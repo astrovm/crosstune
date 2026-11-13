@@ -11,7 +11,7 @@ Recevez un lien d'un service de musique et ouvrez le même morceau dans votre ap
 <li>Si l'application le permet, le titre, l'album ou l'artiste s'ouvre directement, sans recherche.</li>
 <li>Ajoutez d'autres apps et sites dotés d'une page de recherche.</li>
 <li>Collez, recherchez et rouvrez vos liens récents. Ouvrez un lien copié depuis le widget, les réglages rapides ou un appui long sur l'icône.</li>
-<li>Reconnaît un titre qui passe autour de vous : Crosstune écoute lui-même, ou ouvre Shazam ou la recherche de titres de Google. Ouvre aussi les liens Shazam et les titres partagés depuis Now Playing sur Pixel.</li>
+<li>Reconnaît un titre qui passe autour de vous, dans une appli de radio ou un fichier sans tags : Crosstune écoute lui-même, ou ouvre Shazam ou la recherche de titres de Google. Ouvre aussi les liens Shazam et les titres de Now Playing sur Pixel.</li>
 <li>Lien illisible ? Ouvrez-le dans son application d'origine, ou copiez ou partagez la recherche.</li>
 <li>Trouvez un morceau par son nom au lieu d'un lien. Lire vous garde dans Crosstune : une barre en bas montre le morceau, le lecteur montre la suite et a Répéter, J'aime et un minuteur de sommeil, et on balaie entre lecteur et paroles.</li>
 <li>Paroles synchronisées : elles suivent votre app de musique ou écoutent avec vous, flottent au-dessus des autres apps et s'affichent avec des visuels MilkDrop derrière. Mots, timing ou lecture faux ? Signalez-le d'un geste dans les paroles ou sur le mot : ça part en privé au développeur.</li>

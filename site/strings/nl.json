@@ -37,7 +37,7 @@
     ],
     [
       "Welk nummer is dit?",
-      "Crosstune luistert, herkent het en opent het."
+      "Crosstune luistert, herkent het en opent het. Ook dat van een radiozender."
     ],
     [
       "Songteksten op tijd",
@@ -69,7 +69,7 @@
   "privacy_link": "Privacybeleid",
   "language_label": "Taal",
   "privacy_title": "Privacybeleid van Crosstune",
-  "updated": "Laatst bijgewerkt: 12 november 2026",
+  "updated": "Laatst bijgewerkt: 13 november 2026",
   "short_h2": "In het kort",
   "short_items": [
     "Geen account, advertenties of analyse.",
@@ -136,6 +136,10 @@
     [
       "p",
       "Als je Crosstune een nummer laat herkennen, neemt het alleen tijdens het luisteren geluid op met de microfoon, maximaal 12 seconden, en stopt het zodra het het nummer vindt. Op je telefoon maakt het van het geluid een vingerafdruk van de luidste punten. Alleen die vingerafdruk gaat naar Shazam, nooit de audio, en de opname wordt niet bewaard. Crosstune stuurt je locatie niet mee. Shazam antwoordt met de titel, artiest, hoes en Apple Music-ID van het nummer, en Crosstune zoekt het nummer daarna op als een geplakte link. Ook vraagt Crosstune Apple met die ID hoe lang de opname is, zodat de gevonden songtekst op die opname getimed is, en doet het hetzelfde voor elk nummer dat het herkent terwijl het meeluistert. Net als andere verzoeken geeft dit verzoek je IP-adres door aan Shazam, dat het verwerkt volgens zijn eigen privacybeleid. Kan Crosstune Shazam niet bereiken, dan opent het in plaats daarvan de Shazam-app of de Google-app, als je er een hebt; die luisteren volgens hun eigen privacybeleid. Offline blijft het gehoorde geluid in het geheugen van de app, zonder te worden opgeslagen, en gaat alleen de vingerafdruk naar Shazam zodra de telefoon weer online is."
+    ],
+    [
+      "p",
+      "Als een app iets afspeelt zonder te zeggen welk nummer het is, zoals een radio-app die alleen de naam van de zender stuurt, of een bestand zonder tags, herkent Crosstune het nummer zelf op dezelfde manier, maar alleen zolang Crosstune open is met de balk van die app onderaan. Het hoort het geluid dat je telefoon afspeelt als Shizuku of root dat toestaat. Anders gebruikt het de microfoon, alleen als je die al hebt toegestaan, en alleen zolang je telefoon via de luidspreker speelt, niet via een koptelefoon; Android laat zien dat de microfoon aan staat. Het luistert één keer als de app begint te spelen, en opnieuw als het gehoorde nummer afgelopen zou moeten zijn, of na een tijdje. Alleen een vingerafdruk gaat naar Shazam, nooit de audio, en niets wordt opgeslagen. Het stopt als je Crosstune verlaat, de balk verbergt of de app stopt met spelen."
     ],
     [
       "p",

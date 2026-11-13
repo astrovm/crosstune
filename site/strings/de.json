@@ -37,7 +37,7 @@
     ],
     [
       "Welcher Song ist das?",
-      "Crosstune hört zu, erkennt ihn und öffnet ihn."
+      "Crosstune hört zu, erkennt ihn und öffnet ihn. Auch den Song eines Radiosenders."
     ],
     [
       "Songtexte im Takt",
@@ -69,7 +69,7 @@
   "privacy_link": "Datenschutzerklärung",
   "language_label": "Sprache",
   "privacy_title": "Datenschutzerklärung von Crosstune",
-  "updated": "Zuletzt aktualisiert: 12. November 2026",
+  "updated": "Zuletzt aktualisiert: 13. November 2026",
   "short_h2": "Kurz gesagt",
   "short_items": [
     "Kein Konto, keine Werbung, keine Analysen.",
@@ -136,6 +136,10 @@
     [
       "p",
       "Wenn du Crosstune einen Song erkennen lässt, nimmt es nur während des Zuhörens Ton über das Mikrofon auf, höchstens 12 Sekunden, und hört auf, sobald es den Song gefunden hat. Auf deinem Handy macht es aus dem Ton einen Fingerabdruck seiner lautesten Stellen. Nur dieser Fingerabdruck geht an Shazam, nie die Aufnahme, und die Aufnahme wird nicht gespeichert. Crosstune sendet deinen Standort nicht. Shazam antwortet mit Titel, Künstler, Cover und Apple-Music-ID des Songs, und Crosstune schlägt den Song dann wie einen eingefügten Link nach. Außerdem fragt Crosstune Apple mit dieser ID, wie lang die Aufnahme ist, damit die gefundenen Songtexte genau zu dieser Aufnahme passen, und macht das Gleiche für jeden Song, den es beim Mithören erkennt. Wie andere Anfragen gibt diese deine IP-Adresse an Shazam weiter, das sie nach seiner eigenen Datenschutzerklärung verarbeitet. Erreicht Crosstune Shazam nicht, öffnet es stattdessen die Shazam App oder die Google App, wenn du eine davon hast; sie hören nach ihren eigenen Datenschutzerklärungen zu. Offline bleibt der gehörte Ton im Arbeitsspeicher der App, ohne gespeichert zu werden, und nur sein Fingerabdruck geht an Shazam, sobald das Handy wieder online ist."
+    ],
+    [
+      "p",
+      "Wenn eine App abspielt, ohne zu sagen, welcher Song es ist, etwa eine Radio-App, die nur den Namen des Senders schickt, oder eine Datei ohne Tags, erkennt Crosstune den Song auf dieselbe Weise selbst, aber nur, solange Crosstune geöffnet ist und unten die Leiste dieser App zeigt. Es hört den Ton, den dein Handy abspielt, wenn Shizuku oder Root das erlaubt. Sonst nutzt es das Mikrofon, nur wenn du es schon erlaubt hast, und nur, solange dein Handy über den Lautsprecher spielt, nicht über Kopfhörer; Android zeigt an, dass das Mikrofon an ist. Es hört einmal zu, wenn die App zu spielen beginnt, und wieder, wenn der gehörte Song vorbei sein sollte, oder nach einer Weile. Nur ein Fingerabdruck geht an Shazam, nie das Audio, und nichts wird gespeichert. Es hört auf, wenn du Crosstune verlässt, die Leiste ausblendest oder die App nicht mehr abspielt."
     ],
     [
       "p",

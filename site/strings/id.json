@@ -37,7 +37,7 @@
     ],
     [
       "Lagu apa ini?",
-      "Crosstune mendengarkan, mengenali, lalu membukanya."
+      "Crosstune mendengarkan, mengenali, lalu membukanya. Lagu dari stasiun radio juga."
     ],
     [
       "Lirik sesuai lagu",
@@ -69,7 +69,7 @@
   "privacy_link": "Kebijakan privasi",
   "language_label": "Bahasa",
   "privacy_title": "Kebijakan Privasi Crosstune",
-  "updated": "Terakhir diperbarui: 12 November 2026",
+  "updated": "Terakhir diperbarui: 13 November 2026",
   "short_h2": "Singkatnya",
   "short_items": [
     "Tanpa akun, iklan, atau analitik.",
@@ -136,6 +136,10 @@
     [
       "p",
       "Saat Anda meminta Crosstune mengenali lagu, Crosstune merekam suara dari mikrofon hanya selama mendengarkan, paling lama 12 detik, dan berhenti begitu lagunya ditemukan. Di ponsel Anda, suara itu diubah menjadi sidik jari dari titik-titik terkerasnya. Hanya sidik jari itu yang dikirim ke Shazam, tidak pernah rekamannya, dan rekamannya tidak disimpan. Crosstune tidak mengirim lokasi Anda. Shazam menjawab dengan judul, artis, sampul, dan ID Apple Music lagu itu, lalu Crosstune mencari lagunya seperti link yang ditempel. Crosstune juga menanyakan durasi rekaman itu ke Apple dengan ID tersebut, agar lirik yang ditemukan pas dengan waktu rekaman itu, dan melakukan hal yang sama untuk setiap lagu yang dikenalinya saat ikut mendengarkan. Seperti permintaan lain, permintaan ini memperlihatkan alamat IP Anda ke Shazam, yang memprosesnya sesuai kebijakan privasinya sendiri. Jika Crosstune tidak bisa menghubungi Shazam, Crosstune membuka aplikasi Shazam atau aplikasi Google, jika Anda punya; keduanya mendengarkan sesuai kebijakan privasi masing-masing. Saat offline, suara yang terdengar tetap di memori aplikasi, tidak disimpan, dan hanya sidik jarinya yang dikirim ke Shazam begitu ponsel kembali online."
+    ],
+    [
+      "p",
+      "Saat sebuah aplikasi memutar tanpa menyebut lagu apa itu, seperti aplikasi radio yang hanya mengirim nama stasiunnya, atau file tanpa tag, Crosstune mengenali lagunya sendiri dengan cara yang sama, tetapi hanya selama Crosstune terbuka dengan bilah aplikasi itu di bawah. Crosstune mendengar suara yang diputar ponselmu jika Shizuku atau root mengizinkannya. Jika tidak, Crosstune memakai mikrofon, hanya jika kamu sudah mengizinkannya, dan hanya selama ponselmu memutar lewat speaker, bukan lewat headphone; Android menunjukkan bahwa mikrofon menyala. Crosstune mendengarkan sekali saat aplikasi mulai memutar, lalu lagi saat lagu yang didengarnya seharusnya sudah selesai, atau setelah beberapa saat. Hanya sidik suara yang dikirim ke Shazam, tidak pernah audionya, dan tidak ada yang disimpan. Ini berhenti saat kamu keluar dari Crosstune, menyembunyikan bilah, atau aplikasi berhenti memutar."
     ],
     [
       "p",

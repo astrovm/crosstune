@@ -11,7 +11,7 @@ Du bekommst einen Link von einem Musikdienst und öffnest denselben Song in dein
 <li>Wo die App es kann, öffnet sich der Song, das Album oder der Künstler selbst statt einer Suche.</li>
 <li>Füge weitere Apps und Websites mit Suchseite hinzu.</li>
 <li>Mit einem Tipp einfügen, zuletzt genutzte Links durchsuchen und erneut öffnen oder einen kopierten Link über das Startbildschirm-Widget, die Schnelleinstellungen-Kachel oder durch langes Drücken des App-Symbols öffnen.</li>
-<li>Erkennt einen Song in der Nähe: Crosstune hört selbst zu oder öffnet Shazam oder die Songsuche von Google. Öffnet auch Shazam-Links und Songs, die aus Now Playing auf dem Pixel geteilt werden.</li>
+<li>Erkennt einen Song in der Nähe, in einer Radio-App oder Datei ohne Tags: es hört zu oder öffnet Shazam oder die Songsuche von Google. Öffnet auch Shazam-Links und Songs aus Now Playing auf dem Pixel.</li>
 <li>Link nicht lesbar? Öffne ihn in der App, aus der er stammt, kopiere den Suchtext oder teile einen Such-Link.</li>
 <li>Finde einen Song, indem du seinen Namen statt eines Links eintippst. Abspielen lässt dich in Crosstune: Eine Leiste unten zeigt, was läuft, der Player zeigt, was als Nächstes kommt, hat Wiederholen, Liken und einen Schlaftimer, und du wischst zwischen Player und Songtext.</li>
 <li>Songtexte im Takt: Sie folgen deiner Musik-App oder hören mit, schweben über anderen Apps und laufen mit MilkDrop-Visuals dahinter. Falsche Wörter, Timing oder Lesung? Melde es mit einem Tippen im Songtext oder am Wort: es geht privat an den Entwickler.</li>

@@ -37,7 +37,7 @@
     ],
     [
       "Che brano è?",
-      "Crosstune lo ascolta, lo riconosce e lo apre."
+      "Crosstune lo ascolta, lo riconosce e lo apre. Anche quello di una radio."
     ],
     [
       "Testi a tempo",
@@ -69,7 +69,7 @@
   "privacy_link": "Informativa sulla privacy",
   "language_label": "Lingua",
   "privacy_title": "Informativa sulla privacy di Crosstune",
-  "updated": "Ultimo aggiornamento: 12 novembre 2026",
+  "updated": "Ultimo aggiornamento: 13 novembre 2026",
   "short_h2": "In breve",
   "short_items": [
     "Nessun account, pubblicità o analisi.",
@@ -136,6 +136,10 @@
     [
       "p",
       "Quando chiedi a Crosstune di riconoscere un brano, registra il suono dal microfono solo mentre ascolta, per al massimo 12 secondi, e si ferma appena trova il brano. Sul telefono trasforma il suono in un'impronta dei suoi punti più forti. Solo quell'impronta va a Shazam, mai l'audio, e la registrazione non viene salvata. Crosstune non invia la tua posizione. Shazam risponde con titolo, artista, copertina e ID Apple Music del brano, e Crosstune poi lo cerca come un link incollato. Chiede anche ad Apple, con quell'ID, quanto dura la registrazione, così il testo trovato è sincronizzato proprio su quella registrazione, e fa lo stesso per ogni brano che riconosce mentre ascolta. Come le altre richieste, questa espone il tuo indirizzo IP a Shazam, che la tratta secondo la propria informativa sulla privacy. Se Crosstune non raggiunge Shazam, apre invece l'app Shazam o l'app Google, se ne hai una; ascoltano secondo le proprie informative sulla privacy. Offline, il suono ascoltato resta nella memoria dell'app, senza essere salvato, e solo la sua impronta va a Shazam appena il telefono torna online."
+    ],
+    [
+      "p",
+      "Quando un'app riproduce senza dire che brano è, come un'app radio che invia solo il nome della stazione, o un file senza tag, Crosstune riconosce il brano da solo allo stesso modo, ma solo finché Crosstune è aperto con la barra di quell'app in basso. Sente il suono che il telefono riproduce quando Shizuku o root lo consentono. Altrimenti usa il microfono, solo se l'hai già consentito, e solo mentre il telefono suona dall'altoparlante, non nelle cuffie; Android mostra che il microfono è acceso. Ascolta una volta quando l'app inizia a riprodurre, e di nuovo quando il brano sentito dovrebbe essere finito, o dopo un po'. A Shazam va solo un'impronta, mai l'audio, e non viene salvato nulla. Si ferma quando esci da Crosstune, nascondi la barra o l'app smette di riprodurre."
     ],
     [
       "p",

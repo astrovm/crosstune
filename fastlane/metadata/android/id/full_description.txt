@@ -11,7 +11,7 @@ Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lai
 <li>Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud, dan Audiomack bisa langsung membuka lagu, album, atau artisnya, bukan hasil pencarian, Bandcamp (aplikasinya: pencarian) dan Qobuz membuka lagu/album, YouTube lagunya.</li>
 <li>Tambahkan aplikasi dan situs lain yang punya halaman pencarian.</li>
 <li>Tempel dengan satu ketukan, cari dan buka ulang link terbaru, atau buka link yang disalin dari widget layar utama, kartu Setelan Cepat, atau dengan menekan lama ikon aplikasi.</li>
-<li>Mengenali lagu yang diputar di dekatmu: Crosstune mendengarkan sendiri, atau membuka Shazam atau pencarian lagu Google. Juga membuka link Shazam dan lagu yang dibagikan dari Now Playing di Pixel.</li>
+<li>Mengenali lagu yang diputar di dekatmu, di aplikasi radio, atau di file tanpa tag: Crosstune mendengarkan sendiri, atau membuka Shazam atau pencarian lagu Google. Juga membuka link Shazam dan lagu yang dibagikan dari Now Playing di Pixel.</li>
 <li>Link tidak terbaca? Buka di aplikasi asalnya, salin teks pencarian, atau bagikan link pencarian.</li>
 <li>Temukan lagu dengan mengetik namanya alih-alih link. Putar membuatmu tetap di Crosstune: bilah di bawah menunjukkan apa yang diputar, pemutarnya menunjukkan lagu berikutnya dan punya Ulangi, Suka, dan timer tidur, dan kamu menggeser antara pemutar dan lirik.</li>
 <li>Lirik yang pas waktunya: mengikuti aplikasi musikmu atau ikut mendengarkan, melayang di atas aplikasi lain, dan diputar dengan visual MilkDrop di belakangnya. Lirik, waktu, atau bacaan salah? Laporkan sekali ketuk dari lirik atau di kata: terkirim secara pribadi ke pengembang.</li>

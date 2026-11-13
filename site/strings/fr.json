@@ -37,7 +37,7 @@
     ],
     [
       "Quel est ce titre ?",
-      "Crosstune l'écoute, le reconnaît et l'ouvre."
+      "Crosstune l'écoute, le reconnaît et l'ouvre. Celui d'une radio aussi."
     ],
     [
       "Paroles synchronisées",
@@ -69,7 +69,7 @@
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 12 novembre 2026",
+  "updated": "Dernière mise à jour : 13 novembre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
@@ -136,6 +136,10 @@
     [
       "p",
       "Quand vous demandez à Crosstune de reconnaître un titre, il enregistre le son du micro uniquement pendant l'écoute, 12 secondes au maximum, et s'arrête dès qu'il trouve le titre. Sur votre téléphone, il transforme le son en une empreinte de ses points les plus forts. Seule cette empreinte est envoyée à Shazam, jamais l'audio, et l'enregistrement n'est pas conservé. Crosstune n'envoie pas votre position. Shazam répond avec le titre, l'artiste, la pochette et l'identifiant Apple Music du morceau, puis Crosstune le recherche comme un lien collé. Il demande aussi à Apple, avec cet identifiant, la durée de l'enregistrement, pour que les paroles trouvées soient calées sur cet enregistrement, et fait de même pour chaque morceau qu'il reconnaît en écoutant. Comme les autres requêtes, celle-ci expose votre adresse IP à Shazam, qui la traite selon sa propre politique de confidentialité. Si Crosstune ne joint pas Shazam, il ouvre à la place l'application Shazam ou l'application Google, si vous en avez une ; elles écoutent selon leurs propres politiques de confidentialité. Hors ligne, le son entendu reste dans la mémoire de l'app, sans être enregistré, et seule son empreinte part vers Shazam dès que le téléphone est de nouveau en ligne."
+    ],
+    [
+      "p",
+      "Quand une appli joue sans dire quel titre c'est, comme une appli de radio qui n'envoie que le nom de la station, ou un fichier sans tags, Crosstune reconnaît le titre de lui-même de la même façon, mais seulement tant que Crosstune est ouvert avec la barre de cette appli en bas. Il entend le son que joue votre téléphone quand Shizuku ou root le permet. Sinon, il utilise le micro, seulement si vous l'avez déjà autorisé, et seulement tant que votre téléphone joue sur son haut-parleur, pas dans des écouteurs ; Android indique que le micro est allumé. Il écoute une fois quand l'appli commence à jouer, puis à nouveau quand le titre entendu devrait être fini, ou au bout d'un moment. Seule une empreinte part vers Shazam, jamais l'audio, et rien n'est enregistré. Il s'arrête quand vous quittez Crosstune, masquez la barre ou que l'appli arrête de jouer."
     ],
     [
       "p",

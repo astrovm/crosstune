@@ -11,7 +11,7 @@ Someone sends you a link from one music service, but you listen on another. Tap 
 <li>Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud and Audiomack can open the song, album or artist itself instead of a search, Qobuz the song or album, Bandcamp the same, or a search in its app, and YouTube the song.</li>
 <li>Add other apps and sites that have a search page.</li>
 <li>Paste with one tap, search and reopen recent links, or open a copied link from the home screen widget, the Quick Settings tile, or by long-pressing the app icon.</li>
-<li>Names a song playing nearby: Crosstune listens itself, or opens Shazam or Google's song search. Also names what a radio app or a file with no tags plays, when the app doesn't say, and opens Shazam links and songs shared from Pixel Now Playing.</li>
+<li>Names a song played nearby, or by a radio app or untagged file: it listens, or opens Shazam or Google's song search. Also opens Shazam links and Pixel Now Playing shares.</li>
 <li>Can't read a link? Open it in the app it came from, copy the search text, or share a search link.</li>
 <li>Find a song by typing its name instead of a link. Play keeps you in Crosstune: a bar at the bottom shows what's playing, its player has up next, repeat, like and a sleep timer, and you swipe between player and lyrics.</li>
 <li>Lyrics in time: they follow your music app or listen along, float over other apps, and play with MilkDrop visuals behind them. Wrong words, timing or reading? Report it in one tap, from the lyrics or on the word: it goes privately to the developer.</li>
