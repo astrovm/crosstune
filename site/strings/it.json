@@ -151,7 +151,7 @@
     ],
     [
       "p",
-      "Finché hai effettuato l'accesso, Crosstune invia a OpenAI ciò che serve a ogni funzione: titolo, artista e testo di un brano per tradurlo o spiegarlo, correggere le letture giapponesi, scrivere in giapponese o coreano testi trovati in lettere latine o scegliere le parole da imparare; una parola e la sua riga per cercarla; le domande che fai su una riga o un brano; e una descrizione che scrivi, o un brano, per trovare brani corrispondenti. Quando una ricerca su YouTube Music o YouTube non trova nulla con il nome del brano, anche il titolo e l'artista del brano e i risultati della ricerca vanno a OpenAI, perché ChatGPT scelga quello che è il brano. OpenAI li tratta secondo la propria informativa sulla privacy, e contano nell'uso del tuo piano."
+      "Finché hai effettuato l'accesso, Crosstune invia a OpenAI ciò che serve a ogni funzione: titolo, artista e testo di un brano per tradurlo o spiegarlo, correggere le letture giapponesi, scrivere in giapponese o coreano testi trovati in lettere latine o scegliere le parole da imparare; una parola e la sua riga per cercarla; le domande che fai su una riga o un brano; e una descrizione che scrivi, o un brano, per trovare brani corrispondenti. Quando una ricerca su YouTube Music o YouTube non trova nulla con il nome del brano, o ciò che aprirebbe dice di essere un'altra versione, come una dal vivo, anche il titolo e l'artista del brano e i risultati della ricerca vanno a OpenAI, perché ChatGPT scelga quello che è il brano. OpenAI li tratta secondo la propria informativa sulla privacy, e contano nell'uso del tuo piano."
     ],
     [
       "p",

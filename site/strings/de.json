@@ -151,7 +151,7 @@
     ],
     [
       "p",
-      "Solange du angemeldet bist, sendet Crosstune an OpenAI, was jede Funktion braucht: Titel, Künstler und Text eines Songs, um ihn zu übersetzen oder zu erklären, japanische Lesungen zu korrigieren, in lateinischen Buchstaben gefundene Texte auf Japanisch oder Koreanisch zu schreiben oder lernenswerte Wörter auszuwählen; ein Wort mit seiner Zeile, um es nachzuschlagen; deine Fragen zu einer Zeile oder einem Song; und eine Beschreibung, die du eintippst, oder einen Song, um passende Songs zu finden. Findet eine Suche bei YouTube Music oder YouTube nichts, das wie der Song heißt, gehen Titel und Interpret des Songs und die Suchergebnisse ebenfalls an OpenAI, damit ChatGPT das richtige auswählt. OpenAI verarbeitet diese Daten nach seiner eigenen Datenschutzerklärung, und sie zählen zur Nutzung deines Abos."
+      "Solange du angemeldet bist, sendet Crosstune an OpenAI, was jede Funktion braucht: Titel, Künstler und Text eines Songs, um ihn zu übersetzen oder zu erklären, japanische Lesungen zu korrigieren, in lateinischen Buchstaben gefundene Texte auf Japanisch oder Koreanisch zu schreiben oder lernenswerte Wörter auszuwählen; ein Wort mit seiner Zeile, um es nachzuschlagen; deine Fragen zu einer Zeile oder einem Song; und eine Beschreibung, die du eintippst, oder einen Song, um passende Songs zu finden. Findet eine Suche bei YouTube Music oder YouTube nichts, das wie der Song heißt, oder sagt das, was sie öffnen würde, dass es eine andere Version ist, etwa live, gehen Titel und Interpret des Songs und die Suchergebnisse ebenfalls an OpenAI, damit ChatGPT das richtige auswählt. OpenAI verarbeitet diese Daten nach seiner eigenen Datenschutzerklärung, und sie zählen zur Nutzung deines Abos."
     ],
     [
       "p",

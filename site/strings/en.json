@@ -151,7 +151,7 @@
     ],
     [
       "p",
-      "While you're signed in, Crosstune sends OpenAI what each feature needs: a song's title, artist and lyrics to translate or explain them, correct Japanese readings, write lyrics found in Latin letters in Japanese or Korean, or pick words worth learning; a word and its line to look it up; the questions you ask about a line or a song; and a description you type, or a song, to find songs that match. When a YouTube Music or YouTube search finds nothing named like the song, the song's title and artist and what the search found go to OpenAI too, so ChatGPT picks the one that's the song. OpenAI handles them under its own privacy policy, and they count toward your plan's usage."
+      "While you're signed in, Crosstune sends OpenAI what each feature needs: a song's title, artist and lyrics to translate or explain them, correct Japanese readings, write lyrics found in Latin letters in Japanese or Korean, or pick words worth learning; a word and its line to look it up; the questions you ask about a line or a song; and a description you type, or a song, to find songs that match. When a YouTube Music or YouTube search finds nothing named like the song, or what it would open says it's another version, like a live one, the song's title and artist and what the search found go to OpenAI too, so ChatGPT picks the one that's the song. OpenAI handles them under its own privacy policy, and they count toward your plan's usage."
     ],
     [
       "p",
