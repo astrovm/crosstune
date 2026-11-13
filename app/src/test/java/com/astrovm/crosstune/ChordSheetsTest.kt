@@ -858,6 +858,10 @@ class ChordSheetsTest {
         assertEquals("歌：", ChordSheets.fromChordWiki("{subtitle:歌： }\n[C]川").artist)
         // A name of nothing but a space that isn't one of the plain ones is no name either.
         assertEquals("歌：", ChordSheets.fromChordWiki("{st:歌：\u2003 作詞：山田}\n[C]川").artist)
+        // A credit right after the spaces is no name, on a phone too, where "\s" takes U+2003: main read "作詞：山田".
+        assertEquals("歌：", ChordSheets.fromChordWiki("{st:歌： 作詞：山田}\n[C]川").artist)
+        assertEquals("歌：", ChordSheets.fromChordWiki("{st:歌：　作曲：山田 歌詞：川}\n[C]川").artist)
+        assertEquals("歩く人", ChordSheets.fromChordWiki("{st:歌：\u2003歩く人 作詞：山田}\n[C]川").artist)
         val song = ChordSheets.fromChordWiki(
             """
             {c:BPM=90}

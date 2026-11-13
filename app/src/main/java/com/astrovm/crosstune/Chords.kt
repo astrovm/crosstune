@@ -300,9 +300,13 @@ internal object ChordSheets {
 
     /**
      * Who sings it, after 歌 and a colon (half or full width). The credit that follows (作詞, 作曲,
-     * 編曲, 歌詞) is not their name. A subtitle with no such mark is the name itself.
+     * 編曲, 歌詞) is not their name, nor is it one when it comes right after the spaces. A subtitle with no such mark is
+     * the name itself.
      */
-    private val sungBy = phoneRegex("""歌[:：][\s　]*(.+?)(?=[\s　]*(?:作詞|作曲|編曲|歌詞)|$)""")
+    private val sungBy = phoneRegex("""歌[:：][\s　]*+(?!$CREDITS)(.+?)(?=[\s　]*(?:$CREDITS)|$)""")
+
+    /** The credits a ChordWiki subtitle names after its singer. */
+    private const val CREDITS = "作詞|作曲|編曲|歌詞"
 
     /** Title, singer and capo read so far, and whether a tab or grid is open. */
     private data class ChordWikiHead(
