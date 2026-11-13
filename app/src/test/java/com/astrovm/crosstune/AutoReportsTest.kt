@@ -22,7 +22,8 @@ import kotlin.concurrent.thread
 class AutoReportsTest {
 
     private val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("auto-reports-test", Context.MODE_PRIVATE).also { it.edit().clear().commit() }
-    private val reports = AutoReports(preferences, session = 1)
+    // Yes, as reports go only then: the tests of the answer itself start from none.
+    private val reports = AutoReports(preferences, session = 1).also { it.allowed = true }
 
     private fun song(title: String, artist: String = "Band") = MusicMetadata(title, artist)
 
@@ -37,6 +38,7 @@ class AutoReportsTest {
 
     @Test
     fun undecidedUntilTheUserSaysAndThenRemembered() {
+        preferences.edit().clear().commit()
         assertNull(reports.allowed)
         reports.allowed = true
         assertEquals(true, AutoReports(preferences).allowed)
@@ -83,6 +85,7 @@ class AutoReportsTest {
 
     @Test
     fun theOfferClosedIsNotANoUntilTheThirdTime() {
+        preferences.edit().clear().commit()
         reports.closed()
         reports.closed()
         assertNull(reports.allowed)
@@ -454,13 +457,28 @@ class AutoReportsTest {
         assertEquals(listOf(earlier), reports.owed().filter { it.earlier })
         reports.allowed = true
         assertEquals(listOf("by hand"), reports.owed().filterNot { it.earlier }.names())
+        // On its way as the no is said, and it didn't get there: it's still gone.
+        found()
+        val going = checkNotNull(reports.take(reports.owed().first { JSONObject(it.json).optString("name") == "no words" }))
+        reports.allowed = false
+        reports.went(going, Delivery.FAILED)
+        assertEquals(listOf("by hand"), reports.owed().filterNot { it.earlier }.names())
+        // Turned off, a problem found isn't kept, words put in time by hand are, and none goes, nor before an answer.
+        reports.owe(song("Later"), SongProblem.NO_TIMING, json("later"))
+        reports.owe(song("By hand again"), SongProblem.TIMED_BY_HAND, json("again"))
+        assertEquals(listOf("by hand", "again"), reports.owed().filterNot { it.earlier }.names())
+        for (owed in reports.owed()) assertNull(reports.take(owed))
+        reports.allowed = null
+        for (owed in reports.owed()) assertNull(reports.take(owed))
+        reports.allowed = true
+        reports.went(checkNotNull(reports.take(earlier)), Delivery.FAILED)
         // Not answered, they stay; a third close is a no, as one in Settings is.
         found()
         reports.allowed = null
-        assertEquals(3, reports.owed().count { !it.earlier })
+        assertEquals(4, reports.owed().count { !it.earlier })
         repeat(AutoReports.MAX_CLOSES) { reports.closed() }
         assertEquals(false, reports.allowed)
-        assertEquals(listOf("by hand"), reports.owed().filterNot { it.earlier }.names())
+        assertEquals(listOf("by hand", "again"), reports.owed().filterNot { it.earlier }.names())
     }
 
     @Test

@@ -750,6 +750,30 @@ class LyricsReportTest {
     }
 
     @Test
+    fun aProblemFoundWhoseReportWaitsOnTheAppIsNeitherSentNorKeptOnceReportsAreTurnedOff() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        MainActivity.lookupDispatcher = Dispatchers.IO
+        // What's playing isn't said yet, so the report waits to say which app played it.
+        val said = CompletableDeferred<Unit>().also { playback.said = it }
+        // A report that goes is held on its way, so it's seen whether it went or not.
+        val held = CountDownLatch(1).also { reportsHeld = it }
+        try {
+            lyricsAre(plain)
+            openLyrics { shown("Plain one") }
+            waitUntil { owed() == 1 }
+            composeRule.runOnIdle { model().allowAutoReports(false) }
+            assertEquals(0, owed())
+            said.complete(Unit)
+            composeRule.waitForIdle()
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            assertEquals(0, owed())
+            assertFalse(ReportSender.URL in fake.requestedUrls)
+        } finally {
+            held.countDown()
+        }
+    }
+
+    @Test
     fun twoScreensOfTheAppStartedTogetherSendEachReportOwedOnce() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         listOf("One", "Two", "Three").forEach { owe(MusicMetadata(it, "Band"), SongProblem.NO_LYRICS, JSONObject().put("version", "1").put("problem", "no_lyrics")) }
@@ -1338,6 +1362,25 @@ class LyricsReportTest {
         shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.REPORT_PACE_MS))
         waitUntil { keptSent().size == 2 }
         assertEquals(1, owed())
+    }
+
+    @Test
+    fun reportsTurnedOffWhileTheOwedOnesWaitTheirTurnStopTheRest() {
+        MainActivity.reportPaceMs = MainViewModel.REPORT_PACE_MS
+        // One put in time by hand, and two timings an earlier version kept.
+        owedFor("Old one")
+        keptBefore(count = 2)
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        started()
+        waitUntil { sentReports().size == 1 }
+        composeRule.runOnIdle { model().allowAutoReports(false) }
+        repeat(3) {
+            shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.REPORT_PACE_MS))
+            composeRule.waitForIdle()
+        }
+        assertEquals(1, sentReports().size)
+        // They wait on the phone, for reports turned on again.
+        assertEquals(2, owed())
     }
 
     @Test

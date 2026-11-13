@@ -113,13 +113,15 @@ internal class AutoReports(
     }
 
     /**
-     * [owed] taken to go now, in one step with the checks: still owed, not on its way already, and for a problem found,
-     * a place left of today's [FOUND_A_DAY], counting those on their way. Null where it can't go now: one past the
-     * day's share waits for a later day. How it went is told with [went], always.
+     * [owed] taken to go now, in one step with the checks: reports are [allowed], it's still owed, not on its way
+     * already, and for a problem found, a place left of today's [FOUND_A_DAY], counting those on their way. Null where
+     * it can't go now: one past the day's share waits for a later day, and with reports turned off, every one waits.
+     * How it went is told with [went], always.
      */
     fun take(owed: Owed): Going? = synchronized(shared) {
         val going = shared.going
-        if (!owes(owed) || owed.key in going) return null
+        // Checked under the lock a no takes, so a no between two reports stops the rest.
+        if (allowed != true || !owes(owed) || owed.key in going) return null
         val counts = !owed.earlier
         if (counts && foundToday() + going.values.count { it } >= FOUND_A_DAY) return null
         going[owed.key] = counts
@@ -161,11 +163,13 @@ internal class AutoReports(
      * killed before, and the answer may come later. A problem found is owed when its report didn't get there, or
      * had to wait for a later day. An older one for the same song and problem gives way. [json] is sent as it is, so
      * it has its [ID] from [idFor] already, inside the box's size. The latest [MAX_OWED] of each, by hand and found,
-     * are kept, so the oldest go first. Each waits for the next start.
+     * are kept, so the oldest go first. Each waits for the next start. With reports turned off, a problem found isn't
+     * kept, as one made before the no was said, and kept only after it, would wait to go when they're turned on again.
      */
     fun owe(song: MusicMetadata, problem: SongProblem, json: String): Owed = synchronized(shared) {
         val key = keyOf(song, problem)
         val owed = Owed(key, json)
+        if (problem != SongProblem.TIMED_BY_HAND && allowed == false) return owed
         keep(kept().filter { it.key != key } + owed)
         // Kept, it carries its id from now on.
         shared.ids.remove(key)
