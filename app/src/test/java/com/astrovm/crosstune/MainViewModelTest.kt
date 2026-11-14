@@ -586,6 +586,18 @@ class MainViewModelTest {
         assertEquals(false, model.uiState.player?.songless)
         assertNotNull(model.uiState.player?.following)
         assertEquals(MusicMetadata("Fake Song", "", artworkUrl = file.artworkUrl), model.uiState.result)
+        // Tapped again, its player closed, the card already up stays as it is, with the service picked on it,
+        // not looked up again; the player opens again.
+        val picked = Destination.Service(MusicService.YOUTUBE_MUSIC)
+        model.selectDefault(Destination.Service(MusicService.SPOTIFY))
+        model.selectResultDestination(picked)
+        idle()
+        model.closePlayer()
+        model.openPlayingUnnamed()
+        idle()
+        assertEquals(MusicMetadata("Fake Song", "", artworkUrl = file.artworkUrl), model.uiState.result)
+        assertEquals(picked, model.uiState.resultDestination)
+        assertEquals(MusicMetadata("Fake Song", "", artworkUrl = file.artworkUrl), model.uiState.player?.song)
         // What says nothing a song could be read from, as a vlog, only ever has the player on what the app plays.
         val vlog = Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel", said = false)
         val video = model(playback = FakePlayback().apply { access = true; unnamed.value = vlog })
