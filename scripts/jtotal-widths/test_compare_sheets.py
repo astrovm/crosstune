@@ -162,9 +162,30 @@ class AgainstTest(unittest.TestCase):
         self.assertEqual(counts["worse: off in both, as far or farther after"], 2)
         self.assertEqual([w[2] for w in worse], [2, 3])
 
-    def test_a_line_one_app_reads_otherwise_is_left_out(self):
+    def test_a_line_after_reads_as_other_words_is_worse(self):
+        # Before reads the line as drawn, after as other words: each of its 4 chords is worse, wherever it was.
         counts, worse = c.against([self.drawn()], self.run_of(0, 2, 3, 4), self.run_of(0, 1, 1, 1, text="other"))
-        self.assertEqual((counts["chords compared"], counts["chords only one app reads on a line as the drawing"], worse), (0, 4, []))
+        self.assertEqual(counts["chords compared"], 0)
+        self.assertEqual(counts["worse: a line before reads as the drawing, after as other words"], 4)
+        self.assertEqual([w[:6] for w in worse], [(self.URL, 0, n, at, at, None) for n, at in enumerate((0, 2, 3, 4))])
+        self.assertEqual(worse[0][6]["text"], "abcde")
+
+    def test_a_line_only_after_reads_as_the_drawing_is_better(self):
+        counts, worse = c.against([self.drawn()], self.run_of(0, 1, 1, 1, text="other"), self.run_of(0, 2, 3, 4))
+        self.assertEqual((counts["better: a line after reads as the drawing, before as other words"], worse), (4, []))
+        self.assertEqual(counts["worse: a line before reads as the drawing, after as other words"], 0)
+
+    def test_the_command_line_names_a_line_after_reads_otherwise(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "positions.json").write_text(json.dumps(c.positions([self.drawn()])), encoding="utf-8")
+            for tag, text in (("main", "abcde"), ("pr", "other")):
+                (folder / f"app-{tag}.jsonl").write_text(json.dumps(self.run_of(0, 2, 3, 4, text=text)[self.URL]) + "\n", encoding="utf-8")
+            with unittest.mock.patch("sys.stdout", new=io.StringIO()) as out:
+                c.main(["against", str(folder), "main", "pr", "--truth", str(folder / "positions.json"), "--show", "1"])
+            said = out.getvalue()
+            self.assertIn("      4  worse: a line before reads as the drawing, after as other words", said)
+            self.assertIn(f"{self.URL} line 0 chord 0: drawn on 0, main 0, pr reads the line as other words: abcde", said)
 
     def test_a_sheet_an_app_did_not_answer_is_counted(self):
         counts, _ = c.against([self.drawn()], self.run_of(0, 2, 3, 4), {})
@@ -181,6 +202,7 @@ class AgainstTest(unittest.TestCase):
             said = out.getvalue()
             self.assertIn("      1  worse: right before, off after", said)
             self.assertIn("      0  worse: off in both, as far or farther after", said)
+            self.assertIn("      0  worse: a line before reads as the drawing, after as other words", said)
             self.assertIn("      3  right in both", said)
             self.assertIn(f"{self.URL} line 0 chord 3: drawn on 4, main 4, pr 3: abcde", said)
 

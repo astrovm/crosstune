@@ -11,6 +11,8 @@ dependencies {
     compileOnly("org.ow2.asm:asm-analysis:9.11.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.ow2.asm:asm-analysis:9.11.1")
+    // The filter itself is tested as PIT runs it, on mutations of a class built here.
+    testImplementation("org.pitest:pitest-entry:1.30.2")
 }
 
 tasks.withType<JavaCompile>().configureEach {

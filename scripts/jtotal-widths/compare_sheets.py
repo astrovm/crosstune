@@ -260,10 +260,13 @@ def placed(page, got):
 def against(truth, before, after):
     """Chord by chord, two apps against one drawing: each chord is right in both, worse (right before and off
     after), better (off before and right after), or off in both: on the same letter, nearer the drawing's after, or
-    farther, which is worse too. Only chords on lines all three read alike count. Gives the counts and, for each worse
-    chord, (address, line, chord, drawing's letter, before's, after's, line)."""
+    farther, which is worse too. A chord on a line before reads as the drawing and after reads as other words is worse
+    as well, and one the other way better. Gives the counts and, for each worse chord, (address, line, chord, drawing's
+    letter, before's, after's or None when after reads the line otherwise, the line as the app that placed it reads it)."""
     # The worse counts are shown even at none, as that is what the comparison is for.
-    counts, worse = Counter({"worse: right before, off after": 0, "worse: off in both, as far or farther after": 0}), []
+    lost = "worse: a line before reads as the drawing, after as other words"
+    counts = Counter({"worse: right before, off after": 0, "worse: off in both, as far or farther after": 0, lost: 0})
+    worse = []
     for page in truth:
         a, b = before.get(page["url"]), after.get(page["url"])
         if a is None or b is None:
@@ -271,7 +274,10 @@ def against(truth, before, after):
             continue
         counts["sheets"] += 1
         a_at, b_at = placed(page, a["lines"]), placed(page, b["lines"])
-        counts["chords only one app reads on a line as the drawing"] += len(a_at.keys() ^ b_at.keys())
+        for place in sorted(a_at.keys() - b_at.keys()):
+            counts[lost] += 1
+            worse.append((page["url"], *place, a_at[place][0], a_at[place][1], None, a_at[place][2]))
+        counts["better: a line after reads as the drawing, before as other words"] += len(b_at.keys() - a_at.keys())
         for place in sorted(a_at.keys() & b_at.keys()):
             browser, was, now = a_at[place][0], a_at[place][1], b_at[place][1]
             counts["chords compared"] += 1
@@ -582,7 +588,8 @@ def main(argv):
         for name, value in sorted(counts.items()):
             print(f"{value:7d}  {name}")
         for url, line, chord, browser, was, now, app_line in worse[:args.show]:
-            print(f"{url} line {line} chord {chord}: drawn on {browser}, {args.extra} {was}, {args.after} {now}: {app_line['text']}")
+            print(f"{url} line {line} chord {chord}: drawn on {browser}, {args.extra} {was}, "
+                  f"{args.after} {'reads the line as other words' if now is None else now}: {app_line['text']}")
     elif args.command == "positions":
         Path(args.extra).write_text(json.dumps(positions(json.loads(directory.read_text(encoding="utf-8")))), encoding="utf-8")
     else:
