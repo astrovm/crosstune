@@ -26,7 +26,12 @@ internal data class MusicMetadata(
      * How long it lasts where it was heard or opened, when the app playing it says nothing: enough to
      * tell apart timed copies of its takes, but not to say this recording is that one.
      */
-    val heardLengthMs: Long? = null
+    val heardLengthMs: Long? = null,
+    /**
+     * What an app plays with no song named, as [Unnamed.played] asks for it: had only by its app, by what it's
+     * called there, never as a song by its name, whatever it's called. Never kept or sent anywhere.
+     */
+    val unnamed: Boolean = false
 )
 
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */
@@ -274,16 +279,21 @@ internal object MetadataParsers {
     /**
      * The song a player names. One that names no artist, as Android's "<unknown>" for a file with none,
      * or many, as a compilation's "Various Artists", may name it in the title, "Artist - Song", as a video does.
-     * A title alone still identifies what is playing, even if it cannot say who made it.
+     * A title alone still identifies what is playing, even if it cannot say who made it. A dash left at
+     * the title's end, as a radio app that splits a station's "Artist - Song - " leaves it, is no part of it.
      */
     fun playerSong(title: String, artist: String): MusicMetadata? =
-        (spotifyPageSplitAtItsDash(title, artist) ?: if (noArtist(artist)) youtubeVideo(title.replace(audioExtension, ""), "") else MusicMetadata(title, artist))
+        (
+            spotifyPageSplitAtItsDash(title, artist)
+                ?: if (noArtist(artist)) youtubeVideo(title.replace(audioExtension, ""), "") else MusicMetadata(title.replace(danglingDashRegex, ""), artist)
+        )
             ?.let { if (noArtist(it.artist)) it.copy(artist = "") else it }
             ?.takeIf { it.title.isNotBlank() && !namesAFile(it) }
 
     fun noArtist(artist: String) = artist.isBlank() || noOneArtist.matches(artist.trim())
 
-    private val audioExtension = Regex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
+    /** A file's extension, as a player with no tags names a song by its file: "Fake Song.mp3". */
+    val audioExtension = Regex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
 
     /** A browser playing a bare file names it by its address, under its site, e.g. "example.com/song.mp3" by "example.com". */
     private fun namesAFile(song: MusicMetadata) = '.' in song.artist && song.title.startsWith("${song.artist}/")

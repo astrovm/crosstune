@@ -11,7 +11,7 @@ Bir müzik servisinden bağlantı alın, aynı şarkıyı favori uygulamanızda 
 <li>Uygulama destekliyorsa arama yerine doğrudan şarkı, albüm veya sanatçı açılır.</li>
 <li>Arama sayfası olan diğer uygulamaları ve siteleri ekleyin.</li>
 <li>Tek dokunuşla yapıştırın, son bağlantılarda arayıp yeniden açın veya kopyalanan bir bağlantıyı ana ekran widget'ından, Hızlı Ayarlar kutucuğundan ya da uygulama simgesine uzun basarak açın.</li>
-<li>Yakında çalan bir şarkıyı tanır: Crosstune kendisi dinler ya da Shazam'ı veya Google'ın şarkı aramasını açar. Shazam bağlantılarını ve Pixel'deki Now Playing'den paylaşılan şarkıları da açar.</li>
+<li>Yakında ya da adını söylemeyen bir uygulamada çalan şarkıyı tanır: dinler ya da Shazam'ı veya Google'ın şarkı aramasını açar. Shazam bağlantılarını ve Pixel'deki Now Playing şarkılarını da açar.</li>
 <li>Bağlantı okunamadı mı? Geldiği uygulamada açın, arama metnini kopyalayın veya arama bağlantısını paylaşın.</li>
 <li>Bağlantı yerine şarkının adını yazarak şarkıyı bulun. Çal, sizi Crosstune'da tutar: alttaki çubuk neyin çaldığını gösterir, oynatıcıda sıradakiler, tekrarlama, beğenme ve uyku zamanlayıcısı vardır, oynatıcı ile sözler arasında kaydırırsınız.</li>
 <li>Zamanlı sözler: müzik uygulamanı takip eder ya da seninle birlikte dinler, diğer uygulamaların üzerinde yüzer ve arkada MilkDrop görselleriyle akar. Yanlış söz, zamanlama ya da okunuş mu var? Sözlerden ya da kelimeden tek dokunuşla bildir: yalnızca geliştiriciye gider.</li>

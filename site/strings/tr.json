@@ -37,7 +37,7 @@
     ],
     [
       "Bu şarkı ne?",
-      "Crosstune dinler, tanır ve açar."
+      "Crosstune yakında ya da ne çaldığını söylemeyen bir uygulamada çalan şarkıyı dinler, tanır ve açar."
     ],
     [
       "Zamanında sözler",
@@ -69,7 +69,7 @@
   "privacy_link": "Gizlilik politikası",
   "language_label": "Dil",
   "privacy_title": "Crosstune Gizlilik Politikası",
-  "updated": "Son güncelleme: 12 Kasım 2026",
+  "updated": "Son güncelleme: 14 Kasım 2026",
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
@@ -136,6 +136,10 @@
     [
       "p",
       "Crosstune'dan bir şarkıyı tanımasını istediğinizde, mikrofondan yalnızca dinlerken, en fazla 12 saniye ses kaydeder ve şarkıyı bulur bulmaz durur. Telefonunuzda sesi en güçlü noktalarından oluşan bir parmak izine dönüştürür. Shazam'a yalnızca bu parmak izi gider, ses kaydı asla gitmez ve kayıt saklanmaz. Crosstune konumunuzu göndermez. Shazam şarkının adı, sanatçısı, kapağı ve Apple Music kimliğiyle yanıt verir; Crosstune de şarkıyı yapıştırılmış bir bağlantı gibi arar. Ayrıca bu kimlikle Apple'a kaydın ne kadar sürdüğünü sorar; böylece bulunan sözler o kayda göre zamanlanır. Birlikte dinlerken tanıdığı her şarkı için de aynısını yapar. Diğer istekler gibi bu istek de IP adresinizi Shazam'a gösterir; Shazam bunu kendi gizlilik politikasına göre işler. Crosstune Shazam'a ulaşamazsa bunun yerine, yüklüyse Shazam uygulamasını veya Google uygulamasını açar; bunlar kendi gizlilik politikalarına göre dinler. Çevrimdışıyken duyulan ses kaydedilmeden uygulamanın belleğinde kalır ve telefon yeniden çevrimiçi olunca Shazam'a yalnızca parmak izi gider."
+    ],
+    [
+      "p",
+      "Bir uygulama hangi şarkı olduğunu söylemeden çaldığında, örneğin yalnızca istasyonun adını gönderen bir radyo uygulaması, etiketsiz bir dosya ya da bir video, Crosstune şarkıyı aynı şekilde kendisi tanır, ama yalnızca Crosstune açıkken ve altta o uygulamanın çubuğu dururken, ve yalnızca mikrofona zaten izin verdiyseniz. Telefonunuzun çaldığı sesi duyar, kulaklıkla da; Shizuku veya root ile Android'in ses yakalamasını kullanır, bu daha temizdir ve bunu bir bildirim gösterir. Mikrofonu yalnızca telefonunuz bu sesi paylaşmadığında ve yalnızca telefonunuz kulaklıktan değil hoparlörden çalarken kullanır; TV'de ise mikrofonu asla kullanmaz ve yalnızca TV'nin kendi sesini duyar. Android mikrofonun açık olduğunu gösterir. Uygulama çalmaya başladığında dinler, duyduğu şarkının bitmiş olması gerektiğinde ya da bir süre sonra yeniden dinler, ve duymak için yeni bir yolu olduğunda, örneğin mikrofona veya Shizuku'ya izin verdiğinizde ya da kulaklığı çıkardığınızda hemen dinler. Shazam'a yalnızca bir parmak izi gider, ses asla gitmez ve hiçbir şey kaydedilmez. Çubuktaki her şarkı gibi, tanıdığı şarkının da sözleri için başlığı ve sanatçısı aranır. Crosstune'dan çıktığınızda, çubuğu gizlediğinizde ya da uygulama çalmayı bıraktığında durur."
     ],
     [
       "p",

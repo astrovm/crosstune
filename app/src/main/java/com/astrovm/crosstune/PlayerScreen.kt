@@ -186,8 +186,8 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     }
     // The words, but a video's, as its clock may be the video's; blank ones, between verses, leave the last one up.
     val words = remember(player.lines, following?.video) { player.lines.takeIf { following?.video != true }.orEmpty().filter { it.text.isNotBlank() } }
-    // One whose artist is unknown can't be looked up safely, so it has no words to show.
-    val hasWords = song.artist.isNotBlank()
+    // One whose artist is unknown can't be looked up safely, so it has no words to show; nor has what names no song.
+    val hasWords = !player.songless && song.artist.isNotBlank()
     // Its card is under the player, so what it has is a menu away, not another screen.
     val card = state.result?.let { SongNames.same(it.title, song.title) && SongNames.sameArtist(it.artist, song.artist) } == true
     val ground = MaterialTheme.colorScheme.surface
@@ -208,7 +208,8 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             }
             // Its place keeps the list's name in the middle.
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp).moves("menu", moving)) {
-                PlayerMenu(ready = card && !state.isLoading && !state.isMatching, actions)
+                // What names no song has no link to copy, share or open elsewhere.
+                if (!player.songless) PlayerMenu(ready = card && !state.isLoading && !state.isMatching, actions)
             }
         }
     }
@@ -224,19 +225,20 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     val titleRow: @Composable (Morph, Boolean, (@Composable () -> Unit)?) -> Unit = { moving, crossing, lead ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
             lead?.invoke()
-            // A tap on its name opens its card, with its links, as music apps open a song's page. One line
-            // each, so the cover keeps its size from song to song; a longer name scrolls by.
+            // A tap on its name opens its card, with its links, as music apps open a song's page, but for what
+            // names no song, which has none. One line each, so the cover keeps its size from song to song; a
+            // longer name scrolls by.
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .then(if (crossing) Modifier.fades(moving) else Modifier.moves("names", moving))
                     .clip(MaterialTheme.shapes.small)
-                    .clickable(onClickLabel = stringResource(R.string.player_song_card), onClick = actions.onPlayerCard)
+                    .then(if (player.songless) Modifier else Modifier.clickable(onClickLabel = stringResource(R.string.player_song_card), onClick = actions.onPlayerCard))
                     .padding(vertical = 8.dp)
             ) {
                 Text(song.title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, modifier = Modifier.basicMarquee())
                 Text(
-                    song.artist,
+                    player.byLine,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -731,7 +733,7 @@ private fun PlayingRow(player: PlayerState, cover: String?, loadArtwork: suspend
         }
         Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
             Text(player.song.title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(player.song.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(player.byLine, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

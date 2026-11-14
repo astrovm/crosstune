@@ -91,9 +91,9 @@ internal class PlayQueue(
             list?.takeIf { sameApp(it.app, following.appPackage, installed) && it.tracks.any { track -> sameEntry(track, song) } }?.let { skips.playedFrom(it) } ?: skips
         }
 
-        override fun skip(song: MusicMetadata, next: Boolean) {
+        override fun skip(song: MusicMetadata, next: Boolean, app: String?) {
             val last = onLast.value
-            if (!next || last == null || !sameEntry(last, song)) return playback.skip(song, next)
+            if (!next || last == null || !sameEntry(last, song)) return playback.skip(song, next, app)
             onLast.value = null
             scope.launch { playNext() }
         }

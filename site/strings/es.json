@@ -37,7 +37,7 @@
     ],
     [
       "¿Qué canción es?",
-      "Crosstune la escucha, la reconoce y la abre."
+      "Crosstune escucha una canción que suena cerca, o en una app que no dice qué suena, la reconoce y la abre."
     ],
     [
       "Letras a tiempo",
@@ -69,7 +69,7 @@
   "privacy_link": "Política de privacidad",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidad de Crosstune",
-  "updated": "Última actualización: 12 de noviembre de 2026",
+  "updated": "Última actualización: 14 de noviembre de 2026",
   "short_h2": "En resumen",
   "short_items": [
     "Sin cuenta, publicidad ni analíticas.",
@@ -136,6 +136,10 @@
     [
       "p",
       "Cuando le pedís a Crosstune que reconozca una canción, graba sonido del micrófono solo mientras escucha, hasta 12 segundos, y se detiene en cuanto encuentra la canción. En tu teléfono, convierte el sonido en una huella de sus puntos más fuertes. Solo esa huella va a Shazam, nunca el audio, y la grabación no se guarda. Crosstune no envía tu ubicación. Shazam responde con el título, el artista, la portada y el ID de Apple Music de la canción, y Crosstune la busca como un link pegado. También le pregunta a Apple, con ese ID, cuánto dura la grabación, para que la letra que encuentre esté sincronizada con esa grabación, y hace lo mismo con cada canción que reconoce mientras escucha. Como otras solicitudes, esta expone tu dirección IP a Shazam, que la procesa según su propia política de privacidad. Si Crosstune no llega a Shazam, abre en su lugar la app de Shazam o la de Google, si tenés alguna, que escuchan según sus propias políticas de privacidad. Sin conexión, el sonido escuchado queda en la memoria de la app, sin guardarse, y solo su huella va a Shazam cuando el teléfono vuelve a estar en línea."
+    ],
+    [
+      "p",
+      "Cuando una app reproduce sin decir qué canción es, como una app de radio que manda solo el nombre de la emisora, un archivo sin etiquetas o un video, Crosstune reconoce la canción por su cuenta de la misma forma, pero solo con Crosstune abierto y la barra de esa app abajo, y solo si ya permitiste el micrófono. Escucha el sonido que reproduce tu teléfono, también con auriculares; con Shizuku o root, con la captura de audio de Android, más limpia, mientras una notificación lo muestra. Usa el micrófono solo si tu teléfono no comparte su sonido, solo mientras tu teléfono suena por el parlante, no por auriculares, y nunca en un televisor, donde escucha solo el sonido del propio televisor; Android muestra que el micrófono está encendido. Escucha cuando la app empieza a reproducir, otra vez cuando la canción que escuchó debería haber terminado o después de un rato, y enseguida cuando tiene una forma nueva de escuchar, como cuando permitís el micrófono o Shizuku, o cuando sacás los auriculares. Solo una huella va a Shazam, nunca el audio, y no se guarda nada. Como cualquier canción de la barra, la canción que reconoce se busca por título y artista para encontrar su letra. Se detiene cuando salís de Crosstune, ocultás la barra o la app deja de reproducir."
     ],
     [
       "p",

@@ -94,6 +94,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -125,6 +126,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.border
@@ -259,6 +261,11 @@ internal data class ScreenActions(
     val onPeekPlayingNow: () -> Unit = {},
     val onPlayingNowPlayPause: () -> Unit = {},
     val onPlayingNowSkip: () -> Unit = {},
+    /** Shows the song heard in what an app plays with no song named. */
+    val onOpenPlayingUnnamed: () -> Unit = {},
+    val onPeekPlayingUnnamed: () -> Unit = {},
+    /** Says whether the bar with what an app plays with no song named is on screen, the only time it's named by ear. */
+    val onPlayingBarInSight: (Boolean) -> Unit = {},
     val onSettingsLeft: () -> Unit = {},
     /** Fetches the shown song's words and shows them. */
     val onShowLyrics: () -> Unit = {},
@@ -462,7 +469,9 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     layers.up = when {
         // The song's card is only made under its player once the swipe gets there, so one let go early leaves the card shown.
         screen == Screen.MAIN && state.playingNow != null -> Layer(Screen.PLAYER, actions.onPeekPlayingNow, back = actions.onClosePlayer, settled = actions.onOpenPlayingNow)
-        screen == Screen.PLAYER && state.player?.song?.artist?.isNotBlank() == true -> Layer(Screen.LYRICS, actions.onPlayerLyrics, back = actions.onDismissLyrics)
+        // What names no song has no card to put under its player.
+        screen == Screen.MAIN && state.playingUnnamed != null -> Layer(Screen.PLAYER, actions.onPeekPlayingUnnamed, back = actions.onClosePlayer)
+        screen == Screen.PLAYER && state.player?.takeIf { !it.songless }?.song?.artist?.isNotBlank() == true -> Layer(Screen.LYRICS, actions.onPlayerLyrics, back = actions.onDismissLyrics)
         else -> null
     }
     layers.down = when (screen) {
@@ -704,10 +713,17 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
     val songList = state.result?.takeIf { state.isSongList && it.tracks.isNotEmpty() }
 
     // At the bottom, unless it's the song shown or it's turned off; not while a link is typed in.
-    val playing = state.playingNow?.takeIf { now ->
-        state.playingBar && state.error == null && !state.isLoading && !state.listening &&
-            (state.linkText.isBlank() || (state.result != null && state.linkText == state.link?.url))
+    val barOpen = state.playingBar && state.error == null && !state.isLoading && !state.listening &&
+        (state.linkText.isBlank() || (state.result != null && state.linkText == state.link?.url))
+    val playing = state.playingNow?.takeIf { barOpen }
+    // What an app plays with no song named is listened to only while its bar is on screen.
+    val unnamed = state.playingUnnamed?.takeIf { barOpen && playing == null }
+    val naming = unnamed != null
+    DisposableEffect(naming) {
+        actions.onPlayingBarInSight(naming)
+        onDispose { actions.onPlayingBarInSight(false) }
     }
+    val bar: Any? = playing ?: unnamed
     Page(
         title = stringResource(R.string.app_name),
         titleLeading = { AppLogo() },
@@ -729,13 +745,16 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
                 // What's broken stays in sight until it's fixed, over what's playing, once it isn't asked below the field.
                 val toFix = state.toFix.takeIf { !state.firstAsks } ?: 0
                 AnimatedVisibility(visible = toFix > 0, enter = Motion.appear, exit = Motion.disappear) {
-                    FixBar(toFix, actions.onOpenFixes, modifier = if (playing == null) Modifier.navigationBarsPadding() else Modifier)
+                    FixBar(toFix, actions.onOpenFixes, modifier = if (bar == null) Modifier.navigationBarsPadding() else Modifier)
                 }
-                AnimatedVisibility(visible = playing != null, enter = Motion.appear, exit = Motion.disappear) {
+                AnimatedVisibility(visible = bar != null, enter = Motion.appear, exit = Motion.disappear) {
                     // Kept while it fades out, as the song goes when it's tapped.
-                    val shown = remember { mutableStateOf(playing) }
-                    if (playing != null) shown.value = playing
-                    shown.value?.let { NowPlayingBar(it, actions) }
+                    val shown = remember { mutableStateOf(bar) }
+                    if (bar != null) shown.value = bar
+                    when (val now = shown.value) {
+                        is NowPlaying -> NowPlayingBar(now, actions)
+                        is PlayingUnnamed -> UnnamedBar(now, actions)
+                    }
                 }
             }
         },
@@ -789,31 +808,65 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
 private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
     val song = now.song
     val following = now.following
+    PlayingBar(
+        song.title, listOfNotNull(song.artist.takeIf { it.isNotBlank() }, following?.app).joinToString(" · "), song.artworkUrl,
+        following, following?.durationMs ?: song.lengthMs, actions.onOpenPlayingNow, actions
+    )
+}
+
+/**
+ * What an app plays while it names no song, e.g. a radio station: the song heard in it, which a tap
+ * shows like a link when that's safe, or until one is, what the app calls it, e.g. the station, never
+ * as a song. Its buttons and where it is are the app's, as for a song.
+ */
+@Composable
+private fun UnnamedBar(now: PlayingUnnamed, actions: ScreenActions) {
+    val song = now.heard?.metadata
+    // The app's name as following it has it too, as both are from its package.
+    val app = now.playing.label
+    val name = song?.title ?: now.playing.name ?: app.orEmpty()
+    PlayingBar(
+        name, listOfNotNull(song?.artist, app).filter { it.isNotBlank() && it != name }.joinToString(" · "),
+        song?.artworkUrl ?: now.playing.artworkUrl, now.following, now.following?.durationMs, actions.onOpenPlayingUnnamed, actions
+    )
+}
+
+/**
+ * The bar at the bottom with what an app plays: [title] over [byLine], its cover, the app's buttons,
+ * and how far it is when [duration] is known. A tap does [onOpen]; swiped up, it opens the player.
+ */
+@Composable
+private fun PlayingBar(title: String, byLine: String, cover: String?, following: Following?, duration: Long?, onOpen: () -> Unit, actions: ScreenActions) {
     val playing = following?.clock?.playing != false
-    val duration = following?.durationMs ?: song.lengthMs
+    // The buttons sit inside the bar's own tap target, where a remote's search from the bar never looks.
+    val bar = remember { FocusRequester() }
+    val playPause = remember { FocusRequester() }
     Surface(
-        onClick = actions.onOpenPlayingNow,
+        onClick = onOpen,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        // Swiped up, it opens the player.
         modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG).swipeLayers()
+            .focusRequester(bar).focusProperties { right = playPause }
     ) {
         Column(modifier = Modifier.navigationBarsPadding()) {
             Row(
                 modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp).widthIn(max = ContentMaxWidth),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CoverArt(song.artworkUrl, actions.loadArtwork, size = 48.dp)
+                CoverArt(cover, actions.loadArtwork, size = 48.dp)
                 Column(modifier = Modifier.padding(start = 12.dp, end = 8.dp).weight(1f)) {
-                    Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        listOfNotNull(song.artist.takeIf { it.isNotBlank() }, following?.app).joinToString(" · "),
+                        byLine,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                IconButton(onClick = actions.onPlayingNowPlayPause, modifier = Modifier.size(52.dp)) {
+                IconButton(
+                    onClick = actions.onPlayingNowPlayPause,
+                    modifier = Modifier.size(52.dp).focusRequester(playPause).focusProperties { left = bar }
+                ) {
                     AppIcon(
                         if (playing) R.drawable.ic_pause else R.drawable.ic_play,
                         contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play)

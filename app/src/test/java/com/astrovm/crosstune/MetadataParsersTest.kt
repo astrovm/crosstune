@@ -180,6 +180,9 @@ class MetadataParsersTest {
         assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Artist - Fake Song.FLAC", "Unknown Artist"))
         // A placeholder named in the title is no artist either.
         assertEquals(MusicMetadata("Fake Song", ""), MetadataParsers.playerSong("Unknown Artist - Fake Song.ogg", ""))
+        // A radio app that splits a station's "Artist - Song - " leaves the last dash on the song, as VRadio does.
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Song -", "Fake Artist"))
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Song – ", "Fake Artist"))
         // No title, no song.
         assertNull(MetadataParsers.playerSong("", "Fake Artist"))
         assertNull(MetadataParsers.playerSong("  ", ""))

@@ -436,6 +436,24 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun backToBeforeAStationPlaysOnInItsAppWithNowhereToGoBackTo() {
+        keep(line())
+        playing()
+        val cards = cards()
+        val station = Unnamed("com.example.radio", "Fake Radio", "Fake FM")
+        cards.start(null, before = Before(station.played, 0, station.app, songless = true))
+        waitFor("the line is ready") { practice?.sound == LineSound.PLAYED }
+        playback.seeks.clear()
+        playback.plays.clear()
+        playback.playedApps.clear()
+        cards.backToBefore()
+        assertNull(practice)
+        assertEquals(listOf(true), playback.plays.toList())
+        assertEquals(listOf<String?>(station.app), playback.playedApps.toList())
+        assertTrue(playback.seeks.isEmpty())
+    }
+
+    @Test
     fun backToBeforeInAnAppThatHasToBeAskedForItLetsItPlay() {
         keep(line())
         val cards = cards()
@@ -857,6 +875,20 @@ class PracticeCardsTest {
         cards().start(null, before = null)
         waitFor("it's asked") { playback.songsAsked.isNotEmpty() }
         assertEquals(0, playback.cameBack)
+    }
+
+    @Test
+    fun aCardsAppWithNoSongNamedYetIsAskedForTheSongNeverMovedAsIfItHadIt() {
+        spotifyHasTheSong()
+        keep(line().copy(app = MusicService.TIDAL.packageName))
+        playback.access = true
+        // TIDAL loading, its title blank: what it has isn't the card's song, so nothing there is moved or played.
+        playback.appPlaying[MusicService.TIDAL.packageName] = MutableStateFlow(Following(PlaybackClock(0, System.currentTimeMillis()), "TIDAL", canSeek = true, appPackage = MusicService.TIDAL.packageName))
+        playback.unnamed.value = Unnamed(MusicService.TIDAL.packageName, "TIDAL", null)
+        cards().start(null, before = null)
+        waitFor("it's asked") { playback.songsAsked.isNotEmpty() }
+        assertEquals(MusicService.TIDAL.packageName, playback.songsAsked.single().second)
+        assertTrue(playback.seeks.isEmpty())
     }
 
     @Test

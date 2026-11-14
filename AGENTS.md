@@ -18,6 +18,7 @@ ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --second
 python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # the replay set up as that phone check went, held to its lines
 python3 scripts/syncreplay/syncreplay.py untimed [--again MS] -v   # words with their times taken off, timed by the singing heard, line by line against when it's sung
 python3 scripts/matchcheck/replay.py run OUT LABEL   # the YouTube Music matcher replayed on real songs collect.py kept, without the network; `prepare` first, `table OUT LABEL --against main` compares
+scripts/namescheck/golden.sh [SHA]          # what main's SongNames took for each pair NamePairs.kt makes, for NamesGoldenTest; run again after changing NamePairs.kt
 python3 scripts/notices.py check          # each licence text in Settings → About → Licenses against its source, fetched again
 node --test report/*.test.mjs             # the report Worker's tests
 python3 scripts/reports/reports.py triage --since ID   # the reports in D1, grouped; `pull` first, read-only, and they stay out of git
@@ -37,7 +38,7 @@ The most common defect here is a change that works where you tested it and is mi
 
 ## Design
 
-- Crosstune needs two things from Android to work: opening links and notification access. Missing either is a problem to show and fix, never an extra. The microphone is asked where it's used: naming a song, or opening lyrics. With Shizuku, the one tap allows it too, since that costs nothing more.
+- Crosstune needs two things from Android to work: opening links and notification access. Missing either is a problem to show and fix, never an extra. The microphone is asked where it's used: naming a song, or opening lyrics. With Shizuku, the one tap allows it too, since that costs nothing more. Once allowed, it also names what an app plays without saying, but only while Crosstune is open with that app's bar showing.
 - Design for someone without Shizuku, root or ADB first. Shizuku only adds a shortcut on top.
 - The content is the screen. Nothing covers the words, the cover art or the visuals, and a screen's tools stay small, like the lyrics pill.
 - Words cost. Icon, color and state before text. A label, hint or caption has to earn its place. Problems are the exception: say them plainly, in words.

@@ -17,6 +17,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.AudioAttributes
 import android.media.MediaDescription
@@ -25,6 +26,7 @@ import android.media.session.MediaController
 import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Build
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
@@ -34,6 +36,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -56,6 +59,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
+import org.robolectric.shadows.AudioDeviceInfoBuilder
 import org.robolectric.shadows.PlaybackInfoBuilder
 import org.robolectric.shadows.ShadowMediaSessionManager
 import org.robolectric.shadows.ShadowSettings
@@ -978,19 +982,29 @@ class PlaybackTest {
     fun localFilesWithThinTagsStillCountAsPlaying() {
         allow()
         sounding()
+        // A file that names its artist is a song; one that names nobody plays with no song named, and is listened to.
         for ((input, expected) in listOf(
             Triple("org.videolan.vlc", "Fake Artist - Fake Song.mp3", null) to MusicMetadata("Fake Song", "Fake Artist"),
-            Triple("org.videolan.vlc", "Fake Song", "Unknown Artist") to MusicMetadata("Fake Song", ""),
+            Triple("org.videolan.vlc", "Fake Song", "Unknown Artist") to null,
             Triple("com.sec.android.app.music", "Fake Artist - Fake Song", "<unknown>") to MusicMetadata("Fake Song", "Fake Artist"),
-            Triple("com.maxmpz.audioplayer", "Fake Song", "") to MusicMetadata("Fake Song", ""),
+            Triple("com.maxmpz.audioplayer", "Fake Song", "") to null,
             Triple("com.example.player", "Fake Artist - Fake Song.FLAC", "unknown") to MusicMetadata("Fake Song", "Fake Artist"),
-            Triple("com.example.player", "Unknown Artist - Fake Song.ogg", null) to MusicMetadata("Fake Song", "")
+            Triple("com.example.player", "Unknown Artist - Fake Song.ogg", null) to null,
+            Triple("com.example.player", "AUD-20240101-WA0003.opus", "<unknown>") to null
         )) {
             val (packageName, title, artist) = input
             ShadowMediaSessionManager.reset()
             shadowOf(sessions).addController(player(packageName, "Player", title, artist))
             assertEquals(title, expected, playback.nowPlaying()?.metadata)
+            // Followed by what the app has where the artist goes, as the app has it, and shown by its title as a song's is read.
+            val shown = mapOf("Unknown Artist - Fake Song.ogg" to "Fake Song", "AUD-20240101-WA0003.opus" to "AUD-20240101-WA0003")[title] ?: title
+            assertEquals(title, if (expected == null) Unnamed(packageName, "Player", shown, artist = artist.orEmpty()) else null, playback.playingUnnamed())
         }
+        // A title with a real artist is a song, even one shaped like a recording's name.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.example.player", "Player", "Demo 20230415", "Fake Artist", album = "Fake Album"))
+        assertEquals(MusicMetadata("Demo 20230415", "Fake Artist"), playback.nowPlaying()?.metadata)
+        assertNull(playback.playingUnnamed())
     }
 
     @Test
@@ -1459,9 +1473,10 @@ class PlaybackTest {
     fun aFileOfNoArtistPlaysWithoutOneAndACompilationsIsReadFromItsTitle() {
         allow()
         sounding()
-        // Android's word for a file with no artist is no artist (#591), but the file still plays (#780).
+        // Android's word for a file with no artist is no artist (#591): the file plays (#780), with no song named, so it's listened to.
         shadowOf(sessions).addController(player("com.other.player", "Other", "Your FYP, but make it a playlist (256k)", "<unknown>", album = "Downloads"))
-        assertEquals(MusicMetadata("Your FYP, but make it a playlist (256k)", ""), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertNull(playback.nowPlaying())
+        assertEquals(Unnamed("com.other.player", "Other", "Your FYP, but make it a playlist (256k)", artist = "<unknown>"), playback.playingUnnamed())
         // A compilation's file names its artist in the title, whatever the language it says so in.
         for (various in listOf("Various Artists", "Varios Artistas", "VA")) {
             ShadowMediaSessionManager.reset()
@@ -1469,10 +1484,491 @@ class PlaybackTest {
             assertEquals(MusicMetadata("Provision", "Vanishing Point"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
             assertEquals(MusicMetadata("Provision", "Vanishing Point"), playback.recording(MusicMetadata("Provision", "Vanishing Point"))?.copy(lengthMs = null, recordingId = null))
         }
-        // With no artist in its title either, it plays, but there's nobody to name.
+        // With no artist in its title either, it plays, but there's nobody to name, so it's listened to.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.other.player", "Other", "Provision", "Various Artists", album = "Metal Compilation"))
-        assertEquals(MusicMetadata("Provision", ""), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertNull(playback.nowPlaying())
+        assertEquals("Provision", playback.playingUnnamed()?.name)
+    }
+
+    @Test
+    fun aRadioStationIsPlayedWithNoSongNamed() {
+        allow()
+        sounding()
+        // As VRadio names a station it has no song for: no artist, its own name as the album, a length that grows (#998).
+        val cover = "https://example.com/logo.png"
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", album = "VRadio", duration = 120_000, art = mapOf(MediaMetadata.METADATA_KEY_ART_URI to cover)))
+        assertNull(playback.nowPlaying())
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2", cover), playback.playingUnnamed())
+        // An artist named as the app that plays them is a song, as "Trust Me" by Pandora in the Pandora app.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.pandora.android", "Pandora", "Trust Me", "Pandora", album = "Fake Album"))
+        assertEquals(MusicMetadata("Trust Me", "Pandora"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertNull(playback.playingUnnamed())
+        // As Radio Garden names one: the station, where it is as the artist, and no length, as a video has.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.jonathanpuckey.radiogarden", "Radio Garden", "Fake FM", "Lisbon, Portugal", duration = -1))
+        assertNull(playback.nowPlaying())
+        assertEquals("Fake FM", playback.playingUnnamed()?.name)
+        // A station that sends what it plays, as ICY says it, names the song.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Fake Artist - Fake Song", "", album = "VRadio"))
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertNull(playback.playingUnnamed())
+    }
+
+    @Test
+    fun whatPlayedLastOnThePhoneComesFirstNamedOrNot() {
+        allow()
+        sounding()
+        // With no title at all, it still plays, named by nothing.
+        shadowOf(sessions).addController(player("com.example.player", "Player", "", null, at = PLAYED_AT + 1))
+        assertEquals(Unnamed("com.example.player", "Player", null), playback.playingUnnamed())
+        // The one that played last is the one told.
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", at = PLAYED_AT + 2))
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2"), playback.playingUnnamed())
+        // A song that played before it doesn't take its place, as the sleep timer and practice have the station too.
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", at = PLAYED_AT))
+        assertNull(playback.nowPlaying())
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2"), playback.playingUnnamed())
+        // A song played since does.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", at = PLAYED_AT + 2))
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", at = PLAYED_AT + 3))
+        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertNull(playback.playingUnnamed())
+    }
+
+    @Test
+    fun anAppNamingNoSongCountsOnlyWhilePlaying() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", state = PlaybackState.STATE_PAUSED))
+        assertNull(playback.playingUnnamed())
+        // Played on a speaker elsewhere, it counts, away, as the phone has nothing of it to hear.
+        ShadowMediaSessionManager.reset()
+        val cast = player("com.ilv.vradio", "VRadio", "RTP Antena 2", "")
+        shadowOf(cast).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE).build())
+        shadowOf(sessions).addController(cast)
+        assertEquals(true, playback.playingUnnamed()?.away)
+        // Nor with no access to what apps play.
+        ShadowMediaSessionManager.reset()
+        Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", "")
+        NotificationManagerCompat.getEnabledListenerPackages(app)
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "RTP Antena 2", ""))
+        assertNull(playback.playingUnnamed())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun anAppNamingNoSongIsFollowedAndAskedByItsPackageWhateverItCallsItPausedToo() {
+        allow()
+        sounding()
+        // A file with no title at all, as a player may name one.
+        val file = player("com.example.player", "Fake Player", "", null)
+        shadowOf(sessions).addController(file)
+        val unnamed = checkNotNull(playback.playingUnnamed())
+        assertEquals(Unnamed("com.example.player", "Fake Player", null), unnamed)
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(unnamed.played, unnamed.app).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(true, seen.last()?.clock?.playing)
+        // Its buttons reach it by its package; by its name, which is none, nothing does.
+        playback.playPause(unnamed.played, false, unnamed.app)
+        playback.skip(unnamed.played, true, unnamed.app)
+        assertEquals(listOf("pause", "skipToNext"), asked())
+        playback.playPause(unnamed.played, false)
+        playback.skip(unnamed.played, true)
+        assertEquals(emptyList<String>(), asked())
+        // Paused, it no longer counts as playing, but it's still followed, paused, as a song is.
+        shadowOf(file).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 42_000, 0f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(playback.playingUnnamed())
+        assertEquals(false, seen.last()?.clock?.playing)
+        playback.playPause(unnamed.played, true, unnamed.app)
+        assertEquals(listOf("play"), asked())
+        // Stopped, it has nothing to follow.
+        shadowOf(file).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_STOPPED, 0, 0f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSongIsNeverTakenForWhatItsAppPlaysWithNoSongNamed() {
+        allow()
+        sounding()
+        // The same app plays a song now: asked by package for what named none, it isn't that.
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Fake Song", "Fake Band"))
+        playback.playPause(MusicMetadata("", ""), false, "com.example.player")
+        assertEquals(emptyList<String>(), asked())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSongAskedOfAnAppIsNeverWhatItPlaysWithNoSongNamed() {
+        allow()
+        sounding()
+        val fakeSong = MusicMetadata("Fake Song", "Fake Band")
+        // A card's song asked of its app, as it loads with no title yet, or as it plays a station: it isn't that.
+        listOf(player("com.example.player", "Fake Player", "", null), player("com.example.player", "Fake Player", "Fake FM", "")).forEach { other ->
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(other)
+            val seen = mutableListOf<Following?>()
+            collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(fakeSong, "com.example.player").collect { seen += it } }
+            shadowOf(Looper.getMainLooper()).idle()
+            assertNull(seen.last())
+            playback.seekTo(fakeSong, 10_000, "com.example.player")
+            playback.playPause(fakeSong, false, "com.example.player")
+            assertEquals(emptyList<String>(), asked())
+        }
+        // The station is reached as it's called, there.
+        playback.playPause(MusicMetadata("Fake FM", ""), false, "com.example.player")
+        assertEquals(listOf("pause"), asked())
+    }
+
+    /** [controller] played elsewhere, on a speaker or a computer, as Android says. */
+    private fun elsewhere(controller: MediaController) = controller.also {
+        shadowOf(it).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE).build())
+    }
+
+    @Test
+    fun whatPlaysFirstIsRankedNamedOrNotOnThePhoneOrNot() {
+        allow()
+        // A station cast to a speaker plays, and has the bar, though the phone has nothing of it to hear.
+        shadowOf(sessions).addController(elsewhere(player("com.ilv.vradio", "VRadio", "Fake FM", "")))
+        assertNull(playback.nowPlaying())
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "Fake FM", where = Place.ELSEWHERE), playback.playingUnnamed())
+        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM", where = Place.ELSEWHERE)), playback.whatPlays())
+        // A station on the phone comes before a song on a computer, though the computer's said so since: the bar has the station.
+        ShadowMediaSessionManager.reset()
+        sounding()
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Fake FM", ""))
+        shadowOf(sessions).addController(elsewhere(player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Song", "Fake Band", album = "Fake Album", at = PLAYED_AT + 5)))
+        assertNull(playback.nowPlaying())
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "Fake FM"), playback.playingUnnamed())
+        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM")), playback.whatPlays())
+        // A music app's item with no song named, cast to a TV, is the phone's own, so it comes before a newer song on a computer.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(elsewhere(player("com.spotify.music", "Spotify", "Fake Episode", "")))
+        shadowOf(sessions).addController(elsewhere(player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Song", "Fake Band", album = "Fake Album", at = PLAYED_AT + 5)))
+        assertEquals(WhatPlays.Nameless(Unnamed("com.spotify.music", "Spotify", "Fake Episode", where = Place.CAST)), playback.whatPlays())
+        // Both on the phone, and both saying what they play, the one that said where it is last comes first, either way.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Fake FM", "", at = PLAYED_AT + 5))
+        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM")), playback.whatPlays())
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Fake FM", ""))
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", at = PLAYED_AT + 5))
+        assertEquals(song, (playback.whatPlays() as WhatPlays.Named).song.metadata)
+        // A song on the phone comes before a station cast.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(elsewhere(player("com.ilv.vradio", "VRadio", "Fake FM", "", at = PLAYED_AT + 5)))
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
+        assertEquals(song, (playback.whatPlays() as WhatPlays.Named).song.metadata)
+        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertNull(playback.playingUnnamed())
+        // Nothing plays.
+        ShadowMediaSessionManager.reset()
+        assertNull(playback.whatPlays())
+    }
+
+    @Test
+    fun whatSaysNoSongComesAfterEveryAppThatSaysOne() {
+        allow()
+        sounding()
+        // A video that doesn't say it's music, on the phone, comes after a song cast to a speaker.
+        val vlog = { player("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", "Fake Channel", at = PLAYED_AT + 5) }
+        shadowOf(sessions).addController(vlog())
+        shadowOf(sessions).addController(elsewhere(player("com.spotify.music", "Spotify", "Fake Song", "Fake Band", album = "Fake Album")))
+        assertEquals(MusicMetadata("Fake Song", "Fake Band"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertNull(playback.playingUnnamed())
+        assertEquals(MusicMetadata("Fake Song", "Fake Band"), (playback.whatPlays() as WhatPlays.Named).song.metadata.copy(lengthMs = null))
+        // And after a song on a computer.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(vlog())
+        shadowOf(sessions).addController(elsewhere(player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Song", "Fake Band", album = "Fake Album")))
+        assertEquals(MusicMetadata("Fake Song", "Fake Band"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        // A session with no title comes after a song, though it said where it is since.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Fake Song", "Fake Band", album = "Fake Album"))
+        shadowOf(sessions).addController(player("com.example.player", "Player", "", null, at = PLAYED_AT + 5))
+        assertEquals(MusicMetadata("Fake Song", "Fake Band"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        // With nothing else playing, it's what plays.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(vlog())
+        assertNull(playback.nowPlaying())
+        assertEquals(Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel", said = false), playback.playingUnnamed())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aStationCastToASpeakerIsReachedThereByItsApp() {
+        allow()
+        shadowOf(sessions).addController(elsewhere(player("com.ilv.vradio", "VRadio", "Fake FM", "", actions = PlaybackState.ACTION_SKIP_TO_NEXT)))
+        val away = checkNotNull(playback.playingUnnamed())
+        playback.playPause(away.played, false, away.app)
+        playback.skip(away.played, true, away.app)
+        assertEquals(listOf("pause", "skipToNext"), asked())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSongIsNeverAStationThatSharesItsWords() {
+        allow()
+        sounding()
+        val card = MusicMetadata("Hotel California", "Eagles")
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Hotel California Radio", ""))
+        listOf("com.ilv.vradio", null).forEach { app ->
+            val seen = mutableListOf<Following?>()
+            collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(card, app).collect { seen += it } }
+            shadowOf(Looper.getMainLooper()).idle()
+            assertNull(seen.last())
+            playback.seekTo(card, 10_000, app)
+            playback.playPause(card, false, app)
+            assertEquals(emptyList<String>(), asked())
+        }
+        // Nor a station the one before, sharing its words: "Los 40" isn't "Los 40 Classic", the next one.
+        ShadowMediaSessionManager.reset()
+        val radio = player("com.ilv.vradio", "VRadio", "Los 40", "")
+        shadowOf(sessions).addController(radio)
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(MusicMetadata("Los 40", "", unnamed = true), "com.ilv.vradio").collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(true, seen.last()?.clock?.playing)
+        shadowOf(radio).executeOnMetadataChanged(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Los 40 Classic").putString(MediaMetadata.METADATA_KEY_ARTIST, "").build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+        // Asked with no app, a station isn't reached by its name either.
+        playback.playPause(MusicMetadata("Los 40 Classic", "", unnamed = true), false)
+        assertEquals(emptyList<String>(), asked())
+        // Nor is a song by words it shares with the station.
+        assertNull(playback.appFor(MusicMetadata("Los 40", "Fake Band")))
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSongWithNoArtistIsFollowedInAnAppThatNamesItFully() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Fake Song", "Fake Band", album = "Fake Album"))
+        // As Google shares a song, or Recent kept one from a file named by its title alone.
+        val shared = MusicMetadata("Fake Song", "")
+        listOf("com.spotify.music", null).forEach { app ->
+            val seen = mutableListOf<Following?>()
+            collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(shared, app).collect { seen += it } }
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals("$app", true, seen.last()?.clock?.playing)
+        }
+        playback.playPause(shared, false)
+        assertEquals(listOf("pause"), asked())
+        // What names no song is never a song, though it's called the same.
+        assertNull(playback.appFor(shared.copy(unnamed = true)))
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSongStaysFollowedAndTimedAsItsAppNamesWhoSingsItMidSong() {
+        allow()
+        sounding()
+        val file = player("com.example.player", "Player", "Fake Song", "", position = 0, duration = 200_000)
+        shadowOf(sessions).addController(file)
+        // Asked as a song with no artist, and as what the app plays with no song named, as its bar and timer have it.
+        val unnamed = checkNotNull(playback.playingUnnamed()).played
+        val asks = listOf(MusicMetadata("Fake Song", "") to null, unnamed to "com.example.player")
+        val seen = asks.map { (song, app) ->
+            mutableListOf<Following?>().also { seen -> collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song, app).collect { seen += it } } }
+        }
+        val scope = CoroutineScope(Dispatchers.Main.immediate)
+        val timer = SleepTimer(playback, scope)
+        timer.afterSong(unnamed, "com.example.player")
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(file).executeOnMetadataChanged(MediaMetadata.Builder(file.metadata).putString(MediaMetadata.METADATA_KEY_ARTIST, "Fake Band").build())
+        shadowOf(Looper.getMainLooper()).idle()
+        seen.forEach { assertEquals(true, it.last()?.clock?.playing) }
+        // The timer waits for the song's end: nothing is paused yet.
+        assertEquals(emptyList<String>(), asked())
+        assertEquals(Sleep(), timer.set.value)
+        scope.cancel()
+    }
+
+    @Test
+    fun aSongIsFollowedInAnAppThatSendsNoArtistByItsTitleAsTheAppDressesIt() {
+        allow()
+        sounding()
+        val asked = MusicMetadata("Fake Song", "Fake Band")
+        val dressed = listOf("Fake Song [Explicit]", "Fake Song (Official Audio)", "Fake Song (From \"Fake Movie\")", "01 Fake Song", "01. Fake Song", "Fake Song (Live)", "Fake Song (Acoustic)", "Fake Song (Extended Mix)")
+        for (title in dressed + listOf("1. Fake Song", "01 Fake Song (Live) [Explicit].mp3")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.example.player", "Player", title, ""))
+            assertEquals(title, "com.example.player", playback.appFor(asked)?.packageName)
+            assertEquals(title, "com.example.player", playback.appFor(asked, app = "com.example.player")?.packageName)
+        }
+        // Never by words it shares, as a station.
+        // Nor a song whose own name starts with a number, "7 Rings", by the words after it.
+        // Nor another recording of it: what's asked for isn't played, timed or paused in its place.
+        val others = otherRecordingsByTitle.map { (title, song) -> title to MusicMetadata(song, "Fake Band") }
+        for ((station, song) in listOf("Hotel California Radio" to MusicMetadata("Hotel California", "Eagles"), "Los 40 Classic" to MusicMetadata("Los 40", "Fake Band"), "7 Rings" to MusicMetadata("Rings", "Fake Band")) + others) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", station, ""))
+            assertNull(station, playback.appFor(song))
+            assertNull(station, playback.appFor(song, app = "com.ilv.vradio"))
+        }
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aFileIsShownByItsTitleAsASongsWasReadFromIt() {
+        allow()
+        sounding()
+        for ((title, artist) in listOf("Fake Song.mp3" to "", "Unknown Artist - Fake Song.ogg" to null, "01 Fake Song" to "")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.example.player", "Player", title, artist))
+            val unnamed = checkNotNull(playback.playingUnnamed())
+            assertEquals(title, "Fake Song", unnamed.name)
+            // Its buttons still reach it by that name.
+            playback.playPause(unnamed.played, false, unnamed.app)
+            assertEquals(title, listOf("pause"), asked())
+        }
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSongIsFollowedInAnAppThatSendsNoArtist() {
+        allow()
+        sounding()
+        // The app names the song, with no one who sings it: what's asked is the song, as heard.
+        val plain = player("com.example.player", "Player", "Fake Song", "")
+        shadowOf(sessions).addController(plain)
+        val asked = MusicMetadata("Fake Song", "Fake Band")
+        listOf("com.example.player", null).forEach { app ->
+            val seen = mutableListOf<Following?>()
+            collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(asked, app).collect { seen += it } }
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(true, seen.last()?.clock?.playing)
+            assertEquals("com.example.player", playback.appFor(asked, app = app)?.packageName)
+        }
+        playback.playPause(asked, false)
+        assertEquals(listOf("pause"), asked())
+        // Only by its whole title: another song of it is another song.
+        assertNull(playback.appFor(MusicMetadata("Fake Song Two", "Fake Band")))
+        assertNull(playback.appFor(MusicMetadata("Fake", "Fake Band")))
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun anAppIsAskedToPlayWhateverItHas() {
+        allow()
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Fake Song.mp3", "<unknown>", state = PlaybackState.STATE_PAUSED))
+        playback.playApp("com.example.player")
+        playback.playApp("com.example.gone")
+        assertEquals(listOf("play"), asked())
+    }
+
+    @Test
+    fun aStationIsFollowedOnlyUntilItsAppIsOnToTheNext() {
+        allow()
+        sounding()
+        val radio = player("com.ilv.vradio", "VRadio", "Fake FM", "")
+        shadowOf(sessions).addController(radio)
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(MusicMetadata("Fake FM", ""), "com.ilv.vradio").collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(true, seen.last()?.clock?.playing)
+        // Skipped to the next station, it plays on, but not the one followed.
+        shadowOf(radio).executeOnMetadataChanged(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Other FM").putString(MediaMetadata.METADATA_KEY_ARTIST, "").build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+    }
+
+    @Test
+    fun anAppNamingNoSongIsToldAsItChanges() {
+        allow()
+        sounding()
+        val seen = mutableListOf<Unnamed?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.unnamedUpdates().collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        val radio = player("com.ilv.vradio", "VRadio", "RTP Antena 2", "")
+        shadowOf(sessions).addController(radio)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2"), seen.last())
+    }
+
+    @Test
+    fun thePhonePlaysAloudOnlyOnItsSpeakerAndNotMuted() {
+        val audio = app.getSystemService(AudioManager::class.java)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
+        assertTrue(playback.playsAloud())
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
+        assertFalse(playback.playsAloud())
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
+        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+        assertFalse(playback.playsAloud())
+        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+        // Through headphones, wired or not, the microphone hears nothing of it; a speaker on Bluetooth is told as one too.
+        for (type in listOf(AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLE_HEADSET)) {
+            outputs(audio, type)
+            assertFalse(playback.playsAloud())
+        }
+        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+        assertTrue(playback.playsAloud())
+    }
+
+    @Test
+    fun anyOutputThatMayBeHeardByItsListenerAloneIsNotAloud() {
+        val audio = app.getSystemService(AudioManager::class.java)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
+        // What a phone always has, and a TV, a car or a speaker that fills the room.
+        val room = listOf(
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE,
+            AudioDeviceInfo.TYPE_TELEPHONY, AudioDeviceInfo.TYPE_REMOTE_SUBMIX
+        )
+        outputs(audio, *room.toIntArray())
+        assertTrue(playback.playsAloud())
+        for (type in listOf(AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_HDMI_EARC, AudioDeviceInfo.TYPE_BUS, AudioDeviceInfo.TYPE_BLE_SPEAKER)) {
+            outputs(audio, *(room + type).toIntArray())
+            assertTrue("$type", playback.playsAloud())
+        }
+        // Each of these may be in one listener's ears, and so may a kind a later Android adds.
+        val private = listOf(
+            AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_ACCESSORY, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_BROADCAST,
+            AudioDeviceInfo.TYPE_HEARING_AID, AudioDeviceInfo.TYPE_BLE_HEARING_AID, AudioDeviceInfo.TYPE_BLE_CENTRAL, AudioDeviceInfo.TYPE_BLE_CENTRAL_BROADCAST,
+            AudioDeviceInfo.TYPE_LINE_ANALOG, AudioDeviceInfo.TYPE_LINE_DIGITAL, AudioDeviceInfo.TYPE_AUX_LINE,
+            AudioDeviceInfo.TYPE_DOCK, AudioDeviceInfo.TYPE_DOCK_ANALOG, AudioDeviceInfo.TYPE_IP, AudioDeviceInfo.TYPE_FM,
+            AudioDeviceInfo.TYPE_MULTICHANNEL_GROUP, AudioDeviceInfo.TYPE_UNKNOWN, 99
+        )
+        for (type in private) {
+            outputs(audio, *(room + type).toIntArray())
+            assertFalse("$type", playback.playsAloud())
+        }
+    }
+
+    private fun outputs(audio: AudioManager, vararg types: Int) =
+        shadowOf(audio).setOutputDevices(types.map { AudioDeviceInfoBuilder.newBuilder().setType(it).build() })
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.R])
+    fun beforeBluetoothLeHeadsetsHeadphonesStillCount() {
+        val audio = app.getSystemService(AudioManager::class.java)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
+        outputs(audio, AudioDeviceInfo.TYPE_WIRED_HEADSET)
+        assertFalse(playback.playsAloud())
+        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE, AudioDeviceInfo.TYPE_REMOTE_SUBMIX)
+        assertTrue(playback.playsAloud())
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.Q])
+    fun beforeAndroid11TheSpeakerAloneIsStillAloud() {
+        val audio = app.getSystemService(AudioManager::class.java)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
+        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_TELEPHONY)
+        assertTrue(playback.playsAloud())
+        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_WIRED_HEADPHONES)
+        assertFalse(playback.playsAloud())
     }
 
     @Test
@@ -1533,16 +2029,17 @@ class PlaybackTest {
         val blue = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLUE) }
         shadowOf(first).setMetadata(MediaMetadata.Builder(first.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, red).build())
         shadowOf(second).setMetadata(MediaMetadata.Builder(second.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, blue).build())
+        // Named by nobody, they're listened to, and shown by their covers meanwhile.
         shadowOf(sessions).addController(first)
-        val firstCover = playback.nowPlaying()?.metadata?.artworkUrl
+        val firstCover = playback.playingUnnamed()?.artworkUrl
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(second)
-        val secondCover = playback.nowPlaying()?.metadata?.artworkUrl
+        val secondCover = playback.playingUnnamed()?.artworkUrl
         assertNotNull(firstCover)
         assertNotNull(secondCover)
         assertNotEquals(firstCover, secondCover)
         shadowOf(second).setMetadata(MediaMetadata.Builder(second.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, null).build())
-        assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
+        assertNull(playback.playingUnnamed()?.artworkUrl)
     }
 
     @Test
@@ -1573,6 +2070,16 @@ class PlaybackTest {
         shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, cover).build())
         shadowOf(sessions).addController(controller)
         File(app.cacheDir, ARTWORK_DIR).writeText("not a directory")
+        assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
+        // Named by nobody, it's shown with no cover too.
+        assertEquals("Fake Song", playback.playingUnnamed()?.name)
+        assertNull(playback.playingUnnamed()?.artworkUrl)
+        // Named by somebody, it's a song, still with no cover.
+        ShadowMediaSessionManager.reset()
+        val named = player("com.example.player", "Player", "Fake Song", "Fake Artist", album = "Fake Album")
+        shadowOf(named).setMetadata(MediaMetadata.Builder(named.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, cover).build())
+        shadowOf(sessions).addController(named)
+        assertEquals("Fake Song", playback.nowPlaying()?.metadata?.title)
         assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
     }
 

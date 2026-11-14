@@ -82,6 +82,7 @@ class MainActivity : ComponentActivity() {
                     client,
                     packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
                     cache("musicbrainz.json", maxEntries = 1000),
+                    musicBrainzTurn(applicationContext),
                     gapMs = musicBrainzGapMs
                 )
                 // What ChatGPT said is kept, so a song read again asks nothing.
@@ -145,6 +146,7 @@ class MainActivity : ComponentActivity() {
                         client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
                     ).takeIf { checksForUpdates(applicationContext) },
                     mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
+                    mayCapture = { Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && PlaybackCapture.allowed(applicationContext) },
                     singing = singingFactory(applicationContext, client),
                     reminders = remindersFactory(applicationContext),
                     reports = ReportSender(
@@ -421,6 +423,7 @@ class MainActivity : ComponentActivity() {
                 client,
                 app.packageManager.getPackageInfo(app.packageName, 0).versionName.orEmpty(),
                 LookupCache(File(app.cacheDir, "queue_musicbrainz.json"), lookupDispatcher, maxEntries = 1000),
+                musicBrainzTurn(app),
                 gapMs = musicBrainzGapMs
             )
             // Given longer than a screen's lookups, as nobody waits on them: a new Spotify song's artist, looked up
@@ -439,6 +442,19 @@ class MainActivity : ComponentActivity() {
                 app::hasApp
             ) { app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, false) }
                 .also { playQueue = app to it }
+        }
+
+        /** The app's turn at MusicBrainz, and the app it's for. */
+        private var musicBrainzTurn: Pair<Context, MusicBrainz.Turn>? = null
+
+        /**
+         * One for the whole app, so its lookups and its queue's keep to MusicBrainz's one a second together.
+         * Another app, as each test makes, gets its own: one the last app left asking holds none of its lookups up.
+         */
+        internal fun musicBrainzTurn(context: Context): MusicBrainz.Turn {
+            val app = context.applicationContext
+            musicBrainzTurn?.takeIf { it.first === app }?.let { return it.second }
+            return MusicBrainz.Turn().also { musicBrainzTurn = app to it }
         }
 
         private var queueOrder: Pair<Context, QueueOrder>? = null
@@ -862,6 +878,9 @@ class MainActivity : ComponentActivity() {
         onPeekPlayingNow = viewModel::peekPlayingNow,
         onPlayingNowPlayPause = viewModel::playingNowPlayPause,
         onPlayingNowSkip = viewModel::playingNowSkip,
+        onOpenPlayingUnnamed = viewModel::openPlayingUnnamed,
+        onPeekPlayingUnnamed = viewModel::peekPlayingUnnamed,
+        onPlayingBarInSight = viewModel::playingBarInSight,
         onSettingsLeft = viewModel::settingsLeft,
         loadArtwork = viewModel.artwork::load,
         covers = viewModel.artwork

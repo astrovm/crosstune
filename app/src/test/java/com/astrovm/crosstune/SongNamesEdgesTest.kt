@@ -9,6 +9,24 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /** The edges of comparing names: Android versions that can't write kanji as China does, names with no letters, and credits that hold each other. Runs under Robolectric for the Android version. */
+/**
+ * Titles an app may send with no artist, each against a song asked for that it isn't: another recording or another part.
+ * Crosstune never took one for the other, by words or otherwise.
+ */
+internal val otherRecordingsByTitle: List<Pair<String, String>> = listOf(
+    "Hotel California (Live)" to "Hotel California (Acoustic)", "Fake Song (Remix)" to "Fake Song (Live)", "Song (Instrumental)" to "Song (Karaoke)",
+    "Yesterday (Remastered 2009)" to "Yesterday (Live)", "05 Song (Live).flac" to "Song (Demo)", "Stay (Instrumental)" to "Stay",
+    "Hello (Live)" to "Hello", "Hello (Remix)" to "Hello", "Hello" to "Hello (Live)",
+    "Fake Song (Part 2)" to "Fake Song (Part 1)", "Fake Song (Part 2) [Explicit]" to "Fake Song (Part 1)", "Fake Song (Part 2)" to "Fake Song (Part 1) [Explicit]",
+    "Fake Song (Spanish Version)" to "Fake Song (English Version)", "Fake Song (Versión Acústica)" to "Fake Song (Versión En Vivo)",
+    "Fake Song (Versión Acústica)" to "Fake Song (En Vivo)", "Fake Song (Stripped)" to "Fake Song (Live)", "Fake Song (Reprise)" to "Fake Song [Explicit]",
+    "Fake Song (Taylor's Version)" to "Fake Song [Explicit]", "Fake Song (ライブ)" to "Fake Song (Acoustic)"
+) + listOf(
+    "(Part 2)", "(Pt. 2)", "(Reprise)", "(Interlude)", "(Versión Acústica)", "(Versão Acústica)", "(Versione Acustica)", "(Akustik Version)",
+    "(Spanish Version)", "(Orchestral Version)", "(Symphonic Version)", "(Stripped)", "(Re-Recorded)", "(Taylor's Version)", "(Rehearsal)",
+    "(Alternate Take)", "(Remixed)", "(Rework)", "(VIP)", "(Dub)", "(Bootleg)", "(Extended)", "(ライブ)"
+).flatMap { tag -> listOf("Hello $tag" to "Hello", "Hello" to "Hello $tag") }
+
 @RunWith(RobolectricTestRunner::class)
 class SongNamesEdgesTest {
 
@@ -108,5 +126,109 @@ class SongNamesEdgesTest {
         assertFalse(many("A Song About a Concert"))
         assertFalse(many("Side A / Side B"))
         assertFalse(many("AC/DC Song"))
+    }
+
+    @Test
+    fun anAppThatSendsNoArtistHasASongByItsTitleOnlyWhereCrosstuneAlwaysTookIt() {
+        // What an app plays, by its title alone, against the song asked for; and whether that's the song.
+        val rows = listOf(
+            "Fake Song [Explicit]" to "Fake Song" to true,
+            "Fake Song (Official Audio)" to "Fake Song" to true,
+            "Fake Song (From \"Fake Movie\")" to "Fake Song" to true,
+            "01 Fake Song" to "Fake Song" to true,
+            "01. Fake Song" to "Fake Song" to true,
+            "1. Fake Song" to "Fake Song" to true,
+            "Fake Song.mp3" to "Fake Song" to true,
+            "01 Fake Song (Live) [Explicit].mp3" to "Fake Song" to true,
+            "Fake Song (Live)" to "Fake Song" to true,
+            "Fake Song (Acoustic)" to "Fake Song" to true,
+            "Fake Song (Extended Mix)" to "Fake Song" to true,
+            "Yesterday (Remastered 2009)" to "Yesterday" to true,
+            "01 Hello" to "Hello" to true,
+            "Hello.mp3" to "Hello" to true,
+            "Hello [Explicit]" to "Hello" to true,
+            "Hello (Official Audio)" to "Hello" to true,
+            "Fake Song (Part 2)" to "Fake Song" to true,
+            "Fake Song (Reprise)" to "Fake Song" to true,
+            "Fake Song (ライブ)" to "Fake Song" to true,
+            // Tags that name no other recording come off wherever they are, and a tag after a dash is a tag as one in brackets is.
+            "Fake Song" to "Fake Song - Explicit" to true,
+            "Hello" to "Hello - Explicit" to true,
+            "Hello - Explicit" to "Hello" to true,
+            "Hello [Explicit] (Live)" to "Hello - Live" to true,
+            "01 Hello (Official Audio) (Live).mp3" to "Hello - Live" to true,
+            "Hello (Official Audio) (Live)" to "Hello [Explicit] (Live)" to true,
+            "Fake Song - Explicit" to "Fake Song" to true,
+            "01 Fake Song (Official Audio) (Live).mp3" to "Fake Song - Live" to true,
+            "Fake Song [Explicit] (Live)" to "Fake Song - Live" to true,
+            "Fake Song (Live)" to "Fake Song - Live" to true,
+            "Main Theme (From \"Fake Movie\")" to "Main Theme (From \"Fake Movie\")" to true,
+            "Main Theme (From \"Fake Movie\")" to "Main Theme" to true,
+            // A number that's part of the name, and words it only shares.
+            "1999" to "99" to false,
+            "22" to "2" to false,
+            "09" to "9" to false,
+            "Song 2" to "Song" to false,
+            "7 Rings" to "Rings" to false,
+            "100 Song" to "Song" to false,
+            "Hotel California Radio" to "Hotel California" to false,
+            "Los 40 Classic" to "Los 40" to false,
+            "Fake Song Remastered 2013" to "Fake Song" to false,
+            // The work it's from goes only up to its closing quote, and names another recording where the other names another work.
+            "Hello (From 'Fake Movie' / Live)" to "Hello" to false,
+            "Hello" to "Hello (From 'Fake Movie' / Live)" to false,
+            "Main Theme (From \"Fake Movie\")" to "Main Theme (From \"Other Movie\")" to false,
+            "Main Theme (From \"Other Movie\")" to "Main Theme (From \"Fake Movie\")" to false,
+            // A name that's only such tags keeps them, as there's no name past them to tell two apart by.
+            "(Official Audio)" to "[Explicit]" to false
+            // Another recording of it, or another part, is another song to follow, as before.
+        ) + otherRecordingsByTitle.map { it to false }
+        // Taken for the song where Crosstune always took it by its words, and more only where meant to:
+        // a track number, a file's extension, or a tag that names no other recording, on a one-word title.
+        val meant = setOf(
+            "01 Hello for Hello", "Hello.mp3 for Hello", "Hello [Explicit] for Hello", "Hello for Hello - Explicit", "Hello - Explicit for Hello",
+            "Hello (Official Audio) (Live) for Hello [Explicit] (Live)"
+        )
+        val gained = mutableSetOf<String>()
+        for ((pair, has) in rows) {
+            val (title, song) = pair
+            val asked = MusicMetadata(song, "Fake Band")
+            val now = SongNames.names(title, "", asked, byWords = false)
+            assertEquals("$title for $song", has, now)
+            if (now && !SongNames.names(title, "", asked)) gained += "$title for $song"
+        }
+        assertEquals(meant, gained)
+    }
+
+    @Test
+    fun aVersionNamedInAnotherScriptIsAnotherRecordingByWordsToo() {
+        // "ライブ" says "Live" in Japanese: as "Live" does, it tells the recording apart, but it's no word of the name, so
+        // it never makes two names one. Each both ways, with the artist named or not, and by words alone.
+        val rows = listOf(
+            "Fake Song (ライブ)" to "Fake Song (Live)" to true,
+            "Fake Song (라이브)" to "Fake Song (Live)" to true,
+            "Fake Song (カバー)" to "Fake Song (Cover)" to true,
+            "Fake Song (伴奏)" to "Fake Song (Instrumental)" to true,
+            "Fake Song (ライブ)" to "Fake Song" to true,
+            "Fake Song (ライブ)" to "Fake Song (Live) (ライブ)" to true,
+            "愛 (カバー)" to "恋 (カバー)" to false,
+            "愛 (伴奏)" to "恋 (伴奏)" to false,
+            "東京ライブ" to "大阪ライブ" to false,
+            "Hello (ライブ)" to "Hello World (ライブ)" to false,
+            "Rings (カバー)" to "7 Rings (カバー)" to false,
+            "Fake Song (ライブ)" to "Fake Song (Acoustic)" to false,
+            "Fake Song (ライブ)" to "Fake Song (カバー)" to false,
+            // A one-word name with a version is no more the name alone, "Hello (ライブ)" as "Hello (Live)".
+            "Hello (ライブ)" to "Hello" to false,
+            "Hello (Live)" to "Hello" to false,
+            "アイドル (ライブ)" to "アイドル" to false
+        )
+        for ((pair, has) in rows) for ((one, other) in listOf(pair, pair.second to pair.first)) {
+            for (artist in listOf("Fake Band", "")) assertEquals("$one for $other by \"$artist\"", has, SongNames.names(one, artist, MusicMetadata(other, "Fake Band")))
+            assertEquals("$one by words to $other", has, SongNames.wordsMatch(one, other))
+        }
+        // The same mark on both, or in the song's own name, is no other recording.
+        assertTrue(SongNames.wordsMatch("ライブ・ア・ライブ", "ライブ・ア・ライブ"))
+        assertTrue(SongNames.wordsMatch("アイドル (ライブ)", "アイドル (ライブ) [Remastered]"))
     }
 }

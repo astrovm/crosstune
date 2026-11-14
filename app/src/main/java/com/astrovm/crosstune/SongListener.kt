@@ -10,13 +10,17 @@ import androidx.core.content.edit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -41,7 +45,8 @@ internal sealed interface Heard {
      * since the phone started, so the words can follow on from there. [matchId] is the recording Shazam
      * matched it to, whose place [offsetMs] is: often another release than the one playing. [speed] is
      * how fast that recording goes by as the sound heard plays, faster for an upload sped up. [app] is
-     * the music app playing it on the phone, by package.
+     * the music app playing it on the phone, by package. [inRoom] when only the microphone heard it, with
+     * nothing to tell it from another song playing in the room.
      */
     data class Song(
         val metadata: MusicMetadata,
@@ -50,7 +55,8 @@ internal sealed interface Heard {
         val startedAtMs: Long? = null,
         val matchId: String? = null,
         val app: String? = null,
-        val speed: Float = 1f
+        val speed: Float = 1f,
+        val inRoom: Boolean = false
     ) : Heard {
         /** Where the song is, as heard, when both halves are known. */
         val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs, speed) else null
@@ -356,8 +362,9 @@ internal fun interface SongHearing {
     /**
      * What an app on the phone plays, heard rather than as the app says, to tell how far the app is from
      * the words; by the microphone too, when the phone won't share its sound, unless not [byMicrophone].
+     * With [whileAloud], the microphone stops once the phone no longer plays out loud.
      */
-    suspend fun listenToPlaying(byMicrophone: Boolean = true): Heard = listen()
+    suspend fun listenToPlaying(byMicrophone: Boolean = true, whileAloud: Boolean = false): Heard = listen()
 }
 
 /**
@@ -367,20 +374,42 @@ internal fun interface SongHearing {
  * microphone hears poorly, and not at all through headphones; with the microphone only when the
  * phone won't share its sound. Nothing heard, it's named as the app does.
  */
-internal class PlayingFirst(private val playback: PlaybackSource, private val hearing: SongHearing, private val played: SongHearing = hearing) : SongHearing {
+internal class PlayingFirst(
+    private val playback: PlaybackSource,
+    private val hearing: SongHearing,
+    private val played: SongHearing = hearing
+) : SongHearing {
     override suspend fun listen(): Heard {
+        // With no song named, even while an app plays one it doesn't name, the microphone names one
+        // nearby: naming what the phone plays is the bar's to do.
         val playing = playback.nowPlaying() ?: return hearing.listen()
         if (playing.clock != null) return playing
         return listenToPlaying() as? Heard.Song ?: playing
     }
 
-    override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
+    override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
         val heard = played.listen()
         if (!byMicrophone || heard != Heard.Failed(AppError.MICROPHONE)) return heard
+        // Through headphones or muted, the microphone hears nothing of it: no more use than none at all.
+        val room = (if (whileAloud) aloud() else hearing.listen()) ?: return heard
         // The microphone hears the room too: another song playing there isn't the one the phone plays.
-        val room = hearing.listen()
-        val playing = playback.nowPlaying()?.metadata ?: return room
+        // With no song named to tell, the one heard may be either.
+        val playing = playback.nowPlaying()?.metadata ?: return (room as? Heard.Song)?.copy(inRoom = true) ?: room
         return room.takeIf { it !is Heard.Song || SongNames.names(playing.title, playing.artist, it.metadata) } ?: Heard.Nothing
+    }
+
+    /** What the microphone hears while the phone plays out loud, or null once it doesn't, as when headphones are plugged in. */
+    private suspend fun aloud(): Heard? = coroutineScope {
+        val listening = async { hearing.listen() }
+        val quiet = async {
+            while (playback.playsAloud()) delay(ALOUD_CHECK_MS)
+            null
+        }
+        select { listening.onAwait { it }; quiet.onAwait { it } }.also { coroutineContext.cancelChildren() }
+    }
+
+    companion object {
+        const val ALOUD_CHECK_MS = 1_000L
     }
 }
 

@@ -15,8 +15,10 @@ import okio.ForwardingSource
 import okio.buffer
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.util.concurrent.AbstractExecutorService
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * In-memory stand-in for Spotify's web endpoints so tests never touch the network.
@@ -51,6 +53,22 @@ class FakeSpotify : Interceptor {
     }
 
     fun client(): OkHttpClient = OkHttpClient.Builder().dispatcher(Dispatcher(requestThreads)).addInterceptor(this).build()
+
+    /**
+     * A client that answers on the thread that asks, at once, so a lookup started on the main looper ends
+     * within the looper's idle, before a test moves the clock, with no thread of its own to wait for.
+     */
+    fun inlineClient(): OkHttpClient = OkHttpClient.Builder().dispatcher(Dispatcher(Inline)).addInterceptor(this).build()
+
+    /** Runs each task as it's handed over, on that thread. */
+    private object Inline : AbstractExecutorService() {
+        override fun execute(command: Runnable) = command.run()
+        override fun shutdown() = Unit
+        override fun shutdownNow(): List<Runnable> = emptyList()
+        override fun isShutdown() = false
+        override fun isTerminated() = false
+        override fun awaitTermination(timeout: Long, unit: TimeUnit) = true
+    }
 
     companion object {
         // Each test can make several clients. Reuse their threads instead of leaving thousands

@@ -127,7 +127,7 @@ internal object SongNames {
         val own = words(title) + words(artist)
         if ((words(name) - own).any { it in VERSION_WORDS }) return true
         val letters = normalize(name)
-        return VERSION_MARKS.any { it in letters && it !in normalize(title) && it !in normalize(artist) }
+        return VERSION_MARKS.keys.any { it in letters && it !in normalize(title) && it !in normalize(artist) }
     }
 
     /** Words a video's title has when it's another version of the song, or not the song at all. */
@@ -140,13 +140,15 @@ internal object SongNames {
     )
 
     /**
-     * The same, as other scripts write them, found anywhere in a title; written as [normalize]
-     * leaves them, which takes the marks off ブ and splits 커버 into its letters.
+     * The same, as other scripts write them, found anywhere in a title, each with the word it says in
+     * Latin letters; written as [normalize] leaves them, which takes the marks off ブ and splits 커버 into its letters.
      */
-    private val VERSION_MARKS = listOf(
-        "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
-        "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방"
-    ).map(::normalize)
+    private val VERSION_MARKS = mapOf(
+        "カラオケ" to "karaoke", "ライブ" to "live", "弾き語り" to "acoustic", "歌ってみた" to "cover", "演奏してみた" to "cover",
+        "弾いてみた" to "cover", "叩いてみた" to "cover", "ピアノ" to "piano", "ギター" to "guitar", "カバー" to "cover",
+        "メドレー" to "medley", "練習" to "practice", "オルゴール" to "musicbox", "アカペラ" to "acappella", "翻唱" to "cover",
+        "伴奏" to "instrumental", "伴唱" to "karaoke", "卡拉ok" to "karaoke", "커버" to "cover", "라이브" to "live", "노래방" to "karaoke"
+    ).mapKeys { normalize(it.key) }
 
     /**
      * Whether [song] is many songs in one, which has no one song's words to find: a medley, a mashup,
@@ -371,6 +373,54 @@ internal object SongNames {
      */
     private val singAlong = Regex("""karaoke|カラオケ|\bmade popular by\b|\blyrics?\b|\bsing[- ]?along\b|\bminus one\b|\bbacking track\b""", RegexOption.IGNORE_CASE)
 
+    /** A track number before a file's title, "01 Fake Song" or "1. Fake Song", but not a name's own, "7 Rings". */
+    private val trackNumber = Regex("""^(?:0\d|\d{1,2}\.)\s+""")
+
+    /** A tag of a name: in brackets, anywhere in it, or after a dash at its end. "(Live)", "[Explicit]", " - Official Audio". */
+    private val anyTag = Regex("""\s*[(\[]([^()\[\]]*)[)\]]|\s+[-–]\s+([^-–()\[\]]*)$""")
+
+    /**
+     * What a tag says that never names another recording: "Explicit", "Clean", "Official Audio", "Official Video", "Lyric Video",
+     * "Lyrics", or the work it's from, up to its closing quote, "From "Fake Movie"". Any other tag may, "(Part 2)", "(Reprise)",
+     * "(Taylor's Version)", "(ライブ)", "(From 'Fake Movie' / Live)", so it stays. Remasters, mono and guests are what
+     * [withoutEditionTag] already takes off.
+     */
+    private val sameRecordingTag = Regex(
+        """\s*(?:explicit|clean|lyrics|(?:official\s+)?(?:audio|video|music\s+video|lyric\s+video)|(from\s+["“'‘«「『][^"”'’»」』]*["”'’»」』]))\s*""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** The title a file names its song by, without the track number before it: "Fake Song" from "01 Fake Song". */
+    fun withoutTrackNumber(title: String): String = title.replace(trackNumber, "").ifBlank { title }
+
+    /**
+     * Whether [title], as a file or a store names a song, "01 Fake Song.mp3" or "Fake Song [Explicit]", is [song]'s.
+     * Past its track number, its extension and the tags [sameRecordingTag] knows, wherever they are, it's the same name.
+     * Or it differs only in the tags at its end, in brackets or after a dash, every one of them kept, as [wordsMatch]
+     * takes them: "Fake Song (Live)" is "Fake Song", as Crosstune always took it, but "Hello (Live)" isn't "Hello", nor
+     * "Fake Song (Part 2)" "Fake Song (Part 1)".
+     */
+    private fun sameAsAFileNamesIt(title: String, song: String): Boolean {
+        val file = withoutTrackNumber(title.replace(MetadataParsers.audioExtension, ""))
+        if (same(withoutSameRecordingTags(file, worksFrom(song)), withoutSameRecordingTags(song, worksFrom(file)))) return true
+        return same(bareTitle(file), bareTitle(song)) && wordsMatch(file, song)
+    }
+
+    /**
+     * The name without the tags [sameRecordingTag] knows, wherever they are: "Song [Explicit] (Live)" is "Song (Live)". The work
+     * it's from stays when the other name is from [another][from] one: "Main Theme (From "Fake Movie")" is no other film's.
+     */
+    private fun withoutSameRecordingTags(title: String, from: Set<String>): String =
+        title.replace(anyTag) { tag ->
+            val said = sameRecordingTag.matchEntire(tag.groupValues[1] + tag.groupValues[2])
+            val anotherWork = said?.groups?.get(1)?.value?.let { from.isNotEmpty() && normalize(it) !in from } == true
+            if (said == null || anotherWork) tag.value else ""
+        }.trim().ifEmpty { title }
+
+    /** The works a name says it's from, "From "Fake Movie"", as [normalize] writes them. */
+    private fun worksFrom(title: String): Set<String> =
+        anyTag.findAll(title).mapNotNull { tag -> sameRecordingTag.matchEntire(tag.groupValues[1] + tag.groupValues[2])?.groups?.get(1)?.value?.let(::normalize) }.toSet()
+
     /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
     fun bareTitle(title: String): String {
         var bare = title.trim()
@@ -393,13 +443,16 @@ internal object SongNames {
      * Whether what a player names by [title] and [artist] is [song]. A video's title names more, e.g.
      * "Artist - Song (Official Video)", and its channel may be named "Artist - Topic", or not be the
      * artist at all, when the title names them: "Police, The   Every Little Thing She Does Is Magic
-     * Audio Flac" by "keyloginhot".
+     * Audio Flac" by "keyloginhot". [byWords] off, the title is the song's, as a file or a store names it,
+     * "01 Fake Song.mp3" or "Fake Song [Explicit]", never one that shares its words: "Hotel California Radio"
+     * isn't "Hotel California".
      */
-    fun names(title: String, artist: String, song: MusicMetadata): Boolean {
+    fun names(title: String, artist: String, song: MusicMetadata, byWords: Boolean = true): Boolean {
         if (title.isBlank()) return false
         // Read as the song it names the way the song playing is named, e.g. "YOASOBI「アイドル」 Official Music Video".
         val named = MetadataParsers.youtubeVideo(title, artist)?.title
-        if (!(same(title, song.title) || wordsMatch(title, song.title) || named?.let { same(it, song.title) } == true)) return false
+        val near = if (byWords) wordsMatch(title, song.title) else sameAsAFileNamesIt(title, song.title)
+        if (!(same(title, song.title) || near || named?.let { same(it, song.title) } == true)) return false
         return artist.isBlank() || artistInside(artist, song.artist) || sameArtist(song.artist, artist) ||
             artistNames(song.artist).map(::words).any { it.isNotEmpty() && words(title).containsAll(it) }
     }
@@ -474,16 +527,26 @@ internal object SongNames {
         // Entirely non-Latin titles have no words below. Two empty sets say nothing about
         // whether they name the same song; compare their actual letters first.
         if (same(one, other) && normalize(one).isNotEmpty()) return true
-        // Nor do they have words for a note in brackets: "小幸运 (电影《我的少女时代》主题曲)" is "小幸运".
+        // Nor do they have words for a note in brackets: "小幸运 (电影《我的少女时代》主题曲)" is "小幸运", but "曲 (ライブ)" isn't "曲".
         if (words(one).isEmpty() && words(other).isEmpty()) {
             val bare = normalize(bareTitle(one))
-            if (bare.isNotEmpty() && bare == normalize(bareTitle(other))) return true
+            if (bare.isNotEmpty() && bare == normalize(bareTitle(other)) && versionsInScript(one) == versionsInScript(other)) return true
         }
         val ours = words(withoutEditionTag(one))
         val theirs = words(withoutEditionTag(other))
+        // A version said in another script, "(ライブ)", tells recordings apart as "(Live)" would; it never names the song, so it
+        // takes nothing the title's own words don't: "愛 (カバー)" isn't "恋 (カバー)", and "Fake Song (ライブ)" is "Fake Song (Live)".
+        return oneHoldsTheOther(ours, theirs) && oneHoldsTheOther(ours + versionsInScript(one), theirs + versionsInScript(other))
+    }
+
+    /** One of these sets of words holds every one of the other, which, of a single word, must be the whole of it. */
+    private fun oneHoldsTheOther(ours: Set<String>, theirs: Set<String>): Boolean {
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
     }
+
+    /** The versions [title] says in another script, as Latin letters say them: "live" for "ライブ", which [words] has no word for. */
+    private fun versionsInScript(title: String): Set<String> = normalize(title).let { letters -> VERSION_MARKS.filterKeys { it in letters }.values.toSet() }
 
     /**
      * The same title but for its small words, as sites write them down either way: "Vahos de ayer"
