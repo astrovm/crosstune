@@ -21,10 +21,16 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.core.app.ApplicationProvider
+import android.os.Looper
+import androidx.compose.ui.test.assertIsDisplayed
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
+import java.util.Collections
+import java.util.concurrent.Executors
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -61,8 +67,33 @@ class LicensesTest {
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear().putBoolean("setup_complete", true).commit()
     }
 
+    /** Each licence read and split, by its work, with the thread that did it. */
+    private val splits = Collections.synchronizedList(mutableListOf<Pair<String, Thread>>())
+    private val split = LicenseSplits.split
+    private val background = Executors.newSingleThreadExecutor { Thread(it, "licence-split") }
+
+    /** Splits on a thread of their own, as on a phone, and counts each read and split. */
+    private fun splitsCounted() {
+        MainActivity.systemDispatcher = background.asCoroutineDispatcher()
+        LicenseSplits.clear()
+        LicenseSplits.split = { notice -> splits += notice.name to Thread.currentThread(); split(notice) }
+    }
+
+    /** Waits for [words], drawn once a licence's split comes back from its thread. */
+    private fun waitForText(words: String) {
+        composeRule.waitUntil(10_000) {
+            runCatching { scrollTo(hasText(words, substring = true)) }.isSuccess && shown(words)
+        }
+    }
+
+    private fun splitWorks() = synchronized(splits) { splits.map { it.first } }
+
+    private fun splitOnTheMainThread() = synchronized(splits) { splits.filter { it.second == Looper.getMainLooper().thread }.map { it.first } }
+
     @After
     fun tearDown() {
+        LicenseSplits.split = split
+        background.shutdownNow()
         controller?.destroyAndSettle()
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
@@ -172,6 +203,56 @@ class LicensesTest {
         composeRule.waitForIdle()
         assertEquals(1, LicenseSplits.times["projectM"])
         assertEquals(1, LicenseSplits.times["JMdict"])
+    }
+
+    @Test
+    fun openingOneMoreWorkReadsOnlyItOffTheMainThread() {
+        splitsCounted()
+        openLicenses()
+        work("projectM").performClick()
+        waitForText("GNU LESSER GENERAL PUBLIC LICENSE")
+        work("JMdict").performClick()
+        waitForText("Attribution-ShareAlike 4.0 International")
+        work("Kuromoji").performClick()
+        waitForText("Kuromoji Japanese Morphological Analyzer")
+        assertEquals(listOf("projectM", "JMdict", "Kuromoji"), splitWorks())
+        assertEquals(emptyList<String>(), splitOnTheMainThread())
+    }
+
+    @Test
+    fun turnedWithALicenceOpenThePageReadsNoTextAgain() {
+        splitsCounted()
+        openLicenses()
+        work("projectM").performClick()
+        waitForText("END OF TERMS AND CONDITIONS")
+        val piece = composeRule.onAllNodesWithText("END OF TERMS AND CONDITIONS", substring = true).onFirst().fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+
+        controller = checkNotNull(controller).recreate()
+        composeRule.waitForIdle()
+
+        // Still open, where it was, from the pieces split before it turned.
+        composeRule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString(piece)))).assertIsDisplayed()
+        assertEquals(listOf("projectM"), splitWorks())
+        assertEquals(emptyList<String>(), splitOnTheMainThread())
+    }
+
+    @Test
+    fun madeAgainAfterAndroidStoppedTheAppAnOpenLicenceIsReadOffTheMainThreadAndShownWhereItWas() {
+        splitsCounted()
+        openLicenses()
+        work("projectM").performClick()
+        waitForText("END OF TERMS AND CONDITIONS")
+        val piece = composeRule.onAllNodesWithText("END OF TERMS AND CONDITIONS", substring = true).onFirst().fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+
+        // Android stops the app behind another and starts it again: what was split is gone, the page's state is not.
+        LicenseSplits.clear()
+        controller = checkNotNull(controller).recreate()
+        val shownAgain = SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString(piece)))
+        composeRule.waitUntil(10_000) { composeRule.onAllNodes(shownAgain).fetchSemanticsNodes().isNotEmpty() }
+
+        composeRule.onNode(shownAgain).assertIsDisplayed()
+        assertEquals(listOf("projectM", "projectM"), splitWorks())
+        assertEquals(emptyList<String>(), splitOnTheMainThread())
     }
 
     @Test
