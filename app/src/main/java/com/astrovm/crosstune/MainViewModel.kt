@@ -969,7 +969,8 @@ internal class MainViewModel(
         // The words of what's playing are the song's heard in what an app plays, while it's still on, without listening again.
         if (lyrics) {
             // Shown as any song is, which stops whatever else was under way, and keeps the player on this song under its words.
-            uiState.playingUnnamed?.heard?.let { heard -> return showHeard(heard, lyrics = true, byPhone = true) }
+            // Only when a tap would open it too; else it's listened to again.
+            uiState.playingUnnamed?.heard?.takeIf(::opens)?.let { heard -> return showHeard(heard, lyrics = true, byPhone = true) }
         }
         // The bar goes while it listens, and its own listening with it, so the microphone isn't opened twice.
         barInSight.value = false

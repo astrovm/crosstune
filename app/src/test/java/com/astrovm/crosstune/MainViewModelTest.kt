@@ -761,6 +761,25 @@ class MainViewModelTest {
     }
 
     @Test
+    fun theWordsOfWhatsPlayingListenAgainForASongOnTheBarATapWouldntOpen() {
+        // One that may be over by now, and one that may be another song playing in the room (#1002).
+        for (heard in listOf(heardSong(lengthMs = null), heardSong().copy(inRoom = true))) {
+            val ears = EarsOnThePhone(heard, Heard.Nothing)
+            val model = radioModel(ears)
+            model.playingBarInSight(true)
+            idle()
+            assertEquals(heard, model.uiState.playingUnnamed?.heard)
+            model.listen(lyrics = true)
+            idle()
+            // Listened to again, what the phone plays first, and nothing was heard: no song opens.
+            assertEquals(2, ears.asked.size)
+            assertNull(model.uiState.lyricsFor)
+            assertNull(model.uiState.result)
+            assertEquals(AppError.NO_MATCH, model.uiState.error)
+        }
+    }
+
+    @Test
     fun theWordsOfWhatsPlayingStopAListenByHandForTheSongOnTheBar() {
         fake.handler = { request -> FakeSpotify.html(request, "") }
         val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
