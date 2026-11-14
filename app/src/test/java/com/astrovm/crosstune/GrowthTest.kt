@@ -62,6 +62,16 @@ class GrowthTest {
     }
 
     @Test
+    fun countedWorkWithASmallPartSquaredIsOutOfStep() {
+        // In step, with a part squared a tenth the size of the rest at the shorter length: 5.1 times as much.
+        val texts = { length: Int -> listOf("a".repeat(length)) }
+        val mixed = Growth.outOfStepCounting(texts, LENGTH, { it.take(2) }) { 100L * it.length + it.length.toLong() * it.length / 300 }
+        assertEquals(listOf("aa 5.1 times as much"), mixed)
+        // A count of in-step work with a constant part grows less than 4 times, and is in step.
+        assertEquals(emptyList<String>(), Growth.outOfStepCounting(texts, LENGTH, { it }) { 1_000L + it.length })
+    }
+
+    @Test
     fun textsOfEachLengthAreAsMany() {
         val texts = { length: Int -> List(length / LENGTH) { "a" } }
         val failed = runCatching { Growth.outOfStep(texts, LENGTH, { it }) { it } }.exceptionOrNull()

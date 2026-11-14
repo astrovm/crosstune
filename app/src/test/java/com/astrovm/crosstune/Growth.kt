@@ -7,7 +7,9 @@ import java.lang.management.ManagementFactory
  * Whether reading takes time in step with what's read, told by how the work grows and not by a number of
  * milliseconds, which a slow or busy machine goes past. Each text is read at a length and at [TIMES] it: in step,
  * four times the text takes about 4 times the work, and a reader that looks on to the end from each place 16 times
- * as much. Past [MARGIN] times as much, halfway between the two, is out of step.
+ * as much. Past [MARGIN] times as much, halfway between the two, is out of step. Work that is counted is held to
+ * [COUNTED_MARGIN], as a count has no noise: so a reader that does time squared on only part of its work is out of
+ * step too, when that part is more than a few hundredths of it. Timed, it has to be over a third of it (Issue #1003).
  *
  * The work is counted where it can be, as the letters a pattern looks at, which no machine changes. Where it can't,
  * it's the thread's own time on the processor, which work beside it on the machine doesn't add to. Each text is
@@ -23,6 +25,12 @@ internal object Growth {
 
     /** How many times the work the longer text may take: about 4 in step, 16 for time squared. */
     const val MARGIN = 8.0
+
+    /**
+     * As [MARGIN], for work counted. The app's patterns, counted on 14,208 texts, grew 4.03 times at most. Work that
+     * grows linearly, with a part that grows squared, grows past this once that part is over 1/23 of the rest.
+     */
+    const val COUNTED_MARGIN = 4.5
 
     /** How many times each text is read in turn at least, the best of them kept. */
     private const val READINGS = 3
@@ -47,13 +55,13 @@ internal object Growth {
         val (short, long) = made(texts, length)
         // Each once first, so that what's timed is the reading and not the start-up and compiling of the code that reads it.
         short.forEach { read(it) }
-        return judged(short, long, name, "ns") { once, longer -> timed(once, longer, read) }
+        return judged(short, long, name, "ns", MARGIN) { once, longer -> timed(once, longer, read) }
     }
 
     /** As [outOfStep], with the work that reading a text takes counted by [count], which is the same each time. */
     fun <T> outOfStepCounting(texts: (Int) -> List<T>, length: Int, name: (T) -> String, count: (T) -> Long): List<String> {
         val (short, long) = made(texts, length)
-        return judged(short, long, name, "counted") { once, longer -> Work(count(once), count(longer)) }
+        return judged(short, long, name, "counted", COUNTED_MARGIN) { once, longer -> Work(count(once), count(longer)) }
     }
 
     /** How many times as long [longer], [once] at [TIMES] the length, takes to [read], at its best. */
@@ -66,7 +74,7 @@ internal object Growth {
         return short to long
     }
 
-    private fun <T> judged(short: List<T>, long: List<T>, name: (T) -> String, unit: String, work: (T, T) -> Work): List<String> {
+    private fun <T> judged(short: List<T>, long: List<T>, name: (T) -> String, unit: String, margin: Double, work: (T, T) -> Work): List<String> {
         val grown = short.zip(long).map { (once, longer) -> name(longer) to work(once, longer) }
         val test = askingTest()
         log.parentFile?.mkdirs()
@@ -75,7 +83,7 @@ internal object Growth {
                 "$test\t${text.replace(spaces, " ")}\t${"%.2f".format(work.growth)}\t${work.once}\t${work.longer}\t$unit\n"
             }
         )
-        return grown.filter { it.second.growth > MARGIN }.map { (text, work) -> "$text ${"%.1f".format(work.growth)} times as much" }
+        return grown.filter { it.second.growth > margin }.map { (text, work) -> "$text ${"%.1f".format(work.growth)} times as much" }
     }
 
     /**
