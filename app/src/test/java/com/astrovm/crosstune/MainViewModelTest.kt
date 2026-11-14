@@ -970,6 +970,32 @@ class MainViewModelTest {
     }
 
     @Test
+    fun theWordsOfASongHeardAreLookedForNoMoreOnceAnotherSongIsHeard() {
+        val asked = mutableListOf<String>()
+        // Every place is busy, so a lookup asks again after each pause, on the test's clock, till it gives up.
+        fake.handler = { request ->
+            asked += request.url.toString()
+            FakeSpotify.html(request, "", code = 503)
+        }
+        val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 2_000, matching = Dispatchers.Main)
+        val playback = FakePlayback()
+        val other = Heard.Song(MusicMetadata("Other Fake Song", "Other Fake Band", lengthMs = 200_000), "5678", 50_000, null)
+        val ears = EarsOnThePhone(heardSong(), other)
+        radioModel(ears, playback, lyricsFinder = finder).playingBarInSight(true)
+        idle()
+        val first = { asked.count { "Other" !in it } }
+        assertTrue("the first song's words were looked for", first() > 0)
+        // Another station, and another song heard on it at once, before the first song's lookup is done.
+        playback.unnamed.value = station.copy(name = "Fake FM")
+        idle()
+        assertEquals(2, ears.asked.size)
+        assertTrue("the second song's words were looked for", asked.any { "Other" in it })
+        val then = first()
+        pass(LyricsFinder.TOTAL_TIMEOUT_MS)
+        assertEquals(then, first())
+    }
+
+    @Test
     fun listeningByHandStopsListeningByEar() {
         val ears = EarsOnThePhone(heardSong())
         val model = radioModel(ears)
