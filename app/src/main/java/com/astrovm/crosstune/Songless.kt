@@ -64,17 +64,17 @@ internal object Songless {
         return song.artist.isBlank()
     }
 
-    private val extension = Regex("""\.[A-Za-z0-9]{2,4}$""")
+    private val extension = phoneRegex("""\.[A-Za-z0-9]{2,4}$""")
 
     /** Where a file is rather than what it is: "/storage/emulated/0/Music/…", "file:///…" or "content://…". */
-    private val path = Regex("""^(?:/|[a-z]+://)""")
+    private val path = phoneRegex("""^(?:/|[a-z]+://)""")
 
     /**
      * A title that names a file rather than a song: a recording a phone app named with its date, "AUD-20240101-WA0003".
      * Six digits, then anything a file name has, digits too: the same titles as "six or more digits", read in one pass,
      * as there's only one place the digits can end.
      */
-    private val recording = Regex("""[A-Za-z]{2,10}[-_ ]\d{6}[A-Za-z0-9_-]*""")
+    private val recording = phoneRegex("""[A-Za-z]{2,10}[-_ ]\d{6}[A-Za-z0-9_-]*""")
 }
 
 /** Where an app plays: on the phone, cast to a TV by a music app, or shown from another device, e.g. a computer through KDE Connect. */
