@@ -26,6 +26,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -614,7 +615,8 @@ class MainViewModelTest {
     fun aStationOpensAsASongOnATapOnlyOnceItsListenNamedNothingOrItPlaysAway() {
         val ears = EarsOnThePhone(Heard.Nothing)
         // The station's app has what it plays, as its player follows it.
-        val model = radioModel(ears, playback = FakePlayback().apply { playing.value = following(app = station.app) }, mayCapture = { true })
+        val radio = FakePlayback().apply { playing.value = following(app = station.app) }
+        val model = radioModel(ears, playback = radio, mayCapture = { true })
         // It can be heard, and isn't listened to yet: a tap has the player on the station.
         model.openPlayingUnnamed()
         assertEquals(true, model.uiState.player?.songless)
@@ -626,6 +628,16 @@ class MainViewModelTest {
         model.openPlayingUnnamed()
         idle()
         assertEquals(MusicMetadata("RTP Antena 2", "", artworkUrl = station.artworkUrl), model.uiState.player?.song)
+        // Another station, out of the bar's sight, isn't listened to yet: what the last one named says nothing of it, so a
+        // tap has its player, as at first.
+        model.closePlayer()
+        model.playingBarInSight(false)
+        radio.unnamed.value = station.copy(name = "Fake FM")
+        idle()
+        model.openPlayingUnnamed()
+        idle()
+        assertEquals(1, ears.asked.size)
+        assertEquals(true, model.uiState.player?.songless)
         // Cast to a speaker, it's never listened to, so a tap opens it as a song at once.
         val playback = FakePlayback().apply { playing.value = following(app = station.app) }
         val away = radioModel(EarsOnThePhone(heardSong()), playback = playback, mayCapture = { true })
@@ -1554,6 +1566,30 @@ class MainViewModelTest {
         playback.unnamed.value = null
         idle()
         assertEquals(song, model.uiState.playingNow?.song)
+    }
+
+    @Test
+    fun aStationStartingHidesAPausedSongThoughTheSongsAppSaysNothingNew() {
+        // Android tells of a change only in the app it's in: Spotify, which has the song paused, says nothing as VRadio starts.
+        val playback = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(song, null, app = "com.spotify")
+        }
+        val source = object : PlaybackSource by playback {
+            override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = playback.follow(song, app).distinctUntilChanged()
+        }
+        val model = model(playback = source)
+        model.viewModelScope.launch { model.watchPlayingNow() }
+        idle()
+        playback.playing.value = following(playing = false)
+        playback.onThePhone = null
+        idle()
+        assertEquals(song, model.uiState.playingNow?.song)
+        playback.appPlaying[station.app] = MutableStateFlow(null)
+        playback.unnamed.value = station
+        idle()
+        assertNull(model.uiState.playingNow)
+        assertEquals(PlayingUnnamed(station), model.uiState.playingUnnamed)
     }
 
     @Test

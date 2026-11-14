@@ -77,7 +77,7 @@ internal object MetadataParsers {
     /** A zero-padded track number glued to the song, "06 Una señal". */
     private val paddedTrackRegex = Regex("""^0\d\s+""")
 
-    private val danglingDashRegex = Regex("""\s+[-–]\s*$""")
+    private val danglingDashRegex = Regex("""\s+[-–—]\s*$""")
 
     /**
      * Spotify tracks describe themselves as "Artist · Album · Song · Year" and albums as

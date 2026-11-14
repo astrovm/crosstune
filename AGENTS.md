@@ -19,6 +19,7 @@ python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # the replay set
 python3 scripts/syncreplay/syncreplay.py untimed [--again MS] -v   # words with their times taken off, timed by the singing heard, line by line against when it's sung
 python3 scripts/matchcheck/replay.py run OUT LABEL   # the YouTube Music matcher replayed on real songs collect.py kept, without the network; `prepare` first, `table OUT LABEL --against main` compares
 scripts/namescheck/golden.sh [SHA]          # what main's SongNames took for each pair NamePairs.kt makes, for NamesGoldenTest; run again after changing NamePairs.kt
+scripts/playcheck/golden.sh [SHA]           # what main's MediaSessionPlayback played first and followed in each scene PlayScenes.kt makes, for PlayGoldenTest; run again after changing PlayScenes.kt
 python3 scripts/notices.py check          # each licence text in Settings → About → Licenses against its source, fetched again
 node --test report/*.test.mjs             # the report Worker's tests
 python3 scripts/reports/reports.py triage --since ID   # the reports in D1, grouped; `pull` first, read-only, and they stay out of git

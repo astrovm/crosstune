@@ -201,9 +201,9 @@ class SongNamesEdgesTest {
     }
 
     @Test
-    fun aVersionNamedInAnotherScriptIsAnotherRecordingByWordsToo() {
-        // "ライブ" says "Live" in Japanese: as "Live" does, it tells the recording apart, but it's no word of the name, so
-        // it never makes two names one. Each both ways, with the artist named or not, and by words alone.
+    fun aTagTellsRecordingsApartButNeverNamesTheSongInAnyScript() {
+        // "ライブ" says "Live" in Japanese: as "Live" does, it tells the recording apart. Neither is a word of the name, so
+        // a tag never makes two names one. Each both ways, with the artist named or not, and by words alone.
         val rows = listOf(
             "Fake Song (ライブ)" to "Fake Song (Live)" to true,
             "Fake Song (라이브)" to "Fake Song (Live)" to true,
@@ -221,7 +221,28 @@ class SongNamesEdgesTest {
             // A one-word name with a version is no more the name alone, "Hello (ライブ)" as "Hello (Live)".
             "Hello (ライブ)" to "Hello" to false,
             "Hello (Live)" to "Hello" to false,
-            "アイドル (ライブ)" to "アイドル" to false
+            "アイドル (ライブ)" to "アイドル" to false,
+            // In Latin letters too, in brackets or after a dash, which Crosstune once took as words of the name.
+            "Hello (Live)" to "Hello World (Live)" to false,
+            "Hello World (Part 2)" to "Hello (Part 2)" to false,
+            "Hello - Live" to "Hello World - Live" to false,
+            "Hello [Explicit] (Live)" to "Hello World (Live)" to false,
+            "愛 (Live)" to "恋 (Live)" to false,
+            // The names' own words still find each other as they always did: a video's title naming the band first, a tag
+            // that names a place, a name in brackets at its start.
+            "Fake Band - Fake Song (Official Video)" to "Fake Song" to true,
+            "Fake Song - Live at Wembley" to "Fake Song" to true,
+            "Fake Song (Live)" to "Fake Song - Live" to true,
+            "愛 (Live)" to "愛 - Live" to true,
+            "(Don't Fear) The Reaper" to "Don't Fear the Reaper" to true,
+            "01 Hello (Official Audio) (Live).mp3" to "Hello - Live" to true,
+            // Two words in one name, as Crosstune always took "Fake Song" for "Fake Song Two": the tag adds nothing to that.
+            "Fake Song (Live)" to "Fake Song Two (Live)" to true,
+            // A word that's only marks says a version; one inside a name is the name's.
+            "Fake Song (ピアノ弾いてみた)" to "Fake Song (Piano Cover)" to true,
+            "Hello (ピアノ弾いてみた)" to "Hello" to false,
+            "Fake Song (ピアノ弾いてみた)" to "Fake Song (Acoustic)" to false,
+            "東京ライブ" to "東京ライブ (Live)" to false
         )
         for ((pair, has) in rows) for ((one, other) in listOf(pair, pair.second to pair.first)) {
             for (artist in listOf("Fake Band", "")) assertEquals("$one for $other by \"$artist\"", has, SongNames.names(one, artist, MusicMetadata(other, "Fake Band")))
