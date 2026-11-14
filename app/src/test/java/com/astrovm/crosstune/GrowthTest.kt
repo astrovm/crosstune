@@ -54,6 +54,39 @@ class GrowthTest {
     }
 
     @Test
+    fun aMachineBusyForAWholeMeasureIsMeasuredAgain() {
+        // Work beside the test, as another test on the same core, slows each reading of the longer text 3 times until the
+        // measure pauses. Then a pause like the collector's lands in the first reading of the longer text after each pause.
+        val once = "ab".repeat(LENGTH / 2)
+        val longer = once.repeat(Growth.TIMES)
+        var busy = true
+        var paused = false
+        var last = System.nanoTime()
+        val noisy = { text: String ->
+            if (System.nanoTime() - last > Growth.PAUSE_MILLIS * 1_000_000 / 2) {
+                busy = false
+                paused = true
+            }
+            if (text == longer && busy) inStep(longer.repeat(BUSY - 1))
+            if (text == longer && paused) {
+                paused = false
+                inStep(longer.repeat(COLLECTED))
+            }
+            inStep(text).also { last = System.nanoTime() }
+        }
+        val growth = Growth.growth(once, longer, noisy)
+        assertTrue("$growth", growth <= Growth.MARGIN)
+        assertEquals(false, busy)
+    }
+
+    @Test
+    fun aReaderOutOfStepIsOutOfStepEachTimeItIsMeasured() {
+        // Measured again after each pause, with no noise at all, it is still out of step.
+        val once = "ab".repeat(LENGTH / 2)
+        assertTrue(Growth.growth(once, once.repeat(Growth.TIMES), ::squared) > Growth.MARGIN)
+    }
+
+    @Test
     fun workThatIsCountedIsHeldToTheSameLine() {
         val texts = { length: Int -> listOf("a".repeat(length)) }
         val squared = Growth.outOfStepCounting(texts, LENGTH, { it.take(2) }) { it.length.toLong() * it.length }
@@ -94,5 +127,7 @@ class GrowthTest {
         const val SLOWER = 8
         const val SHORT = 20
         const val HICCUP = 3
+        const val BUSY = 3
+        const val COLLECTED = 20
     }
 }
