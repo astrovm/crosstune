@@ -10,8 +10,8 @@
 #                     [--notes DIR] [--check-only]
 #     One edit: the release CODE on --from goes on to each --to track, with the listing in DIR (folders by
 #     language, as play.sh makes them) and the release notes in DIR/en-US/changelogs/CODE.txt. Then the edit is
-#     committed, or with --check-only only checked. This is supply's own code, but supply can only promote to one
-#     track a run.
+#     committed, or with --check-only only checked. supply can only promote to one track a run, so this drives
+#     supply's own client and uploader in one edit.
 require "optparse"
 require_relative "review_guard"
 
@@ -39,10 +39,20 @@ module Crosstune
         codes.include?(code)
       end
 
-      def promote(to)
-        to.each do |track|
-          Supply.config[:track_promote_to] = track
-          @uploader.promote_track
+      # supply's promote_track, for each track, but one that skips a release with no version codes, such as a
+      # draft started in Play Console, where supply's stops with a NoMethodError.
+      def promote(from, code, to)
+        release = client.tracks(from).first&.releases.to_a.find { |r| r.version_codes.to_a.map(&:to_s).include?(code) }
+        FastlaneCore::UI.user_error!("Track '#{from}' has no release with version code #{code}") unless release
+
+        to.each do |name|
+          promoted = release.dup
+          promoted.status = Supply::ReleaseStatus::COMPLETED
+          promoted.user_fraction = nil
+          track = client.tracks(name).first || Google::Apis::AndroidpublisherV3::Track.new(track: name)
+          # Play keeps the track's other releases as they are.
+          track.releases = [promoted]
+          client.update_track(name, track)
         end
       end
 
@@ -115,7 +125,7 @@ module Crosstune
         sync_image_upload: true
       )
       edit.client.begin_edit(package_name: options[:package])
-      edit.promote(options[:to])
+      edit.promote(options[:from], options[:code], options[:to]) unless options[:to].empty?
       edit.send_notes(options[:to].first) if options[:notes]
       edit.send_listing(options[:listing]) if options[:listing]
       if options[:check_only]
@@ -146,9 +156,13 @@ end
 begin
   Crosstune::Play.main(ARGV)
 rescue StandardError => e
-  raise unless defined?(FastlaneCore::Interface::FastlaneError) && e.is_a?(FastlaneCore::Interface::FastlaneError)
-
-  # Plainly, as fastlane's own command line prints its errors.
-  warn("[!] #{e.message}")
+  # Plainly, as fastlane's own command line prints its errors. Anything else is a bug here, with its stack trace.
+  if defined?(FastlaneCore::Interface::FastlaneException) && e.is_a?(FastlaneCore::Interface::FastlaneException)
+    warn("[!] #{e.message}")
+  elsif e.is_a?(Google::Apis::Error)
+    warn("[!] Google Play answered #{e.status_code}: #{e.body || e.message}")
+  else
+    raise
+  end
   exit(1)
 end

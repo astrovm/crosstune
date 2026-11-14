@@ -153,7 +153,7 @@ class PlayTest < Minitest::Test
   end
 
   def test_a_release_never_names_production_or_internal_testing
-    %w[production beta,production internal].each do |named|
+    %w[production beta,production internal beta,tv:production wear:internal].each do |named|
       output, status = play("release", TAG, env: { "PLAY_TRACKS" => named })
       refute status.success?, output
       assert_includes output, "PLAY_TRACKS can't hold"
@@ -191,20 +191,58 @@ class PlayTest < Minitest::Test
     assert_equal release(CODE), saved["beta"]
   end
 
-  def test_production_and_a_testing_track_never_share_an_edit
-    tracks("beta" => release(CODE))
+  def play_rb(*args)
     key = File.join(@dir, "key.json")
     File.write(key, KEY)
-    output, status = Open3.capture2e(
-      env({}), "bundle", "exec", "ruby", PLAY_RB, "edit", key, PACKAGE, "--from", "beta", "--code", CODE.to_s,
-      "--to", "production,alpha", chdir: @dir
-    )
+    Open3.capture2e(env({}), "bundle", "exec", "ruby", PLAY_RB, args[0], key, PACKAGE, *args[1..], chdir: @dir)
+  end
+
+  def test_production_and_a_testing_track_never_share_an_edit
+    { "production,alpha" => "production and alpha", "beta,tv:production" => "tv:production and beta" }
+      .each do |to, changed|
+        File.write(@log, "")
+        tracks("beta" => release(CODE))
+        output, status = play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", to)
+        refute status.success?, output
+
+        assert_includes output, "This edit changed #{changed}, so it was deleted, and nothing was sent"
+        assert_empty commits
+        assert_equal "DELETE", requests.last["method"]
+        assert_equal({ "beta" => release(CODE) }, saved)
+      end
+  end
+
+  def test_production_tracks_of_two_form_factors_can_share_an_edit
+    tracks("beta" => release(CODE))
+    output, status = play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", "production,tv:production")
+    assert status.success?, output
+
+    assert_equal [%w[production tv:production]], committed_tracks
+  end
+
+  def test_a_draft_with_no_version_codes_is_passed_over
+    tracks("internal" => [{ "status" => "draft" }] + release(CODE))
+    output, status = play("release", TAG)
+    assert status.success?, output
+
+    assert_equal [["beta"]], committed_tracks
+    assert_equal release(CODE), saved["beta"]
+  end
+
+  def test_a_release_not_on_the_track_stops_plainly
+    output, status = play("production", "2.26.0")
     refute status.success?, output
 
-    assert_includes output, "This edit changed production and alpha, so it was deleted, and nothing was sent"
+    assert_includes output, "[!] Track 'beta' has no release with version code #{CODE}"
     assert_empty commits
-    assert_equal "DELETE", requests.last["method"]
-    assert_equal({ "beta" => release(CODE) }, saved)
+  end
+
+  def test_a_tag_with_a_suffix_keeps_its_version_code
+    FileUtils.mv(File.join(@dir, "Crosstune-#{TAG}.aab"), File.join(@dir, "Crosstune-#{TAG}-rc.1.aab"))
+    output, status = play("release", "#{TAG}-rc.1")
+    assert status.success?, output
+
+    assert_equal [CODE.to_s], saved["beta"].flat_map { |r| r["versionCodes"] }
   end
 
   def test_the_listing_goes_on_its_own

@@ -55,11 +55,12 @@ class PlayWorkflowsTest(unittest.TestCase):
                     self.assertTrue(set(paths) <= allowed, paths)
                     self.assertIn("persist-credentials: false", step)
 
-    def test_play_jobs_run_in_the_release_environment(self):
+    def test_play_jobs_run_in_the_release_environment_one_at_a_time(self):
         for workflow, name, job in play_jobs():
             with self.subTest(workflow=workflow, job=name):
                 self.assertIn("environment: release", job)
                 self.assertIn("permissions: {}", job)
+                self.assertIn("concurrency:\n      group: google-play\n      cancel-in-progress: false", job)
 
     def test_the_listing_is_sent_by_hand_only(self):
         text = (WORKFLOWS / "store-listing.yml").read_text(encoding="utf-8")

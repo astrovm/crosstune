@@ -60,13 +60,18 @@ module Crosstune
       raise error, message
     end
 
+    # Production, or a form factor's production, such as "tv:production".
+    def self.production?(track)
+      track == PRODUCTION || track.end_with?(":#{PRODUCTION}")
+    end
+
     def self.check_tracks!(service, package_name, edit_id)
-      changed = tracks.fetch(edit_id, []).uniq
-      return unless changed.include?(PRODUCTION) && changed.size > 1
+      production, testing = tracks.fetch(edit_id, []).uniq.partition { |track| production?(track) }
+      return if production.empty? || testing.empty?
 
       discard(service, package_name, edit_id)
       refuse!("Production goes to review on its own",
-              "This edit changed production and #{(changed - [PRODUCTION]).join(', ')}, so it was deleted, and " \
+              "This edit changed #{production.join(', ')} and #{testing.join(', ')}, so it was deleted, and " \
               "nothing was sent to Google Play. Production goes to review on its own.", Mixed)
     end
 

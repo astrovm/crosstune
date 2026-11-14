@@ -286,6 +286,11 @@ jobs:
     timeout-minutes: 15
     environment: release
     permissions: {}
+    # One Google Play job at a time, across the release, promote and store listing workflows: Play takes one edit
+    # of an app at a time. GitHub keeps one job waiting in the group: a newer one cancels it, so re-run that one.
+    concurrency:
+      group: google-play
+      cancel-in-progress: false
     steps:
       # Only the tools that talk to Google Play and the store text, so none of the build's code is checked out
       # where the Play key is.

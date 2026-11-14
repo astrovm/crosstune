@@ -36,7 +36,8 @@ if [[ ${#tracks[@]} == 0 ]]; then
   exit 1
 fi
 for track in "${tracks[@]}"; do
-  if [[ "$track" == production || "$track" == internal || ! "$track" =~ ^[A-Za-z0-9:_-]+$ ]]; then
+  # A form factor's tracks too, such as tv:production.
+  if [[ "$track" =~ (^|:)(production|internal)$ || ! "$track" =~ ^[A-Za-z0-9:_-]+$ ]]; then
     echo "::error::PLAY_TRACKS can't hold '$track'. It names testing tracks: production goes on its own, with promote.yml, and internal testing always gets the release first"
     exit 1
   fi
@@ -65,7 +66,8 @@ play() {
 }
 
 version_code() {
-  if [[ ! "$1" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+  # The same as release.yml: a suffix, as in v2.27.0-rc.1, keeps the version code of 2.27.0.
+  if [[ ! "$1" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)([-.][0-9A-Za-z.-]+)?$ ]]; then
     echo "::error::'$1' must look like 2.26.0 or v2.26.0" >&2
     exit 1
   fi
@@ -110,7 +112,8 @@ release() {
   copy_listing "$work/listing"
 
   # Internal testing first: Google doesn't review it, so testers there get each release in minutes, and the
-  # track never sits on an old version. A re-run finds the bundle there already.
+  # track never sits on an old version. While a review is in progress, Play takes no commit, this one included.
+  # A re-run finds the bundle there already.
   found=0
   play has-version "$key" "$package" internal "$code" || found=$?
   if [[ "$found" == 0 ]]; then
