@@ -7,7 +7,7 @@ import java.lang.management.ManagementFactory
  * Whether reading takes time in step with what's read, told by how the work grows and not by a number of
  * milliseconds, which a slow or busy machine goes past. Each text is read at a length and at [TIMES] it: in step,
  * four times the text takes about 4 times the work, and a reader that looks on to the end from each place 16 times
- * as much. Past [MARGIN] times as much, halfway between the two, is out of step. Work that is counted is held to
+ * as much. Past [MARGIN] times as much, twice the one and half the other, is out of step. Work that is counted is held to
  * [COUNTED_MARGIN], as a count has no noise: so a reader that does time squared on only part of its work is out of
  * step too, when that part is more than a few hundredths of it. Timed, it has to be over a third of it (Issue #1003).
  *
@@ -26,6 +26,12 @@ import java.lang.management.ManagementFactory
  * the first time, so how near the line each one is can be seen.
  */
 internal object Growth {
+    /**
+     * Whether timed work is timed: only in the growthTests task, which runs alone. Elsewhere, with tests beside it, a
+     * timing would fail at random, so each text is read once, for what it runs, and nothing is judged.
+     */
+    val TIMING = System.getProperty("crosstune.timed") == "true"
+
     /** How many times as long the longer text is. */
     const val TIMES = 4
 
@@ -63,8 +69,16 @@ internal object Growth {
      * Each of [texts] made at [length] and at [TIMES] it, timed as [read] reads it: for each out of step, its [name]
      * and its growth. The texts at each length come in the same order.
      */
-    fun <T> outOfStep(texts: (Int) -> List<T>, length: Int, name: (T) -> String, read: (T) -> Any?): List<String> {
+    fun <T> outOfStep(texts: (Int) -> List<T>, length: Int, name: (T) -> String, read: (T) -> Any?): List<String> =
+        outOfStep(texts, length, name, TIMING, read)
+
+    /** As [outOfStep], timed or not, as [timing] says. */
+    fun <T> outOfStep(texts: (Int) -> List<T>, length: Int, name: (T) -> String, timing: Boolean, read: (T) -> Any?): List<String> {
         val (short, long) = made(texts, length)
+        if (!timing) {
+            (short + long).forEach { read(it) }
+            return emptyList()
+        }
         // Each once first, so that what's timed is the reading and not the start-up and compiling of the code that reads it.
         short.forEach { read(it) }
         return judged(short, long, name, "ns", MARGIN) { once, longer -> timed(once, longer, read) }

@@ -87,6 +87,21 @@ class GrowthTest {
     }
 
     @Test
+    fun untimedEachTextIsReadOnceAndNothingIsJudged() {
+        // As in the unit tests, beside other tests: what the texts run counts, and a timing can't fail at random.
+        val texts = { length: Int -> listOf("ab".repeat(length / 2), "ba".repeat(length / 2)) }
+        val read = mutableListOf<Int>()
+        val out = Growth.outOfStep(texts, LENGTH, { it }, timing = false) { text -> read += text.length; squared(text) }
+        assertEquals(emptyList<String>(), out)
+        assertEquals(listOf(LENGTH, LENGTH, Growth.TIMES * LENGTH, Growth.TIMES * LENGTH), read)
+    }
+
+    @Test
+    fun onlyTheGrowthTestsTime() {
+        assertEquals(true, Growth.TIMING)
+    }
+
+    @Test
     fun workThatIsCountedIsHeldToTheSameLine() {
         val texts = { length: Int -> listOf("a".repeat(length)) }
         val squared = Growth.outOfStepCounting(texts, LENGTH, { it.take(2) }) { it.length.toLong() * it.length }

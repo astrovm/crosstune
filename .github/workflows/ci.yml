@@ -190,7 +190,7 @@ jobs:
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
       - name: Test
-        run: ./gradlew :app:testDebugUnitTest :pitest-changed-lines:test :app:koverLogDebug :app:koverXmlReportDebug :app:koverVerifyDebug --build-cache --configuration-cache
+        run: ./gradlew :app:testDebugUnitTest :pitest-changed-lines:test :app:growthTests :app:koverLogDebug :app:koverXmlReportDebug :app:koverVerifyDebug --build-cache --configuration-cache
 
       - name: Upload test and coverage reports
         if: always()
@@ -200,6 +200,7 @@ jobs:
           path: |
             app/build/reports/tests/
             app/build/reports/kover/
+            app/build/growth.tsv
           retention-days: 14
           if-no-files-found: warn
 
