@@ -37,7 +37,7 @@
     ],
     [
       "Quel est ce titre ?",
-      "Crosstune écoute un titre autour de vous, dans une appli de radio ou un fichier sans tags, le reconnaît et l'ouvre."
+      "Crosstune écoute un titre autour de vous, ou dans une appli qui ne dit pas ce qu'elle joue, le reconnaît et l'ouvre."
     ],
     [
       "Paroles synchronisées",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "Quand une appli joue sans dire quel titre c'est, comme une appli de radio qui n'envoie que le nom de la station, ou un fichier sans tags, Crosstune reconnaît le titre de lui-même de la même façon, mais seulement tant que Crosstune est ouvert avec la barre de cette appli en bas, et seulement si vous avez déjà autorisé le micro. Il entend le son que joue votre téléphone, même dans des écouteurs ; avec Shizuku ou root, grâce à la capture audio d'Android, plus nette, pendant qu'une notification l'indique. Il n'utilise le micro que si votre téléphone ne partage pas son son, seulement tant que votre téléphone joue sur son haut-parleur, pas dans des écouteurs, et jamais sur une télé, où il n'entend que le son de la télé elle-même ; Android indique que le micro est allumé. Il écoute quand l'appli commence à jouer, à nouveau quand le titre entendu devrait être fini ou au bout d'un moment, et tout de suite quand il a un nouveau moyen d'entendre, par exemple quand vous autorisez le micro ou Shizuku, ou débranchez vos écouteurs. Seule une empreinte part vers Shazam, jamais l'audio, et rien n'est enregistré. Comme pour tout titre de la barre, le titre et l'artiste du morceau reconnu sont recherchés pour ses paroles. Il s'arrête quand vous quittez Crosstune, masquez la barre ou que l'appli arrête de jouer."
+      "Quand une appli joue sans dire quel titre c'est, comme une appli de radio qui n'envoie que le nom de la station, un fichier sans tags ou une vidéo, Crosstune reconnaît le titre de lui-même de la même façon, mais seulement tant que Crosstune est ouvert avec la barre de cette appli en bas, et seulement si vous avez déjà autorisé le micro. Il entend le son que joue votre téléphone, même dans des écouteurs ; avec Shizuku ou root, grâce à la capture audio d'Android, plus nette, pendant qu'une notification l'indique. Il n'utilise le micro que si votre téléphone ne partage pas son son, seulement tant que votre téléphone joue sur son haut-parleur, pas dans des écouteurs, et jamais sur une télé, où il n'entend que le son de la télé elle-même ; Android indique que le micro est allumé. Il écoute quand l'appli commence à jouer, à nouveau quand le titre entendu devrait être fini ou au bout d'un moment, et tout de suite quand il a un nouveau moyen d'entendre, par exemple quand vous autorisez le micro ou Shizuku, ou débranchez vos écouteurs. Seule une empreinte part vers Shazam, jamais l'audio, et rien n'est enregistré. Comme pour tout titre de la barre, le titre et l'artiste du morceau reconnu sont recherchés pour ses paroles. Il s'arrête quand vous quittez Crosstune, masquez la barre ou que l'appli arrête de jouer."
     ],
     [
       "p",

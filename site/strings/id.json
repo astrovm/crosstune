@@ -37,7 +37,7 @@
     ],
     [
       "Lagu apa ini?",
-      "Crosstune mendengarkan lagu di dekatmu, di aplikasi radio, atau di file tanpa tag, mengenalinya, lalu membukanya."
+      "Crosstune mendengarkan lagu di dekatmu, atau di aplikasi yang tidak menyebut apa yang diputar, mengenalinya, lalu membukanya."
     ],
     [
       "Lirik sesuai lagu",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "Saat sebuah aplikasi memutar tanpa menyebut lagu apa itu, seperti aplikasi radio yang hanya mengirim nama stasiunnya, atau file tanpa tag, Crosstune mengenali lagunya sendiri dengan cara yang sama, tetapi hanya selama Crosstune terbuka dengan bilah aplikasi itu di bawah, dan hanya jika kamu sudah mengizinkan mikrofon. Crosstune mendengar suara yang diputar ponselmu, juga lewat headphone; dengan Shizuku atau root, lewat perekaman audio Android, yang lebih bersih, sementara sebuah notifikasi menunjukkannya. Crosstune hanya memakai mikrofon jika ponselmu tidak membagikan suaranya, hanya selama ponselmu memutar lewat speaker, bukan lewat headphone, dan tidak pernah di TV, tempat Crosstune hanya mendengar suara TV itu sendiri; Android menunjukkan bahwa mikrofon menyala. Crosstune mendengarkan saat aplikasi mulai memutar, lagi saat lagu yang didengarnya seharusnya sudah selesai atau setelah beberapa saat, dan langsung saat ada cara baru untuk mendengar, misalnya saat kamu mengizinkan mikrofon atau Shizuku, atau mencabut headphone. Hanya sidik suara yang dikirim ke Shazam, tidak pernah audionya, dan tidak ada yang disimpan. Seperti lagu apa pun di bilah, judul dan artis lagu yang dikenali dicari untuk liriknya. Ini berhenti saat kamu keluar dari Crosstune, menyembunyikan bilah, atau aplikasi berhenti memutar."
+      "Saat sebuah aplikasi memutar tanpa menyebut lagu apa itu, seperti aplikasi radio yang hanya mengirim nama stasiunnya, file tanpa tag, atau video, Crosstune mengenali lagunya sendiri dengan cara yang sama, tetapi hanya selama Crosstune terbuka dengan bilah aplikasi itu di bawah, dan hanya jika kamu sudah mengizinkan mikrofon. Crosstune mendengar suara yang diputar ponselmu, juga lewat headphone; dengan Shizuku atau root, lewat perekaman audio Android, yang lebih bersih, sementara sebuah notifikasi menunjukkannya. Crosstune hanya memakai mikrofon jika ponselmu tidak membagikan suaranya, hanya selama ponselmu memutar lewat speaker, bukan lewat headphone, dan tidak pernah di TV, tempat Crosstune hanya mendengar suara TV itu sendiri; Android menunjukkan bahwa mikrofon menyala. Crosstune mendengarkan saat aplikasi mulai memutar, lagi saat lagu yang didengarnya seharusnya sudah selesai atau setelah beberapa saat, dan langsung saat ada cara baru untuk mendengar, misalnya saat kamu mengizinkan mikrofon atau Shizuku, atau mencabut headphone. Hanya sidik suara yang dikirim ke Shazam, tidak pernah audionya, dan tidak ada yang disimpan. Seperti lagu apa pun di bilah, judul dan artis lagu yang dikenali dicari untuk liriknya. Ini berhenti saat kamu keluar dari Crosstune, menyembunyikan bilah, atau aplikasi berhenti memutar."
     ],
     [
       "p",

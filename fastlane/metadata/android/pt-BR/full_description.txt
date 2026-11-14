@@ -11,7 +11,7 @@ Receba um link de um serviço de música e abra a mesma música no seu app favor
 <li>Onde o app permite, abre a própria música, álbum ou artista em vez de uma busca.</li>
 <li>Adicione outros apps e sites que tenham uma página de busca.</li>
 <li>Cole com um toque, pesquise e reabra links recentes, ou abra um link copiado pelo widget da tela inicial, pelas Configurações rápidas ou mantendo o ícone do app pressionado.</li>
-<li>Reconhece uma música tocando perto, num app de rádio ou num arquivo sem tags: o Crosstune escuta sozinho, ou abre o Shazam ou a busca de músicas do Google. Também abre links do Shazam e músicas compartilhadas pelo Now Playing do Pixel.</li>
+<li>Reconhece uma música tocando perto, ou num app que não diz qual é: o Crosstune escuta sozinho, ou abre o Shazam ou a busca de músicas do Google. Também abre links do Shazam e músicas compartilhadas pelo Now Playing do Pixel.</li>
 <li>Não consegue ler um link? Abra-o no app de origem, copie o texto da busca ou compartilhe um link de busca.</li>
 <li>Encontre uma música digitando o nome dela em vez de um link. Tocar mantém você no Crosstune: uma barra embaixo mostra o que está tocando, o player mostra o que vem a seguir e tem repetir, curtir e timer para dormir, e você desliza entre o player e a letra.</li>
 <li>Letras sincronizadas: seguem o seu app de música ou ouvem junto, flutuam sobre outros apps e aparecem com visuais do MilkDrop por trás. Letra, tempo ou leitura errados? Relate com um toque, na letra ou na palavra: vai em particular para o desenvolvedor.</li>

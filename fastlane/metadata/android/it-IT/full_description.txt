@@ -11,7 +11,7 @@ Ricevi un link da un servizio musicale e apri lo stesso brano nella tua app pref
 <li>Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud e Audiomack possono aprire direttamente il brano, l'album o l'artista invece di una ricerca, Bandcamp (app: ricerca) e Qobuz brano o album, YouTube il brano.</li>
 <li>Aggiungi altre app e siti con una pagina di ricerca.</li>
 <li>Incolla con un tocco, cerca e riapri i link recenti, oppure apri un link copiato dal widget della schermata Home, dalle Impostazioni rapide o tenendo premuta l'icona dell'app.</li>
-<li>Riconosce un brano che suona vicino, in un'app radio o un file senza tag: ascolta, o apre Shazam o la ricerca di brani di Google. Apre anche i link Shazam e i brani di Now Playing sul Pixel.</li>
+<li>Riconosce un brano che suona vicino, o in un'app che non lo nomina: ascolta, o apre Shazam o la ricerca di brani di Google. Apre anche i link Shazam e i brani di Now Playing sul Pixel.</li>
 <li>Link non leggibile? Aprilo nell'app da cui proviene, copia il testo di ricerca o condividi un link di ricerca.</li>
 <li>Trova un brano digitando il suo nome invece di un link. Riproduci ti tiene in Crosstune: una barra in basso mostra cosa suona, il suo lettore mostra cosa segue e ha Ripeti, Mi piace e il timer di spegnimento, e scorri tra lettore e testo.</li>
 <li>Testi a tempo: seguono la tua app di musica o ascoltano con te, fluttuano sopra le altre app e scorrono con gli effetti visivi MilkDrop dietro. Parole, tempi o letture sbagliati? Segnalalo con un tocco dal testo o sulla parola: arriva in privato allo sviluppatore.</li>
