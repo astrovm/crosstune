@@ -20,6 +20,14 @@
 # isn't sent to Play.
 set -euo pipefail
 
+# A tag with a suffix, as in v2.27.0-rc.1, has the version code of 2.27.0, and Play takes each version code
+# once. Sent to Play, it would keep 2.27.0 itself out. release.yml doesn't run this for one; this is the same
+# check, before the key is used. Testers on Play get each version on the testing tracks.
+if [[ "${1:-}" == release && "${2:-}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+[-.][0-9A-Za-z.-]+$ ]]; then
+  echo "::notice::$2 has a suffix, so it isn't sent to Google Play: Play takes each version code once, and the version without the suffix needs it"
+  exit 0
+fi
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package=com.astrovm.crosstune
 metadata=fastlane/metadata/android
@@ -108,12 +116,6 @@ copy_listing() {
 
 release() {
   local tag="$1" code found
-  # A tag with a suffix, as in v2.27.0-rc.1, has the version code of 2.27.0, and Play takes each version code
-  # once. Sent to Play, it would keep 2.27.0 itself out. Testers on Play get each version on the testing tracks.
-  if [[ "$tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+[-.] ]]; then
-    echo "::notice::$tag has a suffix, so it isn't sent to Google Play: Play takes each version code once, and the version without the suffix needs it"
-    exit 0
-  fi
   code="$(version_code "$tag")"
   copy_notes "$work/notes" "$code"
   copy_listing "$work/listing"

@@ -185,7 +185,7 @@ class PlayTest < Minitest::Test
   end
 
   def test_another_bundle_with_the_same_version_code_stops_the_release
-    tracks({ "internal" => release(CODE), "beta" => release(CODE) }, [bundle("the -rc bundle")])
+    tracks({ "internal" => release(CODE), "beta" => release(CODE) }, [bundle("another bundle")])
     output, status = play("release", TAG)
     refute status.success?, output
 
@@ -278,11 +278,24 @@ class PlayTest < Minitest::Test
   end
 
   def test_a_tag_with_a_suffix_isnt_sent_to_play
-    FileUtils.mv(File.join(@dir, "Crosstune-#{TAG}.aab"), File.join(@dir, "Crosstune-#{TAG}-rc.1.aab"))
-    output, status = play("release", "#{TAG}-rc.1")
-    assert status.success?, output
+    # No bundle and no key: the tag alone decides.
+    FileUtils.rm(File.join(@dir, "Crosstune-#{TAG}.aab"))
+    ["#{TAG}-rc.1", "#{TAG}.1"].each do |tag|
+      output, status = play("release", tag, env: { "PLAY_SERVICE_ACCOUNT_JSON" => nil })
+      assert status.success?, output
 
-    assert_includes output, "::notice::#{TAG}-rc.1 has a suffix, so it isn't sent to Google Play"
+      assert_includes output, "::notice::#{tag} has a suffix, so it isn't sent to Google Play"
+    end
+    assert_empty requests
+  end
+
+  def test_a_release_stops_on_a_tag_that_isnt_a_version
+    ["v2.26", "#{TAG}-"].each do |tag|
+      output, status = play("release", tag)
+      refute status.success?, output
+
+      assert_includes output, "::error::'#{tag}' must look like 2.26.0 or v2.26.0"
+    end
     assert_empty requests
   end
 
@@ -293,6 +306,10 @@ class PlayTest < Minitest::Test
 
     assert_includes output, "::error::'2.26.0-rc.1' must look like 2.26.0 or v2.26.0"
     assert_empty requests
+
+    output, status = play("production", TAG)
+    assert status.success?, output
+    assert_equal [["production"]], committed_tracks
   end
 
   def test_the_listing_goes_on_its_own

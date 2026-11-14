@@ -5,7 +5,7 @@
 #     fastlane supply, as on the command line.
 #   ruby play.rb has-bundle KEY PACKAGE TRACK CODE AAB
 #     Exits 0 when Play has AAB itself as CODE, on TRACK: a re-run. Exits 3 when Play has no bundle with CODE.
-#     Stops when Play has another bundle as CODE (an earlier tag with the same version, such as an -rc), or has
+#     Stops when Play has another bundle as CODE (sent by hand, or the same tag built or signed again), or has
 #     AAB but not on TRACK. It only reads: the edit it opens is deleted, never committed.
 #   ruby play.rb edit KEY PACKAGE [--from TRACK --code CODE --to TRACK[,TRACK...]] [--listing DIR]
 #                     [--notes DIR] [--check-only]

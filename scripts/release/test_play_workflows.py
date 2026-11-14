@@ -82,6 +82,14 @@ class PlayWorkflowsTest(unittest.TestCase):
         self.assertIn("PLAY_TRACKS: ${{ vars.PLAY_TRACKS }}", job)
         self.assertNotIn("production", job.split("run: |", 1)[1].replace("promote.yml sends a release to production", ""))
 
+    def test_a_pre_release_is_never_the_latest_and_never_goes_to_play(self):
+        text = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+        steps = jobs(text)
+        self.assertIn("prerelease: ${{ steps.tag.outputs.prerelease }}", steps["build"])
+        self.assertIn('if [[ "$TAG" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]; then\n            echo "prerelease=false"', steps["build"])
+        self.assertIn('if [[ "$PRERELEASE" == "true" ]]; then\n            args+=(--prerelease)', steps["publish"])
+        self.assertIn("if: needs.build.outputs.prerelease == 'false'", steps["play"])
+
 
 if __name__ == "__main__":
     unittest.main()
