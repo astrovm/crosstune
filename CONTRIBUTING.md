@@ -132,6 +132,8 @@ The store's screenshots and the site's clips, in every language, come from [`scr
 python3 scripts/shots/shots.py          # every language, both themes
 python3 scripts/shots/shots.py ja ko    # only these
 python3 scripts/shots/shots.py --theme light  # only the light set
+python3 scripts/shots/shots.py --box    # Gradle in the build box, in turn with other checkouts
+python3 scripts/shots/banner.py         # then the banner, from the new English dark stills
 ```
 
 It runs the `:app:shots` Gradle task, which draws the app's real screens with Robolectric on a clock that moves one frame at a time, so every run gives the same pictures, and copies both themes’ clips into `docs/img/`. Dark store screenshots go into `fastlane/metadata/android/`; the matching light alternatives are kept in `screenshots/light/<store locale>/`. The site selects clips and stills for its current theme, including system theme changes and reduced motion. The MilkDrop visuals behind the lyrics are drawn ahead with `render.py`, below, from a made-up beat. The scenes live in [`Shots.kt`](app/src/test/java/com/astrovm/crosstune/shots/Shots.kt).

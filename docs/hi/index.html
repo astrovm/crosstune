@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Crosstune: कोई भी लिंक खोलें। कोई भी गाना पहचानें। हर शब्द के साथ चलें।</title>
+<title>Crosstune: कोई भी लिंक खोलें। हर शब्द के साथ चलें।</title>
 <meta name="description" content="म्यूज़िक लिंक उसी ऐप में खोलें जिसमें आप सुनते हैं, आसपास बज रहे गाने को पहचानें, और उसके बोल व कॉर्ड्स के साथ चलें। Android के लिए मुफ़्त और ओपन सोर्स।">
 <link rel="icon" href="/img/icon.png">
 <link rel="alternate" hreflang="en" href="https://crosstune.cc/">
@@ -27,7 +27,7 @@
   try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
 </script>
 <meta property="og:title" content="Crosstune">
-<meta property="og:description" content="कोई भी लिंक खोलें। कोई भी गाना पहचानें। हर शब्द के साथ चलें।">
+<meta property="og:description" content="कोई भी लिंक खोलें। हर शब्द के साथ चलें।">
 <meta property="og:image" content="https://crosstune.cc/img/og.png">
 <meta property="og:url" content="https://crosstune.cc/hi/">
 <meta property="og:locale" content="hi_IN">
@@ -64,23 +64,16 @@
   .icon-link { display: inline-flex; }
   .hero > * { min-width: 0; }
   .hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: center; padding: 40px 0 48px; }
-  h1 { font-size: clamp(2.2rem, 5vw, 3.4rem); line-height: 1.1; margin: 0 0 18px; letter-spacing: -.02em; }
-  h1 em { font-style: normal; background: linear-gradient(transparent 62%, var(--accent) 62%); color: inherit; }
+  h1 { font-size: clamp(1.9rem, 5vw, 3.4rem); line-height: 1.2; margin: 0 0 18px; letter-spacing: -.02em; text-wrap: balance; }
+  /* A line under the word, never a marker over it: light letters on the lime were hard to read. */
+  h1 em { font-style: normal; color: inherit; text-decoration: underline var(--accent) .1em; text-underline-offset: .14em; text-decoration-skip-ink: none; }
   .lede { font-size: 1.15rem; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
   .buttons { display: flex; flex-wrap: wrap; gap: 12px; }
   .btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 24px 13px 18px; border-radius: 999px; font-weight: 600; text-decoration: none; border: 1px solid var(--line); color: var(--text); background: var(--surface); }
-  .btn.primary { background: var(--brand); color: var(--brand-ink); border-color: transparent; box-shadow: 0 8px 24px color-mix(in srgb, var(--brand) 35%, transparent); transition: transform .15s, box-shadow .15s; }
-  .btn.primary:hover { transform: translateY(-1px); box-shadow: 0 12px 28px color-mix(in srgb, var(--brand) 45%, transparent); }
+  .btn.primary { background: var(--brand); color: var(--brand-ink); border-color: transparent; }
+  .btn.primary:hover { background: color-mix(in srgb, var(--brand) 88%, var(--text)); }
   .btn svg { width: 22px; height: 22px; fill: currentColor; }
   button.btn { font: inherit; font-weight: 600; cursor: pointer; }
-  .btn .chevron { width: 20px; height: 20px; margin-right: -6px; transition: transform .2s; }
-  .play-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
-  .hero.open .shots { align-self: start; }
-  /* In the buttons' row, so on a phone, where they stack, it opens right under its button; wider, it takes a row under both. */
-  .play { flex-basis: 100%; order: 1; margin-top: 4px; }
-  .play ol.steps { grid-template-columns: 1fr; gap: 8px; }
-  .play ol.steps li { padding: 12px 14px; }
-  .play .note { margin-top: 10px; }
   a:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
   .note { font-size: .9rem; color: var(--muted); margin-top: 14px; }
   .shots { display: flex; justify-content: center; align-items: flex-start; gap: 14px; }
@@ -90,51 +83,43 @@
   .theme:hover { color: var(--text); }
   .theme svg { width: 20px; height: 20px; fill: currentColor; }
   nav { display: flex; align-items: center; }
-  section { padding: 40px 0; border-top: 1px solid var(--line); }
-  h2 { font-size: 1.7rem; margin: 0 0 20px; letter-spacing: -.01em; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-  .card { display: flex; gap: 14px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
-  .card svg { flex: none; width: 40px; height: 40px; padding: 8px; border-radius: 12px; background: var(--bg); color: var(--brand); fill: currentColor; }
+  section { padding: 48px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 1.7rem; margin: 0 0 28px; letter-spacing: -.01em; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px 32px; }
+  /* Flat, like the app's own lesser tools: an icon, a name and a line, with no box. */
+  .card { display: flex; gap: 14px; align-items: flex-start; }
+  .card svg { flex: none; width: 28px; height: 28px; color: var(--brand); fill: currentColor; }
   .card h3 { margin: 0 0 2px; font-size: 1.05rem; }
   .card p { margin: 0; color: var(--muted); font-size: .95rem; line-height: 1.5; }
-  .step .num { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); font-weight: 700; }
-  .big .card { flex-direction: column; padding: 22px; }
-  .big .card svg { width: 48px; height: 48px; padding: 10px; }
-  .big .card h3 { font-size: 1.15rem; margin-top: 4px; }
+  .step .num { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--brand); color: var(--brand); font-weight: 700; font-size: .95rem; }
+  .big .card { flex-direction: column; gap: 10px; }
+  .big .card svg { width: 32px; height: 32px; }
+  .big .card h3 { font-size: 1.15rem; }
   .works { margin-top: 32px; }
   .works h2 { font-size: .85rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
-  .services { display: flex; flex-wrap: wrap; gap: 12px; margin: 0; padding: 0; list-style: none; }
+  .services { display: flex; flex-wrap: wrap; gap: 14px; margin: 0; padding: 0; list-style: none; }
   .services li { display: flex; }
-  .services svg { width: 28px; height: 28px; }
+  .services svg { width: 24px; height: 24px; }
   html { scroll-behavior: smooth; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   section { scroll-margin-top: 16px; }
-  ol.steps { counter-reset: step; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 0; margin: 0; list-style: none; }
-  ol.steps li { counter-increment: step; display: flex; gap: 14px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; line-height: 1.5; }
-  ol.steps li::before { content: counter(step); flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); font-weight: 700; font-size: .95rem; }
-  ol.steps a { font-weight: 600; }
   footer { padding: 32px 0 48px; color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; justify-content: space-between; }
   footer a { color: var(--muted); }
-  footer select { font: inherit; font-size: .9rem; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 2px 6px; }
+  footer select { font: inherit; font-size: .9rem; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
   footer .heart { vertical-align: -2px; margin: 0 2px; }
   footer .links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
   footer .links a { padding: 8px 0; }
   @media (max-width: 820px) {
     .hero { grid-template-columns: 1fr; padding-top: 24px; }
-    ol.steps, .grid { grid-template-columns: 1fr; }
-  }
+    }
   @media (max-width: 560px) {
     .hero { gap: 32px; padding-bottom: 40px; }
-    .grid { grid-template-columns: 1fr; gap: 8px; }
+    .grid { grid-template-columns: 1fr; gap: 22px; }
     .buttons { flex-direction: column; }
-    .play { order: 0; }
     .btn { justify-content: center; }
-    .card { padding: 12px 14px; gap: 12px; }
-    .card svg { width: 36px; height: 36px; }
-    .big .card { flex-direction: row; padding: 12px 14px; }
-    .big .card svg { width: 36px; height: 36px; padding: 8px; }
-    .services { gap: 12px; }
-    .services svg { width: 26px; height: 26px; }
+    .big .card { flex-direction: row; gap: 14px; }
+    .big .card svg { width: 28px; height: 28px; }
+    section { padding: 36px 0; }
   }
 </style>
 </head>
@@ -151,18 +136,10 @@
   <main>
     <div class="hero">
       <div>
-        <h1><em>कोई भी</em> लिंक खोलें। <em>कोई भी</em> गाना पहचानें। <em>हर</em> शब्द के साथ चलें।</h1>
+        <h1><em>कोई भी</em> लिंक खोलें। <em>हर</em> शब्द के साथ चलें।</h1>
         <p class="lede">किसी भी सेवा का लिंक उसी ऐप में खोलें जिसमें आप सुनते हैं, आसपास बज रहे गाने को पहचानें, और उसके बोल व कॉर्ड्स के साथ चलें।</p>
         <div class="buttons">
-          <button class="btn primary play-toggle" type="button" aria-expanded="false" aria-controls="google-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z"/></svg>Google Play<svg class="chevron" viewBox="0 -960 960 960" aria-hidden="true"><path d="M480-361q-8 0-15-2.5t-13-8.5L268-556q-11-11-11-28t11-28q11-11 28-11t28 11l156 156 156-156q11-11 28-11t28 11q11 11 11 28t-11 28L508-372q-6 6-13 8.5t-15 2.5Z"/></svg></button>
-          <div id="google-play" class="play" role="region" aria-label="Google Play से पाएं" hidden>
-            <ol class="steps">
-        <li><span>अपने Google Play खाते से <a href="https://groups.google.com/g/crosstune-testers">Crosstune testers</a> ग्रुप में शामिल हों।</span></li>
-        <li><span><a href="https://play.google.com/apps/testing/com.astrovm.crosstune">टेस्टिंग पेज</a> खोलें और <b>Become a tester</b> पर टैप करें।</span></li>
-        <li><span><a href="https://play.google.com/store/apps/details?id=com.astrovm.crosstune">Google Play</a> से Crosstune इंस्टॉल करें।</span></li>
-            </ol>
-            <p class="note">Crosstune अभी Google Play पर टेस्टिंग में है। इसे दिखने में कुछ मिनट लग सकते हैं।</p>
-          </div>
+          <a class="btn primary" href="https://play.google.com/store/apps/details?id=com.astrovm.crosstune"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z"/></svg>Google Play</a>
           <a class="btn apk" href="https://github.com/astrovm/crosstune/releases/latest"><svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M480-337q-8 0-15-2.5t-13-8.5L308-492q-12-12-11.5-28t11.5-28q12-12 28.5-12.5T365-549l75 75v-286q0-17 11.5-28.5T480-800q17 0 28.5 11.5T520-760v286l75-75q12-12 28.5-11.5T652-548q11 12 11.5 28T652-492L508-348q-6 6-13 8.5t-15 2.5ZM240-160q-33 0-56.5-23.5T160-240v-80q0-17 11.5-28.5T200-360q17 0 28.5 11.5T240-320v80h480v-80q0-17 11.5-28.5T760-360q17 0 28.5 11.5T800-320v80q0 33-23.5 56.5T720-160H240Z"/></svg>APK डाउनलोड करें</a>
         </div>
         <p class="note">मुफ़्त, ओपन सोर्स और बिना विज्ञापन। Android TV पर भी चलता है।</p>
@@ -277,27 +254,6 @@
     update();
   });
   media.addEventListener("change", update);
-  // Google Play's steps show under its button, and straight away for a link to them.
-  const play = document.querySelector(".play-toggle");
-  const steps = document.getElementById("google-play");
-  // The clips stay where they were while the steps are open, instead of sliding down with the text.
-  const hero = document.querySelector(".hero");
-  const clips = hero.querySelector(".shots");
-  const place = () => {
-    hero.classList.remove("open");
-    clips.style.marginTop = "";
-    if (steps.hidden) return;
-    steps.hidden = true;
-    const closed = clips.getBoundingClientRect().top;
-    steps.hidden = false;
-    hero.classList.add("open");
-    clips.style.marginTop = Math.max(0, closed - clips.getBoundingClientRect().top) + "px";
-  };
-  const showSteps = open => { steps.hidden = !open; play.setAttribute("aria-expanded", open); place(); };
-  addEventListener("resize", place);
-  document.fonts.ready.then(place);
-  play.addEventListener("click", () => showSteps(steps.hidden));
-  if (location.hash === "#google-play") showSteps(true);
   // The APK button downloads the newest release's file itself. Until GitHub answers, or if it can't, it opens the release page.
   const apk = document.querySelector(".apk");
   fetch("https://api.github.com/repos/astrovm/crosstune/releases/latest")
