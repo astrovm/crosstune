@@ -1,14 +1,21 @@
 package com.astrovm.crosstune
 
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -28,8 +35,15 @@ class MusicBrainzTest {
     private val fake = FakeSpotify()
     private val song = MusicMetadata("De Música Ligera", "Soda Stereo")
 
-    private fun brainz(file: File = File(folder.root, "musicbrainz.json"), gapMs: Long = 0) =
-        MusicBrainz(fake.client(), "2.3.3", LookupCache(file, Dispatchers.Unconfined), Dispatchers.Unconfined, gapMs)
+    private val app: Context = ApplicationProvider.getApplicationContext()
+
+    private fun brainz(file: File = File(folder.root, "musicbrainz.json"), gapMs: Long = 0, turn: MusicBrainz.Turn = MusicBrainz.Turn()) =
+        MusicBrainz(fake.client(), "2.3.3", LookupCache(file, Dispatchers.Unconfined), turn, Dispatchers.Unconfined, gapMs)
+
+    /** An app other than [app], as the next test's is. */
+    private fun anotherApp(): Context = object : ContextWrapper(app) {
+        override fun getApplicationContext(): Context = this
+    }
 
     private fun group(title: String, date: String, secondary: List<String>? = null, id: String = title) = JSONObject()
         .put("id", id).put("title", title).put("primary-type", "Album").put("first-release-date", date)
@@ -266,10 +280,34 @@ class MusicBrainzTest {
         val answer = fake.handler
         fake.handler = { request -> times += System.nanoTime(); answer(request) }
         // As the app's own lookups and its queue's each ask it.
-        runBlocking { brainz(gapMs = 150).spotifyArtist("Stella Lefty") }
-        runBlocking { brainz(File(folder.root, "queue.json"), gapMs = 150).spotifyArtist("Stella Lefty") }
+        runBlocking { brainz(gapMs = 150, turn = MainActivity.musicBrainzTurn(app)).spotifyArtist("Stella Lefty") }
+        runBlocking { brainz(File(folder.root, "queue.json"), gapMs = 150, turn = MainActivity.musicBrainzTurn(app)).spotifyArtist("Stella Lefty") }
         assertEquals(4, times.size)
         assertTrue("${(times[2] - times[1]) / 1_000_000} ms between them", times[2] - times[1] >= 140_000_000)
+    }
+
+    @Test
+    fun anotherAppTakesItsOwnTurnsAtMusicBrainz() {
+        assertSame(MainActivity.musicBrainzTurn(app), MainActivity.musicBrainzTurn(app))
+        assertNotSame(MainActivity.musicBrainzTurn(app), MainActivity.musicBrainzTurn(anotherApp()))
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun anAskTheLastAppLeftUnderWayHoldsNoneOfTheNextAppsUp() = runTest {
+        knowing(emptyList())
+        var asked = 0
+        val answer = fake.handler
+        fake.handler = { request -> asked++; answer(request) }
+        // The last app has just asked, and its next ask never ended, as a test's left when its main looper is let go.
+        val left = MainActivity.musicBrainzTurn(app)
+        left.askedAt = System.currentTimeMillis()
+        left.asking.lock()
+        val next = brainz(gapMs = MusicBrainz.ASK_GAP_MS, turn = MainActivity.musicBrainzTurn(anotherApp()))
+        assertNull(next.spotifyArtist("Stella Lefty"))
+        assertEquals(1, asked)
+        // Asked at once, with no wait for the gap after the last app's ask.
+        assertEquals(0, testScheduler.currentTime)
     }
 
     @Test

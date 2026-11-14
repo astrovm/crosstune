@@ -6824,41 +6824,59 @@ class ListeningTest {
         val answers = openAi.reply
         val late = java.util.concurrent.CountDownLatch(1)
         val answeredLate = java.util.concurrent.atomic.AtomicInteger()
-        // What it says about Demo comes only once the next song plays; about any other, there's nothing to say.
+        val aboutDemo = { body: org.json.JSONObject ->
+            val instructions = body.getString("instructions")
+            ("covers and samples" in instructions || "explain the song in four parts" in instructions) &&
+                "Demo" in body.getJSONArray("input").getJSONObject(0).getString("content")
+        }
+        // What it says about Demo comes only once the next song plays, however long that takes; about any other, there's nothing to say.
         openAi.reply = { body ->
             val instructions = body.getString("instructions")
-            val about = "covers and samples" in instructions || "explain the song in four parts" in instructions
-            val demo = "Demo" in body.getJSONArray("input").getJSONObject(0).getString("content")
             when {
-                about && demo -> { late.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS); answers(body).also { answeredLate.incrementAndGet() } }
-                about -> 500 to ""
+                aboutDemo(body) -> { late.await(); answers(body).also { answeredLate.incrementAndGet() } }
+                "covers and samples" in instructions || "explain the song in four parts" in instructions -> 500 to ""
                 else -> answers(body)
             }
         }
-        val hearing = FakeHearing()
-        listeningAlong(hearing)
-        val words = fake.handler
-        fake.handler = { request -> openAi.answer(request) ?: words(request) }
-        allowMicrophone()
-        launch()
-        hearing.song("Demo", 2.0)
-        recognize()
-        waitForText("Demo")
-        click(string(R.string.lyrics_button))
-        waitUntil(TIMEOUT_MS) { lit("Demo one") }
-        aboutSong()
-        waitUntil(TIMEOUT_MS) { openAi.asked.count { "Demo" in it.getJSONArray("input").getJSONObject(0).getString("content") && ("covers and samples" in it.getString("instructions") || "explain the song in four parts" in it.getString("instructions")) } == 2 }
-        hearing.song("Other", 1.0)
-        waitUntil(TIMEOUT_MS) { lit("Other one") }
-        late.countDown()
-        waitUntil(TIMEOUT_MS) { answeredLate.get() == 2 }
-        Thread.sleep(300)
-        composeRule.waitForIdle()
-        // Other's words don't say Demo covers First Demo, or what Demo is about.
-        val learning = controllerModel().uiState.learning
-        assertNull(learning.songFacts)
-        assertFalse(learning.songExplanation?.text.orEmpty().contains("under the stars"))
-        assertFalse(shown("Old Band") || shown("A night under the stars."))
+        // The asks about Demo the app let go of.
+        val letGo = java.util.concurrent.atomic.AtomicInteger()
+        MainActivity.httpClientFactory = {
+            fake.client().newBuilder().eventListener(object : okhttp3.EventListener() {
+                override fun canceled(call: okhttp3.Call) {
+                    if (call.request().url.toString() == ChatGpt.RESPONSES_URL && aboutDemo(org.json.JSONObject(FakeSpotify.bodyOf(call.request())))) letGo.incrementAndGet()
+                }
+            }).build()
+        }
+        // Let go of at the end, passing or failing, so no answer waits past the test.
+        try {
+            val hearing = FakeHearing()
+            listeningAlong(hearing)
+            val words = fake.handler
+            fake.handler = { request -> openAi.answer(request) ?: words(request) }
+            allowMicrophone()
+            launch()
+            hearing.song("Demo", 2.0)
+            recognize()
+            waitForText("Demo")
+            click(string(R.string.lyrics_button))
+            waitUntil(TIMEOUT_MS) { lit("Demo one") }
+            aboutSong()
+            waitUntil(TIMEOUT_MS) { openAi.asked.count(aboutDemo) == 2 }
+            hearing.song("Other", 1.0)
+            waitUntil(TIMEOUT_MS) { lit("Other one") }
+            // Both asks about Demo were let go of as Other took over, so their answers have nowhere to go.
+            waitUntil(TIMEOUT_MS) { letGo.get() == 2 }
+            late.countDown()
+            waitUntil(TIMEOUT_MS) { answeredLate.get() == 2 }
+            composeRule.waitForIdle()
+            // Other's words don't say Demo covers First Demo, or what Demo is about.
+            val learning = controllerModel().uiState.learning
+            assertNull(learning.songFacts)
+            assertFalse(learning.songExplanation?.text.orEmpty().contains("under the stars"))
+            assertFalse(shown("Old Band") || shown("A night under the stars."))
+        } finally {
+            late.countDown()
+        }
     }
 
 
