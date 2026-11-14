@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
 import kotlin.text.RegexOption.DOT_MATCHES_ALL
@@ -303,6 +304,8 @@ class PagesReadAsMainReadTest {
         }
         val adJoins = joins
         joins = 0
+        // Boxes of lyrics that open inside another, closed or not.
+        var nested = 0
         val notWordsTag = """<div data-exclude-from-selection="true">"""
         texts(
             *pieces, """ data-exclude-from-selection="true${'"'}""", notWordsTag, "${notWordsTag}x</div>", """v data-exclude-from-selection="true">""",
@@ -313,20 +316,31 @@ class PagesReadAsMainReadTest {
         ).forEach { page ->
             val body = withoutBoxes(page, notWords)
             assertEquals(page, body, LyricsFinder.withoutGeniusNotWords(page))
-            val boxes = words.findAll(body).map { start ->
+            var read = 0
+            val boxes = words.findAll(body).mapNotNull { start ->
                 var depth = 0
                 val end = box.findAll(body, start.range.first).firstOrNull { tag ->
                     depth += if (tag.value == "</div>") -1 else 1
                     depth == 0
                 }
-                // Main threw where its tag ended on the ">" of a "</div>", which closed it: it has no words.
-                body.substring(start.range.last + 1, (end?.range?.first ?: body.length).coerceAtLeast(start.range.last + 1))
+                // Main threw where its tag ended on the ">" of a "</div>", which closed it: it has no words. And it read
+                // a box inside another again, which is in the other's words already.
+                if (start.range.first < read) return@mapNotNull null
+                read = (end?.range?.first ?: body.length).coerceAtLeast(start.range.last + 1)
+                body.substring(start.range.last + 1, read)
             }.toList()
             assertEquals(body, boxes, LyricsFinder.geniusBoxes(body).toList())
+            nested += words.findAll(body).count() - boxes.size
         }
         assertEquals(listOf("", "a"), LyricsFinder.geniusBoxes("<div data-lyrics-container=\"true\"</div>x<div data-lyrics-container=\"true\">a</div>").toList())
-        // Enough openings that a cut made, of each kind, that those are read as main read them too.
+        // Enough openings that a cut made, of each kind, that those are read as main read them too, and boxes inside others.
         assertEquals("$adJoins and $joins", true, adJoins > MIN_JOINS && joins > MIN_JOINS)
+        assertTrue("$nested", nested > MIN_JOINS)
+        val lyrics = """<div data-lyrics-container="true">"""
+        assertEquals(listOf("a${lyrics}b</div>c", "d"), LyricsFinder.geniusBoxes("${lyrics}a${lyrics}b</div>c</div>${lyrics}d</div>").toList())
+        // One opening where the one before closed at once, on its own tag's ">", is no box inside it.
+        assertEquals(listOf("", "a"), LyricsFinder.geniusBoxes("""<div data-lyrics-container="true"</div>${lyrics}a</div>""").toList())
+        assertEquals(listOf("a${lyrics}b<div>c"), LyricsFinder.geniusBoxes("${lyrics}a${lyrics}b<div>c").toList())
     }
 
     /** Each part [parts] finds in pages of [pieces], as [main] finds them: whole, and its [group] [widen]ed, if any. */

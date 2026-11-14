@@ -1844,13 +1844,17 @@ internal class LyricsFinder(
         /**
          * What's in each of [body]'s boxes of lyrics, to where it closes, or to the end where it doesn't. A box whose tag
          * ends on the `>` of a `</div>`, `<div data-lyrics-container="true"</div>`, closes there, as main counted, so it
-         * has no words, where main threw.
+         * has no words, where main threw. A box inside another is in its words already, so it isn't read again: main read
+         * it again, and on a page of boxes that never close, each to the end, that was time and memory squared.
          */
-        internal fun geniusBoxes(body: String): Sequence<String> {
+        internal fun geniusBoxes(body: String): Sequence<String> = sequence {
             val tags = BoxTags(body)
-            return geniusBox.allIn(body).map { box ->
+            var read = 0
+            for (box in geniusBox.allIn(body)) {
+                if (box.whole.first < read) continue
                 val words = box.whole.last + 1
-                body.substring(words, (tags.closing(tags.at(box.whole.first)) ?: body.length).coerceAtLeast(words))
+                read = (tags.closing(tags.at(box.whole.first)) ?: body.length).coerceAtLeast(words)
+                yield(body.substring(words, read))
             }
         }
 
