@@ -90,6 +90,19 @@ class PlayWorkflowsTest(unittest.TestCase):
         self.assertIn('if [[ "$PRERELEASE" == "true" ]]; then\n            args+=(--prerelease)', steps["publish"])
         self.assertIn("if: needs.build.outputs.prerelease == 'false'", steps["play"])
 
+    def test_release_yml_and_play_sh_agree_on_which_tags_are_pre_releases(self):
+        build = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))["build"]
+        valid = re.search(r'if \[\[ ! "\$TAG" =~ (\S+) \]\]', build).group(1)
+        plain = re.search(r'if \[\[ "\$TAG" =~ (\S+) \]\]; then\n +echo "prerelease=false"', build).group(1)
+        play_sh = (ROOT / ".github/play/play.sh").read_text(encoding="utf-8")
+        skipped = re.search(r'"\$\{2:-\}" =~ (\S+) \]\]', play_sh).group(1)
+        tags = {"v2.27.0": False, "v2.27.0-rc.1": True, "v2.27.0.1": True, "v2.27.0-rc": True, "v10.0.12": False}
+        for tag, pre_release in tags.items():
+            with self.subTest(tag=tag):
+                self.assertTrue(re.search(valid, tag))
+                self.assertEqual(pre_release, not re.search(plain, tag))
+                self.assertEqual(pre_release, bool(re.search(skipped, tag)))
+
 
 if __name__ == "__main__":
     unittest.main()

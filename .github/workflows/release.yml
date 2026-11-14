@@ -284,7 +284,7 @@ jobs:
             # Create the tag on the built commit.
             args+=(--target "$GITHUB_SHA")
           fi
-          # Never the latest release, so Obtainium and the Releases page don't offer it as an update.
+          # Never the latest release, so the app's update check and the site's download button never offer it.
           if [[ "$PRERELEASE" == "true" ]]; then
             args+=(--prerelease)
           fi

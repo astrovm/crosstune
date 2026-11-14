@@ -93,7 +93,16 @@ class UpdatesTest {
         assertTrue(UpdateChecker.isNewer("2.8.17", "2.8.16-dev"))
         assertFalse(UpdateChecker.isNewer("2.8.16", "2.8.16"))
         assertFalse(UpdateChecker.isNewer("2.8.15", "2.8.16"))
+        // A test version comes before its version, and after the one before.
+        assertTrue(UpdateChecker.isNewer("2.27.0", "2.27.0-rc.1"))
+        assertTrue(UpdateChecker.isNewer("2.27.0", "2.27.0.1"))
+        assertTrue(UpdateChecker.isNewer("2.28.0", "2.27.0.1"))
+        assertFalse(UpdateChecker.isNewer("2.27.0-rc.1", "2.27.0"))
+        assertFalse(UpdateChecker.isNewer("2.26.0", "2.27.0-rc.1"))
+        assertFalse(UpdateChecker.isNewer("2.27.0-rc.2", "2.27.0-rc.1"))
         // What isn't X.Y.Z is never newer.
+        assertFalse(UpdateChecker.isNewer("2.9.0", "2.8.99999999999"))
+        assertFalse(UpdateChecker.isNewer("2.9.0.", "2.8.16"))
         assertFalse(UpdateChecker.isNewer("2.9", "2.8.16"))
         assertFalse(UpdateChecker.isNewer("2.9.0", "beta"))
         assertFalse(UpdateChecker.isNewer("next", "2.8.16"))
