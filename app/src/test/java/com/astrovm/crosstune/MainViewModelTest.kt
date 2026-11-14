@@ -786,6 +786,29 @@ class MainViewModelTest {
     }
 
     @Test
+    fun theWordsOfTheSongHeardOpenOverItsOwnPlayerAsItsCardWould() {
+        fake.handler = { request -> FakeSpotify.html(request, "") }
+        val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val heard = heardSong()
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(heard), playback, lyricsFinder = finder)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(heard, model.uiState.playingUnnamed?.heard)
+        // The song heard plays in an app that names it too, and its player is open.
+        playback.onThePhone = Heard.Song(heard.metadata, null, 0, SystemClock.elapsedRealtime())
+        idle()
+        model.openPlayingNow()
+        idle()
+        assertEquals(heard.metadata, model.uiState.player?.song)
+        // Its words open over its player, which stays under them, as its card does.
+        model.listen(lyrics = true)
+        idle()
+        assertEquals("Fake Song", model.uiState.lyricsFor?.title)
+        assertEquals(heard.metadata, model.uiState.player?.song)
+    }
+
+    @Test
     fun aStationsButtonsFollowItsAppAsItPausesAndPlays() {
         val playback = FakePlayback()
         playback.playing.value = Following(PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = false)
