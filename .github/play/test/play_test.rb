@@ -472,6 +472,18 @@ class PlayTest < Minitest::Test
     assert_empty requests
   end
 
+  def test_an_app_bundle_goes_on_tracks_with_no_from
+    aab = File.join(@dir, "Crosstune-#{TAG}.aab")
+    [["--from", "beta", "--code", CODE.to_s, "--to", "production", "--aab", aab],
+     ["--aab", aab, "--listing", File.join(@dir, "fastlane/metadata/android")]].each do |args|
+      output, status = play_rb("edit", *args)
+      refute status.success?, output
+
+      assert_includes output, "An App Bundle goes on tracks with no --from"
+      assert_empty requests
+    end
+  end
+
   def test_the_play_tools_keep_to_120_columns
     Dir[File.expand_path("../{,test/}*.{rb,sh}", __dir__)].each do |file|
       File.readlines(file).each_with_index do |line, number|
