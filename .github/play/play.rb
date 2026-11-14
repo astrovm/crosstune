@@ -3,15 +3,17 @@
 #
 #   ruby play.rb supply ARGS...
 #     fastlane supply, as on the command line.
-#   ruby play.rb has-version KEY PACKAGE TRACK CODE
-#     Exits 0 when TRACK already holds CODE, and 3 when it doesn't. Any other status is an error. It only
-#     reads: the edit it opens is deleted, never committed.
+#   ruby play.rb has-bundle KEY PACKAGE TRACK CODE AAB
+#     Exits 0 when Play has AAB itself as CODE, on TRACK: a re-run. Exits 3 when Play has no bundle with CODE.
+#     Stops when Play has another bundle as CODE (an earlier tag with the same version, such as an -rc), or has
+#     AAB but not on TRACK. It only reads: the edit it opens is deleted, never committed.
 #   ruby play.rb edit KEY PACKAGE [--from TRACK --code CODE --to TRACK[,TRACK...]] [--listing DIR]
 #                     [--notes DIR] [--check-only]
 #     One edit: the release CODE on --from goes on to each --to track, with the listing in DIR (folders by
 #     language, as play.sh makes them) and the release notes in DIR/en-US/changelogs/CODE.txt. Then the edit is
 #     committed, or with --check-only only checked. supply can only promote to one track a run, so this drives
 #     supply's own client and uploader in one edit.
+require "digest"
 require "optparse"
 require_relative "review_guard"
 
@@ -32,18 +34,33 @@ module Crosstune
         @uploader.client
       end
 
-      def track_has?(package, track, code)
+      # :absent, or :on_track when Play holds this very bundle as code on track. Anything else stops the job.
+      def bundle_state(package, track, code, aab)
         client.begin_edit(package_name: package)
-        codes = client.track_version_codes(track).map(&:to_s)
+        bundles = client.client.list_edit_bundles(package, client.current_edit.id).bundles.to_a
+        on_track = client.track_version_codes(track).map(&:to_s).include?(code)
         client.abort_current_edit
-        codes.include?(code)
+        bundle = bundles.find { |b| b.version_code.to_s == code }
+        return :absent unless bundle
+
+        if bundle.sha256 != Digest::SHA256.file(aab).hexdigest
+          FastlaneCore::UI.user_error!("Google Play already has another bundle as version code #{code}, from an " \
+                                       "earlier tag of the same version. Give this release a new versionCode.")
+        end
+        return :on_track if on_track
+
+        FastlaneCore::UI.user_error!("Google Play has this bundle as version code #{code}, but not on #{track}")
       end
 
       # supply's promote_track, for each track, but one that skips a release with no version codes, such as a
       # draft started in Play Console, where supply's stops with a NoMethodError.
       def promote(from, code, to)
-        release = client.tracks(from).first&.releases.to_a.find { |r| r.version_codes.to_a.map(&:to_s).include?(code) }
-        FastlaneCore::UI.user_error!("Track '#{from}' has no release with version code #{code}") unless release
+        releases = client.tracks(from).first&.releases.to_a
+        releases = releases.select { |r| r.version_codes.to_a.map(&:to_s).include?(code) }
+        FastlaneCore::UI.user_error!("Track '#{from}' has no release with version code #{code}") if releases.empty?
+        FastlaneCore::UI.user_error!("Track '#{from}' has #{releases.size} releases with version code #{code}") if releases.size > 1
+
+        release = releases.first
 
         to.each do |name|
           promoted = release.dup
@@ -76,12 +93,12 @@ module Crosstune
       require "supply"
     end
 
-    def has_version(argv)
-      key, package, track, code = argv
-      abort("usage: play.rb has-version KEY PACKAGE TRACK CODE") unless code
+    def has_bundle(argv)
+      key, package, track, code, aab = argv
+      abort("usage: play.rb has-bundle KEY PACKAGE TRACK CODE AAB") unless aab
       require_supply
       edit = Edit.new(json_key: key, package_name: package)
-      exit(edit.track_has?(package, track, code) ? 0 : 3)
+      exit(edit.bundle_state(package, track, code, aab) == :on_track ? 0 : 3)
     end
 
     def parse_edit(argv)
@@ -142,12 +159,12 @@ module Crosstune
       when "supply"
         argv.unshift("supply")
         load Gem.bin_path("fastlane", "fastlane")
-      when "has-version"
-        has_version(argv)
+      when "has-bundle"
+        has_bundle(argv)
       when "edit"
         edit(argv)
       else
-        abort("usage: play.rb supply ARGS... | has-version KEY PACKAGE TRACK CODE | edit KEY PACKAGE ...")
+        abort("usage: play.rb supply ARGS... | has-bundle KEY PACKAGE TRACK CODE AAB | edit KEY PACKAGE ...")
       end
     end
   end
@@ -157,10 +174,12 @@ begin
   Crosstune::Play.main(ARGV)
 rescue StandardError => e
   # Plainly, as fastlane's own command line prints its errors. Anything else is a bug here, with its stack trace.
-  if defined?(FastlaneCore::Interface::FastlaneException) && e.is_a?(FastlaneCore::Interface::FastlaneException)
+  plain = defined?(FastlaneCore::Interface) &&
+          [FastlaneCore::Interface::FastlaneError, FastlaneCore::Interface::FastlaneCommonException].any? { |c| e.is_a?(c) }
+  if plain
     warn("[!] #{e.message}")
   elsif e.is_a?(Google::Apis::Error)
-    warn("[!] Google Play answered #{e.status_code}: #{e.body || e.message}")
+    warn("[!] Google Play: #{[e.status_code, e.body || e.message].compact.join(' ')}")
   else
     raise
   end

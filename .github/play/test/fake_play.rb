@@ -7,6 +7,7 @@
 # RUBYOPT reaches `bundle` too, which has no WebMock: only play.rb gets the fake.
 return unless File.basename($PROGRAM_NAME) == "play.rb"
 
+require "digest"
 require "json"
 require "webmock"
 
@@ -35,8 +36,9 @@ module FakePlay
   @edits = {}
 
   class << self
-    def tracks
-      JSON.parse(File.read(STATE))["tracks"]
+    # What Play keeps: the tracks, and the bundles with their SHA-256.
+    def saved
+      { "tracks" => {}, "bundles" => [] }.merge(JSON.parse(File.read(STATE)))
     end
 
     def log(request)
@@ -66,7 +68,7 @@ module FakePlay
       case [method, path]
       in [:post, ""]
         id = "edit-#{Process.pid}-#{@edits.size + 1}"
-        @edits[id] = tracks
+        @edits[id] = saved
         json({ id: id })
       in [:delete, %r{\A/([^/:]+)\z}]
         @edits.delete(Regexp.last_match(1))
@@ -75,19 +77,19 @@ module FakePlay
         id = Regexp.last_match(1)
         return json(IN_REVIEW, 400) if ENV["FAKE_PLAY_IN_REVIEW"] == "1"
 
-        File.write(STATE, JSON.generate(tracks: @edits.delete(id)))
+        File.write(STATE, JSON.generate(@edits.delete(id)))
         json({ id: id })
       in [:post, %r{\A/([^/]+):validate\z}]
         json({ id: Regexp.last_match(1) })
       in [:get, %r{\A/([^/]+)/tracks\z}]
-        edit = @edits.fetch(Regexp.last_match(1))
+        edit = @edits.fetch(Regexp.last_match(1))["tracks"]
         json({ tracks: edit.map { |name, releases| track_json(name, releases) } })
       in [:get, %r{\A/([^/]+)/tracks/([^/]+)\z}]
-        releases = @edits.fetch(Regexp.last_match(1))[Regexp.last_match(2)]
+        releases = @edits.fetch(Regexp.last_match(1))["tracks"][Regexp.last_match(2)]
         # What Play answers for a track with no release yet.
         releases ? json(track_json(Regexp.last_match(2), releases)) : json({ error: { code: 404, message: "Track not found." } }, 404)
       in [:put, %r{\A/([^/]+)/tracks/([^/]+)\z}]
-        edit = @edits.fetch(Regexp.last_match(1))
+        edit = @edits.fetch(Regexp.last_match(1))["tracks"]
         name = Regexp.last_match(2)
         # Play keeps version codes as strings, whatever was sent.
         releases = JSON.parse(request.body)["releases"].map do |release|
@@ -95,8 +97,16 @@ module FakePlay
         end
         edit[name] = releases
         json(track_json(name, releases))
+      in [:get, %r{\A/([^/]+)/bundles\z}]
+        json({ bundles: @edits.fetch(Regexp.last_match(1))["bundles"] })
       in [:post, %r{\A/([^/]+)/bundles\z}]
-        json({ versionCode: Integer(ENV.fetch("FAKE_PLAY_VERSION_CODE")), sha256: "0" }, 200, upload)
+        # Google's client starts the upload, then sends the bundle.
+        return { status: 200, body: "", headers: { "X-Goog-Upload-Status" => "active", "X-Goog-Upload-URL" => request.uri.to_s } } \
+          if request.headers["X-Goog-Upload-Command"] == "start"
+
+        bundle = { "versionCode" => Integer(ENV.fetch("FAKE_PLAY_VERSION_CODE")), "sha256" => Digest::SHA256.hexdigest(request.body) }
+        @edits.fetch(Regexp.last_match(1))["bundles"] << bundle
+        json(bundle, 200, upload)
       in [:get, %r{\A/[^/]+/listings/[^/]+\z}]
         json({ error: { code: 404, message: "No listing" } }, 404)
       in [:put | :patch, %r{\A/[^/]+/listings/([^/]+)\z}]

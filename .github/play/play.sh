@@ -16,7 +16,7 @@
 # Every commit asks Play to keep a review in progress, and production never shares an edit with another track
 # (review_guard.rb). While a review is in progress, Play refuses the commit, nothing is sent, and the job fails
 # and says to re-run it when the review ends. A re-run starts over: a bundle that is already on internal testing
-# isn't sent again.
+# isn't sent again. Another bundle with the same version code stops the job.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -115,9 +115,9 @@ release() {
   # track never sits on an old version. While a review is in progress, Play takes no commit, this one included.
   # A re-run finds the bundle there already.
   found=0
-  play has-version "$key" "$package" internal "$code" || found=$?
+  play has-bundle "$key" "$package" internal "$code" "Crosstune-$tag.aab" || found=$?
   if [[ "$found" == 0 ]]; then
-    echo "Internal testing already has $code, so the bundle isn't sent again"
+    echo "Internal testing already has this bundle as $code, so it isn't sent again"
   elif [[ "$found" == 3 ]]; then
     play supply \
       --package_name "$package" \

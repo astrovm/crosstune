@@ -5,6 +5,7 @@
 #   BUNDLE_GEMFILE=.github/play/Gemfile BUNDLE_WITHOUT= bundle install
 #   BUNDLE_GEMFILE=.github/play/Gemfile BUNDLE_WITHOUT= bundle exec ruby .github/play/test/play_test.rb
 require "minitest/autorun"
+require "digest"
 require "json"
 require "open3"
 require "openssl"
@@ -56,8 +57,12 @@ class PlayTest < Minitest::Test
     FileUtils.rm_rf(@dir)
   end
 
-  def tracks(tracks)
-    File.write(@state, JSON.generate(tracks: tracks))
+  def tracks(tracks, bundles = [])
+    File.write(@state, JSON.generate(tracks: tracks, bundles: bundles))
+  end
+
+  def bundle(content = "fake bundle")
+    { "versionCode" => CODE, "sha256" => Digest::SHA256.hexdigest(content) }
   end
 
   # The releases on each track, as Play keeps them. A field sent empty is no field.
@@ -169,14 +174,49 @@ class PlayTest < Minitest::Test
   end
 
   def test_a_rerun_doesnt_send_the_bundle_again
-    tracks("internal" => release(CODE))
+    tracks({ "internal" => release(CODE) }, [bundle])
     output, status = play("release", TAG)
     assert status.success?, output
 
     assert_every_commit_keeps_the_review
     assert_equal [["beta"]], committed_tracks
-    refute(requests.any? { |r| r["path"].end_with?("/bundles") })
-    assert_includes output, "Internal testing already has #{CODE}"
+    refute(requests.any? { |r| r["method"] == "POST" && r["path"].end_with?("/bundles") })
+    assert_includes output, "Internal testing already has this bundle as #{CODE}"
+  end
+
+  def test_another_bundle_with_the_same_version_code_stops_the_release
+    tracks({ "internal" => release(CODE), "beta" => release(CODE) }, [bundle("the -rc bundle")])
+    output, status = play("release", TAG)
+    refute status.success?, output
+
+    assert_includes output, "[!] Google Play already has another bundle as version code #{CODE}"
+    assert_empty commits
+    refute(requests.any? { |r| r["method"] == "POST" && r["path"].end_with?("/bundles") })
+  end
+
+  def test_a_bundle_off_internal_testing_stops_the_release
+    tracks({ "beta" => release(CODE) }, [bundle])
+    output, status = play("release", TAG)
+    refute status.success?, output
+
+    assert_includes output, "[!] Google Play has this bundle as version code #{CODE}, but not on internal"
+    assert_empty commits
+  end
+
+  def test_the_bundle_sent_is_the_one_play_keeps
+    output, status = play("release", TAG)
+    assert status.success?, output
+
+    assert_equal [bundle], JSON.parse(File.read(@state))["bundles"]
+  end
+
+  def test_a_version_code_in_two_releases_stops_the_promotion
+    tracks("beta" => release(CODE) + release(CODE))
+    output, status = play("production", "2.26.0")
+    refute status.success?, output
+
+    assert_includes output, "[!] Track 'beta' has 2 releases with version code #{CODE}"
+    assert_empty commits
   end
 
   def test_production_goes_on_its_own_with_the_english_notes
@@ -221,7 +261,7 @@ class PlayTest < Minitest::Test
   end
 
   def test_a_draft_with_no_version_codes_is_passed_over
-    tracks("internal" => [{ "status" => "draft" }] + release(CODE))
+    tracks({ "internal" => [{ "status" => "draft" }] + release(CODE) }, [bundle])
     output, status = play("release", TAG)
     assert status.success?, output
 
