@@ -770,8 +770,11 @@ private fun LicensesPage(onBack: () -> Unit) {
     var restoring by remember { mutableStateOf(open.any { LicenseSplits.of(it) == null }) }
     val units = remember(open, splitDone) { open.mapNotNull { name -> LicenseSplits.of(name)?.let { name to it } }.toMap() }
     // Crosstune's own words in the notices, in the app's language, which picks the file; licence texts stay as published.
+    // The first time, they're read off the main thread and the list waits for them. Turned, they're read already.
     val tag = stringResource(R.string.language_tag)
-    val words = remember(tag) { Notices.words(tag) }
+    val words by produceState(Notices.wordsRead(tag), tag) {
+        value = Notices.wordsRead(tag) ?: withContext(MainActivity.systemDispatcher) { Notices.words(tag) }
+    }
     val look = LicenseLook(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), MaterialTheme.shapes.large)
     // One path for a press and for a remote. The page's own Back still leaves once nothing is open.
     BackHandler(enabled = open.isNotEmpty()) {
@@ -790,8 +793,9 @@ private fun LicensesPage(onBack: () -> Unit) {
         },
         listState = listState
     ) {
-        if (!restoring) {
-            licenseItems(open, units, words, look, openWebPage, focusing = { key ->
+        val shown = words
+        if (!restoring && shown != null) {
+            licenseItems(open, units, shown, look, openWebPage, focusing = { key ->
                 Modifier.focusRequester(requesters.getOrPut(key) { FocusRequester() }).onFocusChanged { if (it.isFocused) focusedKey = key }
             }) { name -> open = if (name in open) open - name else open + name }
         }
@@ -802,9 +806,8 @@ private fun LicensesPage(onBack: () -> Unit) {
     DisposableEffect(Unit) { onDispose { if (activity?.isChangingConfigurations != true) LicenseSplits.clear() } }
     LaunchedEffect(open) {
         // Already split ones are kept. Only a work that is not split yet is split, and not while drawing.
-        val openNotices = Notices.all.filter { it.name in open }
-        if (openNotices.any { LicenseSplits.of(it.name) == null }) {
-            withContext(MainActivity.systemDispatcher) { openNotices.forEach { LicenseSplits.make(it) } }
+        if (open.any { LicenseSplits.of(it) == null }) {
+            withContext(MainActivity.systemDispatcher) { Notices.all.filter { it.name in open }.forEach { LicenseSplits.make(it) } }
             splitDone = Any()
         }
         restoring = false
@@ -965,12 +968,14 @@ internal object LicenseSplits {
     var split: (Notice) -> List<LicenseUnit> = { licenseUnits(Notices.text(it)) }
 
     /**
-     * Splits [notice]'s licence and keeps it, unless it's kept already. The page's notices are the same
-     * objects for as long as the app runs, so each is the lock for its own work: two passes that ask
-     * for the same one at once read it once.
+     * A lock for each work, by its name, so two passes that ask for the same one at once read it once.
+     * Kept for as long as the app runs: one small object for each of the about 40 works.
      */
+    private val locks = HashMap<String, Any>()
+
+    /** Splits [notice]'s licence and keeps it, unless it's kept already. */
     fun make(notice: Notice) {
-        synchronized(notice) {
+        synchronized(synchronized(locks) { locks.getOrPut(notice.name) { Any() } }) {
             val asked = synchronized(pieces) { if (notice.name in pieces) return; kept }
             val made = split(notice)
             synchronized(pieces) { if (kept === asked) pieces[notice.name] = made }

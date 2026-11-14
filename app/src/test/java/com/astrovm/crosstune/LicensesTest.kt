@@ -70,6 +70,7 @@ class LicensesTest {
     /** Each licence read and split, by its work, with the thread that did it. */
     private val splits = Collections.synchronizedList(mutableListOf<Pair<String, Thread>>())
     private val split = LicenseSplits.split
+    private val open = Notices.open
     private val background = Executors.newSingleThreadExecutor { Thread(it, "licence-split") }
 
     /** Splits on a thread of their own, as on a phone, and counts each read and split. */
@@ -93,6 +94,8 @@ class LicensesTest {
     @After
     fun tearDown() {
         LicenseSplits.split = split
+        Notices.open = open
+        Notices.forget()
         background.shutdownNow()
         controller?.destroyAndSettle()
         MainActivity.httpClientFactory = ::httpClient
@@ -166,6 +169,20 @@ class LicensesTest {
         composeRule.waitForIdle()
         text("Attribution-ShareAlike 4.0 International").assertExists()
         work("Guava").assertExists()
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun aLanguagesWordsForTheNoticesAreReadOffTheMainThread() {
+        val reads = Collections.synchronizedList(mutableListOf<Pair<String, Thread>>())
+        MainActivity.systemDispatcher = background.asCoroutineDispatcher()
+        Notices.forget()
+        Notices.open = { name -> reads += name to Thread.currentThread(); open(name) }
+        openLicenses()
+        waitForText("Presets de MilkDrop")
+        val words = synchronized(reads) { reads.filter { it.first == "notices-es.txt" } }
+        assertEquals(listOf("notices-es.txt"), words.map { it.first })
+        assertTrue(words.none { it.second == Looper.getMainLooper().thread })
     }
 
     @Test

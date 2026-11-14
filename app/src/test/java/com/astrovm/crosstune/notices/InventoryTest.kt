@@ -3,6 +3,7 @@ package com.astrovm.crosstune.notices
 import com.astrovm.crosstune.AppLanguage
 import com.astrovm.crosstune.Notice
 import com.astrovm.crosstune.Notices
+import com.astrovm.crosstune.valuesFolder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -59,10 +60,9 @@ class InventoryTest {
 
     /**
      * Crosstune's own files, which need no notice. Each is named exactly, so a new file next to them,
-     * from someone else, needs a notice. Only a language's strings take a wildcard, for its folder: a new
-     * language is Crosstune's own words too. Each language's words for the notices, notices-TAG.txt, is
-     * named by the app's languages, so one that isn't an app language needs a notice. The licence texts are
-     * their notices' own, by their text lines.
+     * from someone else, needs a notice. Each language's strings.xml and its words for the notices,
+     * notices-TAG.txt, are named by the app's languages, so one that isn't an app language needs a notice.
+     * The licence texts are their notices' own, by their text lines.
      */
     private val own = listOf(
         "file app/src/main/assets/milkdrop-kinds.txt",
@@ -70,7 +70,6 @@ class InventoryTest {
         "file app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt",
         "file app/src/main/resources/com/astrovm/crosstune/jtotal-widths-mono.txt",
         "file app/src/main/resources/com/astrovm/crosstune/notices/notices.txt",
-        "file app/src/main/res/values*/strings.xml",
         "file app/src/main/res/values/themes.xml",
         "file app/src/main/res/values-night/themes.xml",
         "file app/src/main/res/values-night-v31/themes.xml",
@@ -97,7 +96,8 @@ class InventoryTest {
         "file app/src/main/res/drawable/widget_background.xml",
         "file app/src/main/res/drawable/widget_preview_row.xml",
         "source app/src/main/cpp/*"
-    ) + AppLanguage.tags.drop(1).map { "file ${TEXTS}notices-$it.txt" }
+    ) + AppLanguage.tags.map { "file app/src/main/res/${valuesFolder(it)}/strings.xml" } +
+        AppLanguage.tags.drop(1).map { "file ${TEXTS}notices-$it.txt" }
 
     /** Licence lines in code that no ABI here compiles. */
     private val notBuilt = listOf(
@@ -201,6 +201,14 @@ class InventoryTest {
             "source third_party/added/added.c",
             "download https://example.com/added.bin"
         )
+        assertEquals(added, report(parts = inventory.parts + added).uncovered)
+    }
+
+    @Test
+    fun aStringsFileInAFolderOfNoAppLanguageIsUncovered() {
+        // Strings for a newer Android, for the dark theme, or in a language the app doesn't have: from
+        // someone else until the app has that language.
+        val added = listOf("values-v34", "values-night", "values-b+sr+Latn").map { "file app/src/main/res/$it/strings.xml" }
         assertEquals(added, report(parts = inventory.parts + added).uncovered)
     }
 

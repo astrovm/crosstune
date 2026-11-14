@@ -1,126 +1,160 @@
 # Crosstune's own words in notices.txt, in Turkish: a block per work, its English name, then the words it
 # translates. What a work isn't given here shows in English. Licence texts stay as published.
+# from: names the English the block was made from. When that English changes, NoticeWordsTest fails
+# and gives the new from: to set once the block is translated again.
 
 JMdict
+from: e24ab7fdbdb1
 note: Crosstune'un JMdict'ten yaptığı kelime listeleri değiştirilmiştir. Okunuşlar: yalnızca JMdict'in tek bir şekilde okuduğu, Crosstune'un ise başka okuduğu iki veya daha çok kanjili kelimeler. Kana ile yazılan kelimeler: yalnızca ilk kanalarından sonra い veya う gelen yaygın kelimeler, her biri nasıl arandığıyla, ve orada ひ veya ふ olanlar. Bunlar da CC BY-SA 4.0 altındadır. Aşağıda Group'un lisansı (https://www.edrdg.org/edrdg/licence.html), CC BY-SA 4.0 lisansı ve JMdict'in belgeleri var.
 
 Kuromoji
+from: 962013f376a7
 by: Atilika Inc. ve katkıda bulunanlar
 
 IPADIC
+from: 429fa42d32bb
 by: Nara Institute of Science and Technology (NAIST), ICOT Free Software'den girdilerle
 license: NAIST ve ICOT lisansı
 note: Kuromoji'nin içinde, mecab-ipadic-2.7.0-20070801 olarak.
 
 UniDic
+from: a2b1f3173cf4
 note: İlk gerektiğinde Maven Central'dan, Kuromoji'nin içinde, unidic-mecab 2.1.2 olarak indirilir. UniDic GPL, LGPL veya BSD lisansı altındadır; Crosstune onu BSD lisansı altında kullanır.
 
 projectM
+from: 7fe496c42dcb
 license: GNU LGPL 2.1 veya sonrası
 note: Kaynak koddan derlendi, v4.1.8, app/src/main/cpp/ içindeki değişikliklerle: görüntü boyutunu korur ve iki derleme uyarısı düzeltildi. Bu sürümün tam kaynak kodu, projectM ve değişikliklerle birlikte: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, burada X.Y.Z bu uygulamanın sürümü; sonra CONTRIBUTING.md'nin dediği gibi derle. projectM'i değiştirilmiş bir kopyayla değiştirmek için uygulamayı o koddan yeniden derle.
 
 MilkDrop's FFT
+from: b45dd4b9f780
 name: MilkDrop'un FFT'si
 note: projectM'in içinde.
 
 projectM's expression parser
+from: cdf5e51ca218
 name: projectM'in ifade ayrıştırıcısı
 note: projectM'in içinde. Ayrıştırıcısını GNU Bison üretir; Bison'un aşağıdaki özel istisnası onu MIT lisansı altında paylaşmaya izin verir.
 
 HLSLParser
+from: ce6b599ae9e8
 note: projectM'in içinde. Crosstune, derlenirken uyarı vermesin diye GLSLGenerator.cpp'yi değiştirir; dosya bunu söyler.
 
 OpenGL Mathematics (GLM)
+from: 4c4874dfd640
 note: projectM'in içinde, 0.9.9 olarak.
 
 SOIL2
+from: d450bd41d67f
 by: Martín Lucas Golini ve Jonathan Dummer
 license: Kamu malı ve MIT lisansı
 note: projectM'in içinde. Görüntü işlevleri MIT lisansını metni olmadan anar; lisansın metni aşağıda.
 
 stb_image and stb_image_write
+from: 63db7987e0a8
 name: stb_image ve stb_image_write
 by: Sean Barrett ve katkıda bulunanlar
 license: Kamu malı
 note: SOIL2'nin içinde, stb_image 2.05 ve stb_image_write 0.98 olarak.
 
 Independent JPEG Group's JPEG software
+from: e98fc27b6e67
 name: Independent JPEG Group'un JPEG yazılımı
 by: Thomas G. Lane ve Independent JPEG Group
 note: Bu yazılım kısmen Independent JPEG Group'un çalışmasına dayanır ("This software is based in part on the work of the Independent JPEG Group"): stb_image'ın JPEG kod çözücüsü IDCT'sini IJG'nin jidctint.c dosyasından alır.
 
 ETC1 texture code
+from: d19acea5fa8c
 name: ETC1 doku kodu
 note: SOIL2'nin içinde.
 
 PowerVR SDK texture decompressor
+from: 85a1d04715d1
 name: PowerVR SDK doku açıcısı
 note: SOIL2'nin içinde, PowerVR SDK'nın PVRTDecompress.cpp dosyasından. Lisans SDK'nın lisansıdır, bu dosyayı içeren herkese açık geçmişindeki en eski sürüm olan R14.2-v3.4'ten.
 
 SDL
+from: d76e46658c64
 note: SOIL2'nin bir OpenGL uzantısını arama şekli SDL2'ninkine dayanır.
 
 MilkDrop presets
+from: c2cee12eb9f2
 name: MilkDrop preset'leri
 by: Yazarları, her preset'in adında anılır
 license: Belirtilmemiş
 note: projectM'in Cream of the Crop, Milkdrop Original ve En D paketlerinden, ve Ryan Geiss'in Ocak 2021 tarihli favori preset'lerinden (https://www.geisswerks.com/about_milkdrop.html); Ayarlar'daki görseller bunlardan alınır. Hiçbiri lisans belirtmez; aşağıdaki metin projectM'in paketleri için söylediğidir.
 
 MilkDrop textures
+from: 1c057dfb0def
 name: MilkDrop dokuları
 by: Yazarları, MilkDrop'tan ve preset'lerinden
 license: Belirtilmemiş
 note: projectM'in Milkdrop Texture Pack'inden; o da lisans belirtmez.
 
 whisper.cpp and ggml
+from: 91b66a3811fe
 name: whisper.cpp ve ggml
 note: Sözleri şarkıya göre ayarlamak için kaynak koddan derlendi. Crosstune, derlenirken uyarı vermesin diye whisper.cpp'yi değiştirir; dosya bunu söyler.
 
 YaRN
+from: 4294a4fa5771
 by: Jeffrey Quesnelle ve Bowen Peng
 note: ggml'in içinde, döner konum ölçeklemesi.
 
 Arm Optimized Routines
+from: ce7ea5fe04b5
 note: ggml'in içinde, hızlı matematiği. Arm Optimized Routines MIT lisansı veya Apache License 2.0 with LLVM Exceptions altındadır; Crosstune onu MIT lisansı altında kullanır.
 
 Whisper
-note: Küçük konuşma modeli tiny, ilk gerektiğinde ggml-tiny-q5_1.bin olarak indirilir; yazarları onu whisper.cpp için dönüştürmüştür. whisper.cpp'nin her kelimeyi zamana yerleştirme şekli Whisper'ınkine dayanır.
+from: 1f00add4de09
+note: Küçük konuşma modeli tiny, ilk gerektiğinde ggml-tiny-q5_1.bin olarak indirilir. Bu, Whisper'ın tiny modelidir; whisper.cpp'nin yazarları onu whisper.cpp'nin biçimine dönüştürmüştür. whisper.cpp'nin her kelimeyi zamana yerleştirme şekli Whisper'ınkine dayanır.
 
 LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+from: 3ec1e4573208
 name: LLVM'den libc++, libc++abi, libunwind, compiler-rt ve clang başlıkları
 note: Görsellerin ve sesin kütüphanelerine gömülü, Android'in NDK r30'undan (clang 21).
 
 Android's C library headers
+from: 3d1c35996aaf
 name: Android'in C kütüphanesi başlıkları
 by: The Android Open Source Project ve diğerleri
 license: BSD ve Apache License 2.0
 note: Görsellerin ve sesin kütüphaneleri bunlarla derlenir, Android'in NDK r30'undan. Metin, NDK'nın bunlar için bildirimidir.
 
 Material Symbols and Material Icons
+from: dc2927001bbd
 name: Material Symbols ve Material Icons
 
 Simple Icons
+from: c0698b1964e9
 by: Simple Icons'a katkıda bulunanlar
 note: Müzik hizmetlerinin logoları. Her logo sahibinin ticari markasıdır.
 
 Roboto
+from: 4e488b8da699
 note: Kalın harfleri, TV ana ekranındaki kutucukta uygulamanın adını çizer.
 
 OkHttp and Okio
+from: ba684c746072
 name: OkHttp ve Okio
 
 Error Prone and J2ObjC annotations
+from: ddff893ca7e3
 name: Error Prone ve J2ObjC ek açıklamaları
 
 AndroidX, Jetpack Compose and Media3
+from: be8fafefbbb5
 name: AndroidX, Jetpack Compose ve Media3
 
 Protocol Buffers
+from: 69810fb6ac21
 note: Ana ekran widget'ının kütüphanesi Glance'in içinde, protobuf 4.28.2 olarak.
 
 Compose Multiplatform
+from: 15eb7e8ff70c
 by: JetBrains s.r.o. ve The Android Open Source Project
 
 Kotlin and kotlinx.coroutines
+from: 337b1a1a8db8
 name: Kotlin ve kotlinx.coroutines
 by: JetBrains s.r.o. ve Kotlin Programming Language'e katkıda bulunanlar

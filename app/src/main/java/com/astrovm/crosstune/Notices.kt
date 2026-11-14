@@ -1,10 +1,13 @@
 package com.astrovm.crosstune
 
+import androidx.annotation.VisibleForTesting
+
 /**
  * A work by others that Crosstune ships or downloads, as **Settings** → **About** → **Licenses** shows
  * it: its [name], who it's [by], its [license] by name, the files with its full licence [texts], where
  * it is, [url], and a [note] of what Crosstune changed. [covers] says what of the APK it is, for
- * `NoticesTest`, which fails when something in the APK has no notice.
+ * `NoticesTest`, which fails when something in the APK has no notice. [translate] names the fields in
+ * Crosstune's own words, which `notices-TAG.txt` translate; null when the notice doesn't say.
  */
 internal data class Notice(
     val name: String,
@@ -13,7 +16,8 @@ internal data class Notice(
     val texts: List<String>,
     val url: String?,
     val note: String?,
-    val covers: List<String>
+    val covers: List<String>,
+    val translate: List<String>? = null
 )
 
 /**
@@ -34,12 +38,9 @@ internal object Notices {
     fun text(notice: Notice): String = notice.texts.joinToString("\n\n") { read(it).replace("\r\n", "\n").trimEnd() }
 
     /** The blocks of [text]: a name, then `key: value` lines; `#` lines are comments. */
-    internal fun parse(text: String): List<Notice> =
-        text.lines().filterNot { it.startsWith('#') }.joinToString("\n")
-            .split(Regex("\n\\s*\n")).map(String::trim).filter(String::isNotEmpty).map(::notice)
+    internal fun parse(text: String): List<Notice> = blocks(text).map(::notice)
 
-    private fun notice(block: String): Notice {
-        val lines = block.lines()
+    private fun notice(lines: List<String>): Notice {
         val fields = lines.drop(1).map { it.substringBefore(": ") to it.substringAfter(": ") }
         fun one(key: String) = fields.firstOrNull { it.first == key }?.second
         return Notice(
@@ -49,7 +50,8 @@ internal object Notices {
             texts = one("text")?.split(' ').orEmpty(),
             url = one("url"),
             note = one("note"),
-            covers = fields.filter { it.first == "covers" }.map { it.second }
+            covers = fields.filter { it.first == "covers" }.map { it.second },
+            translate = one("translate")?.split(' ')?.minus("none")
         )
     }
 
@@ -60,18 +62,27 @@ internal object Notices {
      */
     fun words(tag: String): Map<String, NoticeWords> = synchronized(translated) { translated.getOrPut(tag) { translate(tag) } }
 
+    /** The words in [tag] if they're read already, so a page that turns shows them at once; else null. */
+    fun wordsRead(tag: String): Map<String, NoticeWords>? = synchronized(translated) { translated[tag] }
+
     private val translated = HashMap<String, Map<String, NoticeWords>>()
 
+    /** Forgets the words read for each language, so tests see them read again. */
+    @VisibleForTesting
+    fun forget() = synchronized(translated) { translated.clear() }
+
     private fun translate(tag: String): Map<String, NoticeWords> {
-        val file = Notices::class.java.getResourceAsStream("${FOLDER}notices-$tag.txt")?.bufferedReader()?.use { it.readText() }
-        val found = file?.let(::translations).orEmpty()
+        val found = open("notices-$tag.txt")?.let(::translations).orEmpty()
         return all.associate { notice ->
             val words = found[notice.name].orEmpty()
             notice.name to NoticeWords(words["name"] ?: notice.name, words["by"] ?: notice.by, words["license"] ?: notice.license, words["note"] ?: notice.note)
         }
     }
 
-    /** A translation file's blocks: each work's English name, then its translated `key: value` lines. */
+    /**
+     * A translation file's blocks: each work's English name, then its translated `key: value` lines.
+     * `from:` names the English they were made from, for the tests; the page shows none of it.
+     */
     internal fun translations(text: String): Map<String, Map<String, String>> =
         blocks(text).associate { lines -> lines.first() to lines.drop(1).associate { it.substringBefore(": ") to it.substringAfter(": ") } }
 
@@ -91,6 +102,9 @@ internal object Notices {
         return blocks
     }
 
-    private fun read(name: String): String =
-        requireNotNull(Notices::class.java.getResourceAsStream(FOLDER + name)) { "No $name" }.bufferedReader().use { it.readText() }
+    /** A file in the notices' folder, or null when there's none. Tests see which thread reads it. */
+    @VisibleForTesting
+    var open: (String) -> String? = { name -> Notices::class.java.getResourceAsStream(FOLDER + name)?.bufferedReader()?.use { it.readText() } }
+
+    private fun read(name: String): String = requireNotNull(open(name)) { "No $name" }
 }

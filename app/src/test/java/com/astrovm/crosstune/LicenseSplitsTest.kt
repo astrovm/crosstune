@@ -57,6 +57,33 @@ class LicenseSplitsTest {
     }
 
     @Test
+    fun twoEqualCopiesOfANoticeAskedForAtOnceReadItOnce() {
+        val reads = AtomicInteger()
+        val reading = CountDownLatch(1)
+        val letGo = CountDownLatch(1)
+        LicenseSplits.split = {
+            reads.incrementAndGet()
+            reading.countDown()
+            assertTrue(letGo.await(5, TimeUnit.SECONDS))
+            pieces
+        }
+        val threads = Executors.newFixedThreadPool(2)
+        try {
+            val first = threads.submit { LicenseSplits.make(jmdict) }
+            assertTrue(reading.await(5, TimeUnit.SECONDS))
+            // An equal copy, not the same object: the same work all the same.
+            val second = threads.submit { LicenseSplits.make(jmdict.copy()) }
+            Thread.sleep(100)
+            letGo.countDown()
+            first.get(5, TimeUnit.SECONDS)
+            second.get(5, TimeUnit.SECONDS)
+        } finally {
+            threads.shutdownNow()
+        }
+        assertEquals(1, reads.get())
+    }
+
+    @Test
     fun aSplitThatEndsAfterThePageWasLeftIsNotKept() {
         LicenseSplits.split = {
             // The page is left while the text is read.

@@ -1,126 +1,160 @@
 # Crosstune's own words in notices.txt, in Russian: a block per work, its English name, then the words it
 # translates. What a work isn't given here shows in English. Licence texts stay as published.
+# from: names the English the block was made from. When that English changes, NoticeWordsTest fails
+# and gives the new from: to set once the block is translated again.
 
 JMdict
+from: e24ab7fdbdb1
 note: Списки слов, которые Crosstune сделал из JMdict, изменены. Чтения: только слова из двух и более кандзи, которые JMdict читает только одним способом, а Crosstune читает иначе. Слова каной: только частые, с い или う после первого знака каны, каждое с тем, как его искать, и те, где там стоит ひ или ふ. Они тоже под CC BY-SA 4.0. Ниже лицензия Group (https://www.edrdg.org/edrdg/licence.html), лицензия CC BY-SA 4.0 и документация JMdict.
 
 Kuromoji
+from: 962013f376a7
 by: Atilika Inc. и участники
 
 IPADIC
+from: 429fa42d32bb
 by: Nara Institute of Science and Technology (NAIST), с записями из ICOT Free Software
 license: Лицензия NAIST и ICOT
 note: Внутри Kuromoji, как mecab-ipadic-2.7.0-20070801.
 
 UniDic
+from: a2b1f3173cf4
 note: Скачивается с Maven Central, внутри Kuromoji, когда нужен впервые, как unidic-mecab 2.1.2. UniDic распространяется под GPL, LGPL или лицензией BSD; Crosstune использует его под лицензией BSD.
 
 projectM
+from: 7fe496c42dcb
 license: GNU LGPL 2.1 или новее
 note: Собран из исходного кода, v4.1.8, с изменениями в app/src/main/cpp/: картинка сохраняет свой размер, и исправлены два предупреждения сборки. Точный исходный код этой версии, с projectM и изменениями: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, где X.Y.Z — версия этого приложения, а затем соберите его, как сказано в CONTRIBUTING.md. Чтобы заменить projectM изменённой копией, соберите приложение заново из этого кода.
 
 MilkDrop's FFT
+from: b45dd4b9f780
 name: БПФ из MilkDrop
 note: Внутри projectM.
 
 projectM's expression parser
+from: cdf5e51ca218
 name: Парсер выражений projectM
 note: Внутри projectM. Его парсер создаёт GNU Bison, чьё особое исключение, ниже, позволяет распространять его под лицензией MIT.
 
 HLSLParser
+from: ce6b599ae9e8
 note: Внутри projectM. Crosstune меняет GLSLGenerator.cpp, чтобы он не давал предупреждений при сборке; об этом сказано в файле.
 
 OpenGL Mathematics (GLM)
+from: 4c4874dfd640
 note: Внутри projectM, как 0.9.9.
 
 SOIL2
+from: d450bd41d67f
 by: Martín Lucas Golini и Jonathan Dummer
 license: Общественное достояние и лицензия MIT
 note: Внутри projectM. Его функции для изображений называют лицензию MIT без её текста; текст лицензии ниже.
 
 stb_image and stb_image_write
+from: 63db7987e0a8
 name: stb_image и stb_image_write
 by: Sean Barrett и участники
 license: Общественное достояние
 note: Внутри SOIL2, как stb_image 2.05 и stb_image_write 0.98.
 
 Independent JPEG Group's JPEG software
+from: e98fc27b6e67
 name: JPEG-библиотека Independent JPEG Group
 by: Thomas G. Lane и Independent JPEG Group
 note: Эта программа частично основана на работе Independent JPEG Group ("This software is based in part on the work of the Independent JPEG Group"): JPEG-декодер stb_image берёт своё IDCT из jidctint.c от IJG.
 
 ETC1 texture code
+from: d19acea5fa8c
 name: Код текстур ETC1
 note: Внутри SOIL2.
 
 PowerVR SDK texture decompressor
+from: 85a1d04715d1
 name: Распаковщик текстур из PowerVR SDK
 note: Внутри SOIL2, из PVRTDecompress.cpp в PowerVR SDK. Лицензия — лицензия SDK, из его версии R14.2-v3.4, самой старой в его открытой истории с этим файлом.
 
 SDL
+from: d76e46658c64
 note: То, как SOIL2 ищет расширение OpenGL, основано на том, как это делает SDL2.
 
 MilkDrop presets
+from: c2cee12eb9f2
 name: Пресеты MilkDrop
 by: Их авторы, указанные в названии каждого пресета
 license: Не указана
 note: Из наборов Cream of the Crop, Milkdrop Original и En D от projectM и из любимых пресетов Райана Гейсса за январь 2021 (https://www.geisswerks.com/about_milkdrop.html); картинки в Настройках взяты из них. Ни один не указывает лицензию; текст ниже — то, что projectM говорит о своих наборах.
 
 MilkDrop textures
+from: 1c057dfb0def
 name: Текстуры MilkDrop
 by: Их авторы, из MilkDrop и его пресетов
 license: Не указана
 note: Из Milkdrop Texture Pack от projectM, где не указана лицензия.
 
 whisper.cpp and ggml
+from: 91b66a3811fe
 name: whisper.cpp и ggml
 note: Собраны из исходного кода, чтобы подстраивать текст под пение. Crosstune меняет whisper.cpp, чтобы он не давал предупреждений при сборке; об этом сказано в файле.
 
 YaRN
+from: 4294a4fa5771
 by: Jeffrey Quesnelle и Bowen Peng
 note: Внутри ggml, его масштабирование поворотных позиций.
 
 Arm Optimized Routines
+from: ce7ea5fe04b5
 note: Внутри ggml, его быстрая математика. Arm Optimized Routines распространяется под лицензией MIT или Apache License 2.0 with LLVM Exceptions; Crosstune использует его под лицензией MIT.
 
 Whisper
-note: Маленькая речевая модель tiny скачивается, когда нужна впервые, как ggml-tiny-q5_1.bin, переведённая для whisper.cpp его авторами. То, как whisper.cpp ставит каждое слово во времени, основано на том, как это делает Whisper.
+from: 1f00add4de09
+note: Маленькая речевая модель tiny скачивается, когда нужна впервые, как ggml-tiny-q5_1.bin: модель tiny из Whisper, которую авторы whisper.cpp перевели в формат whisper.cpp. То, как whisper.cpp ставит каждое слово во времени, основано на том, как это делает Whisper.
 
 LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+from: 3ec1e4573208
 name: libc++, libc++abi, libunwind, compiler-rt и заголовки clang из LLVM
 note: Встроены в библиотеки визуализаций и речи, из NDK r30 для Android (clang 21).
 
 Android's C library headers
+from: 3d1c35996aaf
 name: Заголовки библиотеки C в Android
 by: The Android Open Source Project и другие
 license: BSD и Apache License 2.0
 note: Библиотеки визуализаций и речи собираются с ними, из NDK r30 для Android. Текст — уведомление NDK о них.
 
 Material Symbols and Material Icons
+from: dc2927001bbd
 name: Material Symbols и Material Icons
 
 Simple Icons
+from: c0698b1964e9
 by: Участники Simple Icons
 note: Логотипы музыкальных сервисов. Каждый логотип — товарный знак своего владельца.
 
 Roboto
+from: 4e488b8da699
 note: Его жирные буквы рисуют название приложения на плитке главного экрана телевизора.
 
 OkHttp and Okio
+from: ba684c746072
 name: OkHttp и Okio
 
 Error Prone and J2ObjC annotations
+from: ddff893ca7e3
 name: Аннотации Error Prone и J2ObjC
 
 AndroidX, Jetpack Compose and Media3
+from: be8fafefbbb5
 name: AndroidX, Jetpack Compose и Media3
 
 Protocol Buffers
+from: 69810fb6ac21
 note: Внутри библиотеки виджета главного экрана, Glance, как protobuf 4.28.2.
 
 Compose Multiplatform
+from: 15eb7e8ff70c
 by: JetBrains s.r.o. и The Android Open Source Project
 
 Kotlin and kotlinx.coroutines
+from: 337b1a1a8db8
 name: Kotlin и kotlinx.coroutines
 by: JetBrains s.r.o. и участники Kotlin Programming Language

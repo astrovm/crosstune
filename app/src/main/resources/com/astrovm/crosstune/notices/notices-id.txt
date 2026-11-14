@@ -1,126 +1,160 @@
 # Crosstune's own words in notices.txt, in Indonesian: a block per work, its English name, then the words it
 # translates. What a work isn't given here shows in English. Licence texts stay as published.
+# from: names the English the block was made from. When that English changes, NoticeWordsTest fails
+# and gives the new from: to set once the block is translated again.
 
 JMdict
+from: e24ab7fdbdb1
 note: Daftar kata yang dibuat Crosstune dari JMdict sudah diubah. Bacaannya: hanya kata dari dua kanji atau lebih yang dibaca JMdict dengan satu cara saja, sementara Crosstune membacanya dengan cara lain. Kata dalam kana: hanya kata umum dengan い atau う setelah kana pertamanya, masing-masing dengan cara mencarinya, dan kata yang punya ひ atau ふ di situ. Semuanya juga di bawah CC BY-SA 4.0. Di bawah ada lisensi Group (https://www.edrdg.org/edrdg/licence.html), lisensi CC BY-SA 4.0, dan dokumentasi JMdict.
 
 Kuromoji
+from: 962013f376a7
 by: Atilika Inc. dan kontributor
 
 IPADIC
+from: 429fa42d32bb
 by: Nara Institute of Science and Technology (NAIST), dengan entri dari ICOT Free Software
 license: Lisensi NAIST dan ICOT
 note: Di dalam Kuromoji, sebagai mecab-ipadic-2.7.0-20070801.
 
 UniDic
+from: a2b1f3173cf4
 note: Diunduh dari Maven Central, di dalam Kuromoji, saat pertama kali dibutuhkan, sebagai unidic-mecab 2.1.2. UniDic berada di bawah GPL, LGPL, atau lisensi BSD; Crosstune memakainya di bawah lisensi BSD.
 
 projectM
+from: 7fe496c42dcb
 license: GNU LGPL 2.1 atau yang lebih baru
 note: Dibangun dari kode sumber, v4.1.8, dengan perubahan di app/src/main/cpp/: gambarnya tetap berukuran sama, dan dua peringatan build diperbaiki. Kode sumber persis dari rilis ini, beserta projectM dan perubahannya: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, dengan X.Y.Z sebagai versi aplikasi ini, lalu bangun seperti yang dijelaskan CONTRIBUTING.md. Untuk mengganti projectM dengan salinan yang diubah, bangun ulang aplikasi dari kode itu.
 
 MilkDrop's FFT
+from: b45dd4b9f780
 name: FFT MilkDrop
 note: Di dalam projectM.
 
 projectM's expression parser
+from: cdf5e51ca218
 name: Parser ekspresi projectM
 note: Di dalam projectM. Parsernya dibuat oleh GNU Bison, yang pengecualian khususnya, di bawah, membolehkannya dibagikan di bawah lisensi MIT.
 
 HLSLParser
+from: ce6b599ae9e8
 note: Di dalam projectM. Crosstune mengubah GLSLGenerator.cpp agar tidak memberi peringatan saat dibangun; filenya menyebutkan itu.
 
 OpenGL Mathematics (GLM)
+from: 4c4874dfd640
 note: Di dalam projectM, sebagai 0.9.9.
 
 SOIL2
+from: d450bd41d67f
 by: Martín Lucas Golini dan Jonathan Dummer
 license: Domain publik dan lisensi MIT
 note: Di dalam projectM. Fungsi gambarnya menyebut lisensi MIT tanpa teksnya; teks lisensinya ada di bawah.
 
 stb_image and stb_image_write
+from: 63db7987e0a8
 name: stb_image dan stb_image_write
 by: Sean Barrett dan kontributor
 license: Domain publik
 note: Di dalam SOIL2, sebagai stb_image 2.05 dan stb_image_write 0.98.
 
 Independent JPEG Group's JPEG software
+from: e98fc27b6e67
 name: Perangkat lunak JPEG dari Independent JPEG Group
 by: Thomas G. Lane dan Independent JPEG Group
 note: Perangkat lunak ini sebagian didasarkan pada karya Independent JPEG Group ("This software is based in part on the work of the Independent JPEG Group"): dekoder JPEG stb_image mengambil IDCT-nya dari jidctint.c milik IJG.
 
 ETC1 texture code
+from: d19acea5fa8c
 name: Kode tekstur ETC1
 note: Di dalam SOIL2.
 
 PowerVR SDK texture decompressor
+from: 85a1d04715d1
 name: Dekompresor tekstur PowerVR SDK
 note: Di dalam SOIL2, dari PVRTDecompress.cpp di PowerVR SDK. Lisensinya adalah lisensi SDK, dari rilis R14.2-v3.4, yang tertua di riwayat publiknya dengan file ini.
 
 SDL
+from: d76e46658c64
 note: Cara SOIL2 mencari ekstensi OpenGL didasarkan pada cara SDL2.
 
 MilkDrop presets
+from: c2cee12eb9f2
 name: Preset MilkDrop
 by: Pembuatnya, disebut dalam nama setiap preset
 license: Tidak disebutkan
 note: Dari paket Cream of the Crop, Milkdrop Original, dan En D milik projectM, serta preset favorit Ryan Geiss dari Januari 2021 (https://www.geisswerks.com/about_milkdrop.html); gambar di Setelan diambil dari sana. Tidak ada yang menyebutkan lisensi; teks di bawah adalah pernyataan projectM untuk paketnya.
 
 MilkDrop textures
+from: 1c057dfb0def
 name: Tekstur MilkDrop
 by: Pembuatnya, dari MilkDrop dan presetnya
 license: Tidak disebutkan
 note: Dari Milkdrop Texture Pack milik projectM, yang tidak menyebutkan lisensi.
 
 whisper.cpp and ggml
+from: 91b66a3811fe
 name: whisper.cpp dan ggml
 note: Dibangun dari kode sumber untuk menyelaraskan lirik dengan nyanyian. Crosstune mengubah whisper.cpp agar tidak memberi peringatan saat dibangun; filenya menyebutkan itu.
 
 YaRN
+from: 4294a4fa5771
 by: Jeffrey Quesnelle dan Bowen Peng
 note: Di dalam ggml, penskalaan posisi rotasinya.
 
 Arm Optimized Routines
+from: ce7ea5fe04b5
 note: Di dalam ggml, matematika cepatnya. Arm Optimized Routines berada di bawah lisensi MIT atau Apache License 2.0 with LLVM Exceptions; Crosstune memakainya di bawah lisensi MIT.
 
 Whisper
-note: Model suara kecil tiny diunduh saat pertama kali dibutuhkan, sebagai ggml-tiny-q5_1.bin, yang diubah untuk whisper.cpp oleh pembuatnya. Cara whisper.cpp menempatkan setiap kata dalam waktu didasarkan pada cara Whisper.
+from: 1f00add4de09
+note: Model suara kecil tiny diunduh saat pertama kali dibutuhkan, sebagai ggml-tiny-q5_1.bin: model tiny dari Whisper, yang diubah oleh pembuat whisper.cpp ke format whisper.cpp. Cara whisper.cpp menempatkan setiap kata dalam waktu didasarkan pada cara Whisper.
 
 LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+from: 3ec1e4573208
 name: libc++, libc++abi, libunwind, compiler-rt, dan header clang, dari LLVM
 note: Tertanam di pustaka visual dan suara, dari NDK r30 Android (clang 21).
 
 Android's C library headers
+from: 3d1c35996aaf
 name: Header pustaka C Android
 by: The Android Open Source Project dan lainnya
 license: BSD dan Apache License 2.0
 note: Pustaka visual dan suara dibangun dengannya, dari NDK r30 Android. Teksnya adalah pemberitahuan NDK untuknya.
 
 Material Symbols and Material Icons
+from: dc2927001bbd
 name: Material Symbols dan Material Icons
 
 Simple Icons
+from: c0698b1964e9
 by: Kontributor Simple Icons
 note: Logo layanan musik. Setiap logo adalah merek dagang pemiliknya.
 
 Roboto
+from: 4e488b8da699
 note: Huruf tebalnya menggambar nama aplikasi di kotak layar utama TV.
 
 OkHttp and Okio
+from: ba684c746072
 name: OkHttp dan Okio
 
 Error Prone and J2ObjC annotations
+from: ddff893ca7e3
 name: Anotasi Error Prone dan J2ObjC
 
 AndroidX, Jetpack Compose and Media3
+from: be8fafefbbb5
 name: AndroidX, Jetpack Compose, dan Media3
 
 Protocol Buffers
+from: 69810fb6ac21
 note: Di dalam pustaka widget layar utama, Glance, sebagai protobuf 4.28.2.
 
 Compose Multiplatform
+from: 15eb7e8ff70c
 by: JetBrains s.r.o. dan The Android Open Source Project
 
 Kotlin and kotlinx.coroutines
+from: 337b1a1a8db8
 name: Kotlin dan kotlinx.coroutines
 by: JetBrains s.r.o. dan kontributor Kotlin Programming Language

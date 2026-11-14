@@ -1,126 +1,160 @@
 # Crosstune's own words in notices.txt, in Dutch: a block per work, its English name, then the words it
 # translates. What a work isn't given here shows in English. Licence texts stay as published.
+# from: names the English the block was made from. When that English changes, NoticeWordsTest fails
+# and gives the new from: to set once the block is translated again.
 
 JMdict
+from: e24ab7fdbdb1
 note: De woordenlijsten die Crosstune met JMdict heeft gemaakt, zijn veranderd. De lezingen: alleen woorden van twee of meer kanji die JMdict maar op één manier leest, waar Crosstune ze anders leest. De woorden in kana: alleen de gangbare met い of う na hun eerste kana, elk met hoe het wordt opgezocht, en die met ひ of ふ op die plek. Ook die vallen onder CC BY-SA 4.0. Hieronder staan de licentie van de Group (https://www.edrdg.org/edrdg/licence.html), de licentie CC BY-SA 4.0 en de documentatie van JMdict.
 
 Kuromoji
+from: 962013f376a7
 by: Atilika Inc. en bijdragers
 
 IPADIC
+from: 429fa42d32bb
 by: Nara Institute of Science and Technology (NAIST), met items uit ICOT Free Software
 license: Licentie van NAIST en ICOT
 note: In Kuromoji, als mecab-ipadic-2.7.0-20070801.
 
 UniDic
+from: a2b1f3173cf4
 note: Gedownload van Maven Central, in Kuromoji, de eerste keer dat het nodig is, als unidic-mecab 2.1.2. UniDic valt onder de GPL, de LGPL of de BSD-licentie; Crosstune gebruikt het onder de BSD-licentie.
 
 projectM
+from: 7fe496c42dcb
 license: GNU LGPL 2.1 of later
 note: Gebouwd uit de broncode, v4.1.8, met wijzigingen in app/src/main/cpp/: het beeld houdt zijn formaat, en twee bouwwaarschuwingen zijn opgelost. De exacte broncode van deze versie, met projectM en de wijzigingen: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, waarbij X.Y.Z de versie van deze app is; bouw daarna zoals CONTRIBUTING.md zegt. Om projectM door een gewijzigde kopie te vervangen, bouw je de app opnieuw uit die broncode.
 
 MilkDrop's FFT
+from: b45dd4b9f780
 name: FFT van MilkDrop
 note: In projectM.
 
 projectM's expression parser
+from: cdf5e51ca218
 name: Expressieparser van projectM
 note: In projectM. De parser wordt gemaakt door GNU Bison, waarvan de speciale uitzondering, hieronder, toestaat hem onder de MIT-licentie te delen.
 
 HLSLParser
+from: ce6b599ae9e8
 note: In projectM. Crosstune wijzigt GLSLGenerator.cpp zodat het bij het bouwen geen waarschuwingen geeft; het bestand zegt dat.
 
 OpenGL Mathematics (GLM)
+from: 4c4874dfd640
 note: In projectM, als 0.9.9.
 
 SOIL2
+from: d450bd41d67f
 by: Martín Lucas Golini en Jonathan Dummer
 license: Publiek domein en MIT-licentie
 note: In projectM. De beeldfuncties noemen de MIT-licentie zonder de tekst; de tekst van de licentie staat hieronder.
 
 stb_image and stb_image_write
+from: 63db7987e0a8
 name: stb_image en stb_image_write
 by: Sean Barrett en bijdragers
 license: Publiek domein
 note: In SOIL2, als stb_image 2.05 en stb_image_write 0.98.
 
 Independent JPEG Group's JPEG software
+from: e98fc27b6e67
 name: JPEG-software van de Independent JPEG Group
 by: Thomas G. Lane en de Independent JPEG Group
 note: Deze software is deels gebaseerd op het werk van de Independent JPEG Group ("This software is based in part on the work of the Independent JPEG Group"): de JPEG-decoder van stb_image haalt zijn IDCT uit jidctint.c van de IJG.
 
 ETC1 texture code
+from: d19acea5fa8c
 name: ETC1-texturecode
 note: In SOIL2.
 
 PowerVR SDK texture decompressor
+from: 85a1d04715d1
 name: Texture-decompressor uit de PowerVR SDK
 note: In SOIL2, uit PVRTDecompress.cpp van de PowerVR SDK. De licentie is die van de SDK, uit versie R14.2-v3.4, de oudste in de openbare geschiedenis met dit bestand.
 
 SDL
+from: d76e46658c64
 note: Hoe SOIL2 naar een OpenGL-extensie zoekt, is gebaseerd op hoe SDL2 dat doet.
 
 MilkDrop presets
+from: c2cee12eb9f2
 name: MilkDrop-presets
 by: Hun makers, genoemd in de naam van elke preset
 license: Geen vermeld
 note: Uit de packs Cream of the Crop, Milkdrop Original en En D van projectM, en uit de favoriete presets van Ryan Geiss van januari 2021 (https://www.geisswerks.com/about_milkdrop.html); de beelden in Instellingen komen daaruit. Geen ervan vermeldt een licentie; de tekst hieronder is wat projectM over zijn packs zegt.
 
 MilkDrop textures
+from: 1c057dfb0def
 name: MilkDrop-textures
 by: Hun makers, uit MilkDrop en zijn presets
 license: Geen vermeld
 note: Uit het Milkdrop Texture Pack van projectM, dat geen licentie vermeldt.
 
 whisper.cpp and ggml
+from: 91b66a3811fe
 name: whisper.cpp en ggml
 note: Gebouwd uit de broncode om de songtekst op de zang af te stemmen. Crosstune wijzigt whisper.cpp zodat het bij het bouwen geen waarschuwingen geeft; het bestand zegt dat.
 
 YaRN
+from: 4294a4fa5771
 by: Jeffrey Quesnelle en Bowen Peng
 note: In ggml, de schaling van roterende posities.
 
 Arm Optimized Routines
+from: ce7ea5fe04b5
 note: In ggml, de snelle wiskunde. Arm Optimized Routines valt onder de MIT-licentie of de Apache License 2.0 with LLVM Exceptions; Crosstune gebruikt het onder de MIT-licentie.
 
 Whisper
-note: Het kleine spraakmodel tiny wordt gedownload de eerste keer dat het nodig is, als ggml-tiny-q5_1.bin, door de makers omgezet voor whisper.cpp. Hoe whisper.cpp elk woord in de tijd plaatst, is gebaseerd op hoe Whisper dat doet.
+from: 1f00add4de09
+note: Het kleine spraakmodel tiny wordt gedownload de eerste keer dat het nodig is, als ggml-tiny-q5_1.bin: het model tiny van Whisper, dat de makers van whisper.cpp hebben omgezet naar het formaat van whisper.cpp. Hoe whisper.cpp elk woord in de tijd plaatst, is gebaseerd op hoe Whisper dat doet.
 
 LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+from: 3ec1e4573208
 name: libc++, libc++abi, libunwind, compiler-rt en headers van clang, uit LLVM
 note: Ingebouwd in de bibliotheken voor de visuals en de spraak, uit de NDK r30 van Android (clang 21).
 
 Android's C library headers
+from: 3d1c35996aaf
 name: Headers van de C-bibliotheek van Android
 by: The Android Open Source Project en anderen
 license: BSD en Apache License 2.0
 note: De bibliotheken voor de visuals en de spraak worden ermee gebouwd, uit de NDK r30 van Android. De tekst is de mededeling van de NDK erover.
 
 Material Symbols and Material Icons
+from: dc2927001bbd
 name: Material Symbols en Material Icons
 
 Simple Icons
+from: c0698b1964e9
 by: Bijdragers aan Simple Icons
 note: De logo's van de muziekdiensten. Elk logo is een merk van zijn eigenaar.
 
 Roboto
+from: 4e488b8da699
 note: De vette letters tekenen de naam van de app op de tegel van het startscherm van de tv.
 
 OkHttp and Okio
+from: ba684c746072
 name: OkHttp en Okio
 
 Error Prone and J2ObjC annotations
+from: ddff893ca7e3
 name: Annotaties van Error Prone en J2ObjC
 
 AndroidX, Jetpack Compose and Media3
+from: be8fafefbbb5
 name: AndroidX, Jetpack Compose en Media3
 
 Protocol Buffers
+from: 69810fb6ac21
 note: In de bibliotheek van de startschermwidget, Glance, als protobuf 4.28.2.
 
 Compose Multiplatform
+from: 15eb7e8ff70c
 by: JetBrains s.r.o. en The Android Open Source Project
 
 Kotlin and kotlinx.coroutines
+from: 337b1a1a8db8
 name: Kotlin en kotlinx.coroutines
 by: JetBrains s.r.o. en bijdragers aan Kotlin Programming Language
