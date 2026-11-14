@@ -2,7 +2,7 @@
 # Every commit has to ask Play to keep a review in progress, a commit Play refuses for one has to stop the job
 # with a plain message, and production never shares an edit with another track.
 #
-#   BUNDLE_GEMFILE=.github/play/Gemfile BUNDLE_WITHOUT= bundle install
+#   BUNDLE_WITHOUT= .github/play/play.sh setup
 #   BUNDLE_GEMFILE=.github/play/Gemfile BUNDLE_WITHOUT= bundle exec ruby .github/play/test/play_test.rb
 require "minitest/autorun"
 require "digest"
@@ -194,13 +194,73 @@ class PlayTest < Minitest::Test
     refute(requests.any? { |r| r["method"] == "POST" && r["path"].end_with?("/bundles") })
   end
 
-  def test_a_bundle_off_internal_testing_stops_the_release
-    tracks({ "beta" => release(CODE) }, [bundle])
+  def test_a_rerun_after_a_refused_commit_puts_the_bundle_play_kept_on_internal_testing
+    # Play may keep a bundle sent in an edit it then refused, so the bundle is in the app, on no track.
+    kept = { "FAKE_PLAY_KEEPS_UPLOADS" => "1" }
+    output, status = play("release", TAG, env: kept.merge("FAKE_PLAY_IN_REVIEW" => "1"))
+    refute status.success?, output
+    assert_includes output, IN_REVIEW
+    assert_equal [bundle], JSON.parse(File.read(@state))["bundles"]
+    assert_equal({}, saved)
+
+    File.write(@log, "")
+    output, status = play("release", TAG, env: kept)
+    assert status.success?, output
+
+    assert_includes output, "Google Play has this bundle as #{CODE} from an earlier run, so it isn't sent again"
+    refute(requests.any? { |r| r["method"] == "POST" && r["path"].end_with?("/bundles") })
+    assert_every_commit_keeps_the_review
+    assert_equal [["internal"], ["beta"]], committed_tracks
+    notes = [{ "language" => "en-US", "text" => "Fake notes" }]
+    assert_equal release(CODE, notes), saved["internal"]
+    assert_equal release(CODE, notes), saved["beta"]
+  end
+
+  def test_the_same_bundle_is_found_whatever_case_play_writes_its_sha256_in
+    tracks({ "internal" => release(CODE) }, [bundle.merge("sha256" => bundle["sha256"].upcase)])
     output, status = play("release", TAG)
+    assert status.success?, output
+
+    assert_includes output, "Internal testing already has this bundle as #{CODE}"
+  end
+
+  def test_fastlanes_own_commit_retry_keeps_the_review_too
+    # Play asks for changesNotSentForReview, and supply commits again with it.
+    output, status = play("release", TAG, env: { "FAKE_PLAY_NOT_SENT" => "1" })
+    assert status.success?, output
+
+    assert_every_commit_keeps_the_review
+    # supply's own commit, then its retry, in each of the two edits.
+    assert_equal %w[false true false true], commits.map { |c| c["query"]["changesNotSentForReview"] }
+    assert_equal release(CODE, [{ "language" => "en-US", "text" => "Fake notes" }]), saved["beta"]
+  end
+
+  def test_a_review_in_progress_stops_fastlanes_own_retry_with_the_plain_message
+    output, status = play("release", TAG, env: { "FAKE_PLAY_NOT_SENT" => "1", "FAKE_PLAY_IN_REVIEW" => "1" })
     refute status.success?, output
 
-    assert_includes output, "[!] Google Play has this bundle as version code #{CODE}, but not on internal"
-    assert_empty commits
+    assert_includes output, "::error title=Google Play is reviewing the app::#{IN_REVIEW}"
+    assert_includes output, "[!] #{IN_REVIEW}"
+    assert_every_commit_keeps_the_review
+    assert_equal %w[false true], commits.map { |c| c["query"]["changesNotSentForReview"] }
+    assert_equal ["DELETE", edit_of(commits.last)], [requests.last["method"], edit_of(requests.last)]
+    assert_equal({}, saved)
+  end
+
+  def test_setup_needs_no_key_and_a_job_never_installs_where_the_key_is
+    output, status = play("setup", env: { "PLAY_SERVICE_ACCOUNT_JSON" => nil })
+    assert status.success?, output
+    output, status = play("setup")
+    refute status.success?, output
+    assert_includes output, "::error::play.sh setup installs gems, which run their own code, so it never runs with the Play key"
+
+    empty = File.join(@dir, "no-gems")
+    FileUtils.mkdir_p(empty)
+    output, status = play("release", TAG, env: { "BUNDLE_PATH" => empty })
+    refute status.success?, output
+    assert_includes output, "::error::The gems aren't installed. Run play.sh setup first, without the key"
+    assert_empty Dir.children(empty)
+    assert_empty requests
   end
 
   def test_the_bundle_sent_is_the_one_play_keeps

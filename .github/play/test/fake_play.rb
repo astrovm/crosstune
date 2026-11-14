@@ -2,7 +2,8 @@
 # WebMock answers every request to Google, so nothing leaves the machine. Each request is written to
 # FAKE_PLAY_LOG, one JSON line each, and the tracks a commit keeps are in FAKE_PLAY_STATE, so they last from
 # one fastlane run to the next. FAKE_PLAY_IN_REVIEW=1 makes Play refuse commits as it does while a review is
-# in progress.
+# in progress. FAKE_PLAY_NOT_SENT=1 makes it ask for changesNotSentForReview first, as it does for some
+# changes. FAKE_PLAY_KEEPS_UPLOADS=1 makes it keep a bundle once sent, even when its edit is never committed.
 #
 # RUBYOPT reaches `bundle` too, which has no WebMock: only play.rb gets the fake.
 return unless File.basename($PROGRAM_NAME) == "play.rb"
@@ -18,6 +19,16 @@ module FakePlay
   LOG = ENV.fetch("FAKE_PLAY_LOG")
   STATE = ENV.fetch("FAKE_PLAY_STATE")
   # The sample Play's documentation gives for a commit refused while a review is in progress.
+  # What Play answers a commit of changes it doesn't send to review by itself.
+  NOT_SENT = {
+    error: {
+      code: 400,
+      message: "Changes cannot be sent for review automatically. Please set the query parameter " \
+               "changesNotSentForReview to true. Once committed, the changes in this edit can be sent for " \
+               "review from the Google Play Console UI.",
+      status: "INVALID_ARGUMENT"
+    }
+  }.freeze
   IN_REVIEW = {
     error: {
       code: 400,
@@ -75,6 +86,8 @@ module FakePlay
         { status: 204, body: "" }
       in [:post, %r{\A/([^/]+):commit\z}]
         id = Regexp.last_match(1)
+        not_sent = request.uri.query_values.to_h["changesNotSentForReview"] == "true"
+        return json(NOT_SENT, 400) if ENV["FAKE_PLAY_NOT_SENT"] == "1" && !not_sent
         return json(IN_REVIEW, 400) if ENV["FAKE_PLAY_IN_REVIEW"] == "1"
 
         File.write(STATE, JSON.generate(@edits.delete(id)))
@@ -106,6 +119,7 @@ module FakePlay
 
         bundle = { "versionCode" => Integer(ENV.fetch("FAKE_PLAY_VERSION_CODE")), "sha256" => Digest::SHA256.hexdigest(request.body) }
         @edits.fetch(Regexp.last_match(1))["bundles"] << bundle
+        File.write(STATE, JSON.generate(saved.merge("bundles" => saved["bundles"] + [bundle]))) if ENV["FAKE_PLAY_KEEPS_UPLOADS"] == "1"
         json(bundle, 200, upload)
       in [:get, %r{\A/[^/]+/listings/[^/]+\z}]
         json({ error: { code: 404, message: "No listing" } }, 404)

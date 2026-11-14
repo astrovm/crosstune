@@ -8,6 +8,7 @@
 #   play.sh production VERSION The release VERSION (2.26.0) on the first track in PLAY_TRACKS goes on to
 #                              production, with its English release notes, in an edit of its own.
 #   play.sh listing            The listing alone. CHECK_ONLY=true only asks Play whether it would take it.
+#   play.sh setup              Bundler and the gems Gemfile.lock pins, in a step before the key is there.
 #
 # It reads PLAY_SERVICE_ACCOUNT_JSON (the key), PLAY_TRACKS (testing tracks, with commas or spaces between,
 # default beta), PLAY_LANGUAGES (folders of fastlane/metadata/android, default en-US) and CHECK_ONLY, from the
@@ -15,8 +16,8 @@
 #
 # Every commit asks Play to keep a review in progress, and production never shares an edit with another track
 # (review_guard.rb). While a review is in progress, Play refuses the commit, nothing is sent, and the job fails
-# and says to re-run it when the review ends. A re-run starts over: a bundle that is already on internal testing
-# isn't sent again. Another bundle with the same version code stops the job. A tag with a suffix (v2.27.0-rc.1)
+# and says to re-run it when the review ends. A re-run starts over: a bundle that Play already has isn't sent
+# again. Another bundle with the same version code stops the job. A tag with a suffix (v2.27.0-rc.1)
 # isn't sent to Play.
 set -euo pipefail
 
@@ -31,6 +32,41 @@ fi
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package=com.astrovm.crosstune
 metadata=fastlane/metadata/android
+
+# The versions in Gemfile.lock, and only those, Bundler's own too. The tests add their own group.
+export BUNDLE_GEMFILE="$here/Gemfile"
+export BUNDLE_FROZEN=true
+export BUNDLE_WITHOUT="${BUNDLE_WITHOUT-test}"
+export BUNDLE_PATH="${BUNDLE_PATH:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/play-gems}"
+BUNDLER_VERSION="$(awk '/^BUNDLED WITH$/ { getline; print $1 }' "$here/Gemfile.lock")"
+export BUNDLER_VERSION
+# The versions are pinned. Skip the update check, and send no usage metrics.
+export FASTLANE_SKIP_UPDATE_CHECK=1
+export FASTLANE_OPT_OUT_USAGE=1
+
+bundler_installed() {
+  gem list --installed --exact bundler --version "$BUNDLER_VERSION" > /dev/null
+}
+
+# Installing a gem runs its own code, as in building its native extensions, so it happens in a step of its own,
+# before the key is there. Every gem is checked against the checksums in Gemfile.lock.
+if [[ "${1:-}" == setup ]]; then
+  if [[ -n "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]]; then
+    echo "::error::play.sh setup installs gems, which run their own code, so it never runs with the Play key"
+    exit 1
+  fi
+  if ! bundler_installed; then
+    gems="$(gem env gemdir)"
+    # The runner's Ruby is the system's, whose gems only root can write.
+    if mkdir -p "$gems" 2> /dev/null && [[ -w "$gems" ]]; then
+      gem install bundler --version "$BUNDLER_VERSION" --no-document --silent
+    else
+      sudo gem install bundler --version "$BUNDLER_VERSION" --no-document --silent
+    fi
+  fi
+  bundle install --quiet
+  exit 0
+fi
 
 if [[ -z "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]]; then
   echo "::error::PLAY_SERVICE_ACCOUNT_JSON isn't set"
@@ -52,23 +88,16 @@ for track in "${tracks[@]}"; do
   fi
 done
 
+# Nothing is installed from here on, where the key is.
+if ! bundler_installed || ! bundle check > /dev/null 2>&1; then
+  echo "::error::The gems aren't installed. Run play.sh setup first, without the key"
+  exit 1
+fi
+
 work="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/play.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 key="$work/play.json"
 (umask 077 && printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$key")
-
-# The versions in Gemfile.lock, and only those. The tests add their own group.
-export BUNDLE_GEMFILE="$here/Gemfile"
-export BUNDLE_FROZEN=true
-export BUNDLE_WITHOUT="${BUNDLE_WITHOUT-test}"
-export BUNDLE_PATH="${BUNDLE_PATH:-${RUNNER_TEMP:-$work}/bundle}"
-# The versions are pinned. Skip the update check, and send no usage metrics.
-export FASTLANE_SKIP_UPDATE_CHECK=1
-export FASTLANE_OPT_OUT_USAGE=1
-if ! command -v bundle > /dev/null; then
-  sudo gem install bundler --no-document --silent
-fi
-bundle install --quiet
 
 play() {
   bundle exec ruby "$here/play.rb" "$@"
@@ -127,6 +156,10 @@ release() {
   play has-bundle "$key" "$package" internal "$code" "Crosstune-$tag.aab" || found=$?
   if [[ "$found" == 0 ]]; then
     echo "Internal testing already has this bundle as $code, so it isn't sent again"
+  elif [[ "$found" == 4 ]]; then
+    # Sent in a run whose commit Play refused: Play may keep the bundle, and takes each version code once.
+    echo "Google Play has this bundle as $code from an earlier run, so it isn't sent again"
+    play edit "$key" "$package" --code "$code" --to internal --notes "$work/notes"
   elif [[ "$found" == 3 ]]; then
     play supply \
       --package_name "$package" \
@@ -169,7 +202,7 @@ case "${1:-}" in
   production) production "${2:?usage: play.sh production VERSION}" ;;
   listing) listing ;;
   *)
-    echo "usage: play.sh release TAG | play.sh production VERSION | play.sh listing" >&2
+    echo "usage: play.sh release TAG | play.sh production VERSION | play.sh listing | play.sh setup" >&2
     exit 2
     ;;
 esac

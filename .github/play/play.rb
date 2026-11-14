@@ -4,14 +4,15 @@
 #   ruby play.rb supply ARGS...
 #     fastlane supply, as on the command line.
 #   ruby play.rb has-bundle KEY PACKAGE TRACK CODE AAB
-#     Exits 0 when Play has AAB itself as CODE, on TRACK: a re-run. Exits 3 when Play has no bundle with CODE.
-#     Stops when Play has another bundle as CODE (sent by hand, or the same tag built or signed again), or has
-#     AAB but not on TRACK. It only reads: the edit it opens is deleted, never committed.
-#   ruby play.rb edit KEY PACKAGE [--from TRACK --code CODE --to TRACK[,TRACK...]] [--listing DIR]
+#     Exits 0 when Play has AAB itself as CODE, on TRACK: a re-run. Exits 4 when Play has AAB as CODE, but not
+#     on TRACK: sent in a run whose commit Play refused. Exits 3 when Play has no bundle with CODE. Stops when
+#     Play has another bundle as CODE (sent by hand, or the same tag built or signed again). It only reads: the
+#     edit it opens is deleted, never committed.
+#   ruby play.rb edit KEY PACKAGE [[--from TRACK] --code CODE --to TRACK[,TRACK...]] [--listing DIR]
 #                     [--notes DIR] [--check-only]
-#     One edit: the release CODE on --from goes on to each --to track, with the listing in DIR (folders by
-#     language, as play.sh makes them) and the release notes in DIR/en-US/changelogs/CODE.txt. Then the edit is
-#     committed, or with --check-only only checked. supply can only promote to one track a run, so this drives
+#     One edit: the release CODE on --from goes on to each --to track, or with no --from, the bundle Play has as
+#     CODE goes on them. With the listing in DIR (folders by language, as play.sh makes them) and the release
+#     notes in DIR/en-US/changelogs/CODE.txt. Then the edit is committed, or with --check-only only checked. supply can only promote to one track a run, so this drives
 #     supply's own client and uploader in one edit.
 require "digest"
 require "optparse"
@@ -34,7 +35,8 @@ module Crosstune
         @uploader.client
       end
 
-      # :absent, or :on_track when Play holds this very bundle as code on track. Anything else stops the job.
+      # :absent, :on_track when Play holds this very bundle as code on track, or :off_track when it holds it but
+      # not there. Another bundle as code stops the job.
       def bundle_state(package, track, code, aab)
         client.begin_edit(package_name: package)
         bundles = client.client.list_edit_bundles(package, client.current_edit.id).bundles.to_a
@@ -43,14 +45,25 @@ module Crosstune
         bundle = bundles.find { |b| b.version_code.to_s == code }
         return :absent unless bundle
 
-        if bundle.sha256 != Digest::SHA256.file(aab).hexdigest
+        unless bundle.sha256.to_s.casecmp?(Digest::SHA256.file(aab).hexdigest)
           FastlaneCore::UI.user_error!("Google Play already has another bundle as version code #{code}, and it " \
                                        "takes each version code once. Release this as a new version, with a " \
                                        "new tag.")
         end
-        return :on_track if on_track
+        on_track ? :on_track : :off_track
+      end
 
-        FastlaneCore::UI.user_error!("Google Play has this bundle as version code #{code}, but not on #{track}")
+      # The bundle Play has as code, as the one release on each track, as supply's upload puts it there.
+      def put(code, to)
+        release = Google::Apis::AndroidpublisherV3::TrackRelease.new(
+          status: Supply::ReleaseStatus::COMPLETED,
+          version_codes: [code]
+        )
+        to.each do |name|
+          track = client.tracks(name).first || Google::Apis::AndroidpublisherV3::Track.new(track: name)
+          track.releases = [release]
+          client.update_track(name, track)
+        end
       end
 
       # supply's promote_track, for each track, but one that skips a release with no version codes, such as a
@@ -99,7 +112,7 @@ module Crosstune
       abort("usage: play.rb has-bundle KEY PACKAGE TRACK CODE AAB") unless aab
       require_supply
       edit = Edit.new(json_key: key, package_name: package)
-      exit(edit.bundle_state(package, track, code, aab) == :on_track ? 0 : 3)
+      exit({ on_track: 0, off_track: 4, absent: 3 }.fetch(edit.bundle_state(package, track, code, aab)))
     end
 
     def parse_edit(argv)
@@ -119,7 +132,7 @@ module Crosstune
 
     def check_edit(options)
       to = options[:to]
-      abort("Name --from and --code with --to") if !to.empty? && !(options[:from] && options[:code])
+      abort("Name --code with --to") if !to.empty? && !options[:code]
       abort("Release notes go to one track at a time") if options[:notes] && to.size != 1
       abort("Release notes and the listing go in separate edits") if options[:notes] && options[:listing]
       abort("Nothing to send") if to.empty? && !options[:listing]
@@ -143,7 +156,11 @@ module Crosstune
         sync_image_upload: true
       )
       edit.client.begin_edit(package_name: options[:package])
-      edit.promote(options[:from], options[:code], options[:to]) unless options[:to].empty?
+      if options[:from]
+        edit.promote(options[:from], options[:code], options[:to])
+      elsif !options[:to].empty?
+        edit.put(options[:code], options[:to])
+      end
       edit.send_notes(options[:to].first) if options[:notes]
       edit.send_listing(options[:listing]) if options[:listing]
       if options[:check_only]

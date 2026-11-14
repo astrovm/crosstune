@@ -58,6 +58,22 @@ class PlayWorkflowsTest(unittest.TestCase):
                     self.assertTrue(set(paths) <= allowed, paths)
                     self.assertIn("persist-credentials: false", step)
 
+    def test_the_play_jobs_install_fastlane_before_the_key_is_there(self):
+        for workflow, name, job in play_jobs():
+            with self.subTest(workflow=workflow, job=name):
+                steps = job.split("\n      - ")
+                setup = [i for i, step in enumerate(steps) if re.search(r"\.github/play/play\.sh setup$", step, re.M)]
+                keyed = [i for i, step in enumerate(steps) if PLAY_KEY in step]
+                self.assertEqual(1, len(setup), job)
+                self.assertNotIn("secrets.", steps[setup[0]])
+                self.assertLess(setup[0], min(keyed))
+
+    def test_ci_required_waits_on_the_play_job(self):
+        ci = jobs((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))
+        self.assertIn("play", ci)
+        needs = re.search(r"\n    needs:\n((?:      - \S+\n)+)", ci["required-ci"]).group(1).split()
+        self.assertIn("play", [n for n in needs if n != "-"])
+
     def test_play_jobs_run_in_the_release_environment_one_at_a_time(self):
         for workflow, name, job in play_jobs():
             with self.subTest(workflow=workflow, job=name):
@@ -123,20 +139,17 @@ def publish_step():
     return "\n".join(script)
 
 
-# A gh that keeps the arguments of `gh release create`, and answers for the latest release with
-# FAKE_LATEST, or as GitHub does with no release yet, or with FAKE_GH_FAILS, as on an outage.
+# A gh that keeps the arguments of `gh release create`, and lists the releases with FAKE_RELEASES (lines of
+# tag, draft and pre-release, with tabs between), or fails with FAKE_GH_FAILS, as on an outage.
 FAKE_GH = r"""#!/usr/bin/env bash
 if [[ "$1 $2" == "release create" ]]; then
   printf '%s\n' "$@" > "$FAKE_GH_CREATE"
-elif [[ "$1" == api && "$2" == "repos/$GITHUB_REPOSITORY/releases/latest" ]]; then
+elif [[ "$*" == "api --paginate repos/$GITHUB_REPOSITORY/releases --jq "* ]]; then
   if [[ -n "${FAKE_GH_FAILS:-}" ]]; then
     echo "gh: Server Error (HTTP 500)" >&2
     exit 1
-  elif [[ -z "${FAKE_LATEST:-}" ]]; then
-    echo "gh: Not Found (HTTP 404)" >&2
-    exit 1
   fi
-  echo "$FAKE_LATEST"
+  printf '%b' "$FAKE_RELEASES"
 else
   echo "fake gh doesn't know: $*" >&2
   exit 1
@@ -144,8 +157,12 @@ fi
 """
 
 
+def releases(*tags, draft=(), pre=()):
+    return "".join(f"{tag}\t{str(tag in draft).lower()}\t{str(tag in pre).lower()}\n" for tag in tags)
+
+
 class PublishTest(unittest.TestCase):
-    def publish(self, tag, latest="", fails=False):
+    def publish(self, tag, out="", fails=False):
         with tempfile.TemporaryDirectory() as work:
             gh = Path(work, "gh")
             gh.write_text(FAKE_GH, encoding="utf-8")
@@ -159,33 +176,54 @@ class PublishTest(unittest.TestCase):
                 "GITHUB_REPOSITORY": "owner/app",
                 "CERT_SHA256": "00",
                 "FAKE_GH_CREATE": str(create),
-                "FAKE_LATEST": latest,
+                "FAKE_RELEASES": out,
                 "FAKE_GH_FAILS": "1" if fails else "",
             }
-            run = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", publish_step()], env=env, cwd=work,
+            # As GitHub runs a step: bash -e, with no pipefail.
+            run = subprocess.run(["bash", "-e", "-c", publish_step()], env=env, cwd=work,
                                  capture_output=True, text=True, check=False)
             sent = create.read_text(encoding="utf-8").split("\n") if create.exists() else None
             return run, sent
 
-    def test_a_backport_never_becomes_the_latest_release(self):
-        run, sent = self.publish("v2.26.1", latest="v2.27.0")
-        self.assertEqual(0, run.returncode, run.stderr)
-        self.assertIn("--latest=false", sent)
+    def flags(self, sent):
+        """--latest=false, --prerelease and --notes-start-tag with its tag, as sent."""
+        found = [arg for arg in sent if arg in ("--latest=false", "--prerelease")]
+        if "--notes-start-tag" in sent:
+            found += ["--notes-start-tag", sent[sent.index("--notes-start-tag") + 1]]
+        return found
 
-    def test_a_newer_version_becomes_the_latest_release(self):
-        for tag, latest in (("v2.28.0", "v2.27.0"), ("v2.10.0", "v2.9.0"), ("v3.0.0", "v2.99.99"), ("v1.0.0", "")):
-            with self.subTest(tag=tag, latest=latest):
-                run, sent = self.publish(tag, latest=latest)
-                self.assertEqual(0, run.returncode, run.stderr)
-                self.assertNotIn("--latest=false", sent)
-                self.assertNotIn("--prerelease", sent)
+    def assert_flags(self, tag, out, expected):
+        run, sent = self.publish(tag, out)
+        self.assertEqual(0, run.returncode, run.stderr)
+        self.assertEqual(expected, self.flags(sent))
+
+    def test_a_backport_never_becomes_the_latest_release_and_its_notes_start_at_its_own_line(self):
+        self.assert_flags("v2.26.1", releases("v2.27.0", "v2.26.0", "v2.25.0"),
+                          ["--latest=false", "--notes-start-tag", "v2.26.0"])
+
+    def test_a_newer_version_becomes_the_latest_release_and_its_notes_start_at_the_one_before(self):
+        for tag, out, start in (("v2.28.0", releases("v2.26.0", "v2.27.0"), "v2.27.0"),
+                                ("v2.10.0", releases("v2.9.0", "v2.8.0"), "v2.9.0"),
+                                ("v3.0.0", releases("v2.99.99"), "v2.99.99")):
+            with self.subTest(tag=tag):
+                self.assert_flags(tag, out, ["--notes-start-tag", start])
+
+    def test_the_first_release_has_no_start(self):
+        self.assert_flags("v1.0.0", "", [])
+
+    def test_a_final_after_its_test_versions_is_the_latest_and_its_notes_start_at_the_last_final(self):
+        out = releases("v2.27.0-rc.2", "v2.27.0-rc.1", "v2.26.0", pre=("v2.27.0-rc.2",))
+        # v2.27.0-rc.1 was made before pre-releases were marked: it still never counts as newer, or as a start.
+        self.assert_flags("v2.27.0", out, ["--notes-start-tag", "v2.26.0"])
 
     def test_a_pre_release_is_never_the_latest_release(self):
-        run, sent = self.publish("v2.28.0-rc.1", latest="v2.27.0")
-        self.assertEqual(0, run.returncode, run.stderr)
-        self.assertIn("--prerelease", sent)
+        self.assert_flags("v2.28.0-rc.1", releases("v2.27.0", "v2.28.0-rc.0", pre=("v2.28.0-rc.0",)),
+                          ["--prerelease", "--notes-start-tag", "v2.27.0"])
 
-    def test_no_release_is_made_when_github_cant_say_which_is_the_latest(self):
+    def test_a_draft_counts_for_nothing(self):
+        self.assert_flags("v2.28.0", releases("v2.30.0", "v2.27.0", draft=("v2.30.0",)), ["--notes-start-tag", "v2.27.0"])
+
+    def test_no_release_is_made_when_github_cant_list_the_releases(self):
         run, sent = self.publish("v2.26.1", fails=True)
         self.assertNotEqual(0, run.returncode)
         self.assertIsNone(sent)
