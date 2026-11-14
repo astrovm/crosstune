@@ -14,6 +14,7 @@ import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -78,6 +79,15 @@ internal object PlayScenes {
     /** Allows Crosstune to see sessions, as the user does in Android's settings. */
     fun allow(app: Application) {
         Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", ComponentName(app, NowPlayingListener::class.java).flattenToString())
+    }
+
+    /**
+     * Takes that back. AndroidX keeps the allowed listeners until the setting changes, which a cleared one doesn't count
+     * as, so the access would carry over into the tests after, e.g. a TV's that asks for it.
+     */
+    fun disallow(app: Application) {
+        Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", "")
+        NotificationManagerCompat.getEnabledListenerPackages(app)
     }
 
     /** Sets [scene] up as Android shows it: its sessions, each a moment after the one before, and the phone's sound. */

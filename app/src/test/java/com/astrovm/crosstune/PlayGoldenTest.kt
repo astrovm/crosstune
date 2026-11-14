@@ -21,7 +21,10 @@ class PlayGoldenTest {
     private val scenes = PlayScenes.all()
 
     @After
-    fun tearDown() = ShadowMediaSessionManager.reset()
+    fun tearDown() {
+        ShadowMediaSessionManager.reset()
+        PlayScenes.disallow(app)
+    }
 
     /** `main`'s answers, by what was asked: "plays" and the scene, or "follow", the scene, the song and the app. */
     private val main: Map<String, String> by lazy {
