@@ -87,10 +87,15 @@ public final class Work {
      * read once it's gone.
      */
     public static void ended() {
-        Thread thread = Thread.currentThread();
-        if (!measured || thread == counted) return;
-        ended.put(thread.getId(), threads().getCurrentThreadCpuTime());
-        endedNames.put(thread.getId(), thread.getName());
+        // It runs first in Thread.exit: a throw here would skip the rest of it, so nothing leaves.
+        try {
+            Thread thread = Thread.currentThread();
+            if (!measured || thread == counted) return;
+            ended.put(thread.getId(), threads().getCurrentThreadCpuTime());
+            endedNames.put(thread.getId(), thread.getName());
+        } catch (Throwable lost) {
+            // The thread's time is lost, so the reading may miss it: no worse than before it was measured.
+        }
     }
 
     /**
@@ -165,13 +170,14 @@ public final class Work {
      * before did, a failure's whole stack trace too, which took 1.2 ms from the first reading of the next test.
      */
     private static Map<Long, Long> quiet(ThreadMXBean threads) {
+        // A reader may leave this thread interrupted: the wait still goes on, and the flag is set again after.
+        boolean interrupted = Thread.interrupted();
         Map<Long, Long> before = times(threads);
         for (int each = 0; each < QUIET_TRIES; each++) {
             try {
                 Thread.sleep(1);
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-                break;
+            } catch (InterruptedException again) {
+                interrupted = true;
             }
             Map<Long, Long> after = times(threads);
             long took = 0;
@@ -179,6 +185,7 @@ public final class Work {
             before = after;
             if (took <= QUIET_NANOS) break;
         }
+        if (interrupted) Thread.currentThread().interrupt();
         return before;
     }
 

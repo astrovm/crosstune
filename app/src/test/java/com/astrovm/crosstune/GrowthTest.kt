@@ -128,7 +128,7 @@ class GrowthTest {
     @Test
     fun aReadingThatHandsItsWorkToAnotherThreadFails() {
         // Work on another thread isn't counted: a reading that has another do it fails, by its text's name, however it
-        // hands the work over. A pool's thread and each worker are started before, and wait.
+        // hands the work over, as long as it waits for it. A pool's thread and each worker are started before, and wait.
         val pool = Executors.newSingleThreadExecutor()
         pool.submit { }.get()
         val handed = mapOf<String, (String) -> Any?>(
@@ -161,7 +161,8 @@ class GrowthTest {
     fun aStackTraceCountsEachFrame() {
         // Made 100 calls deeper, a throwable takes a step for each call, and one for each frame the JVM walks. Read, the
         // JVM makes an element for each frame, and the throwable gives a copy of them. On a thread of its own, with a
-        // few frames below: on the test runner's thread, reading one 83 frames deeper or more took 2 steps more, once.
+        // few frames below: reading a trace of about 126 frames or more takes 2 steps more, once, on any thread, so the
+        // stack here stays under that. It's the same in each run, so it can't change how a reading grows.
         val made = { levels: Int -> Growth.stepsOf(levels, ::madeAt) }
         val read = { levels: Int -> madeAt(levels).let { made -> Growth.stepsOf(made) { it.stackTrace.size } } }
         var more = emptyList<Long>()

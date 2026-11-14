@@ -17,7 +17,7 @@ import java.lang.invoke.MethodType
  * each element of an array made, cloned or copied, and each byte a checksum or zlib reads or writes, in the app, its
  * libraries and the JDK, its patterns too, but in what runs the JVM and the agent. The growthTests task runs it.
  * Work on other threads isn't counted, and isn't wanted: it's another test's. Each reader here reads on the thread that
- * asks, and a reading that leaves work to another thread fails, however it hands it over: the agent measures the
+ * asks, and a reading that leaves work to another thread fails, however it hands it over, when it waits for it: the agent measures the
  * processor time the other threads take as it reads ([BESIDE_NANOS]). So no other thread may be busy then.
  *
  * Each pair's growth goes to `build/growth/TASK.tsv`, emptied when the Gradle task starts, by test and text, with the
@@ -67,7 +67,8 @@ internal object Growth {
 
     /**
      * The processor time the threads beside a reading may take while it's counted, all together. Work handed to another
-     * thread isn't counted, however it's handed over, so a reading that leaves them more fails. In two runs of the
+     * thread isn't counted, however it's handed over, so a reading that leaves them more fails. Work a reading doesn't wait
+     * for, and work on the JVM's own threads, like the garbage collector's, go unseen. In two runs of the
      * growth tests, 8,834 readings, the threads beside took 107 µs at most, as the JDK cleaned up after the garbage
      * collector. A reading that hands a squared reader's work on 1,000 letters to another thread
      * leaves it 4.3 ms, and on 4,000 letters, 67 ms.
