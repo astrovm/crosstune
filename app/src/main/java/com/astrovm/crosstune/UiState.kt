@@ -471,8 +471,11 @@ private fun SavedLine.withReadingFrom(stored: SavedLine) = copy(
 /** How a card's line sounds: not at all, on its way in the music app or the small player, playing, or ready to play (again). */
 internal enum class LineSound { NONE, LOADING, PLAYING, PLAYED }
 
-/** A [song] the music app [app] played, at [positionMs], before practice took it over. */
-internal data class Before(val song: MusicMetadata, val positionMs: Long, val app: String?)
+/**
+ * A [song] the music app [app] played, at [positionMs], before practice took it over; [songless] when it named
+ * no song, e.g. a radio station, as [Unnamed.played], which goes on playing with no place in it to go back to.
+ */
+internal data class Before(val song: MusicMetadata, val positionMs: Long, val app: String?, val songless: Boolean = false)
 
 /** A question about a line, and ChatGPT's [answer] so far, until [done]; or why there's none. */
 internal data class LineQuestion(val question: String, val answer: String = "", val done: Boolean = false, val failed: Boolean = false, val limitReached: Boolean = false) {

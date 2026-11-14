@@ -2003,7 +2003,7 @@ internal class MainViewModel(
     fun playerSleep(minutes: Int?) {
         val timer = sleepTimer ?: return
         if (minutes != null) return timer.after(minutes)
-        uiState.player?.song?.let(timer::afterSong)
+        uiState.player?.let { timer.afterSong(it.song, it.askedOf) }
     }
 
     fun playerSleepOff() {
@@ -4217,6 +4217,7 @@ internal class MainViewModel(
         val playing = uiState.following?.takeIf { it.clock.playing && it.appPackage != null }
         val before = uiState.lyricsFor?.let { shown -> playing?.let { Before(shown, inApp(it.clock.positionAt(now())), it.appPackage) } }
             ?: playback?.nowPlaying()?.let { heard -> heard.clock?.let { Before(heard.metadata, it.positionAt(now()), app = null) } }
+            ?: playback?.playingUnnamed()?.let { Before(it.played, 0, it.app, songless = true) }
         cards.start(song, before)
     }
 

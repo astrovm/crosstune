@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
@@ -77,9 +78,18 @@ internal class FakePlayback : PlaybackSource {
     override fun follow(song: MusicMetadata, app: String?): Flow<Following?> {
         followed += song
         followedApps += app
-        val flow = app?.let(appPlaying::get) ?: playing
+        val flow = followedAs(song, app, app?.let(appPlaying::get) ?: playing)
         return said?.let { later -> flow { later.await(); emitAll(flow) } } ?: flow
     }
+
+    /**
+     * What [app] plays, as following [song]. Asked of [app] for what names no song, e.g. a station, it's followed only
+     * while [unnamed] is still just that in [app], paused or not, as the real source matches it by what it calls it:
+     * once the app's on to the next station, or a song, it no longer has it.
+     */
+    private fun followedAs(song: MusicMetadata, app: String?, flow: Flow<Following?>): Flow<Following?> =
+        if (app == null || !Songless.namesNoSong(song.title, song.artist)) flow
+        else combine(flow, unnamed) { following, now -> following?.takeIf { now?.app == app && now.played.let { it.title == song.title && it.artist == song.artist } } }
 
     /** Whether what started isn't believed yet, as the phone's sound takes a moment to follow what an app says it plays. */
     var quietYet = false

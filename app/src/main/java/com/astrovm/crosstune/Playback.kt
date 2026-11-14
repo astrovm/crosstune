@@ -213,7 +213,8 @@ internal interface PlaybackSource {
 
     /**
      * Where [song] is in the app playing it, as that changes; null while no app plays it. Only [app], by package, when
-     * one is named, where a session that names no song is what it plays, whatever it calls it; see [playingUnnamed].
+     * one is named. Asked of [app], what plays with no song named is [song] by just what it calls it, as
+     * [Unnamed.played], even nothing; see [playingUnnamed]. So is it for each control asked of [app] below.
      */
     fun follow(song: MusicMetadata, app: String? = null): Flow<Following?>
 
@@ -451,11 +452,22 @@ internal class MediaSessionPlayback(
         controllers.filter { (app == null || it.packageName == app) && it.has(song, app) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
 
     /**
-     * Whether it has [song]: by its name, or, asked of [app] by package, by naming no song, as a station
-     * or a file with no title, so the buttons reach it whatever it calls what it plays.
+     * Whether it has [song]: by its name; or, asked of [app] by package, as what it plays with no song named,
+     * e.g. a station or a file with no title, by just what it calls that, even nothing. So a station's buttons
+     * reach it whatever it's called, and a song asked of the same app, or the station before, never does.
      */
     private fun MediaController.has(song: MusicMetadata, app: String?): Boolean =
-        plays(song) || app != null && metadata.let { Songless.namesNoSong(it?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), it?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) }
+        plays(song) || app != null && calls().let { (title, artist) -> Songless.namesNoSong(title, artist) && title == song.title && artist == song.artist }
+
+    /** What it calls what it plays, its title, "" with none, and its artist: as what names no song is shown and asked for by. */
+    private fun MediaController.calls(): Pair<String, String> =
+        metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }.orEmpty() to metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+
+    /** What it plays, as what names no song is shown. */
+    private fun MediaController.unnamed(): Unnamed {
+        val (title, artist) = calls()
+        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let(::coverOf), artist)
+    }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
         // Taken back meanwhile, the words just stay where they are. An app that doesn't offer a seek,
@@ -662,16 +674,7 @@ internal class MediaSessionPlayback(
     override fun playingUnnamed(): Unnamed? {
         val apps = playingApps()
         if (apps.any { playing(it) != null }) return null
-        return apps.firstOrNull { !it.remote() }?.let { controller ->
-            val metadata = controller.metadata
-            Unnamed(
-                controller.packageName,
-                labelOf(controller.packageName),
-                metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() },
-                metadata?.let(::coverOf),
-                metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
-            )
-        }
+        return apps.firstOrNull { !it.remote() }?.unnamed()
     }
 
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)

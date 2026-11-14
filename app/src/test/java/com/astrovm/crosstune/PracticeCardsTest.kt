@@ -436,6 +436,24 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun backToBeforeAStationPlaysOnInItsAppWithNowhereToGoBackTo() {
+        keep(line())
+        playing()
+        val cards = cards()
+        val station = Unnamed("com.example.radio", "Fake Radio", "Fake FM")
+        cards.start(null, before = Before(station.played, 0, station.app, songless = true))
+        waitFor("the line is ready") { practice?.sound == LineSound.PLAYED }
+        playback.seeks.clear()
+        playback.plays.clear()
+        playback.playedApps.clear()
+        cards.backToBefore()
+        assertNull(practice)
+        assertEquals(listOf(true), playback.plays.toList())
+        assertEquals(listOf<String?>(station.app), playback.playedApps.toList())
+        assertTrue(playback.seeks.isEmpty())
+    }
+
+    @Test
     fun backToBeforeInAnAppThatHasToBeAskedForItLetsItPlay() {
         keep(line())
         val cards = cards()

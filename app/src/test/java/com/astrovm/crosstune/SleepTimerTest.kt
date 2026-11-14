@@ -6,6 +6,7 @@ import java.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -98,6 +99,60 @@ class SleepTimerTest {
         passes(0)
         assertEquals(listOf(false), phone.plays)
         assertNull(timer.set.value)
+    }
+
+    /** A radio station playing in its own app, with no song named, and nothing else playing. */
+    private fun stationPlays(): Unnamed {
+        val station = Unnamed("com.example.radio", "Fake Radio", "Fake FM")
+        phone.appPlaying[station.app] = MutableStateFlow(Following(PlaybackClock(0, SystemClock.elapsedRealtime(), 1f, true), "Fake Radio", canSeek = false))
+        phone.unnamed.value = station
+        // The song's app lets go of it as the station takes over.
+        phone.onThePhone = null
+        phone.playing.value = null
+        passes(0)
+        return station
+    }
+
+    @Test
+    fun afterSoManyMinutesAStationIsPausedInItsApp() {
+        val station = stationPlays()
+        timer.after(15)
+        passes(15 * 60_000)
+        assertEquals(listOf(false), phone.plays)
+        assertEquals(listOf<String?>(station.app), phone.playedApps)
+        assertNull(timer.set.value)
+    }
+
+    @Test
+    fun aSongLeftForAStationPausesTheStation() {
+        // Set on a song, then the user puts a station on in another app: it's what's paused, as the song is gone.
+        plays(10_000)
+        timer.after(15)
+        var station = stationPlays()
+        passes(15 * 60_000)
+        assertEquals(listOf(false), phone.plays)
+        assertEquals(listOf<String?>(station.app), phone.playedApps)
+        // Set to the song's end, as well.
+        plays(10_000)
+        timer.afterSong(song)
+        station = stationPlays()
+        assertEquals(listOf(false, false), phone.plays)
+        assertEquals(listOf<String?>(station.app, station.app), phone.playedApps)
+        assertNull(timer.set.value)
+    }
+
+    @Test
+    fun aFileWithNoSongNamedIsFollowedInItsAppAndPausedAsItEnds() {
+        val file = Unnamed("com.example.player", "Fake Player", "Fake Song", artist = "<unknown>")
+        phone.onThePhone = null
+        phone.unnamed.value = file
+        phone.appPlaying[file.app] = MutableStateFlow(Following(PlaybackClock(190_000, SystemClock.elapsedRealtime(), 1f, true), "Fake Player", canSeek = true, durationMs = 200_000))
+        timer.afterSong(file.played, file.app)
+        passes(9_499)
+        assertTrue(phone.plays.isEmpty())
+        passes(1)
+        assertEquals(listOf(false), phone.plays)
+        assertEquals(listOf<String?>(file.app), phone.playedApps)
     }
 
     @Test

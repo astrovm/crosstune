@@ -1596,6 +1596,45 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSongAskedOfAnAppIsNeverWhatItPlaysWithNoSongNamed() {
+        allow()
+        sounding()
+        val fakeSong = MusicMetadata("Fake Song", "Fake Band")
+        // A card's song asked of its app, as it loads with no title yet, or as it plays a station: it isn't that.
+        listOf(player("com.example.player", "Fake Player", "", null), player("com.example.player", "Fake Player", "Fake FM", "")).forEach { other ->
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(other)
+            val seen = mutableListOf<Following?>()
+            collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(fakeSong, "com.example.player").collect { seen += it } }
+            shadowOf(Looper.getMainLooper()).idle()
+            assertNull(seen.last())
+            playback.seekTo(fakeSong, 10_000, "com.example.player")
+            playback.playPause(fakeSong, false, "com.example.player")
+            assertEquals(emptyList<String>(), asked())
+        }
+        // The station is reached as it's called, there.
+        playback.playPause(MusicMetadata("Fake FM", ""), false, "com.example.player")
+        assertEquals(listOf("pause"), asked())
+    }
+
+    @Test
+    fun aStationIsFollowedOnlyUntilItsAppIsOnToTheNext() {
+        allow()
+        sounding()
+        val radio = player("com.ilv.vradio", "VRadio", "Fake FM", "")
+        shadowOf(sessions).addController(radio)
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(MusicMetadata("Fake FM", ""), "com.ilv.vradio").collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(true, seen.last()?.clock?.playing)
+        // Skipped to the next station, it plays on, but not the one followed.
+        shadowOf(radio).executeOnMetadataChanged(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Other FM").putString(MediaMetadata.METADATA_KEY_ARTIST, "").build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+    }
+
+    @Test
     fun anAppNamingNoSongIsToldAsItChanges() {
         allow()
         sounding()

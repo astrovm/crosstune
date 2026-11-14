@@ -347,11 +347,12 @@ class MainViewModelTest {
         phone: Phone = Phone.OTHER,
         mayCalibrate: () -> Boolean = { true },
         lyricsFinder: LyricsFinder? = null,
-        mayCapture: () -> Boolean = { false }
+        mayCapture: () -> Boolean = { false },
+        sleepTimer: SleepTimer? = null
     ): MainViewModel {
         playback.access = true
         playback.unnamed.value = station
-        val model = model(playback = playback, listener = ears, phone = phone, mayCalibrate = mayCalibrate, lyricsFinder = lyricsFinder, mayCapture = mayCapture)
+        val model = model(playback = playback, listener = ears, phone = phone, mayCalibrate = mayCalibrate, lyricsFinder = lyricsFinder, mayCapture = mayCapture, sleepTimer = sleepTimer)
         model.viewModelScope.launch { model.watchPlayingNow() }
         idle()
         return model
@@ -1056,13 +1057,17 @@ class MainViewModelTest {
         assertNull(model.uiState.lyricsFor)
         assertTrue(model.uiState.history.isEmpty())
         assertEquals(station.played, model.uiState.player?.song)
-        // Skipped to the next station, the player takes it up, as it would the next song.
-        val other = station.copy(name = "Fake FM")
-        playback.playing.value = null
+        // Skipped to the next station, the player takes it up, as it would the next song, its logo too. The app goes
+        // on playing, so what it plays is still followed there: just not as the station before.
+        val other = station.copy(name = "Fake FM", artworkUrl = "https://example.com/fake-fm.png")
         playback.unnamed.value = other
         idle()
         assertEquals(other.played, model.uiState.player?.song)
+        assertEquals("https://example.com/fake-fm.png", model.uiState.player?.song?.artworkUrl)
         assertEquals(true, model.uiState.player?.songless)
+        assertEquals(vradio, model.uiState.player?.following)
+        // The bar's buttons follow it too, as the one before is no longer there to follow.
+        assertEquals(PlayingUnnamed(other, following = vradio), model.uiState.playingUnnamed)
         // The app names the song: the player's on it, as a song.
         playback.unnamed.value = null
         playback.onThePhone = Heard.Song(song, null, app = station.app)
@@ -1070,6 +1075,56 @@ class MainViewModelTest {
         assertEquals(song, model.uiState.player?.song)
         assertEquals(false, model.uiState.player?.songless)
         assertEquals(song.artist, model.uiState.player?.byLine)
+    }
+
+    @Test
+    fun aSongPlayedOverAStationTakesItsPlaceOnTheBarOnceBothArePaused() {
+        val playback = FakePlayback()
+        val radio = MutableStateFlow<Following?>(following(app = station.app))
+        playback.appPlaying[station.app] = radio
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        assertEquals(station, model.uiState.playingUnnamed?.playing)
+        // The user plays a song in another app, over the station, then pauses the song, then the station.
+        playback.playing.value = following()
+        playback.onThePhone = Heard.Song(song, null, app = "com.spotify")
+        idle()
+        assertEquals(song, model.uiState.playingNow?.song)
+        playback.playing.value = following(playing = false)
+        playback.onThePhone = null
+        idle()
+        radio.value = following(playing = false, app = station.app)
+        idle()
+        // The song keeps the bar: the station doesn't come back paused, though its app still has it.
+        assertNull(model.uiState.playingUnnamed)
+        assertEquals(song, model.uiState.playingNow?.song)
+    }
+
+    @Test
+    fun practiceOverAStationKeepsItToPlayOnAfter() {
+        val playback = FakePlayback().apply { playing.value = following(app = station.app) }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        model.startPractice()
+        idle()
+        assertEquals(Before(station.played, 0, station.app, songless = true), model.uiState.practice?.before)
+    }
+
+    @Test
+    fun aStationsSleepTimerFollowsItInItsApp() {
+        val playback = FakePlayback().apply { playing.value = following(app = station.app) }
+        val scope = MainScope()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback, sleepTimer = SleepTimer(playback, scope))
+        model.peekPlayingUnnamed()
+        idle()
+        // As the station, never as a song another app may have.
+        val followed = playback.followed.size
+        model.playerSleep(null)
+        idle()
+        assertEquals(listOf(station.played), playback.followed.drop(followed))
+        assertEquals(listOf<String?>(station.app), playback.followedApps.drop(followed))
+        // With no end, it waits for the station to stop.
+        assertTrue(playback.plays.isEmpty())
+        assertTrue(model.uiState.sleep != null)
+        scope.cancel()
     }
 
     @Test
