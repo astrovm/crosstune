@@ -474,7 +474,7 @@ tasks.register<Test>("growthTests") {
     // (Agent.java).
     jvmArgumentProviders += CommandLineArgumentProvider {
         val jars = (listOf(work.singleFile) + writer.files).joinToString(File.pathSeparator) { it.path }
-        listOf("-javaagent:${agent.singleFile.path}=$jars", "-Xshare:off", "-XX:TieredStopAtLevel=1", "-XX:+UnlockDiagnosticVMOptions", "-XX:-UseVectorizedMismatchIntrinsic")
+        listOf("-javaagent:${agent.singleFile.path}=$jars", "-Xshare:off", "-XX:TieredStopAtLevel=1", "-XX:+UnlockDiagnosticVMOptions", "-XX:-UseVectorizedMismatchIntrinsic", "-XX:-UseCRC32CIntrinsics")
     }
 }
 

@@ -14,13 +14,13 @@ import java.util.function.Supplier;
 import java.util.jar.JarFile;
 
 /**
- * Puts a step of {@link Work} at the start of each method and before each jump back, and counts what each
- * {@code System.arraycopy} moves, in the classes {@link Counted} names: those loaded from now on, and those the JVM
+ * Puts a step of {@link Work} at the start of each method and before each jump back, and counts each element of an
+ * array made, cloned or copied, in the classes {@link Counted} names: those loaded from now on, and those the JVM
  * loaded before. Run the JVM with {@code -XX:TieredStopAtLevel=1 -XX:+UnlockDiagnosticVMOptions
- * -XX:-UseVectorizedMismatchIntrinsic}: C2 runs the JDK's text methods as code of its own, with no steps in it, from
- * whenever it gets to them, so the same reading would count differently each time. C1 swaps only methods that never
- * loop, which count nothing ({@link Steps}), and the vectorized mismatch, turned off. So a reading counts the same
- * steps compiled and interpreted.
+ * -XX:-UseVectorizedMismatchIntrinsic -XX:-UseCRC32CIntrinsics}: C2 runs the JDK's text methods as code of its own,
+ * with no steps in it, from whenever it gets to them, so the same reading would count differently each time. C1 swaps
+ * only methods that never loop, which count no steps ({@link Steps}), and the vectorized mismatch and CRC32C, which
+ * loop, turned off. So a reading counts the same steps compiled and interpreted.
  *
  * <p>Its argument is the paths of the jar with {@link Work} alone, then of the jars {@link Steps} needs, as
  * {@link File#pathSeparator} joins them. Work goes to the boot class loader, as the JDK's classes call it. Steps and

@@ -13,9 +13,11 @@ import java.lang.invoke.MethodType
  * The work is counted, never timed: a count is the same on every machine and each time, where a time is not. Timed, the
  * growths moved by as much as the line between in step and out of step on CI's runners, a runner of their own too, and
  * failed at random. Where the letters a pattern looks at can be counted, they are ([outOfStepCounting]). Elsewhere, the
- * work-count agent (`tools/work-count`) counts the reading thread's steps: each call, each time a loop goes round and
- * each element an array copy moves, in the app, Kotlin and the JDK, its patterns too. The growthTests task runs it.
- * Work on other threads isn't counted, and isn't wanted: it's another test's. Each reader here reads on the thread that asks.
+ * work-count agent (`tools/work-count`) counts the reading thread's steps: each call and each time a loop goes round,
+ * each element of an array made, cloned or copied, and each byte a checksum or zlib reads or writes, in the app, its
+ * libraries and the JDK, its patterns too, but in what runs the JVM and the agent. The growthTests task runs it.
+ * Work on other threads isn't counted, and isn't wanted: it's another test's. Each reader here reads on the thread that
+ * asks, and one that starts, wakes or tells another thread fails.
  *
  * Each pair's growth goes to `build/growth/TASK.tsv`, emptied when the Gradle task starts, by test and text, so how near
  * the line each one is can be seen.
@@ -42,7 +44,7 @@ internal object Growth {
     /**
      * How many times the work the longer text may take: 4 in step, and 16 for time squared. A count has no noise, so the
      * line is near 4: the app's patterns, counted by the letters they look at on 14,208 texts, grew 4.03 times at most,
-     * and the readers, counted in steps, 4.03 too. Work that grows linearly, with a part that grows squared, grows past
+     * and the readers, counted in steps, 4.04. Work that grows linearly, with a part that grows squared, grows past
      * it once that part, at the shorter length, is over 1/23 of the linear part: 4(1 + 4f) / (1 + f) is 4.5 at f = 1/23.
      */
     const val MARGIN = 4.5
@@ -51,11 +53,14 @@ internal object Growth {
      * Each of [texts] made at [length] and at [TIMES] it, read by [read] with its steps counted: for each out of step,
      * its [name] and its growth. The texts at each length come in the same order.
      */
-    fun <T> outOfStep(texts: (Int) -> List<T>, length: Int, name: (T) -> String, read: (T) -> Any?): List<String> =
+    fun <T : CharSequence> outOfStep(texts: (Int) -> List<T>, length: Int, name: (T) -> String, read: (T) -> Any?): List<String> =
         outOfStep(texts, length, name, COUNTING, read)
 
-    /** As [outOfStep], counted or not, as [counting] says. */
-    fun <T> outOfStep(texts: (Int) -> List<T>, length: Int, name: (T) -> String, counting: Boolean, read: (T) -> Any?): List<String> {
+    /**
+     * As [outOfStep], counted or not, as [counting] says. Counted, a reading that starts, wakes or tells another thread
+     * fails, with its text's name: its work may be done there, where nothing counts it.
+     */
+    fun <T : CharSequence> outOfStep(texts: (Int) -> List<T>, length: Int, name: (T) -> String, counting: Boolean, read: (T) -> Any?): List<String> {
         if (!counting) {
             texts(length / UNCOUNTED_SHORTER).forEach { read(it) }
             return emptyList()
@@ -66,7 +71,13 @@ internal object Growth {
         // And each class it loaded while another was written, which the JDK skips, is written now.
         agent("ready")
         val (short, long) = made(texts, length)
-        val out = judged(short, long, name, "steps", MARGIN) { once, longer -> Work(stepsOf(once, read), stepsOf(longer, read)) }
+        val out = judged(short, long, name, "steps", MARGIN) { once, longer ->
+            try {
+                Work(stepsOf(once, read), stepsOf(longer, read))
+            } catch (handed: IllegalStateException) {
+                throw IllegalStateException("${name(longer)}: ${handed.message}", handed)
+            }
+        }
         check(uncounted().isEmpty()) { "Not counted in: ${uncounted()}" }
         return out
     }
