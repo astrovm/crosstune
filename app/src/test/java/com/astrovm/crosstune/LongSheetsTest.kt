@@ -3,7 +3,7 @@ package com.astrovm.crosstune
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** J-Total's sheets that open what they never close, timed as they grow (Growth.kt), apart from ChordSheetsTest's other tests. */
+/** J-Total's sheets that open what they never close, their work counted as they grow (Growth.kt), apart from ChordSheetsTest's other tests. */
 class LongSheetsTest {
     @Test
     fun aChordLinkThatNeverClosesTakesNoLongerThanTheLineItIsOn() {

@@ -426,11 +426,15 @@ val notices = tasks.register<Test>("notices") {
     outputs.upToDateWhen { false }
 }
 
-// The tests that time how reading grows (Growth.kt). Beside other forks, the other tests take the same cores and
-// caches for minutes, which slowed every reading of a longer page on CI 2.3 times and named a reader in step. So only
-// this task times them: in one fork, after every other task of the build, with nothing beside them. Elsewhere, as in
-// the unit tests Kover counts, Growth reads each text once and judges nothing, so what they run still counts.
-val timedTests = listOf("GrowthTest", "LongPagesTest", "LongSheetsTest", "LongTitlesTest").map { "com.astrovm.crosstune.$it" }
+// The tests that judge how reading grows (Growth.kt), by the work it counts. The work-count agent counts it, with the JVM
+// held to its first compiler, many times slower: so only this task counts, in a JVM of its own. Elsewhere, as in the
+// unit tests Kover counts, Growth reads each text once, shorter, and judges nothing, so what they run still counts.
+val countedTests = listOf("GrowthTest", "LongPagesTest", "LongSheetsTest", "LongTitlesTest").map { "com.astrovm.crosstune.$it" }
+val workCount: Configuration = configurations.create("workCount") {
+    isCanBeConsumed = false
+    isTransitive = false
+}
+dependencies { workCount(project(":work-count")) }
 /** The `--tests` patterns the command line asks of each task, by the task's name. */
 val askedTests: Map<String, List<String>> = buildMap<String, MutableList<String>> {
     var task = ""
@@ -447,17 +451,20 @@ val askedTests: Map<String, List<String>> = buildMap<String, MutableList<String>
 val wholeCheck = gradle.startParameter.taskNames.any { it.substringAfterLast(':') == "ci" }
 tasks.register<Test>("growthTests") {
     group = "verification"
-    description = "The tests that time how reading grows, alone in one fork, after the other tasks."
+    description = "The tests that judge how reading grows, by the work the work-count agent counts."
     val unitTests = tasks.named<Test>("testDebugUnitTest").get()
     testClassesDirs = unitTests.testClassesDirs
     classpath = unitTests.classpath
-    timedTests.forEach { filter.includeTestsMatching(it) }
-    systemProperty("crosstune.timed", "true")
-    mustRunAfter(
-        "testDebugUnitTest", "notices", "lintDebug", "detekt", "assembleDebug", "assembleRelease", ":pitest-changed-lines:test",
-        "koverLogDebug", "koverXmlReportDebug", "koverVerifyDebug",
-    )
-    outputs.upToDateWhen { false }
+    countedTests.forEach { filter.includeTestsMatching(it) }
+    val agent = workCount.elements
+    inputs.files(workCount).withPropertyName("workCount")
+    // The agent's jar joins the boot class path, so the JDK's classes can count, and the JVM can share only the boot
+    // loader's classes from its archive then, with a warning. The agent rewrites the JDK's classes it counts anyway, so
+    // the archive would save little: it's off. The flags after it are why a count is the same interpreted and compiled
+    // (Agent.java).
+    jvmArgumentProviders += CommandLineArgumentProvider {
+        listOf("-javaagent:${agent.get().single().asFile.path}", "-Xshare:off", "-XX:TieredStopAtLevel=1", "-XX:+UnlockDiagnosticVMOptions", "-XX:-UseVectorizedMismatchIntrinsic")
+    }
 }
 
 // Robolectric's Android 16 runtime reaches into JDK internals, its native graphics load a library,
@@ -494,18 +501,18 @@ tasks.withType<Test>().configureEach {
         memory >= (12L shl 30) -> 2
         else -> 1
     }
-    // GrowthTest checks the timing itself, so it runs only where the timing is judged.
+    // GrowthTest checks the counting itself, so it runs only where the work is counted.
     if (name != "growthTests") filter.excludeTestsMatching("com.astrovm.crosstune.GrowthTest")
-    // A timed test asked for with --tests here passes without its timing judged: say where it is judged. Which ran is
+    // A counted test asked for with --tests here passes without its growth judged: say where it is judged. Which ran is
     // read from this run's results, which Gradle empties when the task starts, so it's the classes the filter chose.
     if (name != "growthTests" && askedTests[name].orEmpty().isNotEmpty()) {
         val results = reports.junitXml.outputLocation.get().asFile
         // A copy: the script's own value would take the script into the configuration cache.
-        val timed = timedTests.toList()
+        val counted = countedTests.toList()
         doLast {
-            val ran = timed.filter { File(results, "TEST-$it.xml").isFile }.map { it.substringAfterLast('.') }
+            val ran = counted.filter { File(results, "TEST-$it.xml").isFile }.map { it.substringAfterLast('.') }
             if (ran.isNotEmpty()) {
-                logger.lifecycle("${ran.joinToString()}: each text is read once here, shorter, and no timing is judged. Run :app:growthTests for the timing.")
+                logger.lifecycle("${ran.joinToString()}: each text is read once here, shorter, and no growth is judged. Run :app:growthTests to judge it.")
             }
         }
     }
@@ -545,8 +552,8 @@ pitest {
     providers.gradleProperty("mutateTests").orNull?.let { targetTests.set(it.split(",")) }
     providers.gradleProperty("mutateLines").orNull?.let { features.set(listOf("+CHANGED(file[$it])")) }
     // The store's screenshots aren't tests of what the app does, and take long to draw; the song check asks real services;
-    // the notices check reads the build, not the app. The timed tests run as in the unit tests: each text at the shorter length read once,
-    // nothing timed, as two tests side by side here would make a timing fail at random. LongTitlesTest reads thousands
+    // the notices check reads the build, not the app. The counted tests run as in the unit tests: each text read once,
+    // shorter, and nothing judged, as only the work-count agent counts. LongTitlesTest reads thousands
     // of titles even so, and each change it covers would wait for it: the steps CutTitleTest counts catch a reading
     // that's no longer in step with a title's length.
     excludedTestClasses.set(
