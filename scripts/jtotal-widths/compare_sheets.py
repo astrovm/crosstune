@@ -257,20 +257,38 @@ def placed(page, got):
             for chord, (browser, app) in enumerate(zip(drawn_letters[drawn_line], got[app_line]["chords"]))}
 
 
+def undrawn(page, got):
+    """The app's chord lines the drawing has no line for, by their words and chords, as many times as the app shows each."""
+    got, _, pairs = matched_lines(page, got)
+    matched = {app_line for _, app_line in pairs}
+    return Counter(key(line) for k, line in enumerate(got) if k not in matched), {key(line): line for line in got}
+
+
 def against(truth, before, after):
     """Chord by chord, two apps against one drawing: each chord is right in both, worse (right before and off
     after), better (off before and right after), or off in both: on the same letter, nearer the drawing's after, or
     farther, which is worse too. A chord on a line before reads as the drawing and after reads as other words is worse
-    as well, and one the other way better. Gives the counts and, for each worse chord, (address, line, chord, drawing's
-    letter, before's, after's or None when after reads the line otherwise, the line as the app that placed it reads it)."""
+    as well, and one the other way better. So is a chord line after shows that the drawing has none for, more than
+    before shows it, and a sheet only before answers. Gives the counts and, for each worse chord, (address, line, chord,
+    drawing's letter, before's, after's or None when after reads the line otherwise, the line as the app that placed it
+    reads it); for each line after shows that isn't drawn, (address, None, None, None, None, None, the line); and for
+    each sheet after doesn't answer, (address, None, None, None, None, None, None)."""
     # The worse counts are shown even at none, as that is what the comparison is for.
-    lost = "worse: a line before reads as the drawing, after as other words"
-    counts = Counter({"worse: right before, off after": 0, "worse: off in both, as far or farther after": 0, lost: 0})
+    lost, extra, unanswered = ("worse: a line before reads as the drawing, after as other words",
+                               "worse: a chord line after shows and the drawing does not", "worse: a sheet only before answers")
+    counts = Counter({"worse: right before, off after": 0, "worse: off in both, as far or farther after": 0, lost: 0, extra: 0,
+                      unanswered: 0})
     worse = []
     for page in truth:
         a, b = before.get(page["url"]), after.get(page["url"])
         if a is None or b is None:
-            counts["sheets an app did not answer"] += 1
+            if a is not None:
+                counts[unanswered] += 1
+                worse.append((page["url"], None, None, None, None, None, None))
+            elif b is not None:
+                counts["better: a sheet only after answers"] += 1
+            else:
+                counts["sheets neither app answered"] += 1
             continue
         counts["sheets"] += 1
         a_at, b_at = placed(page, a["lines"]), placed(page, b["lines"])
@@ -278,6 +296,11 @@ def against(truth, before, after):
             counts[lost] += 1
             worse.append((page["url"], *place, a_at[place][0], a_at[place][1], None, a_at[place][2]))
         counts["better: a line after reads as the drawing, before as other words"] += len(b_at.keys() - a_at.keys())
+        (a_extra, _), (b_extra, b_lines) = undrawn(page, a["lines"]), undrawn(page, b["lines"])
+        for line in sorted(b_extra - a_extra):
+            counts[extra] += (b_extra - a_extra)[line]
+            worse += [(page["url"], None, None, None, None, None, b_lines[line])] * (b_extra - a_extra)[line]
+        counts["better: a chord line before shows and the drawing does not"] += sum((a_extra - b_extra).values())
         for place in sorted(a_at.keys() & b_at.keys()):
             browser, was, now = a_at[place][0], a_at[place][1], b_at[place][1]
             counts["chords compared"] += 1
@@ -588,8 +611,13 @@ def main(argv):
         for name, value in sorted(counts.items()):
             print(f"{value:7d}  {name}")
         for url, line, chord, browser, was, now, app_line in worse[:args.show]:
-            print(f"{url} line {line} chord {chord}: drawn on {browser}, {args.extra} {was}, "
-                  f"{args.after} {'reads the line as other words' if now is None else now}: {app_line['text']}")
+            if app_line is None:
+                print(f"{url}: {args.after} did not answer")
+            elif line is None:
+                print(f"{url}: {args.after} shows a chord line the drawing does not: {app_line['text']}")
+            else:
+                print(f"{url} line {line} chord {chord}: drawn on {browser}, {args.extra} {was}, "
+                      f"{args.after} {'reads the line as other words' if now is None else now}: {app_line['text']}")
     elif args.command == "positions":
         Path(args.extra).write_text(json.dumps(positions(json.loads(directory.read_text(encoding="utf-8")))), encoding="utf-8")
     else:

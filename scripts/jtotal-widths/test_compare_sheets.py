@@ -167,8 +167,11 @@ class AgainstTest(unittest.TestCase):
         counts, worse = c.against([self.drawn()], self.run_of(0, 2, 3, 4), self.run_of(0, 1, 1, 1, text="other"))
         self.assertEqual(counts["chords compared"], 0)
         self.assertEqual(counts["worse: a line before reads as the drawing, after as other words"], 4)
-        self.assertEqual([w[:6] for w in worse], [(self.URL, 0, n, at, at, None) for n, at in enumerate((0, 2, 3, 4))])
+        self.assertEqual([w[:6] for w in worse[:4]], [(self.URL, 0, n, at, at, None) for n, at in enumerate((0, 2, 3, 4))])
         self.assertEqual(worse[0][6]["text"], "abcde")
+        # Its line as after reads it is a chord line the drawing doesn't have, as compare counts it too.
+        self.assertEqual(counts["worse: a chord line after shows and the drawing does not"], 1)
+        self.assertEqual((worse[4][1], worse[4][6]["text"]), (None, "other"))
 
     def test_a_line_only_after_reads_as_the_drawing_is_better(self):
         counts, worse = c.against([self.drawn()], self.run_of(0, 1, 1, 1, text="other"), self.run_of(0, 2, 3, 4))
@@ -187,9 +190,56 @@ class AgainstTest(unittest.TestCase):
             self.assertIn("      4  worse: a line before reads as the drawing, after as other words", said)
             self.assertIn(f"{self.URL} line 0 chord 0: drawn on 0, main 0, pr reads the line as other words: abcde", said)
 
-    def test_a_sheet_an_app_did_not_answer_is_counted(self):
-        counts, _ = c.against([self.drawn()], self.run_of(0, 2, 3, 4), {})
-        self.assertEqual((counts["sheets an app did not answer"], counts["sheets"]), (1, 0))
+    def test_a_sheet_only_before_answers_is_worse(self):
+        counts, worse = c.against([self.drawn()], self.run_of(0, 2, 3, 4), {})
+        self.assertEqual((counts["worse: a sheet only before answers"], counts["sheets"]), (1, 0))
+        self.assertEqual(worse, [(self.URL, None, None, None, None, None, None)])
+
+    def test_a_sheet_only_after_answers_is_better_and_one_neither_answers_is_neither(self):
+        counts, worse = c.against([self.drawn()], {}, self.run_of(0, 2, 3, 4))
+        self.assertEqual((counts["better: a sheet only after answers"], counts["worse: a sheet only before answers"], worse), (1, 0, []))
+        counts, worse = c.against([self.drawn()], {}, {})
+        self.assertEqual((counts["sheets neither app answered"], worse), (1, []))
+
+    def with_line(self, run, text, *chords):
+        run[self.URL]["lines"].append({"text": text, "chords": [[at, name] for at, name in chords]})
+        return run
+
+    def test_a_chord_line_only_after_shows_and_the_drawing_does_not_is_worse(self):
+        # The review's case: one line more, with a chord, that the page doesn't draw.
+        after = self.with_line(self.run_of(0, 2, 3, 4), "phantom", (0, "Am"))
+        counts, worse = c.against([self.drawn()], self.run_of(0, 2, 3, 4), after)
+        self.assertEqual(counts["worse: a chord line after shows and the drawing does not"], 1)
+        self.assertEqual([(w[0], w[6]["text"]) for w in worse], [(self.URL, "phantom")])
+        # compare counts the same line for the branch alone.
+        self.assertEqual(c.compare([self.drawn()], after)[0]["app chord lines the browser does not draw"], 1)
+
+    def test_an_undrawn_line_both_show_is_neither_and_one_only_before_shows_is_better(self):
+        both = self.with_line(self.run_of(0, 2, 3, 4), "phantom", (0, "Am"))
+        counts, worse = c.against([self.drawn()], both, self.with_line(self.run_of(0, 2, 3, 4), "phantom", (0, "Am")))
+        self.assertEqual((counts["worse: a chord line after shows and the drawing does not"], worse), (0, []))
+        twice = self.with_line(self.with_line(self.run_of(0, 2, 3, 4), "phantom", (0, "Am")), "phantom", (0, "Am"))
+        counts, worse = c.against([self.drawn()], twice, both)
+        self.assertEqual((counts["better: a chord line before shows and the drawing does not"], worse), (1, []))
+        counts, _ = c.against([self.drawn()], both, twice)
+        self.assertEqual(counts["worse: a chord line after shows and the drawing does not"], 1)
+
+    def test_the_command_line_names_a_sheet_after_did_not_answer_and_a_line_it_shows_undrawn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder, other = Path(tmp), "https://example.test/b.html"
+            second = dict(self.drawn(), url=other)
+            (folder / "positions.json").write_text(json.dumps(c.positions([self.drawn(), second])), encoding="utf-8")
+            main = [self.run_of(0, 2, 3, 4)[self.URL], dict(self.run_of(0, 2, 3, 4)[self.URL], url=other)]
+            pr = [self.with_line(self.run_of(0, 2, 3, 4), "phantom", (0, "Am"))[self.URL]]
+            for tag, rows in (("main", main), ("pr", pr)):
+                (folder / f"app-{tag}.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+            with unittest.mock.patch("sys.stdout", new=io.StringIO()) as out:
+                c.main(["against", str(folder), "main", "pr", "--truth", str(folder / "positions.json"), "--show", "5"])
+            said = out.getvalue()
+            self.assertIn("      1  worse: a chord line after shows and the drawing does not", said)
+            self.assertIn("      1  worse: a sheet only before answers", said)
+            self.assertIn(f"{self.URL}: pr shows a chord line the drawing does not: phantom", said)
+            self.assertIn(f"{other}: pr did not answer", said)
 
     def test_the_command_line_compares_against_positions(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -203,6 +253,8 @@ class AgainstTest(unittest.TestCase):
             self.assertIn("      1  worse: right before, off after", said)
             self.assertIn("      0  worse: off in both, as far or farther after", said)
             self.assertIn("      0  worse: a line before reads as the drawing, after as other words", said)
+            self.assertIn("      0  worse: a chord line after shows and the drawing does not", said)
+            self.assertIn("      0  worse: a sheet only before answers", said)
             self.assertIn("      3  right in both", said)
             self.assertIn(f"{self.URL} line 0 chord 3: drawn on 4, main 4, pr 3: abcde", said)
 

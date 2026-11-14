@@ -431,6 +431,18 @@ val notices = tasks.register<Test>("notices") {
 // this task times them: in one fork, after every other task of the build, with nothing beside them. Elsewhere, as in
 // the unit tests Kover counts, Growth reads each text once and judges nothing, so what they run still counts.
 val timedTests = listOf("GrowthTest", "LongPagesTest", "LongSheetsTest", "LongTitlesTest").map { "com.astrovm.crosstune.$it" }
+/** The `--tests` patterns the command line asks of each task, by the task's name. */
+val askedTests: Map<String, List<String>> = buildMap<String, MutableList<String>> {
+    var task = ""
+    val args = gradle.startParameter.taskRequests.flatMap { it.args }
+    args.forEachIndexed { i, arg ->
+        when {
+            arg == "--tests" -> args.getOrNull(i + 1)?.let { getOrPut(task) { mutableListOf() } += it }
+            arg.startsWith("--tests=") -> getOrPut(task) { mutableListOf() } += arg.removePrefix("--tests=")
+            !arg.startsWith("-") && args.getOrNull(i - 1) != "--tests" -> task = arg.substringAfterLast(':')
+        }
+    }
+}
 tasks.register<Test>("growthTests") {
     group = "verification"
     description = "The tests that time how reading grows, alone in one fork, after the other tasks."
@@ -470,6 +482,19 @@ tasks.withType<Test>().configureEach {
     maxParallelForks = if (name != "growthTests" && Runtime.getRuntime().availableProcessors() >= 4 && memory >= (12L shl 30)) 2 else 1
     // GrowthTest checks the timing itself, so it runs only where the timing is judged.
     if (name != "growthTests") filter.excludeTestsMatching("com.astrovm.crosstune.GrowthTest")
+    // A timed test asked for by name here passes without its timing judged: say where it is judged.
+    val asked = askedTests[name].orEmpty()
+    val named = timedTests.map { it.substringAfterLast('.') }.filter { test ->
+        asked.any { pattern -> Regex("""\b$test\b""").containsMatchIn(pattern) || Regex(pattern.split("*").joinToString(".*") { Regex.escape(it) }).matches(test) }
+    }
+    if (name != "growthTests" && named.isNotEmpty()) {
+        val said = "${named.joinToString()}: each text is read once here, and no timing is judged. Run :app:growthTests for the timing."
+        doFirst { logger.lifecycle(said) }
+    }
+    // Each task's growths (Growth.kt) go to a file of its own, emptied when it starts, so one run's stand alone.
+    val growthLog = layout.buildDirectory.file("growth/$name.tsv").get().asFile
+    systemProperty("crosstune.growthLog", growthLog.path)
+    doFirst { growthLog.delete() }
     jvmArgs(robolectricJvmArgs)
     // MatcherCasesTest runs a sample of its matrix and made-up searches, as all of them take minutes: all of them with
     // -PmatcherFull, and only the matrix's songs -PmatcherSongs names, so what main opens can be written in parts.
@@ -495,7 +520,7 @@ tasks.withType<Test>().configureEach {
 }
 
 pitest {
-    pitestVersion.set("1.30.1")
+    pitestVersion.set(providers.gradleProperty("pitest.version"))
     targetClasses.set(providers.gradleProperty("mutateClasses").map { it.split(",") }.orElse(listOf("com.astrovm.crosstune.*")))
     providers.gradleProperty("mutateTests").orNull?.let { targetTests.set(it.split(",")) }
     providers.gradleProperty("mutateLines").orNull?.let { features.set(listOf("+CHANGED(file[$it])")) }

@@ -9,7 +9,8 @@ import java.lang.management.ManagementFactory
  * four times the text takes about 4 times the work, and a reader that looks on to the end from each place 16 times
  * as much. Past [MARGIN] times as much, twice the one and half the other, is out of step. Work that is counted is held to
  * [COUNTED_MARGIN], as a count has no noise: so a reader that does time squared on only part of its work is out of
- * step too, when that part is more than a few hundredths of it. Timed, it has to be over a third of it (Issue #1003).
+ * step too, when that part, at the shorter length, is over 1/23 of the linear part. Timed, it has to be over half of
+ * it (Issue #1003).
  *
  * The work is counted where it can be, as the letters a pattern looks at, which no machine changes. Where it can't,
  * it's the thread's own time on the processor, which work beside it on the machine doesn't add to. Each text is
@@ -22,8 +23,8 @@ import java.lang.management.ManagementFactory
  * measured again after a pause, up to [AGAIN] times, with the best of each text kept. Noise only adds time: a reader in
  * step comes back in step once the machine is quiet, and one out of step is out of step each time.
  *
- * Each pair's growth goes to `build/growth.tsv`, by test and text, with how many times it was measured and its growth
- * the first time, so how near the line each one is can be seen.
+ * Each pair's growth goes to `build/growth/TASK.tsv`, emptied when the Gradle task starts, by test and text, with how
+ * many times it was measured and its growth the first time, so how near the line each one is can be seen.
  */
 internal object Growth {
     /**
@@ -40,7 +41,8 @@ internal object Growth {
 
     /**
      * As [MARGIN], for work counted. The app's patterns, counted on 14,208 texts, grew 4.03 times at most. Work that
-     * grows linearly, with a part that grows squared, grows past this once that part is over 1/23 of the rest.
+     * grows linearly, with a part that grows squared, grows past this once that part, at the shorter length, is over 1/23
+     * of the linear part: 4(1 + 4f) / (1 + f) is 4.5 at f = 1/23, and 8 at f = 1/2.
      */
     const val COUNTED_MARGIN = 4.5
 
@@ -172,6 +174,6 @@ internal object Growth {
     }
 
     private val threads = ManagementFactory.getThreadMXBean()
-    private val log = File("build/growth.tsv")
+    private val log = File(System.getProperty("crosstune.growthLog") ?: "build/growth.tsv")
     private val spaces = Regex("\\s")
 }
