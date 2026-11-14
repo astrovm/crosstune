@@ -535,7 +535,8 @@ class MainViewModelTest {
         val heardAt = SystemClock.elapsedRealtime()
         val ears = EarsOnThePhone(heardSong())
         radioModel(ears, lyricsFinder = finder).playingBarInSight(true)
-        idle()
+        // The words are looked for on real threads, with timeouts on a real clock up to 15 s: the next listen is set once they're done.
+        until("set the next listen", withinMs = 30_000) { shadowOf(Looper.getMainLooper()).nextScheduledTaskTime.toMillis() - SystemClock.uptimeMillis() > MainViewModel.BY_EAR_SOONEST_MS }
         assertEquals(1, ears.asked.size)
         val lookupMs = SystemClock.elapsedRealtime() - heardAt
         assertEquals(10_000L, lookupMs)
@@ -1062,9 +1063,9 @@ class MainViewModelTest {
         assertNull(model.uiState.savedLines.single().startMs)
     }
 
-    /** Idles until [done] holds, since the account is read and the browser answered on real threads. */
-    private fun until(what: String, done: () -> Boolean) {
-        val end = System.currentTimeMillis() + 10_000
+    /** Idles until [done] holds, within [withinMs] of real time, since the account is read and the browser answered on real threads. */
+    private fun until(what: String, withinMs: Long = 10_000, done: () -> Boolean) {
+        val end = System.currentTimeMillis() + withinMs
         while (!done()) {
             check(System.currentTimeMillis() < end) { "Never $what" }
             idle()
