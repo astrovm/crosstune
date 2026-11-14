@@ -76,6 +76,7 @@ Where each feature starts:
 - Tapping a disabled Compose node does nothing: wait for `isEnabled()` first.
 - The fakes answer at once, on `Dispatchers.Unconfined`, so loading states and late answers never show. To test one, hold the fake's answer (a `CountDownLatch` in its handler) until the test has looked.
 - When the focused node goes away, focus can land anywhere. Assert focus on something that stays.
+- Compose's `waitForIdle` and `runOnIdle` wait 2 s for a resumed screen when none is: before one opens, or once it's stopped. There, use `settle(activity)` (`ActivityTeardown.kt`).
 - Kover never sees an interface's default bodies run, as Kotlin calls them another way. Keep interface members abstract.
 
 ## Taste

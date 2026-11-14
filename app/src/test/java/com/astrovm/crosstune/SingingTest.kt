@@ -1076,7 +1076,7 @@ class SingingTest {
         waitUntil { singing.hears == 1 }
         controller!!.pause().stop()
         heard.complete(sung(SHIFT_MS))
-        composeRule.waitForIdle()
+        composeRule.settle(controller!!.get())
         assertFalse(model().uiState.lyricsSynced)
         singing.answer = { sung(SHIFT_MS) }
         controller!!.start().resume()

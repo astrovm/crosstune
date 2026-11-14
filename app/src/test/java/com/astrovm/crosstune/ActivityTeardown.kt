@@ -1,6 +1,9 @@
 package com.astrovm.crosstune
 
 import android.os.Looper
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.junit4.ComposeTestRule
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -24,4 +27,13 @@ internal fun ActivityController<MainActivity>.destroyAndSettle(timeoutMs: Long =
         Thread.sleep(10L)
     }
     assertTrue("the screen's work was still going ${timeoutMs}ms after it closed", work?.isCompleted != false)
+}
+
+/**
+ * The main thread's work run, and Compose's too while [activity] is resumed. Compose waits only for a screen that is,
+ * and with none it waits 2 s for one to come: before a screen opens, and once one is stopped. On CI that was 4 minutes
+ * of each run, measured with JFR in the test forks.
+ */
+internal fun ComposeTestRule.settle(activity: ComponentActivity?) {
+    if (activity?.lifecycle?.currentState == Lifecycle.State.RESUMED) waitForIdle() else shadowOf(Looper.getMainLooper()).idle()
 }

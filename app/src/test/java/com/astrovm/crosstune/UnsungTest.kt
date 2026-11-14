@@ -142,7 +142,8 @@ class UnsungTest {
     /** The music app plays the song, or pauses it. */
     private fun plays(playing: Boolean = true) {
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = playing), "YouTube Music", canSeek = true)
-        composeRule.waitForIdle()
+        // Often before the screen opens.
+        composeRule.settle(controller?.get())
     }
 
     /** The song's words looked for while it plays, till it's said to have none, as [shown] says. */
