@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.time.Duration
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -325,8 +326,11 @@ class MainViewModelTest {
         /** How many times the microphone listened for a song nearby, rather than to what the phone plays, and what it heard. */
         var nearby = 0
         var heardNearby: Heard = Heard.Nothing
+        /** Holds a listen for a song nearby till it's completed. */
+        var holdNearby: CompletableDeferred<Unit>? = null
         override suspend fun listen(): Heard {
             nearby++
+            holdNearby?.await()
             return heardNearby
         }
         override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
@@ -597,6 +601,133 @@ class MainViewModelTest {
         away.openPlayingUnnamed()
         idle()
         assertNull(away.uiState.result)
+    }
+
+    @Test
+    fun anotherStationIsListenedToWithTheRestsFromTheShortestAgain() {
+        val playback = FakePlayback()
+        val ears = EarsOnThePhone(Heard.Nothing)
+        val model = radioModel(ears, playback)
+        model.playingBarInSight(true)
+        idle()
+        pass(MainViewModel.BY_EAR_RETRY_MS)
+        pass(MainViewModel.BY_EAR_RETRY_MS * 2)
+        assertEquals(3, ears.asked.size)
+        // Talk on one station says nothing of the next: it's listened to at once, then after the shortest rest.
+        playback.unnamed.value = station.copy(name = "Fake FM")
+        idle()
+        assertEquals(4, ears.asked.size)
+        pass(MainViewModel.BY_EAR_RETRY_MS)
+        assertEquals(5, ears.asked.size)
+    }
+
+    @Test
+    fun aListenByHandHasTheMicrophoneAloneThoughTheStationChangesMeanwhile() {
+        val playback = FakePlayback()
+        val ears = EarsOnThePhone(Heard.Nothing)
+        val model = radioModel(ears, playback)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(1, ears.asked.size)
+        val hold = CompletableDeferred<Unit>()
+        ears.holdNearby = hold
+        model.listen()
+        idle()
+        assertTrue(model.uiState.listening)
+        // Another station while it listens: no listen by ear opens the microphone a second time.
+        playback.unnamed.value = station.copy(name = "Fake FM")
+        idle()
+        assertEquals(1, ears.asked.size)
+        hold.complete(Unit)
+        idle()
+        // The bar back in sight, the new station is listened to.
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(2, ears.asked.size)
+    }
+
+    /** Takes [takesMs] to hear [heard], timed from when it began to listen, as a recording is. */
+    private class SlowEars(val takesMs: Long, val heard: Heard.Song) : SongHearing {
+        override suspend fun listen(): Heard = Heard.Nothing
+        override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
+            val from = SystemClock.elapsedRealtime()
+            delay(takesMs)
+            return heard.copy(startedAtMs = from)
+        }
+    }
+
+    @Test
+    fun aSongHeardGoesAtItsEndFromWhenTheListenBeganNotWhenItEnded() {
+        // 150 s of it left when the listen began, which took 10 s.
+        val model = radioModel(SlowEars(10_000, heardSong()))
+        model.playingBarInSight(true)
+        pass(10_000)
+        assertNotNull(model.uiState.playingUnnamed?.heard)
+        pass(139_999)
+        assertNotNull(model.uiState.playingUnnamed?.heard)
+        pass(1)
+        assertEquals(PlayingUnnamed(station), model.uiState.playingUnnamed)
+    }
+
+    /** 600 s of it left as it's heard now: listened to again sooner, at the longest rest. */
+    private fun longSong() = heardSong(lengthMs = 650_000)
+
+    @Test
+    fun aLongSongHeardStaysTillItsEndThroughAFailedListen() {
+        val long = longSong()
+        val model = radioModel(EarsOnThePhone(long, Heard.Failed(AppError.NETWORK)))
+        model.playingBarInSight(true)
+        idle()
+        pass(MainViewModel.BY_EAR_LATEST_MS)
+        // That listen failed, which says nothing of the song: it stays till its end, to the moment.
+        assertEquals(long, model.uiState.playingUnnamed?.heard)
+        pass(600_000 - MainViewModel.BY_EAR_LATEST_MS - 1)
+        assertEquals(long, model.uiState.playingUnnamed?.heard)
+        pass(1)
+        assertEquals(PlayingUnnamed(station), model.uiState.playingUnnamed)
+    }
+
+    @Test
+    fun aLongSongHeardGoesForTalkHeardBeforeItsEnd() {
+        // No song plays, so none is shown, though it had a while left.
+        val model = radioModel(EarsOnThePhone(longSong(), Heard.Nothing))
+        model.playingBarInSight(true)
+        idle()
+        pass(MainViewModel.BY_EAR_LATEST_MS)
+        assertEquals(PlayingUnnamed(station), model.uiState.playingUnnamed)
+    }
+
+    @Test
+    fun anotherSongHeardBeforeTheFirstsEndStaysTillItsOwn() {
+        // Timed from when it was heard, 360 s in: its end is at 960 s, the first one's at 600 s.
+        val next = Heard.Song(MusicMetadata("Other Fake Song", "Fake Artist", lengthMs = 650_000), "5678", 50_000, null)
+        val model = radioModel(EarsOnThePhone(longSong(), next, Heard.Failed(AppError.NETWORK)))
+        model.playingBarInSight(true)
+        idle()
+        pass(600_000)
+        assertEquals(next, model.uiState.playingUnnamed?.heard)
+        pass(MainViewModel.BY_EAR_LATEST_MS - 1)
+        assertEquals(next, model.uiState.playingUnnamed?.heard)
+        pass(1)
+        assertEquals(PlayingUnnamed(station), model.uiState.playingUnnamed)
+    }
+
+    @Test
+    fun backInSightMidRestTheNextListenIsOnTime() {
+        val ears = EarsOnThePhone(Heard.Nothing)
+        val model = radioModel(ears)
+        model.playingBarInSight(true)
+        idle()
+        // Out of sight half a second into the rest after nothing was heard, and back at once.
+        pass(500)
+        model.playingBarInSight(false)
+        idle()
+        model.playingBarInSight(true)
+        idle()
+        pass(MainViewModel.BY_EAR_RETRY_MS - 501)
+        assertEquals(1, ears.asked.size)
+        pass(1)
+        assertEquals(2, ears.asked.size)
     }
 
     @Test

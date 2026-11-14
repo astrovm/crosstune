@@ -46,6 +46,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertNotNull
+import android.app.AppOpsManager
+import android.os.Build
 import android.os.Looper
 import android.os.PowerManager
 import android.Manifest
@@ -297,6 +299,41 @@ class ListeningTest {
         composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(HistoryStore(prefs()).load().none { it.metadata.title == "RTP Antena 2" })
+    }
+
+    /**
+     * A station named by ear, with the microphone allowed, that heard no song: Shizuku or root then
+     * shares the phone's own sound, after a second. Returns how many times it was listened to.
+     */
+    private fun listensWhenTheSoundIsShared(): Int {
+        allowMicrophone()
+        val radio = FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "Fake FM") }
+        MainActivity.playbackFactory = { radio }
+        var listens = 0
+        MainActivity.hearingFactory = {
+            SongHearing {
+                listens++
+                Heard.Nothing
+            }
+        }
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        PhoneAppOps.projectMedia = AppOpsManager.MODE_ALLOWED
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        return listens
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.Q])
+    fun fromAndroid10TheStationIsListenedToAgainAtOnceWhenItsSoundIsShared() {
+        assertEquals(2, listensWhenTheSoundIsShared())
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.P])
+    fun beforeAndroid10SharingTheSoundIsNoNewWayToHear() {
+        // Android 9 can't capture what other apps play, shared or not.
+        assertEquals(1, listensWhenTheSoundIsShared())
     }
 
     @Test
