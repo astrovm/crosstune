@@ -144,7 +144,7 @@ class SleepTimerTest {
     @Test
     fun aStationCastToASpeakerIsPausedThere() {
         val station = stationPlays()
-        phone.unnamed.value = station.copy(away = true)
+        phone.unnamed.value = station.copy(where = Place.ELSEWHERE)
         timer.after(15)
         passes(15 * 60_000)
         assertEquals(listOf(false), phone.plays)
@@ -155,7 +155,7 @@ class SleepTimerTest {
     fun aStationOnThePhoneIsPausedNotASongOnAComputer() {
         val station = stationPlays()
         phone.onThePhone = Heard.Song(MusicMetadata("Fake Song", "Fake Band"), null, app = "org.kde.kdeconnect_tp")
-        phone.songElsewhere = true
+        phone.songWhere = Place.ELSEWHERE
         timer.after(15)
         passes(15 * 60_000)
         assertEquals(listOf(false), phone.plays)
@@ -190,6 +190,25 @@ class SleepTimerTest {
         passes(9_499)
         assertTrue(phone.plays.isEmpty())
         passes(1)
+        assertEquals(listOf(false), phone.plays)
+        assertEquals(listOf<String?>(file.app), phone.playedApps)
+    }
+
+    @Test
+    fun aFileWithNoSongNamedIsStillPausedAsItEndsOnceItsAppNamesWhoSingsIt() {
+        val file = Unnamed("com.example.player", "Fake Player", "Fake Song")
+        phone.onThePhone = null
+        phone.unnamed.value = file
+        phone.appPlaying[file.app] = MutableStateFlow(Following(PlaybackClock(10_000, SystemClock.elapsedRealtime(), 1f, true), "Fake Player", canSeek = true, appPackage = file.app, durationMs = 200_000))
+        timer.afterSong(file.played, file.app)
+        passes(0)
+        // Mid-song, the app names who sings it: the same song plays on, and the timer still waits for its end.
+        phone.onThePhone = Heard.Song(MusicMetadata("Fake Song", "Fake Band"), null, app = file.app)
+        phone.unnamed.value = null
+        passes(180_000)
+        assertTrue(phone.plays.isEmpty())
+        assertEquals(Sleep(), timer.set.value)
+        passes(9_500)
         assertEquals(listOf(false), phone.plays)
         assertEquals(listOf<String?>(file.app), phone.playedApps)
     }

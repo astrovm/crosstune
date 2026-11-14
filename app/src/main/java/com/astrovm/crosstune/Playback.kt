@@ -462,27 +462,35 @@ internal class MediaSessionPlayback(
         controllers.filter { (app == null || it.packageName == app) && it.has(song, app) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
 
     /**
-     * Whether it has [song], by its name. What names no song asked for, e.g. a station or a file with no title,
-     * is only asked of [app] by package, by just what it's called, even nothing: so a station's buttons reach it
-     * whatever it's called, and never the station before, as "Los 40" and "Los 40 Classic". A song is had by an
-     * app that names it with no artist, as one that sends none has it, but only by its whole title: never by a
-     * station that shares its words, as "Hotel California" by Eagles and the station "Hotel California Radio".
+     * Whether it has [song], by its name. What names no song, asked for as [Unnamed.played], e.g. a station or a
+     * file with no title, is only asked of [app] by package, by just what it's called, even nothing: so a station's
+     * buttons reach it whatever it's called, and never the station before, as "Los 40" and "Los 40 Classic". Its
+     * app may name who sings it later on, and still has it. A song, even one with no artist, as a song shared from
+     * Google is, is had by its name, as any app names it. An app that names no song, as one that sends no artist,
+     * has it by its title, "01 Fake Song" or "Fake Song (Live)" too, but never by words it shares: the station
+     * "Hotel California Radio" never has "Hotel California" by Eagles.
      */
     private fun MediaController.has(song: MusicMetadata, app: String?): Boolean {
         val (title, artist) = calls()
-        if (Songless.namesNoSong(song.title, song.artist)) return app != null && title == song.title && artist == song.artist
-        if (Songless.namesNoSong(title, artist)) return SongNames.same(title, song.title) && plays(song)
-        return plays(song)
+        val songless = Songless.namesNoSong(metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), artist)
+        if (song.unnamed) return app != null && title == song.title && (artist == song.artist || !songless)
+        return plays(song, byWords = !songless)
     }
 
-    /** What it calls what it plays, its title, "" with none, and its artist: as what names no song is shown and asked for by. */
-    private fun MediaController.calls(): Pair<String, String> =
-        metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }.orEmpty() to metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+    /**
+     * What it calls what it plays, as what names no song is shown and asked for by: its title, read as Crosstune
+     * once read a song's, "Fake Song" from "01 Fake Song.mp3", "" with none; and its artist, as the app has it.
+     */
+    private fun MediaController.calls(): Pair<String, String> {
+        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }.orEmpty()
+        val read = said(this)?.takeIf { it.artist.isBlank() }?.title?.let(SongNames::withoutTrackNumber)?.takeIf { it.isNotBlank() }
+        return (read ?: title) to metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+    }
 
     /** What it plays, as what names no song is shown. */
     private fun MediaController.unnamed(): Unnamed {
         val (title, artist) = calls()
-        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let(::coverOf), artist, away = remote(), said = said(this) != null)
+        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let(::coverOf), artist, where = place(), said = said(this) != null)
     }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
@@ -703,7 +711,7 @@ internal class MediaSessionPlayback(
             audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).all { it.type in ROOM_OUTPUTS }
 
     /**
-     * The apps playing now, nearest first. Without the user's say-so Android shows none, and says so by
+     * The apps playing now, in no order: [whatPlays] ranks them, by [playsFirst] alone. Without the user's say-so Android shows none, and says so by
      * throwing. An app may still say it plays long after it stopped, e.g. a browser tab left behind, so one
      * playing on the phone is only believed while the phone is playing something. Cast to a TV, or
      * played on a computer, the phone itself stays quiet.
@@ -713,7 +721,6 @@ internal class MediaSessionPlayback(
         val sounding = audio.isMusicActive
         return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
             .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() && (sounding || it.remote()) }
-            .sortedWith(nearestFirst)
     }
 
     /** What the app [packageName] is called, as Android shows it. */
@@ -1002,11 +1009,11 @@ internal class MediaSessionPlayback(
         return !isVideo() && length != null && song.lengthMs?.let { abs(it - length) > SAME_RECORDING_LENGTH_MS } == true
     }
 
-    /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)". */
-    private fun MediaController.plays(song: MusicMetadata): Boolean {
+    /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)"; see [SongNames.names] for [byWords]. */
+    private fun MediaController.plays(song: MusicMetadata, byWords: Boolean = true): Boolean {
         val playing = metadata ?: return false
         if (anotherRecording(playing, song)) return false
-        return SongNames.names(playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), song)
+        return SongNames.names(playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), song, byWords)
     }
 }
 

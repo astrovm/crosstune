@@ -535,25 +535,113 @@ class MainViewModelTest {
     @Test
     fun aSongHeardIsNeitherShownNorOpenedOnceItShouldBeOver() {
         val ears = EarsOnThePhone(heardSong(), Heard.Failed(AppError.NETWORK))
-        val model = radioModel(ears)
+        // The station's app has what it plays, as a player on it follows it.
+        val model = radioModel(ears, playback = FakePlayback().apply { playing.value = following(app = station.app) })
         model.playingBarInSight(true)
         idle()
         assertNotNull(model.uiState.playingUnnamed?.heard)
         // Away from Crosstune for 20 minutes, while the station played on.
         model.playingBarInSight(false)
         pass(20 * 60_000L)
-        // Back, the bar shows the station alone at once, before the next listen answers, and a tap opens nothing.
+        // Back, the bar shows the station alone, and the next listen fails: the old song isn't shown again.
         model.playingBarInSight(true)
-        assertEquals(PlayingUnnamed(station), model.uiState.playingUnnamed)
-        model.openPlayingUnnamed()
-        assertNull(model.uiState.result)
-        // That listen fails: the old song isn't shown again.
         idle()
         assertEquals(2, ears.asked.size)
-        assertEquals(PlayingUnnamed(station), model.uiState.playingUnnamed)
+        assertEquals(station, model.uiState.playingUnnamed?.playing)
+        assertNull(model.uiState.playingUnnamed?.heard)
+        // A tap never opens the old song: as nothing named it, it opens the station by its name, as a song.
         model.openPlayingUnnamed()
         idle()
+        assertEquals(MusicMetadata("RTP Antena 2", "", artworkUrl = station.artworkUrl), model.uiState.result)
+        assertEquals(MusicMetadata("RTP Antena 2", "", artworkUrl = station.artworkUrl), model.uiState.player?.song)
+    }
+
+    @Test
+    fun aTitleWithNoArtistOpensAsASongOnATapOnceNothingCanNameIt() {
+        // A file named by its title alone; nothing can hear it: no microphone allowed, nor the phone's own sound.
+        // Its listen hasn't answered yet: it can't name it, as it can't hear it. It has its cover, so none is looked up.
+        val file = Unnamed("com.example.player", "Fake Player", "Fake Song", "https://example.com/cover.png")
+        val unanswered = SongHearing { awaitCancellation() }
+        val heardBy = { mayCapture: Boolean ->
+            val playback = FakePlayback().apply { access = true; unnamed.value = file; playing.value = following(app = file.app) }
+            model(playback = playback, listener = unanswered, mayCapture = { mayCapture }).also { model ->
+                model.viewModelScope.launch { model.watchPlayingNow() }
+                model.playingBarInSight(true)
+                idle()
+            }
+        }
+        // Able to hear it, a tap has the player on it as its app names it, while it's listened to.
+        val hearing = heardBy(true)
+        hearing.openPlayingUnnamed()
+        idle()
+        assertEquals(true, hearing.uiState.player?.songless)
+        val model = heardBy(false)
+        // Nothing opens by itself.
         assertNull(model.uiState.result)
+        assertNull(model.uiState.player)
+        // A tap opens it as Crosstune once took it, a song by its title: its card, and its player, which follows it.
+        model.openPlayingUnnamed()
+        idle()
+        assertEquals(MusicMetadata("Fake Song", "", artworkUrl = file.artworkUrl), model.uiState.player?.song)
+        assertEquals(false, model.uiState.player?.songless)
+        assertNotNull(model.uiState.player?.following)
+        assertEquals(MusicMetadata("Fake Song", "", artworkUrl = file.artworkUrl), model.uiState.result)
+        // What says nothing a song could be read from, as a vlog, only ever has the player on what the app plays.
+        val vlog = Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel", said = false)
+        val video = model(playback = FakePlayback().apply { access = true; unnamed.value = vlog })
+        video.viewModelScope.launch { video.watchPlayingNow() }
+        video.playingBarInSight(true)
+        idle()
+        video.openPlayingUnnamed()
+        idle()
+        assertEquals(true, video.uiState.player?.songless)
+        assertNull(video.uiState.result)
+    }
+
+    @Test
+    fun aStationOpensAsASongOnATapOnlyOnceItsListenNamedNothingOrItPlaysAway() {
+        val ears = EarsOnThePhone(Heard.Nothing)
+        // The station's app has what it plays, as its player follows it.
+        val model = radioModel(ears, playback = FakePlayback().apply { playing.value = following(app = station.app) }, mayCapture = { true })
+        // It can be heard, and isn't listened to yet: a tap has the player on the station.
+        model.openPlayingUnnamed()
+        assertEquals(true, model.uiState.player?.songless)
+        model.closePlayer()
+        // Listened to, it names nothing: a tap opens it as a song by its name.
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(1, ears.asked.size)
+        model.openPlayingUnnamed()
+        idle()
+        assertEquals(MusicMetadata("RTP Antena 2", "", artworkUrl = station.artworkUrl), model.uiState.player?.song)
+        // Cast to a speaker, it's never listened to, so a tap opens it as a song at once.
+        val playback = FakePlayback().apply { playing.value = following(app = station.app) }
+        val away = radioModel(EarsOnThePhone(heardSong()), playback = playback, mayCapture = { true })
+        playback.unnamed.value = station.copy(where = Place.ELSEWHERE)
+        away.playingBarInSight(true)
+        idle()
+        away.openPlayingUnnamed()
+        idle()
+        assertEquals(false, away.uiState.player?.songless)
+    }
+
+    @Test
+    fun aMusicAppsItemCastToATvComesBeforeANewerSongOnAComputer() {
+        val episode = Unnamed("com.spotify.music", "Spotify", "Fake Episode", where = Place.CAST)
+        val computer = MusicMetadata("Fake Song", "Fake Band")
+        val playback = FakePlayback().apply {
+            access = true
+            unnamed.value = episode
+            onThePhone = Heard.Song(computer, null, app = "org.kde.kdeconnect_tp")
+            songWhere = Place.ELSEWHERE
+            songAt = 5
+        }
+        val model = model(playback = playback)
+        model.viewModelScope.launch { model.watchPlayingNow() }
+        idle()
+        assertEquals(WhatPlays.Nameless(episode), playback.whatPlays())
+        assertEquals(episode, model.uiState.playingUnnamed?.playing)
+        assertNull(model.uiState.playingNow)
     }
 
     @Test
@@ -1146,7 +1234,7 @@ class MainViewModelTest {
         // Cast to a speaker, it's what played.
         val cast = FakePlayback().apply { playing.value = following(app = station.app) }
         val model = radioModel(EarsOnThePhone(Heard.Nothing), cast)
-        cast.unnamed.value = station.copy(away = true)
+        cast.unnamed.value = station.copy(where = Place.ELSEWHERE)
         idle()
         assertEquals(true, model.uiState.playingUnnamed?.playing?.away)
         model.startPractice()
@@ -1156,7 +1244,7 @@ class MainViewModelTest {
         val both = FakePlayback().apply {
             playing.value = following(app = station.app)
             onThePhone = Heard.Song(MusicMetadata("Fake Song", "Fake Band"), null, app = "org.kde.kdeconnect_tp")
-            songElsewhere = true
+            songWhere = Place.ELSEWHERE
         }
         val other = radioModel(EarsOnThePhone(Heard.Nothing), both)
         other.startPractice()
@@ -1170,7 +1258,7 @@ class MainViewModelTest {
         val playback = FakePlayback().apply {
             playing.value = following(app = station.app)
             onThePhone = Heard.Song(computer, null, app = "org.kde.kdeconnect_tp")
-            songElsewhere = true
+            songWhere = Place.ELSEWHERE
         }
         val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
         assertNull(model.uiState.playingNow)
@@ -1193,7 +1281,7 @@ class MainViewModelTest {
         val vradio = following(app = station.app, skipNext = true)
         val playback = FakePlayback().apply { playing.value = vradio }
         val model = radioModel(ears, playback)
-        val away = station.copy(away = true)
+        val away = station.copy(where = Place.ELSEWHERE)
         playback.unnamed.value = away
         model.playingBarInSight(true)
         idle()
@@ -1239,6 +1327,26 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aSongsPlayerOpenedBeforeItsAppIsKnownIsTakenUpByWhatThatAppGoesOnTo() {
+        // The bar has the song before any app is seen to play it: its player opens for no app.
+        val playback = FakePlayback()
+        val model = playingModel(playback)
+        assertEquals(song, model.uiState.player?.song)
+        assertNull(model.uiState.player?.app)
+        // Then Spotify is seen to play it.
+        playback.playing.value = following()
+        idle()
+        assertEquals("com.spotify", model.uiState.player?.following?.appPackage)
+        // Spotify going on to an episode with no song named is the next one, as it's the app the song played in.
+        val episode = Unnamed("com.spotify", "Spotify", "Fake Episode")
+        playback.onThePhone = null
+        playback.unnamed.value = episode
+        idle()
+        assertEquals(episode.played, model.uiState.player?.song)
+        assertEquals(true, model.uiState.player?.songless)
+    }
+
+    @Test
     fun aVideoThatDoesntSayItsMusicComesAfterASongCastOrOnAComputer() {
         // A video that doesn't say it's music says nothing a song could be read from, though it has a name.
         val vlog = Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel", said = false)
@@ -1248,7 +1356,7 @@ class MainViewModelTest {
             unnamed.value = vlog
             unnamedAt = 2
             onThePhone = Heard.Song(computer, null, app = "org.kde.kdeconnect_tp")
-            songElsewhere = true
+            songWhere = Place.ELSEWHERE
         }
         val model = model(playback = playback)
         model.viewModelScope.launch { model.watchPlayingNow() }
@@ -1311,11 +1419,11 @@ class MainViewModelTest {
         val model = model(playback = playback)
         model.viewModelScope.launch { model.watchPlayingNow() }
         idle()
-        assertEquals(MusicMetadata("Fake Song", "<unknown>"), playback.followed.last())
+        assertEquals(MusicMetadata("Fake Song", "<unknown>", unnamed = true), playback.followed.last())
         model.openPlayingUnnamed()
         idle()
         assertEquals(true, model.uiState.player?.songless)
-        assertEquals(MusicMetadata("Fake Song", "<unknown>"), playback.followed.last())
+        assertEquals(MusicMetadata("Fake Song", "<unknown>", unnamed = true), playback.followed.last())
         assertEquals("com.example.player", playback.followedApps.last())
         // Its words aren't looked up, as "<unknown>" names no one.
         assertTrue(model.uiState.player?.lines.orEmpty().isEmpty())

@@ -371,6 +371,29 @@ internal object SongNames {
      */
     private val singAlong = Regex("""karaoke|カラオケ|\bmade popular by\b|\blyrics?\b|\bsing[- ]?along\b|\bminus one\b|\bbacking track\b""", RegexOption.IGNORE_CASE)
 
+    /** A track number before a file's title, "01 Fake Song" or "1. Fake Song", but not a name's own, "7 Rings". */
+    private val trackNumber = Regex("""^(?:0\d|\d{1,2}\.)\s+""")
+
+    /** What a name adds at its end in brackets: "(Live)", "[Explicit]", "(From "Fake Movie")". */
+    private val bracketedTag = Regex("""\s*[(\[][^()\[\]]*[)\]]$""")
+
+    /** The title a file names its song by, without the track number before it: "Fake Song" from "01 Fake Song". */
+    fun withoutTrackNumber(title: String): String = title.replace(trackNumber, "").ifBlank { title }
+
+    /** Whether [title], as a file or a store names a song, "01 Fake Song.mp3" or "Fake Song [Explicit]", is [song]'s. */
+    private fun sameAsAFileNamesIt(title: String, song: String): Boolean =
+        same(withoutBrackets(withoutTrackNumber(title.replace(MetadataParsers.audioExtension, ""))), withoutBrackets(song))
+
+    /** The name without what it adds in brackets, but what it adds after a dash: "Song (Live) [Explicit]" is "Song". */
+    private fun withoutBrackets(title: String): String {
+        var bare = title.trim()
+        while (true) {
+            val shorter = bare.replace(bracketedTag, "").trim()
+            if (shorter == bare || shorter.isEmpty()) return bare
+            bare = shorter
+        }
+    }
+
     /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
     fun bareTitle(title: String): String {
         var bare = title.trim()
@@ -393,13 +416,16 @@ internal object SongNames {
      * Whether what a player names by [title] and [artist] is [song]. A video's title names more, e.g.
      * "Artist - Song (Official Video)", and its channel may be named "Artist - Topic", or not be the
      * artist at all, when the title names them: "Police, The   Every Little Thing She Does Is Magic
-     * Audio Flac" by "keyloginhot".
+     * Audio Flac" by "keyloginhot". [byWords] off, the title is the song's, as a file or a store names it,
+     * "01 Fake Song.mp3" or "Fake Song [Explicit]", never one that shares its words: "Hotel California Radio"
+     * isn't "Hotel California".
      */
-    fun names(title: String, artist: String, song: MusicMetadata): Boolean {
+    fun names(title: String, artist: String, song: MusicMetadata, byWords: Boolean = true): Boolean {
         if (title.isBlank()) return false
         // Read as the song it names the way the song playing is named, e.g. "YOASOBI「アイドル」 Official Music Video".
         val named = MetadataParsers.youtubeVideo(title, artist)?.title
-        if (!(same(title, song.title) || wordsMatch(title, song.title) || named?.let { same(it, song.title) } == true)) return false
+        val near = if (byWords) wordsMatch(title, song.title) else sameAsAFileNamesIt(title, song.title)
+        if (!(same(title, song.title) || near || named?.let { same(it, song.title) } == true)) return false
         return artist.isBlank() || artistInside(artist, song.artist) || sameArtist(song.artist, artist) ||
             artistNames(song.artist).map(::words).any { it.isNotEmpty() && words(title).containsAll(it) }
     }

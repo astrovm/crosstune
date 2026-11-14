@@ -54,9 +54,15 @@ internal class FakePlayback : PlaybackSource {
     /** Each time the music was muted (true) or let be heard again (false). */
     val quiets: MutableList<Boolean> = CopyOnWriteArrayList()
     private val songs = MutableStateFlow<Heard.Song?>(null)
+
+    /** [onThePhone], as its app names it, which a follow reads apart from [songs], whose watchers a test counts. */
+    private val named = MutableStateFlow<Heard.Song?>(null)
     var onThePhone: Heard.Song?
         get() = songs.value
-        set(value) { songs.value = value }
+        set(value) {
+            songs.value = value
+            named.value = value
+        }
 
     override fun hasAccess() = access
 
@@ -87,20 +93,22 @@ internal class FakePlayback : PlaybackSource {
      * asked of plays, [app] or else the one followed, while it's there; any other app plays [song].
      */
     private fun followedAs(song: MusicMetadata, app: String?, flow: Flow<Following?>): Flow<Following?> =
-        combine(flow, unnamed) { following, now ->
-            following?.takeIf { has(now?.takeIf { (app ?: following.appPackage) == it.app }?.played, song, app) }
+        combine(flow, unnamed, named) { following, now, phone ->
+            following?.takeIf {
+                val asked = app ?: following.appPackage
+                has(now?.takeIf { it.app == asked }?.played, phone?.takeIf { asked != null && it.app == asked }?.metadata, song, app)
+            }
         }
 
     /**
-     * Whether an app that plays [there] has [song], as the real source has it: what names no song asked for, only
-     * of its [app], by just what it's called; a song, by its name, and by its whole title when [there] names no song.
-     * With nothing [there], the app plays [song].
+     * Whether an app that plays [there], what names no song, or the song it [names], has [song], as the real source
+     * has it: what names no song, asked for as [Unnamed.played], only of its [app], by just what it's called, or by
+     * its title once the app names who sings it; a song, by its title, never by words it shares. With nothing
+     * [there], the app plays [song].
      */
-    private fun has(there: MusicMetadata?, song: MusicMetadata, app: String?): Boolean {
-        if (Songless.namesNoSong(song.title, song.artist)) return app != null && there?.title == song.title && there.artist == song.artist
-        if (there == null) return true
-        if (Songless.namesNoSong(there.title, there.artist)) return SongNames.same(there.title, song.title) && SongNames.names(there.title, there.artist, song)
-        return SongNames.names(there.title, there.artist, song)
+    private fun has(there: MusicMetadata?, names: MusicMetadata?, song: MusicMetadata, app: String?): Boolean {
+        if (song.unnamed) return app != null && (there?.let { it.title == song.title && it.artist == song.artist } ?: (names?.title == song.title))
+        return there == null || SongNames.names(there.title, there.artist, song, byWords = false)
     }
 
     /** Whether what started isn't believed yet, as the phone's sound takes a moment to follow what an app says it plays. */
@@ -124,13 +132,12 @@ internal class FakePlayback : PlaybackSource {
 
     private fun playingOnly(unnamed: Unnamed?, following: Following?) = unnamed?.takeIf { following?.clock?.playing != false }
 
-    /** Whether [onThePhone] is a song another device plays, as KDE Connect shows a computer's. */
-    var songElsewhere = false
+    /** Where [onThePhone] plays: on the phone, cast to a TV by its music app, or on another device, as KDE Connect shows a computer's. */
+    var songWhere = Place.PHONE
 
     /**
      * When [onThePhone] and [unnamed] last said where they are, on their app's clock: of two in the same place, the
-     * one that said so last plays first. [unnamed] [Unnamed.away] is cast, which a station's app is ranked as another
-     * device's for, as Android has no music app to say it's the phone's.
+     * one that said so last plays first. [unnamed] plays [Unnamed.where] it says, as the real source has it.
      */
     var songAt = 0L
     var unnamedAt = 0L
@@ -141,9 +148,9 @@ internal class FakePlayback : PlaybackSource {
 
     // Ranked as the real source ranks them, by [playsFirst]; the song first when they tie.
     private fun ranked(song: Heard.Song?): WhatPlays? {
-        val named = song?.let { WhatPlays.Named(it) to Rank(true, if (songElsewhere) Place.ELSEWHERE else Place.PHONE, songAt) }
+        val named = song?.let { WhatPlays.Named(it) to Rank(true, songWhere, songAt) }
         val nameless = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value)?.let {
-            WhatPlays.Nameless(it) to Rank(it.said, if (it.away) Place.ELSEWHERE else Place.PHONE, unnamedAt)
+            WhatPlays.Nameless(it) to Rank(it.said, it.where, unnamedAt)
         }
         return listOfNotNull(named, nameless).minWithOrNull(compareBy(playsFirst) { it.second })?.first
     }

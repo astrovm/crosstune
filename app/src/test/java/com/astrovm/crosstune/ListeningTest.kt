@@ -272,6 +272,8 @@ class ListeningTest {
         MainActivity.playbackFactory = { radio }
         val heard = kotlinx.coroutines.CompletableDeferred<Heard>()
         MainActivity.hearingFactory = { SongHearing { heard.await() } }
+        // It can be heard, by the microphone, and is being listened to.
+        allowMicrophone()
         launch()
         waitUntil(TIMEOUT_MS) { barShown() }
         assertTrue(shown("RTP Antena 2"))

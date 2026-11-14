@@ -269,6 +269,9 @@ internal class MainViewModel(
     /** What the last listen by ear could hear with, as [earsNow] has it, when it named no song; null after one that did. */
     private var unheardWith: List<Boolean>? = null
 
+    /** Whether the last listen by ear to what an app plays now, with no song named, named none: talk, a song Shazam doesn't know, or a failure. */
+    private var unheardByEar = false
+
     /** The work naming a song by ear, which a listen asked for waits on, so the microphone isn't opened twice. */
     private var byEar: Job? = null
 
@@ -1156,6 +1159,7 @@ internal class MainViewModel(
                 // Started, paused or played again, it's listened to at once once it plays.
                 nextByEarAtMs = 0L
                 quietByEar = 0
+                unheardByEar = false
                 liveUnnamed = unnamed
                 showUnnamed()
             }
@@ -1186,6 +1190,7 @@ internal class MainViewModel(
                 listening.join()
                 listening.takeUnless { it.isCancelled }?.await()
             } ?: continue
+            unheardByEar = heard !is Heard.Song
             val wait = when (heard) {
                 is Heard.Song -> {
                     quietByEar = 0
@@ -1243,12 +1248,26 @@ internal class MainViewModel(
     }
 
     /**
-     * Shows the song heard in what an app plays, as a pasted link would, when it's safe to: else, or
-     * with none heard, the player on what the app plays, as it names it.
+     * Shows the song heard in what an app plays, as a pasted link would, when it's safe to. With none heard
+     * when it can't be named by ear, what Crosstune once took it for, a song by its title alone, opens as
+     * that did, card and player, as the user asks for it, never by itself. Else, the player on what the app
+     * plays, as it names it.
      */
     fun openPlayingUnnamed() {
-        val heard = uiState.playingUnnamed?.heard?.takeIf(::opens) ?: return peekPlayingUnnamed()
-        showHeard(heard, lyrics = false, byPhone = true)
+        val playing = uiState.playingUnnamed ?: return
+        playing.heard?.takeIf(::opens)?.let { heard -> return showHeard(heard, lyrics = false, byPhone = true) }
+        val song = playing.playing.asSong?.takeIf { cantName(playing.playing) } ?: return peekPlayingUnnamed()
+        if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
+        if (uiState.player?.song != song) openPlayer(song, playing.playing.app, played = true)
+    }
+
+    /**
+     * Whether what [unnamed] plays can't be named by ear now: it plays away from the phone, nothing can hear it,
+     * neither the phone's own sound nor the microphone, or the last listen to it named no song.
+     */
+    private fun cantName(unnamed: Unnamed): Boolean {
+        val ears = mayCapture() || uiState.phone != Phone.TV && mayCalibrate() && playback?.playsAloud() == true
+        return unnamed.away || !ears || unheardByEar
     }
 
     /**
