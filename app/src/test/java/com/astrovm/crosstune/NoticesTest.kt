@@ -109,10 +109,9 @@ class NoticesTest {
         assertEquals(before.size + 1 + jmdict.size, licenseWorkIndex("projectM", open, units))
         LicenseSplits.clear()
         val notice = Notices.all.first { it.name == "JMdict" }
-        assertEquals(licenseUnits(Notices.text(notice)), LicenseSplits.make(notice))
-        assertEquals(1, LicenseSplits.times["JMdict"])
         LicenseSplits.make(notice)
-        assertEquals(1, LicenseSplits.times["JMdict"])
+        assertEquals(licenseUnits(Notices.text(notice)), LicenseSplits.of("JMdict"))
+        LicenseSplits.clear()
     }
 
     @Test

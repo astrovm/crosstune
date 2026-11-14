@@ -213,14 +213,14 @@ class LicensesTest {
     @Test
     fun openingAnotherWorkDoesNotSplitAnOpenOneAgain() {
         LicenseSplits.clear()
+        LicenseSplits.split = { notice -> splits += notice.name to Thread.currentThread(); split(notice) }
         openLicenses()
         work("projectM").performClick()
         composeRule.waitForIdle()
-        assertEquals(1, LicenseSplits.times["projectM"])
+        assertEquals(listOf("projectM"), splitWorks())
         work("JMdict").performClick()
         composeRule.waitForIdle()
-        assertEquals(1, LicenseSplits.times["projectM"])
-        assertEquals(1, LicenseSplits.times["JMdict"])
+        assertEquals(listOf("projectM", "JMdict"), splitWorks())
     }
 
     @Test

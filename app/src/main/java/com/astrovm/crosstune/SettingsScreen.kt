@@ -89,7 +89,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -761,15 +760,15 @@ private fun LicensesPage(onBack: () -> Unit) {
     var open by rememberSaveable { mutableStateOf(listOf<String>()) }
     var focusedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var entered by rememberSaveable { mutableStateOf(false) }
-    // Bumps once a licence has been split, so the page draws the pieces it kept. The split itself stays
-    // off this pass: the longest text is hundreds of thousands of characters.
-    var splitGeneration by remember { mutableIntStateOf(0) }
+    // A new one once a licence has been split, so the page draws the pieces it kept. The split itself
+    // stays off this pass: the longest text is hundreds of thousands of characters.
+    var splitDone by remember { mutableStateOf(Any()) }
     val requesters = remember { mutableMapOf<String, FocusRequester>() }
     // Made again with a licence open after Android stopped the app, its pieces are gone. The list stays
     // empty until they are split again, below: with fewer rows it would lose where it was scrolled to.
     // Turned, the pieces are kept, so the page draws at once.
     var restoring by remember { mutableStateOf(open.any { LicenseSplits.of(it) == null }) }
-    val units = remember(open, splitGeneration) { open.mapNotNull { name -> LicenseSplits.of(name)?.let { name to it } }.toMap() }
+    val units = remember(open, splitDone) { open.mapNotNull { name -> LicenseSplits.of(name)?.let { name to it } }.toMap() }
     // Crosstune's own words in the notices, in the app's language, which picks the file; licence texts stay as published.
     val tag = stringResource(R.string.language_tag)
     val words = remember(tag) { Notices.words(tag) }
@@ -806,7 +805,7 @@ private fun LicensesPage(onBack: () -> Unit) {
         val openNotices = Notices.all.filter { it.name in open }
         if (openNotices.any { LicenseSplits.of(it.name) == null }) {
             withContext(MainActivity.systemDispatcher) { openNotices.forEach { LicenseSplits.make(it) } }
-            splitGeneration++
+            splitDone = Any()
         }
         restoring = false
     }
@@ -952,17 +951,12 @@ internal data class LicenseUnit(val text: String, val starts: Boolean, val ends:
 /**
  * Each work's licence, split once and kept. Opening another work must not split this one again, and
  * the split stays off the pass that draws the page: one text is about half a million characters.
- * [times] counts the splits, for that test.
  */
 internal object LicenseSplits {
     private val pieces = HashMap<String, List<LicenseUnit>>()
-    val times = mutableMapOf<String, Int>()
 
-    /** One lock for each work, so two passes that ask for the same one at once read it once. */
-    private val making = HashMap<String, Any>()
-
-    /** Bumped by [clear], so a split that ends after the page was left isn't kept. */
-    private var kept = 0
+    /** A new one at each [clear], so a split that ends after the page was left isn't kept. */
+    private var kept = Any()
 
     fun of(name: String): List<LicenseUnit>? = synchronized(pieces) { pieces[name] }
 
@@ -970,27 +964,23 @@ internal object LicenseSplits {
     @VisibleForTesting
     var split: (Notice) -> List<LicenseUnit> = { licenseUnits(Notices.text(it)) }
 
-    fun make(notice: Notice): List<LicenseUnit> {
-        val lock = synchronized(pieces) { pieces[notice.name]?.let { return it }; making.getOrPut(notice.name) { Any() } }
-        return synchronized(lock) {
-            val asked = synchronized(pieces) { pieces[notice.name]?.let { return it }; kept }
+    /**
+     * Splits [notice]'s licence and keeps it, unless it's kept already. The page's notices are the same
+     * objects for as long as the app runs, so each is the lock for its own work: two passes that ask
+     * for the same one at once read it once.
+     */
+    fun make(notice: Notice) {
+        synchronized(notice) {
+            val asked = synchronized(pieces) { if (notice.name in pieces) return; kept }
             val made = split(notice)
-            synchronized(pieces) {
-                if (kept == asked) {
-                    times[notice.name] = (times[notice.name] ?: 0) + 1
-                    pieces[notice.name] = made
-                }
-            }
-            made
+            synchronized(pieces) { if (kept === asked) pieces[notice.name] = made }
         }
     }
 
     fun clear() {
         synchronized(pieces) {
             pieces.clear()
-            times.clear()
-            making.clear()
-            kept++
+            kept = Any()
         }
     }
 }

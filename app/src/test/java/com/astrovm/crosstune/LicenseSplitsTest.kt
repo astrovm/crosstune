@@ -41,18 +41,19 @@ class LicenseSplitsTest {
         }
         val threads = Executors.newFixedThreadPool(2)
         try {
-            val first = threads.submit<List<LicenseUnit>> { LicenseSplits.make(jmdict) }
+            val first = threads.submit { LicenseSplits.make(jmdict) }
             assertTrue(reading.await(5, TimeUnit.SECONDS))
             // The second asks while the first is still reading, and waits for it rather than reading again.
-            val second = threads.submit<List<LicenseUnit>> { LicenseSplits.make(jmdict) }
+            val second = threads.submit { LicenseSplits.make(jmdict) }
             Thread.sleep(100)
             letGo.countDown()
-            assertSame(first.get(5, TimeUnit.SECONDS), second.get(5, TimeUnit.SECONDS))
+            first.get(5, TimeUnit.SECONDS)
+            second.get(5, TimeUnit.SECONDS)
         } finally {
             threads.shutdownNow()
         }
         assertEquals(1, reads.get())
-        assertEquals(1, LicenseSplits.times["JMdict"])
+        assertSame(pieces, LicenseSplits.of("JMdict"))
     }
 
     @Test
@@ -62,9 +63,8 @@ class LicenseSplitsTest {
             LicenseSplits.clear()
             pieces
         }
-        assertEquals(pieces, LicenseSplits.make(jmdict))
+        LicenseSplits.make(jmdict)
         assertNull(LicenseSplits.of("JMdict"))
-        assertNull(LicenseSplits.times["JMdict"])
         // Opened again on the next visit, it is read again and kept.
         LicenseSplits.split = { pieces }
         LicenseSplits.make(jmdict)
@@ -78,5 +78,6 @@ class LicenseSplitsTest {
         LicenseSplits.make(jmdict)
         LicenseSplits.make(jmdict)
         assertEquals(1, reads.get())
+        assertEquals(pieces, LicenseSplits.of("JMdict"))
     }
 }
