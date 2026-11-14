@@ -135,6 +135,56 @@ class PositionsTest(unittest.TestCase):
             self.assertIn("      1  chords on another letter", out.getvalue())
 
 
+class AgainstTest(unittest.TestCase):
+    URL = "https://example.test/a.html"
+
+    def drawn(self):
+        return page(line(chords=[chord("C", 0), chord("G", 40), chord("D", 60), chord("E", 80)]), line(words("abcde")))
+
+    def run_of(self, *letters, text="abcde"):
+        return {self.URL: {"url": self.URL, "lines": [{"text": text, "chords": [[at, n] for at, n in zip(letters, "CGDE")]}]}}
+
+    def test_each_chord_is_right_in_both_worse_better_or_off_in_both(self):
+        # Drawn on 0, 2, 3 and 4.
+        counts, worse = c.against([self.drawn()], self.run_of(0, 2, 1, 1), self.run_of(0, 1, 3, 1))
+        self.assertEqual(counts["chords compared"], 4)
+        self.assertEqual(counts["right in both"], 1)
+        self.assertEqual(counts["worse: right before, off after"], 1)
+        self.assertEqual(counts["better: off before, right after"], 1)
+        self.assertEqual(counts["off in both, on the same letter"], 1)
+        self.assertEqual([w[:6] for w in worse], [(self.URL, 0, 1, 2, 2, 1)])
+
+    def test_off_in_both_is_worse_when_it_is_no_nearer(self):
+        # Drawn on 0, 2, 3 and 4: G from 4 to 3 is nearer, D from 2 to 1 farther, E from 3 to 5 as far.
+        counts, worse = c.against([self.drawn()], self.run_of(1, 4, 2, 3), self.run_of(1, 3, 1, 5))
+        self.assertEqual(counts["off in both, on the same letter"], 1)
+        self.assertEqual(counts["off in both, nearer after"], 1)
+        self.assertEqual(counts["worse: off in both, as far or farther after"], 2)
+        self.assertEqual([w[2] for w in worse], [2, 3])
+
+    def test_a_line_one_app_reads_otherwise_is_left_out(self):
+        counts, worse = c.against([self.drawn()], self.run_of(0, 2, 3, 4), self.run_of(0, 1, 1, 1, text="other"))
+        self.assertEqual((counts["chords compared"], counts["chords only one app reads on a line as the drawing"], worse), (0, 4, []))
+
+    def test_a_sheet_an_app_did_not_answer_is_counted(self):
+        counts, _ = c.against([self.drawn()], self.run_of(0, 2, 3, 4), {})
+        self.assertEqual((counts["sheets an app did not answer"], counts["sheets"]), (1, 0))
+
+    def test_the_command_line_compares_against_positions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "positions.json").write_text(json.dumps(c.positions([self.drawn()])), encoding="utf-8")
+            for tag, letters in (("main", (0, 2, 3, 4)), ("pr", (0, 2, 3, 3))):
+                (folder / f"app-{tag}.jsonl").write_text(json.dumps(self.run_of(*letters)[self.URL]) + "\n", encoding="utf-8")
+            with unittest.mock.patch("sys.stdout", new=io.StringIO()) as out:
+                c.main(["against", str(folder), "main", "pr", "--truth", str(folder / "positions.json"), "--show", "5"])
+            said = out.getvalue()
+            self.assertIn("      1  worse: right before, off after", said)
+            self.assertIn("      0  worse: off in both, as far or farther after", said)
+            self.assertIn("      3  right in both", said)
+            self.assertIn(f"{self.URL} line 0 chord 3: drawn on 4, main 4, pr 3: abcde", said)
+
+
 class DrawSizeTest(unittest.TestCase):
     RAW = '<html><head><link href="/ssi_dat/dat_st.css" rel="stylesheet"><script>x()</script></head><body>a</body></html>'
 

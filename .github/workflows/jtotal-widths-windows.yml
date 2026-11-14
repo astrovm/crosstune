@@ -2,7 +2,9 @@ name: J-Total widths on Windows
 
 # Measures J-Total's page as a reader on Windows sees it: Chromium and Edge with Windows' own fonts,
 # MS Gothic among them, in Japanese. The width tables come from this run (scripts/jtotal-widths).
-# Download the artifact and run `jtotal_widths.py generate DIR` on it.
+# Download the artifact and run `jtotal_widths.py generate DIR` on it. To hold a branch to main, chord by chord, on
+# how the sheets are drawn: `compare_sheets.py app DIR main` from a main checkout and `app DIR pr` from the branch,
+# then `compare_sheets.py against DIR main pr --truth ARTIFACT/positions-page-1.json`. The artifact lasts a day.
 on:
   workflow_dispatch:
 

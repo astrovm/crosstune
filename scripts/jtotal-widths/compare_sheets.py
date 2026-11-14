@@ -8,6 +8,7 @@
   python3 scripts/jtotal-widths/compare_sheets.py app DIR TAG [--old]    # DIR/app-TAG.jsonl
   python3 scripts/jtotal-widths/compare_sheets.py positions DRAWING.json OUT.json   # the chords, with no words
   python3 scripts/jtotal-widths/compare_sheets.py compare DIR TAG [--truth DRAWING.json] [--show N]
+  python3 scripts/jtotal-widths/compare_sheets.py against DIR BEFORE AFTER [--truth DRAWING.json] [--show N]
 
 `crawl` saves the pages in URLS.txt (one address a line) under DIR/sheets, one request a second at most.
 A page the site doesn't send is named and skipped; the wait doubles after each failure, and five in a
@@ -35,6 +36,8 @@ come back with neither the words nor the chords.
 `compare` puts the two side by side, against DIR/browser.json or the drawing or positions in --truth: a chord is right when the app's letter is the one the browser's
 chord starts nearest to. Lines that the app and the browser read as other words or other chords
 are counted on their own, as nothing says which letter would be right there.
+`against` puts two apps' runs, such as main's and a branch's, side by side against one drawing, chord by chord:
+how many chords each has right, how many are right in BEFORE and off in AFTER, and each of those, with --show.
 """
 import argparse
 import difflib
@@ -183,12 +186,12 @@ def positions(drawing):
             for page in drawing]
 
 
-def compare_page(page, got):
-    """Counts of one page: chords on the right letter, on another one, on lines that differ, and so on.
+def matched_lines(page, got):
+    """The app's chord lines, the letters the drawing's chords are on, line by line, and each (drawing's line, app's
+    line) that read as the same words and chords.
 
     `page` is a drawing, or `positions` of one: then each line is a hash, and the app's line is hashed to match it.
     """
-    counts, wrong = Counter(), []
     got = [line for line in got if line["chords"]]
     if page.get("hidden"):
         drawn_keys, drawn_letters = [line["key"] for line in page["lines"]], [line["at"] for line in page["lines"]]
@@ -198,17 +201,24 @@ def compare_page(page, got):
         drawn_keys, drawn_letters = [key(line) for line in drawn], [[c[0] for c in line["chords"]] for line in drawn]
         got_keys = [key(line) for line in got]
     matcher = difflib.SequenceMatcher(None, drawn_keys, got_keys, autojunk=False)
+    pairs = [(a + k, b + k) for a, b, size in matcher.get_matching_blocks() for k in range(size)]
+    return got, drawn_letters, pairs
+
+
+def compare_page(page, got):
+    """Counts of one page: chords on the right letter, on another one, on lines that differ, and so on."""
+    counts, wrong = Counter(), []
+    got, drawn_letters, pairs = matched_lines(page, got)
     matched = set()
-    for a, b, size in matcher.get_matching_blocks():
-        for k in range(size):
-            matched.add(a + k)
-            counts["chord lines compared"] += 1
-            app_line = got[b + k]
-            for browser, app in zip(drawn_letters[a + k], app_line["chords"]):
-                counts["chords compared"] += 1
-                if browser != app[0]:
-                    counts["chords on another letter"] += 1
-                    wrong.append((app_line["text"], [browser, app[1]], app))
+    for drawn_line, app_line_index in pairs:
+        matched.add(drawn_line)
+        counts["chord lines compared"] += 1
+        app_line = got[app_line_index]
+        for browser, app in zip(drawn_letters[drawn_line], app_line["chords"]):
+            counts["chords compared"] += 1
+            if browser != app[0]:
+                counts["chords on another letter"] += 1
+                wrong.append((app_line["text"], [browser, app[1]], app))
     for k, letters in enumerate(drawn_letters):
         if k not in matched:
             counts["chord lines the app reads as other words or chords"] += 1
@@ -236,6 +246,50 @@ def compare(truth, app):
         total["sheets with any difference"] += bool(differs)
         examples += [(page["url"], *w) for w in wrong]
     return total, examples
+
+
+def placed(page, got):
+    """{(drawing's line, chord): (the drawing's letter, the app's letter, the app's line)} for each chord on a line
+    the drawing and the app read alike."""
+    got, drawn_letters, pairs = matched_lines(page, got)
+    return {(drawn_line, chord): (browser, app[0], got[app_line])
+            for drawn_line, app_line in pairs
+            for chord, (browser, app) in enumerate(zip(drawn_letters[drawn_line], got[app_line]["chords"]))}
+
+
+def against(truth, before, after):
+    """Chord by chord, two apps against one drawing: each chord is right in both, worse (right before and off
+    after), better (off before and right after), or off in both: on the same letter, nearer the drawing's after, or
+    farther, which is worse too. Only chords on lines all three read alike count. Gives the counts and, for each worse
+    chord, (address, line, chord, drawing's letter, before's, after's, line)."""
+    # The worse counts are shown even at none, as that is what the comparison is for.
+    counts, worse = Counter({"worse: right before, off after": 0, "worse: off in both, as far or farther after": 0}), []
+    for page in truth:
+        a, b = before.get(page["url"]), after.get(page["url"])
+        if a is None or b is None:
+            counts["sheets an app did not answer"] += 1
+            continue
+        counts["sheets"] += 1
+        a_at, b_at = placed(page, a["lines"]), placed(page, b["lines"])
+        counts["chords only one app reads on a line as the drawing"] += len(a_at.keys() ^ b_at.keys())
+        for place in sorted(a_at.keys() & b_at.keys()):
+            browser, was, now = a_at[place][0], a_at[place][1], b_at[place][1]
+            counts["chords compared"] += 1
+            if was == browser and now == browser:
+                counts["right in both"] += 1
+            elif was == browser:
+                counts["worse: right before, off after"] += 1
+                worse.append((page["url"], *place, browser, was, now, b_at[place][2]))
+            elif now == browser:
+                counts["better: off before, right after"] += 1
+            elif was == now:
+                counts["off in both, on the same letter"] += 1
+            elif abs(now - browser) < abs(was - browser):
+                counts["off in both, nearer after"] += 1
+            else:
+                counts["worse: off in both, as far or farther after"] += 1
+                worse.append((page["url"], *place, browser, was, now, b_at[place][2]))
+    return counts, worse
 
 
 def read_app(path):
@@ -496,9 +550,10 @@ def moves_main(a_path, b_path, show):
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("command", choices=("crawl", "browser", "draw", "app", "compare", "moves", "positions"))
+    parser.add_argument("command", choices=("crawl", "browser", "draw", "app", "compare", "against", "moves", "positions"))
     parser.add_argument("directory", type=Path)
     parser.add_argument("extra", nargs="?")
+    parser.add_argument("after", nargs="?", help="against: the tag of the app run to put against DIR/app-EXTRA.jsonl")
     parser.add_argument("--limit", type=int, default=1000)
     parser.add_argument("--old", action="store_true")
     parser.add_argument("--show", type=int, default=0)
@@ -521,6 +576,13 @@ def main(argv):
         app_run(directory, args.extra, args.old)
     elif args.command == "moves":
         moves_main(directory, Path(args.extra), args.show)
+    elif args.command == "against":
+        truth = json.loads((args.truth or directory / "browser.json").read_text(encoding="utf-8"))
+        counts, worse = against(truth, *(read_app(directory / f"app-{tag}.jsonl") for tag in (args.extra, args.after)))
+        for name, value in sorted(counts.items()):
+            print(f"{value:7d}  {name}")
+        for url, line, chord, browser, was, now, app_line in worse[:args.show]:
+            print(f"{url} line {line} chord {chord}: drawn on {browser}, {args.extra} {was}, {args.after} {now}: {app_line['text']}")
     elif args.command == "positions":
         Path(args.extra).write_text(json.dumps(positions(json.loads(directory.read_text(encoding="utf-8")))), encoding="utf-8")
     else:
