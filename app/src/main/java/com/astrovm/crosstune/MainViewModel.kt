@@ -251,8 +251,8 @@ internal class MainViewModel(
     private var nextByEarAtMs = 0L
     private var quietByEar = 0
 
-    /** Counts up each time what plays may have changed, to listen again at once; see [forgetHeardByEar]. */
-    private val byEarAgain = MutableStateFlow(0)
+    /** A new one each time what plays may have changed, to listen again at once; see [forgetHeardByEar]. */
+    private val byEarAgain = MutableStateFlow(Any())
 
     /** The song last heard by ear, and where the app said it was then, to tell where in it it is now; see [fits]. */
     private var heardFrom: HeardFrom? = null
@@ -1152,7 +1152,7 @@ internal class MainViewModel(
         quietByEar = 0
         unheardByEar = false
         unheardWith = null
-        byEarAgain.value++
+        byEarAgain.value = Any()
     }
 
     /** A button Crosstune sent to [app] may have moved what it plays on: see [forgetHeardByEar]. Only for the app that names no song. */
@@ -1289,8 +1289,11 @@ internal class MainViewModel(
     private fun endOf(heard: Heard.Song): Long? {
         val length = heard.metadata.lengthMs ?: return null
         val at = heard.offsetMs ?: return null
-        return (heard.startedAtMs ?: now()) + ((length - at) / heard.speed).toLong()
+        return endOf(heard, length, at)
     }
+
+    /** When the song [heard], [length] long, should be over, heard [at] that far into it. */
+    private fun endOf(heard: Heard.Song, length: Long, at: Long) = (heard.startedAtMs ?: now()) + ((length - at) / heard.speed).toLong()
 
     /**
      * How long until the next listen: a little after the song [heard] should be over, as the next one has
@@ -1338,16 +1341,17 @@ internal class MainViewModel(
 
     /**
      * Whether where the song [heard] should be now is inside it, which takes its length: from where in it it was
-     * heard, on by as much as the app's clock went since, when it says where it is, or else by the time gone by.
+     * heard, on by as much as the app's clock went since, when it said where it was then and says now, or else by
+     * the time gone by, as the bar's own timer goes ([endOf]).
      */
     private fun fits(heard: Heard.Song): Boolean {
         val length = heard.metadata.lengthMs ?: return false
         val at = heard.offsetMs ?: return false
-        val from = heardFrom?.takeIf { it.heard === heard } ?: return false
+        val from = heardFrom?.takeIf { it.heard === heard }
         val clock = uiState.playingUnnamed?.following?.clock
-        val since = from.appAtMs?.let { appAt -> clock?.let { (it.positionAt(now()) - appAt) / from.appSpeed } }
-            ?: (now() - (heard.startedAtMs ?: now())).toFloat()
-        return (at + since * heard.speed).toLong() in 0 until length
+        val appAt = from?.appAtMs
+        if (from == null || appAt == null || clock == null) return now() < endOf(heard, length, at)
+        return (at + (clock.positionAt(now()) - appAt) / from.appSpeed * heard.speed).toLong() in 0 until length
     }
 
     /** The player on what an app plays with no song named, as the app names it, with its buttons, as a swipe up from the bar opens it. */

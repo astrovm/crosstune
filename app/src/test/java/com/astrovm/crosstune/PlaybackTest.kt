@@ -1818,6 +1818,22 @@ class PlaybackTest {
     }
 
     @Test
+    fun aTitleAndArtistAskedOfLeastLatelyIsReadAgainOnceMoreThanTheKeptAreAsked() {
+        val reads = mutableListOf<String>()
+        val songs = SongsRead({ title, _ -> reads += title; MusicMetadata(title, "Fake Band").takeIf { title != "Untitled" } }, kept = 2)
+        assertEquals(MusicMetadata("One", "Fake Band"), songs.of("One", ""))
+        assertNull(songs.of("Untitled", ""))
+        // Both kept, each read once, even one that names no song; "One" is asked of last.
+        assertEquals(MusicMetadata("One", "Fake Band"), songs.of("One", ""))
+        assertEquals(listOf("One", "Untitled"), reads)
+        // A third takes the place of the one asked of least lately.
+        assertEquals(MusicMetadata("Three", "Fake Band"), songs.of("Three", ""))
+        assertEquals(MusicMetadata("One", "Fake Band"), songs.of("One", ""))
+        assertNull(songs.of("Untitled", ""))
+        assertEquals(listOf("One", "Untitled", "Three", "Untitled"), reads)
+    }
+
+    @Test
     fun eachTitleAndArtistAnAppSaysIsReadOnce() {
         allow()
         sounding()

@@ -329,6 +329,8 @@ class MainViewModelTest {
         var heardNearby: Heard = Heard.Nothing
         /** Holds a listen for a song nearby till it's completed. */
         var holdNearby: CompletableDeferred<Unit>? = null
+        /** Holds a listen to what plays, once asked, till it's completed. */
+        var holdPlaying: CompletableDeferred<Unit>? = null
         override suspend fun listen(): Heard {
             nearby++
             holdNearby?.await()
@@ -337,6 +339,7 @@ class MainViewModelTest {
         override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
             asked += byMicrophone
             this.whileAloud += whileAloud
+            holdPlaying?.await()
             return answers[minOf(asked.size, answers.size) - 1]
         }
     }
@@ -381,14 +384,18 @@ class MainViewModelTest {
         val playback = FakePlayback()
         val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
         val model = untitledHeard(ears, playback)
+        ears.holdPlaying = CompletableDeferred()
         model.playingNowSkip()
         idle()
         assertEquals(listOf(true), playback.skips)
         assertEquals(listOf<String?>(untitled.app), playback.controlledApps)
         // The app goes on to its next file, with the same blank name: the song heard isn't known to be on, so it's
-        // shown no more, and what plays is listened to at once.
+        // shown no more, even while what plays is listened to, at once.
         assertEquals(PlayingUnnamed(untitled), model.uiState.playingUnnamed)
         assertEquals(2, ears.asked.size)
+        checkNotNull(ears.holdPlaying).complete(Unit)
+        idle()
+        assertEquals(PlayingUnnamed(untitled), model.uiState.playingUnnamed)
         // A tap opens the player on what plays, never the song heard before.
         model.openPlayingUnnamed()
         idle()
@@ -447,6 +454,7 @@ class MainViewModelTest {
             "back to the start" to { it.copy(clock = PlaybackClock(0, now())) },
             "forward" to { it.copy(clock = PlaybackClock(it.clock.positionAt(now()) + 30_000, now())) },
             "back" to { it.copy(clock = PlaybackClock(it.clock.positionAt(now()) - 3_000, now())) },
+            "a moment past a moment off" to { it.copy(clock = PlaybackClock(it.clock.positionAt(now()) + MainViewModel.BY_EAR_JUMP_MS + 1, now())) },
             "queue" to { it.copy(upNext = emptyList()) },
             "session" to { it.copy(session = it.session + 1) },
             "length" to { it.copy(durationMs = 180_000) }
@@ -458,7 +466,7 @@ class MainViewModelTest {
             val model = untitledHeard(ears, playback)
             pass(5_000)
             // Playing on, as an app says now and then, keeps it, even a moment off, or played faster from where it is.
-            playback.playing.value = start.copy(clock = PlaybackClock(start.clock.positionAt(now()) + 1_000, now()))
+            playback.playing.value = start.copy(clock = PlaybackClock(start.clock.positionAt(now()) + MainViewModel.BY_EAR_JUMP_MS, now()))
             idle()
             playback.playing.value = start.copy(clock = PlaybackClock(start.clock.positionAt(now()), now(), speed = 1.5f))
             idle()
@@ -512,6 +520,77 @@ class MainViewModelTest {
         idle()
         assertFalse(over.uiState.linkText.contains("1234"))
         assertEquals(true, over.uiState.player?.songless)
+        // Tapped just as it ends, 120 s on, before the bar's own timer took it off: what plays may be the next one.
+        val ending = untitledHeard(EarsOnThePhone(sped(), Heard.Nothing))
+        ShadowSystemClock.advanceBy(Duration.ofMillis(120_000))
+        assertEquals("1234", ending.uiState.playingUnnamed?.heard?.appleMusicId)
+        ending.openPlayingUnnamed()
+        idle()
+        assertFalse(ending.uiState.linkText.contains("1234"))
+        assertEquals(true, ending.uiState.player?.songless)
+    }
+
+    @Test
+    fun aTapOpensTheSongHeardByWhereTheAppsClockSaysItIsFromWhereItWasWhenTheSoundHeardStarted() {
+        fun now() = SystemClock.elapsedRealtime()
+        // Well into the phone's day, so a time and a length on its clock aren't alike.
+        pass(1_000_000)
+        // The app plays twice as fast, 150 s into what it plays; the sound heard started 10 s back, 50 s into a song
+        // of 200 s, at the speed it plays. So it was 130 s into what it plays then, and the song is 70 s in now.
+        val start = following(app = untitled.app).copy(clock = PlaybackClock(150_000, now(), speed = 2f))
+        fun heard() = heardSong().copy(speed = 2f, startedAtMs = now() - 10_000)
+        val on = untitledHeard(EarsOnThePhone(heard(), Heard.Nothing), FakePlayback().apply { playing.value = start })
+        // 20 s on, the app's 40 s further: 110 s in.
+        pass(20_000)
+        on.openPlayingUnnamed()
+        idle()
+        assertTrue(on.uiState.linkText.contains("1234"))
+        // Then the app plays faster still, from where it is: 32.5 s on, it's 130 s further, just at the song's end,
+        // though by the time alone it's still on, and the bar shows it.
+        val playback = FakePlayback().apply { playing.value = start.copy(clock = PlaybackClock(150_000, now(), speed = 2f)) }
+        val over = untitledHeard(EarsOnThePhone(heard(), Heard.Nothing), playback)
+        playback.playing.value = checkNotNull(playback.playing.value).copy(clock = PlaybackClock(150_000, now(), speed = 4f))
+        idle()
+        pass(32_500)
+        assertEquals("1234", over.uiState.playingUnnamed?.heard?.appleMusicId)
+        over.openPlayingUnnamed()
+        idle()
+        assertFalse(over.uiState.linkText.contains("1234"))
+        assertEquals(true, over.uiState.player?.songless)
+        // Heard at its very start, it opens at once.
+        val first = untitledHeard(EarsOnThePhone(heardSong(offsetMs = 0), Heard.Nothing), FakePlayback().apply { playing.value = following(app = untitled.app) })
+        first.openPlayingUnnamed()
+        idle()
+        assertTrue(first.uiState.linkText.contains("1234"))
+    }
+
+    @Test
+    fun aSkipASeekOrALineRepeatedFromTheWordsOfAFileDropsTheSongHeardInIt() {
+        // A file called as the song heard in it, with no artist: its words follow the file's app, and their buttons move it.
+        val file = Unnamed("com.example.player", "Fake Player", "Fake Song")
+        val words = """[{"trackName":"Fake Song","artistName":"Fake Artist","duration":200,"syncedLyrics":"[00:00.00] One\n[00:10.00] Two\n[00:20.00] Three"}]"""
+        val controls = listOf<Pair<String, (MainViewModel) -> Unit>>(
+            "next" to { it.skipSong(true) }, "back" to { it.skipSong(false) }, "seek" to { it.seekLyrics(10_000) }, "repeat" to { it.repeatLine(1) }
+        )
+        for ((name, control) in controls) {
+            fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") words else "") }
+            val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+            val playback = FakePlayback().apply { playing.value = following(app = file.app, skipNext = true, skipPrevious = true) }
+            val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+            val model = radioModel(ears, playback, lyricsFinder = finder)
+            playback.unnamed.value = file
+            idle()
+            model.playingBarInSight(true)
+            idle()
+            assertEquals(name, ears.answers[0], model.uiState.playingUnnamed?.heard)
+            model.listen(lyrics = true)
+            idle()
+            assertEquals(name, listOf("One", "Two", "Three"), model.uiState.lyricLines.map { it.text })
+            assertEquals(name, file.app, model.uiState.following?.appPackage)
+            control(model)
+            idle()
+            assertNull(name, model.uiState.playingUnnamed?.heard)
+        }
     }
 
     @Test
