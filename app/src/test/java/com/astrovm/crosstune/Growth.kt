@@ -63,6 +63,8 @@ internal object Growth {
         // Once first, at another length, so the classes it loads and sets up don't count, and no text is read twice, as
         // a reader that keeps what it read would read it the second time for nothing.
         texts(length / 2).forEach { read(it) }
+        // And each class it loaded while another was written, which the JDK skips, is written now.
+        agent("ready")
         val (short, long) = made(texts, length)
         val out = judged(short, long, name, "steps", MARGIN) { once, longer -> Work(stepsOf(once, read), stepsOf(longer, read)) }
         check(uncounted().isEmpty()) { "Not counted in: ${uncounted()}" }
@@ -82,8 +84,10 @@ internal object Growth {
     }
 
     /** The classes the agent should count in and doesn't, with why. */
-    private fun uncounted(): List<*> =
-        Class.forName("com.astrovm.crosstune.workcount.Agent", true, ClassLoader.getSystemClassLoader()).getMethod("uncounted").invoke(null) as List<*>
+    private fun uncounted(): List<*> = agent("uncounted") as List<*>
+
+    private fun agent(method: String): Any? =
+        Class.forName("com.astrovm.crosstune.workcount.Agent", true, ClassLoader.getSystemClassLoader()).getMethod(method).invoke(null)
 
     private fun <T> made(texts: (Int) -> List<T>, length: Int): Pair<List<T>, List<T>> {
         val short = texts(length)

@@ -3,6 +3,7 @@ import java.util.zip.ZipFile
 import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
 import org.gradle.api.artifacts.FileCollectionDependency
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedComponentResult
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
 
@@ -430,11 +431,18 @@ val notices = tasks.register<Test>("notices") {
 // held to its first compiler, many times slower: so only this task counts, in a JVM of its own. Elsewhere, as in the
 // unit tests Kover counts, Growth reads each text once, shorter, and judges nothing, so what they run still counts.
 val countedTests = listOf("GrowthTest", "LongPagesTest", "LongSheetsTest", "LongTitlesTest").map { "com.astrovm.crosstune.$it" }
+// The agent's jar with what it needs (ASM), and the jar with its Work class alone, which the boot class loader holds.
 val workCount: Configuration = configurations.create("workCount") {
+    isCanBeConsumed = false
+}
+val workCountWork: Configuration = configurations.create("workCountWork") {
     isCanBeConsumed = false
     isTransitive = false
 }
-dependencies { workCount(project(":work-count")) }
+dependencies {
+    workCount(project(":work-count"))
+    workCountWork(project(":work-count", "work"))
+}
 /** The `--tests` patterns the command line asks of each task, by the task's name. */
 val askedTests: Map<String, List<String>> = buildMap<String, MutableList<String>> {
     var task = ""
@@ -456,14 +464,17 @@ tasks.register<Test>("growthTests") {
     testClassesDirs = unitTests.testClassesDirs
     classpath = unitTests.classpath
     countedTests.forEach { filter.includeTestsMatching(it) }
-    val agent = workCount.elements
-    inputs.files(workCount).withPropertyName("workCount")
-    // The agent's jar joins the boot class path, so the JDK's classes can count, and the JVM can share only the boot
+    val agent = workCount.incoming.artifactView { componentFilter { it is ProjectComponentIdentifier } }.files
+    val writer = workCount.incoming.artifactView { componentFilter { it !is ProjectComponentIdentifier } }.files
+    val work = workCountWork.incoming.files
+    inputs.files(workCount, workCountWork).withPropertyName("workCount")
+    // The jar with Work joins the boot class path, so the JDK's classes can count, and the JVM can share only the boot
     // loader's classes from its archive then, with a warning. The agent rewrites the JDK's classes it counts anyway, so
     // the archive would save little: it's off. The flags after it are why a count is the same interpreted and compiled
     // (Agent.java).
     jvmArgumentProviders += CommandLineArgumentProvider {
-        listOf("-javaagent:${agent.get().single().asFile.path}", "-Xshare:off", "-XX:TieredStopAtLevel=1", "-XX:+UnlockDiagnosticVMOptions", "-XX:-UseVectorizedMismatchIntrinsic")
+        val jars = (listOf(work.singleFile) + writer.files).joinToString(File.pathSeparator) { it.path }
+        listOf("-javaagent:${agent.singleFile.path}=$jars", "-Xshare:off", "-XX:TieredStopAtLevel=1", "-XX:+UnlockDiagnosticVMOptions", "-XX:-UseVectorizedMismatchIntrinsic")
     }
 }
 

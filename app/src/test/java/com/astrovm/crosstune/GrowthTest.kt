@@ -41,7 +41,9 @@ class GrowthTest {
         val pattern = Growth.outOfStep(opens, SHORT, { it.take(4) }) { text -> Regex("<[^>]*>").findAll(text).count() }
         // Each letter put first, which moves the rest along: an array copy, counted by what it moves.
         val moves = Growth.outOfStep(::abs, LENGTH, { it.take(4) }) { text -> StringBuilder().apply { text.forEach { insert(0, it) } }.length }
-        assertEquals(listOf(1, 1, 1, 1), listOf(copies, looks, pattern, moves).map { it.size })
+        // A look on text outside Latin-1, which the JDK keeps in a class of its own, StringUTF16.
+        val wide = Growth.outOfStep({ length -> listOf("歌a".repeat(length / 2)) }, LENGTH, { it.take(4) }) { text -> text.indices.sumOf { text.indexOf('c', it) } }
+        assertEquals(listOf(1, 1, 1, 1, 1), listOf(copies, looks, pattern, moves, wide).map { it.size })
         // The same work once along the text is in step.
         assertEquals(emptyList<String>(), Growth.outOfStep(::abs, LENGTH, { it }) { text -> text.substring(1).indexOf('c') })
         assertEquals(emptyList<String>(), Growth.outOfStep(opens, SHORT, { it }) { text -> Regex("<[^<>]*+>").findAll(text).count() })

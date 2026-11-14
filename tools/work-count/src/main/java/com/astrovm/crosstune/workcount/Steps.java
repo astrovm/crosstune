@@ -2,113 +2,143 @@ package com.astrovm.crosstune.workcount;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.classfile.Annotation;
-import java.lang.classfile.Attributes;
-import java.lang.classfile.ClassFile;
-import java.lang.classfile.ClassHierarchyResolver;
-import java.lang.classfile.ClassTransform;
-import java.lang.classfile.CodeBuilder;
-import java.lang.classfile.CodeElement;
-import java.lang.classfile.CodeTransform;
-import java.lang.classfile.CodeModel;
-import java.lang.classfile.Label;
-import java.lang.classfile.MethodModel;
-import java.lang.classfile.MethodTransform;
-import java.lang.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
-import java.lang.classfile.instruction.BranchInstruction;
-import java.lang.classfile.instruction.InvokeInstruction;
-import java.lang.classfile.instruction.LabelTarget;
-import java.lang.constant.ClassDesc;
-import java.lang.constant.ConstantDescs;
-import java.lang.constant.MethodTypeDesc;
+import java.io.UncheckedIOException;
 import java.lang.instrument.ClassFileTransformer;
+import java.lang.instrument.Instrumentation;
+import java.lang.instrument.UnmodifiableClassException;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.AnnotationNode;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.InsnNode;
+import org.objectweb.asm.tree.JumpInsnNode;
+import org.objectweb.asm.tree.LabelNode;
+import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.MethodNode;
 
 /**
- * Writes the steps of {@link Work} into each class it counts in. Public, as the bootstrap class loader holds it, with
- * the rest of the agent's jar, apart from the {@link Agent} the JVM starts.
+ * Writes the steps of {@link Work} into each class it counts in: those loaded from now on, and those loaded before.
+ * Public, as the {@link Agent} makes it from a class loader of its own, with ASM.
+ *
+ * <p>The JDK gives a transformer no class that its thread loads while it writes another: that class is never written,
+ * and says nothing. So each class given is kept, and {@link #run} writes each counted class loaded and never given.
+ * {@link #get} names those, with each class that failed.
  */
-public final class Steps implements ClassFileTransformer {
-    private static final ClassDesc WORK = ClassDesc.of(Work.class.getName());
-    private static final MethodTypeDesc STEP = MethodTypeDesc.of(ConstantDescs.CD_void);
-    private static final MethodTypeDesc COPIED = MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int);
+public final class Steps implements ClassFileTransformer, Runnable, Supplier<List<String>> {
+    private static final String WORK = "com/astrovm/crosstune/workcount/Work";
+    private static final String INTRINSIC = "Ljdk/internal/vm/annotation/IntrinsicCandidate;";
+    /** How many times {@link #run} writes the classes missed again, as writing them can load more. */
+    private static final int ROUNDS = 10;
 
-    /** The app's, Kotlin's, and the JDK's that read and build text and hold what's read. */
-    private static final String[] COUNTED = {"com/astrovm/crosstune/", "kotlin/", "java/lang/", "java/util/", "java/text/", "jdk/internal/icu/", "jdk/internal/util/"};
+    private final Instrumentation instrumentation;
 
-    /**
-     * What runs the JVM, the agent and the writing of classes: work no reading does as it reads, and some of it runs
-     * while a class is written, which would then wait on itself.
-     */
-    private static final String[] NOT_COUNTED = {
-        "com/astrovm/crosstune/workcount/", "java/lang/invoke/", "java/lang/ref/", "java/lang/reflect/", "java/lang/classfile/", "java/lang/constant/",
-        "java/lang/module/", "java/lang/instrument/", "java/lang/Thread", "java/lang/Object", "java/lang/Class", "java/lang/System", "java/lang/Module",
-        "java/lang/StackTrace", "java/lang/StackWalker", "java/lang/ScopedValue", "java/lang/VirtualThread", "java/lang/Runtime", "java/lang/Shutdown",
-        "java/util/concurrent/", "java/util/jar/", "java/util/zip/", "java/util/logging/", "java/util/ServiceLoader",
-    };
+    /** Each class given, by name and class loader. */
+    private final Set<String> given = new HashSet<>();
 
-    private final ThreadLocal<Boolean> writing = ThreadLocal.withInitial(() -> false);
-
-    /** Each class not counted in, and why: a class loaded while another is written isn't, or it would wait on itself. */
-    public static final List<String> FAILED = new ArrayList<>();
+    /** Each class that failed to be written, with why. */
+    private final List<String> failed = new ArrayList<>();
 
     /**
-     * Whether {@code name}'s work counts. Plain loops: a stream or a lambda here could load a class while one is
-     * written, which would wait on itself.
+     * Writes this class once, so the classes that write classes are loaded before the first class is written, then
+     * each counted class loaded so far.
      */
-    public static boolean countsIn(Module module, String name) {
-        if (module.isNamed() && !module.getName().equals("java.base")) return false;
-        boolean counted = false;
-        for (String start : COUNTED) counted |= name.startsWith(start);
-        for (String start : NOT_COUNTED) counted &= !name.startsWith(start);
-        return counted;
+    public Steps(Instrumentation instrumentation) {
+        this.instrumentation = instrumentation;
+        try (InputStream in = Steps.class.getResourceAsStream("Steps.class")) {
+            if (in == null) throw new IOException("No Steps.class");
+            written(in.readAllBytes());
+        } catch (IOException error) {
+            throw new UncheckedIOException(error);
+        }
+        instrumentation.addTransformer(this, true);
+        run();
+    }
+
+    /** Writes each counted class loaded and not written yet. */
+    @Override
+    public void run() {
+        for (int round = 0; round < ROUNDS; round++) {
+            List<Class<?>> missed = missed();
+            if (missed.isEmpty()) return;
+            try {
+                instrumentation.retransformClasses(missed.toArray(new Class<?>[0]));
+            } catch (UnmodifiableClassException error) {
+                synchronized (failed) {
+                    failed.add(String.valueOf(error));
+                }
+                return;
+            }
+        }
+    }
+
+    /** Each class that should count and doesn't, with why: failed, or loaded and never given. */
+    @Override
+    public List<String> get() {
+        List<String> uncounted = new ArrayList<>();
+        synchronized (failed) {
+            uncounted.addAll(failed);
+        }
+        for (Class<?> each : missed()) uncounted.add(each.getName().concat(": loaded while another class was written"));
+        return uncounted;
+    }
+
+    private List<Class<?>> missed() {
+        List<Class<?>> missed = new ArrayList<>();
+        for (Class<?> loaded : instrumentation.getAllLoadedClasses()) {
+            String name = loaded.getName().replace('.', '/');
+            if (!instrumentation.isModifiableClass(loaded) || !Counted.in(loaded.getModule(), name)) continue;
+            synchronized (given) {
+                if (!given.contains(key(name, loaded.getClassLoader()))) missed.add(loaded);
+            }
+        }
+        return missed;
+    }
+
+    /** Built with concat, not +: + makes a call site the JDK sets up with classes of its own, which a transform can't. */
+    private static String key(String name, ClassLoader loader) {
+        return name.concat("@").concat(String.valueOf(System.identityHashCode(loader)));
     }
 
     @Override
     public byte[] transform(Module module, ClassLoader loader, String name, Class<?> redefined, ProtectionDomain domain, byte[] bytes) {
-        if (name == null || !countsIn(module, name)) return null;
-        if (writing.get()) {
-            synchronized (FAILED) {
-                FAILED.add(name + ": loaded while another class was written");
-            }
-            return null;
+        if (name == null || !Counted.in(module, name)) return null;
+        synchronized (given) {
+            given.add(key(name, loader));
         }
-        writing.set(true);
         try {
-            return written(bytes, loader);
+            return written(bytes);
         } catch (RuntimeException | LinkageError error) {
-            synchronized (FAILED) {
-                FAILED.add(name + ": " + error);
+            synchronized (failed) {
+                failed.add(name.concat(": ").concat(String.valueOf(error)));
             }
             return null;
-        } finally {
-            writing.set(false);
         }
     }
 
-
-    /** Writes [name] once, with the classes that do it, so they're loaded. */
-    public void counted(String name, ClassLoader loader, Module module) throws IOException {
-        try (InputStream in = loader.getResourceAsStream(name + ".class")) {
-            if (in == null) throw new IOException("No " + name);
-            written(in.readAllBytes(), loader);
+    /**
+     * The class with its steps. Its stack map frames are kept as they are, as no step changes what's on the stack or
+     * in the locals where a jump lands: so no class is loaded or read to work out a frame, which while a class is
+     * written would wait on itself.
+     */
+    private static byte[] written(byte[] bytes) {
+        ClassReader reader = new ClassReader(bytes);
+        ClassNode node = new ClassNode();
+        reader.accept(node, 0);
+        for (MethodNode method : node.methods) {
+            if (counts(method)) count(method.instructions);
         }
-    }
-
-    private static byte[] written(byte[] bytes, ClassLoader loader) {
-        // The classes a class names are read as files, never loaded: one loaded while it's written would be defined twice.
-        ClassHierarchyResolver system = ClassHierarchyResolver.ofResourceParsing(ClassLoader.getSystemClassLoader());
-        ClassFile classes = ClassFile.of(ClassFile.ClassHierarchyResolverOption.of(
-            loader == null ? system : ClassHierarchyResolver.ofResourceParsing(loader).orElse(system)
-        ));
-        return classes.transformClass(
-            classes.parse(bytes),
-            ClassTransform.transformingMethods(Steps::counts, MethodTransform.transformingCode(CodeTransform.ofStateful(Counting::new)))
-        );
+        ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS);
+        node.accept(writer);
+        return writer.toByteArray();
     }
 
     /**
@@ -117,45 +147,43 @@ public final class Steps implements ClassFileTransformer {
      * swaps, with C1 and the vectorized mismatch turned off, takes the same work each time, as it never loops: where
      * one is called again and again, the loop that calls it counts.
      */
-    private static boolean counts(MethodModel method) {
-        if (method.code().isEmpty()) return false;
+    private static boolean counts(MethodNode method) {
+        if (method.instructions.size() == 0) return false;
         boolean swapped = false;
-        for (RuntimeVisibleAnnotationsAttribute annotations : method.findAttributes(Attributes.runtimeVisibleAnnotations())) {
-            for (Annotation annotation : annotations.annotations()) swapped |= annotation.className().equalsString(INTRINSIC);
+        if (method.visibleAnnotations != null) {
+            for (AnnotationNode annotation : method.visibleAnnotations) swapped |= annotation.desc.equals(INTRINSIC);
         }
-        return !swapped || loops(method.code().get());
+        return !swapped || loops(method.instructions);
     }
 
     /** Whether [code] jumps back. */
-    private static boolean loops(CodeModel code) {
-        Set<Label> passed = new HashSet<>();
-        for (CodeElement element : code) {
-            if (element instanceof LabelTarget target) passed.add(target.label());
-            if (element instanceof BranchInstruction branch && passed.contains(branch.target())) return true;
+    private static boolean loops(InsnList code) {
+        Set<LabelNode> passed = new HashSet<>();
+        for (AbstractInsnNode element : code) {
+            if (element instanceof LabelNode) passed.add((LabelNode) element);
+            if (element instanceof JumpInsnNode && passed.contains(((JumpInsnNode) element).label)) return true;
         }
         return false;
     }
 
-    private static final String INTRINSIC = "Ljdk/internal/vm/annotation/IntrinsicCandidate;";
-
     /** One method's steps: one at its start, one before each jump back, and the length of each array copy. */
-    private static final class Counting implements CodeTransform {
-        private final Set<Label> passed = new HashSet<>();
-        private boolean started;
-
-        @Override
-        public void accept(CodeBuilder code, CodeElement element) {
-            if (!started) {
-                started = true;
-                code.invokestatic(WORK, "step", STEP);
+    private static void count(InsnList code) {
+        Set<LabelNode> passed = new HashSet<>();
+        for (AbstractInsnNode element : code.toArray()) {
+            if (element instanceof LabelNode) passed.add((LabelNode) element);
+            if (element instanceof JumpInsnNode && passed.contains(((JumpInsnNode) element).label)) code.insertBefore(element, step());
+            if (element instanceof MethodInsnNode) {
+                MethodInsnNode call = (MethodInsnNode) element;
+                if (call.owner.equals("java/lang/System") && call.name.equals("arraycopy")) {
+                    code.insertBefore(call, new InsnNode(Opcodes.DUP));
+                    code.insertBefore(call, new MethodInsnNode(Opcodes.INVOKESTATIC, WORK, "copied", "(I)V", false));
+                }
             }
-            if (element instanceof LabelTarget target) passed.add(target.label());
-            if (element instanceof BranchInstruction branch && passed.contains(branch.target())) code.invokestatic(WORK, "step", STEP);
-            if (element instanceof InvokeInstruction call && call.owner().asInternalName().equals("java/lang/System") && call.name().equalsString("arraycopy")) {
-                code.dup();
-                code.invokestatic(WORK, "copied", COPIED);
-            }
-            code.with(element);
         }
+        code.insert(step());
+    }
+
+    private static MethodInsnNode step() {
+        return new MethodInsnNode(Opcodes.INVOKESTATIC, WORK, "step", "()V", false);
     }
 }
