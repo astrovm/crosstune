@@ -22,6 +22,17 @@ class SongNamesVersionTest {
     }
 
     @Test
+    fun aCoverTagMayHoldATagOfItsOwn() {
+        for (title in listOf("Song (Acoustic Cover (Live))", "Song (Cover [Acoustic])", "Song [Cover (Piano)]")) {
+            assertEquals(title, SongNames.Covered("Song", null), SongNames.coverOf(title))
+        }
+        // A bracket that never closes is read from the first one to the first close, as it always was.
+        for (title in listOf("Song (Acoustic Cover (Live)", "Song (Cover()")) assertEquals(title, SongNames.Covered("Song", null), SongNames.coverOf(title))
+        // Whose song it is ends where that tag starts.
+        assertEquals(SongNames.Covered("Song", "Artist"), SongNames.coverOf("Song (In the Style of Artist (Live))"))
+    }
+
+    @Test
     fun aTitleThatSaysNoOneSingsInItSaysItsInstrumental() {
         // The list scripts/songcheck/instrumental_rules.py is tested against too, so both read titles alike.
         val titles = javaClass.getResource("/instrumental-titles.tsv")!!.readText().lines().filter { it.isNotBlank() && !it.startsWith("#") }

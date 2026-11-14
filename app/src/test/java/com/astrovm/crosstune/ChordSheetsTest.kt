@@ -326,6 +326,15 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalsChordInATagOfItsOwnInItsLinkIsStillItsChord() {
+        // A tag that isn't a link is cut before the link is read.
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "Am")))),
+            ChordSheets.fromJTotal("""<a href="JavaScript:jump_1('../../../cd/Am.html');"><b>Am</b></a><br>abcd""")
+        )
+    }
+
+    @Test
     fun jTotalsBassIsWrittenAfterItsLinkAsOn() {
         assertEquals(
             listOf(SheetLine("川の道", listOf(Chord(0, "E/G#"), Chord(3, "Am")))),
@@ -405,124 +414,82 @@ class ChordSheetsTest {
     }
 
     @Test
-    fun jTotalDoesNotTrimBracketsInTheMonospaceStack() {
-        val sheet = "\u3000${jTotal("C")}<br>」\u3000い"
-        assertEquals(2, ChordSheets.fromJTotal(sheet).single().chords.single().at)
-        assertEquals(1, ChordSheets.fromJTotal(sheet, monospace = true).single().chords.single().at)
+    fun jTotalTrimsNoBracketInEitherStack() {
+        // Drawn in Chromium, Edge and Chrome on Windows, in Japanese: MS Gothic has no narrow forms to trim to, so
+        // a full-width bracket or stop stays two columns. Trimmed, each chord would land one letter later.
+        for (monospace in listOf(false, true)) {
+            assertEquals(1, at("\u3000${jTotal("C")}<br>」\u3000い", monospace))
+            assertEquals(2, at("abcd${jTotal("C")}<br>あ、\u3000「いう」\u3000えお", monospace))
+            assertEquals(4, at("abcdefgh${jTotal("C")}<br>「あい」\u3000「うえ」お", monospace))
+        }
     }
 
     @Test
-    fun jTotalsReferenceMarkFollowsTheScriptBesideItOnTheMonospaceStack() {
-        // Measured in Chromium on the monospace stack: U+203B is 2.000 columns or 1.650.
-        // A chord over the middle of a two-column mark lands on the later letter.
-        // abc is three columns. On the main stack あ is 2.000, so the chord ties and lands on い.
-        // On the monospace stack あ is 2.050. The narrow mark also lands on い. The wide mark lands on あ.
-        val narrow = "abc${jTotal("C")}<br>※あいう"
-        assertEquals(2, ChordSheets.fromJTotal(narrow).single().chords.single().at)
-        assertEquals(2, monoAt(narrow))
-        // Kana on the chord line, or on the line above a blank break, keeps the wide mark.
-        assertEquals(1, monoAt("abc${jTotal("C")}よ<br>※あいう"))
-        assertEquals(1, monoAt("abc${jTotal("D")}よ<br><br>※あいう"))
-        assertEquals(2, monoAt("abc${jTotal("D")}<br><br>※あいう"))
-        // Latin, an ideographic space, then kana. A kana line above the same words keeps the narrow mark.
-        assertEquals(3, monoAt("abcdef${jTotal("C")}<br>※A\u3000ああ"))
-        assertEquals(4, monoAt("abcdef${jTotal("C")}よ<br>※A\u3000ああ"))
-        assertEquals(6, monoAt("abcdefghi${jTotal("C")}<br>※It's\u3000あ"))
-        assertEquals(4, monoAt("abcdefg${jTotal("C")}<br>※A1\u3000あ"))
-        assertEquals(3, monoAt("abcdefg${jTotal("C")}<br>※Ａ\u3000ああ"))
-        assertEquals(4, monoAt("abcdefg${jTotal("C")}<br>※A \u3000ああ"))
-        assertEquals(5, monoAt("abcdefg${jTotal("C")}<br>※A\u3000Bあ"))
-        // The same script on both sides is wide. Kana then kanji is narrow. Both Han blocks count.
-        assertEquals(3, monoAt("abcde${jTotal("C")}よ<br>※恋ああ"))
-        assertEquals(2, monoAt("abcde${jTotal("C")}字<br>※恋ああ"))
-        assertEquals(2, monoAt("abcde${jTotal("C")}\u3400<br>※恋ああ"))
-        assertEquals(2, monoAt("abcde${jTotal("C")}\uF900<br>※恋ああ"))
-        assertEquals(1, monoAt("abc${jTotal("C")}ｶ<br>※あいう"))
-        assertEquals(1, monoAt("abc${jTotal("C")}\u31F0<br>※あいう"))
-        // The letter touching the mark wins over the line above.
-        assertEquals(2, monoAt("abcde${jTotal("C")}<br>恋※ああ"))
-        assertEquals(2, monoAt("abcd${jTotal("C")}<br>ｶ※あいう"))
-        assertEquals(2, monoAt("abcd${jTotal("C")}<br>あ ※Bあ"))
-        assertEquals(3, monoAt("abcdefg${jTotal("C")}<br>（※印あ"))
-        assertEquals(2, monoAt("abcde${jTotal("C")}<br>\u3000※あいう"))
-        // A mark at the end of a line that leads with an ideographic space.
-        // Kana with no Latin after it stays wide when the line above is kana too.
-        assertEquals(3, monoAt("abcdef${jTotal("C")}よ<br>\u3000あ…※"))
-        assertEquals(7, monoAt("abcdefghij${jTotal("C")}<br>\u3000このnew※"))
-        assertEquals(14, monoAt("abcdefghijkよよ${jTotal("C")}よ<br>\u3000ĲLovin' you…※"))
-        assertEquals(11, monoAt("\u2103abcdefghijk${jTotal("C")}<br>\u3000glory days※"))
-        // No script yet: kana after the mark is wide, Latin after it is narrow.
-        // The main stack keeps the table width of 2.000, so the same Latin line lands one letter later.
-        val latinAfter = "※${jTotal("C")}<br>\u0132bcdef"
-        assertEquals(2, ChordSheets.fromJTotal(latinAfter).single().chords.single().at)
-        assertEquals(1, monoAt(latinAfter))
-        assertEquals(3, monoAt("※あ${jTotal("C")}<br>あ\u0132bc"))
-        // The ellipsis is not a script. The kana after it still makes the mark wide.
-        assertEquals(4, monoAt("※…あ${jTotal("C")}<br>あ\u0132bc"))
-        // The chord's own letters are the script of the line above the words.
-        assertEquals(1, monoAt("よ<br>※${jTotal("C")}\u3000あ<br>\u0132bcdef"))
-        assertEquals(2, monoAt("※${jTotal("C")}\u3000あ<br>\u0132bcdef"))
-        // D is one column. A wide mark then puts C past the last letter. A narrow mark would stop on c.
-        val split = "${jTotal("D")}あ※${jTotal("C")}<br>あ\u0132bc"
-        assertEquals(listOf(0, 4), ChordSheets.fromJTotal(split, monospace = true).single().chords.map { it.at })
+    fun jTotalsPunctuationIsAsWideBesideOtherPunctuationAsAlone() {
+        // The pairs scripts/jtotal-widths measured on Windows: none is narrower than its two marks alone, so a
+        // chord over the columns of both is on the letter after them.
+        val marks = "、。，．・：；！？「」『』（）［］｛｝〈〉《》【】〔〕“”‘’\u3000"
+        for (monospace in listOf(false, true)) {
+            for (first in marks) {
+                for (second in marks) {
+                    val columns = (JTotalWidths.of(first.code, monospace) + JTotalWidths.of(second.code, monospace)) / JTotalWidths.COLUMN
+                    assertEquals("$first$second", 2, at("x".repeat(columns) + "${jTotal("C")}<br>$first${second}いう", monospace))
+                }
+            }
+        }
     }
 
     @Test
-    fun jTotalMonospaceReferenceMarkKeepsEachMeasuredEdge() {
-        // Each letter was read in Chromium, from a made-up page, with scripts/jtotal-widths/compare_sheets.py.
-        // On every line, 1.650 columns and 2.000 columns land on different letters.
-        val words = "b".repeat(45)
-        // The first assigned fullwidth character widens the mark. U+FF00 is unassigned and does not.
-        assertEquals(25, monoAt("${"あ".repeat(10)}\uFF01※${jTotal("C")}<br>$words"))
-        assertEquals(24, monoAt("${"あ".repeat(10)}\uFF00※${jTotal("C")}<br>$words"))
-        // U+FF65 is the last of that block. U+FF66 is halfwidth kana, so it is wide for a different reason.
-        assertEquals(24, monoAt("${"あ".repeat(10)}\uFF65※${jTotal("C")}<br>$words"))
-        assertEquals(24, monoAt("${"あ".repeat(10)}\uFF66※${jTotal("C")}<br>$words"))
-        // U+3040 is unassigned. U+3041 is the first kana. U+3100 is not kana.
-        assertEquals(24, monoAt("${"あ".repeat(10)}\u3040※${jTotal("C")}<br>$words"))
-        assertEquals(25, monoAt("${"あ".repeat(10)}\u3041※${jTotal("C")}<br>$words"))
-        assertEquals(24, monoAt("${"あ".repeat(10)}\u3100※${jTotal("C")}<br>$words"))
-        // U+321F is an unassigned hole. The enclosed letters on either side are wide.
-        assertEquals(24, monoAt("${"あ".repeat(10)}\u321F※${jTotal("C")}<br>$words"))
-        assertEquals(25, monoAt("${"あ".repeat(10)}\u3220※${jTotal("C")}<br>$words"))
-        // Halfwidth Hangul is wide, and each unassigned hole in that block is narrow.
-        assertEquals(30, monoAt("${"あ".repeat(13)}\uFFBF※${jTotal("C")}<br>$words"))
-        assertEquals(31, monoAt("${"あ".repeat(13)}\uFFC2※${jTotal("C")}<br>$words"))
-        assertEquals(30, monoAt("${"あ".repeat(13)}\uFFC8※${jTotal("C")}<br>$words"))
-        assertEquals(31, monoAt("${"あ".repeat(13)}\uFFCA※${jTotal("C")}<br>$words"))
-        assertEquals(30, monoAt("${"あ".repeat(13)}\uFFD0※${jTotal("C")}<br>$words"))
-        assertEquals(31, monoAt("${"あ".repeat(13)}\uFFD2※${jTotal("C")}<br>$words"))
-        assertEquals(30, monoAt("${"あ".repeat(13)}\uFFD8※${jTotal("C")}<br>$words"))
-        assertEquals(31, monoAt("${"あ".repeat(13)}\uFFDA※${jTotal("C")}<br>$words"))
-        assertEquals(24, monoAt("${"あ".repeat(10)}\uFFDD※${jTotal("C")}<br>$words"))
-        // A kana run, then '[' or '{', still widens the mark. Calling either one Latin would narrow it.
-        assertEquals(24, monoAt("${"あ".repeat(9)}[※あ${jTotal("C")}<br>$words"))
-        assertEquals(24, monoAt("${"あ".repeat(9)}{※あ${jTotal("C")}<br>$words"))
-        // The line above is Latin, so '[' or '{' before the ideographic space stays in the Latin run.
-        assertEquals(3, monoAt("abcdef${jTotal("C")}<br>※[\u3000あbbbb"))
-        assertEquals(3, monoAt("abcdef${jTotal("C")}<br>※{\u3000あbbbb"))
-        // 'a' starts the run. The fullwidth letter beside the range does not, and the one inside it does.
-        assertEquals(3, monoAt("abcdef${jTotal("C")}<br>※a\u3000あbbbb"))
-        assertEquals(4, monoAt("abcdefg${jTotal("C")}<br>※\uFF3B\u3000あbbbb"))
-        assertEquals(3, monoAt("abcdefg${jTotal("C")}<br>※\uFF41\u3000あbbbb"))
-        assertEquals(4, monoAt("abcdefg${jTotal("C")}<br>※\uFF5B\u3000あbbbb"))
-        // Kanji after the ideographic space is wide, the same as kana there.
-        assertEquals(1, monoAt("b\u0132${jTotal("C")}<br>※A\u3000\u5B57bbbb"))
-        // The mark is not the first letter, so the second chord's place depends on the first name's length.
-        val two = "${jTotal("C")}\u0132\u0132\u0132\uFF0F※${jTotal("D")}<br>${"b".repeat(20)}"
-        assertEquals(listOf(0, 9), ChordSheets.fromJTotal(two, monospace = true).single().chords.map { it.at })
-        // U+0000 stays inside the Latin run.
-        assertEquals(4, monoAt("ab${"\u0132".repeat(4)}${jTotal("C")}<br>※A\u0000\u3000あbbbb"))
-        // This line does not open with an ideographic space. Treating it as though it did would widen the mark.
-        assertEquals(4, monoAt("abc\u0132${jTotal("C")}<br>bb※99"))
-        // Digits after a trailing mark keep the wide width. A zero width would land two letters later.
-        assertEquals(3, monoAt("abcdef${jTotal("C")}<br>\u3000あ…※99"))
-        // U+A000 and U+FB00 are just outside the two Han blocks, and the mark stays narrow.
-        assertEquals(23, monoAt("${"あ".repeat(10)}\uA000※${jTotal("C")}<br>$words"))
-        assertEquals(7, monoAt("ああ\uFB00※${jTotal("C")}<br>$words"))
+    fun jTotalsReferenceMarkIsTwoColumnsInBothStacks() {
+        // Drawn in Chromium on both stacks. At 1.650 columns, the first chord would land on the second a.
+        for (monospace in listOf(false, true)) {
+            assertEquals(4, at("abcdefgh${jTotal("C")}<br>※※※※aaaa", monospace))
+            assertEquals(4, at("abcdef${jTotal("C")}<br>※A\u3000ああ", monospace))
+        }
     }
 
-    private fun monoAt(sheet: String) = ChordSheets.fromJTotal(sheet, monospace = true).last().chords.last().at
+    @Test
+    fun jTotalsHalfwidthSoundMarksTakeAColumnEach() {
+        // Drawn in Chromium on both stacks: ﾞ and ﾟ draw as part of the kana before them, and still move the line on
+        // by a column. With no width, each chord would land one letter later, on い.
+        for (monospace in listOf(false, true)) {
+            assertEquals(2, at("xx${jTotal("C")}<br>ｶﾞあい", monospace))
+            assertEquals(2, at("xx${jTotal("C")}<br>ﾊﾟあい", monospace))
+            assertEquals(4, at("xxxx${jTotal("C")}<br>ｶﾞｶﾞあい", monospace))
+        }
+    }
+
+    @Test
+    fun jTotalsGreekCyrillicAndOtherShiftJisSymbolsAreTwoColumns() {
+        // Drawn on Windows: MS Gothic has these, at two columns. Narrower, each chord would land a letter later.
+        for (monospace in listOf(false, true)) {
+            assertEquals(3, at("xxxxxx${jTotal("C")}<br>αβγδεあ", monospace))
+            assertEquals(3, at("xxxxxx${jTotal("C")}<br>жизньあ", monospace))
+            assertEquals(3, at("xxxxxx${jTotal("C")}<br>≒≒≒≒あ", monospace))
+        }
+    }
+
+    private fun at(sheet: String, monospace: Boolean) = ChordSheets.fromJTotal(sheet, monospace).single().chords.single().at
+
+    @Test
+    fun jTotalCountsALetterAboveTheBasicPlaneBeforeAChordOnce() {
+        // 𠮷 is one letter of two columns, which Java holds as two halves. Counted as two letters, it would
+        // move the chord after it on by two more columns, to the end of the line.
+        for (monospace in listOf(false, true)) assertEquals(2, at("\uD842\uDFB7${jTotal("C")}<br>abcd", monospace))
+    }
+
+    @Test
+    fun jTotalPutsNoChordOnHalfOfALetterAboveTheBasicPlane() {
+        // Read as two letters, 𠮷's second half would start where a does, and take the chord over it.
+        for (monospace in listOf(false, true)) assertEquals(2, at("xx${jTotal("C")}<br>\uD842\uDFB7ab", monospace))
+    }
+
+    @Test
+    fun aLongRunOfLinksAndSpacesFitsOnTheStack() {
+        // Read one at a time, each link and space of a run took a step deeper into the stack: 20,000 of them
+        // overflowed it. The run is a line of nothing but links, so no line comes out of it.
+        assertEquals(listOf(SheetLine("abcd", emptyList())), ChordSheets.fromJTotal("${"<a> ".repeat(100_000)}<br>abcd"))
+    }
 
     @Test
     fun jTotalDoesNotReadLinksToOtherVersionsAsChords() {
@@ -542,6 +509,26 @@ class ChordSheetsTest {
         assertEquals(true, ChordSheets.jTotalMonospace(normal + mono))
         assertEquals(false, ChordSheets.jTotalMonospace(mono + normal))
         assertEquals(false, ChordSheets.jTotalMonospace(normal + "<style>/* tt { font-family: 'Inconsolata', monospace; } */</style>"))
+        assertEquals(true, ChordSheets.jTotalMonospace(normal + "<STYLE>/* a */ tt { font-family: 'Inconsolata', monospace; } /* b */</STYLE>"))
+    }
+
+    @Test
+    fun jTotalReadsACssCommentFromItsOpeningToTheFirstCloseAfterIt() {
+        val monoRule = "tt { font-family: 'Inconsolata', monospace; }"
+        // A comment at the very start of the page's CSS.
+        assertEquals(false, ChordSheets.jTotalMonospace("<style>/* $monoRule */</style>"))
+        // The slash that opens a comment doesn't also close it: "/*/" is still open.
+        assertEquals(false, ChordSheets.jTotalMonospace("<style>/*/ $monoRule */</style>"))
+        // The rule right after the close, with no space: the close is all that goes.
+        assertEquals(true, ChordSheets.jTotalMonospace("<style>/* x */$monoRule</style>"))
+    }
+
+    @Test
+    fun jTotalsSheetIsFromItsFirstStartToTheEndAfterIt() {
+        assertEquals("ab", ChordSheets.jTotalSheet("x<!--HPSTART-->ab<!--HPEND-->c<!--HPSTART-->d<!--HPEND-->"))
+        assertEquals("", ChordSheets.jTotalSheet("<!--HPSTART--><!--HPEND-->"))
+        assertNull(ChordSheets.jTotalSheet("<!--HPEND--><!--HPSTART-->ab"))
+        assertNull(ChordSheets.jTotalSheet("ab<!--HPEND-->"))
     }
 
     @Test
@@ -569,120 +556,11 @@ class ChordSheetsTest {
         assertEquals(listOf(SheetLine("abcd", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("→${jTotal("C")}<br>abcd"))
         assertEquals(listOf(SheetLine("abcd", listOf(Chord(0, "C")))), ChordSheets.fromJTotal("\u200B${jTotal("C")}<br>abcd"))
         assertEquals(listOf(SheetLine("abcd", listOf(Chord(0, "C")))), ChordSheets.fromJTotal("\u0301${jTotal("C")}<br>abcd"))
-        assertEquals(listOf(SheetLine("abcd", listOf(Chord(0, "C")))), ChordSheets.fromJTotal("\uFF9E${jTotal("C")}<br>abcd"))
-        assertEquals(listOf(SheetLine("abcd", listOf(Chord(0, "C")))), ChordSheets.fromJTotal("\uFF9F${jTotal("C")}<br>abcd"))
+        // A half-width sound mark is a column, even with no kana before it to join.
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("\uFF9E${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("\uFF9F${jTotal("C")}<br>abcd"))
         // Four Latin columns reach い: あ and ） are two each, because い is not punctuation.
         assertEquals(listOf(SheetLine("あ）い", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ）い"))
-    }
-
-    @Test
-    fun jTotalsFullwidthBracketsTakeOneColumnBesideThePunctuationChromiumTrims() {
-        // A closing mark before one of these is one column, so four Latin columns land on い.
-        val closingBefore = listOf(
-            '\u3000', '\u30FB', '\u00B7', '\u2027', '\u2019', '\u201D',
-            '）', '、', '。', '，', '．', ')'
-        )
-        for (next in closingBefore) {
-            assertEquals(
-                "U+%04X".format(next.code),
-                listOf(SheetLine("あ）${next}い", listOf(Chord(3, "C")))),
-                ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ）${next}い")
-            )
-        }
-        // The same for a stop, a corner bracket, and the other full-width block, not only ）.
-        for (mark in listOf('、', '。', '，', '．', '」', '\uFF60')) {
-            assertEquals(
-                "U+%04X".format(mark.code),
-                listOf(SheetLine("あ${mark}\u3000い", listOf(Chord(3, "C")))),
-                ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ${mark}\u3000い")
-            )
-        }
-        // An opening mark after one of these is one column. Six Latin columns then land past い, on z.
-        val openingAfterWide = listOf('\u3000', '\u30FB', '\u2027', '）', '（', '「')
-        for (prev in openingAfterWide) {
-            assertEquals(
-                "U+%04X".format(prev.code),
-                listOf(SheetLine("あ${prev}（iz", listOf(Chord(4, "C")))),
-                ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>あ${prev}（iz")
-            )
-        }
-        // A one-column neighbor needs the chord one column earlier to show the same trim.
-        for (prev in listOf('\u00B7', '\u2018', '\u201C', '(')) {
-            assertEquals(
-                "U+%04X".format(prev.code),
-                listOf(SheetLine("あ${prev}（iz", listOf(Chord(4, "C")))),
-                ChordSheets.fromJTotal("abcde${jTotal("C")}<br>あ${prev}（iz")
-            )
-        }
-        // An opening corner bracket from the other block, and a small-form bracket that does not trim.
-        assertEquals(
-            listOf(SheetLine("あ\u3000「iz", listOf(Chord(4, "C")))),
-            ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>あ\u3000「iz")
-        )
-        assertEquals(
-            listOf(SheetLine("あ\uFE5A\u3000い", listOf(Chord(2, "C")))),
-            ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ\uFE5A\u3000い")
-        )
-        // At the end of the chord's own gap there is no following letter, so ） stays two columns.
-        assertEquals(
-            listOf(SheetLine("abcdef", listOf(Chord(4, "C")))),
-            ChordSheets.fromJTotal("あ）${jTotal("C")}<br>abcdef")
-        )
-        // Kana beside a bracket does not trim it. Column 6 is い, not the letter after it.
-        assertEquals(
-            listOf(SheetLine("ああ（iz", listOf(Chord(3, "C")))),
-            ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>ああ（iz")
-        )
-    }
-
-    @Test
-    fun jTotalsFullwidthColonAndSemicolonTrimTheMarkBesideThem() {
-        // CSS Text 4 puts these with the middle dots for Japanese. Chromium does that with no lang too,
-        // so four Latin columns land on い, and six land on z.
-        for (mark in listOf('\uFF1A', '\uFF1B')) {
-            assertEquals(
-                "U+%04X".format(mark.code),
-                listOf(SheetLine("あ）${mark}い", listOf(Chord(3, "C")))),
-                ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ）${mark}い")
-            )
-            assertEquals(
-                "U+%04X stop".format(mark.code),
-                listOf(SheetLine("あ、${mark}い", listOf(Chord(3, "C")))),
-                ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ、${mark}い")
-            )
-            assertEquals(
-                "U+%04X open".format(mark.code),
-                listOf(SheetLine("あ${mark}（iz", listOf(Chord(4, "C")))),
-                ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>あ${mark}（iz")
-            )
-        }
-    }
-
-    @Test
-    fun jTotalsMarksOutsideTheSpacingClassesStayTwoColumns() {
-        // Measured in Chromium, beside the page font: these are not middle dots, quotes or Ps/Pe,
-        // so ） stays two columns and four Latin columns land on the mark, not on い.
-        for (next in listOf('\uFF65', '\u00BB', '\uFE10', '\uFE11', '\uFE13', '\uFE15')) {
-            assertEquals(
-                "U+%04X".format(next.code),
-                listOf(SheetLine("あ）${next}い", listOf(Chord(2, "C")))),
-                ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ）${next}い")
-            )
-        }
-        // An opening mark after a guillemet (one column) or a vertical comma (two) stays two.
-        assertEquals(
-            listOf(SheetLine("あ\u00AB（iz", listOf(Chord(4, "C")))),
-            ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>あ\u00AB（iz")
-        )
-        assertEquals(
-            listOf(SheetLine("あ\uFE10（iz", listOf(Chord(3, "C")))),
-            ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>あ\uFE10（iz")
-        )
-        // A right quote trims the closing mark before it, and not the opening mark after it.
-        assertEquals(
-            listOf(SheetLine("あ”（iz", listOf(Chord(3, "C")))),
-            ChordSheets.fromJTotal("abcde${jTotal("C")}<br>あ”（iz")
-        )
     }
 
     @Test
@@ -768,8 +646,9 @@ class ChordSheetsTest {
     @Test
     fun jTotalsWideLettersStartRightPastLatinAndOnEitherSideOfHalfWidthKana() {
         // What comes before the chord is what's measured; words in Latin letters say how many columns it took.
-        // Ā is one column: Inconsolata has it. The last half-width kana letter is one; the voice marks are none, covered above.
-        val columnsOf = listOf('\u00FF' to 1, '\u0100' to 1, '\uFF60' to 2, '\uFF61' to 1, '\uFF9D' to 1, '\uFFA0' to 2)
+        // Ā is one column: Inconsolata has it. The last half-width kana letter is one, and so are the sound marks, covered
+        // above. On Windows, Malgun Gothic draws the half-width Hangul filler at one column too.
+        val columnsOf = listOf('\u00FF' to 1, '\u0100' to 1, '\uFF60' to 2, '\uFF61' to 1, '\uFF9D' to 1, '\uFFA0' to 1)
         for ((letter, columns) in columnsOf) {
             assertEquals(
                 "U+%04X".format(letter.code),
@@ -951,6 +830,10 @@ class ChordSheetsTest {
         assertEquals("歌：", ChordSheets.fromChordWiki("{subtitle:歌： }\n[C]川").artist)
         // A name of nothing but a space that isn't one of the plain ones is no name either.
         assertEquals("歌：", ChordSheets.fromChordWiki("{st:歌：\u2003 作詞：山田}\n[C]川").artist)
+        // A credit right after the spaces is no name, on a phone too, where "\s" takes U+2003: main read "作詞：山田".
+        assertEquals("歌：", ChordSheets.fromChordWiki("{st:歌： 作詞：山田}\n[C]川").artist)
+        assertEquals("歌：", ChordSheets.fromChordWiki("{st:歌：　作曲：山田 歌詞：川}\n[C]川").artist)
+        assertEquals("歩く人", ChordSheets.fromChordWiki("{st:歌：\u2003歩く人 作詞：山田}\n[C]川").artist)
         val song = ChordSheets.fromChordWiki(
             """
             {c:BPM=90}

@@ -54,6 +54,8 @@ class NoticesTest {
             ),
             notices
         )
+        // Blank lines before the first block and after the last, as a comment leaves them, make no block.
+        assertEquals(listOf("One"), Notices.parse("# about\n\n\nOne\nby: Someone\nlicense: MIT License\n\n\n# end\n\n").map { it.name })
     }
 
     @Test(expected = IllegalArgumentException::class)
@@ -85,6 +87,9 @@ class NoticesTest {
         // A sentence ends past a third of the way: cut there.
         val sentence = "a".repeat(200) + ". " + "b ".repeat(100)
         assertEquals(listOf("a".repeat(200) + ".", "b ".repeat(100).trim()), licenseUnits(sentence).map { it.text })
+        // One that ends a third of the way exactly is late enough.
+        val third = "a".repeat(most / 3 - 1) + ". " + "b ".repeat(150)
+        assertEquals("a".repeat(most / 3 - 1) + ".", licenseUnits(third).first().text)
         // None does, or only too early: cut between words, as late as fits.
         val words = "c. " + "word ".repeat(80)
         val cut = licenseUnits(words).map { it.text }

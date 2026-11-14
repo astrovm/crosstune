@@ -80,41 +80,107 @@ internal object ChordSheets {
     /** How long a line with nothing after it takes per letter, to time its chords. */
     private const val LETTER_MS = 150L
 
-    private val inline = Regex("""\[([^\]]*)]""")
 
     /** A reading in brackets right after a kanji: kana, and the dashes that hold a sound. */
-    private val reading = Regex("""(?<=\p{IsHan})[(（][ぁ-ゟァ-ヿｦ-ﾟ\-－]+[)）]""")
-    private val ugChord = Regex("""\[ch]([^\[]*)\[/ch]""")
-    private val ugTab = Regex("""\[/?tab]""")
-    private val section = Regex("""^\s*\[[^\]]*]\s*$""")
+    private val reading = phoneRegex("""(?<=\p{sc=Han})[(（][ぁ-ゟァ-ヿｦ-ﾟ\-－]+[)）]""")
+    private val ugChord = phoneRegex("""\[ch]([^\[]*)\[/ch]""")
+    private val ugTab = phoneRegex("""\[/?tab]""")
+    private val section = phoneRegex("""^\s*\[[^\]]*]\s*$""")
     private val solfege = mapOf("DO" to "C", "RE" to "D", "MI" to "E", "FA" to "F", "SOL" to "G", "LA" to "A", "SI" to "B")
-    private val jTotalLineEnd = Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
+    private val jTotalLineEnd = phoneRegex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
+
+    /*
+     * A J-Total page is read as main's patterns read it, a tag from its `<` to the first `>` after it, but in time
+     * in step with its length: main's patterns tried again from each `<`, and a chord name with no `</a>`, or a `<`
+     * with no `>` after it, took seconds on 30,000 letters. So its tags and links are read by [TagEnds] and
+     * [linkedNames], each looking on from where it last looked.
+     */
+
+    /** A chord's name: spaces, then a letter, then anything up to the next tag. */
+    private const val CHORD_NAME = """\s*+[^<\s][^<]*+"""
 
     /** A chord, linked to the picture of how it's played, and any bass written after the link: "E" then "onG#". */
-    private val jTotalChord = Regex("""<a [^>]*cd/[^>]*>([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?""")
+    internal data class ChordLink(val range: IntRange, val name: String, val bass: String)
 
     /** A chord link a <br> cut in half, so the line starts with the name and the closing tag. */
-    private val splitChord = Regex("""^([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?""")
-    private val markup = Regex("""<[^>]+>""")
-    private val nonAnchorMarkup = Regex("""<(?!/?a(?:\s|>))/?[^>]+>""", RegexOption.IGNORE_CASE)
-    private val sourceSpace = Regex("""[ \t\r\n]+""")
-    private val nameThenBreak = Regex("""(<a [^>]*cd/[^>]*>[^<]*[^<\s][^<]*)(<br\s*/?>)(\s*</a>)""", RegexOption.IGNORE_CASE)
-    private val spacesAndTags = Regex("""(?: |<[^>]+>)+""")
-    private val oneSpaceOrTag = Regex(""" |<[^>]+>""")
-    private val commentedStyle = Regex("""<!--\s*<style\b[^>]*>.*?</style>\s*-->""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-    private val styleBlock = Regex("""<style\b[^>]*>(.*?)</style>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-    private val cssComment = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
-    private val ttRule = Regex("""(?:^|[}\s>])tt\s*\{([^}]*)\}""", RegexOption.IGNORE_CASE)
-    private val fontFamily = Regex("""font-family\s*:\s*([^;}]+)""", RegexOption.IGNORE_CASE)
+    private val splitChord = phoneRegex("""^($CHORD_NAME)</a>(?:on([A-G][#b]?))?""")
+    private val sourceSpace = phoneRegex("""[ \t\r\n]+""")
+    internal val commentedStyle = PageParts(phoneRegex("""<!--\s*+<style\b""", RegexOption.IGNORE_CASE), phoneRegex("""</style>\s*+-->""", RegexOption.IGNORE_CASE))
+    internal val styleBlock = PageParts(phoneRegex("""<style\b""", RegexOption.IGNORE_CASE), phoneRegex("</style>", RegexOption.IGNORE_CASE))
+    private val fontFamily = phoneRegex("""font-family\s*:\s*([^;}]+)""", RegexOption.IGNORE_CASE)
 
     /** J-Total's last tt rule selects one of its two font stacks. */
     fun jTotalMonospace(page: String): Boolean {
-        val css = styleBlock.findAll(page.replace(commentedStyle, "")).joinToString("\n") { it.groupValues[1] }.replace(cssComment, "")
-        val family = ttRule.findAll(css).mapNotNull { fontFamily.find(it.groupValues[1])?.groupValues?.get(1) }.lastOrNull()
+        val styled = commentedStyle.cutFrom(page)
+        val css = withoutCssComments(styleBlock.allIn(styled).joinToString("\n") { styled.substring(it.between) })
+        val family = ttRules(css).mapNotNull { fontFamily.find(it)?.groupValues?.get(1) }.lastOrNull()
         return family?.replace("'", "\"")?.replace(" ", "")?.equals("\"Inconsolata\",monospace", ignoreCase = true) == true
     }
 
-    private val solfegeChord = Regex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)((?:maj|min|sus|add|dim|aug|alt|m|M|b|[^A-Za-z/])*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
+    /**
+     * What's in each `tt` rule of [css], as main's `(?:^|[}\s>])tt\s*\{([^}]*)\}` read them: a `tt` at the start, or
+     * after a `}`, a space or a `>` that the rule before didn't end on, then from its `{` to the first `}` after it.
+     */
+    internal fun ttRules(css: String): Sequence<String> = sequence {
+        var from = 0
+        var at = css.indexOf(TT, ignoreCase = true)
+        while (at >= 0) {
+            val brace = spacesEnd(css, at + TT.length)
+            if (startsASelector(css, at, from) && css.getOrNull(brace) == '{') {
+                // From the `{`, which isn't one.
+                val end = css.indexOf('}', brace)
+                // A rule that never closes, nor any after it.
+                if (end == -1) return@sequence
+                yield(css.substring(brace + 1, end))
+                from = end + 1
+                at = css.indexOf(TT, from, ignoreCase = true)
+            } else {
+                at = css.indexOf(TT, at + 1, ignoreCase = true)
+            }
+        }
+    }
+
+    private const val TT = "tt"
+
+    /** Whether a `tt` at [at] in [css] starts a selector, as [ttRules] reads one: [from] is where the rule before it ended. */
+    private fun startsASelector(css: String, at: Int, from: Int) = at == 0 || at > from && css[at - 1].let { it == '}' || it == '>' || isPatternSpace(it) }
+
+    /** [css] with each comment taken out, from where it opens to the first close after it. One that never closes stays, and so does the rest. */
+    internal fun withoutCssComments(css: String): String {
+        val kept = StringBuilder()
+        var from = 0
+        while (true) {
+            val open = css.indexOf("/*", from)
+            val close = if (open < 0) -1 else css.indexOf("*/", open + 2)
+            if (close == -1) return kept.append(css, from, css.length).toString()
+            kept.append(css, from, open)
+            from = close + 2
+        }
+    }
+
+    /** The sheet in J-Total's page: from its first `<!--HPSTART-->` to the `<!--HPEND-->` after it, or null with either missing. */
+    fun jTotalSheet(page: String): String? {
+        val start = page.indexOf(HP_START).takeIf { it >= 0 }?.plus(HP_START.length) ?: return null
+        val end = page.indexOf(HP_END, start).takeIf { it != -1 } ?: return null
+        return page.substring(start, end)
+    }
+
+    private const val HP_START = "<!--HPSTART-->"
+    private const val HP_END = "<!--HPEND-->"
+
+    private val solfegeChord = phoneRegex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)((?:maj|min|sus|add|dim|aug|alt|m|M|b|[^A-Za-z/])*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
+
+    /** Each chord in brackets in [line], as main's `\[([^\]]*)]` read them: from a `[` to the first `]` after it, a `[` between too. */
+    internal fun brackets(line: String): Sequence<IntRange> = sequence {
+        var at = line.indexOf('[')
+        while (at >= 0) {
+            val end = line.indexOf(']', at + 1)
+            if (end == -1) return@sequence
+            yield(at..end)
+            // From the `]`, which isn't one.
+            at = line.indexOf('[', end)
+        }
+    }
 
     /** U-FRET's sheet: each line its words with each chord in brackets where it's played, "[Am]五月[Em]雨". */
     fun fromUFret(lines: JSONArray): List<SheetLine> = (0 until lines.length()).map { index ->
@@ -122,10 +188,10 @@ internal object ChordSheets {
         val chords = mutableListOf<Chord>()
         val text = StringBuilder()
         var from = 0
-        inline.findAll(line).forEach { match ->
-            text.append(line, from, match.range.first)
-            match.groupValues[1].trim().takeIf { it.isNotEmpty() }?.let { chords += Chord(text.length, it) }
-            from = match.range.last + 1
+        for (bracket in brackets(line)) {
+            text.append(line, from, bracket.first)
+            line.substring(bracket.first + 1, bracket.last).trim().takeIf { it.isNotEmpty() }?.let { chords += Chord(text.length, it) }
+            from = bracket.last + 1
         }
         text.append(line.substring(from))
         SheetLine(text.toString(), chords)
@@ -148,317 +214,188 @@ internal object ChordSheets {
      * none at the start of the line. The tags stay where they were, as a link can start or end in
      * the space.
      */
-    private fun collapseSpaces(line: String): String = line.replace(spacesAndTags) { run ->
-        var spaced = run.range.first == 0
-        run.value.replace(oneSpaceOrTag) {
-            if (it.value != " ") it.value else if (spaced) "" else " ".also { spaced = true }
+    internal fun collapseSpaces(line: String): String {
+        val tags = TagEnds(line)
+        val kept = StringBuilder()
+        // In a run of spaces and tags, whether it has its one space: a run at the line's start has none. Null out of one.
+        var spaced: Boolean? = null
+        var at = 0
+        while (at < line.length) {
+            val tagEnd = tags.at(at)
+            if (tagEnd == -1 && line[at] != ' ') {
+                kept.append(line[at])
+                spaced = null
+                at++
+                continue
+            }
+            val hasSpace = spaced ?: (at == 0)
+            if (tagEnd != -1) {
+                kept.append(line, at, tagEnd + 1)
+                spaced = hasSpace
+                at = tagEnd + 1
+            } else {
+                if (!hasSpace) kept.append(' ')
+                spaced = true
+                at++
+            }
         }
-    }.trim(' ')
+        return kept.toString().trim(' ')
+    }
+
+    /**
+     * Each chord link in [line], as main's `<a [^>]*cd/[^>]*>([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?` read them: by
+     * [linkedNames], its tag closed right after its name, then any bass.
+     */
+    internal fun chordLinks(line: String): Sequence<ChordLink> =
+        linkedNames(line, ignoreCase = false) { at -> if (line.startsWith(LINK_CLOSE, at)) at + LINK_CLOSE.length else -1 }.map { (start, nameStart, nameEnd, end) ->
+            val bassEnd = if (line.getOrNull(end + 3)?.let { it in "#b" } == true) end + 4 else end + 3
+            val bass = if (line.startsWith("on", end) && line.getOrNull(end + 2)?.let { it in 'A'..'G' } == true) line.substring(end + 2, bassEnd) else ""
+            ChordLink(start until if (bass.isEmpty()) end else bassEnd, line.substring(nameStart, nameEnd), bass)
+        }
+
+    /** [sheet] with each chord link a <br> cut after its name closed before the break, as main's `nameThenBreak` put it with "$1$3$2". */
+    internal fun withNamesBeforeBreaks(sheet: String): String {
+        val kept = StringBuilder()
+        var from = 0
+        for ((_, _, nameEnd, end) in linkedNames(sheet, ignoreCase = true) { closedAfterBreak(sheet, it) }) {
+            val breakEnd = breakEnd(sheet, nameEnd)
+            kept.append(sheet, from, nameEnd).append(sheet, breakEnd, end).append(sheet, nameEnd, breakEnd)
+            from = end
+        }
+        return kept.append(sheet, from, sheet.length).toString()
+    }
+
+    /** Where a <br> that starts at [at] ends, as `<br`, spaces, an optional `/`, then `>` read it ignoring case, or -1. */
+    private fun breakEnd(text: String, at: Int): Int {
+        if (!text.regionMatches(at, "<br", 0, "<br".length, ignoreCase = true)) return -1
+        var end = spacesEnd(text, at + "<br".length)
+        if (text.getOrNull(end) == '/') end++
+        return if (text.getOrNull(end) == '>') end + 1 else -1
+    }
+
+    /** Where a <br> at [at], then spaces and `</a>`, end, as such a <br>, `\s*` and `</a>` read them ignoring case, or -1. */
+    private fun closedAfterBreak(text: String, at: Int): Int {
+        val breakEnd = breakEnd(text, at).orNone() ?: return -1
+        val close = spacesEnd(text, breakEnd)
+        return if (text.regionMatches(close, LINK_CLOSE, 0, LINK_CLOSE.length, ignoreCase = true)) close + LINK_CLOSE.length else -1
+    }
+
+    /**
+     * Where each chord link in [text] starts, where its name starts and ends, and where [after] says it ends, as main's
+     * `<a [^>]*cd/[^>]*>[^<]*[^<\s][^<]*` read them: `<a `, a `cd/` address before the tag's first `>`, then a name, up to
+     * the next tag, with a letter that isn't a space. [after] reads from that tag, and says -1 for no link.
+     */
+    private fun linkedNames(text: String, ignoreCase: Boolean, after: (Int) -> Int): Sequence<IntArray> = sequence {
+        val tagCloses = NextFound(text, ">")
+        val addresses = NextFound(text, ADDRESS, ignoreCase)
+        val nextTags = NextFound(text, "<")
+        val letters = NextFound(text) { from -> (from until text.length).firstOrNull { !isPatternSpace(text[it]) } ?: -1 }
+        var at = text.indexOf(LINK, ignoreCase = ignoreCase)
+        while (at >= 0) {
+            val inside = at + LINK.length
+            val tagClose = tagCloses.from(inside)
+            val address = addresses.from(inside)
+            // A link no `>` closes, or with no address, nor any after it.
+            if (tagClose == text.length || address == text.length) return@sequence
+            var end = -1
+            // The address all before the `>`, and a name after it: the next tag is past a letter that isn't a space.
+            // [after] says -1 at the text's end, where there's no tag.
+            if (address + ADDRESS.length <= tagClose && letters.from(tagClose + 1) < nextTags.from(tagClose)) {
+                end = after(nextTags.from(tagClose))
+            }
+            if (end == -1) {
+                at = text.indexOf(LINK, at + 1, ignoreCase)
+                continue
+            }
+            yield(intArrayOf(at, tagClose + 1, nextTags.from(tagClose), end))
+            at = text.indexOf(LINK, end, ignoreCase)
+        }
+    }
+
+    private const val LINK = "<a "
+    private const val LINK_CLOSE = "</a>"
+    private const val ADDRESS = "cd/"
+
+    /** Whether a link's tag, `<a` or `</a`, then a space or `>`, starts at [at], as `<(?!/?a(?:\s|>))` reads it ignoring case. */
+    internal fun isLinkTag(text: String, at: Int): Boolean {
+        val name = if (text.getOrNull(at + 1) == '/') at + 2 else at + 1
+        return text.getOrNull(name)?.lowercaseChar() == 'a' && text.getOrNull(name + 1)?.let { it == '>' || isPatternSpace(it) } == true
+    }
 
     /**
      * J-Total's sheet, as written into its page: a line of chords over the line of words they're
      * played on, each over its letter. Japanese takes two columns, and the Latin font the page names
-     * first takes one. A full-width bracket or stop is two as well, except where the browser draws
-     * it at one. A letter in neither font is as wide as the browser's fallback draws it, and a chord
-     * goes over the letter that starts nearest where it is. On the monospace stack, the reference
-     * mark is 1.650 columns or 2.000. The script beside it chooses, and the line above counts.
-     * Only a <br> ends a line, and spaces count as a browser counts them, as its source wraps anywhere.
-     * Tags are not drawn: an empty link adds no column, and a link split by a <br> names the chord
-     * on the line its name is on.
+     * first takes one. A full-width bracket or stop is two as well, beside another or not: a Japanese
+     * reader's browser on Windows trims none. A letter in neither font is as wide as the browser's
+     * fallback draws it, and a chord goes over the letter that starts nearest where it is. Only a <br>
+     * ends a line, and spaces count as a browser counts them, as its source wraps anywhere. Tags are not
+     * drawn: an empty link adds no column, and a link split by a <br> names the chord on the line its
+     * name is on.
      */
     fun fromJTotal(sheet: String, monospace: Boolean = false): List<SheetLine> {
         // A chord link can end after the break that follows its name: the name is still on its line.
-        val lines = sheet.replace(nameThenBreak, "$1$3$2").split(jTotalLineEnd).map { collapseSpaces(it.replace(nonAnchorMarkup, "").replace(sourceSpace, " ")) }
-            .filter { it.replace(markup, "").trim(' ').isNotEmpty() }
+        val lines = withNamesBeforeBreaks(sheet).split(jTotalLineEnd)
+            .map { line -> collapseSpaces(withoutTags(line) { isLinkTag(line, it) }.replace(sourceSpace, " ")) }
+            .filter { withoutTags(it).trim(' ').isNotEmpty() }
         val result = mutableListOf<SheetLine>()
         var index = 0
-        // The last kana, kanji, or Latin letter on an earlier line. A blank line leaves it as it was.
-        var previous: NeighbourScript? = null
         while (index < lines.size) {
             val line = lines[index++]
-            val visible = line.replace(markup, "")
-            if (!jTotalChord.containsMatchIn(line) && !splitChord.containsMatchIn(line)) {
-                result += SheetLine(visible, emptyList())
-                previous = carriedScript(visible, previous)
+            if (chordLinks(line).none() && !splitChord.containsMatchIn(line)) {
+                result += SheetLine(withoutTags(line), emptyList())
                 continue
             }
             val chords = mutableListOf<Pair<Int, String>>()
             var column = 0
             var from = 0
-            var used = 0
-            // Widths of a gap use the whole line, so a reference mark can see the letters past the chord.
-            fun widen(raw: String): Int {
-                val piece = raw.replace(markup, "")
-                val width = columns(piece, monospace, previous, visible, used)
-                used += piece.length
-                return width
-            }
             // The opening tag stayed on the previous line, so this one starts at the chord's name.
             splitChord.find(line)?.let { split ->
                 val (name, bass) = split.destructured
                 chords += column to if (bass.isEmpty()) name.trim() else "${name.trim()}/$bass"
-                column += widen(split.value)
+                column += columns(withoutTags(split.value), monospace)
                 from = split.range.last + 1
             }
-            jTotalChord.findAll(line).forEach { match ->
-                val (name, bass) = match.destructured
-                column += widen(line.substring(from, match.range.first))
+            for ((range, name, bass) in chordLinks(line)) {
+                column += columns(withoutTags(line.substring(from, range.first)), monospace)
                 chords += column to if (bass.isEmpty()) name.trim() else "${name.trim()}/$bass"
-                column += widen(match.value)
-                from = match.range.last + 1
+                column += columns(withoutTags(line.substring(range)), monospace)
+                from = range.last + 1
             }
-            // The chord names count. The words under them then see that script.
-            val over = carriedScript(visible, previous)
             val words = lines.getOrNull(index)?.takeUnless {
-                jTotalChord.containsMatchIn(it) || splitChord.containsMatchIn(it)
-            }?.replace(markup, "")
-            result += SheetLine(words.orEmpty(), chords.map { (at, name) -> Chord(letterAt(words.orEmpty(), at, monospace, over), name) })
-            previous = over
-            if (words != null) {
-                index++
-                previous = carriedScript(words, over)
-            }
+                chordLinks(it).any() || splitChord.containsMatchIn(it)
+            }?.let(::withoutTags)
+            if (words != null) index++
+            result += SheetLine(words.orEmpty(), chords.map { (at, name) -> Chord(letterAt(words.orEmpty(), at, monospace), name) })
         }
         return result
     }
 
-    /** A neighbour that changes the width of U+203B. Digits and punctuation have none. */
-    private enum class NeighbourScript { LATIN, KANA, HAN }
-
-    /** U+203B. The width table records the Japanese context, which is two columns. */
-    private const val REFERENCE_MARK = 0x203B
-
-    /** What Chromium draws for U+203B on the monospace stack when the neighbour is not Japanese. */
-    private const val REFERENCE_NARROW = 1650
-
-    private const val REFERENCE_WIDE = 2 * JTotalWidths.COLUMN
-
     /**
-     * How wide [text] is in the font the page asks for, as Chromium draws it, in thousandths of a
-     * column ([JTotalWidths]). A letter takes the width of the font it is drawn from: Inconsolata's
-     * own at one column, the Japanese monospace font's at one or two, and any other from a proportional
-     * font, at whatever it measures. A full-width bracket or stop is two, then one where Chromium's
-     * default `text-spacing-trim: normal` kerns it. That follows the CSS Text 4 classes: a closing mark
-     * before a closing mark, a middle dot or an ideographic space, and an opening mark after those
-     * or after a closing mark. For Japanese, and on an untagged page, the full-width colon and
-     * semicolon are middle dots and the stops are closing marks. A right quote trims the closing
-     * mark before it and not the opening mark after it: Inconsolata draws that quote at one column.
-     * A letter outside the Basic Multilingual Plane is one letter, not two halves.
-     * [line] is the whole line and [origin] is where [text] starts in it, so a reference mark can see
-     * the letters on either side. [previous] is the script of the line above.
+     * How wide [text] is in the font the page asks for, as a Japanese reader's browser on Windows draws
+     * it, in thousandths of a column ([JTotalWidths]). A letter takes the width of the font it is drawn
+     * from: Inconsolata's own at one column, MS Gothic's at one or two, and any other from a proportional
+     * font, at whatever it measures. MS Gothic has no narrow forms, so the browser trims no full-width
+     * bracket or stop beside another. A letter outside the Basic Multilingual Plane is one letter, not two halves.
      */
-    private fun columns(text: String, monospace: Boolean, previous: NeighbourScript?, line: String, origin: Int): Int {
+    private fun columns(text: String, monospace: Boolean): Int {
         var total = 0
         var index = 0
         while (index < text.length) {
-            total += widthAt(text, index, monospace, previous, line, origin + index)
+            total += widthAt(text, index, monospace)
             index += Character.charCount(text.codePointAt(index))
         }
         return total
     }
 
-    private fun widthAt(text: String, index: Int, monospace: Boolean, previous: NeighbourScript?, line: String, lineIndex: Int): Int {
-        val codePoint = text.codePointAt(index)
-        // The piece is what a bracket trims against. The whole line is what a reference mark reads.
-        if (monospace && codePoint == REFERENCE_MARK) return referenceMarkWidth(line, lineIndex, previous)
-        val width = JTotalWidths.of(codePoint, monospace)
-        // Chromium trims only with a font that has the narrow forms. Measured in the container, the Japanese
-        // font that `monospace` falls back to has none, so a page in that stack never trims.
-        return if (!monospace && width == 2 * JTotalWidths.COLUMN && trimmed(text, index)) JTotalWidths.COLUMN else width
-    }
-
-    /**
-     * How wide U+203B is on the monospace stack. WenQuanYi draws it at two columns after kana or
-     * kanji. Noto Sans draws it at 1.650 after Latin. The line above supplies the script when this
-     * line has none yet. [previous] is that script.
-     */
-    private fun referenceMarkWidth(text: String, index: Int, previous: NeighbourScript?): Int {
-        if (wideNeighbour(codeBefore(text, index))) return REFERENCE_WIDE
-        val next = scriptAfter(text, index + 1)
-        val prior = scriptBefore(text, index) ?: previous
-        // A Latin letter on the line above starts the run, the same way one on this line does.
-        if (latinSpaceThenKana(text, index + 1, prior == NeighbourScript.LATIN) && prior != NeighbourScript.KANA && prior != NeighbourScript.HAN) return REFERENCE_WIDE
-        if (startsWithIdeograph(text, index) && next == null) return trailingReferenceWidth(text, index, previous)
-        if (prior == null) return if (next == NeighbourScript.KANA || next == NeighbourScript.HAN) REFERENCE_WIDE else REFERENCE_NARROW
-        if (prior == next && prior != NeighbourScript.LATIN) return REFERENCE_WIDE
-        return REFERENCE_NARROW
-    }
-
-    /** The code point before [index], skipping spaces. -1 when the line has none. */
-    private fun codeBefore(text: String, index: Int): Int {
-        var cursor = index
-        while (cursor > 0) {
-            val codePoint = text.codePointBefore(cursor)
-            cursor -= Character.charCount(codePoint)
-            if (codePoint != ' '.code && codePoint != '\t'.code) return codePoint
-        }
-        return -1
-    }
-
-    private fun wideNeighbour(codePoint: Int): Boolean {
-        val script = neighbourScript(codePoint)
-        return script == NeighbourScript.KANA || script == NeighbourScript.HAN || fullwidthNeighbour(codePoint)
-    }
-
-    /**
-     * Full-width punctuation, digits and letters, and the ideographic space. They are not a script.
-     * U+FF00 is unassigned and leaves the mark narrow. U+FF66 is kana, so it is already wide.
-     */
-    private fun fullwidthNeighbour(codePoint: Int): Boolean {
-        if (codePoint in 0x3000..0x303F) return true
-        return codePoint in 0xFF01..0xFF65
-    }
-
-    private fun neighbourScript(codePoint: Int): NeighbourScript? {
-        if (codePoint in 'A'.code..'Z'.code || codePoint in 'a'.code..'z'.code) return NeighbourScript.LATIN
-        if (codePoint in 0xFF21..0xFF3A || codePoint in 0xFF41..0xFF5A) return NeighbourScript.LATIN
-        // The holes are unassigned and leave the mark narrow: U+3040, U+3100, U+321F, U+FFBF and the
-        // same kind of hole inside the halfwidth Hangul block. The next assigned letter draws it wide again.
-        if (codePoint in 0x3041..0x30FF || codePoint in 0x31F0..0x321E || codePoint in 0x3220..0x33FF) return NeighbourScript.KANA
-        if (kanaExtension(codePoint)) return NeighbourScript.KANA
-        if (codePoint in 0x3400..0x9FFF || codePoint in 0xF900..0xFAFF) return NeighbourScript.HAN
-        return null
-    }
-
-    /** Halfwidth kana, then halfwidth Hangul, stopping before each unassigned hole. */
-    private fun kanaExtension(codePoint: Int): Boolean =
-        codePoint in 0xFF66..0xFFBE || codePoint in 0xFFC2..0xFFC7 || codePoint in 0xFFCA..0xFFCF ||
-            codePoint in 0xFFD2..0xFFD7 || codePoint in 0xFFDA..0xFFDC
-
-    private fun scriptBefore(text: String, end: Int): NeighbourScript? {
-        var script: NeighbourScript? = null
-        var index = 0
-        while (index < end) {
-            neighbourScript(text.codePointAt(index))?.let { script = it }
-            index += Character.charCount(text.codePointAt(index))
-        }
-        return script
-    }
-
-    private fun scriptAfter(text: String, start: Int): NeighbourScript? {
-        var index = start
-        while (index < text.length) {
-            neighbourScript(text.codePointAt(index))?.let { return it }
-            index += Character.charCount(text.codePointAt(index))
-        }
-        return null
-    }
-
-    /** [previous], then the last strong letter of [text]. */
-    private fun carriedScript(text: String, previous: NeighbourScript?): NeighbourScript? =
-        scriptBefore(text, text.length) ?: previous
-
-    /**
-     * Latin letters, then an ideographic space, then kana or kanji. An apostrophe inside the Latin
-     * run stays in the run. A Latin letter after the space ends it.
-     */
-    private fun latinSpaceThenKana(text: String, from: Int, carriedLatin: Boolean): Boolean {
-        var seenLatin = carriedLatin
-        var seenSpace = false
-        var index = from
-        while (index < text.length) {
-            val codePoint = text.codePointAt(index)
-            index += Character.charCount(codePoint)
-            if (codePoint == ' '.code || codePoint == '\t'.code) continue
-            if (continuesLatinRun(codePoint, seenLatin)) {
-                if (seenSpace) return false
-                seenLatin = true
-                continue
-            }
-            if (codePoint == '\u3000'.code && seenLatin) {
-                seenSpace = true
-                continue
-            }
-            val script = neighbourScript(codePoint)
-            return seenSpace && (script == NeighbourScript.KANA || script == NeighbourScript.HAN)
-        }
-        return false
-    }
-
-    private fun continuesLatinRun(codePoint: Int, seenLatin: Boolean): Boolean {
-        if (neighbourScript(codePoint) == NeighbourScript.LATIN || Character.isDigit(codePoint)) return true
-        return seenLatin && asciiPunctuation(codePoint)
-    }
-
-    private fun asciiPunctuation(codePoint: Int) =
-        codePoint in 0..127 && codePoint != ' '.code && codePoint != '\t'.code && !Character.isLetterOrDigit(codePoint)
-
-    /** [text] before [index] starts with an ideographic space, once ASCII spaces are gone. */
-    private fun startsWithIdeograph(text: String, index: Int) =
-        text.substring(0, index).trim(' ', '\t').startsWith('\u3000')
-
-    /** A reference mark at the end of a line that starts with an ideographic space. */
-    private fun trailingReferenceWidth(text: String, index: Int, previous: NeighbourScript?): Int {
-        if (kanaOrHanThenLatin(text, index)) return REFERENCE_NARROW
-        if (!kanaOrHanBefore(text, index) && (previous == NeighbourScript.KANA || previous == NeighbourScript.HAN)) return REFERENCE_NARROW
-        return REFERENCE_WIDE
-    }
-
-    private fun kanaOrHanThenLatin(text: String, end: Int): Boolean {
-        var seen = false
-        var index = 0
-        while (index < end) {
-            val script = neighbourScript(text.codePointAt(index))
-            if (script == NeighbourScript.KANA || script == NeighbourScript.HAN) seen = true
-            else if (script == NeighbourScript.LATIN && seen) return true
-            index += Character.charCount(text.codePointAt(index))
-        }
-        return false
-    }
-
-    private fun kanaOrHanBefore(text: String, end: Int): Boolean {
-        var index = 0
-        while (index < end) {
-            val script = neighbourScript(text.codePointAt(index))
-            if (script == NeighbourScript.KANA || script == NeighbourScript.HAN) return true
-            index += Character.charCount(text.codePointAt(index))
-        }
-        return false
-    }
-
-    /** A two-column bracket or stop that the browser draws at one because of the letter beside it. */
-    private fun trimmed(text: String, index: Int): Boolean {
-        val letter = text[index]
-        if (fullwidthClose(letter) && index + 1 < text.length && closesBefore(text[index + 1])) return true
-        return fullwidthOpen(letter) && index > 0 && opensAfter(text[index - 1])
-    }
-
-    private fun closesBefore(next: Char): Boolean {
-        if (next == '\u3000' || next in middleDots || next in rightQuotes) return true
-        return fullwidthClose(next) || Character.getType(next) == Character.END_PUNCTUATION.toInt()
-    }
-
-    private fun opensAfter(prev: Char): Boolean {
-        if (prev == '\u3000' || prev in middleDots || prev in leftQuotes) return true
-        return fullwidthClose(prev) || Character.getType(prev) == Character.START_PUNCTUATION.toInt()
-    }
-
-    /** Stops Chromium trims as closing punctuation. They are not Unicode category Pe. */
-    private fun fullwidthClose(letter: Char) = letter in "、。，．" || cjkBracket(letter, Character.END_PUNCTUATION.toInt())
-
-    private fun fullwidthOpen(letter: Char) = cjkBracket(letter, Character.START_PUNCTUATION.toInt())
-
-    private fun cjkBracket(letter: Char, type: Int): Boolean {
-        val block = Character.UnicodeBlock.of(letter)
-        val cjk = block == Character.UnicodeBlock.CJK_SYMBOLS_AND_PUNCTUATION ||
-            block == Character.UnicodeBlock.HALFWIDTH_AND_FULLWIDTH_FORMS
-        return cjk && Character.getType(letter) == type
-    }
-
-    /** Middle dots, plus the full-width colon and semicolon. Japanese, and Chromium on an untagged page, trim beside both. */
-    private val middleDots = setOf('\u00B7', '\u2027', '\u30FB', '\uFF1A', '\uFF1B')
-
-    private val leftQuotes = setOf('\u2018', '\u201C')
-
-    private val rightQuotes = setOf('\u2019', '\u201D')
+    private fun widthAt(text: String, index: Int, monospace: Boolean): Int = JTotalWidths.of(text.codePointAt(index), monospace)
 
     /**
      * The letter of [words] whose start is nearest [column], the later one when two are as near: a
-     * chord over the middle of a wide letter is read as the next. Widths use the whole line, so a
-     * bracket can see the punctuation beside it. Letters that start in the same place, as a mark with
-     * no width does, give the first. The end of the line is where a chord past the last letter goes.
+     * chord over the middle of a wide letter is read as the next. Each letter has its own width, whatever
+     * is beside it. Letters that start in the same place, as a mark with no width does, give the first.
+     * The end of the line is where a chord past the last letter goes.
      */
-    private fun letterAt(words: String, column: Int, monospace: Boolean, previous: NeighbourScript?): Int {
+    private fun letterAt(words: String, column: Int, monospace: Boolean): Int {
         var best = 0
         var bestStart = 0
         var bestDistance = Int.MAX_VALUE
@@ -472,30 +409,34 @@ internal object ChordSheets {
                 bestDistance = distance
             }
             if (index >= words.length) return best
-            start += widthAt(words, index, monospace, previous, words, index)
+            start += widthAt(words, index, monospace)
             index += Character.charCount(words.codePointAt(index))
         }
     }
 
     /** A ChordPro directive name, as `{title:…}` and `{start_of_tab}` write it. */
-    private val directiveName = Regex("""[a-z_][a-z0-9_]*""")
+    private val directiveName = phoneRegex("""[a-z_][a-z0-9_]*""")
 
     /** The longest editor on an edit page; a page with none is the ChordPro text itself. */
-    private val textarea = Regex("""<textarea\b[^>]*>(.*?)</textarea>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    internal val textarea = PageParts(phoneRegex("""<textarea\b""", RegexOption.IGNORE_CASE), phoneRegex("</textarea>", RegexOption.IGNORE_CASE))
 
     /** A chord token: a letter root, then only what a chord name uses, and not a whole word. */
-    private val chordToken = Regex("""[A-G][0-9A-Za-z#/()+\-]*""")
-    private val letterRun = Regex("""[A-Za-z]{4,}""")
-    private val chordWord = Regex("""maj|min|sus|add|dim|aug""")
+    private val chordToken = phoneRegex("""[A-G][0-9A-Za-z#/()+\-]*""")
+    private val letterRun = phoneRegex("""[A-Za-z]{4,}""")
+    private val chordWord = phoneRegex("""maj|min|sus|add|dim|aug""")
 
     /** `(4/4)` at the start of a line, which is not sung and not part of where a chord sits. */
-    private val timeSignature = Regex("""^\(\d+/\d+\)""")
+    private val timeSignature = phoneRegex("""^\(\d+/\d+\)""")
 
     /**
      * Who sings it, after 歌 and a colon (half or full width). The credit that follows (作詞, 作曲,
-     * 編曲, 歌詞) is not their name. A subtitle with no such mark is the name itself.
+     * 編曲, 歌詞) is not their name, nor is it one when it comes right after the spaces. A subtitle with no such mark is
+     * the name itself.
      */
-    private val sungBy = Regex("""歌[:：][\s　]*(.+?)(?=[\s　]*(?:作詞|作曲|編曲|歌詞)|$)""")
+    private val sungBy = phoneRegex("""歌[:：][\s　]*+(?!$CREDITS)(.+?)(?=[\s　]*(?:$CREDITS)|$)""")
+
+    /** The credits a ChordWiki subtitle names after its singer. */
+    private const val CREDITS = "作詞|作曲|編曲|歌詞"
 
     /** Title, singer and capo read so far, and whether a tab or grid is open. */
     private data class ChordWikiHead(
@@ -558,7 +499,7 @@ internal object ChordSheets {
 
     /** The ChordPro text: the longest textarea on an edit page, or [page] when it has none. An empty editor stays empty. */
     private fun chordWikiText(page: String): String {
-        val editors = textarea.findAll(page).map { it.groupValues[1] }.toList()
+        val editors = textarea.allIn(page).map { page.substring(it.between) }.toList()
         if (editors.isEmpty()) return page
         return ChordFinder.unescape(editors.maxBy { it.length })
     }
@@ -589,7 +530,7 @@ internal object ChordSheets {
 
     /** The fret [value] names, when it's a guitar fret; words and a number past the neck are not. */
     private fun chordWikiCapo(value: String): Int? {
-        val number = Regex("""\d+""").find(value)?.value?.toIntOrNull() ?: return null
+        val number = phoneRegex("""\d+""").find(value)?.value?.toIntOrNull() ?: return null
         return number.takeIf { it <= 24 }
     }
 
@@ -610,11 +551,11 @@ internal object ChordSheets {
         val chords = mutableListOf<Chord>()
         val text = StringBuilder()
         var from = 0
-        inline.findAll(body).forEach { match ->
-            text.append(body, from, match.range.first)
-            val name = match.groupValues[1].trim()
+        for (bracket in brackets(body)) {
+            text.append(body, from, bracket.first)
+            val name = body.substring(bracket.first + 1, bracket.last).trim()
             if (chordWikiChord(name)) chords += Chord(text.length, name)
-            from = match.range.last + 1
+            from = bracket.last + 1
         }
         text.append(body.substring(from))
         val (words, placed) = withoutReadings(text.toString(), chords)
@@ -628,7 +569,7 @@ internal object ChordSheets {
      * Left in, they are letters the song never has, and a line that is mostly readings looks like another verse.
      */
     private fun withoutReadings(words: String, chords: List<Chord>): Pair<String, List<Chord>> {
-        val ranges = reading.findAll(words).map { it.range }.toList()
+        val ranges = reading.matchesIn(words).map { it.range }.toList()
         if (ranges.isEmpty()) return words to chords
         return reading.replace(words, "") to chords.map { chord ->
             val gone = ranges.sumOf { range -> (minOf(chord.at, range.last + 1) - range.first).coerceAtLeast(0) }
@@ -640,7 +581,7 @@ internal object ChordSheets {
     private fun chordWikiChord(name: String): Boolean {
         if (name.equals("N.C.", ignoreCase = true) || name.equals("NC", ignoreCase = true)) return true
         if (name.length > 15 || !chordToken.matches(name)) return false
-        return letterRun.findAll(name).all { chordWord.containsMatchIn(it.value) }
+        return letterRun.matchesIn(name).all { chordWord.containsMatchIn(it.value) }
     }
 
     /**
@@ -663,7 +604,7 @@ internal object ChordSheets {
             val chords = mutableListOf<Chord>()
             val plain = StringBuilder()
             var from = 0
-            ugChord.findAll(line).forEach { match ->
+            ugChord.matchesIn(line).forEach { match ->
                 plain.append(line, from, match.range.first)
                 chords += Chord(plain.length, letterName(match.groupValues[1].trim()))
                 plain.append(match.groupValues[1])

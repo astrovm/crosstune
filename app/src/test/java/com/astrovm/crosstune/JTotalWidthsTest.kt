@@ -2,10 +2,11 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.nio.charset.Charset
 
 /**
- * The widths are what Chromium measures on J-Total's page, with its own CSS, in thousandths of a
- * column. The letters here were measured by scripts/jtotal-widths; Issue #775 lists the first four.
+ * The widths are what Chromium measures on J-Total's page on Windows, with its own CSS, in thousandths
+ * of a column. The letters here were measured, and their lines drawn, by scripts/jtotal-widths.
  */
 class JTotalWidthsTest {
     private fun jTotal(name: String) = """<a href="JavaScript:jump_1('../../../cd/$name.html');">$name</a>"""
@@ -22,22 +23,37 @@ class JTotalWidthsTest {
     }
 
     @Test
-    fun theMonospaceFallbackHasItsOwnWidths() {
-        assertEquals(2050, JTotalWidths.of('あ'.code, monospace = true))
-        val sheet = "${"x".repeat(41)}${jTotal("C")}<br>${"あ".repeat(22)}"
-        assertEquals(21, ChordSheets.fromJTotal(sheet).single().chords.single().at)
-        assertEquals(20, ChordSheets.fromJTotal(sheet, monospace = true).single().chords.single().at)
+    fun theMonospaceStackHasItsOwnWidths() {
+        // Kana is two columns on both stacks, as MS Gothic draws it. ۰ comes from another fallback on each.
+        assertEquals(2000, JTotalWidths.of('あ'.code, monospace = true))
+        assertEquals(1144, JTotalWidths.of(0x6F0))
+        assertEquals(1200, JTotalWidths.of(0x6F0, monospace = true))
+        val kana = "${"x".repeat(41)}${jTotal("C")}<br>${"あ".repeat(22)}"
+        assertEquals(21, ChordSheets.fromJTotal(kana).single().chords.single().at)
+        assertEquals(21, ChordSheets.fromJTotal(kana, monospace = true).single().chords.single().at)
+    }
+
+    @Test
+    fun everyShiftJisLetterIsOneColumnOrTwo() {
+        // J-Total's pages are Shift_JIS, and MS Gothic draws each letter that can hold at one column or two.
+        val shiftJis = Charset.forName("windows-31j").newEncoder()
+        for (code in 0x80..0xFFFF) {
+            if (Character.isSurrogate(code.toChar()) || !shiftJis.canEncode(code.toChar())) continue
+            for (monospace in listOf(false, true)) {
+                val width = JTotalWidths.of(code, monospace)
+                assert(width == 1000 || width == 2000) { "U+%04X is %d".format(code, width) }
+            }
+        }
     }
 
     @Test
     fun aLetterInInconsolataIsOneColumnAndOneAbsentFromItIsWhatTheFallbackDraws() {
         assertEquals(1000, JTotalWidths.of(0xC5))
-        assertEquals(1470, JTotalWidths.of(0x132))
-        assertEquals(888, JTotalWidths.of(0x133))
+        assertEquals(1000, JTotalWidths.of(0x132))
         assertEquals(1000, JTotalWidths.of(0x134))
-        assertEquals(1000, JTotalWidths.of(0x148))
-        assertEquals(1209, JTotalWidths.of(0x149))
-        assertEquals(1841, JTotalWidths.of(0xFFA0))
+        assertEquals(1557, JTotalWidths.of(0x531))
+        assertEquals(851, JTotalWidths.of(0x10D0))
+        assertEquals(2746, JTotalWidths.of(0x1F600))
     }
 
     @Test
@@ -64,49 +80,38 @@ class JTotalWidthsTest {
         assertEquals(0, JTotalWidths.of(0xAD))
         assertEquals(0, JTotalWidths.of(0x301))
         assertEquals(0, JTotalWidths.of(0x200B))
-        assertEquals(0, JTotalWidths.of(0xFF9E))
     }
 
     @Test
-    fun aLigatureOfOnePointFourSevenColumnsPutsTheChordOnTheLetterBeyond() {
-        // Ĳ is 1.47 columns: two Latin columns are nearest where b starts (2.47), not a (1.47).
-        assertEquals(2, landsOn("ab", "\u0132abc"))
+    fun aHalfwidthSoundMarkIsAColumn() {
+        // It draws over the kana before it, and still moves the line on by a column.
+        assertEquals(1000, JTotalWidths.of(0xFF9E))
+        assertEquals(1000, JTotalWidths.of(0xFF9F, monospace = true))
     }
 
     @Test
-    fun aLigatureNarrowerThanAColumnPutsTheChordOnTheLetterBeyond() {
-        // ĳ is 0.888, so b starts at 1.888 and the chord's two columns are nearest it.
-        assertEquals(2, landsOn("ab", "\u0133abc"))
+    fun aLetterWiderThanAColumnPutsTheChordWhereItsWidthSays() {
+        // Ա is 1.557 columns: four columns are nearer where the fourth letter starts (4.671) than the third (3.114).
+        assertEquals(3, landsOn("abcd", "ԱԱԱab"))
     }
 
     @Test
-    fun aLetterWithAnApostropheTakesItsWidthWhereAChordIsPlaced() {
-        // ŉ is 1.209: two columns are nearer the 2.209 where b starts than the 1.209 where a starts.
-        assertEquals(2, landsOn("ab", "\u0149abc"))
+    fun aLetterNarrowerThanAColumnPutsTheChordWhereItsWidthSays() {
+        // ა is 0.851: five of them are 4.255 columns, so four columns are over the a after them.
+        assertEquals(5, landsOn("abcd", "აააააab"))
     }
 
     @Test
-    fun aHangulFillerTakesItsWidthWhereAChordIsPlaced() {
-        // Five of them are 9.205 columns, so ten Latin columns are nearest the sixth letter after.
-        assertEquals(6, landsOn("abcdefghij", "\uFFA0\uFFA0\uFFA0\uFFA0\uFFA0abc"))
+    fun lettersTheContainerDrewAtFractionsAreAColumnOnWindows() {
+        // Ĳ, ĳ, ŉ and the half-width Hangul filler: four columns are over the a after them.
+        assertEquals(4, landsOn("abcd", "Ĳĳŉﾠab"))
     }
 
     @Test
-    fun greekTakesWhatTheBrowserGivesIt() {
-        // α is 1.25 columns, so four columns reach the fourth letter's start (3.75) and not the third's (2.5).
-        assertEquals(3, landsOn("abcd", "αααααb"))
-    }
-
-    @Test
-    fun cyrillicTakesWhatTheBrowserGivesIt() {
-        // а is 1.127 columns, so ten are nearest where the tenth letter starts (10.143), not the sixth (two columns each).
-        assertEquals(9, landsOn("abcdefghij", "аааааааааb"))
-    }
-
-    @Test
-    fun hangulSyllablesTakeWhatTheBrowserGivesThem() {
-        // A syllable is 1.841 columns. Five are 9.205, so ten columns are nearest where c starts (10.205), not b (two columns each).
-        assertEquals(6, landsOn("abcdefghij", "가가가가가bc"))
+    fun greekCyrillicAndHangulAreTwoColumns() {
+        assertEquals(2, landsOn("abcd", "αααααb"))
+        assertEquals(5, landsOn("abcdefghij", "аааааааааb"))
+        assertEquals(5, landsOn("abcdefghij", "가가가가가bc"))
     }
 
     @Test
@@ -119,17 +124,17 @@ class JTotalWidthsTest {
     fun aLetterOutsideTheBasicMultilingualPlaneIsOneLetter() {
         // 𠮷 is two columns, a pair of surrogates. Four columns are over the letter after two of them.
         assertEquals(4, landsOn("abcd", "𠮷𠮷abc"))
-        // An emoji is 2.5 columns: five columns are over the letter after two.
+        // An emoji is 2.746 columns: five columns are nearer the letter after two (5.492) than the second (2.746).
         assertEquals(4, landsOn("abcde", "😀😀abc"))
     }
 
     @Test
     fun aChordInTheMiddleOfAWideLetterGoesOverTheNextAndOneNearerTheLetterGoesOverIt() {
         assertEquals(1, landsOn("a", "あいう"))
-        // Hangul Filler starts the next letter at 1.841, a little before two columns.
-        assertEquals(1, landsOn("ab", "ﾠabc"))
-        // ĳ ends at 0.888 and Ĳ at 1.47: one column is nearer the end of ĳ.
-        assertEquals(1, landsOn("a", "ĳĲb"))
+        // Two columns are nearer where the second Ա starts (1.557) than where b does (3.114).
+        assertEquals(1, landsOn("ab", "ԱԱb"))
+        // One column is nearer where the second ა starts (0.851) than where b does (1.702).
+        assertEquals(1, landsOn("a", "ააb"))
     }
 
     @Test

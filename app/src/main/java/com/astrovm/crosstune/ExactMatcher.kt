@@ -540,9 +540,9 @@ internal class ExactMatcher(
             if (!response.isSuccessful) throw IOException("Qobuz answered ${response.code}")
             response.body.stringAtMost()
         }
-        val songs = qobuzItemRegex.findAll(page).mapNotNull { item ->
-            val html = item.value
-            val (title, credit) = qobuzTitleRegex.find(html)?.groupValues?.drop(1)?.map(::htmlText) ?: return@mapNotNull null
+        val songs = qobuzItems.allIn(page).mapNotNull { item ->
+            val html = page.substring(item.whole)
+            val (title, credit) = qobuzTitle(html)?.toList()?.map(::htmlText) ?: return@mapNotNull null
             val (artist, album) = credit.split("•").map(String::trim).let { it.first() to it.getOrElse(1) { "" } }
             QobuzSong(title, artist, album, qobuzTrackRegex.find(html)?.groupValues?.get(1), qobuzAlbumRegex.find(html)?.groupValues?.get(1))
         }
@@ -558,11 +558,10 @@ internal class ExactMatcher(
 
     private class QobuzSong(val title: String, val artist: String, val albumTitle: String, val track: String?, val album: String?)
 
-    private fun htmlText(html: String) = android.text.Html.fromHtml(html.replace(tagRegex, " "), android.text.Html.FROM_HTML_MODE_LEGACY)
+    private fun htmlText(html: String) = android.text.Html.fromHtml(withoutTags(html, with = " "), android.text.Html.FROM_HTML_MODE_LEGACY)
         .toString().replace(spacesRegex, " ").trim()
 
-    private val tagRegex = Regex("<[^>]+>")
-    private val spacesRegex = Regex("\\s+")
+    private val spacesRegex = phoneRegex("\\s+")
 
     /** Whether [name] is one of [metadata]'s artists, e.g. the account an upload is on. */
     private fun sameArtist(metadata: MusicMetadata, name: String): Boolean {
@@ -864,7 +863,7 @@ internal class ExactMatcher(
         if (names.titles.none { titleIn(it, row.name) }) return false
         if (names.titles.all { title -> SongNames.saysAnotherVersion(row.name, title, names.artists.joinToString(" ")) }) return false
         val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
-        val outside = row.name.replace(BRACKETED, " ")
+        val outside = outsideBrackets(row.name)
         val rest = SongNames.words(outside) - said.toSet() - VIDEO_TAGS
         if (rest.any { !YEAR.matches(it) }) return false
         // Nor anything in another script, which has no words to tell apart: "桜の雨" isn't "桜". Named
@@ -939,7 +938,7 @@ internal class ExactMatcher(
     private fun looselyMatches(metadata: MusicMetadata, name: String, artist: String): Boolean =
         SongNames.wordsMatch(name, metadata.title) && SongNames.artistInside(artist, metadata.artist)
 
-    private companion object {
+    internal companion object {
         const val TIMEOUT_MS = 5_000L
 
         /** How many of the Spotify songs ListenBrainz knows by a name are read to find the one. */
@@ -951,10 +950,21 @@ internal class ExactMatcher(
         const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"
         const val YOUTUBE_WATCH_VIDEOS_URL = "https://www.youtube.com/watch_videos"
         /** One song in Qobuz's search: its title and "artist • album", and the numbers of the song and its album. */
-        private val qobuzItemRegex = Regex("""<div class="ListItem">.*?</li>""", RegexOption.DOT_MATCHES_ALL)
-        private val qobuzTitleRegex = Regex("""class="ListItem__title"[^>]*>(.*?)</a>\s*<p class="ListItem__artists">(.*?)</p>""", RegexOption.DOT_MATCHES_ALL)
-        private val qobuzTrackRegex = Regex("""track&#x2F;(\d+)""")
-        private val qobuzAlbumRegex = Regex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)"""")
+        internal val qobuzItems = PageParts(phoneRegex("""<div class="ListItem">"""), phoneRegex("</li>"), tagEnd = null)
+        internal val qobuzTitles = PageParts(phoneRegex("""class="ListItem__title${'"'}"""), phoneRegex("""</a>\s*+<p class="ListItem__artists">"""))
+
+        /**
+         * A Qobuz song's title and credit, as main's `class="ListItem__title"[^>]*>(.*?)</a>\s*<p class="ListItem__artists">(.*?)</p>`
+         * read them: the title up to the first `</a>` that the credit follows, then the credit up to the first `</p>`.
+         */
+        fun qobuzTitle(html: String): Pair<String, String>? {
+            val title = qobuzTitles.firstIn(html) ?: return null
+            val credit = title.whole.last + 1
+            val end = html.indexOf("</p>", credit).orNone() ?: return null
+            return html.substring(title.between) to html.substring(credit, end)
+        }
+        private val qobuzTrackRegex = phoneRegex("""track&#x2F;(\d+)""")
+        private val qobuzAlbumRegex = phoneRegex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)${'"'}""")
 
         const val BANDCAMP_SEARCH_URL = "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
         const val YOUTUBE_MUSIC_SEARCH_URL = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
@@ -993,10 +1003,8 @@ internal class ExactMatcher(
         private val VIDEO_TAG_MARKS = listOf("歌詞付き", "歌詞付", "歌詞", "公式", "字幕", "高音質", "日本語", "中日羅", "가사").map(SongNames::normalize)
 
         /** A year, as a video's title may give the song's: "1984". */
-        private val YEAR = Regex("""(?:19|20)\d\d""")
+        private val YEAR = phoneRegex("""(?:19|20)\d\d""")
 
-        /** What's in brackets, of any kind a title uses. */
-        private val BRACKETED = Regex("""[(\[（【「『［][^)\]）】」』］]*[)\]）】」』］]""")
 
         /** Apple Music stores that write names as they are in Japanese, Korean and Chinese. */
         private val NAMING_STORES = listOf("JP", "KR", "TW", "HK", "CN")
@@ -1043,3 +1051,6 @@ internal fun canBeMissing(target: MusicService, item: MusicMetadata): Boolean =
  * artist's own page or a verified account counts, and ListenBrainz doesn't know every Spotify song.
  */
 private val partlyKnown = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.SPOTIFY)
+
+/** [name] with what's in brackets put as a space, of any kind a title uses: "Song (An Endless Song (1987))" is "Song  ". */
+internal fun outsideBrackets(name: String) = replacingBracketTags(name, "([（【「『［", ")]）】」』］", " ")

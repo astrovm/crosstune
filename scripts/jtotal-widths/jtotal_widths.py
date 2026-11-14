@@ -1,33 +1,52 @@
 #!/usr/bin/env python3
-"""How wide each letter is on J-Total's page, measured in Chromium, as the table the app places chords with.
+"""How wide each letter is on J-Total's page, measured in a browser on Windows, as the tables the app places chords with.
 
-  python3 scripts/jtotal-widths/jtotal_widths.py generate    # measure in a container, rewrite the table
-  python3 scripts/jtotal-widths/jtotal_widths.py check       # measure again, and say where the table differs
+  gh workflow run jtotal-widths-windows.yml                  # measure on Windows, then download its artifact
+  python3 scripts/jtotal-widths/jtotal_widths.py generate DIR   # rewrite both tables from that artifact
+  python3 scripts/jtotal-widths/jtotal_widths.py check DIR      # say whether the tables are what DIR measured
+  python3 scripts/jtotal-widths/jtotal_widths.py container DIR  # measure the same in the Containerfile's container
+  python3 scripts/jtotal-widths/jtotal_widths.py diff A.json B.json   # where two measurements differ
 
-J-Total sets a sheet in `Inconsolata, MS Gothic, Hiragino Kaku Gothic, Monaco, sans-serif`. A letter
-Inconsolata has is one column, and one the Japanese monospace font has is one or two. Any other letter
-Chromium draws from a proportional font, so its width is not a whole number: U+0133 is 0.888 of a
-column and U+0132 is 1.470. `ChordSheets` counts chords over those widths, so it needs the real ones.
+Where the tables come from: the workflow .github/workflows/jtotal-widths-windows.yml, on GitHub's
+windows-latest runner, in Chromium as Playwright ships it, in Japanese, with Windows' own fonts (MS
+Gothic, Meiryo, Yu Gothic and the rest). Its first line, in SOURCE.txt, heads each table with the run.
+The sheets are written on Windows, and a Japanese reader's browser draws them there. The same run
+measures Edge and Chrome as installed, each with a Japanese profile, on what a Shift_JIS page holds, and
+they matched Chromium on every letter. The container gives other widths, as its fonts are not Windows'
+(Greek and Cyrillic, for one): it is kept to compare, not to make the tables.
 
-The page is measured with the page's own CSS and fonts: each letter is a span in `あXあ`, as lyrics are
-Japanese, and its width is divided by the width of a digit. The table lists, in thousandths of a column,
-every letter from U+0080 up (and emoji) that is not two columns, which is what the app assumes for
-the rest. It is the browser's answer in the container of the Containerfile: another machine's fonts
-give other widths for the scripts they draw differently, and the app can only follow one.
+J-Total sets a sheet in `Inconsolata, MS Gothic, Hiragino Kaku Gothic, Monaco, sans-serif`, or in
+`Inconsolata, monospace`. A letter Inconsolata has is one column, and one MS Gothic has is one or two.
+Any other letter the browser draws from a proportional font, so its width is not a whole number: ۰ is
+1.144 columns on the first stack and 1.200 on the second. `ChordSheets` counts chords over those widths.
 
-The table ends up in app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt, one run per
-line: `FIRST[-LAST] WIDTH`, code points in hex.
+Each letter is measured as what it adds to a line: the width of `あXあXあ...あ`, ten of it, less that of
+eleven `あ`, divided by ten and by the width of a digit. A mark is measured after a letter it follows
+(`base_letter`), of its own script where it has one: ﾞ draws over the ｶ before it, and still moves the
+line on by a column. A width below nothing is no width in the table. The table lists, in thousandths of a column, every
+letter from U+0080 up (and emoji) that is not two columns, which is what the app assumes for the rest.
+`trims` measures whether the browser trims a full-width bracket or stop beside another: on Windows, in
+Japanese, it trims none, as MS Gothic has no narrow forms.
 
-U+203B on the monospace stack is not one width. ChordSheets uses 1.650 or 2.000 columns from the
-script beside the mark, including the line above. The table keeps the Japanese-context width, 2.000.
+Not measured: a real Japanese desktop's own settings (the runner is a server image with the Japanese
+fonts added), Firefox, and macOS, which draws a different page as "Hiragino Kaku Gothic" is not a
+macOS font name (Issue #976). `contexts.py` measures any machine's browser against the tables, and
+`compare_sheets.py moves` counts the chords that land on another letter.
 """
 import argparse
+import functools
 import hashlib
 import json
+import platform
+import re
+import shutil
 import subprocess
 import sys
+import tempfile
+import time
 import unicodedata
 import urllib.request
+from importlib import metadata
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -35,6 +54,7 @@ REPO = HERE.parents[1] if len(HERE.parents) > 1 else HERE  # in the container th
 TABLE = REPO / "app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt"
 MONO_TABLE = TABLE.with_name("jtotal-widths-mono.txt")
 IMAGE = "localhost/crosstune-jtotal-widths"
+ALIASES = Path("/etc/fonts/local.conf")  # where the Containerfile names the fonts the page asks for
 
 # Google Fonts' Inconsolata v37, in the three files J-Total's stylesheet asks for, with their ranges.
 FONT_BASE = "https://fonts.gstatic.com/s/inconsolata/v37/QldgNThLqRwH-OJ1UHjlKENVzkWGVkL3GZQmAwLYxYWI2qfdm7Lpp4U8WR"
@@ -102,53 +122,346 @@ def installed_fonts(packages):
     return [line.removesuffix(" installed") for line in packages.splitlines() if line.endswith(" installed")]
 
 
-def measure(out, stack=STACK):
-    """Inside the container: the width of every letter, in thousandths of a digit. Writes JSON to `out`."""
-    from playwright.sync_api import sync_playwright
-
-    faces = "".join(
-        f'@font-face {{ font-family:"Inconsolata"; src:url("file:///fonts/inconsolata-{name}.woff2") format("woff2"); unicode-range:{span}; }}\n'
+def font_faces(fonts):
+    """J-Total's three Inconsolata files, from the folder `fonts`, each over its range."""
+    return "".join(
+        f'@font-face {{ font-family:"Inconsolata"; src:url("{(Path(fonts) / f"inconsolata-{name}.woff2").resolve().as_uri()}") format("woff2"); unicode-range:{span}; }}\n'
         for name, (_, span) in FONTS.items()
     )
-    head = f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>\n{faces}tt {{ font-family:{stack}; font-size:40px; line-height:1; white-space:pre; }}\ndiv {{ margin:0; }}\n</style></head><body>'
-    codes = spans_codes()
-    widths = {}
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        environment = [
-            f"Font stack {stack}",
-            f"Chromium {browser.version}",
-            f"Playwright {subprocess.check_output(['pip', 'show', 'playwright'], text=True).split('Version: ', 1)[1].splitlines()[0]}",
-            f"Unicode {unicodedata.unidata_version}",
-        ]
-        packages = subprocess.check_output(
-            ['dpkg-query', '-W', '-f=${Package} ${Version} ${db:Status-Status}\\n', 'fonts-*'],
-            text=True,
-        )
-        environment.extend(installed_fonts(packages))
-        environment.append('Inconsolata v37 (Google Fonts), SHA-256: ' + ', '.join(
-            f'{name}={hashlib.sha256(Path(f"/fonts/inconsolata-{name}.woff2").read_bytes()).hexdigest()}' for name in FONTS
-        ))
-        environment.append('MS Gothic and Hiragino Kaku Gothic alias Noto Sans Mono CJK JP; sans-serif aliases Noto Sans')
-        page = browser.new_page(viewport={"width": 1200, "height": 800})
+
+
+def page_head(stack, fonts, lang=None, charset="utf-8"):
+    """The top of a page that draws `tt` as J-Total does: its font stack at 40px, one line a row."""
+    tag = f' lang="{lang}"' if lang else ""
+    return (f'<!DOCTYPE html><html{tag}><head><meta charset="{charset}"><style>\n{font_faces(fonts)}'
+            'tt { font-family:' + stack + '; font-size:40px; line-height:1; white-space:pre; }\ndiv { margin:0; }\n</style></head><body>')
+
+
+def in_cp932(code):
+    """True for a letter a Shift_JIS page can hold without a numeric reference."""
+    try:
+        chr(code).encode("cp932")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def written(code, as_entity=()):
+    """`code` as J-Total's Shift_JIS page writes it: the letter itself, or a numeric reference for one it can't hold."""
+    return chr(code) if in_cp932(code) and code not in as_entity else f"&#{code};"
+
+
+def shift_jis_page(html):
+    """The page as J-Total serves it: Shift_JIS, untagged. Every letter it can't hold is already a reference."""
+    return html.encode("cp932")
+
+
+# A mark whose name starts with another word than its script's letters do.
+MARK_SCRIPTS = {"VEDIC": "DEVANAGARI"}
+# The consonants a script's marks are measured after, where it has one: Indic and Southeast Asian
+# scripts have a KA, and Arabic a BEH.
+CONSONANTS = (("LETTER", "KA"), ("LETTER", "BEH"))
+
+
+@functools.lru_cache(maxsize=None)
+def script_letters():
+    """For each script, named by the first word of its letters' names, the letter its marks are measured
+    after: its KA or BEH if it has one, else its first letter."""
+    found = {}
+    for code in range(0x80, 0x110000):
+        letter = chr(code)
+        if not unicodedata.category(letter).startswith("L"):
+            continue
+        words = tuple(unicodedata.name(letter, "").split(" "))
+        if len(words) < 3 or words[1] not in ("LETTER", "CHARACTER"):
+            continue
+        if words[0] not in found or words[1:] in CONSONANTS:
+            found[words[0]] = letter
+    return found
+
+
+def base_letter(code):
+    """The letter `code` is measured after. A mark joins the letter before it, and the browser draws the two
+    as one: after あ, a Latin accent pulls あ itself into another font, and a Devanagari vowel sign after a
+    letter of another script gets a dotted circle of its own. So a mark is measured after a letter it is
+    written after: ﾞ and ﾟ after ｶ, the kana sound marks after か, a mark of a script after a consonant of
+    it, and any other mark after a, or after あ if it is a wide one. Every other letter is measured after あ,
+    as lyrics are Japanese."""
+    if code in (0xFF9E, 0xFF9F):
+        return "ｶ"
+    if code in (0x3099, 0x309A):
+        return "か"
+    letter = chr(code)
+    if unicodedata.category(letter) not in ("Mn", "Mc", "Me"):
+        return "あ"
+    script = unicodedata.name(letter, "").split(" ")[0]
+    found = script_letters().get(MARK_SCRIPTS.get(script, script))
+    if found:
+        return found
+    return "あ" if unicodedata.east_asian_width(letter) == "W" else "a"
+
+
+# How many of a letter one row holds. One row is drawn to a 64th of a pixel, so ten of a letter measure
+# it to a tenth of that: a line of 200 letters then drifts less than a hundredth of a column.
+REPEATS = 10
+
+
+def probe_row(code, as_entity=()):
+    """`code` ten times, each between two of its base letters, as `あXあXあ...あ`. The first is in a span,
+    for the fonts that drew it and for the letter the browser read."""
+    b, letter = written(ord(base_letter(code))), written(code, as_entity)
+    return f'<div><tt data-c="{code}" data-b="{b}">{b}<span>{letter}</span>{b}' + f"{letter}{b}" * (REPEATS - 1) + "</tt></div>"
+
+
+def probe_rows(codes, as_entity=()):
+    """One row of eleven base letters for each base, such as `あ` × 11, and one `probe_row` for each code point."""
+    bases = sorted({written(ord(base_letter(c))) for c in codes})
+    return "".join(f'<div><tt data-base="{b}">{b * (REPEATS + 1)}</tt></div>' for b in bases) + "".join(probe_row(c, as_entity) for c in codes)
+
+
+# What a letter adds to a line: the width of `あXあ...あ` less that of eleven `あ`, divided by ten, in
+# thousandths of a digit to a hundredth. The letter's own box is not enough: a mark that Chromium draws as
+# part of the letter before it, such as U+FF9E after ｶ, has a box of no width but still moves the next letter on.
+PROBE_JS = """() => {
+  const REPEATS = %d;
+  const probe = document.createElement('tt'); probe.textContent = '0'; document.body.appendChild(probe);
+  const digit = probe.getBoundingClientRect().width;
+  const base = {};
+  for (const tt of document.querySelectorAll('tt[data-base]')) base[tt.dataset.base] = tt.getBoundingClientRect().width;
+  const out = {}, read = {};
+  for (const tt of document.querySelectorAll('tt[data-c]')) {
+    out[tt.dataset.c] = Math.round((tt.getBoundingClientRect().width - base[tt.dataset.b]) / REPEATS / digit * 1000 * 100) / 100;
+    read[tt.dataset.c] = tt.querySelector('span').textContent.codePointAt(0);
+  }
+  return {digit, out, read};
+}""" % REPEATS
+
+
+def platform_fonts(cdp, selector):
+    """The fonts the browser drew each node of `selector` with, in document order."""
+    root = cdp.send("DOM.getDocument", {"depth": 0})["root"]["nodeId"]
+    nodes = cdp.send("DOM.querySelectorAll", {"nodeId": root, "selector": selector})["nodeIds"]
+    return [sorted({f["familyName"] for f in cdp.send("CSS.getPlatformFontsForNode", {"nodeId": node})["fonts"]}) for node in nodes]
+
+
+class Opened:
+    """A browser opened for measuring: its version, and how to close it."""
+
+    def __init__(self, version, close):
+        self.version = version
+        self.close = close
+
+
+def japanese_profile(folder, lang):
+    """A profile whose browser speaks `lang`. Chrome and Edge on Windows take their language from the
+    profile's `intl.app_locale`, not from --lang, and it picks the fonts a generic family draws with."""
+    folder = Path(folder)
+    (folder / "Default").mkdir(parents=True, exist_ok=True)
+    (folder / "Local State").write_text(json.dumps({"intl": {"app_locale": lang}}), encoding="utf-8")
+    (folder / "Default" / "Preferences").write_text(json.dumps({"intl": {"accept_languages": lang, "selected_languages": lang}}), encoding="utf-8")
+    return folder
+
+
+def open_page(p, browser_name, lang, profile=None, viewport=(1200, 800), scale=1):
+    """A page to measure on. An installed browser with a language gets a profile in that language, in `profile`."""
+    size = {"width": viewport[0], "height": viewport[1]}
+    if lang and profile is not None and Path(browser_name).exists():
+        context = p.chromium.launch_persistent_context(str(japanese_profile(profile, lang)), executable_path=browser_name, headless=True,
+                                                       args=[f"--lang={lang}"], locale=lang, viewport=size, device_scale_factor=scale)
+        page = context.pages[0] if context.pages else context.new_page()
+        cdp = context.new_cdp_session(page)
+        version = cdp.send("Browser.getVersion")["product"].split("/")[-1]
+        opened = Opened(version, context.close)
+    else:
+        browser = launch(p, browser_name, lang)
+        page = browser.new_page(viewport=size, device_scale_factor=scale, locale=lang)
+        cdp = page.context.new_cdp_session(page) if browser_name != "webkit" else None
+        opened = Opened(browser.version, browser.close)
+    if cdp:
+        cdp.send("DOM.enable")
+        cdp.send("CSS.enable")
+    if lang:
+        found = page.evaluate("navigator.language")
+        if not found.startswith(lang):
+            raise SystemExit(f"{browser_name} speaks {found}, not {lang}")
+    return opened, page, cdp
+
+
+def show(page, html, path):
+    path.write_bytes(shift_jis_page(html))
+    page.goto(path.as_uri())
+    page.evaluate("document.fonts.ready")
+    page.wait_for_timeout(100)
+
+
+def measure(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lang=None, codes=None):
+    """The width each letter adds to a line, in thousandths of a digit, and the fonts that drew it. Writes JSON to `out`."""
+    from playwright.sync_api import sync_playwright
+
+    head = page_head(stack, fonts, charset="shift_jis")
+    codes = spans_codes() if codes is None else codes
+    widths, used, misread = {}, {}, set()
+    began = time.monotonic()
+    with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
+        browser, page, cdp = open_page(p, browser_name, lang, Path(tmp) / "profile")
+        html = Path(tmp) / "widths.html"
+        digit = None
+
+        def batch_of(batch, as_entity=()):
+            nonlocal digit
+            show(page, head + probe_rows(batch, as_entity) + "</body></html>", html)
+            found = page.evaluate(PROBE_JS)
+            digit = found["digit"]
+            for c in batch:
+                if found["read"][str(c)] != c:
+                    misread.add(c)
+                    continue
+                widths[c] = found["out"][str(c)]
+            if cdp:
+                used.update((c, f) for c, f in zip(batch, platform_fonts(cdp, "tt[data-c] span")) if c in widths)
+
         for start in range(0, len(codes), BATCH):
-            rows = "".join(f'<div><tt data-c="{c}">あ<s>{chr(c)}</s>あ</tt></div>' for c in codes[start:start + BATCH])
-            Path("/tmp/widths.html").write_text(head + rows + "</body></html>", encoding="utf-8")
-            page.goto("file:///tmp/widths.html")
-            page.evaluate("document.fonts.ready")
-            page.wait_for_timeout(300)
-            widths.update(page.evaluate("""() => {
-              const probe = document.createElement('tt'); probe.textContent = '0'; document.body.appendChild(probe);
-              const digit = probe.getBoundingClientRect().width;
-              const out = {};
-              for (const tt of document.querySelectorAll('tt[data-c]')) {
-                out[tt.dataset.c] = Math.round(tt.querySelector('s').getBoundingClientRect().width / digit * 1000);
-              }
-              return out;
-            }"""))
+            batch_of(codes[start:start + BATCH])
+            if start // BATCH % 20 == 0:
+                print(f"{start + BATCH} of {len(codes)} code points, {time.monotonic() - began:.0f} s", file=sys.stderr, flush=True)
+        # A letter the browser's Shift_JIS reads as another one is written as a reference instead, as a page would have to.
+        retry = sorted(misread)
+        misread.clear()
+        if retry:
+            batch_of(retry, as_entity=set(retry))
+        found = environment(browser, browser_name if "/" not in browser_name else Path(browser_name).stem, stack, fonts)
+        found.append(f"Page Shift_JIS with no language; browser language {lang or 'as Playwright starts it'}")
+        found.append(f"One digit is {digit} CSS px at 40px. A width is a tenth of what ten of the letter add, each between two of its base letters (base_letter).")
         browser.close()
+    if misread:
+        raise SystemExit(f"read as other letters even as references: {sorted(misread)[:20]}")
     nothing = [c for c in codes if unassigned(c)]
-    Path(out).write_text(json.dumps({"widths": widths, "nothing": nothing, "environment": environment}), encoding="utf-8")
+    data = {"widths": {str(c): v for c, v in widths.items()}, "nothing": nothing, "environment": found,
+            "fonts": {str(c): f for c, f in used.items()}, "stack": stack}
+    Path(out).write_text(json.dumps(data), encoding="utf-8")
+    print(f"{out}: {len(widths)} code points, {time.monotonic() - began:.0f} s", file=sys.stderr)
+
+
+# Full-width brackets and stops, and what sits beside them in lyrics, for the trimming probe.
+PUNCTUATION = "、。，．・：；！？「」『』（）［］｛｝〈〉《》【】〔〕“”‘’\u3000"
+NEIGHBOURS = "あ字Ａa1 "
+
+
+def trim_rows(marks=PUNCTUATION, neighbours=NEIGHBOURS):
+    """Rows for each pair of marks, and each mark beside a letter, between two hiragana; and each mark at a line's start and end."""
+    letters = marks + neighbours
+    pairs = [(a, b) for a in letters for b in letters if a in marks or b in marks]
+    rows = '<div><tt data-base="1">ああ</tt></div><div><tt data-one="1">あ</tt></div>'
+    rows += "".join(f'<div><tt data-pair="{a}{b}">あ{a}{b}あ</tt></div>' for a, b in pairs)
+    rows += "".join(f'<div><tt data-first="{m}">{m}あ</tt></div>' for m in marks)
+    rows += "".join(f'<div><tt data-later="{m}">あ<br>{m}あ</tt></div>' for m in marks)
+    rows += "".join(f'<div><tt data-last="{m}">あ{m}</tt></div>' for m in marks)
+    return rows
+
+
+# Each pair is what the two marks add between two hiragana. `first` is a mark at the start of the first line,
+# `later` at the start of a line after a <br>, `last` at a line's end: each what it adds to `あ` there.
+TRIM_JS = """() => {
+  const probe = document.createElement('tt'); probe.textContent = '0'; document.body.appendChild(probe);
+  const digit = probe.getBoundingClientRect().width;
+  const width = (e) => e.getBoundingClientRect().width;
+  const base = width(document.querySelector('tt[data-base]')), one = width(document.querySelector('tt[data-one]'));
+  const k = (v) => Math.round(v / digit * 1000);
+  const out = {pairs: {}, first: {}, later: {}, last: {}};
+  for (const tt of document.querySelectorAll('tt[data-pair]')) out.pairs[tt.dataset.pair] = k(width(tt) - base);
+  for (const tt of document.querySelectorAll('tt[data-first]')) out.first[tt.dataset.first] = k(width(tt) - one);
+  for (const tt of document.querySelectorAll('tt[data-later]')) { const r = tt.getClientRects(); out.later[tt.dataset.later] = k(r[r.length - 1].width - one); }
+  for (const tt of document.querySelectorAll('tt[data-last]')) out.last[tt.dataset.last] = k(width(tt) - one);
+  return out;
+}"""
+
+
+def trims(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lang=None):
+    """How wide full-width brackets and stops are beside each other and at a line's ends. Writes JSON to `out`."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
+        browser, page, cdp = open_page(p, browser_name, lang, Path(tmp) / "profile")
+        show(page, page_head(stack, fonts, charset="shift_jis") + trim_rows() + "</body></html>", Path(tmp) / "trims.html")
+        found = page.evaluate(TRIM_JS)
+        marks = dict(zip(PUNCTUATION, platform_fonts(cdp, "tt[data-last]"))) if cdp else {}
+        environment_found = environment(browser, browser_name if "/" not in browser_name else Path(browser_name).stem, stack, fonts)
+        browser.close()
+    Path(out).write_text(json.dumps({**found, "fonts": marks, "environment": environment_found, "stack": stack}, ensure_ascii=False), encoding="utf-8")
+    print(f"{out}: {len(found['pairs'])} pairs", file=sys.stderr)
+
+
+def font_packages():
+    """The font packages of a Debian or Ubuntu machine. Elsewhere, what the machine is, as its fonts come with it."""
+    if shutil.which("dpkg-query"):
+        packages = subprocess.check_output(['dpkg-query', '-W', '-f=${Package} ${Version} ${db:Status-Status}\\n', 'fonts-*'], text=True)
+        return installed_fonts(packages)
+    if shutil.which("sw_vers"):
+        build = subprocess.check_output(["sw_vers", "-buildVersion"], text=True).strip()
+        return [f"macOS {platform.mac_ver()[0]} ({build}) {platform.machine()}, its own fonts"]
+    if platform.system() == "Windows":
+        return [f"Windows {platform.version()} {platform.machine()}, its own fonts", *windows_fonts()]
+    return [f"{platform.system()} {platform.release()}: no dpkg-query, so the font packages are not recorded"]
+
+
+# The Japanese fonts a Windows reader's browser can draw the page with, by file.
+WINDOWS_FONTS = ("msgothic.ttc", "meiryo.ttc", "YuGothR.ttc", "consola.ttf", "arial.ttf", "seguiemj.ttf")
+
+
+def windows_fonts(folder=Path("C:/Windows/Fonts")):
+    """Each font file of WINDOWS_FONTS, with each face it holds and that face's version, or that the file is missing."""
+    found = []
+    for name in WINDOWS_FONTS:
+        path = folder / name
+        if not path.exists():
+            found.append(f"{name}: not on this machine")
+            continue
+        try:
+            from fontTools.ttLib import TTCollection, TTFont
+        except ImportError:
+            found.append(f"{name}: present, SHA-256 {hashlib.sha256(path.read_bytes()).hexdigest()}")
+            continue
+        faces = TTCollection(str(path)).fonts if name.lower().endswith(".ttc") else [TTFont(str(path))]
+        found.append(f"{name}: " + "; ".join(f"{face['name'].getDebugName(4)} {face['name'].getDebugName(5)}" for face in faces))
+    return found
+
+
+def launch(p, browser, lang=None):
+    """Starts `browser`: chromium or webkit as Playwright ships them, or a Chromium-based browser at that path.
+
+    `lang` also sets the browser's own language, which picks the fonts Chromium draws a generic family in.
+    """
+    args = [f"--lang={lang}"] if lang and browser != "webkit" else []
+    if browser in ("chromium", "webkit"):
+        return getattr(p, browser).launch(headless=True, args=args)
+    if not Path(browser).exists():
+        raise SystemExit(f"{browser}: no such browser on this machine")
+    return p.chromium.launch(headless=True, executable_path=browser, args=args)
+
+
+def inconsolata_hashes(fonts):
+    return 'Inconsolata v37 (Google Fonts), SHA-256: ' + ', '.join(
+        f'{name}={hashlib.sha256((Path(fonts) / f"inconsolata-{name}.woff2").read_bytes()).hexdigest()}' for name in FONTS
+    )
+
+
+def environment(browser, name, stack, fonts):
+    """What made a measurement: the stack, the browser, Playwright, Unicode, and the fonts."""
+    return [
+        f"Font stack {stack}",
+        f"{name.capitalize()} {browser.version}",
+        f"Playwright {metadata.version('playwright')}",
+        f"Unicode {unicodedata.unidata_version}",
+        *font_packages(),
+        inconsolata_hashes(fonts),
+        *([aliases(ALIASES.read_text(encoding="utf-8"))] if ALIASES.exists() else []),
+    ]
+
+
+def aliases(config):
+    """The font names fontconfig answers with another font, as `config` (its local.conf) sets them."""
+    pairs = re.findall(r"<alias[^>]*>\s*<family>([^<]+)</family>\s*<prefer>\s*<family>([^<]+)</family>", config)
+    return "Fontconfig aliases: " + "; ".join(f"{name} is {font}" for name, font in pairs)
 
 
 def cache():
@@ -156,51 +469,127 @@ def cache():
     return (mnt if mnt.is_dir() else Path.home() / ".cache/agent-cache") / "crosstune-jtotal-widths"
 
 
-def container():
-    """Downloads Inconsolata once, builds the image, and gives back the folder that holds the fonts' work files."""
-    work = cache()
-    (work / "fonts").mkdir(parents=True, exist_ok=True)
+def container_fonts():
+    """Downloads J-Total's three Inconsolata files once, and gives back their folder."""
+    fonts = cache() / "fonts"
+    fonts.mkdir(parents=True, exist_ok=True)
     for name, (url, _) in FONTS.items():
-        font = work / "fonts" / f"inconsolata-{name}.woff2"
+        font = fonts / f"inconsolata-{name}.woff2"
         if not font.exists():
             font.write_bytes(urllib.request.urlopen(url, timeout=60).read())
+    return fonts
+
+
+def container():
+    """Downloads Inconsolata once, builds the image, and gives back the folder that holds the fonts' work files."""
+    fonts = container_fonts()
     subprocess.run(["podman", "build", "-t", IMAGE, "-f", str(HERE / "Containerfile"), str(HERE)], check=True)
-    return work
+    return fonts.parent
 
 
-def in_container(mono=False):
-    """Measures in the container and gives back the table text it makes."""
-    work = container()
+def run_in_container(work, script):
+    """Runs `python3 SCRIPT...` in the container, with `work` at /work, the fonts at /fonts and this folder at /script."""
+    fonts = container() / "fonts"
     subprocess.run(
-        ["podman", "run", "--rm", "-v", f"{work}:/work", "-v", f"{work / 'fonts'}:/fonts:ro", "-v", f"{HERE}:/script:ro",
-         IMAGE, "python3", "/script/jtotal_widths.py", "measure", "/work/raw.json", *(["--mono"] if mono else [])],
+        ["podman", "run", "--rm", "-v", f"{work}:/work", "-v", f"{fonts}:/fonts:ro", "-v", f"{HERE}:/script:ro",
+         "-e", "PYTHONPATH=/script", IMAGE, "python3", *script],
         check=True,
     )
-    raw = json.loads((work / "raw.json").read_text(encoding="utf-8"))
-    widths = {int(c): w for c, w in raw["widths"].items()}
-    return "\n".join(header(raw["environment"]) + lines(runs(widths, set(raw["nothing"])))) + "\n"
+
+
+def default_fonts():
+    """J-Total's Inconsolata files: at /fonts in the container, downloaded once anywhere else."""
+    return Path("/fonts") if Path("/fonts").is_dir() else container_fonts()
+
+
+# The files a measuring run writes into its folder, and the stack each is for.
+RUNS = {"main": STACK, "mono": MONO_STACK}
+
+
+def in_container(work):
+    """Measures both stacks and the trimming in the table's container, into `work`."""
+    for name in RUNS:
+        mono = ["--mono"] if name == "mono" else []
+        run_in_container(work, ["/script/jtotal_widths.py", "measure", f"/work/{name}.json", *mono])
+        run_in_container(work, ["/script/jtotal_widths.py", "trims", f"/work/{name}-trims.json", *mono])
+
+
+def table_text(raw, source):
+    """The table from one measuring run: its header, then each run that isn't two columns."""
+    # Measured to a hundredth of a thousandth, and kept in whole thousandths. A mark that kerns into the
+    # letter before it measures below nothing: the app counts it as no width, as no letter takes the line back.
+    widths = {int(c): max(0, round(w)) for c, w in raw["widths"].items()}
+    return "\n".join(header([source, *raw["environment"]]) + lines(runs(widths, set(raw["nothing"])))) + "\n"
+
+
+def tables(directory):
+    """Both tables, as the measurement in `directory` makes them. Its SOURCE.txt says where it was measured."""
+    source = (directory / "SOURCE.txt").read_text(encoding="utf-8").strip()
+    return [(table, table_text(json.loads((directory / f"{name}.json").read_text(encoding="utf-8")), source))
+            for table, name in ((TABLE, "main"), (MONO_TABLE, "mono"))]
+
+
+def differences(a, b):
+    """Code points measured at another width in `b` than in `a`: (code, width in a, width in b)."""
+    wa, wb = a["widths"], b["widths"]
+    return [(int(c), wa[c], wb[c]) for c in sorted(wa, key=int) if c in wb and wa[c] != wb[c]]
+
+
+def diff_main(a_path, b_path, show):
+    a, b = (json.loads(Path(x).read_text(encoding="utf-8")) for x in (a_path, b_path))
+    found = differences(a, b)
+    shift_jis = [d for d in found if in_cp932(d[0])]
+    print(f"{len(found)} code points differ, {len(shift_jis)} of them in Windows-31J")
+    for code, x, y in (shift_jis + [d for d in found if not in_cp932(d[0])])[:show]:
+        fonts = lambda m: "/".join(m.get("fonts", {}).get(str(code), [])) or "?"
+        print(f"U+{code:04X} {chr(code)!r} {x / 1000:.3f} ({fonts(a)}) -> {y / 1000:.3f} ({fonts(b)})")
+    for kind in ("pairs", "first", "later", "last"):
+        ta, tb = (json.loads(Path(x).with_name(Path(x).stem + "-trims.json").read_text(encoding="utf-8")) if Path(x).with_name(Path(x).stem + "-trims.json").exists() else None for x in (a_path, b_path))
+        if ta is None or tb is None:
+            break
+        moved = [k for k in ta[kind] if k in tb[kind] and ta[kind][k] != tb[kind][k]]
+        print(f"{kind}: {len(moved)} of {len(ta[kind])} differ" + (": " + " ".join(f"{k!r} {ta[kind][k]}->{tb[kind][k]}" for k in moved[:show]) if moved else ""))
 
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("command", choices=("generate", "check", "measure"))
-    parser.add_argument("out", nargs="?")
+    parser.add_argument("command", choices=("measure", "trims", "container", "generate", "check", "diff"))
+    parser.add_argument("paths", nargs="*")
     parser.add_argument("--mono", action="store_true")
+    parser.add_argument("--browser", default="chromium")
+    parser.add_argument("--lang")
+    parser.add_argument("--fonts", type=Path)
+    parser.add_argument("--show", type=int, default=50)
+    parser.add_argument("--stack", help="another font stack than the page's, such as one naming MS PGothic")
+    parser.add_argument("--cp932", action="store_true", help="only the letters a Shift_JIS page holds")
     args = parser.parse_args(argv)
+    stack = args.stack or (MONO_STACK if args.mono else STACK)
     if args.command == "measure":
-        measure(args.out, MONO_STACK if args.mono else STACK)
+        codes = [c for c in spans_codes() if in_cp932(c)] if args.cp932 else None
+        measure(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang, codes)
         return 0
-    tables = [(TABLE, in_container()), (MONO_TABLE, in_container(mono=True))]
+    if args.command == "trims":
+        trims(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang)
+        return 0
+    if args.command == "container":
+        work = Path(args.paths[0]).resolve()
+        work.mkdir(parents=True, exist_ok=True)
+        in_container(work)
+        (work / "SOURCE.txt").write_text("Measured in the Containerfile's container\n", encoding="utf-8")
+        return 0
+    if args.command == "diff":
+        diff_main(args.paths[0], args.paths[1], args.show)
+        return 0
+    made = tables(Path(args.paths[0]))
     if args.command == "generate":
-        for table, text in tables:
-            table.parent.mkdir(parents=True, exist_ok=True)
+        for table, text in made:
             table.write_text(text, encoding="utf-8")
             print(f"{table.relative_to(REPO)}: {len(text.splitlines())} lines")
         return 0
-    if all(table.read_text(encoding="utf-8") == text for table, text in tables):
-        print("the table is what the browser measures")
+    if all(table.read_text(encoding="utf-8") == text for table, text in made):
+        print("the tables are what that measurement says")
         return 0
-    print("the table differs from the browser: run `generate` and look at the diff", file=sys.stderr)
+    print("the tables differ from that measurement: run `generate` and look at the diff", file=sys.stderr)
     return 1
 
 

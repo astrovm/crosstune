@@ -2357,7 +2357,7 @@ private const val READING_GAP = 0.05f
  * Japanese and Chinese wrap anywhere, a single character (Korean, spaced, wraps by word), keeping the marks that can't start a
  * line, like 。 or ー or small kana, with the one before.
  */
-private val WORDS = Regex("""[\p{IsLatin}\p{IsHangul}\p{N}'’.,!?:;&()\-]+\s*|\S[ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ・、。，．！？」』）〕】]*\s*|\s+""")
+private val WORDS = phoneRegex("""[\p{sc=Latin}\p{sc=Hangul}\p{N}'’.,!?:;&()\-]+\s*|\S[ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ・、。，．！？」』）〕】]*\s*|\s+""")
 
 /**
  * One line, open to study: what helps read it, its words to tap for their meaning and, signed in, examples, and what can be
@@ -2503,7 +2503,7 @@ private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?
         var at = 0
         parts.forEach { part ->
             // A part with a reading stays whole; one without wraps as the lyrics do.
-            val pieces = if (part.reading == null) WORDS.findAll(part.text).map { it.value }.toList() else listOf(part.text)
+            val pieces = if (part.reading == null) WORDS.matchesIn(part.text).map { it.value }.toList() else listOf(part.text)
             pieces.forEach { piece ->
                 val start = at
                 at += piece.length

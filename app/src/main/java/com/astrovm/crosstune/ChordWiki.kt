@@ -306,9 +306,8 @@ internal fun chordWikiLook(seen: ChordWikiSeen, timedOut: Boolean): ChordWikiLoo
 internal fun chordWikiHits(page: String): List<ChordWikiHit> {
     val lined = page.lineSequence().mapNotNull(::chordWikiHitLine).toList()
     if (lined.isNotEmpty()) return lined
-    return ANCHOR.findAll(page).mapNotNull { match ->
-        val text = ChordFinder.unescape(match.groupValues[2].replace(ANCHOR_TAGS, "")).trim()
-        chordWikiHit(text, ChordFinder.unescape(match.groupValues[1]))
+    return chordWikiLinks(page).mapNotNull { (address, shown) ->
+        chordWikiHit(ChordFinder.unescape(withoutTags(shown)).trim(), ChordFinder.unescape(address))
     }.toList()
 }
 
@@ -335,9 +334,36 @@ private fun chordWikiNames(title: String, one: String, other: String, more: List
     chordWikiTitles(title).any { name -> SongNames.same(name, one) || SongNames.same(name, other) || more.any { SongNames.same(name, it) } }
 
 /** A page's name as listed, and without the credit ChordWiki hangs on it, as in "夜に駆ける （歌：YOASOBI 作詞・作曲・編曲：Ayase）". */
-private fun chordWikiTitles(title: String): List<String> = listOf(title, title.replace(CREDIT, ""))
+internal fun chordWikiTitles(title: String): List<String> = listOf(title, withoutCredit(title))
 
-private val CREDIT = Regex("""\s*[（(]\s*(?:歌|唄|作詞|作曲|編曲|原曲)[^）)]*[）)]\s*$""")
+/**
+ * [title] without the credit in its last tag, and the spaces around it, which may name someone with brackets of their
+ * own, "（歌：YOASOBI（ヨアソビ））". Where a bracket doesn't close in order, the credit runs from a bracket after the one
+ * that closes before the last, to the last, as main read it.
+ */
+private fun withoutCredit(title: String): String {
+    val close = title.indexOfLast { it in CREDIT_CLOSES }.takeIf { it != -1 } ?: return title
+    // Only spaces may follow: each line break that a pattern's "$" ends before is a space too.
+    val end = spacesEnd(title, close + 1).takeIf { it == title.length } ?: return title
+    val credit = if (bracketsInOrder(title, CREDIT_OPENS, CREDIT_CLOSES)) {
+        bracketTags(title, CREDIT_OPENS, CREDIT_CLOSES).last().first.takeIf { creditAt(title, it) }
+    } else {
+        val after = title.lastIndexOfAny(CREDIT_CLOSES.toCharArray(), close - 1)
+        (after + 1 until close).firstOrNull { creditAt(title, it) }
+    } ?: return title
+    return title.substring(0, spacesStart(title, credit)) + title.substring(end)
+}
+
+private const val CREDIT_OPENS = "（("
+private const val CREDIT_CLOSES = "）)"
+
+/**
+ * Whether a credit starts at [at], as `[（(]\s*+(?:歌|唄|作詞|作曲|編曲|原曲)` read it: a bracket, spaces, and who did
+ * what. Read in code: on a phone a pattern copies the whole title before each look, so a look at each bracket of a
+ * long title took time squared.
+ */
+private fun creditAt(title: String, at: Int) = title[at] in CREDIT_OPENS && CREDIT_WORDS.any { title.startsWith(it, spacesEnd(title, at + 1)) }
+private val CREDIT_WORDS = listOf("歌", "唄", "作詞", "作曲", "編曲", "原曲")
 
 private fun chordWikiHitLine(line: String): ChordWikiHit? {
     val (text, href) = line.split('\t', limit = 2).takeIf { it.size == 2 } ?: return null
@@ -353,8 +379,64 @@ private fun chordWikiHit(text: String, href: String): ChordWikiHit? {
     return ChordWikiHit(title, text.substringAfter(" - ", "").trim(), link)
 }
 
-private val ANCHOR = Regex("""<a\b[^>]*\bhref="([^"]*)"[^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-private val ANCHOR_TAGS = Regex("<[^>]+>")
+private val ANCHOR = phoneRegex("""<a\b""", RegexOption.IGNORE_CASE)
+private val ADDRESS = phoneRegex("""\bhref=${'"'}""", RegexOption.IGNORE_CASE)
+private val ANCHOR_CLOSE = phoneRegex("</a>", RegexOption.IGNORE_CASE)
+
+/**
+ * Each link in [page], its address and what it shows, as main's `<a\b[^>]*\bhref="([^"]*)"[^>]*>(.*?)</a>` read them: of
+ * the `href="` in a link's tag, before its first `>`, the last one after which come a `"`, then a `>`, then a `</a>`, and
+ * what's between that `>` and the first `</a>` after it. Each mark is looked for once, so a page of links that never
+ * close takes time in step with it, where main's pattern looked to its end from each.
+ */
+internal fun chordWikiLinks(page: String): Sequence<Pair<String, String>> = sequence {
+    val addresses = linkAddresses(page)
+    val opens = ANCHOR.toPattern().matcher(page)
+    val closes = ANCHOR_CLOSE.toPattern().matcher(page)
+    val firstCloses = NextFound(page, ">")
+    var closeStart = -1
+    var closeEnd = -1
+    var last = -1
+    var from = 0
+    while (opens.find()) {
+        if (opens.start() < from) continue
+        val firstClose = firstCloses.from(opens.end())
+        if (firstClose == page.length) return@sequence
+        // The last address whose `href="` is all before the tag's first `>`, where it's in this tag.
+        while (last + 1 < addresses.size && addresses[last + 1][1] <= firstClose) last++
+        val address = addresses.getOrNull(last)?.takeIf { (opens.end()..firstClose).contains(it[0]) } ?: continue
+        val shown = address[3] + 1
+        // A `</a>` comes after it, as it's one of [addresses].
+        while (closeStart < shown) {
+            closes.find()
+            closeStart = closes.start()
+            closeEnd = closes.end()
+        }
+        yield(page.substring(address[1], address[2]) to page.substring(shown, closeStart))
+        from = closeEnd
+    }
+}
+
+/**
+ * Each `href="` in [page] that a quote, a `>` and a `</a>` follow, in order: where it starts, where its value starts,
+ * its quote and its `>`.
+ */
+private fun linkAddresses(page: String): List<IntArray> {
+    val addresses = mutableListOf<IntArray>()
+    val found = ADDRESS.toPattern().matcher(page)
+    val quotes = NextFound(page, "\"")
+    val tagCloses = NextFound(page, ">")
+    val anchorCloses = NextFound(page, "</a>", ignoreCase = true)
+    while (found.find()) {
+        val quote = quotes.from(found.end())
+        if (quote == page.length) break
+        // From the quote, which isn't one.
+        val tagClose = tagCloses.from(quote)
+        // What it shows starts before a `</a>`, empty or not. From the `>`, which no `</a>` starts on.
+        if (anchorCloses.from(tagClose) < page.length) addresses += intArrayOf(found.start(), found.end(), quote, tagClose)
+    }
+    return addresses
+}
 
 /** What ChordWiki's search says when no song matches. */
 private const val NO_MATCH = "一致するものは見つかりませんでした"

@@ -29,7 +29,7 @@ internal object Notices {
     /** The blocks of [text]: a name, then `key: value` lines; `#` lines are comments. */
     internal fun parse(text: String): List<Notice> =
         text.lines().filterNot { it.startsWith('#') }.joinToString("\n")
-            .split(Regex("\n\\s*\n")).map(String::trim).filter(String::isNotEmpty).map(::notice)
+            .split(phoneRegex("\n\\s*\n")).map(String::trim).filter(String::isNotEmpty).map(::notice)
 
     private fun notice(block: String): Notice {
         val lines = block.lines()

@@ -23,7 +23,8 @@ concurrency:
 
 jobs:
   # A pull request that only changes the site, docs, store listing, the reports' Worker, the browser extension or their scripts skips the app's jobs.
-  # One that changes the YouTube Music matcher, its MatcherCasesTest or what main opened in it runs that test in full.
+  # One that changes the YouTube Music matcher, what it reads names and links with, its MatcherCasesTest or what main
+  # opened in it runs that test in full.
   changes:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -64,7 +65,7 @@ jobs:
           else
             echo "extension=false" >> "$GITHUB_OUTPUT"
           fi
-          if grep -qE '^app/src/(main/java/com/astrovm/crosstune/(ExactMatcher|SongNames)\.kt|test/java/com/astrovm/crosstune/MatcherCasesTest\.kt|test/resources/matcher-(matrix|fuzz)-main\.tsv\.gz)$' <<< "$files"; then
+          if grep -qE '^app/src/(main/java/com/astrovm/crosstune/(ExactMatcher|SongNames|CutTitle|MetadataParsers|Patterns|PhoneRegex|PhoneRegexTable|MusicLinks)\.kt|test/java/com/astrovm/crosstune/MatcherCasesTest\.kt|test/resources/matcher-(matrix|fuzz)-main\.tsv\.gz)$' <<< "$files"; then
             echo "matcher=true" >> "$GITHUB_OUTPUT"
           else
             echo "matcher=false" >> "$GITHUB_OUTPUT"
@@ -75,6 +76,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Check Play Store changelog and texts
         run: |
@@ -120,12 +123,15 @@ jobs:
           python3 -m unittest discover -s scripts/emulator -p "test_*.py"
           python3 -m unittest scripts/test_devicelock.py
           python3 -m unittest scripts/test_notices.py
+          python3 -m unittest scripts/test_workflows.py
           python3 -m unittest discover -s scripts/record -p "test_*.py"
           python3 -m unittest discover -s scripts/reports -p "test_*.py"
           python3 -m unittest discover -s scripts/jtotal-widths -p "test_*.py"
           python3 -m unittest discover -s scripts/lyrics -p "test_*.py"
           python3 -m unittest discover -s scripts/ci-warnings -p "test_*.py"
           python3 -m unittest discover -s scripts/perf -p "test_*.py"
+          python3 -m unittest discover -s scripts/regextable -p "test_*.py"
+          python3 -m unittest discover -s scripts/titlefuzz -p "test_*.py"
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
           node --test "report/*.test.mjs"
@@ -141,6 +147,8 @@ jobs:
         working-directory: extension
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -169,6 +177,8 @@ jobs:
     steps:
       # A shallow clone keeps the Git-derived version constant, so task outputs are reused across commits.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
@@ -187,9 +197,82 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-reports
+          # The results' XML too: it has when each class started, so how the classes were split between the test
+          # processes, and which one ran longest, can be read from a run.
           path: |
             app/build/reports/tests/
+            app/build/test-results/testDebugUnitTest/
             app/build/reports/kover/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # The tests that time how reading grows. They run on a runner of their own, with no other tests beside them,
+  # and apart from the test job, which they'd otherwise add minutes to.
+  growth:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Time growth
+        run: ./gradlew :app:growthTests --build-cache --configuration-cache
+
+      - name: Upload the growths
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: growth
+          path: |
+            app/build/reports/tests/growthTests/
+            app/build/growth/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # The fuzzes the test job reads one case in 20 of (Fuzz.kt), each case: TitlesAgainstMainTest's 200,000 titles against
+  # main's readings, and the letters, titles, patterns and dashes of the rest.
+  fuzz:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Every case of each fuzz
+        run: >-
+          ./gradlew :app:testDebugUnitTest -PfuzzFull --build-cache --configuration-cache
+          --tests com.astrovm.crosstune.TitlesAgainstMainTest --tests com.astrovm.crosstune.PatternLettersTest
+          --tests com.astrovm.crosstune.CutTitleTest --tests com.astrovm.crosstune.LinearPatternsTest
+          --tests com.astrovm.crosstune.ArtistBeforeTest
+
+      - name: Upload the differences
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/titles-differences.tsv
           retention-days: 14
           if-no-files-found: warn
 
@@ -202,6 +285,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
@@ -235,6 +320,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           # The pull request merged into main, and main before it, to see what it adds to detekt's baseline.
           fetch-depth: 2
 
@@ -300,6 +386,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           # projectM, which draws the MilkDrop visuals, is built from source.
           submodules: recursive
 
@@ -348,6 +435,8 @@ jobs:
       - site
       - extension
       - test
+      - growth
+      - fuzz
       - matcher
       - lint
       - build

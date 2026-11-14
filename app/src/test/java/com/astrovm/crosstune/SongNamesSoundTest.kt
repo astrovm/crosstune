@@ -20,6 +20,8 @@ class SongNamesSoundTest {
             "Quick Six" to "クイック・シックス",
             "Kiss Me" to "キスミー",
             "Plastic Love" to "プラスティック・ラブズ",
+            // Five sounds, the fewest that may be one off.
+            "Sweet Memory" to "スイート・メモリーズ",
             // A ch said k, a th said s, a ph said f, a v said b and an s said z.
             "Christmas Eve" to "クリスマス・イブ",
             "Thank You" to "サンキュー",
@@ -50,5 +52,14 @@ class SongNamesSoundTest {
             "Miss Me" to "キスミー"
         )
         other.forEach { (latin, katakana) -> assertEquals("$latin / $katakana", false, SongNames.soundsAlike(latin, katakana)) }
+    }
+
+    @Test
+    fun oneEditApartIsADistanceOfOneAtMost() {
+        // Every pair of words of up to four letters of two kinds: each place a letter can be changed, added or taken away.
+        val words = (0..4).flatMap { length -> (0 until (1 shl length)).map { bits -> String(CharArray(length) { if (bits shr it and 1 == 1) 'b' else 'a' }) } }
+        for (one in words) for (other in words) {
+            assertEquals("$one / $other", SongNames.distance(one, other) <= 1, SongNames.oneEditApart(one, other))
+        }
     }
 }

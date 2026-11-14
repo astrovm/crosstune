@@ -20,7 +20,7 @@ class ReadingsSweepTest {
 
     /** Runs of Japanese writing in the test sources and data: kanji and kana, up to the next mark, space or other script. */
     private val kept: List<String> by lazy {
-        val japanese = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}ー々]+")
+        val japanese = Regex("[\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}ー々]+")
         File("src/test").walkTopDown()
             .filter { it.isFile && it.extension in setOf("kt", "tsv", "json", "txt") && it.name != "ReadingsSweepTest.kt" }
             .flatMap { japanese.findAll(it.readText()).map { match -> match.value } }

@@ -1052,6 +1052,18 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aDescriptionIsThreeWordsOrMore() {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        val model = searchingModel(openAi)
+        openAi.reply = { _ -> 200 to FakeOpenAi.stream("[]") }
+        model.searchSongs("hush moon")
+        until("found") { model.uiState.songSearchQuery == "hush moon" && !model.uiState.isSearchingSongs }
+        assertTrue(openAi.asked.isEmpty())
+        model.searchSongs("hush moon stars")
+        until("asked") { openAi.asked.isNotEmpty() }
+    }
+
+    @Test
     fun aDescriptionChatGptNamesNothingRealForLeavesTheCatalogueSongsAlone() {
         val openAi = FakeOpenAi(System::currentTimeMillis)
         val model = searchingModel(openAi)

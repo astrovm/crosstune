@@ -1,7 +1,9 @@
+import io
 import json
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -99,6 +101,257 @@ class ComparePageTest(unittest.TestCase):
         self.assertEqual(counts["app chord lines the browser does not draw"], 0)
 
 
+class PositionsTest(unittest.TestCase):
+    def drawn(self):
+        return page(line(chords=[chord("Cmaj7", 0), chord("Gsus4", 40)]), line(words("abc")))
+
+    def test_positions_keep_the_letters_and_neither_the_words_nor_the_chords(self):
+        found = c.positions([self.drawn()])
+        self.assertEqual(found[0]["lines"], [{"key": c.hidden({"text": "abc", "chords": [[0, "Cmaj7"], [2, "Gsus4"]]}), "at": [0, 2]}])
+        text = json.dumps(found)
+        for secret in ("abc", "Cmaj7", "Gsus4"):
+            self.assertNotIn(secret, text)
+        self.assertEqual((found[0]["url"], found[0]["font"], found[0]["hidden"]), (self.drawn()["url"], self.drawn()["font"], True))
+
+    def test_a_line_with_other_chords_is_another_line(self):
+        hidden = c.positions([self.drawn()])[0]
+        counts, _ = c.compare_page(hidden, [{"text": "abc", "chords": [[0, "Cmaj7"], [2, "G"]]}])
+        self.assertEqual((counts["chords compared"], counts["chord lines the app reads as other words or chords"]), (0, 1))
+
+    def test_positions_compare_as_the_drawing_does(self):
+        hidden = c.positions([self.drawn()])[0]
+        for app in ([[0, "Cmaj7"], [2, "Gsus4"]], [[0, "Cmaj7"], [1, "Gsus4"]]):
+            got = [{"text": "abc", "chords": app}, {"text": "more", "chords": []}]
+            self.assertEqual(c.compare_page(hidden, got)[0], c.compare_page(self.drawn(), got)[0])
+
+    def test_the_command_line_writes_positions_and_compares_with_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "drawing.json").write_text(json.dumps([self.drawn()]), encoding="utf-8")
+            c.main(["positions", str(folder / "drawing.json"), str(folder / "positions.json")])
+            (folder / "app-x.jsonl").write_text(json.dumps({"url": self.drawn()["url"], "lines": [{"text": "abc", "chords": [[0, "Cmaj7"], [1, "Gsus4"]]}]}) + "\n", encoding="utf-8")
+            with unittest.mock.patch("sys.stdout", new=io.StringIO()) as out:
+                c.main(["compare", str(folder), "x", "--truth", str(folder / "positions.json")])
+            self.assertIn("      1  chords on another letter", out.getvalue())
+
+
+class AgainstTest(unittest.TestCase):
+    URL = "https://example.test/a.html"
+
+    def drawn(self):
+        return page(line(chords=[chord("C", 0), chord("G", 40), chord("D", 60), chord("E", 80)]), line(words("abcde")))
+
+    def run_of(self, *letters, text="abcde"):
+        return {self.URL: {"url": self.URL, "lines": [{"text": text, "chords": [[at, n] for at, n in zip(letters, "CGDE")]}]}}
+
+    def test_each_chord_is_right_in_both_worse_better_or_off_in_both(self):
+        # Drawn on 0, 2, 3 and 4.
+        counts, worse = c.against([self.drawn()], self.run_of(0, 2, 1, 1), self.run_of(0, 1, 3, 1))
+        self.assertEqual(counts["chords compared"], 4)
+        self.assertEqual(counts["right in both"], 1)
+        self.assertEqual(counts["worse: right before, off after"], 1)
+        self.assertEqual(counts["better: off before, right after"], 1)
+        self.assertEqual(counts["off in both, on the same letter"], 1)
+        self.assertEqual([w[:6] for w in worse], [(self.URL, 0, 1, 2, 2, 1)])
+
+    def test_off_in_both_is_worse_when_it_is_no_nearer(self):
+        # Drawn on 0, 2, 3 and 4: G from 4 to 3 is nearer, D from 2 to 1 farther, E from 3 to 5 as far.
+        counts, worse = c.against([self.drawn()], self.run_of(1, 4, 2, 3), self.run_of(1, 3, 1, 5))
+        self.assertEqual(counts["off in both, on the same letter"], 1)
+        self.assertEqual(counts["off in both, nearer after"], 1)
+        self.assertEqual(counts["worse: off in both, as far or farther after"], 2)
+        self.assertEqual([w[2] for w in worse], [2, 3])
+
+    def test_a_line_after_reads_as_other_words_is_worse(self):
+        # Before reads the line as drawn, after as other words: each of its 4 chords is worse, wherever it was.
+        counts, worse = c.against([self.drawn()], self.run_of(0, 2, 3, 4), self.run_of(0, 1, 1, 1, text="other"))
+        self.assertEqual(counts["chords compared"], 0)
+        self.assertEqual(counts["worse: a line before reads as the drawing, after as other words"], 4)
+        self.assertEqual([w[:6] for w in worse[:4]], [(self.URL, 0, n, at, at, None) for n, at in enumerate((0, 2, 3, 4))])
+        self.assertEqual(worse[0][6]["text"], "abcde")
+        # Its line as after reads it is a chord line the drawing doesn't have, as compare counts it too.
+        self.assertEqual(counts["worse: a chord line after shows and the drawing does not"], 1)
+        self.assertEqual((worse[4][1], worse[4][6]["text"]), (None, "other"))
+
+    def test_a_line_only_after_reads_as_the_drawing_is_better(self):
+        counts, worse = c.against([self.drawn()], self.run_of(0, 1, 1, 1, text="other"), self.run_of(0, 2, 3, 4))
+        self.assertEqual((counts["better: a line after reads as the drawing, before as other words"], worse), (4, []))
+        self.assertEqual(counts["worse: a line before reads as the drawing, after as other words"], 0)
+
+    def test_the_command_line_names_a_line_after_reads_otherwise(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "positions.json").write_text(json.dumps(c.positions([self.drawn()])), encoding="utf-8")
+            for tag, text in (("main", "abcde"), ("pr", "other")):
+                (folder / f"app-{tag}.jsonl").write_text(json.dumps(self.run_of(0, 2, 3, 4, text=text)[self.URL]) + "\n", encoding="utf-8")
+            with unittest.mock.patch("sys.stdout", new=io.StringIO()) as out:
+                c.main(["against", str(folder), "main", "pr", "--truth", str(folder / "positions.json"), "--show", "1"])
+            said = out.getvalue()
+            self.assertIn("      4  worse: a line before reads as the drawing, after as other words", said)
+            self.assertIn(f"{self.URL} line 0 chord 0: drawn on 0, main 0, pr reads the line as other words: abcde", said)
+
+    def test_a_sheet_only_before_answers_is_worse(self):
+        counts, worse = c.against([self.drawn()], self.run_of(0, 2, 3, 4), {})
+        self.assertEqual((counts["worse: a sheet only before answers"], counts["sheets"]), (1, 0))
+        self.assertEqual(worse, [(self.URL, None, None, None, None, None, None)])
+
+    def test_a_sheet_only_after_answers_is_better_and_one_neither_answers_is_neither(self):
+        counts, worse = c.against([self.drawn()], {}, self.run_of(0, 2, 3, 4))
+        self.assertEqual((counts["better: a sheet only after answers"], counts["worse: a sheet only before answers"], worse), (1, 0, []))
+        counts, worse = c.against([self.drawn()], {}, {})
+        self.assertEqual((counts["sheets neither app answered"], worse), (1, []))
+
+    def with_line(self, run, text, *chords):
+        run[self.URL]["lines"].append({"text": text, "chords": [[at, name] for at, name in chords]})
+        return run
+
+    def test_a_chord_line_only_after_shows_and_the_drawing_does_not_is_worse(self):
+        # The review's case: one line more, with a chord, that the page doesn't draw.
+        after = self.with_line(self.run_of(0, 2, 3, 4), "phantom", (0, "Am"))
+        counts, worse = c.against([self.drawn()], self.run_of(0, 2, 3, 4), after)
+        self.assertEqual(counts["worse: a chord line after shows and the drawing does not"], 1)
+        self.assertEqual([(w[0], w[6]["text"]) for w in worse], [(self.URL, "phantom")])
+        # compare counts the same line for the branch alone.
+        self.assertEqual(c.compare([self.drawn()], after)[0]["app chord lines the browser does not draw"], 1)
+
+    def test_an_undrawn_line_both_show_is_neither_and_one_only_before_shows_is_better(self):
+        both = self.with_line(self.run_of(0, 2, 3, 4), "phantom", (0, "Am"))
+        counts, worse = c.against([self.drawn()], both, self.with_line(self.run_of(0, 2, 3, 4), "phantom", (0, "Am")))
+        self.assertEqual((counts["worse: a chord line after shows and the drawing does not"], worse), (0, []))
+        twice = self.with_line(self.with_line(self.run_of(0, 2, 3, 4), "phantom", (0, "Am")), "phantom", (0, "Am"))
+        counts, worse = c.against([self.drawn()], twice, both)
+        self.assertEqual((counts["better: a chord line before shows and the drawing does not"], worse), (1, []))
+        counts, _ = c.against([self.drawn()], both, twice)
+        self.assertEqual(counts["worse: a chord line after shows and the drawing does not"], 1)
+
+    def test_the_command_line_names_a_sheet_after_did_not_answer_and_a_line_it_shows_undrawn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder, other = Path(tmp), "https://example.test/b.html"
+            second = dict(self.drawn(), url=other)
+            (folder / "positions.json").write_text(json.dumps(c.positions([self.drawn(), second])), encoding="utf-8")
+            main = [self.run_of(0, 2, 3, 4)[self.URL], dict(self.run_of(0, 2, 3, 4)[self.URL], url=other)]
+            pr = [self.with_line(self.run_of(0, 2, 3, 4), "phantom", (0, "Am"))[self.URL]]
+            for tag, rows in (("main", main), ("pr", pr)):
+                (folder / f"app-{tag}.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+            with unittest.mock.patch("sys.stdout", new=io.StringIO()) as out:
+                c.main(["against", str(folder), "main", "pr", "--truth", str(folder / "positions.json"), "--show", "5"])
+            said = out.getvalue()
+            self.assertIn("      1  worse: a chord line after shows and the drawing does not", said)
+            self.assertIn("      1  worse: a sheet only before answers", said)
+            self.assertIn(f"{self.URL}: pr shows a chord line the drawing does not: phantom", said)
+            self.assertIn(f"{other}: pr did not answer", said)
+
+    def test_the_command_line_compares_against_positions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "positions.json").write_text(json.dumps(c.positions([self.drawn()])), encoding="utf-8")
+            for tag, letters in (("main", (0, 2, 3, 4)), ("pr", (0, 2, 3, 3))):
+                (folder / f"app-{tag}.jsonl").write_text(json.dumps(self.run_of(*letters)[self.URL]) + "\n", encoding="utf-8")
+            with unittest.mock.patch("sys.stdout", new=io.StringIO()) as out:
+                c.main(["against", str(folder), "main", "pr", "--truth", str(folder / "positions.json"), "--show", "5"])
+            said = out.getvalue()
+            self.assertIn("      1  worse: right before, off after", said)
+            self.assertIn("      0  worse: off in both, as far or farther after", said)
+            self.assertIn("      0  worse: a line before reads as the drawing, after as other words", said)
+            self.assertIn("      0  worse: a chord line after shows and the drawing does not", said)
+            self.assertIn("      0  worse: a sheet only before answers", said)
+            self.assertIn("      3  right in both", said)
+            self.assertIn(f"{self.URL} line 0 chord 3: drawn on 4, main 4, pr 3: abcde", said)
+
+
+class DrawSizeTest(unittest.TestCase):
+    RAW = '<html><head><link href="/ssi_dat/dat_st.css" rel="stylesheet"><script>x()</script></head><body>a</body></html>'
+
+    def test_a_sheet_drawn_at_its_own_size_keeps_the_page_s_font_size(self):
+        text = c.sheet_html(self.RAW, "tt{font-size:15px}", "FACES", size=None)
+        self.assertIn("<style>tt{font-size:15px}</style>", text)
+        self.assertIn("<style>FACES</style></head>", text)
+        self.assertNotIn("font-size:40px", text)
+        self.assertNotIn("<script", text)
+
+    def test_a_sheet_drawn_larger_has_every_letter_at_that_size(self):
+        self.assertIn("<style>FACES *{font-size:40px !important}</style></head>", c.sheet_html(self.RAW, "", "FACES", size=40))
+
+    def test_a_link_to_another_host_reads_as_a_web_address_and_not_as_a_shared_folder(self):
+        # In a file: page, //x5.shinobi.jp/a.gif is file://x5.shinobi.jp/a.gif: on Windows the share
+        # \\x5.shinobi.jp\a.gif, which the browser waits on. Against the site's address it's https, which the route stops.
+        raw = '<html><head><meta charset="x"></head><body><img src="//x5.shinobi.jp/a.gif"></body></html>'
+        self.assertTrue(c.sheet_html(raw, "", "", size=None).startswith('<html><head><base href="https://music.j-total.net/"><meta'))
+
+    def test_only_a_file_on_this_machine_loads(self):
+        self.assertEqual([c.local(u) for u in ("file:///C:/Users/a/Inconsolata.woff2", "file:///fonts/a.woff2",
+                                               "file://x5.shinobi.jp/a.gif", "https://music.j-total.net/a.css", "data:,a")],
+                         [True, True, False, False, False])
+
+    def test_a_sheet_that_fails_to_draw_is_named_and_the_others_still_are(self):
+        class Failed(Exception):
+            pass
+
+        def draw_one(item):
+            if item["file"] == "0001.html":
+                raise Failed("Timeout 30000ms exceeded.\nCall log: ...")
+            return {"lines": [item["file"]]}
+
+        items = [{"file": f"000{n}.html", "url": f"https://example.test/{n}.html"} for n in range(3)]
+        with unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            pages, failed = c.draw_each(items, draw_one, Failed)
+        self.assertEqual([p["url"] for p in pages], ["https://example.test/0.html", "https://example.test/2.html"])
+        self.assertEqual(pages[0]["lines"], ["0000.html"])
+        self.assertEqual(failed, ["0001.html https://example.test/1.html: Timeout 30000ms exceeded."])
+        self.assertIn(failed[0], err.getvalue())
+
+    def test_the_command_line_takes_the_size_and_the_scale(self):
+        with unittest.mock.patch.object(c, "draw") as draw:
+            c.main(["draw", "dir", "--size", "page", "--scale", "1.25", "--out", "x.json"])
+            self.assertEqual((draw.call_args.kwargs["size"], draw.call_args.kwargs["scale"]), (None, 1.25))
+            c.main(["draw", "dir"])
+            self.assertEqual((draw.call_args.kwargs["size"], draw.call_args.kwargs["scale"]), (40, 4.0))
+
+
+class CrawlTest(unittest.TestCase):
+    """The crawl asks the site for one page at a time, and a page it doesn't get never ends the crawl."""
+
+    def crawl(self, answers, count):
+        """Crawls `count` addresses, each answered by the next of `answers`: bytes, or an error to raise."""
+        urls = [f"https://example.test/{n}.html" for n in range(count)]
+        answers, slept = iter(answers), []
+
+        def urlopen(request, timeout):
+            answer = next(answers)
+            if isinstance(answer, Exception):
+                raise answer
+            return io.BytesIO(answer)
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                unittest.mock.patch.object(c.urllib.request, "urlopen", urlopen), \
+                unittest.mock.patch.object(c.time, "sleep", slept.append), \
+                unittest.mock.patch.object(c.time, "monotonic", return_value=1000.0), \
+                unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as err, \
+                unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
+            (Path(tmp) / "dat_st.css").write_text("", encoding="utf-8")
+            c.crawl(Path(tmp), urls, 1000)
+            fetched = [item["url"] for item in json.loads((Path(tmp) / "urls.json").read_text(encoding="utf-8"))]
+        return fetched, slept, err.getvalue()
+
+    def test_a_page_the_site_does_not_send_in_time_is_named_and_the_crawl_goes_on(self):
+        fetched, _, err = self.crawl([TimeoutError("timed out"), b"<html>"], 2)
+        self.assertEqual(fetched, ["https://example.test/1.html"])
+        self.assertIn("https://example.test/0.html: timed out", err)
+
+    def test_after_a_failure_the_crawl_waits_longer_and_after_five_in_a_row_it_stops(self):
+        refused = c.urllib.error.URLError("refused")
+        fetched, slept, err = self.crawl([b"a", refused, b"b", refused, refused, refused, refused, refused], 9)
+        self.assertEqual(fetched, ["https://example.test/0.html", "https://example.test/2.html"])
+        # None before the first page, then a page a second; twice that after a failure, and twice again for each one after it.
+        self.assertEqual(slept, [0.0, 1.1, 2.2, 1.1, 2.2, 4.4, 8.8, 17.6])
+        self.assertIn("5 failed in a row", err)
+
+    def test_an_address_that_is_not_a_sheet_is_skipped_at_the_usual_pace(self):
+        missing = c.urllib.error.HTTPError("https://example.test/0.html", 404, "Not Found", {}, None)
+        fetched, slept, _ = self.crawl([missing, missing, b"a"], 3)
+        self.assertEqual((fetched, slept), (["https://example.test/2.html"], [0.0, 1.1, 1.1]))
+
+
 class CompareTest(unittest.TestCase):
     def test_the_totals_of_every_sheet(self):
         drawn = page(line(chords=[chord("C", 0)]), line(words("ab")))
@@ -115,6 +368,70 @@ class CompareTest(unittest.TestCase):
             path = Path(folder) / "app.jsonl"
             path.write_text(json.dumps({"url": "u", "lines": []}) + "\n", encoding="utf-8")
             self.assertEqual(c.read_app(path), {"u": {"url": "u", "lines": []}})
+
+
+class MovesTest(unittest.TestCase):
+    def drawn(self, widths, left=60, url="https://example.test/a.html", font="Inconsolata, monospace"):
+        chars, x = [], 0
+        for letter, width in zip("abcd", widths):
+            chars.append(char(letter, x, x + width))
+            x += width
+        return {**page(line(chords=[chord("C", left)]), line(chars), font=font), "url": url}
+
+    def test_the_same_drawing_moves_nothing(self):
+        counts, shifts, culprits = c.moves([self.drawn([20, 20, 20, 20])], [self.drawn([20, 20, 20, 20])])
+        self.assertEqual(counts["chords (mono stack)"], 1)
+        self.assertEqual(counts["chords on another letter (mono stack)"], 0)
+        self.assertEqual(counts["chords on a letter start in A (mono stack)"], 1)
+        self.assertEqual((shifts, culprits), ({}, {}))
+
+    def test_a_wider_letter_before_the_chord_moves_it_back_a_letter(self):
+        counts, shifts, culprits = c.moves([self.drawn([20, 20, 20, 20])], [self.drawn([20, 44, 20, 20], left=60)])
+        self.assertEqual(counts["chords on another letter (mono stack)"], 1)
+        self.assertEqual(counts["sheets with a chord on another letter (mono stack)"], 1)
+        self.assertEqual(counts["chords on a letter start in B (mono stack)"], 0)
+        self.assertEqual(shifts, {("mono", -1.0): 1})
+        self.assertEqual(culprits, {("mono", ord("b")): 1})
+
+    def test_other_words_are_not_compared(self):
+        b = self.drawn([20, 44, 20, 20])
+        b["lines"][1]["chars"][3]["c"] = "x"
+        counts, _, _ = c.moves([self.drawn([20] * 4)], [b])
+        self.assertEqual(counts["chords (mono stack)"], 0)
+
+    def test_a_leading_space_one_drawing_leaves_out_blames_no_letter(self):
+        a = self.drawn([20, 44, 20, 20], left=20)
+        a["lines"][1]["chars"].insert(0, char(" ", -20, 0))
+        counts, _, culprits = c.moves([a], [self.drawn([20] * 4, left=20)])
+        self.assertEqual(counts["chords on another letter (mono stack)"], 1)
+        self.assertEqual(culprits, {})
+
+    def test_a_sheet_only_one_drawing_has_is_counted_on_its_own(self):
+        counts, _, _ = c.moves([self.drawn([20] * 4, url="https://example.test/b.html", font="x")], [self.drawn([20] * 4)])
+        self.assertEqual(counts["sheets only A drew"], 1)
+
+    def test_starts_are_by_utf16_unit_and_the_end_counts(self):
+        self.assertEqual(c.starts(words("a\U0001F600")), {0: 0, 1: 20, 3: 40})
+        self.assertEqual(c.starts([]), {})
+
+    def test_moves_main_prints_the_counts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            a, b = Path(folder) / "a.json", Path(folder) / "b.json"
+            a.write_text(json.dumps([self.drawn([20] * 4)]), encoding="utf-8")
+            b.write_text(json.dumps([self.drawn([20, 44, 20, 20])]), encoding="utf-8")
+            c.moves_main(a, b, 5)
+
+
+class TemplateTest(unittest.TestCase):
+    def test_old_takes_the_font_stack_and_windows_31j_out_of_the_template(self):
+        source = c.old_template(c.TEMPLATE.read_text(encoding="utf-8"))
+        self.assertNotIn("jTotalMonospace", source)
+        self.assertNotIn("mono", source.split("fun json")[0].split("val lines")[1])
+        self.assertIn('"Shift_JIS"', source)
+
+    def test_a_template_without_a_part_old_takes_out_fails(self):
+        with self.assertRaises(ValueError):
+            c.old_template("class CrawlDumpTest")
 
 
 if __name__ == "__main__":

@@ -127,7 +127,7 @@ class InstrumentalProbe {
             runCatching { MetadataParsers.youtubeMusicVideo(JSONObject(body), id) }.getOrNull()?.let {
                 answer.put("title", it.title).put("artist", it.artist).put("lengthMs", it.lengthMs)
             }
-            answer.put("wordsPage", Regex(""""browseId":"(MPLY[^"]+)"""").containsMatchIn(body))
+            answer.put("wordsPage", Regex(""""browseId":"(MPLY[^"]+)${'"'}""").containsMatchIn(body))
         }
         asked?.optString("browseId")?.ifEmpty { null }?.let { answer.put("browseId", it).put("body", body) }
         return answer

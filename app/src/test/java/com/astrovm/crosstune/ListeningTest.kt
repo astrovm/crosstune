@@ -3817,7 +3817,7 @@ class ListeningTest {
                 // Answering late, as on a slow machine.
                 Thread.sleep(500)
                 // Found untimed at first, shown as they are; a timed copy comes from asking again.
-                val timed = if (++asked == 1) "" else ""","syncedLyrics":"[00:01.00] Night sky\n[00:05.00] Stars""""
+                val timed = if (++asked == 1) "" else ""","syncedLyrics":"[00:01.00] Night sky\n[00:05.00] Stars${'"'}"""
                 FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars"$timed}]""")
             } else {
                 FakeSpotify.html(request, """{"results":[]}""")
@@ -4517,7 +4517,7 @@ class ListeningTest {
                 GOOGLE_TRANSLATE_HOST -> translation(request, translations)
                 "api.mymemory.translated.net" -> myMemoryTranslation(request, translations)
                 else -> {
-                    val timed = synced?.let { ""","syncedLyrics":"$it"""" }.orEmpty()
+                    val timed = synced?.let { ""","syncedLyrics":"$it${'"'}""" }.orEmpty()
                     FakeSpotify.html(request, """[{"trackName":"$title","artistName":"$artist","plainLyrics":"$plain"$timed}]""")
                 }
             }

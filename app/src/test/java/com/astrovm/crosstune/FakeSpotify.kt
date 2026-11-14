@@ -50,12 +50,16 @@ class FakeSpotify : Interceptor {
         return handler(request)
     }
 
-    fun client(): OkHttpClient = OkHttpClient.Builder().dispatcher(Dispatcher(requestThreads)).addInterceptor(this).build()
+    fun client(): OkHttpClient = base.newBuilder().dispatcher(Dispatcher(requestThreads)).addInterceptor(this).build()
 
     companion object {
         // Each test can make several clients. Reuse their threads instead of leaving thousands
         // idle for OkHttp's keep-alive period while the rest of the suite starts.
         private val requestThreads = Executors.newCachedThreadPool { task -> Thread(task, "Fake HTTP").apply { isDaemon = true } }
+
+        // A client made from nothing reads and indexes every certificate Android trusts. One made from this one keeps
+        // what this one read: made from nothing each time, they took 6% of the unit tests' processor time on CI.
+        private val base = OkHttpClient()
         private val HTML = "text/html; charset=utf-8".toMediaType()
 
         /**

@@ -1,6 +1,6 @@
 package com.astrovm.crosstune
 
-private val lyricWord = Regex("""[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*""")
+private val lyricWord = phoneRegex("""[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*""")
 
 /** More of a copy's words than this with a capital is title case. German's nouns stay well under it. */
 private const val TITLE_CASE_SHARE = 0.4
@@ -12,7 +12,7 @@ private const val LETTERS_PER_MISSPELLING = 4
 internal class LyricCase(copies: List<String>) {
     /** Each copy's words, and which of them can say something about being a name. */
     private val inside = copies.flatMap { copy ->
-        val words = lyricWord.findAll(copy).toList()
+        val words = lyricWord.matchesIn(copy).toList()
         val inside = words.indices.filter { index -> index > 0 && insideASentence(copy.substring(words[index - 1].range.last + 1, words[index].range.first)) }
         // A capital on most words, as a copy in capitals or in title case has, says nothing about any of them.
         if (inside.count { words[it].value.first().isUpperCase() } > inside.size * TITLE_CASE_SHARE) emptyList()
@@ -28,9 +28,9 @@ internal class LyricCase(copies: List<String>) {
 
     /** Letter for letter, so even timings which split a word keep their places. */
     fun apply(text: String): String {
-        val words = lyricWord.findAll(text).toList()
+        val words = lyricWord.matchesIn(text).toList()
         var index = 0
-        return lyricWord.replace(text) { token ->
+        return lyricWord.replaceEach(text) { token ->
             val here = index++
             val key = context(words, here)
             val spelling = if (key in cases) cases[key] else respelled(token.value, between[neighbors(words, here)])

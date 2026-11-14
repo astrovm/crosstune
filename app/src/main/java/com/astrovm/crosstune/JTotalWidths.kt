@@ -2,11 +2,12 @@ package com.astrovm.crosstune
 
 /**
  * How wide a letter is on J-Total's page, in thousandths of a column (a column is the width of a
- * digit). The page sets a sheet in Inconsolata, then a Japanese monospace font, then whatever the
- * browser finds: a letter in neither is drawn from a proportional font, so U+0133 is 888 and U+0132 is
- * 1470, not a whole number of columns. The widths are measured in Chromium with the page's own CSS
- * and fonts, see `scripts/jtotal-widths`, and kept in `jtotal-widths.txt`, which lists every letter
- * from U+0080 up that is not two columns: that is what the rest are.
+ * digit), as a Japanese reader's browser on Windows draws it. The page sets a sheet in Inconsolata,
+ * then MS Gothic, then whatever the browser finds: a letter in neither is drawn from a proportional
+ * font, so ۰ is 1144, not a whole number of columns. The widths are measured on Windows with the
+ * page's own CSS and Windows' own fonts, see `scripts/jtotal-widths`, and kept in `jtotal-widths.txt`
+ * and `jtotal-widths-mono.txt`, one for each of the page's font stacks. Each lists every letter from
+ * U+0080 up that is not two columns: that is what the rest are.
  */
 internal object JTotalWidths {
     const val COLUMN = 1000

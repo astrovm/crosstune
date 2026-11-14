@@ -141,8 +141,16 @@ baselineProfile {
     automaticGenerationDuringBuild = false
 }
 
+val composeStability = layout.projectDirectory.file("compose-stability.conf")
 composeCompiler {
-    stabilityConfigurationFiles.add(layout.projectDirectory.file("compose-stability.conf"))
+    stabilityConfigurationFiles.add(composeStability)
+}
+
+// The Kotlin compile isn't told that the Compose compiler reads that file, so a change to it alone left the classes
+// as they were, unstable as before (StableStateTest failed on a build made before the change). As an input of its
+// own, a change to it makes Gradle compile everything again, not only the files that changed.
+tasks.matching { it.name.startsWith("compile") && it.name.endsWith("Kotlin") }.configureEach {
+    inputs.file(composeStability).withPathSensitivity(PathSensitivity.NONE).withPropertyName("composeStability")
 }
 
 // The Compose compiler's reports, with -PcomposeReports: which classes it can't call stable, and which
@@ -257,6 +265,7 @@ tasks.register("ci") {
     description = "Unit tests with the 100% line and 88% branch coverage gates, the notices check, lint, detekt, and the debug and minified release APKs."
     dependsOn(
         "testDebugUnitTest",
+        "growthTests",
         "notices",
         ":pitest-changed-lines:test",
         "koverLogDebug",
@@ -417,6 +426,38 @@ val notices = tasks.register<Test>("notices") {
     outputs.upToDateWhen { false }
 }
 
+// The tests that time how reading grows (Growth.kt). With two forks, the other one's tests take the same cores and
+// caches for minutes, which slowed every reading of a longer page on CI 2.3 times and named a reader in step. So only
+// this task times them: in one fork, after every other task of the build, with nothing beside them. Elsewhere, as in
+// the unit tests Kover counts, Growth reads each text once and judges nothing, so what they run still counts.
+val timedTests = listOf("GrowthTest", "LongPagesTest", "LongSheetsTest", "LongTitlesTest").map { "com.astrovm.crosstune.$it" }
+/** The `--tests` patterns the command line asks of each task, by the task's name. */
+val askedTests: Map<String, List<String>> = buildMap<String, MutableList<String>> {
+    var task = ""
+    val args = gradle.startParameter.taskRequests.flatMap { it.args }
+    args.forEachIndexed { i, arg ->
+        when {
+            arg == "--tests" -> args.getOrNull(i + 1)?.let { getOrPut(task) { mutableListOf() } += it }
+            arg.startsWith("--tests=") -> getOrPut(task) { mutableListOf() } += arg.removePrefix("--tests=")
+            !arg.startsWith("-") && args.getOrNull(i - 1) != "--tests" -> task = arg.substringAfterLast(':')
+        }
+    }
+}
+tasks.register<Test>("growthTests") {
+    group = "verification"
+    description = "The tests that time how reading grows, alone in one fork, after the other tasks."
+    val unitTests = tasks.named<Test>("testDebugUnitTest").get()
+    testClassesDirs = unitTests.testClassesDirs
+    classpath = unitTests.classpath
+    timedTests.forEach { filter.includeTestsMatching(it) }
+    systemProperty("crosstune.timed", "true")
+    mustRunAfter(
+        "testDebugUnitTest", "notices", "lintDebug", "detekt", "assembleDebug", "assembleRelease", ":pitest-changed-lines:test",
+        "koverLogDebug", "koverXmlReportDebug", "koverVerifyDebug",
+    )
+    outputs.upToDateWhen { false }
+}
+
 // Robolectric's Android 16 runtime reaches into JDK internals, its native graphics load a library,
 // and DataStore's protobuf reads memory through sun.misc.Unsafe; the JDK warns of the last two otherwise.
 val robolectricJvmArgs = listOf(
@@ -435,14 +476,44 @@ tasks.withType<Test>().configureEach {
     systemProperty("robolectric-deps.properties", layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path)
     // Robolectric loads a full Android runtime per SDK level the tests use.
     maxHeapSize = "3g"
-    // Two test processes, each with that heap, where there's room for them, like CI's runner:
-    // the tests take about half the time.
+    // Test processes side by side, each with that heap, where there's room for them. Gradle hands the test classes to them
+    // in turn by name before any runs, not to whichever is free. So a class added or taken away moves each after it to
+    // another process: with two, PracticeCardsTest, ListeningTest and MainActivityTest, which mostly wait, ended up in the
+    // same one, and it ran 4 minutes past the other on CI's runner. Three, as CI's runner has room for, leave each less to
+    // do whichever classes share one; they mostly wait, so the processor has room for the third.
     val memory = (ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean).totalMemorySize
-    maxParallelForks = if (Runtime.getRuntime().availableProcessors() >= 4 && memory >= (12L shl 30)) 2 else 1
+    val processors = Runtime.getRuntime().availableProcessors()
+    maxParallelForks = when {
+        name == "growthTests" || processors < 4 -> 1
+        memory >= (14L shl 30) -> 3
+        memory >= (12L shl 30) -> 2
+        else -> 1
+    }
+    // GrowthTest checks the timing itself, so it runs only where the timing is judged.
+    if (name != "growthTests") filter.excludeTestsMatching("com.astrovm.crosstune.GrowthTest")
+    // A timed test asked for with --tests here passes without its timing judged: say where it is judged. Which ran is
+    // read from this run's results, which Gradle empties when the task starts, so it's the classes the filter chose.
+    if (name != "growthTests" && askedTests[name].orEmpty().isNotEmpty()) {
+        val results = reports.junitXml.outputLocation.get().asFile
+        // A copy: the script's own value would take the script into the configuration cache.
+        val timed = timedTests.toList()
+        doLast {
+            val ran = timed.filter { File(results, "TEST-$it.xml").isFile }.map { it.substringAfterLast('.') }
+            if (ran.isNotEmpty()) {
+                logger.lifecycle("${ran.joinToString()}: each text is read once here, shorter, and no timing is judged. Run :app:growthTests for the timing.")
+            }
+        }
+    }
+    // Each task's growths (Growth.kt) go to a file of its own, emptied when it starts, so one run's stand alone.
+    val growthLog = layout.buildDirectory.file("growth/$name.tsv").get().asFile
+    systemProperty("crosstune.growthLog", growthLog.path)
+    doFirst { growthLog.delete() }
     jvmArgs(robolectricJvmArgs)
     // MatcherCasesTest runs a sample of its matrix and made-up searches, as all of them take minutes: all of them with
     // -PmatcherFull, and only the matrix's songs -PmatcherSongs names, so what main opens can be written in parts.
     if (providers.gradleProperty("matcherFull").isPresent) systemProperty("crosstune.matcherFull", "true")
+    // The fuzzes that take most of a minute read one case in 20 (Fuzz.kt): each case with -PfuzzFull.
+    if (providers.gradleProperty("fuzzFull").isPresent) systemProperty("crosstune.fuzzFull", "true")
     providers.gradleProperty("matcherSongs").orNull?.let { systemProperty("crosstune.matcherSongs", it) }
     testLogging {
         events("failed")
@@ -464,13 +535,18 @@ tasks.withType<Test>().configureEach {
 }
 
 pitest {
-    pitestVersion.set("1.30.1")
+    pitestVersion.set(providers.gradleProperty("pitest.version"))
     targetClasses.set(providers.gradleProperty("mutateClasses").map { it.split(",") }.orElse(listOf("com.astrovm.crosstune.*")))
     providers.gradleProperty("mutateTests").orNull?.let { targetTests.set(it.split(",")) }
     providers.gradleProperty("mutateLines").orNull?.let { features.set(listOf("+CHANGED(file[$it])")) }
     // The store's screenshots aren't tests of what the app does, and take long to draw; the song check asks real services;
-    // the notices check reads the build, not the app.
-    excludedTestClasses.set(listOf("com.astrovm.crosstune.shots.*", "com.astrovm.crosstune.songcheck.*", "com.astrovm.crosstune.notices.*"))
+    // the notices check reads the build, not the app. The timed tests run as in the unit tests: each text at the shorter length read once,
+    // nothing timed, as two tests side by side here would make a timing fail at random. LongTitlesTest reads thousands
+    // of titles even so, and each change it covers would wait for it: the steps CutTitleTest counts catch a reading
+    // that's no longer in step with a title's length.
+    excludedTestClasses.set(
+        listOf("com.astrovm.crosstune.shots.*", "com.astrovm.crosstune.songcheck.*", "com.astrovm.crosstune.notices.*", "com.astrovm.crosstune.LongTitlesTest", "com.astrovm.crosstune.GrowthTest"),
+    )
     threads.set(2)
     // A fresh test process takes some seconds to start Robolectric, more than PIT allows a test by default.
     timeoutConstInMillis.set(30_000)
@@ -483,6 +559,7 @@ pitest {
     // cache, unsplit, gives them the room.
     // MatcherCasesTest's matrix and made-up searches take over a minute for each change that lives, so here only its
     // fixed cases run: the matcher job in CI runs all of them whenever the matcher or what it calls changes.
+    // The fuzz tests read a few titles there, not thousands (Fuzz.kt).
     jvmArgs.set(robolectricJvmArgs + listOf("-Dcrosstune.mutationRun=true", "-Xmx3g", "-XX:-SegmentedCodeCache", "-XX:ReservedCodeCacheSize=512m", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path))
 }
 

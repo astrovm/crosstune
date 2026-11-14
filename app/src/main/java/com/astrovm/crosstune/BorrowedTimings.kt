@@ -23,8 +23,8 @@ internal object BorrowedTimings {
     /** How far apart, on the middle line, borrowed times and rough ones can be and still agree. */
     const val AGREE_MS = 8_000L
 
-    private val marks = Regex("\\p{Mn}+")
-    private val notSound = Regex("[^a-z0-9]")
+    private val marks = phoneRegex("\\p{Mn}+")
+    private val notSound = phoneRegex("[^a-z0-9]")
 
     /** [text] as the letters it's said with, without accents, spaces or punctuation. */
     fun sound(text: String): String =

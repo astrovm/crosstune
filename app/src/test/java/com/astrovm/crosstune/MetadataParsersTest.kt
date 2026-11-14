@@ -197,6 +197,14 @@ class MetadataParsersTest {
         assertEquals(MusicMetadata("Song - Remastered 2011", "Band"), MetadataParsers.musicVideo("Song - Remastered 2011", "Band"))
         assertEquals(MusicMetadata("Song (feat. A)", "Band"), MetadataParsers.musicVideo("Song (feat. A)", "Band"))
         assertNull(MetadataParsers.musicVideo("(Official Video)", "Band"))
+        // A line break after the song's brackets, or in later ones, still leaves the song in the first.
+        assertEquals(MusicMetadata("アイドル", "YOASOBI"), MetadataParsers.musicVideo("YOASOBI「アイドル」\nTV size", "Label"))
+        assertEquals(MusicMetadata("アイドル", "YOASOBI"), MetadataParsers.musicVideo("YOASOBI「アイドル」「Idol\nEnglish」", "Label"))
+        // Before them, a line break ends what can be the artist: this is a vlog's title, not a song's.
+        assertNull(MetadataParsers.musicVideo("Vlog\nYOASOBI「アイドル」", "Label"))
+        // A tag may hold one of its own.
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song (Official Video (Remastered))", "Band"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song [Lyrics (English)]", "Band"))
         // An app writing "Artist - Song" with no artist leaves no one before the dash.
         assertNull(MetadataParsers.musicVideo(" - Day 3 in Tokyo", "Someone"))
     }
@@ -223,6 +231,22 @@ class MetadataParsersTest {
             assertEquals(title, MusicMetadata("River Road", "Band"), MetadataParsers.youtubeVideo(title, "Band"))
         }
         assertEquals(MusicMetadata("Music Video Killed the Radio Star", "Band"), MetadataParsers.youtubeVideo("Band - Music Video Killed the Radio Star HD", "Band"))
+    }
+
+    @Test
+    fun aVideoTagThatHoldsATagGoesWhole() {
+        for (title in listOf("Artist - Song (Official Video [4K])", "Artist - Song (Official Video (Remastered))", "Artist - Song [Lyrics (English)]", "Artist - Song ([Lyrics])")) {
+            assertEquals(title, MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo(title, "Channel"))
+        }
+        // Its words are read as words, as main read them with no brackets in it: one says it's a video, and it goes whole.
+        assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (Live at Wembley [HD])", "Channel"))
+        assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (x[[4K]2 y])", "Channel"))
+        assertEquals(MusicMetadata("Song (Live (2020))", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (Live (2020))", "Channel"))
+        // A bracket that never closes, or one too many, is read from the first one to the first close, as it always was.
+        for (title in listOf("Artist - Song (Lyrics()", "Artist - Song ((Lyrics)", "Artist - Song (Official Video :( )")) {
+            assertEquals(title, MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo(title, "Channel"))
+        }
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song (Lyrics()", "Band"))
     }
 
     @Test

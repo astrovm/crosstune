@@ -64,6 +64,6 @@ class AppShortcutsTest {
     fun theDevBuildHasTheSameShortcutsPointingAtItself() {
         // Comments aside, the dev build's copy is the app's, opening the dev build instead.
         fun shortcuts(build: String) = File("src/$build/res/xml/shortcuts.xml").readText().replace(Regex("""\s*<!--.*?-->""", RegexOption.DOT_MATCHES_ALL), "")
-        assertEquals(shortcuts("main"), shortcuts("debug").replace("""android:targetPackage="com.astrovm.crosstune.dev"""", """android:targetPackage="com.astrovm.crosstune""""))
+        assertEquals(shortcuts("main"), shortcuts("debug").replace("""android:targetPackage="com.astrovm.crosstune.dev${'"'}""", """android:targetPackage="com.astrovm.crosstune${'"'}"""))
     }
 }
