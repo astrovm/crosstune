@@ -91,6 +91,7 @@ class UpdatesTest {
         assertTrue(UpdateChecker.isNewer("2.10.0", "2.9.9"))
         assertTrue(UpdateChecker.isNewer("3.0.0", "2.99.99"))
         assertTrue(UpdateChecker.isNewer("2.8.17", "2.8.16-dev"))
+        assertTrue(UpdateChecker.isNewer("2.8.16", "2.8.16-dev"))
         assertFalse(UpdateChecker.isNewer("2.8.16", "2.8.16"))
         assertFalse(UpdateChecker.isNewer("2.8.15", "2.8.16"))
         // A test version comes before its version, and after the one before.
