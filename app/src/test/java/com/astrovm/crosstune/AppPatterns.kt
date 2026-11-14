@@ -32,6 +32,12 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         fun line(at: Int) = source.substring(source.lastIndexOf('\n', at - 1) + 1).lineSequence().first().trim()
         // A pattern named in a comment, as main's was, is no pattern of the app's.
         fun inComment(at: Int) = line(at).let { it.startsWith("*") || it.startsWith("/*") || it.startsWith("//") }
+        if (name.endsWith(".java")) {
+            // The app writes its patterns in Kotlin, with phoneRegex, so each is read here as a phone reads it. One in
+            // Java is read neither way, so each is named, as a pattern built from a value is.
+            javaBuilt.findAll(source).map { it.range.first }.filterNot(::inComment).forEach { unread += "${where(it)} ${line(it)}" }
+            return emptyList()
+        }
         val calls = call.findAll(source).filterNot { inComment(it.range.first) }.toList()
         val read = call.findAll(source).map { it.range.first }.toSet()
         built.findAll(source).filter { it.range.first !in read }.map { it.range.first }
@@ -72,9 +78,12 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
 
     companion object {
         /** The app's own patterns, from its code. */
-        fun ofApp() = AppPatterns(
-            File("src/main/java").walk().filter { it.extension == "kt" }.sortedBy { it.path }.map { it.name to it.readText() }.toList()
-        )
+        fun ofApp() = AppPatterns(sources("src/main/java").map { it.name to it.readText() })
+
+        /** The code under [root], Kotlin and Java: a pattern or a call in either is the app's, so neither is left unread. */
+        fun sources(root: String): List<File> = File(root).walk().filter { it.isFile && it.extension in CODE }.sortedBy { it.path }.toList()
+
+        private val CODE = setOf("kt", "java")
 
         /** A raw literal ends at its first `\"\"\"`, and takes in any more quotes right before that. */
         private const val RAW = "\"\"\"(?:[^\"]|\"(?!\"\"))*+\"*\"\"\""
@@ -85,6 +94,8 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         private val call = Regex("""\b(?:phoneRegex|Regex)\(\s*((?:$RAW|$QUOTED)(?:\s*\+\s*(?:$RAW|$QUOTED))*+)\s*(,\s*(?:RegexOption\.\w+(?:\s*,\s*RegexOption\.\w+)*+|setOf\([^()]*\)))?\s*\)""")
         /** Any `phoneRegex(` or `Regex(`, read or not, and a `.toRegex(`. */
         private val built = Regex("""\b(?:phoneRegex|Regex)\(|\.toRegex\(""")
+        /** Where Java builds a pattern: as Kotlin does, or with `Pattern`, or with a String's own methods, which take one. */
+        private val javaBuilt = Regex("""\b(?:Pattern\.(?:compile|matches)|Regex|StringsKt\.toRegex)\(|\.(?:matches|split|replaceAll|replaceFirst)\(""")
         private val constant = Regex("""\bconst val (\w+)\s*=\s*($RAW|$QUOTED)""")
         private val template = Regex("""\$\{'([^'\\])'\}|\$\{(\w+)\}|\$(\w+)""")
         private val escape = Regex("""\\(u[0-9a-fA-F]{4}|.)""")

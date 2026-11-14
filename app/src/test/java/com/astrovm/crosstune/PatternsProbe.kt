@@ -71,7 +71,7 @@ object PatternsProbe {
         val (command, from, to) = args
         File(to).bufferedWriter().use { out ->
             if (command == "list") {
-                val files = File(from).walk().filter { it.extension == "kt" }.sortedBy { it.path }.map { it.name to it.readText() }.toList()
+                val files = AppPatterns.sources(from).map { it.name to it.readText() }
                 AppPatterns(files).found.forEach { out.write(line(it.where, it.pattern.pattern(), options(it.pattern.flags())) + "\n") }
             } else {
                 val titles = titles()

@@ -70,13 +70,22 @@ internal fun Regex.replaceEach(input: CharSequence, transform: (MatchResult) -> 
 private class FoundMatch(private val regex: Regex, private val input: CharSequence, private val bounds: IntArray) : MatchResult {
     override val range get() = bounds[0] until bounds[1]
     override val value get() = input.substring(bounds[0], bounds[1])
-    override val groups: MatchGroupCollection = FoundGroups(input, bounds)
+    override val groups: MatchGroupCollection = Groups()
     override val groupValues: List<String> get() = List(groups.size) { groups[it]?.value.orEmpty() }
 
     /** The next match, by a look of its own, as [Regex.find]'s. */
     override fun next(): MatchResult? {
         val next = if (range.isEmpty()) bounds[1] + 1 else bounds[1]
         return if (next > input.length) null else regex.find(input, next)
+    }
+
+    private inner class Groups : AbstractCollection<MatchGroup?>(), MatchGroupCollection {
+        override val size get() = bounds.size / 2
+        override fun iterator() = List(size, ::get).iterator()
+        override fun get(index: Int): MatchGroup? {
+            val start = bounds[2 * index]
+            return if (start < 0) null else MatchGroup(input.substring(start, bounds[2 * index + 1]), start until bounds[2 * index + 1])
+        }
     }
 }
 
@@ -107,6 +116,31 @@ internal fun spacesEnd(text: CharSequence, at: Int): Int {
     var end = at
     while (end < text.length && isPatternSpace(text[end])) end++
     return end
+}
+
+/**
+ * A text cut short: [text] up to [end], then [after], what followed a tag cut off its end, as the line break that ended
+ * it. Read as one text without copying it, so a loop that cuts tags off a long title's end one at a time reads near
+ * that end only.
+ */
+internal class Kept(private val text: String, val end: Int, private val after: String) : CharSequence {
+    override val length get() = end + after.length
+    override fun get(index: Int) = if (index < end) text[index] else after[index - end]
+    // What's asked of the title, then what's asked of what follows it: either may be none.
+    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
+        text.substring(minOf(startIndex, end), minOf(endIndex, end)) + after.substring(maxOf(startIndex - end, 0), maxOf(endIndex - end, 0))
+    override fun toString() = text.substring(0, end) + after
+
+    /** Without [range], which is near the end. */
+    fun without(range: IntRange): Kept = minOf(range.first, end).let { cut -> Kept(text, cut, "${subSequence(cut, range.first)}${subSequence(range.last + 1, length)}") }
+
+    /** Without the spaces it ends with, as [String.trim] takes them, and those it starts with once all but [after] is cut. */
+    fun trimmed(): Kept {
+        val rest = after.trimEnd()
+        var cut = end
+        if (rest.isEmpty()) while (cut > 0 && text[cut - 1].isWhitespace()) cut--
+        return Kept(text, cut, if (cut == 0) rest.trimStart() else rest)
+    }
 }
 
 /**

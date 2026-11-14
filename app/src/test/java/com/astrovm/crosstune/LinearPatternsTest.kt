@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.io.File
 import java.util.regex.Pattern
 
 /**
@@ -87,6 +88,27 @@ class LinearPatternsTest {
             listOf("Test.kt:7 val e = Regex(\"\"\"^(.+)\"\"\" + words + \"\"\"${'$'}\"\"\")", "Test.kt:8 val f = words.joinToString(\"|\").toRegex()", "Test.kt:9 val g = Regex(words.first(), RegexOption.IGNORE_CASE)"),
             read.unread.sorted()
         )
+    }
+
+    @Test
+    fun aPatternInJavaIsNamedAsUnread() {
+        val source = "class A {\n  // Pattern.compile(\"a\")\n  static final Pattern B = Pattern.compile(\"b+\");\n" +
+            "  String c(String d) { return d.replaceAll(\"e\", \"f\").split(\",\")[0]; }\n  Regex g = new Regex(\"h\");\n}\n"
+        val read = AppPatterns(listOf("A.java" to source))
+        assertEquals(emptyList<AppPatterns.Found>(), read.found)
+        assertEquals(listOf("A.java:3", "A.java:4", "A.java:4", "A.java:5"), read.unread.map { it.substringBefore(' ') })
+    }
+
+    @Test
+    fun theAppsJavaIsReadWithItsKotlin() {
+        val root = kotlin.io.path.createTempDirectory("sources").toFile()
+        try {
+            listOf("a", "e").forEach { File(root, it).mkdir() }
+            listOf("a/B.kt", "C.java", "d.txt", "e/F.java").forEach { File(root, it).writeText("") }
+            assertEquals(listOf("C.java", "B.kt", "F.java"), AppPatterns.sources(root.path).map { it.name })
+        } finally {
+            root.deleteRecursively()
+        }
     }
 
     /** Text that makes a pattern try each place and look on to the end: runs of one thing, and of how the pattern starts. */
