@@ -130,6 +130,34 @@ jobs:
           node scripts/test-site-language.cjs
           node --test "report/*.test.mjs"
 
+  # What the release, promote and store listing workflows send to Google Play: .github/play/play.sh with the real
+  # fastlane of Gemfile.lock, against a fake Play. Every commit has to keep a review in progress, and production
+  # never shares an edit with another track. The runner's own Ruby, as those workflows use.
+  play:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    env:
+      BUNDLE_GEMFILE: .github/play/Gemfile
+      BUNDLE_FROZEN: "true"
+      BUNDLE_WITHOUT: ""
+      BUNDLE_PATH: ${{ github.workspace }}/../play-gems
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/play
+          sparse-checkout-cone-mode: false
+
+      - name: Test the Google Play steps
+        run: |
+          if ! command -v bundle > /dev/null; then
+            sudo gem install bundler --no-document --silent
+          fi
+          shellcheck .github/play/play.sh
+          ruby --version
+          bundle install --quiet
+          bundle exec ruby .github/play/test/play_test.rb
+
   # The browser extension in extension/, built and tested only when its files change. Its lyrics panel's browser test answers everything itself; the two that follow real links need the network, so they run by hand (see CONTRIBUTING.md).
   extension:
     needs: changes

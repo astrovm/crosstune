@@ -1,0 +1,57 @@
+name: Promote to production
+
+# Sends a release from open testing on to Google Play's production, with its English release notes, in an edit
+# of its own: production never goes to Google's review with a testing track. The release has to be on the
+# first track of the PLAY_TRACKS repository variable (beta when it isn't set). See "Releasing" in CONTRIBUTING.md.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to send to production, as in its tag (e.g. 2.26.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# One at a time: Google Play takes one edit of an app at a time.
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+env:
+  # Every checkout prints Git's hint to name the initial branch. This is what it asks for.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  production:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    environment: release
+    permissions: {}
+    steps:
+      # Only the tools that talk to Google Play and the English release notes, so none of the app's build code
+      # is checked out where the Play key is. Every version's notes stay on main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/play
+            fastlane/metadata/android/en-US/changelogs
+          sparse-checkout-cone-mode: false
+
+      # The commit asks Google Play to keep a review in progress. While one is, Play refuses it, nothing is
+      # sent, and the job says to re-run it when the review ends.
+      - name: Send the release to production
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          PLAY_TRACKS: ${{ vars.PLAY_TRACKS }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]]; then
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON isn't set, so nothing can be sent to Google Play"
+            exit 1
+          fi
+          .github/play/play.sh production "$VERSION"

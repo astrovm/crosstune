@@ -50,8 +50,26 @@ The version is set explicitly in `app/build.gradle.kts`: `versionName` is `X.Y.Z
 1. Update `versionName` and `versionCode` in `app/build.gradle.kts`, and add the changelog under `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`, in the last pull request going into the release rather than one of their own. Merge it before releasing. CI and the Release workflow require a nonempty English changelog for the current version before building. Run `python3 scripts/release/check_changelog.py` to check it locally.
 2. Push a tag with `git tag vX.Y.Z && git push origin vX.Y.Z`, or run **Actions → Release → Run workflow**.
 3. The [Release workflow](.github/workflows/release.yml) runs the CI checks, verifies that the APK's version matches the tag, then signs and publishes `Crosstune-vX.Y.Z.apk`. Signing runs in the `release` environment, which only `main` and `v*` tags can use; add required reviewers to it under **Settings** → **Environments** to approve each release by hand.
-4. It then sends the signed App Bundle and the English changelog to Google Play's production track, once `PLAY_SERVICE_ACCOUNT_JSON` is set. Without it, download `Crosstune-vX.Y.Z.aab` from the workflow run's **Crosstune-vX.Y.Z-play** artifact and upload it in Play Console. It's signed with the same key, which Play uses as the upload key. Set the `PLAY_TRACK` repository variable to, say, `internal` to send releases to another track. The store listing has its own workflow, [`store-listing.yml`](.github/workflows/store-listing.yml): a change on `main` to a name, a description or a picture in `fastlane/metadata/android/` sends the English listing to Google Play with the same key. Run it by hand to send another branch, to add a language the store doesn't have yet (name its folders in **languages**), or with **check_only** to ask Play whether it would take the listing. Google reviews a listing before it shows.
-5. On Play, each release lands in internal testing first, which Google doesn't review, so testers there get it in minutes. The same release then goes on to `PLAY_TRACK` with its notes, through Google's review.
+4. Once `PLAY_SERVICE_ACCOUNT_JSON` is set, it sends the release to Google Play. The App Bundle and its English changelog go to internal testing first, which Google doesn't review, so testers there get it in minutes. Then one edit sends the same release on to each testing track in the `PLAY_TRACKS` repository variable, with the store listing in the languages of `PLAY_LANGUAGES`. So Google reviews each release once. Without the secret, download `Crosstune-vX.Y.Z.aab` from the workflow run's **Crosstune-vX.Y.Z-play** artifact and upload it in Play Console. It's signed with the same key, which Play uses as the upload key.
+5. Production is a step of its own: **Actions** → **Promote to production** → **Run workflow**, with the version (`2.26.0`). [`promote.yml`](.github/workflows/promote.yml) sends that release from the first track in `PLAY_TRACKS` on to production, with its English changelog, in an edit with nothing else. Production never goes to review with a testing track.
+6. The listing also has a workflow of its own, [`store-listing.yml`](.github/workflows/store-listing.yml), run by hand only: to send the listing between releases, from another branch, or in a language the store doesn't have yet (name its folders in **languages**). With **check_only** it only asks Play whether it would take the listing. Each run that isn't a check goes to Google's review.
+
+```mermaid
+flowchart LR
+  tag[Tag vX.Y.Z] --> release[release.yml]
+  release -->|edit 1| internal[Internal testing<br/>no review]
+  internal -->|edit 2: one review| testing[PLAY_TRACKS<br/>beta, alpha<br/>+ listing]
+  dispatch[Promote to production<br/>run by hand] --> promote[promote.yml]
+  testing -.-> promote
+  promote -->|edit 3: its own review| production[Production]
+```
+
+Google Play cancels a review in progress when a new edit is committed, unless the commit asks it not to, and every cancel puts the app at the back of the queue. So every commit these workflows make asks Play to keep the review (`changesInReviewBehavior=ERROR_IF_IN_REVIEW`). While a review is in progress, Play refuses the commit and nothing is sent: the job fails and says to re-run it when the review ends. A re-run of the release doesn't send the App Bundle again when internal testing has it already. All three run [`.github/play/play.sh`](.github/play/play.sh), with fastlane at the versions in its `Gemfile.lock`; `review_guard.rb` adds the parameter to every commit, and refuses an edit that changes production and another track. They check out only that folder and the store text, so none of the app's build code is where the Play key is. CI runs `play.sh` against a fake Play (`.github/play/test/play_test.rb`), and `scripts/release/test_play_workflows.py` checks that the workflows reach Play only through it.
+
+| Repository variable | Value |
+| --- | --- |
+| `PLAY_TRACKS` | The testing tracks each release goes to, with commas between. `beta` (open testing) when it isn't set. `beta,alpha` sends closed testing the same release in the same edit: until production launches, closed testing is where people get the app, so drop `alpha` after. It can't name `production` or `internal` |
+| `PLAY_LANGUAGES` | The listing's languages each release sends: folders of `fastlane/metadata/android`, with spaces between. `en-US` when it isn't set |
 
 It needs these repository secrets:
 
