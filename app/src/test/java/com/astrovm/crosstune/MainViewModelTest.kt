@@ -959,6 +959,31 @@ class MainViewModelTest {
     }
 
     @Test
+    fun theWordsOfAStationsSongStillHearWhatThePhonePlaysAfterALinkIsOnlyHandedOn() {
+        // Links go straight to YouTube Music.
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).commit()
+        fake.handler = { request -> FakeSpotify.html(request, "") }
+        val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val ears = EarsOnThePhone(heardSong())
+        val model = radioModel(ears, lyricsFinder = finder)
+        model.playingBarInSight(true)
+        idle()
+        model.listen(lyrics = true)
+        idle()
+        val song = model.uiState.lyricsFor
+        assertEquals("Fake Song", song?.title)
+        // A link only handed on leaves the words floating, and how they're kept in time, as they were.
+        model.resolveIncoming("see https://soundcloud.com/discover.", keepWords = true)
+        idle()
+        assertEquals(song, model.uiState.lyricsFor)
+        // Still listening along with them, after its pause, it's what the phone plays that's heard, never the room.
+        val asked = ears.asked.size
+        pass(MainViewModel.LISTEN_ALONG_PAUSE_MS)
+        assertTrue(ears.asked.size > asked)
+        assertEquals(0, ears.nearby)
+    }
+
+    @Test
     fun theWordsOfWhatsPlayingAreTheSongHeardOnTheBarFirstThenThePhonesOwnSound() {
         fake.handler = { request -> FakeSpotify.html(request, "") }
         val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)

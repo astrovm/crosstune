@@ -307,6 +307,36 @@ class ListeningTest {
         assertTrue(HistoryStore(prefs()).load().none { it.metadata.title == "RTP Antena 2" })
     }
 
+    @Test
+    fun aStationIsListenedToOnlyWhileItsBarIsInSightNotUnderItsPlayer() {
+        val radio = FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "Fake FM") }
+        MainActivity.playbackFactory = { radio }
+        var listens = 0
+        var stopped = 0
+        MainActivity.hearingFactory = {
+            SongHearing {
+                listens++
+                try {
+                    kotlinx.coroutines.awaitCancellation()
+                } finally {
+                    stopped++
+                }
+            }
+        }
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        // Its player covers the bar, and the main screen with it: the listen stops.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        composeRule.waitForIdle()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1 to 1, listens to stopped)
+        // Back on the bar, it's listened to again.
+        closeWords()
+        waitUntil(TIMEOUT_MS) { listens == 2 }
+        assertEquals(1, stopped)
+    }
+
     /**
      * A station named by ear, with the microphone allowed, that heard no song: Shizuku or root then
      * shares the phone's own sound, after a second. Returns how many times it was listened to.
