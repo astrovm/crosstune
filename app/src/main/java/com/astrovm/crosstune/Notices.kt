@@ -115,7 +115,7 @@ internal object Notices {
 
     /** A file in the notices' folder, or null when there's none. Tests see which thread reads it. */
     @VisibleForTesting
-    var open: (String) -> String? = { name -> Notices::class.java.getResourceAsStream(FOLDER + name)?.bufferedReader()?.use { it.readText() } }
+    var open: (String) -> String? = { name -> Notices::class.java.getResource(FOLDER + name)?.readText() }
 
     private fun read(name: String): String = requireNotNull(open(name)) { "No $name" }
 }

@@ -4,6 +4,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -11,6 +12,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.security.MessageDigest
+import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -301,6 +303,17 @@ class NoticeWordsTest {
         val strings = File(temporary.newFolder("values-v34"), "strings.xml").apply { writeText("<resources><string name=\"app_name\">Crosstune</string></resources>") }
         val failure = assertThrows(IllegalStateException::class.java) { languageTag(strings) }
         assertEquals("$strings has no language_tag", failure.message)
+    }
+
+    @Test
+    fun aLanguagesWordsAreReadOnceWhileTheyAreKept() {
+        val reads = Collections.synchronizedList(mutableListOf<String>())
+        Notices.letGoOfWords()
+        Notices.open = { name -> reads += name; open(name) }
+        val first = Notices.words("es")
+        // Asked again while the page keeps them, as two passes may: the same words, not read again.
+        assertSame(first, Notices.words("es"))
+        assertEquals(listOf("notices-es.txt"), reads.filter { it == "notices-es.txt" })
     }
 
     @Test
