@@ -1,0 +1,12 @@
+# fastlane for play.sh, at the versions Gemfile.lock pins. review_guard.rb needs a google-apis-androidpublisher_v3
+# whose commit_edit takes changes_in_review_behavior (0.99.0 or newer), and stops the job if it doesn't.
+source "https://rubygems.org"
+
+gem "fastlane", "2.240.1"
+gem "google-apis-androidpublisher_v3", ">= 0.99.0"
+
+# Only for test/play_test.rb, which runs play.sh against a fake Google Play.
+group :test do
+  gem "minitest"
+  gem "webmock"
+end
