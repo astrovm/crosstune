@@ -26,12 +26,10 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onRoot
@@ -646,23 +644,33 @@ class TvTest {
     }
 
     @Test
-    fun onATvAStationWithNoSongNamedTakesNoFocusUntilItsSongIsHeard() {
-        // VRadio names only the station (#998).
-        MainActivity.playbackFactory = { FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") } }
+    fun onATvAStationWithNoSongNamedReachesItsButtonsAsASongDoes() {
+        // VRadio names only the station (#998), and has its buttons all the same.
+        MainActivity.playbackFactory = {
+            FakePlayback().apply {
+                access = true
+                unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2")
+                playing.value = Following(PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "VRadio", canSeek = false, canSkipNext = true, appPackage = "com.ilv.vradio")
+            }
+        }
         val heard = CompletableDeferred<Heard>()
         MainActivity.hearingFactory = { SongHearing { heard.await() } }
         launch()
         composeRule.waitUntil(5_000) { shown("RTP Antena 2") }
         val bar = composeRule.onNodeWithTag(NOW_PLAYING_TAG)
-        bar.assertIsNotEnabled()
         field().requestFocus()
-        // Down as far as it goes, the remote never lands on the station, nor is it held there.
         repeat(4) { pressOnFocused(Key.DirectionDown) }
-        focused().assertExists()
-        assertTrue(composeRule.onAllNodes(hasTestTag(NOW_PLAYING_TAG) and isFocused()).fetchSemanticsNodes().isEmpty())
-        heard.complete(Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null))
-        composeRule.waitUntil(5_000) { shown("Iris") }
-        repeat(4) { pressOnFocused(Key.DirectionDown) }
+        bar.assertIsFocused()
+        pressOnFocused(Key.DirectionRight)
+        button(R.string.lyrics_pause).assertIsFocused()
+        pressOnFocused(Key.DirectionRight)
+        button(R.string.lyrics_next_song).assertIsFocused()
+        pressOnFocused(Key.DirectionLeft)
+        pressOnFocused(Key.DirectionLeft)
+        bar.assertIsFocused()
+        // Its song heard, the bar keeps the remote as its name changes.
+        heard.complete(Heard.Song(MusicMetadata("Fake Song", "Fake Band"), null))
+        composeRule.waitUntil(5_000) { shown("Fake Song") }
         bar.assertIsFocused()
         pressOnFocused(Key.DirectionUp)
         bar.assertIsNotFocused()

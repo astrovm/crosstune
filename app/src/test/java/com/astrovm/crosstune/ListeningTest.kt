@@ -10,7 +10,6 @@ import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
@@ -261,20 +260,40 @@ class ListeningTest {
     }
 
     @Test
-    fun aRadioStationIsShownAsItIsUntilItsSongIsHeardAndThenATapShowsTheSong() {
+    fun aRadioStationKeepsItsButtonsAndPlayerAsItIsUntilItsSongIsHeardAndThenATapShowsTheSong() {
         // VRadio names only the station (#998).
-        MainActivity.playbackFactory = { FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") } }
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2")
+            playing.value = Following(PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "VRadio", canSeek = false, appPackage = "com.ilv.vradio", canSkipNext = true)
+        }
+        MainActivity.playbackFactory = { radio }
         val heard = kotlinx.coroutines.CompletableDeferred<Heard>()
         MainActivity.hearingFactory = { SongHearing { heard.await() } }
         launch()
         waitUntil(TIMEOUT_MS) { barShown() }
         assertTrue(shown("RTP Antena 2"))
         assertTrue(shown("VRadio"))
-        // The station is no song: there's nothing to open, and it isn't kept as one.
-        composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsNotEnabled()
-        heard.complete(Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null))
-        waitForText("Iris")
-        assertTrue(shown("The Goo Goo Dolls \u00b7 VRadio"))
+        // Its buttons are the app's, as for a song.
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_pause)) and hasClickAction()).performClick()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_next_song)) and hasClickAction()).performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf(false), radio.plays)
+        assertEquals(listOf(true), radio.skips)
+        // A tap opens its player, as the app names it: no song, so no menu with its link, no words, and nothing kept.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        composeRule.waitForIdle()
+        assertTrue(shown("RTP Antena 2"))
+        assertFalse(described(string(R.string.more_button)))
+        assertFalse(described(string(R.string.lyrics_button)))
+        assertTrue(composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isEmpty())
+        closeWords()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        // Its song heard, which has a while left, a tap shows it, as a Shazam result.
+        heard.complete(Heard.Song(MusicMetadata("Fake Song", "Fake Band", lengthMs = 200_000), null, 50_000, SystemClock.elapsedRealtime()))
+        waitForText("Fake Song")
+        assertTrue(shown("Fake Band \u00b7 VRadio"))
         composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(HistoryStore(prefs()).load().none { it.metadata.title == "RTP Antena 2" })

@@ -658,7 +658,8 @@ internal class MediaSessionPlayback(
                 controller.packageName,
                 labelOf(controller.packageName),
                 metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() },
-                metadata?.let(::coverOf)
+                metadata?.let(::coverOf),
+                metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
             )
         }
     }

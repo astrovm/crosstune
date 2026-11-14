@@ -392,9 +392,10 @@ internal data class NowPlaying(val song: MusicMetadata, val following: Following
 
 /**
  * An app that plays with no song named, as [playing] has it, and the song [heard] in it once one is,
- * by its sound or the microphone. The app's own name for a song always comes before it.
+ * by its sound or the microphone. The app's own name for a song always comes before it. [following]
+ * it in the app, for its buttons and where it is, as for a song.
  */
-internal data class PlayingUnnamed(val playing: Unnamed, val heard: Heard.Song? = null)
+internal data class PlayingUnnamed(val playing: Unnamed, val heard: Heard.Song? = null, val following: Following? = null)
 
 /**
  * The player's [song], asked of the music app [app], by package, with its [link] there for YouTube
@@ -410,8 +411,16 @@ internal data class PlayerState(
     val lines: List<LyricLine> = emptyList(),
     val linesByEar: Boolean = false,
     /** What the app was playing when asked, so only a song it goes on to after is taken for the one asked. */
-    val over: MusicMetadata? = null
-)
+    val over: MusicMetadata? = null,
+    /**
+     * It plays what the app names no song for, e.g. a radio station, as the app names it: its buttons
+     * and where it is, but nothing that takes it for a song, no card, words, link or search.
+     */
+    val songless: Boolean = false
+) {
+    /** Who it's by, as shown under its name: for what names no song, the app that plays it. */
+    val byLine: String get() = if (songless) following?.app.orEmpty() else song.artist
+}
 
 internal data class Practice(
     val queue: List<SavedLine> = emptyList(),

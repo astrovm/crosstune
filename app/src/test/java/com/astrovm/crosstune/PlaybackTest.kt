@@ -989,14 +989,20 @@ class PlaybackTest {
             Triple("com.maxmpz.audioplayer", "Fake Song", "") to null,
             Triple("com.example.player", "Fake Artist - Fake Song.FLAC", "unknown") to MusicMetadata("Fake Song", "Fake Artist"),
             Triple("com.example.player", "Unknown Artist - Fake Song.ogg", null) to null,
-            Triple("com.example.player", "AUD-20240101-WA0003.opus", "Fake Artist") to null
+            Triple("com.example.player", "AUD-20240101-WA0003.opus", "<unknown>") to null
         )) {
             val (packageName, title, artist) = input
             ShadowMediaSessionManager.reset()
             shadowOf(sessions).addController(player(packageName, "Player", title, artist))
             assertEquals(title, expected, playback.nowPlaying()?.metadata)
-            assertEquals(title, if (expected == null) Unnamed(packageName, "Player", title) else null, playback.playingUnnamed())
+            // Followed by what the app has where the artist goes, as the app has it.
+            assertEquals(title, if (expected == null) Unnamed(packageName, "Player", title, artist = artist.orEmpty()) else null, playback.playingUnnamed())
         }
+        // A title with a real artist is a song, even one shaped like a recording's name.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.example.player", "Player", "Demo 20230415", "Fake Artist", album = "Fake Album"))
+        assertEquals(MusicMetadata("Demo 20230415", "Fake Artist"), playback.nowPlaying()?.metadata)
+        assertNull(playback.playingUnnamed())
     }
 
     @Test
@@ -1468,7 +1474,7 @@ class PlaybackTest {
         // Android's word for a file with no artist is no artist (#591): the file plays (#780), with no song named, so it's listened to.
         shadowOf(sessions).addController(player("com.other.player", "Other", "Your FYP, but make it a playlist (256k)", "<unknown>", album = "Downloads"))
         assertNull(playback.nowPlaying())
-        assertEquals(Unnamed("com.other.player", "Other", "Your FYP, but make it a playlist (256k)"), playback.playingUnnamed())
+        assertEquals(Unnamed("com.other.player", "Other", "Your FYP, but make it a playlist (256k)", artist = "<unknown>"), playback.playingUnnamed())
         // A compilation's file names its artist in the title, whatever the language it says so in.
         for (various in listOf("Various Artists", "Varios Artistas", "VA")) {
             ShadowMediaSessionManager.reset()

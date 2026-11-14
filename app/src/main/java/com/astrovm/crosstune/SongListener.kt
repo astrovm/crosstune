@@ -45,7 +45,8 @@ internal sealed interface Heard {
      * since the phone started, so the words can follow on from there. [matchId] is the recording Shazam
      * matched it to, whose place [offsetMs] is: often another release than the one playing. [speed] is
      * how fast that recording goes by as the sound heard plays, faster for an upload sped up. [app] is
-     * the music app playing it on the phone, by package.
+     * the music app playing it on the phone, by package. [inRoom] when only the microphone heard it, with
+     * nothing to tell it from another song playing in the room.
      */
     data class Song(
         val metadata: MusicMetadata,
@@ -54,7 +55,8 @@ internal sealed interface Heard {
         val startedAtMs: Long? = null,
         val matchId: String? = null,
         val app: String? = null,
-        val speed: Float = 1f
+        val speed: Float = 1f,
+        val inRoom: Boolean = false
     ) : Heard {
         /** Where the song is, as heard, when both halves are known. */
         val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs, speed) else null
@@ -391,7 +393,8 @@ internal class PlayingFirst(
         // Through headphones or muted, the microphone hears nothing of it: no more use than none at all.
         val room = (if (whileAloud) aloud() else hearing.listen()) ?: return heard
         // The microphone hears the room too: another song playing there isn't the one the phone plays.
-        val playing = playback.nowPlaying()?.metadata ?: return room
+        // With no song named to tell, the one heard may be either.
+        val playing = playback.nowPlaying()?.metadata ?: return (room as? Heard.Song)?.copy(inRoom = true) ?: room
         return room.takeIf { it !is Heard.Song || SongNames.names(playing.title, playing.artist, it.metadata) } ?: Heard.Nothing
     }
 

@@ -794,6 +794,18 @@ class SongListenerTest {
     }
 
     @Test
+    fun aSongOnlyTheMicrophoneHeardWithNoSongNamedIsKeptAsHeardInTheRoom() {
+        val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
+        val song = Heard.Song(MusicMetadata("Fake Song", "Fake Artist"), null, 12_000, 400_000)
+        val unshared = SongHearing { Heard.Failed(AppError.MICROPHONE) }
+        // The phone won't share its sound: the microphone may hear another song in the room than the station's (#1002).
+        assertEquals(song.copy(inRoom = true), runBlocking { PlayingFirst(phone, SongHearing { song }, unshared).listenToPlaying() })
+        // Heard in the phone's own sound, it's the station's, and the microphone isn't asked.
+        assertEquals(song, runBlocking { PlayingFirst(phone, SongHearing { error("not asked") }, SongHearing { song }).listenToPlaying() })
+        assertEquals(Heard.Nothing, runBlocking { PlayingFirst(phone, SongHearing { Heard.Nothing }, unshared).listenToPlaying() })
+    }
+
+    @Test
     fun whileAloudTheMicrophoneStopsOnceThePhoneGoesQuietButItsOwnSoundGoesOn() = runTest {
         val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
         val unshared = Heard.Failed(AppError.MICROPHONE)
@@ -833,10 +845,11 @@ class SongListenerTest {
         delay(check * 5)
         assertTrue(byHand.isActive)
         asked.complete(song)
-        assertEquals(song, byHand.await())
+        // Heard by the microphone alone, it may be the room's: see aSongOnlyTheMicrophoneHeardWithNoSongNamedIsKeptAsHeardInTheRoom.
+        assertEquals(song.copy(inRoom = true), byHand.await())
         // A song heard while the phone plays out loud is the answer.
         phone.aloud = true
-        assertEquals(song, PlayingFirst(phone, SongHearing { song }, SongHearing { unshared }).listenToPlaying(whileAloud = true))
+        assertEquals(song.copy(inRoom = true), PlayingFirst(phone, SongHearing { song }, SongHearing { unshared }).listenToPlaying(whileAloud = true))
     }
 
     @Test
@@ -863,7 +876,8 @@ class SongListenerTest {
         // Nothing playing on the phone, the room's song is the one asked for.
         phone.onThePhone = null
         assertEquals(room, runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listen() })
-        assertEquals(room, runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listenToPlaying() })
+        // Heard to tell what the phone plays, it's kept as the room's, as nothing tells it's the phone's.
+        assertEquals(room.copy(inRoom = true), runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listenToPlaying() })
     }
 
     private companion object {

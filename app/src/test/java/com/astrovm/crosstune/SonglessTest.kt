@@ -42,7 +42,7 @@ class SonglessTest {
         assertTrue(noSong("VID_20240101_123456.mp4", ""))
         assertTrue(noSong("/storage/emulated/0/Music/Fake Artist - Fake Song.mp3", ""))
         assertTrue(noSong("content://media/external/audio/media/42", ""))
-        assertTrue(noSong("file:///sdcard/Download/fake.ogg", "Fake Artist"))
+        assertTrue(noSong("file:///sdcard/Download/fake.ogg", "<unknown>"))
     }
 
     @Test
@@ -59,6 +59,11 @@ class SonglessTest {
         assertFalse(noSong("Song 2", "Fake Band"))
         assertFalse(noSong("Summer of 1999", "Fake Artist"))
         assertFalse(noSong("Track 01 Remix Edition", "Fake Artist"))
+        // A title with a real artist is a song, even one shaped like a file's or a recording's name.
+        assertFalse(noSong("Demo 20230415", "Fake Artist"))
+        assertFalse(noSong("Session 210415", "Fake Band"))
+        assertFalse(noSong("Jenny 8675309", "Fake Band"))
+        assertFalse(noSong("file:///sdcard/Download/fake.ogg", "Fake Artist"))
         // A song an artist named for its place on the album, as some do.
         assertFalse(noSong("Track 10", "Fake Artist"))
         assertFalse(noSong("Pista 03", "Fake Band"))
