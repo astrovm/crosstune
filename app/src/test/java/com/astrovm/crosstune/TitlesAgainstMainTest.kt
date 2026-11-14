@@ -8,7 +8,8 @@ import java.util.zip.GZIPInputStream
 /**
  * No title reads worse than on main: each of [TitleFuzz]'s titles is read here and compared with main's readings,
  * made by `scripts/titlefuzz/baseline.py`. A reading that differs is one of [BETTER], with why it's better, or the
- * test fails. Every difference is written to `build/titles-differences.tsv` to look at.
+ * test fails. Every difference is written to `build/titles-differences.tsv` to look at. The unit tests read one title
+ * in [SAMPLED], as all of them take a minute: all of them with `-PtitlesFull`, as CI's titles job runs it.
  */
 class TitlesAgainstMainTest {
     @Test
@@ -22,7 +23,10 @@ class TitlesAgainstMainTest {
         val worse = mutableListOf<String>()
         val better = sortedMapOf<String, Int>()
         val differences = StringBuilder()
-        TitleFuzz.titles().take(count).zip(lines.drop(1).asSequence()).forEach { (title, line) ->
+        val every = if (count < TitleFuzz.COUNT || System.getProperty("crosstune.titlesFull") == "true") 1 else SAMPLED
+        var read = 0
+        TitleFuzz.titles().take(count).zip(lines.drop(1).asSequence()).filterIndexed { at, _ -> at % every == 0 }.forEach { (title, line) ->
+            read++
             val parts = line.split(TitleFuzz.VARIANT)
             val variants = TitleFuzz.variants(title)
             assertEquals(title.text, variants.map { it.first }, parts.drop(1).chunked(2).map { it.first() })
@@ -38,6 +42,7 @@ class TitlesAgainstMainTest {
                 if (why == null) worse += shown.joinToString(" | ") { it.replace("\n", "\\n").replace("\r", "\\r") } else better.merge(why.name, 1, Int::plus)
             }
         }
+        assertEquals((count + every - 1) / every, read)
         File("build/titles-differences.tsv").writeText(differences.toString())
         println("Better than main: $better")
         assertEquals("${worse.size} titles read worse than on main", emptyList<String>(), worse.take(SHOWN))
@@ -115,6 +120,8 @@ class TitlesAgainstMainTest {
         const val BASELINE = "src/test/titlefuzz/main.tsv.gz"
         const val SHOWN = 40
         const val FEW = 1_000
+        /** One title in this many is read in the unit tests, and every one under mutation testing's [FEW]. */
+        const val SAMPLED = 20
         val SONGS = setOf("musicVideo", "youtubeVideo", "playerSong")
 
         /** Whether [text] has a tag in a tag, by the brackets [opens] starts, and each of those brackets closes in order, with its own kind. */

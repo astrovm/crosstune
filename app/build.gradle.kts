@@ -482,14 +482,18 @@ tasks.withType<Test>().configureEach {
     maxParallelForks = if (name != "growthTests" && Runtime.getRuntime().availableProcessors() >= 4 && memory >= (12L shl 30)) 2 else 1
     // GrowthTest checks the timing itself, so it runs only where the timing is judged.
     if (name != "growthTests") filter.excludeTestsMatching("com.astrovm.crosstune.GrowthTest")
-    // A timed test asked for by name here passes without its timing judged: say where it is judged.
-    val asked = askedTests[name].orEmpty()
-    val named = timedTests.map { it.substringAfterLast('.') }.filter { test ->
-        asked.any { pattern -> Regex("""\b$test\b""").containsMatchIn(pattern) || Regex(pattern.split("*").joinToString(".*") { Regex.escape(it) }).matches(test) }
-    }
-    if (name != "growthTests" && named.isNotEmpty()) {
-        val said = "${named.joinToString()}: each text is read once here, at the shorter length, and no timing is judged. Run :app:growthTests for the timing."
-        doFirst { logger.lifecycle(said) }
+    // A timed test asked for with --tests here passes without its timing judged: say where it is judged. Which ran is
+    // read from this run's results, which Gradle empties when the task starts, so it's the classes the filter chose.
+    if (name != "growthTests" && askedTests[name].orEmpty().isNotEmpty()) {
+        val results = reports.junitXml.outputLocation.get().asFile
+        // A copy: the script's own value would take the script into the configuration cache.
+        val timed = timedTests.toList()
+        doLast {
+            val ran = timed.filter { File(results, "TEST-$it.xml").isFile }.map { it.substringAfterLast('.') }
+            if (ran.isNotEmpty()) {
+                logger.lifecycle("${ran.joinToString()}: each text is read once here, at the shorter length, and no timing is judged. Run :app:growthTests for the timing.")
+            }
+        }
     }
     // Each task's growths (Growth.kt) go to a file of its own, emptied when it starts, so one run's stand alone.
     val growthLog = layout.buildDirectory.file("growth/$name.tsv").get().asFile
@@ -499,6 +503,8 @@ tasks.withType<Test>().configureEach {
     // MatcherCasesTest runs a sample of its matrix and made-up searches, as all of them take minutes: all of them with
     // -PmatcherFull, and only the matrix's songs -PmatcherSongs names, so what main opens can be written in parts.
     if (providers.gradleProperty("matcherFull").isPresent) systemProperty("crosstune.matcherFull", "true")
+    // TitlesAgainstMainTest reads one title in 20 of its 200,000, as all of them take a minute: all of them with -PtitlesFull.
+    if (providers.gradleProperty("titlesFull").isPresent) systemProperty("crosstune.titlesFull", "true")
     providers.gradleProperty("matcherSongs").orNull?.let { systemProperty("crosstune.matcherSongs", it) }
     testLogging {
         events("failed")
