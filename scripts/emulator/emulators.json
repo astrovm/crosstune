@@ -51,6 +51,7 @@
     "by_hand": []
   },
   "crosstune-android8": {
+    "kind": "engine",
     "image": "system-images;android-26;google_apis;{abi}",
     "device": "pixel",
     "port": 5584,
