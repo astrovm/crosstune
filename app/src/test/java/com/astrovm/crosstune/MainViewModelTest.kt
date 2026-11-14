@@ -325,6 +325,8 @@ class MainViewModelTest {
     private class EarsOnThePhone(vararg val answers: Heard) : SongHearing {
         val asked = mutableListOf<Boolean>()
         val whileAloud = mutableListOf<Boolean>()
+        /** Listens with no time gone by: see [Looping]. */
+        private val listensNow = Looping()
         /** How many times the microphone listened for a song nearby, rather than to what the phone plays, and what it heard. */
         var nearby = 0
         var heardNearby: Heard = Heard.Nothing
@@ -341,7 +343,7 @@ class MainViewModelTest {
             asked += byMicrophone
             this.whileAloud += whileAloud
             // Listened to over and over with no time going by is a loop: it stops here, so the test fails on the count, at once.
-            if (asked.size > LISTENS_AT_MOST) awaitCancellation()
+            if (listensNow.loops()) awaitCancellation()
             holdPlaying?.await()
             return answers[minOf(asked.size, answers.size) - 1]
         }
@@ -4230,9 +4232,6 @@ class MainViewModelTest {
     }
 
     private companion object {
-        /** More listens than any test asks for. */
-        const val LISTENS_AT_MOST = 100
-
         /** How long UtaTen takes to answer: a slow one, as a test machine with much else to do may be. */
         const val UTATEN_MS = 200L
     }

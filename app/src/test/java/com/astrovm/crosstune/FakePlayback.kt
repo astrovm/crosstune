@@ -85,8 +85,9 @@ internal class FakePlayback : PlaybackSource {
     override fun follow(song: MusicMetadata, app: String?): Flow<Following?> {
         followed += song
         followedApps += app
-        // Followed over and over is a loop, as a player opening itself again: it ends here, so the test fails on what was followed, at once.
-        if (followed.size > FOLLOWS_AT_MOST) return emptyFlow()
+        // Followed over and over with no time gone by is a loop, as a player opening itself again: it ends here, so the
+        // test fails on what was followed, at once. A long test follows many times, but as its time goes on.
+        if (followsNow.loops()) return emptyFlow()
         val flow = followedAs(song, app, app?.let(appPlaying::get) ?: playing)
         return said?.let { later -> flow { later.await(); emitAll(flow) } } ?: flow
     }
@@ -346,8 +347,25 @@ internal class FakePlayback : PlaybackSource {
         return true
     }
 
-    private companion object {
-        /** More follows than any test asks for. */
-        const val FOLLOWS_AT_MOST = 200
+    /** Follows with no time gone by: see [Looping]. */
+    private val followsNow = Looping()
+}
+
+/**
+ * Counts calls made with no time gone by on the phone's clock, which only a loop makes [atMost] of: a fake asked
+ * that often answers no more, so a loop fails its test on the count at once, not by running out of memory.
+ */
+internal class Looping(private val atMost: Int = 100) {
+    private var at = -1L
+    private var calls = 0
+
+    /** Counts this call: true once there are more than [atMost] at this moment. */
+    fun loops(): Boolean {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now != at) {
+            at = now
+            calls = 0
+        }
+        return ++calls > atMost
     }
 }
