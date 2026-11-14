@@ -249,6 +249,12 @@ internal class MainViewModel(
     /** The work naming a song by ear, which a listen asked for waits on, so the microphone isn't opened twice. */
     private var byEar: Job? = null
 
+    /**
+     * The words of the song last named by ear, looked for ahead, apart from listening: a slow lookup
+     * holds neither the next listen nor one asked for.
+     */
+    private var byEarLook: Job? = null
+
     /** The screen's state, which the parts work is handed to change too. */
     private val screen = mutableStateOf(
         UiState(
@@ -1083,7 +1089,8 @@ internal class MainViewModel(
                 is Heard.Song -> {
                     quietByEar = 0
                     uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = heard)) }
-                    lyricsFinder?.firstLook(heard.metadata)
+                    byEarLook?.cancel()
+                    byEarLook = lyricsFinder?.let { finder -> viewModelScope.launch { finder.firstLook(heard.metadata) } }
                     untilOver(heard)
                 }
                 // Talk, ads or a pause: no song plays, so none is shown, and the next try waits longer each time.
@@ -1093,7 +1100,6 @@ internal class MainViewModel(
                 }
                 else -> BY_EAR_RETRY_MS
             }
-            // After the song's words were looked for, which takes a while.
             nextByEarAtMs = now() + wait
         }
     }

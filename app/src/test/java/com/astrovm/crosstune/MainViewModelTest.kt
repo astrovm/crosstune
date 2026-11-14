@@ -524,24 +524,24 @@ class MainViewModelTest {
     }
 
     @Test
-    fun aSongHeardIsListenedToAgainWhenItShouldBeOverEvenWhenItsWordsTakeAWhile() {
+    fun lookingUpTheWordsOfASongHeardDoesNotHoldTheNextListen() {
         var asked = 0
         fake.handler = { request ->
             // The lookup takes 10 s, all on its first ask.
             if (asked++ == 0) ShadowSystemClock.advanceBy(Duration.ofSeconds(10))
             FakeSpotify.html(request, "")
         }
-        val finder = LyricsFinder(fake.client(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        // Answered on the main thread, so the lookup is done when the looper idles, with no real clock in it.
+        val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
         val heardAt = SystemClock.elapsedRealtime()
-        val ears = EarsOnThePhone(heardSong())
+        // 5 s of the song left: listened to again as soon as it ever is after a song.
+        val ears = EarsOnThePhone(heardSong(offsetMs = 195_000))
         radioModel(ears, lyricsFinder = finder).playingBarInSight(true)
-        // The words are looked for on real threads, with timeouts on a real clock up to 15 s: the next listen is set once they're done.
-        until("set the next listen", withinMs = 30_000) { shadowOf(Looper.getMainLooper()).nextScheduledTaskTime.toMillis() - SystemClock.uptimeMillis() > MainViewModel.BY_EAR_SOONEST_MS }
+        idle()
         assertEquals(1, ears.asked.size)
-        val lookupMs = SystemClock.elapsedRealtime() - heardAt
-        assertEquals(10_000L, lookupMs)
-        // 150 s of the song were left when it was heard, and a little after that.
-        pass(heardAt + 150_000 + MainViewModel.BY_EAR_AFTER_MS - SystemClock.elapsedRealtime() - 500)
+        assertTrue("the words were looked for", asked > 0)
+        assertEquals(heardAt + 10_000, SystemClock.elapsedRealtime())
+        pass(heardAt + MainViewModel.BY_EAR_SOONEST_MS - SystemClock.elapsedRealtime() - 500)
         assertEquals(1, ears.asked.size)
         pass(1_000)
         assertEquals(2, ears.asked.size)
@@ -1063,9 +1063,9 @@ class MainViewModelTest {
         assertNull(model.uiState.savedLines.single().startMs)
     }
 
-    /** Idles until [done] holds, within [withinMs] of real time, since the account is read and the browser answered on real threads. */
-    private fun until(what: String, withinMs: Long = 10_000, done: () -> Boolean) {
-        val end = System.currentTimeMillis() + withinMs
+    /** Idles until [done] holds, since the account is read and the browser answered on real threads. */
+    private fun until(what: String, done: () -> Boolean) {
+        val end = System.currentTimeMillis() + 10_000
         while (!done()) {
             check(System.currentTimeMillis() < end) { "Never $what" }
             idle()
