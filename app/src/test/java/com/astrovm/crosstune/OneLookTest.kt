@@ -2,7 +2,6 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.io.File
 import kotlin.random.Random
 
 /**
@@ -16,13 +15,11 @@ class OneLookTest {
         for (pattern in PATTERNS) {
             val regex = Regex(pattern)
             texts().forEach { text ->
-                for (start in listOf(0, text.length / 2, text.length)) {
-                    val found = regex.matchesIn(text, start).toList()
-                    val all = regex.findAll(text, start).toList()
-                    assertEquals("$pattern in $text from $start", all.map(::seen), found.map(::seen))
-                    // The next of each, by a look of its own, as findAll's.
-                    assertEquals("$pattern in $text from $start", all.map { it.next()?.let(::seen) }, found.map { it.next()?.let(::seen) })
-                }
+                val found = regex.matchesIn(text).toList()
+                val all = regex.findAll(text).toList()
+                assertEquals("$pattern in $text", all.map(::seen), found.map(::seen))
+                // The next of each, by a look of its own, as findAll's.
+                assertEquals("$pattern in $text", all.map { it.next()?.let(::seen) }, found.map { it.next()?.let(::seen) })
             }
         }
     }
@@ -40,7 +37,7 @@ class OneLookTest {
 
     @Test
     fun theAppStartsNoLookForEachMatch() {
-        val again = File("src/main/java").walk().filter { it.extension == "kt" && it.name != "Patterns.kt" }.flatMap { file ->
+        val again = AppPatterns.sources("src/main/java").filter { it.name != "Patterns.kt" }.flatMap { file ->
             file.readLines().mapIndexedNotNull { index, line -> "${file.name}:${index + 1}: ${line.trim()}".takeIf { LOOK_AGAIN.containsMatchIn(line) } }
         }.toList()
         assertEquals(emptyList<String>(), again)

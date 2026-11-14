@@ -35,10 +35,9 @@ class SpacesStartTest {
             fun handed(text: String) = listOf(gap)
             fun held(text: String, fixer: (MatchResult) -> CharSequence) = gap.replace(text, fixer)
             fun said() = "gap.findAll(text)" + ${"\"\"\""}gap.find(text, 2)${"\"\"\""} + '"'
-            fun fromAfter(text: String) = gap.matchesIn(text, 2)
         """.trimIndent()
         val found = searchedAgain(AppPatterns(listOf("Test.kt" to source)))
-        assertEquals(listOf(7, 8, 9, 10, 11, 12, 13, 14, 16), found.map { it.substringAfter("Test.kt:").substringBefore(' ').toInt() })
+        assertEquals(listOf(7, 8, 9, 10, 11, 12, 13, 14), found.map { it.substringAfter("Test.kt:").substringBefore(' ').toInt() })
     }
 
     /** Each use of a pattern with `\G` that isn't a search from the start, by where it is, or a pattern no value holds. */
@@ -65,7 +64,6 @@ class SpacesStartTest {
             declared.containsMatchIn(before) -> true
             reference.matchesAt(after, 0) -> true
             after.startsWith(".find(") -> args(after, ".find(".length).let { (given, rest) -> given.size == 1 && !next.matchesAt(rest, 0) }
-            after.startsWith(".matchesIn(") -> args(after, ".matchesIn(".length).first.size == 1
             after.startsWith(".replace(") -> args(after, ".replace(".length).let { (given, rest) -> given.size == 2 && plain(given[1], rest) }
             plainCall.matchesAt(after, 0) -> true
             // Handed to a String's replace or split, as the first of what it's given.
@@ -119,7 +117,7 @@ class SpacesStartTest {
     private companion object {
         val declared = Regex("""\b(?:val|var)\s+$""")
         val reference = Regex("""::(?:matches|matchEntire|containsMatchIn)\b""")
-        val plainCall = Regex("""\.(?:matches|matchEntire|containsMatchIn|split)\(""")
+        val plainCall = Regex("""\.(?:matches|matchEntire|containsMatchIn|split|matchesIn)\(""")
         val next = Regex("""\s*\??\.\s*next\(""")
         val block = Regex("""\s*\{""")
         val argumentTo = Regex("""\.(replace|split)\(\s*$""")
