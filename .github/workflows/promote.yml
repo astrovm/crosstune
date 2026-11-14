@@ -55,12 +55,12 @@ jobs:
       # sent, and the job says to re-run it when the review ends.
       - name: Send the release to production
         env:
-          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          PLAY_KEY_JSON: ${{ secrets.PLAY_KEY_JSON }}
           PLAY_TRACKS: ${{ vars.PLAY_TRACKS }}
           VERSION: ${{ inputs.version }}
         run: |
-          if [[ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]]; then
-            echo "::error::PLAY_SERVICE_ACCOUNT_JSON isn't set, so nothing can be sent to Google Play"
-            exit 1
+          if [[ -z "$PLAY_KEY_JSON" ]]; then
+            echo "::notice::PLAY_KEY_JSON isn't set, so nothing was sent to Google Play"
+            exit 0
           fi
           .github/play/play.sh production "$VERSION"

@@ -12,7 +12,10 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github/workflows"
-PLAY_KEY = "secrets.PLAY_SERVICE_ACCOUNT_JSON"
+PLAY_KEY = "secrets.PLAY_KEY_JSON"
+# The key's name before .github/play. A tag on an older commit runs that commit's workflow, which sends to Play
+# without the review guard. Under a new name, such a run finds no key, and skips Play.
+OLD_KEY = "PLAY_SERVICE_ACCOUNT_JSON"
 
 
 def jobs(text):
@@ -34,6 +37,21 @@ class PlayWorkflowsTest(unittest.TestCase):
         found = sorted((workflow, job) for workflow, job, _ in play_jobs())
         self.assertEqual(
             [("promote.yml", "production"), ("release.yml", "play"), ("store-listing.yml", "listing")], found)
+
+    def test_no_workflow_or_play_tool_reads_the_old_key(self):
+        files = [*WORKFLOWS.glob("*.yml"), *(ROOT / ".github/play").rglob("*.*")]
+        for path in files:
+            with self.subTest(path=path.name):
+                self.assertNotIn(OLD_KEY, path.read_text(encoding="utf-8"))
+
+    def test_every_play_job_skips_play_with_a_notice_when_the_key_isnt_set(self):
+        for workflow, name, job in play_jobs():
+            with self.subTest(workflow=workflow, job=name):
+                self.assertIn("PLAY_KEY_JSON: ${{ secrets.PLAY_KEY_JSON }}", job)
+                script = job.split("run: |", 1)[1] if "PLAY_KEY_JSON" in job.split("run: |", 1)[0] else job
+                skip = re.search(r'if \[\[ -z "\$PLAY_KEY_JSON" \]\]; then\n\s+echo "::notice::([^"]+)"\n\s+exit 0', script)
+                self.assertIsNotNone(skip, "no notice and exit 0 when PLAY_KEY_JSON isn't set")
+                self.assertIn("PLAY_KEY_JSON isn't set", skip.group(1))
 
     def test_every_play_job_goes_through_play_sh(self):
         for workflow, name, job in play_jobs():

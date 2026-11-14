@@ -103,7 +103,7 @@ class PlayTest < Minitest::Test
 
   def env(extra)
     {
-      "PLAY_SERVICE_ACCOUNT_JSON" => KEY,
+      "PLAY_KEY_JSON" => KEY,
       "PLAY_TRACKS" => nil,
       "PLAY_LANGUAGES" => nil,
       "CHECK_ONLY" => nil,
@@ -524,7 +524,7 @@ class PlayTest < Minitest::Test
   end
 
   def test_setup_needs_no_key_and_a_job_never_installs_where_the_key_is
-    output, status = play("setup", env: { "PLAY_SERVICE_ACCOUNT_JSON" => nil })
+    output, status = play("setup", env: { "PLAY_KEY_JSON" => nil })
     assert status.success?, output
     output, status = play("setup")
     refute status.success?, output
@@ -618,7 +618,7 @@ class PlayTest < Minitest::Test
     # No bundle and no key: the tag alone decides.
     FileUtils.rm(File.join(@dir, "Crosstune-#{TAG}.aab"))
     ["#{TAG}-rc.1", "#{TAG}.1"].each do |tag|
-      output, status = play("release", tag, env: { "PLAY_SERVICE_ACCOUNT_JSON" => nil })
+      output, status = play("release", tag, env: { "PLAY_KEY_JSON" => nil })
       assert status.success?, output
 
       assert_includes output, "::notice::#{tag} has a suffix, so it isn't sent to Google Play"

@@ -12,7 +12,7 @@
 #   play.sh listing            The listing alone. CHECK_ONLY=true only asks Play whether it would take it.
 #   play.sh setup              Bundler and the gems Gemfile.lock pins, in a step before the key is there.
 #
-# It reads PLAY_SERVICE_ACCOUNT_JSON (the key), PLAY_TRACKS (testing tracks, with commas or spaces between,
+# It reads PLAY_KEY_JSON (the key), PLAY_TRACKS (testing tracks, with commas or spaces between,
 # default beta), PLAY_LANGUAGES (folders of fastlane/metadata/android, default en-US) and CHECK_ONLY, from the
 # working directory.
 #
@@ -59,7 +59,7 @@ bundler_installed() {
 # Installing a gem runs its own code, as in building its native extensions, so it happens in a step of its own,
 # before the key is there. Every gem is checked against the checksums in Gemfile.lock.
 if [[ "${1:-}" == setup ]]; then
-  if [[ -n "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]]; then
+  if [[ -n "${PLAY_KEY_JSON:-}" ]]; then
     echo "::error::play.sh setup installs gems, which run their own code, so it never runs with the Play key"
     exit 1
   fi
@@ -76,8 +76,8 @@ if [[ "${1:-}" == setup ]]; then
   exit 0
 fi
 
-if [[ -z "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]]; then
-  echo "::error::PLAY_SERVICE_ACCOUNT_JSON isn't set"
+if [[ -z "${PLAY_KEY_JSON:-}" ]]; then
+  echo "::error::PLAY_KEY_JSON isn't set"
   exit 1
 fi
 
@@ -106,7 +106,7 @@ fi
 work="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/play.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 key="$work/play.json"
-(umask 077 && printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$key")
+(umask 077 && printf '%s' "$PLAY_KEY_JSON" > "$key")
 
 play() {
   bundle exec ruby "$here/play.rb" "$@"
