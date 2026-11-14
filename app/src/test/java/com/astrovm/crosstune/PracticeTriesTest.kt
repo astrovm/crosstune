@@ -105,7 +105,7 @@ class PracticeTriesTest {
     }, true, "UTF-8")
 
     /** Runs one card of case [index] on its own fakes and its own thread, and says what it did. */
-    private fun run(index: Int, case: Case): Outcome {
+    private fun run(index: Int, case: Case, player: FakeLinePlayer): Outcome {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val crashed = AtomicReference<Throwable?>()
         val thread = "card-$index"
@@ -137,7 +137,6 @@ class PracticeTriesTest {
             Plays.SPOTIFY_FREE -> playing(spotify, canSeek = false)
             Plays.DEEZER -> playing(deezer, canSeek = true)
         }
-        val player = FakeLinePlayer(context)
         val screen = mutableStateOf(UiState(musicApps = case.apps, defaultDestination = case.preferred))
         val store = SavedLinesStore(context.getSharedPreferences("practice-tries-$index", Context.MODE_PRIVATE).also { it.edit().clear().commit() })
         val traits = AppTraitsStore(context.getSharedPreferences("practice-tries-traits-$index", Context.MODE_PRIVATE).also { it.edit().clear().commit() }) { 1_000_000L }
@@ -172,13 +171,16 @@ class PracticeTriesTest {
         ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
         val before = ShadowLog.stream
         ShadowLog.stream = byThread
+        // Each case's player is a view, made here: views made on many threads at once break Android's shared cache of their settings,
+        // and every test after them in this run.
+        val players = cases.map { FakeLinePlayer(ApplicationProvider.getApplicationContext()) }
         val pool = Executors.newFixedThreadPool(AT_ONCE)
         try {
             val wrong = cases.mapIndexed { index, case ->
                 pool.submit<String?> {
                     val want = expected(case)
                     // Without showing over other apps nothing is asked about the song for Spotify; with it, only for a Spotify it opens.
-                    val got = run(index, case).let { if (case.overlay) it.copy(askedSpotify = false) else it }
+                    val got = run(index, case, players[index]).let { if (case.overlay) it.copy(askedSpotify = false) else it }
                     "$case\n  want $want\n  got  $got".takeIf { got != want }
                 }
             }.mapNotNull { it.get() }
