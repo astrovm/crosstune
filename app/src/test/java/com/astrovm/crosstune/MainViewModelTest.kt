@@ -761,6 +761,58 @@ class MainViewModelTest {
     }
 
     @Test
+    fun theWordsOfWhatsPlayingStopAListenByHandForTheSongOnTheBar() {
+        fake.handler = { request -> FakeSpotify.html(request, "") }
+        val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val ears = EarsOnThePhone(heardSong())
+        val model = radioModel(ears, lyricsFinder = finder)
+        model.playingBarInSight(true)
+        idle()
+        // A listen by hand for a song nearby, which hears another one once it's done.
+        val hold = CompletableDeferred<Unit>()
+        ears.holdNearby = hold
+        ears.heardNearby = Heard.Song(MusicMetadata("Other Fake Song", "Other Fake Band"), "5678", 10_000, null)
+        model.listen()
+        idle()
+        assertTrue(model.uiState.listening)
+        // The words of what's playing meanwhile: the song on the bar's, and the listen by hand stops.
+        model.listen(lyrics = true)
+        idle()
+        hold.complete(Unit)
+        idle()
+        assertEquals("Fake Song", model.uiState.lyricsFor?.title)
+        assertTrue(model.uiState.linkText, model.uiState.linkText.endsWith("/song/1234"))
+        assertFalse(model.uiState.listening)
+    }
+
+    @Test
+    fun aStationsButtonsFollowItsAppAsItPausesAndPlays() {
+        val playback = FakePlayback()
+        playback.playing.value = Following(PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = false)
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        assertEquals(true, model.uiState.playingUnnamed?.following?.clock?.playing)
+        playback.playing.value = Following(PlaybackClock(2_000, 0, playing = false), "VRadio", canSeek = false)
+        idle()
+        assertEquals(false, model.uiState.playingUnnamed?.following?.clock?.playing)
+    }
+
+    @Test
+    fun aStationBackAgainIsNotShownAsItWasFollowedTillItsAppSaysHowItIs() {
+        val playback = FakePlayback()
+        playback.playing.value = Following(PlaybackClock(1_000, 0, playing = false), "VRadio", canSeek = false)
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        assertEquals(false, model.uiState.playingUnnamed?.following?.clock?.playing)
+        // It stops, then plays again, and its app takes a moment to say how.
+        playback.unnamed.value = null
+        idle()
+        playback.said = CompletableDeferred()
+        playback.unnamed.value = station
+        idle()
+        assertEquals(station, model.uiState.playingUnnamed?.playing)
+        assertNull(model.uiState.playingUnnamed?.following)
+    }
+
+    @Test
     fun theWordsOfWhatsPlayingAreTheSongHeardOnTheBarFirstThenThePhonesOwnSound() {
         fake.handler = { request -> FakeSpotify.html(request, "") }
         val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)

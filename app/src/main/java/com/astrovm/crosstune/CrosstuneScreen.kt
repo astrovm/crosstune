@@ -822,7 +822,8 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
 @Composable
 private fun UnnamedBar(now: PlayingUnnamed, actions: ScreenActions) {
     val song = now.heard?.metadata
-    val app = now.following?.app ?: now.playing.label
+    // The app's name as following it has it too, as both are from its package.
+    val app = now.playing.label
     val name = song?.title ?: now.playing.name ?: app.orEmpty()
     PlayingBar(
         name, listOfNotNull(song?.artist, app).filter { it.isNotBlank() && it != name }.joinToString(" · "),

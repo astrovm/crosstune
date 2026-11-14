@@ -1,8 +1,13 @@
 package com.astrovm.crosstune
 
+import android.content.Context
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -50,6 +55,11 @@ class PlayingBarTest {
 
     private fun shown(text: String) = compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
+    /** The bar's words in turn: its name, then who and where. */
+    private fun barWords() = compose.onNodeWithTag(NOW_PLAYING_TAG).fetchSemanticsNode().config[SemanticsProperties.Text].map { it.text }
+
+    private fun described(description: String) = compose.onAllNodesWithContentDescription(description).fetchSemanticsNodes().isNotEmpty()
+
     @Test
     fun theBarStaysUnderASongShownFromALinkWhileItsLinkIsInTheBox() {
         show(UiState(playingNow = playing, result = MusicMetadata("Fake Song", "Fake Band"), link = link, linkText = url))
@@ -65,8 +75,23 @@ class PlayingBarTest {
     @Test
     fun aStationWithNoNameShowsItsAppsNameAndItsLogo() {
         show(UiState(playingUnnamed = PlayingUnnamed(Unnamed("com.example.radio", "Fake Radio", null, "https://example.com/logo.png"))))
-        assertTrue(shown("Fake Radio"))
+        assertEquals(listOf("Fake Radio", ""), barWords())
         assertEquals(listOf("https://example.com/logo.png"), covers)
+    }
+
+    @Test
+    fun aStationIsNamedOverItsApp() {
+        show(UiState(playingUnnamed = PlayingUnnamed(Unnamed("com.example.radio", "Fake Radio", "Fake FM"))))
+        assertEquals(listOf("Fake FM", "Fake Radio"), barWords())
+    }
+
+    @Test
+    fun aStationsBarShowsItPausedAsItsAppHasIt() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val paused = Following(PlaybackClock(25_000, 0, playing = false), "Fake Radio", canSeek = false)
+        show(UiState(playingUnnamed = PlayingUnnamed(Unnamed("com.example.radio", "Fake Radio", "Fake FM"), following = paused)))
+        assertTrue(described(context.getString(R.string.lyrics_play)))
+        assertFalse(described(context.getString(R.string.lyrics_pause)))
     }
 
     @Test

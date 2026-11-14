@@ -292,6 +292,12 @@ class ListeningTest {
         assertTrue(composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isEmpty())
         closeWords()
         waitUntil(TIMEOUT_MS) { barShown() }
+        assertNull(controllerModel().uiState.player)
+        // A swipe up opens the same player.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput { swipe(center, center - Offset(0f, 1500f)) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        closeWords()
+        waitUntil(TIMEOUT_MS) { barShown() }
         // Its song heard, which has a while left, a tap shows it, as a Shazam result.
         heard.complete(Heard.Song(MusicMetadata("Fake Song", "Fake Band", lengthMs = 200_000), null, 50_000, SystemClock.elapsedRealtime()))
         waitForText("Fake Song")

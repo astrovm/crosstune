@@ -34,6 +34,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -554,5 +555,18 @@ class PlayerScreenTest {
         player(ScreenActions(onPlayerCard = { cards++ }))
         compose.onNodeWithText("Song").performClick()
         assertEquals(1, cards)
+    }
+
+    @Test
+    fun aStationsQueueShowsItAsItsAppNamesIt() {
+        val following = Following(PlaybackClock(25_000, 0, playing = true), "Fake Radio", canSeek = false, upNext = listOf(Queued("Next Fake Song", "Fake Band", 7)))
+        shown = UiState(canFollowApps = true, player = PlayerState(MusicMetadata("Fake FM", ""), "Fake Radio", following = following, played = true, songless = true))
+        compose.setContent { CrosstuneTheme { PlayerScreen(shown, ScreenActions()) } }
+        fun count(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().size
+        val names = count("Fake FM") to count("Fake Radio")
+        compose.onNodeWithContentDescription(context.getString(R.string.player_up_next)).performClick()
+        compose.waitForIdle()
+        // First in what plays next, the station by its name over its app's, as its player shows it.
+        assertEquals(names.first + 1 to names.second + 1, count("Fake FM") to count("Fake Radio"))
     }
 }

@@ -7,7 +7,7 @@ package com.astrovm.crosstune
  * what the app has where the artist goes, e.g. "<unknown>", or nothing. Crosstune names the song by
  * listening, and shows this meanwhile, never as a song to open, search or report.
  */
-internal data class Unnamed(val app: String, val label: String?, val name: String?, val artworkUrl: String? = null, val artist: String = "") {
+internal data class Unnamed(val app: String, val label: String?, val name: String?, val artworkUrl: String? = null, private val artist: String = "") {
     /** What it plays as the app names it, which its buttons and the player follow it there by, never as a song. */
     val played: MusicMetadata get() = MusicMetadata(name.orEmpty(), artist, artworkUrl = artworkUrl)
 }
