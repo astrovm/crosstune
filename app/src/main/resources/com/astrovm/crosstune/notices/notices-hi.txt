@@ -1,0 +1,160 @@
+# Crosstune's own words in notices.txt, in Hindi: a block per work, its English name, then the words it
+# translates. What a work isn't given here shows in English. Licence texts stay as published.
+# from: names the English the block was made from. When that English changes, NoticeWordsTest fails
+# and gives the new from: to set once the block is translated again.
+
+JMdict
+from: e24ab7fdbdb1
+note: Crosstune ने JMdict से जो शब्द-सूचियां बनाईं, वे बदली गई हैं। उच्चारण: सिर्फ़ दो या ज़्यादा कांजी वाले वे शब्द जिन्हें JMdict एक ही तरह पढ़ता है, जबकि Crosstune उन्हें दूसरी तरह पढ़ता है। काना वाले शब्द: सिर्फ़ वे आम शब्द जिनमें पहले काना के बाद い या う आता है, हर एक के साथ यह कि उसे कैसे खोजा जाता है, और वे जिनमें वहां ひ या ふ है। ये भी CC BY-SA 4.0 के तहत हैं। नीचे Group का लाइसेंस (https://www.edrdg.org/edrdg/licence.html), CC BY-SA 4.0 लाइसेंस और JMdict का दस्तावेज़ है।
+
+Kuromoji
+from: 962013f376a7
+by: Atilika Inc. और योगदानकर्ता
+
+IPADIC
+from: 429fa42d32bb
+by: Nara Institute of Science and Technology (NAIST), ICOT Free Software की प्रविष्टियों के साथ
+license: NAIST और ICOT का लाइसेंस
+note: Kuromoji के अंदर, mecab-ipadic-2.7.0-20070801 के रूप में।
+
+UniDic
+from: a2b1f3173cf4
+note: पहली बार ज़रूरत पड़ने पर Maven Central से डाउनलोड होता है, Kuromoji के अंदर, unidic-mecab 2.1.2 के रूप में। UniDic, GPL, LGPL या BSD लाइसेंस के तहत है; Crosstune इसे BSD लाइसेंस के तहत इस्तेमाल करता है।
+
+projectM
+from: 7fe496c42dcb
+license: GNU LGPL 2.1 या बाद का
+note: सोर्स कोड से बनाया गया, v4.1.8, app/src/main/cpp/ में बदलावों के साथ: तस्वीर अपना आकार रखती है, और बिल्ड की दो चेतावनियां ठीक की गई हैं। इस रिलीज़ का सटीक सोर्स कोड, projectM और उसके बदलावों के साथ: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, जहां X.Y.Z इस ऐप का वर्ज़न है, फिर CONTRIBUTING.md में बताए तरीके से बिल्ड करें। projectM को बदली हुई कॉपी से बदलने के लिए, उसी सोर्स से ऐप फिर से बिल्ड करें।
+
+MilkDrop's FFT
+from: b45dd4b9f780
+name: MilkDrop का FFT
+note: projectM के अंदर।
+
+projectM's expression parser
+from: cdf5e51ca218
+name: projectM का एक्सप्रेशन पार्सर
+note: projectM के अंदर। इसका पार्सर GNU Bison बनाता है, जिसका खास अपवाद, नीचे, इसे MIT लाइसेंस के तहत शेयर करने देता है।
+
+HLSLParser
+from: ce6b599ae9e8
+note: projectM के अंदर। Crosstune, GLSLGenerator.cpp को बदलता है ताकि बिल्ड होते समय वह चेतावनी न दे; फ़ाइल में यह लिखा है।
+
+OpenGL Mathematics (GLM)
+from: 4c4874dfd640
+note: projectM के अंदर, 0.9.9 के रूप में।
+
+SOIL2
+from: d450bd41d67f
+by: Martín Lucas Golini और Jonathan Dummer
+license: पब्लिक डोमेन और MIT लाइसेंस
+note: projectM के अंदर। इसके इमेज फ़ंक्शन MIT लाइसेंस का नाम लेते हैं, पर उसका टेक्स्ट नहीं देते; लाइसेंस का टेक्स्ट नीचे है।
+
+stb_image and stb_image_write
+from: 63db7987e0a8
+name: stb_image और stb_image_write
+by: Sean Barrett और योगदानकर्ता
+license: पब्लिक डोमेन
+note: SOIL2 के अंदर, stb_image 2.05 और stb_image_write 0.98 के रूप में।
+
+Independent JPEG Group's JPEG software
+from: e98fc27b6e67
+name: Independent JPEG Group का JPEG सॉफ़्टवेयर
+by: Thomas G. Lane और Independent JPEG Group
+note: यह सॉफ़्टवेयर कुछ हद तक Independent JPEG Group के काम पर आधारित है ("This software is based in part on the work of the Independent JPEG Group"): stb_image का JPEG डिकोडर अपना IDCT, IJG की jidctint.c से लेता है।
+
+ETC1 texture code
+from: d19acea5fa8c
+name: ETC1 टेक्सचर कोड
+note: SOIL2 के अंदर।
+
+PowerVR SDK texture decompressor
+from: 85a1d04715d1
+name: PowerVR SDK का टेक्सचर डीकंप्रेसर
+note: SOIL2 के अंदर, PowerVR SDK की PVRTDecompress.cpp से। लाइसेंस SDK का है, उसकी रिलीज़ R14.2-v3.4 से, जो इस फ़ाइल वाली उसकी सार्वजनिक हिस्ट्री में सबसे पुरानी है।
+
+SDL
+from: d76e46658c64
+note: SOIL2 जिस तरह OpenGL एक्सटेंशन ढूंढता है, वह SDL2 के तरीके पर आधारित है।
+
+MilkDrop presets
+from: c2cee12eb9f2
+name: MilkDrop प्रीसेट
+by: उनके लेखक, हर प्रीसेट के नाम में दिए गए
+license: कोई नहीं बताया गया
+note: projectM के Cream of the Crop, Milkdrop Original और En D पैक से, और जनवरी 2021 के Ryan Geiss के पसंदीदा प्रीसेट से (https://www.geisswerks.com/about_milkdrop.html); सेटिंग में दिखने वाली तस्वीरें इन्हीं से बनी हैं। कोई भी लाइसेंस नहीं बताता; नीचे का टेक्स्ट वह है जो projectM अपने पैक के बारे में कहता है।
+
+MilkDrop textures
+from: 1c057dfb0def
+name: MilkDrop टेक्सचर
+by: उनके लेखक, MilkDrop और उसके प्रीसेट से
+license: कोई नहीं बताया गया
+note: projectM के Milkdrop Texture Pack से, जो कोई लाइसेंस नहीं बताता।
+
+whisper.cpp and ggml
+from: 91b66a3811fe
+name: whisper.cpp और ggml
+note: बोल को गाने के साथ मिलाने के लिए सोर्स कोड से बनाया गया। Crosstune, whisper.cpp को बदलता है ताकि बिल्ड होते समय वह चेतावनी न दे; फ़ाइल में यह लिखा है।
+
+YaRN
+from: 4294a4fa5771
+by: Jeffrey Quesnelle और Bowen Peng
+note: ggml के अंदर, इसकी रोटरी पोज़िशन स्केलिंग।
+
+Arm Optimized Routines
+from: ce7ea5fe04b5
+note: ggml के अंदर, इसका तेज़ गणित। Arm Optimized Routines, MIT लाइसेंस या Apache License 2.0 with LLVM Exceptions के तहत है; Crosstune इसे MIT लाइसेंस के तहत इस्तेमाल करता है।
+
+Whisper
+from: 1f00add4de09
+note: छोटा स्पीच मॉडल tiny पहली बार ज़रूरत पड़ने पर ggml-tiny-q5_1.bin के रूप में डाउनलोड होता है: यह Whisper का tiny मॉडल है, जिसे whisper.cpp के लेखकों ने whisper.cpp के फ़ॉर्मैट में बदला है। whisper.cpp हर शब्द को समय में जिस तरह रखता है, वह Whisper के तरीके पर आधारित है।
+
+LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+from: 3ec1e4573208
+name: LLVM के libc++, libc++abi, libunwind, compiler-rt और clang हेडर
+note: विज़ुअल और आवाज़ की लाइब्रेरी में शामिल, Android के NDK r30 से (clang 21)।
+
+Android's C library headers
+from: 3d1c35996aaf
+name: Android की C लाइब्रेरी के हेडर
+by: The Android Open Source Project और दूसरे
+license: BSD और Apache License 2.0
+note: विज़ुअल और आवाज़ की लाइब्रेरी इनके साथ बिल्ड होती हैं, Android के NDK r30 से। टेक्स्ट इनके लिए NDK की सूचना है।
+
+Material Symbols and Material Icons
+from: dc2927001bbd
+name: Material Symbols और Material Icons
+
+Simple Icons
+from: c0698b1964e9
+by: Simple Icons के योगदानकर्ता
+note: म्यूज़िक सेवाओं के लोगो। हर लोगो अपने मालिक का ट्रेडमार्क है।
+
+Roboto
+from: 4e488b8da699
+note: इसके बोल्ड अक्षर TV की होम स्क्रीन की टाइल पर ऐप का नाम बनाते हैं।
+
+OkHttp and Okio
+from: ba684c746072
+name: OkHttp और Okio
+
+Error Prone and J2ObjC annotations
+from: ddff893ca7e3
+name: Error Prone और J2ObjC एनोटेशन
+
+AndroidX, Jetpack Compose and Media3
+from: be8fafefbbb5
+name: AndroidX, Jetpack Compose और Media3
+
+Protocol Buffers
+from: 69810fb6ac21
+note: होम स्क्रीन विजेट की लाइब्रेरी Glance के अंदर, protobuf 4.28.2 के रूप में।
+
+Compose Multiplatform
+from: 15eb7e8ff70c
+by: JetBrains s.r.o. और The Android Open Source Project
+
+Kotlin and kotlinx.coroutines
+from: 337b1a1a8db8
+name: Kotlin और kotlinx.coroutines
+by: JetBrains s.r.o. और Kotlin Programming Language के योगदानकर्ता

@@ -537,6 +537,25 @@ class TvTest {
     }
 
     @Test
+    fun onATvTheLicensesMadeAgainAfterAndroidStoppedTheAppPutTheRemoteBackOnWhatItWasOn() {
+        licensesByRemote()
+        val row = hasText("projectM") and hasClickAction()
+        scrollTo(row)
+        composeRule.onNode(row).requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        repeat(12) { pressOnFocused(Key.DirectionDown) }
+        val reading = focused().fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+
+        // What was split is gone with the app; the page's state comes back, and the text is split again.
+        LicenseSplits.clear()
+        controller = checkNotNull(controller).recreate()
+        composeRule.waitForIdle()
+
+        val piece = SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString(reading)))
+        composeRule.onNode(piece).assertIsDisplayed().assertIsFocused()
+    }
+
+    @Test
     fun onATvBackFromInsideALongLicenceClosesItAndLandsOnItsRowThenLeavesThePage() {
         licensesByRemote()
         val row = hasText("projectM") and hasClickAction()

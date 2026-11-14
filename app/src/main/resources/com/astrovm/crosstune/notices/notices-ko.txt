@@ -1,0 +1,160 @@
+# Crosstune's own words in notices.txt, in Korean: a block per work, its English name, then the words it
+# translates. What a work isn't given here shows in English. Licence texts stay as published.
+# from: names the English the block was made from. When that English changes, NoticeWordsTest fails
+# and gives the new from: to set once the block is translated again.
+
+JMdict
+from: e24ab7fdbdb1
+note: Crosstune이 JMdict로 만든 단어 목록은 바뀌었어요. 읽기: JMdict가 한 가지로만 읽는 두 글자 이상의 한자 단어 중에서 Crosstune이 다르게 읽는 것만. 가나 단어: 첫 가나 뒤에 い나 う가 오는 흔한 단어만, 각각 찾는 방법과 함께, 그리고 그 자리에 ひ나 ふ가 있는 단어. 이것들도 CC BY-SA 4.0이에요. 아래에 Group의 라이선스(https://www.edrdg.org/edrdg/licence.html), CC BY-SA 4.0 라이선스, JMdict 문서가 있어요.
+
+Kuromoji
+from: 962013f376a7
+by: Atilika Inc. 및 기여자
+
+IPADIC
+from: 429fa42d32bb
+by: Nara Institute of Science and Technology (NAIST), ICOT Free Software의 항목 포함
+license: NAIST 및 ICOT 라이선스
+note: Kuromoji 안에 mecab-ipadic-2.7.0-20070801로 들어 있어요.
+
+UniDic
+from: a2b1f3173cf4
+note: 처음 필요할 때 Maven Central에서 내려받아요. Kuromoji 안의 unidic-mecab 2.1.2로요. UniDic은 GPL, LGPL 또는 BSD 라이선스이고, Crosstune은 BSD 라이선스로 써요.
+
+projectM
+from: 7fe496c42dcb
+license: GNU LGPL 2.1 이상
+note: 소스에서 빌드했어요. v4.1.8이고, app/src/main/cpp/에 바꾼 곳이 있어요: 화면이 크기를 유지하고, 빌드 경고 두 개를 고쳤어요. 이 릴리스의 정확한 소스(projectM과 바꾼 곳 포함): git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune 에서 X.Y.Z는 이 앱의 버전이에요. 그다음 CONTRIBUTING.md에 적힌 대로 빌드하세요. projectM을 바꾼 사본으로 교체하려면 그 소스로 앱을 다시 빌드하세요.
+
+MilkDrop's FFT
+from: b45dd4b9f780
+name: MilkDrop의 FFT
+note: projectM 안에 들어 있어요.
+
+projectM's expression parser
+from: cdf5e51ca218
+name: projectM의 수식 파서
+note: projectM 안에 들어 있어요. 파서는 GNU Bison이 만들고, 아래에 있는 Bison의 특별 예외 덕분에 MIT 라이선스로 공유할 수 있어요.
+
+HLSLParser
+from: ce6b599ae9e8
+note: projectM 안에 들어 있어요. Crosstune은 빌드할 때 경고가 나오지 않게 GLSLGenerator.cpp를 바꾸고, 파일에도 그렇게 적혀 있어요.
+
+OpenGL Mathematics (GLM)
+from: 4c4874dfd640
+note: projectM 안에 0.9.9로 들어 있어요.
+
+SOIL2
+from: d450bd41d67f
+by: Martín Lucas Golini 및 Jonathan Dummer
+license: 퍼블릭 도메인 및 MIT 라이선스
+note: projectM 안에 들어 있어요. 이미지 기능이 MIT 라이선스의 이름만 적고 본문은 없어서, 라이선스 본문을 아래에 실었어요.
+
+stb_image and stb_image_write
+from: 63db7987e0a8
+name: stb_image 및 stb_image_write
+by: Sean Barrett 및 기여자
+license: 퍼블릭 도메인
+note: SOIL2 안에 stb_image 2.05와 stb_image_write 0.98로 들어 있어요.
+
+Independent JPEG Group's JPEG software
+from: e98fc27b6e67
+name: Independent JPEG Group의 JPEG 소프트웨어
+by: Thomas G. Lane 및 Independent JPEG Group
+note: 이 소프트웨어는 일부 Independent JPEG Group의 작업에 기반해요 ("This software is based in part on the work of the Independent JPEG Group"): stb_image의 JPEG 디코더가 IDCT를 IJG의 jidctint.c에서 가져와요.
+
+ETC1 texture code
+from: d19acea5fa8c
+name: ETC1 텍스처 코드
+note: SOIL2 안에 들어 있어요.
+
+PowerVR SDK texture decompressor
+from: 85a1d04715d1
+name: PowerVR SDK 텍스처 압축 해제기
+note: SOIL2 안에 들어 있어요. PowerVR SDK의 PVRTDecompress.cpp에서 왔어요. 라이선스는 SDK의 것으로, 이 파일이 있는 공개 기록 중 가장 오래된 릴리스 R14.2-v3.4의 것이에요.
+
+SDL
+from: d76e46658c64
+note: SOIL2가 OpenGL 확장을 찾는 방식은 SDL2의 방식을 바탕으로 해요.
+
+MilkDrop presets
+from: c2cee12eb9f2
+name: MilkDrop 프리셋
+by: 각 프리셋 이름에 적힌 작성자
+license: 명시 안 됨
+note: projectM의 Cream of the Crop, Milkdrop Original, En D 팩과 Ryan Geiss가 2021년 1월에 고른 프리셋(https://www.geisswerks.com/about_milkdrop.html)에서 왔어요. 설정의 정지 화면은 여기서 그려요. 어느 것도 라이선스를 밝히지 않아요. 아래 글은 projectM이 자기 팩에 대해 밝힌 내용이에요.
+
+MilkDrop textures
+from: 1c057dfb0def
+name: MilkDrop 텍스처
+by: MilkDrop과 그 프리셋의 작성자
+license: 명시 안 됨
+note: projectM의 Milkdrop Texture Pack에서 왔어요. 라이선스는 밝히지 않아요.
+
+whisper.cpp and ggml
+from: 91b66a3811fe
+name: whisper.cpp 및 ggml
+note: 가사를 노래에 맞추려고 소스에서 빌드했어요. Crosstune은 빌드할 때 경고가 나오지 않게 whisper.cpp를 바꾸고, 파일에도 그렇게 적혀 있어요.
+
+YaRN
+from: 4294a4fa5771
+by: Jeffrey Quesnelle 및 Bowen Peng
+note: ggml 안에 들어 있어요. 회전 위치 스케일링이에요.
+
+Arm Optimized Routines
+from: ce7ea5fe04b5
+note: ggml 안에 들어 있어요. 빠른 수학 함수예요. Arm Optimized Routines는 MIT 라이선스 또는 Apache License 2.0 with LLVM Exceptions이고, Crosstune은 MIT 라이선스로 써요.
+
+Whisper
+from: 1f00add4de09
+note: 작은 음성 모델 tiny는 처음 필요할 때 ggml-tiny-q5_1.bin으로 내려받아요. Whisper의 tiny 모델을 whisper.cpp 작성자가 whisper.cpp 형식으로 변환한 거예요. whisper.cpp가 각 단어의 시간을 정하는 방식은 Whisper의 방식을 바탕으로 해요.
+
+LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+from: 3ec1e4573208
+name: LLVM의 libc++, libc++abi, libunwind, compiler-rt 및 clang 헤더
+note: 비주얼과 음성 라이브러리에 들어 있어요. Android NDK r30(clang 21)에서 왔어요.
+
+Android's C library headers
+from: 3d1c35996aaf
+name: Android C 라이브러리 헤더
+by: The Android Open Source Project 외
+license: BSD 및 Apache License 2.0
+note: 비주얼과 음성 라이브러리는 이것으로 빌드해요. Android NDK r30에서 왔어요. 본문은 이것에 대한 NDK의 고지예요.
+
+Material Symbols and Material Icons
+from: dc2927001bbd
+name: Material Symbols 및 Material Icons
+
+Simple Icons
+from: c0698b1964e9
+by: Simple Icons 기여자
+note: 음악 서비스의 로고예요. 각 로고는 소유자의 상표예요.
+
+Roboto
+from: 4e488b8da699
+note: 굵은 글자로 TV 홈 화면 타일에 앱 이름을 그려요.
+
+OkHttp and Okio
+from: ba684c746072
+name: OkHttp 및 Okio
+
+Error Prone and J2ObjC annotations
+from: ddff893ca7e3
+name: Error Prone 및 J2ObjC 어노테이션
+
+AndroidX, Jetpack Compose and Media3
+from: be8fafefbbb5
+name: AndroidX, Jetpack Compose 및 Media3
+
+Protocol Buffers
+from: 69810fb6ac21
+note: 홈 화면 위젯의 라이브러리 Glance 안에 protobuf 4.28.2로 들어 있어요.
+
+Compose Multiplatform
+from: 15eb7e8ff70c
+by: JetBrains s.r.o. 및 The Android Open Source Project
+
+Kotlin and kotlinx.coroutines
+from: 337b1a1a8db8
+name: Kotlin 및 kotlinx.coroutines
+by: JetBrains s.r.o. 및 Kotlin Programming Language 기여자

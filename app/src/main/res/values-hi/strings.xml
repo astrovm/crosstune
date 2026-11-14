@@ -27,6 +27,7 @@
     <string name="settings_licenses">लाइसेंस</string>
     <string name="license_show">लाइसेंस दिखाएं</string>
     <string name="license_hide">लाइसेंस छिपाएं</string>
+    <string name="language_tag">hi</string>
     <string name="settings_links_title">इनके लिंक खोलें</string>
     <string name="rule_opens_in">%1$s में खुलेगा</string>
     <string name="rule_default">डिफ़ॉल्ट (%1$s)</string>
