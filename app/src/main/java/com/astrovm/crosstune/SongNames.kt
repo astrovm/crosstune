@@ -54,7 +54,8 @@ internal object SongNames {
         val guest = title.spacesEnd(title.after(word, said.value.length - 1))
         val bracket = title.nextBracket(guest)
         return when {
-            bracket >= title.end -> title.lineEnd(guest)
+            // A guest starts on a letter that's no space, so past the line break that ends the title only at its end.
+            bracket >= title.end -> maxOf(title.lineEnd(), guest)
             title[bracket] in TAG_CLOSES -> null
             else -> title.spacesStart(bracket, guest)
         }
@@ -108,7 +109,7 @@ internal object SongNames {
      */
     private fun editionTagIn(title: CutTitle): TagLook {
         val first = title.next(0)
-        val lastCloser = title.previous(title.lineEnd(first) - 1)
+        val lastCloser = title.previous(title.lineEnd() - 1)
         var dashes = 0
         var at = title.previous(title.end - 1)
         while (at > first) {

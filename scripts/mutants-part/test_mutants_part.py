@@ -17,6 +17,7 @@ class Parts(unittest.TestCase):
             (sources / "com/astrovm/crosstune/B.kt").write_text("b1\nb2\n")
             (sources / "com/astrovm/crosstune/A.kt").write_text("a1\na2\na3\n")
             (sources / "com/astrovm/crosstune/ui/C.kt").write_text("c1\n")
+            (sources / "com/astrovm/crosstune/Ab.java").write_text("j1\n")
             (sources / "com/astrovm/crosstune/notes.txt").write_text("not code\n")
             lines = mutants_part.all_lines(sources)
         self.assertEqual(
@@ -25,6 +26,7 @@ class Parts(unittest.TestCase):
                 "com/astrovm/crosstune/A.kt:1",
                 "com/astrovm/crosstune/A.kt:2",
                 "com/astrovm/crosstune/A.kt:3",
+                "com/astrovm/crosstune/Ab.java:1",
                 "com/astrovm/crosstune/B.kt:1",
                 "com/astrovm/crosstune/B.kt:2",
                 "com/astrovm/crosstune/ui/C.kt:1",
@@ -111,6 +113,28 @@ class Branch(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("M.kt:741  memory error: oom", out.getvalue())
         self.assertIn("0 of 1 changes caught by a test.", out.getvalue())
+
+    def test_changed_lines_of_kotlin_and_java_are_listed(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)]))
+        code = root / "app/src/main/java/com/astrovm/crosstune"
+        code.mkdir(parents=True)
+        files = {"A.kt": "a1\na2\n", "J.java": "j1\nj2\n", "notes.txt": "n1\n"}
+        for name, text in files.items():
+            (code / name).write_text(text)
+        git = ["git", "-c", "user.name=test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false"]
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)
+        subprocess.run([*git, "add", "."], cwd=root, check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "test: base"], cwd=root, check=True)
+        for name in files:
+            (code / name).write_text((code / name).read_text() + "new\n")
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        import mutants
+
+        saved = mutants.ROOT
+        self.addCleanup(lambda: setattr(mutants, "ROOT", saved))
+        mutants.ROOT = root
+        self.assertEqual(mutants.changed_lines("main"), ["com/astrovm/crosstune/A.kt:3", "com/astrovm/crosstune/J.java:3"])
 
 
 if __name__ == "__main__":

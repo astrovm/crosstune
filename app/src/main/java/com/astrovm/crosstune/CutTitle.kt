@@ -119,16 +119,18 @@ internal class CutTitle(private val title: String) {
         }
     }
 
-    /** Where a pattern's `$` first matches, as [lineEnd] says. */
-    fun lineEnd(from: Int): Int {
+    /**
+     * Where a pattern's `$` first matches, as [lineEnd] says: before the line break that ends what's left, or at the end.
+     * It's never before a letter that's left, but the line break: from a letter that's no space on, it's where `$` matches.
+     */
+    fun lineEnd(): Int {
         val last = previous(end - 1)
         val beforeLast = previous(last - 1)
-        val lineBreak = when {
+        return when {
             title.getOrNull(last) == '\n' && title.getOrNull(beforeLast) == '\r' -> beforeLast
             title.getOrNull(last)?.let(::isLineBreak) == true -> last
             else -> end
         }
-        return if (lineBreak >= from) lineBreak else end
     }
 
     /** Whether all that's left is spaces, as [String.isBlank] says. */
@@ -211,7 +213,8 @@ internal class CutTitle(private val title: String) {
      */
     fun afterDigit(at: Int): Boolean {
         val before = letterBefore(at)
-        if (before !in title.indices) return false
+        // -1 for none; any other is a letter of the title, as the place it's before is at its end at most.
+        if (before < 0) return false
         return isPatternDigit(Character.codePointBefore(title, before + 1))
     }
 

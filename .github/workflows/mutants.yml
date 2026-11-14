@@ -55,7 +55,7 @@ jobs:
           python3 scripts/mutants.py --gradle "./gradlew --build-cache --configuration-cache" | tee "$RUNNER_TEMP/mutants.txt"
           status=${PIPESTATUS[0]}
           set -e
-          grep -qE '^(No Kotlin lines changed in the app\.|[0-9]+ of [0-9]+ changes caught by a test\.)$' "$RUNNER_TEMP/mutants.txt" || exit "$status"
+          grep -qE '^(No lines of code changed in the app\.|[0-9]+ of [0-9]+ changes caught by a test\.)$' "$RUNNER_TEMP/mutants.txt" || exit "$status"
 
       # One comment per pull request, kept up to date, and gone once every change is caught.
       - name: Comment what lived
