@@ -151,6 +151,24 @@ class LicensesTest {
     }
 
     @Test
+    @Config(qualifiers = "+es")
+    fun inSpanishCrosstunesOwnWordsAreSpanishAndTheLicencesAndTheWorksOwnNamesAsPublished() {
+        openLicenses()
+        // What a work is, who it's by and its licence, in Crosstune's words.
+        work("Presets de MilkDrop")
+        assertTrue(shown("Sus autores, nombrados en el nombre de cada preset · No indica ninguna"))
+        work("JMdict")
+        assertTrue(shown("Las listas de palabras que Crosstune hizo con JMdict están cambiadas"))
+        assertTrue(!shown("word lists made from JMdict are changed"))
+        // The licence itself, and the names works and groups give themselves, stay as they wrote them.
+        assertTrue(shown("Electronic Dictionary Research and Development Group · CC BY-SA 4.0"))
+        work("JMdict").performClick()
+        composeRule.waitForIdle()
+        text("Attribution-ShareAlike 4.0 International").assertExists()
+        work("Guava").assertExists()
+    }
+
+    @Test
     fun aWorkOpensToItsFullLicenceAndWhereItIsWhichOpensOnlyOnATap() {
         openLicenses()
         assertTrue(!shown("GNU LESSER GENERAL PUBLIC LICENSE"))

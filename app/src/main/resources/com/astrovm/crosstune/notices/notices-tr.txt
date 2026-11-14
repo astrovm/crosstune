@@ -1,0 +1,126 @@
+# Crosstune's own words in notices.txt, in Turkish: a block per work, its English name, then the words it
+# translates. What a work isn't given here shows in English. Licence texts stay as published.
+
+JMdict
+note: Crosstune'un JMdict'ten yaptığı kelime listeleri değiştirilmiştir. Okunuşlar: yalnızca JMdict'in tek bir şekilde okuduğu, Crosstune'un ise başka okuduğu iki veya daha çok kanjili kelimeler. Kana ile yazılan kelimeler: yalnızca ilk kanalarından sonra い veya う gelen yaygın kelimeler, her biri nasıl arandığıyla, ve orada ひ veya ふ olanlar. Bunlar da CC BY-SA 4.0 altındadır. Aşağıda Group'un lisansı (https://www.edrdg.org/edrdg/licence.html), CC BY-SA 4.0 lisansı ve JMdict'in belgeleri var.
+
+Kuromoji
+by: Atilika Inc. ve katkıda bulunanlar
+
+IPADIC
+by: Nara Institute of Science and Technology (NAIST), ICOT Free Software'den girdilerle
+license: NAIST ve ICOT lisansı
+note: Kuromoji'nin içinde, mecab-ipadic-2.7.0-20070801 olarak.
+
+UniDic
+note: İlk gerektiğinde Maven Central'dan, Kuromoji'nin içinde, unidic-mecab 2.1.2 olarak indirilir. UniDic GPL, LGPL veya BSD lisansı altındadır; Crosstune onu BSD lisansı altında kullanır.
+
+projectM
+license: GNU LGPL 2.1 veya sonrası
+note: Kaynak koddan derlendi, v4.1.8, app/src/main/cpp/ içindeki değişikliklerle: görüntü boyutunu korur ve iki derleme uyarısı düzeltildi. Bu sürümün tam kaynak kodu, projectM ve değişikliklerle birlikte: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, burada X.Y.Z bu uygulamanın sürümü; sonra CONTRIBUTING.md'nin dediği gibi derle. projectM'i değiştirilmiş bir kopyayla değiştirmek için uygulamayı o koddan yeniden derle.
+
+MilkDrop's FFT
+name: MilkDrop'un FFT'si
+note: projectM'in içinde.
+
+projectM's expression parser
+name: projectM'in ifade ayrıştırıcısı
+note: projectM'in içinde. Ayrıştırıcısını GNU Bison üretir; Bison'un aşağıdaki özel istisnası onu MIT lisansı altında paylaşmaya izin verir.
+
+HLSLParser
+note: projectM'in içinde. Crosstune, derlenirken uyarı vermesin diye GLSLGenerator.cpp'yi değiştirir; dosya bunu söyler.
+
+OpenGL Mathematics (GLM)
+note: projectM'in içinde, 0.9.9 olarak.
+
+SOIL2
+by: Martín Lucas Golini ve Jonathan Dummer
+license: Kamu malı ve MIT lisansı
+note: projectM'in içinde. Görüntü işlevleri MIT lisansını metni olmadan anar; lisansın metni aşağıda.
+
+stb_image and stb_image_write
+name: stb_image ve stb_image_write
+by: Sean Barrett ve katkıda bulunanlar
+license: Kamu malı
+note: SOIL2'nin içinde, stb_image 2.05 ve stb_image_write 0.98 olarak.
+
+Independent JPEG Group's JPEG software
+name: Independent JPEG Group'un JPEG yazılımı
+by: Thomas G. Lane ve Independent JPEG Group
+note: Bu yazılım kısmen Independent JPEG Group'un çalışmasına dayanır ("This software is based in part on the work of the Independent JPEG Group"): stb_image'ın JPEG kod çözücüsü IDCT'sini IJG'nin jidctint.c dosyasından alır.
+
+ETC1 texture code
+name: ETC1 doku kodu
+note: SOIL2'nin içinde.
+
+PowerVR SDK texture decompressor
+name: PowerVR SDK doku açıcısı
+note: SOIL2'nin içinde, PowerVR SDK'nın PVRTDecompress.cpp dosyasından. Lisans SDK'nın lisansıdır, bu dosyayı içeren herkese açık geçmişindeki en eski sürüm olan R14.2-v3.4'ten.
+
+SDL
+note: SOIL2'nin bir OpenGL uzantısını arama şekli SDL2'ninkine dayanır.
+
+MilkDrop presets
+name: MilkDrop preset'leri
+by: Yazarları, her preset'in adında anılır
+license: Belirtilmemiş
+note: projectM'in Cream of the Crop, Milkdrop Original ve En D paketlerinden, ve Ryan Geiss'in Ocak 2021 tarihli favori preset'lerinden (https://www.geisswerks.com/about_milkdrop.html); Ayarlar'daki görseller bunlardan alınır. Hiçbiri lisans belirtmez; aşağıdaki metin projectM'in paketleri için söylediğidir.
+
+MilkDrop textures
+name: MilkDrop dokuları
+by: Yazarları, MilkDrop'tan ve preset'lerinden
+license: Belirtilmemiş
+note: projectM'in Milkdrop Texture Pack'inden; o da lisans belirtmez.
+
+whisper.cpp and ggml
+name: whisper.cpp ve ggml
+note: Sözleri şarkıya göre ayarlamak için kaynak koddan derlendi. Crosstune, derlenirken uyarı vermesin diye whisper.cpp'yi değiştirir; dosya bunu söyler.
+
+YaRN
+by: Jeffrey Quesnelle ve Bowen Peng
+note: ggml'in içinde, döner konum ölçeklemesi.
+
+Arm Optimized Routines
+note: ggml'in içinde, hızlı matematiği. Arm Optimized Routines MIT lisansı veya Apache License 2.0 with LLVM Exceptions altındadır; Crosstune onu MIT lisansı altında kullanır.
+
+Whisper
+note: Küçük konuşma modeli tiny, ilk gerektiğinde ggml-tiny-q5_1.bin olarak indirilir; yazarları onu whisper.cpp için dönüştürmüştür. whisper.cpp'nin her kelimeyi zamana yerleştirme şekli Whisper'ınkine dayanır.
+
+LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+name: LLVM'den libc++, libc++abi, libunwind, compiler-rt ve clang başlıkları
+note: Görsellerin ve sesin kütüphanelerine gömülü, Android'in NDK r30'undan (clang 21).
+
+Android's C library headers
+name: Android'in C kütüphanesi başlıkları
+by: The Android Open Source Project ve diğerleri
+license: BSD ve Apache License 2.0
+note: Görsellerin ve sesin kütüphaneleri bunlarla derlenir, Android'in NDK r30'undan. Metin, NDK'nın bunlar için bildirimidir.
+
+Material Symbols and Material Icons
+name: Material Symbols ve Material Icons
+
+Simple Icons
+by: Simple Icons'a katkıda bulunanlar
+note: Müzik hizmetlerinin logoları. Her logo sahibinin ticari markasıdır.
+
+Roboto
+note: Kalın harfleri, TV ana ekranındaki kutucukta uygulamanın adını çizer.
+
+OkHttp and Okio
+name: OkHttp ve Okio
+
+Error Prone and J2ObjC annotations
+name: Error Prone ve J2ObjC ek açıklamaları
+
+AndroidX, Jetpack Compose and Media3
+name: AndroidX, Jetpack Compose ve Media3
+
+Protocol Buffers
+note: Ana ekran widget'ının kütüphanesi Glance'in içinde, protobuf 4.28.2 olarak.
+
+Compose Multiplatform
+by: JetBrains s.r.o. ve The Android Open Source Project
+
+Kotlin and kotlinx.coroutines
+name: Kotlin ve kotlinx.coroutines
+by: JetBrains s.r.o. ve Kotlin Programming Language'e katkıda bulunanlar

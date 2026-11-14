@@ -1,0 +1,126 @@
+# Crosstune's own words in notices.txt, in Dutch: a block per work, its English name, then the words it
+# translates. What a work isn't given here shows in English. Licence texts stay as published.
+
+JMdict
+note: De woordenlijsten die Crosstune met JMdict heeft gemaakt, zijn veranderd. De lezingen: alleen woorden van twee of meer kanji die JMdict maar op één manier leest, waar Crosstune ze anders leest. De woorden in kana: alleen de gangbare met い of う na hun eerste kana, elk met hoe het wordt opgezocht, en die met ひ of ふ op die plek. Ook die vallen onder CC BY-SA 4.0. Hieronder staan de licentie van de Group (https://www.edrdg.org/edrdg/licence.html), de licentie CC BY-SA 4.0 en de documentatie van JMdict.
+
+Kuromoji
+by: Atilika Inc. en bijdragers
+
+IPADIC
+by: Nara Institute of Science and Technology (NAIST), met items uit ICOT Free Software
+license: Licentie van NAIST en ICOT
+note: In Kuromoji, als mecab-ipadic-2.7.0-20070801.
+
+UniDic
+note: Gedownload van Maven Central, in Kuromoji, de eerste keer dat het nodig is, als unidic-mecab 2.1.2. UniDic valt onder de GPL, de LGPL of de BSD-licentie; Crosstune gebruikt het onder de BSD-licentie.
+
+projectM
+license: GNU LGPL 2.1 of later
+note: Gebouwd uit de broncode, v4.1.8, met wijzigingen in app/src/main/cpp/: het beeld houdt zijn formaat, en twee bouwwaarschuwingen zijn opgelost. De exacte broncode van deze versie, met projectM en de wijzigingen: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, waarbij X.Y.Z de versie van deze app is; bouw daarna zoals CONTRIBUTING.md zegt. Om projectM door een gewijzigde kopie te vervangen, bouw je de app opnieuw uit die broncode.
+
+MilkDrop's FFT
+name: FFT van MilkDrop
+note: In projectM.
+
+projectM's expression parser
+name: Expressieparser van projectM
+note: In projectM. De parser wordt gemaakt door GNU Bison, waarvan de speciale uitzondering, hieronder, toestaat hem onder de MIT-licentie te delen.
+
+HLSLParser
+note: In projectM. Crosstune wijzigt GLSLGenerator.cpp zodat het bij het bouwen geen waarschuwingen geeft; het bestand zegt dat.
+
+OpenGL Mathematics (GLM)
+note: In projectM, als 0.9.9.
+
+SOIL2
+by: Martín Lucas Golini en Jonathan Dummer
+license: Publiek domein en MIT-licentie
+note: In projectM. De beeldfuncties noemen de MIT-licentie zonder de tekst; de tekst van de licentie staat hieronder.
+
+stb_image and stb_image_write
+name: stb_image en stb_image_write
+by: Sean Barrett en bijdragers
+license: Publiek domein
+note: In SOIL2, als stb_image 2.05 en stb_image_write 0.98.
+
+Independent JPEG Group's JPEG software
+name: JPEG-software van de Independent JPEG Group
+by: Thomas G. Lane en de Independent JPEG Group
+note: Deze software is deels gebaseerd op het werk van de Independent JPEG Group ("This software is based in part on the work of the Independent JPEG Group"): de JPEG-decoder van stb_image haalt zijn IDCT uit jidctint.c van de IJG.
+
+ETC1 texture code
+name: ETC1-texturecode
+note: In SOIL2.
+
+PowerVR SDK texture decompressor
+name: Texture-decompressor uit de PowerVR SDK
+note: In SOIL2, uit PVRTDecompress.cpp van de PowerVR SDK. De licentie is die van de SDK, uit versie R14.2-v3.4, de oudste in de openbare geschiedenis met dit bestand.
+
+SDL
+note: Hoe SOIL2 naar een OpenGL-extensie zoekt, is gebaseerd op hoe SDL2 dat doet.
+
+MilkDrop presets
+name: MilkDrop-presets
+by: Hun makers, genoemd in de naam van elke preset
+license: Geen vermeld
+note: Uit de packs Cream of the Crop, Milkdrop Original en En D van projectM, en uit de favoriete presets van Ryan Geiss van januari 2021 (https://www.geisswerks.com/about_milkdrop.html); de beelden in Instellingen komen daaruit. Geen ervan vermeldt een licentie; de tekst hieronder is wat projectM over zijn packs zegt.
+
+MilkDrop textures
+name: MilkDrop-textures
+by: Hun makers, uit MilkDrop en zijn presets
+license: Geen vermeld
+note: Uit het Milkdrop Texture Pack van projectM, dat geen licentie vermeldt.
+
+whisper.cpp and ggml
+name: whisper.cpp en ggml
+note: Gebouwd uit de broncode om de songtekst op de zang af te stemmen. Crosstune wijzigt whisper.cpp zodat het bij het bouwen geen waarschuwingen geeft; het bestand zegt dat.
+
+YaRN
+by: Jeffrey Quesnelle en Bowen Peng
+note: In ggml, de schaling van roterende posities.
+
+Arm Optimized Routines
+note: In ggml, de snelle wiskunde. Arm Optimized Routines valt onder de MIT-licentie of de Apache License 2.0 with LLVM Exceptions; Crosstune gebruikt het onder de MIT-licentie.
+
+Whisper
+note: Het kleine spraakmodel tiny wordt gedownload de eerste keer dat het nodig is, als ggml-tiny-q5_1.bin, door de makers omgezet voor whisper.cpp. Hoe whisper.cpp elk woord in de tijd plaatst, is gebaseerd op hoe Whisper dat doet.
+
+LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+name: libc++, libc++abi, libunwind, compiler-rt en headers van clang, uit LLVM
+note: Ingebouwd in de bibliotheken voor de visuals en de spraak, uit de NDK r30 van Android (clang 21).
+
+Android's C library headers
+name: Headers van de C-bibliotheek van Android
+by: The Android Open Source Project en anderen
+license: BSD en Apache License 2.0
+note: De bibliotheken voor de visuals en de spraak worden ermee gebouwd, uit de NDK r30 van Android. De tekst is de mededeling van de NDK erover.
+
+Material Symbols and Material Icons
+name: Material Symbols en Material Icons
+
+Simple Icons
+by: Bijdragers aan Simple Icons
+note: De logo's van de muziekdiensten. Elk logo is een merk van zijn eigenaar.
+
+Roboto
+note: De vette letters tekenen de naam van de app op de tegel van het startscherm van de tv.
+
+OkHttp and Okio
+name: OkHttp en Okio
+
+Error Prone and J2ObjC annotations
+name: Annotaties van Error Prone en J2ObjC
+
+AndroidX, Jetpack Compose and Media3
+name: AndroidX, Jetpack Compose en Media3
+
+Protocol Buffers
+note: In de bibliotheek van de startschermwidget, Glance, als protobuf 4.28.2.
+
+Compose Multiplatform
+by: JetBrains s.r.o. en The Android Open Source Project
+
+Kotlin and kotlinx.coroutines
+name: Kotlin en kotlinx.coroutines
+by: JetBrains s.r.o. en bijdragers aan Kotlin Programming Language

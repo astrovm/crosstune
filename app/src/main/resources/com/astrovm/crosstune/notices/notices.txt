@@ -5,6 +5,8 @@
 #   text     files in this folder with the licence's full text and notices, shown one after the other
 #   url      where it, or its source, is; opened in the browser only on a tap
 #   note     what Crosstune changed, or what else the licence asks to say
+# Crosstune's own words here, every note and each name, by or licence that is more than a work's own name,
+# are in each app language too, in notices-TAG.txt beside this file. NoticeWordsTest names one that's missing.
 #   covers   what of the APK it is, for the :app:notices task (in :app:ci), which fails on anything in the
 #            release APK no line covers, and on a line that covers nothing. One per line, exact, no wildcards
 #            unless said:

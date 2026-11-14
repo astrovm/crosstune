@@ -1,5 +1,6 @@
 package com.astrovm.crosstune.notices
 
+import com.astrovm.crosstune.AppLanguage
 import com.astrovm.crosstune.Notice
 import com.astrovm.crosstune.Notices
 import org.junit.Assert.assertEquals
@@ -83,7 +84,9 @@ class TextsTest {
 
     @Test
     fun everyTextHasItsSourceAndEveryNoticesTextIsOne() {
-        val texts = folder.list().orEmpty().filter { it != "notices.txt" }.sorted()
+        // Crosstune's own words: the notices, and their words in each app language but English.
+        val words = setOf("notices.txt") + AppLanguage.tags.drop(1).map { "notices-$it.txt" }
+        val texts = folder.list().orEmpty().filter { it !in words }.sorted()
         assertEquals(texts, manifest.keys.sorted())
         assertEquals(texts, Notices.all.flatMap { it.texts }.distinct().sorted())
     }

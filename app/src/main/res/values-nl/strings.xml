@@ -27,6 +27,7 @@
     <string name="settings_licenses">Licenties</string>
     <string name="license_show">Licentie tonen</string>
     <string name="license_hide">Licentie verbergen</string>
+    <string name="language_tag">nl</string>
     <string name="settings_links_title">Links openen van</string>
     <string name="rule_opens_in">Opent in %1$s</string>
     <string name="rule_default">Standaard (%1$s)</string>

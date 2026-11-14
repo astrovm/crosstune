@@ -1,0 +1,126 @@
+# Crosstune's own words in notices.txt, in Italian: a block per work, its English name, then the words it
+# translates. What a work isn't given here shows in English. Licence texts stay as published.
+
+JMdict
+note: Gli elenchi di parole che Crosstune ha fatto con JMdict sono modificati. Le letture: solo parole di due o più kanji che JMdict legge in un solo modo, dove Crosstune le legge in un altro. Le parole in kana: solo quelle comuni con い o う dopo il primo kana, ognuna con il modo in cui si cerca, e quelle con ひ o ふ in quel punto. Anche loro sono sotto CC BY-SA 4.0. Qui sotto ci sono la licenza del Group (https://www.edrdg.org/edrdg/licence.html), la licenza CC BY-SA 4.0 e la documentazione di JMdict.
+
+Kuromoji
+by: Atilika Inc. e collaboratori
+
+IPADIC
+by: Nara Institute of Science and Technology (NAIST), con voci da ICOT Free Software
+license: Licenza di NAIST e ICOT
+note: Dentro Kuromoji, come mecab-ipadic-2.7.0-20070801.
+
+UniDic
+note: Scaricato da Maven Central, dentro Kuromoji, la prima volta che serve, come unidic-mecab 2.1.2. UniDic è sotto la GPL, la LGPL o la licenza BSD; Crosstune lo usa sotto la licenza BSD.
+
+projectM
+license: GNU LGPL 2.1 o successiva
+note: Compilato dal codice sorgente, v4.1.8, con modifiche in app/src/main/cpp/: l'immagine mantiene la sua dimensione e due avvisi di compilazione sono corretti. Il codice sorgente esatto di questa versione, con projectM e le sue modifiche: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, dove X.Y.Z è la versione di questa app, poi compila come dice CONTRIBUTING.md. Per sostituire projectM con una copia modificata, ricompila l'app da quel codice.
+
+MilkDrop's FFT
+name: FFT di MilkDrop
+note: Dentro projectM.
+
+projectM's expression parser
+name: Parser delle espressioni di projectM
+note: Dentro projectM. Il suo parser è generato da GNU Bison, la cui eccezione speciale, qui sotto, permette di condividerlo sotto la licenza MIT.
+
+HLSLParser
+note: Dentro projectM. Crosstune modifica GLSLGenerator.cpp perché non dia avvisi in compilazione; il file lo dice.
+
+OpenGL Mathematics (GLM)
+note: Dentro projectM, come 0.9.9.
+
+SOIL2
+by: Martín Lucas Golini e Jonathan Dummer
+license: Pubblico dominio e licenza MIT
+note: Dentro projectM. Le sue funzioni per le immagini nominano la licenza MIT senza il suo testo; il testo della licenza è qui sotto.
+
+stb_image and stb_image_write
+name: stb_image e stb_image_write
+by: Sean Barrett e collaboratori
+license: Pubblico dominio
+note: Dentro SOIL2, come stb_image 2.05 e stb_image_write 0.98.
+
+Independent JPEG Group's JPEG software
+name: Software JPEG dell'Independent JPEG Group
+by: Thomas G. Lane e l'Independent JPEG Group
+note: Questo software si basa in parte sul lavoro dell'Independent JPEG Group ("This software is based in part on the work of the Independent JPEG Group"): il decoder JPEG di stb_image prende la sua IDCT dal jidctint.c dell'IJG.
+
+ETC1 texture code
+name: Codice delle texture ETC1
+note: Dentro SOIL2.
+
+PowerVR SDK texture decompressor
+name: Decompressore di texture del PowerVR SDK
+note: Dentro SOIL2, dal PVRTDecompress.cpp del PowerVR SDK. La licenza è quella dell'SDK, dalla sua versione R14.2-v3.4, la più vecchia nella sua cronologia pubblica con questo file.
+
+SDL
+note: Il modo in cui SOIL2 cerca un'estensione OpenGL si basa su quello di SDL2.
+
+MilkDrop presets
+name: Preset di MilkDrop
+by: I loro autori, nominati nel nome di ogni preset
+license: Nessuna indicata
+note: Dai pacchetti Cream of the Crop, Milkdrop Original ed En D di projectM, e dai preset preferiti di Ryan Geiss di gennaio 2021 (https://www.geisswerks.com/about_milkdrop.html); le immagini in Impostazioni vengono da lì. Nessuno indica una licenza; il testo qui sotto è quello che projectM dice dei suoi pacchetti.
+
+MilkDrop textures
+name: Texture di MilkDrop
+by: I loro autori, da MilkDrop e dai suoi preset
+license: Nessuna indicata
+note: Dal Milkdrop Texture Pack di projectM, che non indica nessuna licenza.
+
+whisper.cpp and ggml
+name: whisper.cpp e ggml
+note: Compilato dal codice sorgente per allineare il testo al canto. Crosstune modifica whisper.cpp perché non dia avvisi in compilazione; il file lo dice.
+
+YaRN
+by: Jeffrey Quesnelle e Bowen Peng
+note: Dentro ggml, il suo ridimensionamento delle posizioni rotatorie.
+
+Arm Optimized Routines
+note: Dentro ggml, i suoi calcoli veloci. Arm Optimized Routines è sotto la licenza MIT o la Apache License 2.0 with LLVM Exceptions; Crosstune lo usa sotto la licenza MIT.
+
+Whisper
+note: Il piccolo modello vocale tiny si scarica la prima volta che serve, come ggml-tiny-q5_1.bin, convertito per whisper.cpp dai suoi autori. Il modo in cui whisper.cpp colloca ogni parola nel tempo si basa su quello di Whisper.
+
+LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+name: libc++, libc++abi, libunwind, compiler-rt e header di clang, da LLVM
+note: Inclusi nelle librerie dei visual e della voce, dall'NDK r30 di Android (clang 21).
+
+Android's C library headers
+name: Header della libreria C di Android
+by: The Android Open Source Project e altri
+license: BSD e Apache License 2.0
+note: Le librerie dei visual e della voce sono compilate con questi, dall'NDK r30 di Android. Il testo è l'avviso dell'NDK per loro.
+
+Material Symbols and Material Icons
+name: Material Symbols e Material Icons
+
+Simple Icons
+by: Collaboratori di Simple Icons
+note: I loghi dei servizi musicali. Ogni logo è un marchio del suo proprietario.
+
+Roboto
+note: Le sue lettere in grassetto disegnano il nome dell'app nel riquadro della schermata Home della TV.
+
+OkHttp and Okio
+name: OkHttp e Okio
+
+Error Prone and J2ObjC annotations
+name: Annotazioni di Error Prone e J2ObjC
+
+AndroidX, Jetpack Compose and Media3
+name: AndroidX, Jetpack Compose e Media3
+
+Protocol Buffers
+note: Dentro la libreria del widget della schermata Home, Glance, come protobuf 4.28.2.
+
+Compose Multiplatform
+by: JetBrains s.r.o. e The Android Open Source Project
+
+Kotlin and kotlinx.coroutines
+name: Kotlin e kotlinx.coroutines
+by: JetBrains s.r.o. e collaboratori di Kotlin Programming Language

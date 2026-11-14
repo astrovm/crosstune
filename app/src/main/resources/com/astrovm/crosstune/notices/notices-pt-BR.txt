@@ -1,0 +1,126 @@
+# Crosstune's own words in notices.txt, in Brazilian Portuguese: a block per work, its English name, then the words it
+# translates. What a work isn't given here shows in English. Licence texts stay as published.
+
+JMdict
+note: As listas de palavras que o Crosstune fez com o JMdict foram alteradas. As leituras: só palavras de dois kanji ou mais que o JMdict lê de um único jeito, onde o Crosstune as lê de outro. As palavras em kana: só as comuns com い ou う depois do primeiro kana, cada uma com o jeito de procurá-la, e as que têm ひ ou ふ ali. Também estão sob a CC BY-SA 4.0. Abaixo estão a licença do Group (https://www.edrdg.org/edrdg/licence.html), a licença CC BY-SA 4.0 e a documentação do JMdict.
+
+Kuromoji
+by: Atilika Inc. e colaboradores
+
+IPADIC
+by: Nara Institute of Science and Technology (NAIST), com entradas do ICOT Free Software
+license: Licença do NAIST e do ICOT
+note: Dentro do Kuromoji, como mecab-ipadic-2.7.0-20070801.
+
+UniDic
+note: Baixado do Maven Central, dentro do Kuromoji, na primeira vez que é preciso, como unidic-mecab 2.1.2. O UniDic está sob a GPL, a LGPL ou a licença BSD; o Crosstune o usa sob a licença BSD.
+
+projectM
+license: GNU LGPL 2.1 ou posterior
+note: Compilado a partir do código-fonte, v4.1.8, com mudanças em app/src/main/cpp/: a imagem mantém o tamanho e dois avisos de compilação foram corrigidos. O código-fonte exato desta versão, com o projectM e as mudanças: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, onde X.Y.Z é a versão deste app, e depois compile como diz o CONTRIBUTING.md. Para trocar o projectM por uma cópia alterada, compile o app de novo a partir desse código.
+
+MilkDrop's FFT
+name: FFT do MilkDrop
+note: Dentro do projectM.
+
+projectM's expression parser
+name: Analisador de expressões do projectM
+note: Dentro do projectM. O analisador é gerado pelo GNU Bison, cuja exceção especial, abaixo, permite compartilhá-lo sob a licença MIT.
+
+HLSLParser
+note: Dentro do projectM. O Crosstune altera GLSLGenerator.cpp para que ele não dê avisos ao ser compilado; o arquivo diz isso.
+
+OpenGL Mathematics (GLM)
+note: Dentro do projectM, como 0.9.9.
+
+SOIL2
+by: Martín Lucas Golini e Jonathan Dummer
+license: Domínio público e licença MIT
+note: Dentro do projectM. As funções de imagem dele citam a licença MIT sem o texto; o texto da licença está abaixo.
+
+stb_image and stb_image_write
+name: stb_image e stb_image_write
+by: Sean Barrett e colaboradores
+license: Domínio público
+note: Dentro do SOIL2, como stb_image 2.05 e stb_image_write 0.98.
+
+Independent JPEG Group's JPEG software
+name: Software JPEG do Independent JPEG Group
+by: Thomas G. Lane e o Independent JPEG Group
+note: Este software é baseado em parte no trabalho do Independent JPEG Group ("This software is based in part on the work of the Independent JPEG Group"): o decodificador JPEG do stb_image tira o IDCT do jidctint.c do IJG.
+
+ETC1 texture code
+name: Código de texturas ETC1
+note: Dentro do SOIL2.
+
+PowerVR SDK texture decompressor
+name: Descompactador de texturas do PowerVR SDK
+note: Dentro do SOIL2, do PVRTDecompress.cpp do PowerVR SDK. A licença é a do SDK, da versão R14.2-v3.4, a mais antiga do histórico público dele com este arquivo.
+
+SDL
+note: O jeito como o SOIL2 procura uma extensão do OpenGL se baseia no do SDL2.
+
+MilkDrop presets
+name: Presets do MilkDrop
+by: Os autores, citados no nome de cada preset
+license: Nenhuma informada
+note: Dos pacotes Cream of the Crop, Milkdrop Original e En D do projectM, e dos presets favoritos de Ryan Geiss de janeiro de 2021 (https://www.geisswerks.com/about_milkdrop.html); as imagens em Configurações vêm deles. Nenhum informa uma licença; o texto abaixo é o que o projectM diz sobre os pacotes dele.
+
+MilkDrop textures
+name: Texturas do MilkDrop
+by: Os autores, do MilkDrop e dos presets dele
+license: Nenhuma informada
+note: Do Milkdrop Texture Pack do projectM, que não informa nenhuma licença.
+
+whisper.cpp and ggml
+name: whisper.cpp e ggml
+note: Compilado a partir do código-fonte para alinhar a letra com o canto. O Crosstune altera whisper.cpp para que ele não dê avisos ao ser compilado; o arquivo diz isso.
+
+YaRN
+by: Jeffrey Quesnelle e Bowen Peng
+note: Dentro do ggml, o escalonamento de posições rotativas.
+
+Arm Optimized Routines
+note: Dentro do ggml, a matemática rápida. O Arm Optimized Routines está sob a licença MIT ou a Apache License 2.0 with LLVM Exceptions; o Crosstune o usa sob a licença MIT.
+
+Whisper
+note: O modelo de voz tiny é baixado na primeira vez que é preciso, como ggml-tiny-q5_1.bin, convertido para o whisper.cpp pelos autores dele. O jeito como o whisper.cpp situa cada palavra no tempo se baseia no do Whisper.
+
+LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+name: libc++, libc++abi, libunwind, compiler-rt e cabeçalhos do clang, do LLVM
+note: Incluídos nas bibliotecas dos visuais e da voz, do NDK r30 do Android (clang 21).
+
+Android's C library headers
+name: Cabeçalhos da biblioteca C do Android
+by: The Android Open Source Project e outros
+license: BSD e Apache License 2.0
+note: As bibliotecas dos visuais e da voz são compiladas com eles, do NDK r30 do Android. O texto é o aviso do NDK para eles.
+
+Material Symbols and Material Icons
+name: Material Symbols e Material Icons
+
+Simple Icons
+by: Colaboradores do Simple Icons
+note: Os logos dos serviços de música. Cada logo é uma marca do seu dono.
+
+Roboto
+note: As letras em negrito dela desenham o nome do app no bloco da tela inicial da TV.
+
+OkHttp and Okio
+name: OkHttp e Okio
+
+Error Prone and J2ObjC annotations
+name: Anotações do Error Prone e do J2ObjC
+
+AndroidX, Jetpack Compose and Media3
+name: AndroidX, Jetpack Compose e Media3
+
+Protocol Buffers
+note: Dentro da biblioteca do widget da tela inicial, Glance, como protobuf 4.28.2.
+
+Compose Multiplatform
+by: JetBrains s.r.o. e The Android Open Source Project
+
+Kotlin and kotlinx.coroutines
+name: Kotlin e kotlinx.coroutines
+by: JetBrains s.r.o. e colaboradores do Kotlin Programming Language

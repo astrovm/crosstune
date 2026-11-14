@@ -770,6 +770,9 @@ private fun LicensesPage(onBack: () -> Unit) {
     // Turned, the pieces are kept, so the page draws at once.
     var restoring by remember { mutableStateOf(open.any { LicenseSplits.of(it) == null }) }
     val units = remember(open, splitGeneration) { open.mapNotNull { name -> LicenseSplits.of(name)?.let { name to it } }.toMap() }
+    // Crosstune's own words in the notices, in the app's language, which picks the file; licence texts stay as published.
+    val tag = stringResource(R.string.language_tag)
+    val words = remember(tag) { Notices.words(tag) }
     val look = LicenseLook(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), MaterialTheme.shapes.large)
     // One path for a press and for a remote. The page's own Back still leaves once nothing is open.
     BackHandler(enabled = open.isNotEmpty()) {
@@ -789,7 +792,7 @@ private fun LicensesPage(onBack: () -> Unit) {
         listState = listState
     ) {
         if (!restoring) {
-            licenseItems(open, units, look, openWebPage, focusing = { key ->
+            licenseItems(open, units, words, look, openWebPage, focusing = { key ->
                 Modifier.focusRequester(requesters.getOrPut(key) { FocusRequester() }).onFocusChanged { if (it.isFocused) focusedKey = key }
             }) { name -> open = if (name in open) open - name else open + name }
         }
@@ -850,6 +853,7 @@ private class LicenseLook(val color: Color, val hairline: Color, val corner: Cor
 private fun LazyListScope.licenseItems(
     open: List<String>,
     units: Map<String, List<LicenseUnit>>,
+    words: Map<String, NoticeWords>,
     look: LicenseLook,
     openWebPage: (String) -> Unit,
     focusing: (String) -> Modifier,
@@ -861,7 +865,7 @@ private fun LazyListScope.licenseItems(
         item(key = "work:${notice.name}") {
             Column(look.box(first = index == 0, last = last && !isOpen)) {
                 if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = look.hairline)
-                NoticeRow(notice, isOpen, focusing("work:${notice.name}")) { onToggle(notice.name) }
+                NoticeRow(words.getValue(notice.name), isOpen, focusing("work:${notice.name}")) { onToggle(notice.name) }
             }
         }
         if (isOpen && notice.url != null) {
@@ -879,7 +883,7 @@ private fun LazyListScope.licenseItems(
 
 /** One work: who it's by, its licence and what was changed; tapped, its licence opens under it, and tapped again it closes. */
 @Composable
-private fun NoticeRow(notice: Notice, open: Boolean, modifier: Modifier, onToggle: () -> Unit) {
+private fun NoticeRow(notice: NoticeWords, open: Boolean, modifier: Modifier, onToggle: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

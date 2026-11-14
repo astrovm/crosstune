@@ -1,0 +1,126 @@
+# Crosstune's own words in notices.txt, in Traditional Chinese: a block per work, its English name, then the words it
+# translates. What a work isn't given here shows in English. Licence texts stay as published.
+
+JMdict
+note: Crosstune 用 JMdict 做的詞表經過修改。讀音：只有 JMdict 只給一種讀法、而 Crosstune 讀法不同的兩個以上漢字的詞。假名詞：只有第一個假名後面是 い 或 う 的常用詞，每個都附上查找方式，以及那裡是 ひ 或 ふ 的詞。它們同樣採用 CC BY-SA 4.0。下面是 Group 的授權條款 (https://www.edrdg.org/edrdg/licence.html)、CC BY-SA 4.0 授權條款和 JMdict 的文件。
+
+Kuromoji
+by: Atilika Inc. 和貢獻者
+
+IPADIC
+by: Nara Institute of Science and Technology (NAIST)，含 ICOT Free Software 的詞條
+license: NAIST 和 ICOT 授權條款
+note: 包含在 Kuromoji 中，版本為 mecab-ipadic-2.7.0-20070801。
+
+UniDic
+note: 第一次需要時從 Maven Central 下載，包含在 Kuromoji 中，版本為 unidic-mecab 2.1.2。UniDic 採用 GPL、LGPL 或 BSD 授權條款；Crosstune 依 BSD 授權條款使用它。
+
+projectM
+license: GNU LGPL 2.1 或更新版本
+note: 從原始碼建置，v4.1.8，在 app/src/main/cpp/ 中有修改：畫面保持原本大小，並修正了兩個建置警告。這個版本的完整原始碼，包括 projectM 和修改：git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune ，其中 X.Y.Z 是這個應用程式的版本，然後依 CONTRIBUTING.md 的說明建置。要把 projectM 換成修改過的副本，請用那份原始碼重新建置應用程式。
+
+MilkDrop's FFT
+name: MilkDrop 的 FFT
+note: 包含在 projectM 中。
+
+projectM's expression parser
+name: projectM 的運算式剖析器
+note: 包含在 projectM 中。它的剖析器由 GNU Bison 產生，Bison 的特別例外（見下文）允許它依 MIT 授權條款分享。
+
+HLSLParser
+note: 包含在 projectM 中。Crosstune 修改了 GLSLGenerator.cpp，讓它建置時不出現警告；檔案裡寫明了這一點。
+
+OpenGL Mathematics (GLM)
+note: 包含在 projectM 中，版本為 0.9.9。
+
+SOIL2
+by: Martín Lucas Golini 和 Jonathan Dummer
+license: 公眾領域和 MIT 授權條款
+note: 包含在 projectM 中。它的圖片函式只提到 MIT 授權條款，沒有附上全文；授權條款全文在下面。
+
+stb_image and stb_image_write
+name: stb_image 和 stb_image_write
+by: Sean Barrett 和貢獻者
+license: 公眾領域
+note: 包含在 SOIL2 中，版本為 stb_image 2.05 和 stb_image_write 0.98。
+
+Independent JPEG Group's JPEG software
+name: Independent JPEG Group 的 JPEG 軟體
+by: Thomas G. Lane 和 Independent JPEG Group
+note: 本軟體部分基於 Independent JPEG Group 的成果 ("This software is based in part on the work of the Independent JPEG Group")：stb_image 的 JPEG 解碼器的 IDCT 取自 IJG 的 jidctint.c。
+
+ETC1 texture code
+name: ETC1 紋理程式碼
+note: 包含在 SOIL2 中。
+
+PowerVR SDK texture decompressor
+name: PowerVR SDK 的紋理解壓縮器
+note: 包含在 SOIL2 中，來自 PowerVR SDK 的 PVRTDecompress.cpp。授權條款是 SDK 的，取自它的 R14.2-v3.4 版本，也就是它公開歷史中含有這個檔案的最早版本。
+
+SDL
+note: SOIL2 尋找 OpenGL 擴充功能的方式是以 SDL2 的方式為基礎。
+
+MilkDrop presets
+name: MilkDrop 預設集
+by: 各自的作者，寫在每個預設集的名稱裡
+license: 未註明
+note: 來自 projectM 的 Cream of the Crop、Milkdrop Original 和 En D 套件，以及 Ryan Geiss 2021 年 1 月最喜歡的預設集 (https://www.geisswerks.com/about_milkdrop.html)；設定裡的靜態畫面取自這些預設集。它們都沒有註明授權條款；下面的文字是 projectM 對自己套件的說明。
+
+MilkDrop textures
+name: MilkDrop 紋理
+by: 各自的作者，來自 MilkDrop 和它的預設集
+license: 未註明
+note: 來自 projectM 的 Milkdrop Texture Pack，它沒有註明授權條款。
+
+whisper.cpp and ggml
+name: whisper.cpp 和 ggml
+note: 從原始碼建置，用來讓歌詞對上歌聲。Crosstune 修改了 whisper.cpp，讓它建置時不出現警告；檔案裡寫明了這一點。
+
+YaRN
+by: Jeffrey Quesnelle 和 Bowen Peng
+note: 包含在 ggml 中，是它的旋轉位置縮放。
+
+Arm Optimized Routines
+note: 包含在 ggml 中，是它的快速數學函式。Arm Optimized Routines 採用 MIT 授權條款或 Apache License 2.0 with LLVM Exceptions；Crosstune 依 MIT 授權條款使用它。
+
+Whisper
+note: 小型語音模型 tiny 會在第一次需要時下載，檔案為 ggml-tiny-q5_1.bin，由 whisper.cpp 的作者轉換。whisper.cpp 為每個詞定時間的方式是以 Whisper 的方式為基礎。
+
+LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+name: LLVM 的 libc++、libc++abi、libunwind、compiler-rt 和 clang 標頭檔
+note: 內建在視覺效果和語音的程式庫中，來自 Android 的 NDK r30 (clang 21)。
+
+Android's C library headers
+name: Android 的 C 程式庫標頭檔
+by: The Android Open Source Project 及其他
+license: BSD 和 Apache License 2.0
+note: 視覺效果和語音的程式庫是用它們建置的，來自 Android 的 NDK r30。正文是 NDK 對它們的聲明。
+
+Material Symbols and Material Icons
+name: Material Symbols 和 Material Icons
+
+Simple Icons
+by: Simple Icons 貢獻者
+note: 音樂服務的標誌。每個標誌都是其擁有者的商標。
+
+Roboto
+note: 它的粗體字在電視主畫面的資訊方塊上畫出應用程式名稱。
+
+OkHttp and Okio
+name: OkHttp 和 Okio
+
+Error Prone and J2ObjC annotations
+name: Error Prone 和 J2ObjC 註解
+
+AndroidX, Jetpack Compose and Media3
+name: AndroidX、Jetpack Compose 和 Media3
+
+Protocol Buffers
+note: 包含在主畫面小工具的程式庫 Glance 中，版本為 protobuf 4.28.2。
+
+Compose Multiplatform
+by: JetBrains s.r.o. 和 The Android Open Source Project
+
+Kotlin and kotlinx.coroutines
+name: Kotlin 和 kotlinx.coroutines
+by: JetBrains s.r.o. 和 Kotlin Programming Language 貢獻者
