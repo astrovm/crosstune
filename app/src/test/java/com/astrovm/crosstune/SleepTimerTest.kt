@@ -126,7 +126,7 @@ class SleepTimerTest {
     @Test
     fun aStationCastToASpeakerIsPausedThere() {
         val station = stationPlays()
-        phone.unnamedCast = true
+        phone.unnamed.value = station.copy(away = true)
         timer.after(15)
         passes(15 * 60_000)
         assertEquals(listOf(false), phone.plays)

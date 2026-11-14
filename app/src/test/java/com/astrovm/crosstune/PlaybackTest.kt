@@ -969,12 +969,11 @@ class PlaybackTest {
         sounding()
         // Paused, with no title, with no metadata, or Crosstune itself: none are a song playing.
         shadowOf(sessions).addController(player("com.paused", "Paused", "Something Else", "Someone", state = PlaybackState.STATE_PAUSED))
-        shadowOf(sessions).addController(player("com.notitle", "No Title", "", "Someone", at = PLAYED_AT - 1))
+        shadowOf(sessions).addController(player("com.notitle", "No Title", "", "Someone"))
         shadowOf(sessions).addController(MediaController(app, MediaSession(app, "com.nothing").sessionToken).also { shadowOf(it).setPackageName("com.nothing") })
         shadowOf(sessions).addController(player(app.packageName, "Crosstune", "Its Own Preview", "Someone"))
         assertNull(playback.nowPlaying())
 
-        // A song played since the one with no title is what plays.
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours"))
         assertEquals(song, playback.nowPlaying()?.metadata)
     }
@@ -1540,17 +1539,17 @@ class PlaybackTest {
     }
 
     @Test
-    fun anAppNamingNoSongCountsOnlyWhilePlayingHere() {
+    fun anAppNamingNoSongCountsOnlyWhilePlaying() {
         allow()
         sounding()
         shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", state = PlaybackState.STATE_PAUSED))
         assertNull(playback.playingUnnamed())
-        // Played on a speaker elsewhere, the phone has nothing to hear.
+        // Played on a speaker elsewhere, it counts, away, as the phone has nothing of it to hear.
         ShadowMediaSessionManager.reset()
         val cast = player("com.ilv.vradio", "VRadio", "RTP Antena 2", "")
         shadowOf(cast).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE).build())
         shadowOf(sessions).addController(cast)
-        assertNull(playback.playingUnnamed())
+        assertEquals(true, playback.playingUnnamed()?.away)
         // Nor with no access to what apps play.
         ShadowMediaSessionManager.reset()
         Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", "")
@@ -1635,11 +1634,11 @@ class PlaybackTest {
     @Test
     fun whatPlaysFirstIsRankedNamedOrNotOnThePhoneOrNot() {
         allow()
-        // A station cast to a speaker: the phone hears nothing, but it plays.
+        // A station cast to a speaker plays, and has the bar, though the phone has nothing of it to hear.
         shadowOf(sessions).addController(elsewhere(player("com.ilv.vradio", "VRadio", "Fake FM", "")))
         assertNull(playback.nowPlaying())
-        assertNull(playback.playingUnnamed())
-        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM")), playback.whatPlays())
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "Fake FM", away = true), playback.playingUnnamed())
+        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM", away = true)), playback.whatPlays())
         // A station on the phone comes before a song on a computer, though the computer's said so since: the bar has the station.
         ShadowMediaSessionManager.reset()
         sounding()
@@ -1658,6 +1657,45 @@ class PlaybackTest {
         // Nothing plays.
         ShadowMediaSessionManager.reset()
         assertNull(playback.whatPlays())
+    }
+
+    @Test
+    fun whatSaysNoSongComesAfterEveryAppThatSaysOne() {
+        allow()
+        sounding()
+        // A video that doesn't say it's music, on the phone, comes after a song cast to a speaker.
+        val vlog = { player("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", "Fake Channel", at = PLAYED_AT + 5) }
+        shadowOf(sessions).addController(vlog())
+        shadowOf(sessions).addController(elsewhere(player("com.spotify.music", "Spotify", "Fake Song", "Fake Band", album = "Fake Album")))
+        assertEquals(MusicMetadata("Fake Song", "Fake Band"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertNull(playback.playingUnnamed())
+        assertEquals(MusicMetadata("Fake Song", "Fake Band"), (playback.whatPlays() as WhatPlays.Named).song.metadata.copy(lengthMs = null))
+        // And after a song on a computer.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(vlog())
+        shadowOf(sessions).addController(elsewhere(player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Song", "Fake Band", album = "Fake Album")))
+        assertEquals(MusicMetadata("Fake Song", "Fake Band"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        // A session with no title comes after a song, though it said where it is since.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Fake Song", "Fake Band", album = "Fake Album"))
+        shadowOf(sessions).addController(player("com.example.player", "Player", "", null, at = PLAYED_AT + 5))
+        assertEquals(MusicMetadata("Fake Song", "Fake Band"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        // With nothing else playing, it's what plays.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(vlog())
+        assertNull(playback.nowPlaying())
+        assertEquals(Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel"), playback.playingUnnamed())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aStationCastToASpeakerIsReachedThereByItsApp() {
+        allow()
+        shadowOf(sessions).addController(elsewhere(player("com.ilv.vradio", "VRadio", "Fake FM", "", actions = PlaybackState.ACTION_SKIP_TO_NEXT)))
+        val away = checkNotNull(playback.playingUnnamed())
+        playback.playPause(away.played, false, away.app)
+        playback.skip(away.played, true, away.app)
+        assertEquals(listOf("pause", "skipToNext"), asked())
     }
 
     @Test
@@ -1811,9 +1849,9 @@ class PlaybackTest {
     fun aFilePlayingInABrowserIsNoSong() {
         allow()
         sounding()
-        shadowOf(sessions).addController(player("com.brave.browser", "Brave", "example.com/music/song.mp3", "example.com", at = PLAYED_AT - 3))
+        shadowOf(sessions).addController(player("com.brave.browser", "Brave", "example.com/music/song.mp3", "example.com"))
         assertNull(playback.nowPlaying())
-        // A song named with dots, by an artist named with one, is one, played since.
+        // A song named with dots, by an artist named with one, is one.
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "will.i.am/remix", "will.i.am band", at = PLAYED_AT - 1))
         shadowOf(sessions).addController(player("com.other.player", "Other", "Mr. Brightside", "The Killers", at = PLAYED_AT - 2))
         assertEquals("will.i.am/remix", playback.nowPlaying()?.metadata?.title)

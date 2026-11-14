@@ -993,8 +993,9 @@ internal class MainViewModel(
         )
         val byEar = byEar
         // Its words are of what an app plays with no song named, heard from the phone's own sound first, as the
-        // microphone hears the room too; with no app playing, or to name a song, the microphone hears what's nearby.
-        val unnamed = lyrics && liveUnnamed != null
+        // microphone hears the room too; with no app playing, one on a speaker it's cast to, or to name a song, the
+        // microphone hears what's nearby.
+        val unnamed = lyrics && liveUnnamed?.away == false
         job = viewModelScope.launch {
             byEar?.cancelAndJoin()
             val heard = try {
@@ -1158,8 +1159,8 @@ internal class MainViewModel(
                 liveUnnamed = unnamed
                 showUnnamed()
             }
-            // Paused, nothing plays to hear.
-            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight } }
+            // Paused, nothing plays to hear; nor on a speaker it's cast to, which the phone doesn't play.
+            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight && !it.away } }
             .distinctUntilChanged()
             .collectLatest { unnamed -> if (unnamed != null) nameByEar(source) }
     }
@@ -1869,10 +1870,12 @@ internal class MainViewModel(
     /**
      * Opens the player on [unnamed], what an app plays with no song named, e.g. the next station or a file
      * with no tags, when the app went on to it from [song] once it [played], as it would to the next song;
-     * not while a song is [playing], or [song] is still [following].
+     * not while a song is [playing], or [song] is still [following]. Only in the player's own app: what
+     * another app plays is no next song of this one.
      */
     private fun tookUpUnnamed(unnamed: Unnamed?, playing: Heard.Song?, following: Following?, played: Boolean, song: MusicMetadata): Boolean {
-        val next = unnamed?.takeIf { playing == null && following == null && played && uiState.practice == null && it.played != song } ?: return false
+        val app = uiState.player?.let { it.following?.appPackage ?: it.app }
+        val next = unnamed?.takeIf { playing == null && following == null && played && uiState.practice == null && it.played != song && it.app == app } ?: return false
         openPlayer(next.played, next.app, played = true, songless = true)
         return true
     }

@@ -118,24 +118,34 @@ internal class FakePlayback : PlaybackSource {
 
     private fun playingOnly(unnamed: Unnamed?, following: Following?) = unnamed?.takeIf { following?.clock?.playing != false }
 
-    /** Whether [unnamed] is cast to a speaker: it plays, but not on the phone, so there's nothing to hear. */
-    var unnamedCast = false
-
-    /** Whether [onThePhone] is a song another device plays, as KDE Connect shows a computer's: last of what plays. */
+    /** Whether [onThePhone] is a song another device plays, as KDE Connect shows a computer's. */
     var songElsewhere = false
 
-    override fun playingUnnamed() = (whatPlays() as? WhatPlays.Nameless)?.playing?.takeUnless { unnamedCast }
+    /**
+     * When [onThePhone] and [unnamed] last said where they are, on their app's clock: of two in the same place, the
+     * one that said so last plays first. [unnamed] [Unnamed.away] is cast, which a station's app is ranked as another
+     * device's for, as Android has no music app to say it's the phone's.
+     */
+    var songAt = 0L
+    var unnamedAt = 0L
+
+    /** Whether [unnamed] is a video that doesn't say it's music: it says nothing a song could be read from, though it has a name. */
+    var unnamedVideo = false
+
+    override fun playingUnnamed() = (whatPlays() as? WhatPlays.Nameless)?.playing
 
     override fun whatPlays() = ranked(onThePhone.takeUnless { quietYet })
 
-    // As Android ranks them: a song on the phone first, then what names none, on it or cast, then a song elsewhere.
+    // Ranked as the real source ranks them, by [playsFirst]; the song first when they tie.
     private fun ranked(song: Heard.Song?): WhatPlays? {
-        val named = song?.let(WhatPlays::Named)
-        val nameless = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value)?.let(WhatPlays::Nameless)
-        return if (songElsewhere) nameless ?: named else named ?: nameless
+        val named = song?.let { WhatPlays.Named(it) to Rank(true, if (songElsewhere) Place.ELSEWHERE else Place.PHONE, songAt) }
+        val nameless = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value)?.let {
+            WhatPlays.Nameless(it) to Rank(it.name != null && !unnamedVideo, if (it.away) Place.ELSEWHERE else Place.PHONE, unnamedAt)
+        }
+        return listOfNotNull(named, nameless).minWithOrNull(compareBy(playsFirst) { it.second })?.first
     }
 
-    override fun unnamedUpdates(): Flow<Unnamed?> = changes { (ranked(onThePhone) as? WhatPlays.Nameless)?.playing?.takeUnless { unnamedCast } }
+    override fun unnamedUpdates(): Flow<Unnamed?> = changes { (ranked(onThePhone) as? WhatPlays.Nameless)?.playing }
 
     /** [read] again each time the song, what names none, or how that app plays changes, as Android says any of them did. */
     private fun <T> changes(read: () -> T): Flow<T> = channelFlow {

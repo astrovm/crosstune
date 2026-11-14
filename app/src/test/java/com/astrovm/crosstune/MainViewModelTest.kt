@@ -1143,10 +1143,12 @@ class MainViewModelTest {
 
     @Test
     fun practiceGoesBackToAStationCastOrOnThePhoneNotToASongOnAComputer() {
-        // Cast to a speaker, it isn't on the bar, but it's what played.
-        val cast = FakePlayback().apply { playing.value = following(app = station.app); unnamedCast = true }
+        // Cast to a speaker, it's what played.
+        val cast = FakePlayback().apply { playing.value = following(app = station.app) }
         val model = radioModel(EarsOnThePhone(Heard.Nothing), cast)
-        assertNull(model.uiState.playingUnnamed)
+        cast.unnamed.value = station.copy(away = true)
+        idle()
+        assertEquals(true, model.uiState.playingUnnamed?.playing?.away)
         model.startPractice()
         idle()
         assertEquals(Before(station.played, 0, station.app, songless = true), model.uiState.practice?.before)
@@ -1183,6 +1185,83 @@ class MainViewModelTest {
         idle()
         assertNull(model.uiState.playingNow)
         assertEquals(station, model.uiState.playingUnnamed?.playing)
+    }
+
+    @Test
+    fun aStationCastToASpeakerHasItsBarAndButtonsButIsNeverListenedTo() {
+        val ears = EarsOnThePhone(heardSong())
+        val vradio = following(app = station.app, skipNext = true)
+        val playback = FakePlayback().apply { playing.value = vradio }
+        val model = radioModel(ears, playback)
+        val away = station.copy(away = true)
+        playback.unnamed.value = away
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(PlayingUnnamed(away, following = vradio), model.uiState.playingUnnamed)
+        assertNull(model.uiState.playingNow)
+        // Its sound isn't on the phone: nothing listens to it, however long it plays.
+        pass(MainViewModel.BY_EAR_LATEST_MS * 2)
+        assertTrue(ears.asked.isEmpty())
+        assertEquals(0, ears.nearby)
+        // Its buttons reach it by package, as a song's.
+        model.playingNowPlayPause()
+        model.playingNowSkip()
+        assertEquals(listOf(false), playback.plays)
+        assertEquals(listOf(true), playback.skips)
+        assertEquals(listOf<String?>(station.app), playback.playedApps)
+        assertEquals(listOf<String?>(station.app), playback.controlledApps)
+        // Words asked for name what's nearby, not the phone's sound, which has none of it.
+        model.listen(lyrics = true)
+        idle()
+        assertTrue(ears.asked.isEmpty())
+        assertEquals(1, ears.nearby)
+    }
+
+    @Test
+    fun aSongsPlayerIsntTakenUpByAStationAnotherAppPlays() {
+        val playback = FakePlayback().apply { playing.value = following() }
+        val model = playingModel(playback)
+        assertEquals(song, model.uiState.player?.song)
+        // Spotify lets go of the song, and VRadio plays a station: no next song of Spotify's.
+        playback.appPlaying[station.app] = MutableStateFlow(following(app = station.app))
+        playback.playing.value = null
+        playback.onThePhone = null
+        playback.unnamed.value = station
+        idle()
+        assertEquals(song, model.uiState.player?.song)
+        assertEquals(false, model.uiState.player?.songless)
+        // Spotify going on to one is.
+        val file = Unnamed("com.spotify", "Spotify", "Fake Episode")
+        playback.unnamed.value = file
+        idle()
+        assertEquals(file.played, model.uiState.player?.song)
+        assertEquals(true, model.uiState.player?.songless)
+    }
+
+    @Test
+    fun aVideoThatDoesntSayItsMusicComesAfterASongCastOrOnAComputer() {
+        val vlog = Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel")
+        val computer = MusicMetadata("Fake Song", "Fake Band")
+        val playback = FakePlayback().apply {
+            access = true
+            unnamed.value = vlog
+            unnamedVideo = true
+            unnamedAt = 2
+            onThePhone = Heard.Song(computer, null, app = "org.kde.kdeconnect_tp")
+            songElsewhere = true
+        }
+        val model = model(playback = playback)
+        model.viewModelScope.launch { model.watchPlayingNow() }
+        idle()
+        assertEquals(computer, model.uiState.playingNow?.song)
+        assertNull(model.uiState.playingUnnamed)
+        assertEquals(computer, (playback.whatPlays() as WhatPlays.Named).song.metadata)
+        // A station is taken for what it says, and the phone's comes first.
+        playback.unnamedVideo = false
+        playback.unnamed.value = station
+        idle()
+        assertEquals(station, model.uiState.playingUnnamed?.playing)
+        assertNull(model.uiState.playingNow)
     }
 
     @Test

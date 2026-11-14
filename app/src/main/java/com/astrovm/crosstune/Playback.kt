@@ -301,7 +301,7 @@ internal interface PlaybackSource {
 
     /**
      * The song an app is playing right now, and where it is, when it's what plays first, see [whatPlays]; null when
-     * none is, none can be seen, or what plays before it names no song, e.g. a station on the phone over a computer's song.
+     * none is, none can be seen, or what plays before it names no song, e.g. a station that played since.
      */
     fun nowPlaying(): Heard.Song?
 
@@ -313,14 +313,14 @@ internal interface PlaybackSource {
     fun nowPlayingUpdates(): Flow<Heard.Song?>
 
     /**
-     * What an app on the phone itself plays while it names no song, e.g. a radio station, a file with no
-     * tags or a video that doesn't say it's music, so it's named by listening, when it's what plays first,
-     * see [whatPlays]; null when none plays, or a song plays first, which [nowPlaying] has. Cast to a
-     * speaker, it isn't heard on the phone, so it's null too, though the sleep timer still pauses it.
+     * What an app plays while it names no song, e.g. a radio station, a file with no tags or a video that
+     * doesn't say it's music, when it's what plays first, see [whatPlays]; null when none plays, or a song
+     * plays first, which [nowPlaying] has. On the phone it's named by listening; cast to a speaker, it's
+     * [Unnamed.away], with nothing on the phone to hear.
      */
     fun playingUnnamed(): Unnamed?
 
-    /** What plays first, named or not, on the phone or not; see [WhatPlays]. Null when nothing plays, or none can be seen. */
+    /** What plays first, named or not, on the phone or not, as [playsFirst] ranks it. Null when nothing plays, or none can be seen. */
     fun whatPlays(): WhatPlays?
 
     /** [playingUnnamed], updated when apps start, pause, stop, or change what they play. */
@@ -480,7 +480,7 @@ internal class MediaSessionPlayback(
     /** What it plays, as what names no song is shown. */
     private fun MediaController.unnamed(): Unnamed {
         val (title, artist) = calls()
-        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let(::coverOf), artist)
+        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let(::coverOf), artist, away = remote())
     }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
@@ -686,13 +686,13 @@ internal class MediaSessionPlayback(
     }
 
     // What plays first, as [whatPlays] ranks it, so the bar, the sleep timer and practice never disagree.
-    override fun nowPlaying(): Heard.Song? = playingApps().firstOrNull()?.let(::playing)
+    override fun nowPlaying(): Heard.Song? = (whatPlays() as? WhatPlays.Named)?.song
 
-    // Only the phone's own sound can be heard, not a speaker's, a TV's or a computer's.
-    override fun playingUnnamed(): Unnamed? = playingApps().firstOrNull()?.takeIf { playing(it) == null && !it.remote() }?.unnamed()
+    override fun playingUnnamed(): Unnamed? = (whatPlays() as? WhatPlays.Nameless)?.playing
 
-    // Ranked as songs are, a station among them: one on the phone comes before a song on a computer.
-    override fun whatPlays(): WhatPlays? = playingApps().firstOrNull()?.let { app -> playing(app)?.let(WhatPlays::Named) ?: WhatPlays.Nameless(app.unnamed()) }
+    override fun whatPlays(): WhatPlays? =
+        playingApps().minWithOrNull(compareBy(playsFirst) { Rank(said(it) != null, it.place(), it.playbackState?.lastPositionUpdateTime ?: 0L) })
+            ?.let { app -> playing(app)?.let(WhatPlays::Named) ?: WhatPlays.Nameless(app.unnamed()) }
 
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
 
@@ -828,23 +828,8 @@ internal class MediaSessionPlayback(
     /** What [controller] plays, as a song, unless it names none; [asked] is how long the song asked for is, when known. */
     private fun playing(controller: MediaController, asked: Long? = null): Heard.Song? {
         val metadata = controller.metadata ?: return null
-        val said = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
-        val by = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
-        if (Songless.namesNoSong(said, by)) return null
-        val (title, artist) = MetadataParsers.playerSong(said, by) ?: return null
-        // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
-        // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
-        // YouTube Music plays videos with no album too, all of them music, "Queen - Bohemian Rhapsody (Lyrics)" by "7clouds".
-        // A music app's "Song - Remastered" stays whole.
-        // A song's length tells its versions apart; a video's is the video's, which may open with more.
-        val named = when {
-            !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = controller.lengthOf(metadata, asked))
-            MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist) ?: return null
-            // A computer's video, as KDE Connect shows one, is only a song when it says so plainly: a
-            // talk show's "Show - Episode 12" isn't, though a video on the phone named so is taken as one.
-            controller.mirrored() -> MetadataParsers.musicVideo(title, artist, byDash = false) ?: return null
-            else -> MetadataParsers.musicVideo(title, artist) ?: return null
-        }
+        if (Songless.namesNoSong(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty())) return null
+        val named = said(controller, asked) ?: return null
         val artwork = coverOf(metadata)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         // Nor where a song waiting for an ad to end is, as it isn't playing yet.
@@ -857,6 +842,29 @@ internal class MediaSessionPlayback(
             url = uri ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
             recordingId = RecordingKey.playing(controller.packageName, id, duration)
         ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f)
+    }
+
+    /**
+     * What [controller] says it plays, read as a song's title and artist, even a station's name, as Crosstune
+     * once took it; null when it says nothing a song could be read from, e.g. no title, or a video that doesn't
+     * say it's music. What plays is ranked by it, see [playsFirst].
+     */
+    private fun said(controller: MediaController, asked: Long? = null): MusicMetadata? {
+        val metadata = controller.metadata ?: return null
+        val (title, artist) = MetadataParsers.playerSong(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
+        // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
+        // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
+        // YouTube Music plays videos with no album too, all of them music, "Queen - Bohemian Rhapsody (Lyrics)" by "7clouds".
+        // A music app's "Song - Remastered" stays whole.
+        // A song's length tells its versions apart; a video's is the video's, which may open with more.
+        return when {
+            !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = controller.lengthOf(metadata, asked))
+            MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist)
+            // A computer's video, as KDE Connect shows one, is only a song when it says so plainly: a
+            // talk show's "Show - Episode 12" isn't, though a video on the phone named so is taken as one.
+            controller.mirrored() -> MetadataParsers.musicVideo(title, artist, byDash = false)
+            else -> MetadataParsers.musicVideo(title, artist)
+        }
     }
 
     /** The cover the app shows: its link on the web, or the picture itself; see [ownCover]. */
@@ -974,13 +982,14 @@ internal class MediaSessionPlayback(
     /** Only shown here from another device, e.g. a computer's player through KDE Connect: what the phone itself plays comes first. */
     private fun MediaController.mirrored(): Boolean = remote() && !cast()
 
+    private fun MediaController.place(): Place = if (mirrored()) Place.ELSEWHERE else if (cast()) Place.CAST else Place.PHONE
+
     /**
      * What the phone itself plays, then what it casts, then what another device plays; among each, the
      * one that last said where it is, over one that said so long ago. A computer's player says so every
      * second, but the phone's own music app is what the phone plays.
      */
-    private val nearestFirst = compareBy<MediaController> { if (it.mirrored()) 2 else if (it.cast()) 1 else 0 }
-        .thenByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
+    private val nearestFirst = compareBy<MediaController> { it.place() }.thenByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
 
     /** Whether what this app has [playing] is known to be another recording than [song], whatever it's named. */
     private fun MediaController.anotherRecording(playing: MediaMetadata, song: MusicMetadata): Boolean {
