@@ -126,6 +126,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.border
@@ -806,11 +807,15 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
     val following = now.following
     val playing = following?.clock?.playing != false
     val duration = following?.durationMs ?: song.lengthMs
+    // The buttons sit inside the bar's own tap target, where a remote's search from the bar never looks.
+    val bar = remember { FocusRequester() }
+    val playPause = remember { FocusRequester() }
     Surface(
         onClick = actions.onOpenPlayingNow,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         // Swiped up, it opens the player.
         modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG).swipeLayers()
+            .focusRequester(bar).focusProperties { right = playPause }
     ) {
         Column(modifier = Modifier.navigationBarsPadding()) {
             Row(
@@ -828,7 +833,10 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                IconButton(onClick = actions.onPlayingNowPlayPause, modifier = Modifier.size(52.dp)) {
+                IconButton(
+                    onClick = actions.onPlayingNowPlayPause,
+                    modifier = Modifier.size(52.dp).focusRequester(playPause).focusProperties { left = bar }
+                ) {
                     AppIcon(
                         if (playing) R.drawable.ic_pause else R.drawable.ic_play,
                         contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play)

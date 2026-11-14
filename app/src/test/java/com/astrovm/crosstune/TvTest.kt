@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,9 +26,12 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onRoot
@@ -46,6 +50,7 @@ import org.robolectric.RuntimeEnvironment
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -102,6 +107,7 @@ class TvTest {
         MainActivity.checksForUpdates = ::looksForUpdates
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.playbackFactory = ::MediaSessionPlayback
+        MainActivity.hearingFactory = null
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -607,5 +613,58 @@ class TvTest {
         checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         visuals.assertIsFocused()
+    }
+
+    private fun button(id: Int) = composeRule.onNode(hasContentDescription(string(id)) and hasClickAction())
+
+    @Test
+    fun onATvTheBarOfWhatsPlayingReachesItsButtonsAndComesBack() {
+        val playing = MusicMetadata("Demo", "Band")
+        MainActivity.playbackFactory = {
+            FakePlayback().apply {
+                access = true
+                onThePhone = Heard.Song(playing, null, 1_000, SystemClock.elapsedRealtime())
+                this.playing.value = Following(
+                    PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "Music",
+                    canSeek = true, canSkipNext = true, appPackage = MusicService.YOUTUBE_MUSIC.packageName
+                )
+            }
+        }
+        launch()
+        composeRule.waitUntil(5_000) { shown("Demo") }
+        val bar = composeRule.onNodeWithTag(NOW_PLAYING_TAG)
+        bar.requestFocus()
+        // The bar is one tap target, so its buttons sit inside it, where the remote doesn't look on its own.
+        pressOnFocused(Key.DirectionRight)
+        button(R.string.lyrics_pause).assertIsFocused()
+        pressOnFocused(Key.DirectionRight)
+        button(R.string.lyrics_next_song).assertIsFocused()
+        pressOnFocused(Key.DirectionLeft)
+        button(R.string.lyrics_pause).assertIsFocused()
+        pressOnFocused(Key.DirectionLeft)
+        bar.assertIsFocused()
+    }
+
+    @Test
+    fun onATvAStationWithNoSongNamedTakesNoFocusUntilItsSongIsHeard() {
+        // VRadio names only the station (#998).
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") } }
+        val heard = CompletableDeferred<Heard>()
+        MainActivity.hearingFactory = { SongHearing { heard.await() } }
+        launch()
+        composeRule.waitUntil(5_000) { shown("RTP Antena 2") }
+        val bar = composeRule.onNodeWithTag(NOW_PLAYING_TAG)
+        bar.assertIsNotEnabled()
+        field().requestFocus()
+        // Down as far as it goes, the remote never lands on the station, nor is it held there.
+        repeat(4) { pressOnFocused(Key.DirectionDown) }
+        focused().assertExists()
+        assertTrue(composeRule.onAllNodes(hasTestTag(NOW_PLAYING_TAG) and isFocused()).fetchSemanticsNodes().isEmpty())
+        heard.complete(Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null))
+        composeRule.waitUntil(5_000) { shown("Iris") }
+        repeat(4) { pressOnFocused(Key.DirectionDown) }
+        bar.assertIsFocused()
+        pressOnFocused(Key.DirectionUp)
+        bar.assertIsNotFocused()
     }
 }
