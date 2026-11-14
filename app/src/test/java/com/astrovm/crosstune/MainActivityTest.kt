@@ -4277,6 +4277,7 @@ class MainActivityTest {
         waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_button))).fetchSemanticsNodes().isEmpty())
         // One another app plays next is that app's, by its name and its icon.
+        // Named with its artist: what names nobody is never a song the phone says it plays, since #998.
         phone.onThePhone = Heard.Song(MusicMetadata("Third Song", "Third Band"), null, app = MusicService.SPOTIFY.packageName)
         waitForText("Third Song")
         waitForDescription(string(R.string.player_playing_in, "Spotify"))

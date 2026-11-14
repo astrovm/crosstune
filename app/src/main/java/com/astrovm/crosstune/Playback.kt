@@ -462,14 +462,16 @@ internal class MediaSessionPlayback(
         controllers.filter { (app == null || it.packageName == app) && it.has(song, app) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
 
     /**
-     * Whether it has [song], by its name. What names no song, e.g. a station or a file with no title, had or
-     * asked for, is that only asked of [app] by package, by just what it's called, even nothing. So a station's
-     * buttons reach it whatever it's called; a song, or the station before, never does, even sharing its words,
-     * as "Hotel California" by Eagles and the station "Hotel California Radio", or "Los 40" and "Los 40 Classic".
+     * Whether it has [song], by its name. What names no song asked for, e.g. a station or a file with no title,
+     * is only asked of [app] by package, by just what it's called, even nothing: so a station's buttons reach it
+     * whatever it's called, and never the station before, as "Los 40" and "Los 40 Classic". A song is had by an
+     * app that names it with no artist, as one that sends none has it, but only by its whole title: never by a
+     * station that shares its words, as "Hotel California" by Eagles and the station "Hotel California Radio".
      */
     private fun MediaController.has(song: MusicMetadata, app: String?): Boolean {
         val (title, artist) = calls()
-        if (Songless.namesNoSong(title, artist) || Songless.namesNoSong(song.title, song.artist)) return app != null && title == song.title && artist == song.artist
+        if (Songless.namesNoSong(song.title, song.artist)) return app != null && title == song.title && artist == song.artist
+        if (Songless.namesNoSong(title, artist)) return SongNames.same(title, song.title) && plays(song)
         return plays(song)
     }
 
@@ -480,7 +482,7 @@ internal class MediaSessionPlayback(
     /** What it plays, as what names no song is shown. */
     private fun MediaController.unnamed(): Unnamed {
         val (title, artist) = calls()
-        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let(::coverOf), artist, away = remote())
+        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let(::coverOf), artist, away = remote(), said = said(this) != null)
     }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {

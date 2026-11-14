@@ -1240,12 +1240,12 @@ class MainViewModelTest {
 
     @Test
     fun aVideoThatDoesntSayItsMusicComesAfterASongCastOrOnAComputer() {
-        val vlog = Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel")
+        // A video that doesn't say it's music says nothing a song could be read from, though it has a name.
+        val vlog = Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel", said = false)
         val computer = MusicMetadata("Fake Song", "Fake Band")
         val playback = FakePlayback().apply {
             access = true
             unnamed.value = vlog
-            unnamedVideo = true
             unnamedAt = 2
             onThePhone = Heard.Song(computer, null, app = "org.kde.kdeconnect_tp")
             songElsewhere = true
@@ -1257,7 +1257,6 @@ class MainViewModelTest {
         assertNull(model.uiState.playingUnnamed)
         assertEquals(computer, (playback.whatPlays() as WhatPlays.Named).song.metadata)
         // A station is taken for what it says, and the phone's comes first.
-        playback.unnamedVideo = false
         playback.unnamed.value = station
         idle()
         assertEquals(station, model.uiState.playingUnnamed?.playing)
@@ -1435,6 +1434,25 @@ class MainViewModelTest {
         playback.unnamed.value = null
         idle()
         assertEquals(song, model.uiState.playingNow?.song)
+    }
+
+    @Test
+    fun aSongAnotherAppPausedKeepsItsBarOverWhatSaysNothingASongCouldBeReadFrom() {
+        val vlog = Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel", said = false)
+        val untitled = Unnamed("com.example.player", "Fake Player", null)
+        listOf(vlog, untitled).forEach { other ->
+            val playback = FakePlayback()
+            val model = playingModel(playback, open = false)
+            // Spotify pauses, and keeps its song; a vlog, or a file with no title, starts in another app.
+            playback.playing.value = following(playing = false)
+            playback.onThePhone = null
+            playback.appPlaying[other.app] = MutableStateFlow(following(app = other.app))
+            playback.unnamed.value = other
+            idle()
+            // The bar keeps the paused song, to play again.
+            assertEquals(other.name, song, model.uiState.playingNow?.song)
+            assertEquals(false, model.uiState.playingNow?.following?.clock?.playing)
+        }
     }
 
     @Test

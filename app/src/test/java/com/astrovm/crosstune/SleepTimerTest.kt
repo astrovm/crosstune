@@ -101,6 +101,24 @@ class SleepTimerTest {
         assertNull(timer.set.value)
     }
 
+    @Test
+    fun theSongIsPausedAsItEndsInAnAppThatSendsNoArtist() {
+        // The app has the song by its title alone, as heard by "Band"; asked of the app or of none.
+        val player = Unnamed("com.example.player", "Fake Player", "Song")
+        listOf(player.app, null).forEach { app ->
+            phone.plays.clear()
+            phone.appPlaying[player.app] = MutableStateFlow(Following(PlaybackClock(190_000, SystemClock.elapsedRealtime(), 1f, true), "Fake Player", canSeek = true, appPackage = player.app, durationMs = 200_000))
+            phone.playing.value = phone.appPlaying[player.app]?.value
+            phone.unnamed.value = player
+            timer.afterSong(song, app)
+            passes(9_499)
+            assertTrue("$app", phone.plays.isEmpty())
+            passes(1)
+            assertEquals(listOf(false), phone.plays)
+            assertNull(timer.set.value)
+        }
+    }
+
     /** A radio station playing in its own app, with no song named, and nothing else playing. */
     private fun stationPlays(): Unnamed {
         val station = Unnamed("com.example.radio", "Fake Radio", "Fake FM")

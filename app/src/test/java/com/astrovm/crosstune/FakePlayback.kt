@@ -83,18 +83,24 @@ internal class FakePlayback : PlaybackSource {
     }
 
     /**
-     * What [app] plays, as following [song], matched as the real source does. What names no song, e.g. a station, is
-     * followed only asked of its [app], while [unnamed] is still just that there, paused or not: once the app's on to
-     * the next station, or a song, it no longer has it. A song is never what [unnamed] is, in its app.
+     * What [app] plays, as following [song], matched as the real source does. [unnamed] is what the app it's
+     * asked of plays, [app] or else the one followed, while it's there; any other app plays [song].
      */
-    private fun followedAs(song: MusicMetadata, app: String?, flow: Flow<Following?>): Flow<Following?> {
-        val nameless = Songless.namesNoSong(song.title, song.artist)
-        if (app == null && !nameless) return flow
-        return combine(flow, unnamed) { following, now ->
-            following?.takeIf {
-                if (nameless) app != null && now?.app == app && now.played.let { it.title == song.title && it.artist == song.artist } else now?.app != app
-            }
+    private fun followedAs(song: MusicMetadata, app: String?, flow: Flow<Following?>): Flow<Following?> =
+        combine(flow, unnamed) { following, now ->
+            following?.takeIf { has(now?.takeIf { (app ?: following.appPackage) == it.app }?.played, song, app) }
         }
+
+    /**
+     * Whether an app that plays [there] has [song], as the real source has it: what names no song asked for, only
+     * of its [app], by just what it's called; a song, by its name, and by its whole title when [there] names no song.
+     * With nothing [there], the app plays [song].
+     */
+    private fun has(there: MusicMetadata?, song: MusicMetadata, app: String?): Boolean {
+        if (Songless.namesNoSong(song.title, song.artist)) return app != null && there?.title == song.title && there.artist == song.artist
+        if (there == null) return true
+        if (Songless.namesNoSong(there.title, there.artist)) return SongNames.same(there.title, song.title) && SongNames.names(there.title, there.artist, song)
+        return SongNames.names(there.title, there.artist, song)
     }
 
     /** Whether what started isn't believed yet, as the phone's sound takes a moment to follow what an app says it plays. */
@@ -129,9 +135,6 @@ internal class FakePlayback : PlaybackSource {
     var songAt = 0L
     var unnamedAt = 0L
 
-    /** Whether [unnamed] is a video that doesn't say it's music: it says nothing a song could be read from, though it has a name. */
-    var unnamedVideo = false
-
     override fun playingUnnamed() = (whatPlays() as? WhatPlays.Nameless)?.playing
 
     override fun whatPlays() = ranked(onThePhone.takeUnless { quietYet })
@@ -140,7 +143,7 @@ internal class FakePlayback : PlaybackSource {
     private fun ranked(song: Heard.Song?): WhatPlays? {
         val named = song?.let { WhatPlays.Named(it) to Rank(true, if (songElsewhere) Place.ELSEWHERE else Place.PHONE, songAt) }
         val nameless = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value)?.let {
-            WhatPlays.Nameless(it) to Rank(it.name != null && !unnamedVideo, if (it.away) Place.ELSEWHERE else Place.PHONE, unnamedAt)
+            WhatPlays.Nameless(it) to Rank(it.said, if (it.away) Place.ELSEWHERE else Place.PHONE, unnamedAt)
         }
         return listOfNotNull(named, nameless).minWithOrNull(compareBy(playsFirst) { it.second })?.first
     }

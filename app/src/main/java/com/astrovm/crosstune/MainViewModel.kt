@@ -1265,8 +1265,9 @@ internal class MainViewModel(
     }
 
     private fun showPlayingNow() {
-        // A song another app paused isn't offered over what an app plays now, even with no song named.
-        val song = heardNow ?: followedNow?.first?.takeIf { uiState.playingUnnamed == null }
+        // A song another app paused isn't offered over what an app plays now, even with no song named, as a
+        // station; over what says nothing a song could be read from, as a vlog, it is, as Crosstune always had it.
+        val song = heardNow ?: followedNow?.first?.takeIf { uiState.playingUnnamed?.playing?.said != true }
         uiState = uiState.copy(playingNow = song?.let { NowPlaying(it, followedNow?.takeIf { (followed) -> followed == song }?.second) })
     }
 

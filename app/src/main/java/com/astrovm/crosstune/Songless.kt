@@ -7,6 +7,8 @@ package com.astrovm.crosstune
  * where the artist goes, e.g. "<unknown>", or nothing. Crosstune names the song by listening, and shows
  * this meanwhile, never as a song to open, search or report. [away] when it plays on another device, e.g.
  * a speaker it's cast to: its bar still has its buttons, but there's nothing on the phone to listen to.
+ * [said] when it says what it plays as Crosstune once took for a song, e.g. a station's name: what says
+ * nothing a song could be read from, as a video that doesn't say it's music, never hides a paused song.
  */
 internal data class Unnamed(
     val app: String,
@@ -14,7 +16,8 @@ internal data class Unnamed(
     val name: String?,
     val artworkUrl: String? = null,
     private val artist: String = "",
-    val away: Boolean = false
+    val away: Boolean = false,
+    val said: Boolean = name != null
 ) {
     /** What it plays as the app names it, which its buttons and the player follow it there by, never as a song. */
     val played: MusicMetadata get() = MusicMetadata(name.orEmpty(), artist, artworkUrl = artworkUrl)

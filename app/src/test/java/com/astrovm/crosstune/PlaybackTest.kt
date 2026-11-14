@@ -491,8 +491,7 @@ class PlaybackTest {
     @Test
     fun itFollowsAlongAsTheAppPausesStopsOrStarts() {
         allow()
-        // Named by the one who put it up, as YouTube has it: with no one named, it would name no song, and never be one.
-        val youtube = player("com.google.android.youtube", "YouTube", "Blinding Lights", "The Weeknd")
+        val youtube = player("com.google.android.youtube", "YouTube", "Blinding Lights", null)
         shadowOf(sessions).addController(youtube)
         val seen = followed()
         assertTrue(seen.last()!!.clock.playing)
@@ -1684,7 +1683,7 @@ class PlaybackTest {
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(vlog())
         assertNull(playback.nowPlaying())
-        assertEquals(Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel"), playback.playingUnnamed())
+        assertEquals(Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel", said = false), playback.playingUnnamed())
     }
 
     @Test
@@ -1728,6 +1727,29 @@ class PlaybackTest {
         // Asked with no app, a station isn't reached by its name either.
         playback.playPause(MusicMetadata("Los 40 Classic", ""), false)
         assertEquals(emptyList<String>(), asked())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSongIsFollowedInAnAppThatSendsNoArtist() {
+        allow()
+        sounding()
+        // The app names the song, with no one who sings it: what's asked is the song, as heard.
+        val plain = player("com.example.player", "Player", "Fake Song", "")
+        shadowOf(sessions).addController(plain)
+        val asked = MusicMetadata("Fake Song", "Fake Band")
+        listOf("com.example.player", null).forEach { app ->
+            val seen = mutableListOf<Following?>()
+            collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(asked, app).collect { seen += it } }
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(true, seen.last()?.clock?.playing)
+            assertEquals("com.example.player", playback.appFor(asked, app = app)?.packageName)
+        }
+        playback.playPause(asked, false)
+        assertEquals(listOf("pause"), asked())
+        // Only by its whole title: another song of it is another song.
+        assertNull(playback.appFor(MusicMetadata("Fake Song Two", "Fake Band")))
+        assertNull(playback.appFor(MusicMetadata("Fake", "Fake Band")))
     }
 
     @Test
@@ -1939,11 +1961,20 @@ class PlaybackTest {
     fun aCoverIsNotReturnedWhenItsFileCannotBeWritten() {
         allow()
         sounding()
-        val controller = player("com.example.player", "Player", "Fake Song", "Fake Artist", album = "Fake Album")
+        val controller = player("com.example.player", "Player", "Fake Song", "")
         val cover = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
         shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, cover).build())
         shadowOf(sessions).addController(controller)
         File(app.cacheDir, ARTWORK_DIR).writeText("not a directory")
+        assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
+        // Named by nobody, it's shown with no cover too.
+        assertEquals("Fake Song", playback.playingUnnamed()?.name)
+        assertNull(playback.playingUnnamed()?.artworkUrl)
+        // Named by somebody, it's a song, still with no cover.
+        ShadowMediaSessionManager.reset()
+        val named = player("com.example.player", "Player", "Fake Song", "Fake Artist", album = "Fake Album")
+        shadowOf(named).setMetadata(MediaMetadata.Builder(named.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, cover).build())
+        shadowOf(sessions).addController(named)
         assertEquals("Fake Song", playback.nowPlaying()?.metadata?.title)
         assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
     }
