@@ -1807,7 +1807,13 @@ class PlaybackTest {
         }
         // Never by words it shares, as a station.
         // Nor a song whose own name starts with a number, "7 Rings", by the words after it.
-        for ((station, song) in listOf("Hotel California Radio" to MusicMetadata("Hotel California", "Eagles"), "Los 40 Classic" to MusicMetadata("Los 40", "Fake Band"), "7 Rings" to MusicMetadata("Rings", "Fake Band"))) {
+        // Nor another recording of it: what's asked for isn't played, timed or paused in its place.
+        val others = listOf(
+            "Hotel California (Live)" to "Hotel California (Acoustic)", "Fake Song (Remix)" to "Fake Song (Live)", "Song (Instrumental)" to "Song (Karaoke)",
+            "Yesterday (Remastered 2009)" to "Yesterday (Live)", "05 Song (Live).flac" to "Song (Demo)", "Stay (Instrumental)" to "Stay",
+            "Hello (Live)" to "Hello", "Hello (Remix)" to "Hello", "Hello" to "Hello (Live)"
+        ).map { (title, song) -> title to MusicMetadata(song, "Fake Band") }
+        for ((station, song) in listOf("Hotel California Radio" to MusicMetadata("Hotel California", "Eagles"), "Los 40 Classic" to MusicMetadata("Los 40", "Fake Band"), "7 Rings" to MusicMetadata("Rings", "Fake Band")) + others) {
             ShadowMediaSessionManager.reset()
             shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", station, ""))
             assertNull(station, playback.appFor(song))

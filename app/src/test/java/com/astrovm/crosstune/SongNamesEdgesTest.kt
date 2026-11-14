@@ -109,4 +109,59 @@ class SongNamesEdgesTest {
         assertFalse(many("Side A / Side B"))
         assertFalse(many("AC/DC Song"))
     }
+
+    @Test
+    fun anAppThatSendsNoArtistHasASongByItsTitleOnlyWhereCrosstuneAlwaysTookIt() {
+        // What an app plays, by its title alone, against the song asked for; and whether that's the song.
+        val rows = listOf(
+            "Fake Song [Explicit]" to "Fake Song" to true,
+            "Fake Song (Official Audio)" to "Fake Song" to true,
+            "Fake Song (From \"Fake Movie\")" to "Fake Song" to true,
+            "01 Fake Song" to "Fake Song" to true,
+            "01. Fake Song" to "Fake Song" to true,
+            "1. Fake Song" to "Fake Song" to true,
+            "Fake Song.mp3" to "Fake Song" to true,
+            "01 Fake Song (Live) [Explicit].mp3" to "Fake Song" to true,
+            "Fake Song (Live)" to "Fake Song" to true,
+            "Fake Song (Acoustic)" to "Fake Song" to true,
+            "Fake Song (Extended Mix)" to "Fake Song" to true,
+            "Yesterday (Remastered 2009)" to "Yesterday" to true,
+            "01 Hello" to "Hello" to true,
+            "Hello.mp3" to "Hello" to true,
+            "Hello [Explicit]" to "Hello" to true,
+            "Hello (Official Audio)" to "Hello" to true,
+            // Another recording of it is another song to follow, as before.
+            "Hotel California (Live)" to "Hotel California (Acoustic)" to false,
+            "Fake Song (Remix)" to "Fake Song (Live)" to false,
+            "Song (Instrumental)" to "Song (Karaoke)" to false,
+            "Yesterday (Remastered 2009)" to "Yesterday (Live)" to false,
+            "05 Song (Live).flac" to "Song (Demo)" to false,
+            "Stay (Instrumental)" to "Stay" to false,
+            "Hello (Live)" to "Hello" to false,
+            "Hello (Remix)" to "Hello" to false,
+            "Hello" to "Hello (Live)" to false,
+            // A number that's part of the name, and words it only shares.
+            "1999" to "99" to false,
+            "22" to "2" to false,
+            "09" to "9" to false,
+            "Song 2" to "Song" to false,
+            "7 Rings" to "Rings" to false,
+            "100 Song" to "Song" to false,
+            "Hotel California Radio" to "Hotel California" to false,
+            "Los 40 Classic" to "Los 40" to false,
+            "Fake Song Remastered 2013" to "Fake Song" to false
+        )
+        // Taken for the song where Crosstune always took it by its words, and more only where meant to:
+        // a track number, a file's extension, or a tag that names no other recording, on a one-word title.
+        val meant = setOf("01 Hello", "Hello.mp3", "Hello [Explicit]")
+        val gained = mutableSetOf<String>()
+        for ((pair, has) in rows) {
+            val (title, song) = pair
+            val asked = MusicMetadata(song, "Fake Band")
+            val now = SongNames.names(title, "", asked, byWords = false)
+            assertEquals("$title for $song", has, now)
+            if (now && !SongNames.names(title, "", asked)) gained += title
+        }
+        assertEquals(meant, gained)
+    }
 }

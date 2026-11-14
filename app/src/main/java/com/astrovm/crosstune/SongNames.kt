@@ -380,16 +380,28 @@ internal object SongNames {
     /** The title a file names its song by, without the track number before it: "Fake Song" from "01 Fake Song". */
     fun withoutTrackNumber(title: String): String = title.replace(trackNumber, "").ifBlank { title }
 
-    /** Whether [title], as a file or a store names a song, "01 Fake Song.mp3" or "Fake Song [Explicit]", is [song]'s. */
-    private fun sameAsAFileNamesIt(title: String, song: String): Boolean =
-        same(withoutBrackets(withoutTrackNumber(title.replace(MetadataParsers.audioExtension, ""))), withoutBrackets(song))
+    /**
+     * Whether [title], as a file or a store names a song, "01 Fake Song.mp3" or "Fake Song [Explicit]", is [song]'s.
+     * Past its track number, its extension and tags that name no other recording, it may differ only in its tags,
+     * and only as [wordsMatch] takes them: "Fake Song (Live)" is "Fake Song", as Crosstune always took it, but
+     * "Hello (Live)" isn't "Hello", nor "Hotel California (Live)" "Hotel California (Acoustic)".
+     */
+    private fun sameAsAFileNamesIt(title: String, song: String): Boolean {
+        val file = withoutBrackets(withoutTrackNumber(title.replace(MetadataParsers.audioExtension, "")), ::namesNoRecording)
+        val own = withoutBrackets(song, ::namesNoRecording)
+        return same(file, own) || same(withoutBrackets(file) { true }, withoutBrackets(own) { true }) && wordsMatch(file, own)
+    }
 
-    /** The name without what it adds in brackets, but what it adds after a dash: "Song (Live) [Explicit]" is "Song". */
-    private fun withoutBrackets(title: String): String {
+    /** Whether a tag names no other recording than the song's own: "[Explicit]", "(Official Audio)", but not "(Live)" or "(Extended Mix)". */
+    private fun namesNoRecording(tag: String): Boolean = words(tag).none { it in VERSION_WORDS }
+
+    /** The name without the tags at its end in brackets that [drops], but what it adds after a dash: "Song (Live) [Explicit]" is "Song". */
+    private fun withoutBrackets(title: String, drops: (String) -> Boolean): String {
         var bare = title.trim()
         while (true) {
-            val shorter = bare.replace(bracketedTag, "").trim()
-            if (shorter == bare || shorter.isEmpty()) return bare
+            val tag = bracketedTag.find(bare)?.value ?: return bare
+            val shorter = bare.removeSuffix(tag).trim()
+            if (!drops(tag) || shorter.isEmpty()) return bare
             bare = shorter
         }
     }
