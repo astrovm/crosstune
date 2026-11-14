@@ -324,8 +324,8 @@ jobs:
   # listing, in one edit: one review a release. Production is a step of its own, promote.yml. Skipped until the
   # PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing" in CONTRIBUTING.md. Skipped for a pre-release too:
   # Play takes each version code once, and v2.27.0-rc.1 has the one of 2.27.0, which 2.27.0 itself needs.
-  # A test version never goes to Play. Neither does a fix to an older version: play.sh finds the newer one on
-  # Play's tracks first, and the release stays on GitHub only.
+  # A test version never goes to Play. A fix to an older version never changes a track: play.sh finds the newer
+  # version on Play first, and sends the bundle only, for promote.yml to put on production.
   play:
     needs: [build, sign, publish]
     if: needs.build.outputs.prerelease == 'false'

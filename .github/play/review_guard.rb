@@ -45,9 +45,15 @@ module Crosstune
       false
     end
 
+    # The edits deleted here, so nothing else tries again.
+    def self.discarded
+      @discarded ||= []
+    end
+
     # Play keeps the refused edit. Deleting it leaves nothing behind; if that fails too, the edit expires
     # by itself, and the review is safe either way.
     def self.discard(service, package_name, edit_id)
+      discarded << edit_id
       service.delete_edit(package_name, edit_id)
     rescue Google::Apis::Error => e
       warn("The refused edit #{edit_id} wasn't deleted (#{e.message}). It expires by itself.")

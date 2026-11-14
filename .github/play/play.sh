@@ -18,15 +18,20 @@
 # (review_guard.rb). While a review is in progress, Play refuses the commit, nothing is sent, and the job fails
 # and says to re-run it when the review ends. A re-run starts over: a bundle that Play already has isn't sent
 # again. Another bundle with the same version code stops the job. A tag with a suffix (v2.27.0-rc.1)
-# isn't sent to Play. Nor is a tag older than what a track it goes to has, such as a backport: it stays on
-# GitHub only, and production refuses it.
+# isn't sent to Play.
+#
+# No release takes a track back to an older version. When internal testing, a testing track or production has
+# a newer version, the release is a fix to an older version, or an older tag run again: Play gets its bundle on
+# no track, for promote.yml to send to production, or nothing when production has it or a newer one. A newer
+# version that no tag on origin has stops the job: something sent by hand, or a tag since deleted.
 set -euo pipefail
 
 # A tag with a suffix, as in v2.27.0-rc.1, has the version code of 2.27.0, and Play takes each version code
 # once. Sent to Play, it would keep 2.27.0 itself out. release.yml doesn't run this for one; this is the same
 # check, before the key is used. Testers on Play get each version on the testing tracks.
 if [[ "${1:-}" == release && "${2:-}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+[-.][0-9A-Za-z.-]+$ ]]; then
-  echo "::notice::$2 has a suffix, so it isn't sent to Google Play: Play takes each version code once, and the version without the suffix needs it"
+  echo "::notice::$2 has a suffix, so it isn't sent to Google Play:" \
+    "Play takes each version code once, and the version without the suffix needs it"
   exit 0
 fi
 
@@ -84,7 +89,8 @@ fi
 for track in "${tracks[@]}"; do
   # A form factor's tracks too, such as tv:production.
   if [[ "$track" =~ (^|:)(production|internal)$ || ! "$track" =~ ^[A-Za-z0-9:_-]+$ ]]; then
-    echo "::error::PLAY_TRACKS can't hold '$track'. It names testing tracks: production goes on its own, with promote.yml, and internal testing always gets the release first"
+    echo "::error::PLAY_TRACKS can't hold '$track'. It names testing tracks:" \
+      "production goes on its own, with promote.yml, and internal testing always gets the release first"
     exit 1
   fi
 done
@@ -111,6 +117,23 @@ version_code() {
     exit 1
   fi
   echo $((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 10000 + 10#${BASH_REMATCH[3]} * 100))
+}
+
+# The highest version code a tag on origin has, read now: a re-run of a job sees the tags pushed since. No token:
+# the repository is public, and the job has no permissions.
+top_tag_code() {
+  local refs ref tag top=0
+  if ! refs="$(GIT_TERMINAL_PROMPT=0 git ls-remote --tags origin)"; then
+    echo "::error::The tags on origin couldn't be listed, so nothing was sent to Google Play" >&2
+    exit 1
+  fi
+  while read -r _ ref; do
+    tag="${ref#refs/tags/}"
+    if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ && "$(version_code "$tag")" -gt "$top" ]]; then
+      top="$(version_code "$tag")"
+    fi
+  done <<< "$refs"
+  echo "$top"
 }
 
 # Just the English release notes: other folders use F-Droid's language codes, which Play doesn't all accept.
@@ -145,40 +168,57 @@ copy_listing() {
 }
 
 release() {
-  local tag="$1" code found
+  local tag="$1" code found top
   code="$(version_code "$tag")"
+  top="$(top_tag_code)"
   copy_notes "$work/notes" "$code"
   copy_listing "$work/listing"
 
   # Internal testing first: Google doesn't review it, so testers there get each release in minutes, and the
   # track never sits on an old version. While a review is in progress, Play takes no commit, this one included.
-  # A re-run finds the bundle there already. Before anything is sent, Play is asked for every track this goes
-  # to: one with a newer version means an older tag run again, or a backport, and neither takes a track back.
+  # A re-run finds the bundle there already. Before anything is sent, Play is asked what internal testing, each
+  # track in PLAY_TRACKS and production have.
   found=0
-  play has-bundle "$key" "$package" "$(IFS=,; echo "internal,${tracks[*]}")" "$code" "Crosstune-$tag.aab" || found=$?
-  if [[ "$found" == 5 ]]; then
-    echo "::notice::$tag stays on GitHub only: Google Play already has a newer version on a testing track"
-    return
-  elif [[ "$found" == 0 ]]; then
-    echo "Internal testing already has this bundle as $code, so it isn't sent again"
-  elif [[ "$found" == 4 ]]; then
-    # Sent in a run whose commit Play refused: Play may keep the bundle, and takes each version code once.
-    echo "Google Play has this bundle as $code from an earlier run, and no testing track has a newer version, so it isn't sent again"
-    play edit "$key" "$package" --code "$code" --to internal --notes "$work/notes"
-  elif [[ "$found" == 3 ]]; then
-    play supply \
-      --package_name "$package" \
-      --json_key "$key" \
-      --aab "Crosstune-$tag.aab" \
-      --track internal \
-      --metadata_path "$work/notes" \
-      --skip_upload_apk true \
-      --skip_upload_metadata true \
-      --skip_upload_images true \
-      --skip_upload_screenshots true
-  else
-    exit "$found"
-  fi
+  play plan "$key" "$package" "$(IFS=,; echo "internal,${tracks[*]}")" "$code" "Crosstune-$tag.aab" "$top" ||
+    found=$?
+  case "$found" in
+    0) echo "Internal testing already has this bundle as $code, so it isn't sent again" ;;
+    4)
+      # Sent in a run whose commit Play refused: Play may keep the bundle, and takes each version code once.
+      echo "Google Play has this bundle as $code from an earlier run, and no testing track has a newer version," \
+        "so it isn't sent again"
+      play edit "$key" "$package" --code "$code" --to internal --notes "$work/notes"
+      ;;
+    3)
+      play supply \
+        --package_name "$package" \
+        --json_key "$key" \
+        --aab "Crosstune-$tag.aab" \
+        --track internal \
+        --metadata_path "$work/notes" \
+        --skip_upload_apk true \
+        --skip_upload_metadata true \
+        --skip_upload_images true \
+        --skip_upload_screenshots true
+      ;;
+    5)
+      echo "::notice::$tag stays on GitHub only: Google Play has a newer version, and production has this one" \
+        "or a newer one"
+      return
+      ;;
+    6)
+      # A fix to an older version: testers keep the newer one, and production can take this one.
+      play upload "$key" "$package" "$code" "Crosstune-$tag.aab"
+      echo "::notice::$tag is on Google Play as a bundle, on no track. To send it to production, run promote.yml" \
+        "with ${tag#v}"
+      return
+      ;;
+    7)
+      echo "::notice::Google Play has $tag already. To send it to production, run promote.yml with ${tag#v}"
+      return
+      ;;
+    *) exit "$found" ;;
+  esac
 
   # One edit, so Google reviews the release on every testing track and the listing at once. The release
   # carries its notes along.
@@ -187,10 +227,19 @@ release() {
 }
 
 production() {
-  local code
+  local code on=0
   code="$(version_code "$1")"
   copy_notes "$work/notes" "$code"
-  play edit "$key" "$package" --from "${tracks[0]}" --code "$code" --to production --notes "$work/notes"
+  play on-track "$key" "$package" "${tracks[0]}" "$code" || on=$?
+  if [[ "$on" == 0 ]]; then
+    play edit "$key" "$package" --from "${tracks[0]}" --code "$code" --to production --notes "$work/notes"
+  elif [[ "$on" == 3 ]]; then
+    # A fix to an older version, which its release sent to Play on no track, as testing has a newer one.
+    echo "Track '${tracks[0]}' doesn't have $code, so production gets the bundle Google Play has"
+    play edit "$key" "$package" --code "$code" --to production --notes "$work/notes"
+  else
+    exit "$on"
+  fi
 }
 
 listing() {

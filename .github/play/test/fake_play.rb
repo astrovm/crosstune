@@ -4,6 +4,7 @@
 # one fastlane run to the next. FAKE_PLAY_IN_REVIEW=1 makes Play refuse commits as it does while a review is
 # in progress. FAKE_PLAY_NOT_SENT=1 makes it ask for changesNotSentForReview first, as it does for some
 # changes. FAKE_PLAY_KEEPS_UPLOADS=1 makes it keep a bundle once sent, even when its edit is never committed.
+# FAKE_PLAY_TRACKS_FAIL=1 makes it fail to list an edit's tracks.
 #
 # RUBYOPT reaches `bundle` too, which has no WebMock: only play.rb gets the fake.
 return unless File.basename($PROGRAM_NAME) == "play.rb"
@@ -95,6 +96,8 @@ module FakePlay
       in [:post, %r{\A/([^/]+):validate\z}]
         json({ id: Regexp.last_match(1) })
       in [:get, %r{\A/([^/]+)/tracks\z}]
+        return json({ error: { code: 503, message: "Backend Error" } }, 503) if ENV["FAKE_PLAY_TRACKS_FAIL"] == "1"
+
         edit = @edits.fetch(Regexp.last_match(1))["tracks"]
         json({ tracks: edit.map { |name, releases| track_json(name, releases) } })
       in [:get, %r{\A/([^/]+)/tracks/([^/]+)\z}]
