@@ -2,8 +2,9 @@ package com.astrovm.crosstune
 
 /**
  * What an app plays when it doesn't say what song it is, e.g. a radio station or a file with no tags:
- * [name] as the app shows it, the station's or the file's, read as Crosstune once read a song's title,
- * "Fake Song" from "01 Fake Song.mp3", or null with none; [app] by package, and [label], its name;
+ * [name] as the app shows it, the station's or the file's, read as Crosstune once read a song's title, past
+ * an audio file's extension only: "Fake Song" from "Fake Song.mp3", and "07 Years" from "07 Years.mp3", its
+ * track number kept; or null with none; [app] by package, and [label], its name;
  * [artworkUrl] the cover it shows, e.g. the station's logo; [artist] what the app has where the artist
  * goes, e.g. "<unknown>", or nothing. Crosstune names the song by listening, and shows this meanwhile,
  * never as a song to open, search or report till it can't be named so, see [asSong]. [where] it plays:
@@ -53,13 +54,13 @@ internal object Songless {
      * "Fake Song.mp3" by "<unknown>"; nor, by no one, by a recording's file name or a file's path:
      * "AUD-20240101-WA0003" or "/storage/emulated/0/Music/song.mp3". A title with an artist is always a
      * song, as music apps name theirs, even "Track 10", "Demo 20230415" or one by an artist named as
-     * the app is, and so is "Artist - Song" alone.
+     * the app is, and so is "Artist - Song" alone. [read] is how they read as a song's, when it's read already.
      */
-    fun namesNoSong(title: String, artist: String): Boolean {
+    fun namesNoSong(title: String, artist: String, read: MusicMetadata? = MetadataParsers.playerSong(title, artist)): Boolean {
         // Read before it's split at a dash, which "AUD-20240101-WA0003" has.
         val bare = title.trim().replace(extension, "")
         if (MetadataParsers.noArtist(artist) && (recording.matches(bare) || path.containsMatchIn(bare))) return true
-        val song = MetadataParsers.playerSong(title, artist) ?: return true
+        val song = read ?: return true
         return song.artist.isBlank()
     }
 

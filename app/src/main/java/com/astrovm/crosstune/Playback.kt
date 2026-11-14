@@ -181,7 +181,12 @@ internal data class Following(
     /** The list it plays from, when Crosstune is playing one through: see [PlayQueue]. */
     val from: String? = null,
     /** It plays an ad under the song's name, as YouTube Music's free plan does, and the song waits at its start: see [PlaybackClock]. */
-    val ad: Boolean = false
+    val ad: Boolean = false,
+    /**
+     * Which of the app's sessions plays it, a new number each time a follow goes on to another: an app may start a new one for
+     * what it plays next, and say nothing else of it, as a player of files with no title may.
+     */
+    val session: Int = 0
 )
 
 /**
@@ -360,9 +365,32 @@ internal class MediaSessionPlayback(
     private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue,
     private val lengths: SteadyLengths = SteadyLengths(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)),
     /** What an app calls one of its drawings, by its number there; Robolectric has no other app's. */
-    private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() }
+    private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() },
+    /** How a title and an artist an app says read as a song's; see [MetadataParsers.playerSong]. */
+    private val readSong: (String, String) -> MusicMetadata? = MetadataParsers::playerSong
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
+
+    /**
+     * How each title and artist an app says read as a song's, by [readSong]: read once, as a long one takes a while, and
+     * each change is asked of many times over, for what plays first, what it's called, and whether it has a song.
+     */
+    private val songsRead = object : LinkedHashMap<Pair<String, String>, SongRead>(SONGS_READ_KEPT, LOAD_FACTOR, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<String, String>, SongRead>?) = size > SONGS_READ_KEPT
+    }
+
+    /** How a title and an artist read as a song's: [song], or null when they name none. */
+    private class SongRead(val song: MusicMetadata?)
+
+    /** [title] and [artist] as [readSong] reads them, once for each; see [songsRead]. */
+    private fun songOf(title: String, artist: String): MusicMetadata? {
+        val key = title to artist
+        synchronized(songsRead) { songsRead[key] }?.let { return it.song }
+        val read = SongRead(readSong(title, artist))
+        synchronized(songsRead) { songsRead[key] = read }
+        return read.song
+    }
+
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
     private val audio: AudioManager = context.getSystemService(AudioManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
@@ -395,11 +423,13 @@ internal class MediaSessionPlayback(
         var watched: List<MediaController> = emptyList()
         lateinit var clocks: SteadyClock
         var movesSeen = moves
+        // Each change of the session followed, counted, as an app may play what's next in a new one and say nothing else of it.
+        var session = -1
         // What it plays next only for the one followed, as reading an app's queue takes a while.
         fun steadily(controller: MediaController) = following(controller, song.lengthMs)?.let {
             // Moved by Crosstune, where the app says next is believed, even a moment back.
             if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
-            it.copy(clock = clocks.of(it.clock), upNext = upNext(controller))
+            it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = session)
         }
         val callback = object : MediaController.Callback() {
             // Gone on to another song, as TIDAL does at the end of a preview, it plays this one no longer, even before it's said its new name.
@@ -418,6 +448,7 @@ internal class MediaSessionPlayback(
                 followed?.unregisterCallback(callback)
                 modesWatched()
                 followed = playing
+                session++
                 clocks = steadyClock(playing?.packageName)
                 playing?.registerCallback(callback, handler)
                 // An app's shuffle and repeat aren't in what Android says of how it plays, so they're watched apart.
@@ -469,10 +500,10 @@ internal class MediaSessionPlayback(
      * Google is, is had by its name, as any app names it ([SongNames.names]).
      */
     private fun MediaController.has(song: MusicMetadata, app: String?): Boolean {
+        if (!song.unnamed) return plays(song)
         val (title, artist) = calls()
-        val songless = Songless.namesNoSong(metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), artist)
-        if (song.unnamed) return app != null && title == song.title && (artist == song.artist || !songless)
-        return plays(song)
+        val said = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        return app != null && title == song.title && (artist == song.artist || !Songless.namesNoSong(said, artist, songOf(said, artist)))
     }
 
     /**
@@ -835,7 +866,9 @@ internal class MediaSessionPlayback(
     /** What [controller] plays, as a song, unless it names none; [asked] is how long the song asked for is, when known. */
     private fun playing(controller: MediaController, asked: Long? = null): Heard.Song? {
         val metadata = controller.metadata ?: return null
-        if (Songless.namesNoSong(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty())) return null
+        val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        if (Songless.namesNoSong(title, artist, songOf(title, artist))) return null
         val named = said(controller, asked) ?: return null
         val artwork = coverOf(metadata)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
@@ -858,7 +891,7 @@ internal class MediaSessionPlayback(
      */
     private fun said(controller: MediaController, asked: Long? = null): MusicMetadata? {
         val metadata = controller.metadata ?: return null
-        val (title, artist) = MetadataParsers.playerSong(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
+        val (title, artist) = songOf(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
         // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
         // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
         // YouTube Music plays videos with no album too, all of them music, "Queen - Bohemian Rhapsody (Lyrics)" by "7clouds".
@@ -1019,6 +1052,12 @@ private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, Packag
 
 /** How long an app asked to play in the background has to say it does, before it's taken as not playing. */
 internal const val START_MS = 3_000L
+
+/** How many titles and artists apps said are kept as read: more than a phone has apps playing at once. */
+private const val SONGS_READ_KEPT = 32
+
+/** How full [MediaSessionPlayback]'s titles read may get before it grows, as Java's own maps have it. */
+private const val LOAD_FACTOR = 0.75f
 
 /** Whether the phone's music is muted by Crosstune, see [PlaybackSource.quiet]. */
 internal const val QUIETED_KEY = "quieted_music"

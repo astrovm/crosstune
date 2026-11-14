@@ -1794,6 +1794,54 @@ class PlaybackTest {
     }
 
     @Test
+    fun anAppGoingOnInANewSessionThatSaysWhatTheLastOneDidIsFollowedAsANewOne() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "", null))
+        val unnamed = checkNotNull(playback.playingUnnamed())
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(unnamed.played, unnamed.app).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        val first = checkNotNull(seen.last()).session
+        // It goes on to its next file in a new session, which says just what the last one did.
+        shadowOf(sessions).clearControllers()
+        val next = player("com.example.player", "Fake Player", "", null)
+        shadowOf(sessions).addController(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        val second = checkNotNull(seen.last()).session
+        assertNotEquals(first, second)
+        // Saying where it is again, it's the same session still.
+        shadowOf(next).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 43_000, 1f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(43_000L, seen.last()?.clock?.positionMs)
+        assertEquals(second, seen.last()?.session)
+    }
+
+    @Test
+    fun eachTitleAndArtistAnAppSaysIsReadOnce() {
+        allow()
+        sounding()
+        val reads = mutableListOf<Pair<String, String>>()
+        val playback = MediaSessionPlayback(app, now = { NOW }, waker = { null }, modes = modes, queueOf = { queues[it.packageName] }, readSong = { title, artist ->
+            reads += title to artist
+            MetadataParsers.playerSong(title, artist)
+        })
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Fake Song.mp3", ""))
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED))
+        // What plays first, what it's called, and following it in its app, as the bar asks for each change.
+        val unnamed = checkNotNull(playback.playingUnnamed())
+        playback.whatPlays()
+        playback.nowPlaying()
+        playback.unnamedUpdates()
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(unnamed.played, unnamed.app).collect { seen += it } }
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(2, seen.size)
+        assertEquals(reads.distinct(), reads)
+    }
+
+    @Test
     fun aFileNamedWithANumberIsNeverASongOfTheWordAfterIt() {
         allow()
         sounding()
