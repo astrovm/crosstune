@@ -97,9 +97,12 @@ class LicensesTest {
     fun tearDown() {
         LicenseSplits.split = split
         Notices.open = open
-        Notices.letGoOfWords()
-        background.shutdownNow()
         controller?.destroyAndSettle()
+        // A read a test held, then let go, may not have woken yet: it ends on its own. Interrupted, it would
+        // throw into the page's coroutine, and Compose would fail the test with it.
+        background.shutdown()
+        assertTrue("A licence read still runs after the test", background.awaitTermination(10, TimeUnit.SECONDS))
+        Notices.letGoOfWords()
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO

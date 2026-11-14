@@ -7,6 +7,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -19,11 +20,27 @@ class LicenseSplitsTest {
     private val jmdict = Notices.all.first { it.name == "JMdict" }
     private val pieces = listOf(LicenseUnit("The licence.", starts = true, ends = true))
 
+    /** Two threads to ask from, kept so a test sees when one waits for the other. */
+    private val started = Collections.synchronizedList(mutableListOf<Thread>())
+    private val threads = Executors.newFixedThreadPool(2) { Thread(it).also(started::add) }
+
+    /** Waits until [thread] waits for a lock another thread holds: then it asked while the read went on. */
+    private fun waitsForALock(thread: Thread) {
+        val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (thread.state != Thread.State.BLOCKED) {
+            check(System.nanoTime() < until) { "${thread.name} never waited for the read: ${thread.state}" }
+            Thread.yield()
+        }
+    }
+
     @Before
     fun setUp() = LicenseSplits.clear()
 
     @After
     fun tearDown() {
+        // Each read a test held is let go by then. It ends on its own: interrupted, it would end in a failure of its own.
+        threads.shutdown()
+        assertTrue("A read still runs after the test", threads.awaitTermination(10, TimeUnit.SECONDS))
         LicenseSplits.split = split
         LicenseSplits.clear()
     }
@@ -39,18 +56,17 @@ class LicenseSplitsTest {
             assertTrue(letGo.await(5, TimeUnit.SECONDS))
             pieces
         }
-        val threads = Executors.newFixedThreadPool(2)
         try {
             val first = threads.submit { LicenseSplits.make(jmdict) }
             assertTrue(reading.await(5, TimeUnit.SECONDS))
             // The second asks while the first is still reading, and waits for it rather than reading again.
             val second = threads.submit { LicenseSplits.make(jmdict) }
-            Thread.sleep(100)
+            waitsForALock(started[1])
             letGo.countDown()
             first.get(5, TimeUnit.SECONDS)
             second.get(5, TimeUnit.SECONDS)
         } finally {
-            threads.shutdownNow()
+            letGo.countDown()
         }
         assertEquals(1, reads.get())
         assertSame(pieces, LicenseSplits.of("JMdict"))
@@ -67,18 +83,17 @@ class LicenseSplitsTest {
             assertTrue(letGo.await(5, TimeUnit.SECONDS))
             pieces
         }
-        val threads = Executors.newFixedThreadPool(2)
         try {
             val first = threads.submit { LicenseSplits.make(jmdict) }
             assertTrue(reading.await(5, TimeUnit.SECONDS))
             // An equal copy, not the same object: the same work all the same.
             val second = threads.submit { LicenseSplits.make(jmdict.copy()) }
-            Thread.sleep(100)
+            waitsForALock(started[1])
             letGo.countDown()
             first.get(5, TimeUnit.SECONDS)
             second.get(5, TimeUnit.SECONDS)
         } finally {
-            threads.shutdownNow()
+            letGo.countDown()
         }
         assertEquals(1, reads.get())
     }

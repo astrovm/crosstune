@@ -229,7 +229,9 @@ class NoticeWordsTest {
             assertEquals(Notices.words("es"), Notices.wordsRead("es"))
         } finally {
             letGo.countDown()
-            threads.shutdownNow()
+            // The held read ends on its own: interrupted, it would throw instead.
+            threads.shutdown()
+            assertTrue("The words were still read after the test", threads.awaitTermination(10, TimeUnit.SECONDS))
         }
     }
 
