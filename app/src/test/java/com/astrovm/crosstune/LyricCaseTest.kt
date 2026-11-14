@@ -4,6 +4,28 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LyricCaseTest {
+    @Test fun aSongInLettersPastUFFFFIsCasedAsOneInLatin() {
+        // Deseret's letters are each two chars. Read letter by letter, its capitals are those of a song in Latin.
+        for (text in listOf("WE WALK THROUGH THE NIGHT TOGETHER\nHELLO", "we walk with MIRA ELVER through the night\nwe wait by the river", "We walk\nThrough the night")) {
+            assertEquals(text, deseret(LyricsFinder.cleaned(LyricsFinder.Lyrics.Found(text), MusicMetadata("Song", "Band")).words),
+                LyricsFinder.cleaned(LyricsFinder.Lyrics.Found(deseret(text)), MusicMetadata("Song", "Band")).words)
+        }
+    }
+
+    /** [text] in Deseret's letters: its capitals in Deseret's, and its small letters in its small ones. */
+    private fun deseret(text: String) = text.map { letter ->
+        when (letter) {
+            in 'A'..'Z' -> String(Character.toChars(DESERET + (letter - 'A')))
+            in 'a'..'z' -> String(Character.toChars(DESERET + DESERET_SMALL + (letter - 'a')))
+            else -> letter.toString()
+        }
+    }.joinToString("")
+
+    private companion object {
+        const val DESERET = 0x10400
+        const val DESERET_SMALL = 0x28
+    }
+
     @Test fun neighborsMatchAcrossDifferentLinesAndMissingWords() {
         val casing = LyricCase(listOf("We walk\nWith Mira through the night\nAnd visit Elver by the sea"))
         assertEquals("We walk with Mira through the night\nThen visit Elver by the sea", casing.apply("We walk with mira through the night\nThen visit elver by the sea"))

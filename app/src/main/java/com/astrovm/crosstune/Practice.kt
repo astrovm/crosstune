@@ -57,13 +57,13 @@ internal fun isFiller(text: String): Boolean {
     val letters = text.filter { it.isLetter() }
     if (letters.isEmpty()) return true
     if (letters.all { it in FILLER_KANA }) return true
-    val words = text.lowercase().split(Regex("[^\\p{L}]+")).filter { it.isNotEmpty() }
+    val words = text.lowercase().split(phoneRegex("[^\\p{L}]+")).filter { it.isNotEmpty() }
     return words.all { word -> FILLER_WORD.matches(word) }
 }
 
 private const val FILLER_KANA = "ラらナなアあオおウうーぁッっ"
 
-private val FILLER_WORD = Regex("(la|na|da|oh|ah|uh|eh|ooh|oo|hey|yeah|yeh|ya|woah|whoa|wo|mm+|hm+|ha|doo|ba|sha)+")
+private val FILLER_WORD = phoneRegex("(la|na|da|oh|ah|uh|eh|ooh|oo|hey|yeah|yeh|ya|woah|whoa|wo|mm+|hm+|ha|doo|ba|sha)+")
 
 /** A line of a song, as it's offered to learn: once, however many times it's sung, from where it's first sung. */
 internal data class SongLine(

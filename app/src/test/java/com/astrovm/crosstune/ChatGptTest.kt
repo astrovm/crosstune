@@ -448,7 +448,7 @@ class ChatGptTest {
     @Test
     fun everyKindOfErrorEventIsTakenForALimitOrAFailureByWhatItSays() {
         val chatGpt = signedIn()
-        val limit = """"code":"subscription_sharing_usage_limit_exceeded""""
+        val limit = """"code":"subscription_sharing_usage_limit_exceeded${'"'}"""
         listOf("response.failed", "response.incomplete", "error").forEach { type ->
             openAi.reply = { 200 to FakeOpenAi.stream("Half", end = """{"type":"$type",$limit}""") }
             assertEquals(type, ChatGptReply.LimitReached, runBlocking { chatGpt.ask("", "Hi") })

@@ -181,7 +181,7 @@ internal class MusicBrainz(
         const val ASK_GAP_MS = 1100L
 
         private const val API = "https://musicbrainz.org/ws/2"
-        private val SPOTIFY_ARTIST = Regex("""https://open\.spotify\.com/artist/([A-Za-z0-9]{22})""")
+        private val SPOTIFY_ARTIST = phoneRegex("""https://open\.spotify\.com/artist/([A-Za-z0-9]{22})""")
         private const val YEAR_DIGITS = 4
 
         /** A song's recordings from its first year whose albums are looked at, to stay inside MusicBrainz's one request a second. */

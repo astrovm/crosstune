@@ -1,0 +1,115 @@
+name: J-Total widths on Windows
+
+# Measures J-Total's page as a reader on Windows sees it: Chromium and Edge with Windows' own fonts,
+# MS Gothic among them, in Japanese. The width tables come from this run (scripts/jtotal-widths).
+# Download the artifact and run `jtotal_widths.py generate DIR` on it. To hold a branch to main, chord by chord, on
+# how the sheets are drawn: `compare_sheets.py app DIR main` from a main checkout and `app DIR pr` from the branch,
+# then `compare_sheets.py against DIR main pr --truth ARTIFACT/positions-page-1.json`. The artifact lasts a day.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The token stays out of .git/config: the job opens J-Total's pages and runs code from outside.
+          persist-credentials: false
+      - name: Japanese fonts
+        shell: pwsh
+        run: |
+          # MS Gothic and MS PGothic are both faces of msgothic.ttc, part of Windows' Japanese fonts.
+          if (-not (Test-Path C:\Windows\Fonts\msgothic.ttc)) {
+            Write-Output "msgothic.ttc is not on this runner: adding Windows' Japanese fonts"
+            Add-WindowsCapability -Online -Name "Language.Fonts.Jpan~~~und-JPAN~0.0.1.0"
+          }
+          # A Japanese PC also has Meiryo, which a Japanese browser draws sans-serif with. This server image may not.
+          if (-not (Test-Path C:\Windows\Fonts\meiryo.ttc)) {
+            Get-WindowsCapability -Online -Name "Language.Fonts.Jpan*" | Format-Table Name, State
+            try { Add-WindowsCapability -Online -Name "Language.Fonts.Jpan~~~und-JPAN~0.0.1.0" -ErrorAction Stop | Out-Null } catch { Write-Output "Windows' Japanese supplemental fonts could not be added: $_" }
+          }
+          Get-ChildItem C:\Windows\Fonts\msgothic.ttc, C:\Windows\Fonts\meiryo.ttc, C:\Windows\Fonts\YuGothR.ttc -ErrorAction SilentlyContinue | Format-Table Name, Length
+          if (-not (Test-Path C:\Windows\Fonts\msgothic.ttc)) { throw "msgothic.ttc is still missing" }
+      - name: Playwright
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.64.1 fonttools==4.68.0
+          python -m playwright install chromium
+      - name: Measure
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=windows
+          mkdir -p $out
+          w="python scripts/jtotal-widths/jtotal_widths.py"
+          edge="C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+          echo "Measured on Windows, GitHub's windows-latest runner, Chromium as Playwright ships it, browser language ja (run ${{ github.run_id }})" > $out/SOURCE.txt
+          $w measure $out/main.json --lang ja
+          $w measure $out/mono.json --mono --lang ja
+          $w trims $out/main-trims.json --lang ja
+          $w trims $out/mono-trims.json --mono --lang ja
+          # Edge and Chrome as installed, each with a Japanese profile, on what a Shift_JIS page holds.
+          chrome="C:/Program Files/Google/Chrome/Application/chrome.exe"
+          for b in edge chrome; do
+            path=$([ $b = edge ] && echo "$edge" || echo "$chrome")
+            $w measure $out/$b-main.json --lang ja --cp932 --browser "$path"
+            $w measure $out/$b-mono.json --mono --lang ja --cp932 --browser "$path"
+            $w trims $out/$b-main-trims.json --lang ja --browser "$path"
+            $w trims $out/$b-mono-trims.json --mono --lang ja --browser "$path"
+          done
+          # MS PGothic in MS Gothic's place, and an English browser, for how much those would move.
+          $w measure $out/pgothic.json --lang ja --cp932 --stack '"Inconsolata","MS PGothic","Hiragino Kaku Gothic","Monaco",sans-serif'
+          $w trims $out/pgothic-trims.json --lang ja --stack '"Inconsolata","MS PGothic","Hiragino Kaku Gothic","Monaco",sans-serif'
+          $w measure $out/en-main.json --cp932
+          $w measure $out/en-mono.json --mono --cp932
+          $w trims $out/en-main-trims.json
+          $w trims $out/en-mono-trims.json --mono
+      - name: Draw the tests' sheets
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The sheets the app's tests place chords on, drawn as a reader on Windows sees them. `invented.py show` reads each.
+          python scripts/jtotal-widths/invented.py write windows/invented
+          fonts=$(python -c "import sys; sys.path.insert(0, 'scripts/jtotal-widths'); import jtotal_widths; print(jtotal_widths.container_fonts())")
+          d="python scripts/jtotal-widths/compare_sheets.py draw windows/invented --fonts $fonts --lang ja"
+          $d --out chromium.json
+          $d --out edge.json --browser "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+          $d --out chrome.json --browser "C:/Program Files/Google/Chrome/Application/chrome.exe"
+          for b in chromium edge chrome; do echo "== $b"; python scripts/jtotal-widths/invented.py show windows/invented/$b.json; done
+          # As a reader sees them: at the page's own 15px, on a screen Windows scales by 100%, 125% or 150%.
+          for scale in 1 1.25 1.5; do
+            $d --out "page-$scale.json" --size page --scale "$scale"
+            echo "== chromium, 15px, scale $scale"; python scripts/jtotal-widths/invented.py show "windows/invented/page-$scale.json"
+          done
+      - name: Draw J-Total's sheets
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The sheets of scripts/jtotal-widths/sheets.txt, fetched one a second and drawn in Japanese. They are
+          # another person's work: they stay in the runner's temporary folder, and only where each chord is, with
+          # each line's words as a hash, goes in the artifact. `compare_sheets.py compare --truth` reads it.
+          sheets="$RUNNER_TEMP/sheets"
+          c="python scripts/jtotal-widths/compare_sheets.py"
+          fonts=$(python -c "import sys; sys.path.insert(0, 'scripts/jtotal-widths'); import jtotal_widths; print(jtotal_widths.container_fonts())")
+          $c crawl "$sheets" scripts/jtotal-widths/sheets.txt
+          $c draw "$sheets" --fonts "$fonts" --lang ja
+          $c positions "$sheets/browser.json" windows/positions.json
+          cp "$sheets/browser.environment.txt" windows/positions.environment.txt
+          # Again as a reader sees them: at the page's own 15px, on a screen scaled by 100%, 125% or 150%.
+          for scale in 1 1.25 1.5; do
+            $c draw "$sheets" --fonts "$fonts" --lang ja --size page --scale "$scale" --out "page-$scale.json"
+            $c positions "$sheets/page-$scale.json" "windows/positions-page-$scale.json"
+            cp "$sheets/page-$scale.environment.txt" "windows/positions-page-$scale.environment.txt"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jtotal-widths-windows
+          path: windows/
+          # The tables come out of it once; nothing needs it after that.
+          retention-days: 1
