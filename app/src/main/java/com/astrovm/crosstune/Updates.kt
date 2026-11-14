@@ -66,17 +66,21 @@ internal class UpdateChecker(
          * Whether [version] comes after [installed], both as X.Y.Z. One with a suffix, as a test version
          * (2.27.0-rc.1, 2.27.0.1) or a build's own "-dev", comes before X.Y.Z itself, so a tester gets 2.27.0.
          */
-        fun isNewer(version: String, installed: String): Boolean =
-            parts(version).zip(parts(installed)).firstOrNull { (a, b) -> a != b }?.let { (a, b) -> a > b } ?: false
+        fun isNewer(version: String, installed: String): Boolean {
+            val new = key(version) ?: return false
+            val old = key(installed) ?: return false
+            return new > old
+        }
 
         /**
-         * X, Y and Z, then 1 for X.Y.Z itself or 0 for one with a suffix. Nothing for what isn't a version: with
-         * nothing to compare, it's never newer, and nothing is newer than it.
+         * X, Y and Z at ten digits each, so two keys compare as text, then 1 for X.Y.Z itself or 0 for one with a
+         * suffix. Null for what isn't a version: it's never newer, and nothing is newer than it.
          */
-        private fun parts(version: String): List<Int> {
-            val match = VERSION.matchEntire(version) ?: return emptyList()
-            val numbers = match.groupValues.subList(1, 4).map { it.toIntOrNull() ?: return emptyList() }
-            return numbers + if (match.groupValues[4].isEmpty()) 1 else 0
+        private fun key(version: String): String? {
+            val match = VERSION.matchEntire(version) ?: return null
+            val numbers = match.groupValues.subList(1, 4).map { it.toIntOrNull() ?: return null }
+            return numbers.joinToString("") { it.toString().padStart(10, '0') } +
+                if (match.groupValues[4].isEmpty()) "1" else "0"
         }
 
         private val VERSION = Regex("""(\d+)\.(\d+)\.(\d+)([-.].+)?""")
