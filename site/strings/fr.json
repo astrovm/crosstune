@@ -37,7 +37,7 @@
     ],
     [
       "Quel est ce titre ?",
-      "Crosstune l'écoute, le reconnaît et l'ouvre. Celui d'une radio aussi."
+      "Crosstune l'écoute, le reconnaît et l'ouvre."
     ],
     [
       "Paroles synchronisées",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "Quand une appli joue sans dire quel titre c'est, comme une appli de radio qui n'envoie que le nom de la station, ou un fichier sans tags, Crosstune reconnaît le titre de lui-même de la même façon, mais seulement tant que Crosstune est ouvert avec la barre de cette appli en bas. Il entend le son que joue votre téléphone quand Shizuku ou root le permet. Sinon, il utilise le micro, seulement si vous l'avez déjà autorisé, et seulement tant que votre téléphone joue sur son haut-parleur, pas dans des écouteurs ; Android indique que le micro est allumé. Il écoute une fois quand l'appli commence à jouer, puis à nouveau quand le titre entendu devrait être fini, ou au bout d'un moment. Seule une empreinte part vers Shazam, jamais l'audio, et rien n'est enregistré. Il s'arrête quand vous quittez Crosstune, masquez la barre ou que l'appli arrête de jouer."
+      "Quand une appli joue sans dire quel titre c'est, comme une appli de radio qui n'envoie que le nom de la station, ou un fichier sans tags, Crosstune reconnaît le titre de lui-même de la même façon, mais seulement tant que Crosstune est ouvert avec la barre de cette appli en bas. Il le fait seulement si vous avez déjà autorisé le micro. Il entend le son que joue votre téléphone, même dans des écouteurs ; avec Shizuku ou root, grâce à la capture audio d'Android, plus nette, pendant qu'une notification l'indique. Il n'utilise le micro que si votre téléphone ne partage pas son son, et seulement tant que votre téléphone joue sur son haut-parleur, pas dans des écouteurs ; Android indique que le micro est allumé. Il écoute une fois quand l'appli commence à jouer, puis à nouveau quand le titre entendu devrait être fini, ou au bout d'un moment. Seule une empreinte part vers Shazam, jamais l'audio, et rien n'est enregistré. Il s'arrête quand vous quittez Crosstune, masquez la barre ou que l'appli arrête de jouer."
     ],
     [
       "p",

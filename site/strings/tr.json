@@ -37,7 +37,7 @@
     ],
     [
       "Bu şarkı ne?",
-      "Crosstune dinler, tanır ve açar. Bir radyo istasyonunun şarkısını da."
+      "Crosstune dinler, tanır ve açar."
     ],
     [
       "Zamanında sözler",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "Bir uygulama hangi şarkı olduğunu söylemeden çaldığında, örneğin yalnızca istasyonun adını gönderen bir radyo uygulaması ya da etiketsiz bir dosya, Crosstune şarkıyı aynı şekilde kendisi tanır, ama yalnızca Crosstune açıkken ve altta o uygulamanın çubuğu dururken. Shizuku veya root izin verdiğinde telefonunuzun çaldığı sesi duyar. Aksi halde mikrofonu, yalnızca zaten izin verdiyseniz ve yalnızca telefonunuz kulaklıktan değil, hoparlörden çalarken kullanır; Android mikrofonun açık olduğunu gösterir. Uygulama çalmaya başladığında bir kez dinler, duyduğu şarkının bitmiş olması gerektiğinde ya da bir süre sonra yeniden dinler. Shazam'a yalnızca bir parmak izi gider, ses asla gitmez ve hiçbir şey kaydedilmez. Crosstune'dan çıktığınızda, çubuğu gizlediğinizde ya da uygulama çalmayı bıraktığında durur."
+      "Bir uygulama hangi şarkı olduğunu söylemeden çaldığında, örneğin yalnızca istasyonun adını gönderen bir radyo uygulaması ya da etiketsiz bir dosya, Crosstune şarkıyı aynı şekilde kendisi tanır, ama yalnızca Crosstune açıkken ve altta o uygulamanın çubuğu dururken. Bunu yalnızca mikrofona zaten izin verdiyseniz yapar. Telefonunuzun çaldığı sesi duyar, kulaklıkla da; Shizuku veya root ile Android'in ses yakalamasını kullanır, bu daha temizdir ve bunu bir bildirim gösterir. Mikrofonu yalnızca telefonunuz bu sesi paylaşmadığında ve yalnızca telefonunuz kulaklıktan değil, hoparlörden çalarken kullanır; Android mikrofonun açık olduğunu gösterir. Uygulama çalmaya başladığında bir kez dinler, duyduğu şarkının bitmiş olması gerektiğinde ya da bir süre sonra yeniden dinler. Shazam'a yalnızca bir parmak izi gider, ses asla gitmez ve hiçbir şey kaydedilmez. Crosstune'dan çıktığınızda, çubuğu gizlediğinizde ya da uygulama çalmayı bıraktığında durur."
     ],
     [
       "p",

@@ -37,7 +37,7 @@
     ],
     [
       "Welcher Song ist das?",
-      "Crosstune hört zu, erkennt ihn und öffnet ihn. Auch den Song eines Radiosenders."
+      "Crosstune hört zu, erkennt ihn und öffnet ihn."
     ],
     [
       "Songtexte im Takt",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "Wenn eine App abspielt, ohne zu sagen, welcher Song es ist, etwa eine Radio-App, die nur den Namen des Senders schickt, oder eine Datei ohne Tags, erkennt Crosstune den Song auf dieselbe Weise selbst, aber nur, solange Crosstune geöffnet ist und unten die Leiste dieser App zeigt. Es hört den Ton, den dein Handy abspielt, wenn Shizuku oder Root das erlaubt. Sonst nutzt es das Mikrofon, nur wenn du es schon erlaubt hast, und nur, solange dein Handy über den Lautsprecher spielt, nicht über Kopfhörer; Android zeigt an, dass das Mikrofon an ist. Es hört einmal zu, wenn die App zu spielen beginnt, und wieder, wenn der gehörte Song vorbei sein sollte, oder nach einer Weile. Nur ein Fingerabdruck geht an Shazam, nie das Audio, und nichts wird gespeichert. Es hört auf, wenn du Crosstune verlässt, die Leiste ausblendest oder die App nicht mehr abspielt."
+      "Wenn eine App abspielt, ohne zu sagen, welcher Song es ist, etwa eine Radio-App, die nur den Namen des Senders schickt, oder eine Datei ohne Tags, erkennt Crosstune den Song auf dieselbe Weise selbst, aber nur, solange Crosstune geöffnet ist und unten die Leiste dieser App zeigt. Das tut es nur, wenn du das Mikrofon schon erlaubt hast. Es hört den Ton, den dein Handy abspielt, auch über Kopfhörer; mit Shizuku oder Root über Androids Wiedergabeaufnahme, die sauberer ist, während eine Benachrichtigung das anzeigt. Das Mikrofon nutzt es nur, wenn dein Handy seinen Ton nicht teilt, und nur, solange dein Handy über den Lautsprecher spielt, nicht über Kopfhörer; Android zeigt an, dass das Mikrofon an ist. Es hört einmal zu, wenn die App zu spielen beginnt, und wieder, wenn der gehörte Song vorbei sein sollte, oder nach einer Weile. Nur ein Fingerabdruck geht an Shazam, nie das Audio, und nichts wird gespeichert. Es hört auf, wenn du Crosstune verlässt, die Leiste ausblendest oder die App nicht mehr abspielt."
     ],
     [
       "p",

@@ -37,7 +37,7 @@
     ],
     [
       "¿Qué canción es?",
-      "Crosstune la escucha, la reconoce y la abre. También la de una radio."
+      "Crosstune la escucha, la reconoce y la abre."
     ],
     [
       "Letras a tiempo",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "Cuando una app reproduce sin decir qué canción es, como una app de radio que manda solo el nombre de la emisora, o un archivo sin etiquetas, Crosstune reconoce la canción por su cuenta de la misma forma, pero solo con Crosstune abierto y la barra de esa app abajo. Escucha el sonido que reproduce tu teléfono cuando Shizuku o root se lo permiten. Si no, usa el micrófono, solo si ya lo permitiste, y solo mientras tu teléfono suena por el parlante, no por auriculares; Android muestra que el micrófono está encendido. Escucha una vez cuando la app empieza a reproducir, y otra vez cuando la canción que escuchó debería haber terminado, o después de un rato. Solo una huella va a Shazam, nunca el audio, y no se guarda nada. Se detiene cuando salís de Crosstune, ocultás la barra o la app deja de reproducir."
+      "Cuando una app reproduce sin decir qué canción es, como una app de radio que manda solo el nombre de la emisora, o un archivo sin etiquetas, Crosstune reconoce la canción por su cuenta de la misma forma, pero solo con Crosstune abierto y la barra de esa app abajo. Lo hace solo si ya permitiste el micrófono. Escucha el sonido que reproduce tu teléfono, también con auriculares; con Shizuku o root, con la captura de audio de Android, más limpia, mientras una notificación lo muestra. Usa el micrófono solo si tu teléfono no comparte su sonido, y solo mientras tu teléfono suena por el parlante, no por auriculares; Android muestra que el micrófono está encendido. Escucha una vez cuando la app empieza a reproducir, y otra vez cuando la canción que escuchó debería haber terminado, o después de un rato. Solo una huella va a Shazam, nunca el audio, y no se guarda nada. Se detiene cuando salís de Crosstune, ocultás la barra o la app deja de reproducir."
     ],
     [
       "p",

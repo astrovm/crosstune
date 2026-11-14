@@ -37,7 +37,7 @@
     ],
     [
       "Lagu apa ini?",
-      "Crosstune mendengarkan, mengenali, lalu membukanya. Lagu dari stasiun radio juga."
+      "Crosstune mendengarkan, mengenali, lalu membukanya."
     ],
     [
       "Lirik sesuai lagu",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "Saat sebuah aplikasi memutar tanpa menyebut lagu apa itu, seperti aplikasi radio yang hanya mengirim nama stasiunnya, atau file tanpa tag, Crosstune mengenali lagunya sendiri dengan cara yang sama, tetapi hanya selama Crosstune terbuka dengan bilah aplikasi itu di bawah. Crosstune mendengar suara yang diputar ponselmu jika Shizuku atau root mengizinkannya. Jika tidak, Crosstune memakai mikrofon, hanya jika kamu sudah mengizinkannya, dan hanya selama ponselmu memutar lewat speaker, bukan lewat headphone; Android menunjukkan bahwa mikrofon menyala. Crosstune mendengarkan sekali saat aplikasi mulai memutar, lalu lagi saat lagu yang didengarnya seharusnya sudah selesai, atau setelah beberapa saat. Hanya sidik suara yang dikirim ke Shazam, tidak pernah audionya, dan tidak ada yang disimpan. Ini berhenti saat kamu keluar dari Crosstune, menyembunyikan bilah, atau aplikasi berhenti memutar."
+      "Saat sebuah aplikasi memutar tanpa menyebut lagu apa itu, seperti aplikasi radio yang hanya mengirim nama stasiunnya, atau file tanpa tag, Crosstune mengenali lagunya sendiri dengan cara yang sama, tetapi hanya selama Crosstune terbuka dengan bilah aplikasi itu di bawah. Crosstune melakukannya hanya jika kamu sudah mengizinkan mikrofon. Crosstune mendengar suara yang diputar ponselmu, juga lewat headphone; dengan Shizuku atau root, lewat perekaman audio Android, yang lebih bersih, sementara sebuah notifikasi menunjukkannya. Crosstune hanya memakai mikrofon jika ponselmu tidak membagikan suaranya, dan hanya selama ponselmu memutar lewat speaker, bukan lewat headphone; Android menunjukkan bahwa mikrofon menyala. Crosstune mendengarkan sekali saat aplikasi mulai memutar, lalu lagi saat lagu yang didengarnya seharusnya sudah selesai, atau setelah beberapa saat. Hanya sidik suara yang dikirim ke Shazam, tidak pernah audionya, dan tidak ada yang disimpan. Ini berhenti saat kamu keluar dari Crosstune, menyembunyikan bilah, atau aplikasi berhenti memutar."
     ],
     [
       "p",
