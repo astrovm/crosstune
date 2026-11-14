@@ -100,11 +100,11 @@ internal class FakePlayback : PlaybackSource {
     /** Whether what started isn't believed yet, as the phone's sound takes a moment to follow what an app says it plays. */
     var quietYet = false
 
-    override fun nowPlaying() = onThePhone.takeUnless { quietYet }
+    override fun nowPlaying() = (whatPlays() as? WhatPlays.Named)?.song
 
     override fun recording(song: MusicMetadata) = onThePhone?.metadata
 
-    override fun nowPlayingUpdates(): Flow<Heard.Song?> = songs
+    override fun nowPlayingUpdates(): Flow<Heard.Song?> = changes { (ranked(onThePhone) as? WhatPlays.Named)?.song }
 
     /** How many are listening for what's on the phone. */
     val nowPlayingWatchers get() = songs.subscriptionCount.value
@@ -124,17 +124,23 @@ internal class FakePlayback : PlaybackSource {
     /** Whether [onThePhone] is a song another device plays, as KDE Connect shows a computer's: last of what plays. */
     var songElsewhere = false
 
-    override fun playingUnnamed() = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value).takeUnless { unnamedCast }
+    override fun playingUnnamed() = (whatPlays() as? WhatPlays.Nameless)?.playing?.takeUnless { unnamedCast }
+
+    override fun whatPlays() = ranked(onThePhone.takeUnless { quietYet })
 
     // As Android ranks them: a song on the phone first, then what names none, on it or cast, then a song elsewhere.
-    override fun whatPlays(): WhatPlays? {
-        val song = nowPlaying()?.let(WhatPlays::Named)
+    private fun ranked(song: Heard.Song?): WhatPlays? {
+        val named = song?.let(WhatPlays::Named)
         val nameless = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value)?.let(WhatPlays::Nameless)
-        return if (songElsewhere) nameless ?: song else song ?: nameless
+        return if (songElsewhere) nameless ?: named else named ?: nameless
     }
 
-    override fun unnamedUpdates(): Flow<Unnamed?> =
-        channelFlow { unnamed.collectLatest { now -> flowOf(now?.app).collect { send(playingOnly(now, it)?.takeUnless { unnamedCast }) } } }.distinctUntilChanged()
+    override fun unnamedUpdates(): Flow<Unnamed?> = changes { (ranked(onThePhone) as? WhatPlays.Nameless)?.playing?.takeUnless { unnamedCast } }
+
+    /** [read] again each time the song, what names none, or how that app plays changes, as Android says any of them did. */
+    private fun <T> changes(read: () -> T): Flow<T> = channelFlow {
+        combine(songs, unnamed) { _, now -> now }.collectLatest { now -> if (now == null) send(read()) else flowOf(now.app).collect { send(read()) } }
+    }.distinctUntilChanged()
 
     /** Whether the phone's music plays out loud, where the microphone hears it. */
     var aloud = true

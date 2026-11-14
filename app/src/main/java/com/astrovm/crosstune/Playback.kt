@@ -299,7 +299,10 @@ internal interface PlaybackSource {
     /** Whether [app] was seen to play only in front, as YouTube Music without Premium, so [comesBack] leaves it there. */
     fun playsOnlyInFront(app: String): Boolean
 
-    /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
+    /**
+     * The song an app is playing right now, and where it is, when it's what plays first, see [whatPlays]; null when
+     * none is, none can be seen, or what plays before it names no song, e.g. a station on the phone over a computer's song.
+     */
     fun nowPlaying(): Heard.Song?
 
     /** The matching recording, including one paused in its music app. */
@@ -311,8 +314,9 @@ internal interface PlaybackSource {
 
     /**
      * What an app on the phone itself plays while it names no song, e.g. a radio station, a file with no
-     * tags or a video that doesn't say it's music, so it's named by listening; null when none plays, or
-     * an app names a song, which [nowPlaying] has.
+     * tags or a video that doesn't say it's music, so it's named by listening, when it's what plays first,
+     * see [whatPlays]; null when none plays, or a song plays first, which [nowPlaying] has. Cast to a
+     * speaker, it isn't heard on the phone, so it's null too, though the sleep timer still pauses it.
      */
     fun playingUnnamed(): Unnamed?
 
@@ -681,15 +685,11 @@ internal class MediaSessionPlayback(
         preferences.edit { putBoolean(QUIETED_KEY, on) }
     }
 
-    // Without the user's say-so Android shows none, and says so by throwing.
-    override fun nowPlaying(): Heard.Song? = playingApps().firstNotNullOfOrNull(::playing)
+    // What plays first, as [whatPlays] ranks it, so the bar, the sleep timer and practice never disagree.
+    override fun nowPlaying(): Heard.Song? = playingApps().firstOrNull()?.let(::playing)
 
-    // A song any app names comes first; only the phone's own sound can be heard, not a TV's or a computer's.
-    override fun playingUnnamed(): Unnamed? {
-        val apps = playingApps()
-        if (apps.any { playing(it) != null }) return null
-        return apps.firstOrNull { !it.remote() }?.unnamed()
-    }
+    // Only the phone's own sound can be heard, not a speaker's, a TV's or a computer's.
+    override fun playingUnnamed(): Unnamed? = playingApps().firstOrNull()?.takeIf { playing(it) == null && !it.remote() }?.unnamed()
 
     // Ranked as songs are, a station among them: one on the phone comes before a song on a computer.
     override fun whatPlays(): WhatPlays? = playingApps().firstOrNull()?.let { app -> playing(app)?.let(WhatPlays::Named) ?: WhatPlays.Nameless(app.unnamed()) }

@@ -157,7 +157,8 @@ class PracticeTriesTest {
                 Thread.sleep(10)
             }
             val steps = logged[thread]?.toString().orEmpty().lines().mapNotNull { it.substringAfter("/$CHAIN_LOG: ", "").ifEmpty { null } }
-            val played = if (player.shown.isEmpty()) playback.seekedApps.last().orEmpty() else "player"
+            // The card says it's the small player's as it says it's played, a moment before the player's shown.
+            val played = if (screen.value.practice?.video != null) "player" else playback.seekedApps.last().orEmpty()
             val askedSpotify = sites.requestedUrls.any { it.toHttpUrl().host in setOf("labs.api.listenbrainz.org", "open.spotify.com") }
             return Outcome(steps.filter { it.startsWith("trying ") }.map { it.removePrefix("trying ") }, played, screen.value.practice?.cantComeBack == true, askedSpotify)
         } finally {
