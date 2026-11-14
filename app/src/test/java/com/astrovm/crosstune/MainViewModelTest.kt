@@ -1109,6 +1109,48 @@ class MainViewModelTest {
     }
 
     @Test
+    fun practiceGoesBackToAStationCastOrOnThePhoneNotToASongOnAComputer() {
+        // Cast to a speaker, it isn't on the bar, but it's what played.
+        val cast = FakePlayback().apply { playing.value = following(app = station.app); unnamedCast = true }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), cast)
+        assertNull(model.uiState.playingUnnamed)
+        model.startPractice()
+        idle()
+        assertEquals(Before(station.played, 0, station.app, songless = true), model.uiState.practice?.before)
+        // On the phone, with a song on a computer: the station's what the phone played.
+        val both = FakePlayback().apply {
+            playing.value = following(app = station.app)
+            onThePhone = Heard.Song(MusicMetadata("Fake Song", "Fake Band"), null, app = "org.kde.kdeconnect_tp")
+            songElsewhere = true
+        }
+        val other = radioModel(EarsOnThePhone(Heard.Nothing), both)
+        other.startPractice()
+        idle()
+        assertEquals(Before(station.played, 0, station.app, songless = true), other.uiState.practice?.before)
+    }
+
+    @Test
+    fun aStationsPlayerWhoseAppWentOnToAnotherHasTheAppPlayNeverSearchesForIt() {
+        // An untitled file, whose app then stops on another, paused: nothing has the file to follow.
+        val file = Unnamed("com.example.player", "Fake Player", null, artist = "<unknown>")
+        val playback = FakePlayback().apply { playing.value = following(app = file.app) }
+        val model = model(playback = playback.apply { access = true; unnamed.value = file })
+        model.viewModelScope.launch { model.watchPlayingNow() }
+        idle()
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(true, model.uiState.player?.songless)
+        playback.playing.value = following(playing = false, app = file.app)
+        playback.unnamed.value = Unnamed(file.app, "Fake Player", "Other.mp3", artist = "<unknown>")
+        idle()
+        assertNull(model.uiState.player?.following)
+        model.playerPlayPause()
+        idle()
+        assertEquals(listOf(file.app), playback.appsPlayed.toList())
+        assertTrue(playback.songsAsked.isEmpty())
+    }
+
+    @Test
     fun aStationsSleepTimerFollowsItInItsApp() {
         val playback = FakePlayback().apply { playing.value = following(app = station.app) }
         val scope = MainScope()

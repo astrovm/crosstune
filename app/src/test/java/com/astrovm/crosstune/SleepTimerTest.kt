@@ -124,6 +124,27 @@ class SleepTimerTest {
     }
 
     @Test
+    fun aStationCastToASpeakerIsPausedThere() {
+        val station = stationPlays()
+        phone.unnamedCast = true
+        timer.after(15)
+        passes(15 * 60_000)
+        assertEquals(listOf(false), phone.plays)
+        assertEquals(listOf<String?>(station.app), phone.playedApps)
+    }
+
+    @Test
+    fun aStationOnThePhoneIsPausedNotASongOnAComputer() {
+        val station = stationPlays()
+        phone.onThePhone = Heard.Song(MusicMetadata("Fake Song", "Fake Band"), null, app = "org.kde.kdeconnect_tp")
+        phone.songElsewhere = true
+        timer.after(15)
+        passes(15 * 60_000)
+        assertEquals(listOf(false), phone.plays)
+        assertEquals(listOf<String?>(station.app), phone.playedApps)
+    }
+
+    @Test
     fun aSongLeftForAStationPausesTheStation() {
         // Set on a song, then the user puts a station on in another app: it's what's paused, as the song is gone.
         plays(10_000)

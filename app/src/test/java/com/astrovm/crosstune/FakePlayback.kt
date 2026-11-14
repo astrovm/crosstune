@@ -83,13 +83,19 @@ internal class FakePlayback : PlaybackSource {
     }
 
     /**
-     * What [app] plays, as following [song]. Asked of [app] for what names no song, e.g. a station, it's followed only
-     * while [unnamed] is still just that in [app], paused or not, as the real source matches it by what it calls it:
-     * once the app's on to the next station, or a song, it no longer has it.
+     * What [app] plays, as following [song], matched as the real source does. What names no song, e.g. a station, is
+     * followed only asked of its [app], while [unnamed] is still just that there, paused or not: once the app's on to
+     * the next station, or a song, it no longer has it. A song is never what [unnamed] is, in its app.
      */
-    private fun followedAs(song: MusicMetadata, app: String?, flow: Flow<Following?>): Flow<Following?> =
-        if (app == null || !Songless.namesNoSong(song.title, song.artist)) flow
-        else combine(flow, unnamed) { following, now -> following?.takeIf { now?.app == app && now.played.let { it.title == song.title && it.artist == song.artist } } }
+    private fun followedAs(song: MusicMetadata, app: String?, flow: Flow<Following?>): Flow<Following?> {
+        val nameless = Songless.namesNoSong(song.title, song.artist)
+        if (app == null && !nameless) return flow
+        return combine(flow, unnamed) { following, now ->
+            following?.takeIf {
+                if (nameless) app != null && now?.app == app && now.played.let { it.title == song.title && it.artist == song.artist } else now?.app != app
+            }
+        }
+    }
 
     /** Whether what started isn't believed yet, as the phone's sound takes a moment to follow what an app says it plays. */
     var quietYet = false
@@ -112,10 +118,23 @@ internal class FakePlayback : PlaybackSource {
 
     private fun playingOnly(unnamed: Unnamed?, following: Following?) = unnamed?.takeIf { following?.clock?.playing != false }
 
-    override fun playingUnnamed() = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value)
+    /** Whether [unnamed] is cast to a speaker: it plays, but not on the phone, so there's nothing to hear. */
+    var unnamedCast = false
+
+    /** Whether [onThePhone] is a song another device plays, as KDE Connect shows a computer's: last of what plays. */
+    var songElsewhere = false
+
+    override fun playingUnnamed() = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value).takeUnless { unnamedCast }
+
+    // As Android ranks them: a song on the phone first, then what names none, on it or cast, then a song elsewhere.
+    override fun whatPlays(): WhatPlays? {
+        val song = nowPlaying()?.let(WhatPlays::Named)
+        val nameless = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value)?.let(WhatPlays::Nameless)
+        return if (songElsewhere) nameless ?: song else song ?: nameless
+    }
 
     override fun unnamedUpdates(): Flow<Unnamed?> =
-        channelFlow { unnamed.collectLatest { now -> flowOf(now?.app).collect { send(playingOnly(now, it)) } } }.distinctUntilChanged()
+        channelFlow { unnamed.collectLatest { now -> flowOf(now?.app).collect { send(playingOnly(now, it)?.takeUnless { unnamedCast }) } } }.distinctUntilChanged()
 
     /** Whether the phone's music plays out loud, where the microphone hears it. */
     var aloud = true
@@ -169,6 +188,13 @@ internal class FakePlayback : PlaybackSource {
 
     /** Each app paused whatever it played, by package, once per pause: an app a card stopped is paused again while it's kept so. */
     val pausedApps: MutableList<String> = CopyOnWriteArrayList()
+
+    /** Each app asked, by package, to play whatever it has. */
+    val appsPlayed: MutableList<String> = CopyOnWriteArrayList()
+
+    override fun playApp(app: String) {
+        appsPlayed += app
+    }
 
     override fun pauseApp(app: String) {
         pausedApps += app

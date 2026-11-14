@@ -12,6 +12,16 @@ internal data class Unnamed(val app: String, val label: String?, val name: Strin
     val played: MusicMetadata get() = MusicMetadata(name.orEmpty(), artist, artworkUrl = artworkUrl)
 }
 
+/**
+ * What plays first, as Android ranks the apps that play: on the phone, then cast, then on another device.
+ * A song by its name, [Named], or what names none, [Nameless], e.g. a radio station, even one cast to a
+ * speaker, which isn't heard on the phone. What a sleep timer pauses, and practice goes back to.
+ */
+internal sealed interface WhatPlays {
+    data class Named(val song: Heard.Song) : WhatPlays
+    data class Nameless(val playing: Unnamed) : WhatPlays
+}
+
 /** Whether what a player says it plays names no song, so the song is named by listening instead. */
 internal object Songless {
     /**

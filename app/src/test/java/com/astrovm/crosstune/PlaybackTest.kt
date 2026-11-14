@@ -491,7 +491,8 @@ class PlaybackTest {
     @Test
     fun itFollowsAlongAsTheAppPausesStopsOrStarts() {
         allow()
-        val youtube = player("com.google.android.youtube", "YouTube", "Blinding Lights", null)
+        // Named by the one who put it up, as YouTube has it: with no one named, it would name no song, and never be one.
+        val youtube = player("com.google.android.youtube", "YouTube", "Blinding Lights", "The Weeknd")
         shadowOf(sessions).addController(youtube)
         val seen = followed()
         assertTrue(seen.last()!!.clock.playing)
@@ -1616,6 +1617,77 @@ class PlaybackTest {
         // The station is reached as it's called, there.
         playback.playPause(MusicMetadata("Fake FM", ""), false, "com.example.player")
         assertEquals(listOf("pause"), asked())
+    }
+
+    /** [controller] played elsewhere, on a speaker or a computer, as Android says. */
+    private fun elsewhere(controller: MediaController) = controller.also {
+        shadowOf(it).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE).build())
+    }
+
+    @Test
+    fun whatPlaysFirstIsRankedNamedOrNotOnThePhoneOrNot() {
+        allow()
+        // A station cast to a speaker: the phone hears nothing, but it plays.
+        shadowOf(sessions).addController(elsewhere(player("com.ilv.vradio", "VRadio", "Fake FM", "")))
+        assertNull(playback.playingUnnamed())
+        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM")), playback.whatPlays())
+        // A station on the phone comes before a song on a computer, though the computer's said so since.
+        ShadowMediaSessionManager.reset()
+        sounding()
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Fake FM", ""))
+        shadowOf(sessions).addController(elsewhere(player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Song", "Fake Band", album = "Fake Album", at = PLAYED_AT + 5)))
+        assertEquals(MusicMetadata("Fake Song", "Fake Band"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM")), playback.whatPlays())
+        // A song on the phone comes before a station cast.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(elsewhere(player("com.ilv.vradio", "VRadio", "Fake FM", "", at = PLAYED_AT + 5)))
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
+        assertEquals(song, (playback.whatPlays() as WhatPlays.Named).song.metadata)
+        // Nothing plays.
+        ShadowMediaSessionManager.reset()
+        assertNull(playback.whatPlays())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSongIsNeverAStationThatSharesItsWords() {
+        allow()
+        sounding()
+        val card = MusicMetadata("Hotel California", "Eagles")
+        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Hotel California Radio", ""))
+        listOf("com.ilv.vradio", null).forEach { app ->
+            val seen = mutableListOf<Following?>()
+            collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(card, app).collect { seen += it } }
+            shadowOf(Looper.getMainLooper()).idle()
+            assertNull(seen.last())
+            playback.seekTo(card, 10_000, app)
+            playback.playPause(card, false, app)
+            assertEquals(emptyList<String>(), asked())
+        }
+        // Nor a station the one before, sharing its words: "Los 40" isn't "Los 40 Classic", the next one.
+        ShadowMediaSessionManager.reset()
+        val radio = player("com.ilv.vradio", "VRadio", "Los 40", "")
+        shadowOf(sessions).addController(radio)
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(MusicMetadata("Los 40", ""), "com.ilv.vradio").collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(true, seen.last()?.clock?.playing)
+        shadowOf(radio).executeOnMetadataChanged(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Los 40 Classic").putString(MediaMetadata.METADATA_KEY_ARTIST, "").build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+        // Asked with no app, a station isn't reached by its name either.
+        playback.playPause(MusicMetadata("Los 40 Classic", ""), false)
+        assertEquals(emptyList<String>(), asked())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun anAppIsAskedToPlayWhateverItHas() {
+        allow()
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Fake Song.mp3", "<unknown>", state = PlaybackState.STATE_PAUSED))
+        playback.playApp("com.example.player")
+        playback.playApp("com.example.gone")
+        assertEquals(listOf("play"), asked())
     }
 
     @Test

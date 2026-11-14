@@ -1915,13 +1915,20 @@ internal class MainViewModel(
         uiState = uiState.copy(showDestinationPicker = true, pickerHides = null)
     }
 
-    /** Plays or pauses the player's song; asked of its app again when it isn't playing it. */
     /** The app the player's buttons ask, by package: for what names no song, its own, whatever it calls it, even nothing; else whichever plays the song. */
     private val PlayerState.askedOf: String? get() = app.takeIf { songless }
 
+    /**
+     * Plays or pauses the player's song; asked of its app again when it isn't playing it. What names no song has no
+     * name to be asked for by, so once its app is on to another, the app plays whatever it has.
+     */
     fun playerPlayPause() {
         val player = uiState.player ?: return
         val following = player.following ?: return run {
+            if (player.songless) {
+                player.app?.let { playback?.playApp(it) }
+                return
+            }
             // Still being asked for, a second ask would start it over.
             if (!uiState.playingResult) viewModelScope.launch {
                 // On a TV, YouTube lets go of a song once Crosstune is in front, so it's opened on it again, covered.
@@ -4216,8 +4223,11 @@ internal class MainViewModel(
         // The song the words follow, in its app; or else whatever plays, which the last app played has.
         val playing = uiState.following?.takeIf { it.clock.playing && it.appPackage != null }
         val before = uiState.lyricsFor?.let { shown -> playing?.let { Before(shown, inApp(it.clock.positionAt(now())), it.appPackage) } }
-            ?: playback?.nowPlaying()?.let { heard -> heard.clock?.let { Before(heard.metadata, it.positionAt(now()), app = null) } }
-            ?: playback?.playingUnnamed()?.let { Before(it.played, 0, it.app, songless = true) }
+            ?: when (val first = playback?.whatPlays()) {
+                is WhatPlays.Named -> first.song.clock?.let { Before(first.song.metadata, it.positionAt(now()), app = null) }
+                is WhatPlays.Nameless -> Before(first.playing.played, 0, first.playing.app, songless = true)
+                null -> null
+            }
         cards.start(song, before)
     }
 

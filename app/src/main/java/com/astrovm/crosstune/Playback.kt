@@ -227,6 +227,9 @@ internal interface PlaybackSource {
     /** Pauses whatever [app], by package, plays: a song asked to play there may have gone on into another, which isn't left playing. */
     fun pauseApp(app: String)
 
+    /** Has [app], by package, play whatever it has: what names no song can't be asked for by a name, once its app is on to another. */
+    fun playApp(app: String)
+
     /**
      * Has the app [song] is paused in play it on, from where it is, in the background. False when it
      * says it can't or hasn't started within a couple of seconds, as YouTube Music without Premium,
@@ -312,6 +315,9 @@ internal interface PlaybackSource {
      * an app names a song, which [nowPlaying] has.
      */
     fun playingUnnamed(): Unnamed?
+
+    /** What plays first, named or not, on the phone or not; see [WhatPlays]. Null when nothing plays, or none can be seen. */
+    fun whatPlays(): WhatPlays?
 
     /** [playingUnnamed], updated when apps start, pause, stop, or change what they play. */
     @MainThread
@@ -452,12 +458,16 @@ internal class MediaSessionPlayback(
         controllers.filter { (app == null || it.packageName == app) && it.has(song, app) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
 
     /**
-     * Whether it has [song]: by its name; or, asked of [app] by package, as what it plays with no song named,
-     * e.g. a station or a file with no title, by just what it calls that, even nothing. So a station's buttons
-     * reach it whatever it's called, and a song asked of the same app, or the station before, never does.
+     * Whether it has [song], by its name. What names no song, e.g. a station or a file with no title, had or
+     * asked for, is that only asked of [app] by package, by just what it's called, even nothing. So a station's
+     * buttons reach it whatever it's called; a song, or the station before, never does, even sharing its words,
+     * as "Hotel California" by Eagles and the station "Hotel California Radio", or "Los 40" and "Los 40 Classic".
      */
-    private fun MediaController.has(song: MusicMetadata, app: String?): Boolean =
-        plays(song) || app != null && calls().let { (title, artist) -> Songless.namesNoSong(title, artist) && title == song.title && artist == song.artist }
+    private fun MediaController.has(song: MusicMetadata, app: String?): Boolean {
+        val (title, artist) = calls()
+        if (Songless.namesNoSong(title, artist) || Songless.namesNoSong(song.title, song.artist)) return app != null && title == song.title && artist == song.artist
+        return plays(song)
+    }
 
     /** What it calls what it plays, its title, "" with none, and its artist: as what names no song is shown and asked for by. */
     private fun MediaController.calls(): Pair<String, String> =
@@ -491,6 +501,10 @@ internal class MediaSessionPlayback(
         runCatching {
             sessions.getActiveSessions(listener).filter { it.packageName == app && it.playbackState?.state == PlaybackState.STATE_PLAYING }.forEach { it.transportControls.pause() }
         }
+    }
+
+    override fun playApp(app: String) {
+        runCatching { sessions.getActiveSessions(listener).filter { it.packageName == app }.sortedWith(nearestFirst).firstOrNull()?.transportControls?.play() }
     }
 
     override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
@@ -676,6 +690,9 @@ internal class MediaSessionPlayback(
         if (apps.any { playing(it) != null }) return null
         return apps.firstOrNull { !it.remote() }?.unnamed()
     }
+
+    // Ranked as songs are, a station among them: one on the phone comes before a song on a computer.
+    override fun whatPlays(): WhatPlays? = playingApps().firstOrNull()?.let { app -> playing(app)?.let(WhatPlays::Named) ?: WhatPlays.Nameless(app.unnamed()) }
 
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
 

@@ -58,10 +58,13 @@ internal class SleepTimer(
         }
     }
 
-    /** Pauses the song that plays, or else what an app plays with no song named, e.g. a radio station, as music to sleep to. */
+    /** Pauses what plays first, a song or what names none, e.g. a radio station, even cast to a speaker: music to sleep to. */
     private fun pauseWhatPlays() {
-        playback.nowPlaying()?.let { return playback.playPause(it.metadata, false) }
-        playback.playingUnnamed()?.let { playback.playPause(it.played, false, it.app) }
+        when (val first = playback.whatPlays()) {
+            is WhatPlays.Named -> playback.playPause(first.song.metadata, false)
+            is WhatPlays.Nameless -> playback.playPause(first.playing.played, false, first.playing.app)
+            null -> Unit
+        }
     }
 
     fun off() {
