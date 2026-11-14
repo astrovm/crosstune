@@ -190,7 +190,7 @@ jobs:
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
       - name: Test
-        run: ./gradlew :app:testDebugUnitTest :pitest-changed-lines:test :app:growthTests :app:koverLogDebug :app:koverXmlReportDebug :app:koverVerifyDebug --build-cache --configuration-cache
+        run: ./gradlew :app:testDebugUnitTest :pitest-changed-lines:test :app:koverLogDebug :app:koverXmlReportDebug :app:koverVerifyDebug --build-cache --configuration-cache
 
       - name: Upload test and coverage reports
         if: always()
@@ -200,6 +200,38 @@ jobs:
           path: |
             app/build/reports/tests/
             app/build/reports/kover/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # The tests that time how reading grows. They run on a runner of their own, with no other tests beside them,
+  # and apart from the test job, which they'd otherwise add minutes to.
+  growth:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Time growth
+        run: ./gradlew :app:growthTests --build-cache --configuration-cache
+
+      - name: Upload the growths
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: growth
+          path: |
+            app/build/reports/tests/growthTests/
             app/build/growth/
           retention-days: 14
           if-no-files-found: warn
@@ -363,6 +395,7 @@ jobs:
       - site
       - extension
       - test
+      - growth
       - matcher
       - lint
       - build

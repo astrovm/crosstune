@@ -4,6 +4,8 @@ Each checkout leaves the job's token out of .git/config, so the code and pages a
 read it there. Only a job that pushes with git keeps it, and it's named below with what it pushes.
 
 Each script's tests run in a workflow, so a script that makes what the app's tests read is held to its own.
+
+CI / Required waits on every other job in ci.yml, so a job added there can't fail and still let a pull request merge.
 """
 
 import re
@@ -69,6 +71,32 @@ def unrun(tests, workflows):
     return [test for test in tests if test not in run and test.rsplit("/", 1)[0] not in folders]
 
 
+def unrequired(text, required="required-ci"):
+    """Each job in a workflow's text that the [required] job doesn't list in its `needs`."""
+    jobs, needs, job, in_jobs, in_needs = [], [], None, False, False
+    for line in text.split("\n"):
+        if line.startswith("jobs:"):
+            in_jobs = True
+            continue
+        if not line.startswith(" ") and line.strip():
+            in_jobs = False
+        name = JOB.match(line)
+        if in_jobs and name:
+            job = name.group(1)
+            jobs.append(job)
+            in_needs = False
+            continue
+        if job != required:
+            continue
+        if line.strip() == "needs:":
+            in_needs = True
+        elif in_needs and line.strip().startswith("- "):
+            needs.append(line.strip()[2:].strip())
+        elif in_needs and line.strip():
+            in_needs = False
+    return [found for found in jobs if found != required and found not in needs]
+
+
 class WorkflowsTest(unittest.TestCase):
     def test_each_scripts_tests_run_in_a_workflow(self):
         tests = sorted(str(path.relative_to(ROOT)) for path in (ROOT / "scripts").rglob("test_*.py"))
@@ -78,6 +106,28 @@ class WorkflowsTest(unittest.TestCase):
         text = 'python3 -m unittest discover -s scripts/a -p "test_*.py"\npython3 -m unittest scripts/test_b.py\n'
         tests = ["scripts/a/test_x.py", "scripts/test_b.py", "scripts/c/test_y.py", "scripts/a/d/test_z.py"]
         self.assertEqual(["scripts/c/test_y.py", "scripts/a/d/test_z.py"], unrun(tests, text))
+
+    def test_ci_required_waits_on_every_job(self):
+        self.assertEqual([], unrequired((WORKFLOWS / "ci.yml").read_text(encoding="utf-8")))
+
+    def test_a_job_the_required_job_doesnt_need_is_named(self):
+        text = "\n".join([
+            "jobs:",
+            "  a:",
+            "    steps: []",
+            "  b:",
+            "    needs: a",
+            "  c:",
+            "    needs:",
+            "      - a",
+            "  required-ci:",
+            "    needs:",
+            "      - a",
+            "      - c",
+            "    steps:",
+            "      - run: true",
+        ])
+        self.assertEqual(["b"], unrequired(text))
 
     def test_only_a_job_that_pushes_keeps_its_token(self):
         kept = [
