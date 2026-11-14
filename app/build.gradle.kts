@@ -496,9 +496,11 @@ afterEvaluate {
         dependsOn(robolectricDeps)
         // What the unit tests run with, like the app's resources, which Robolectric reads. The app's own
         // classes come from the folders PIT mutates, not the jar the tests get, or PIT finds nothing to mutate.
+        // Their classpath alone, which needs what builds it: through the task's provider it needed the task,
+        // and every unit test ran before PIT started, 12 minutes in CI.
         additionalClasspath.setFrom(
             mutableCodePaths,
-            tasks.named<Test>("testDebugUnitTest").map { test -> test.classpath.filter { "runtime_app_classes_jar" !in it.path } },
+            tasks.named<Test>("testDebugUnitTest").get().classpath.filter { "runtime_app_classes_jar" !in it.path },
         )
     }
 }
