@@ -144,7 +144,12 @@ def diff(first, second):
     return count
 
 
-def generate(table):
+def api(engine):
+    """The Android version an engine line names: "ICU 78.3, Android 17, API 37" is "37"."""
+    return engine.rsplit("API ", 1)[1]
+
+
+def generate(table, kotlin=KOTLIN, test_kotlin=TEST_KOTLIN):
     rows, engine = load(table)
     every = codes("0-10ffff")
     made = "// Made by scripts/regextable/regextable.py from app/src/test/regextable/" + Path(table).name + ": make it again, don't edit it."
@@ -176,9 +181,9 @@ def generate(table):
         f'internal const val PHONE_FULL_FOLDS = "{full}"',
         "",
     ]
-    KOTLIN.write_text("\n".join(lines), encoding="utf-8")
-    TEST_KOTLIN.write_text("\n".join(test_lines + [""]), encoding="utf-8")
-    print(f"{KOTLIN.relative_to(ROOT)} and {TEST_KOTLIN.relative_to(ROOT)}: from {engine}")
+    kotlin.write_text("\n".join(lines), encoding="utf-8")
+    test_kotlin.write_text("\n".join(test_lines + [""]), encoding="utf-8")
+    print(f"{kotlin.name} and {test_kotlin.name}: from {engine}")
 
 
 def emulator(serial):
@@ -209,7 +214,7 @@ def probe(serial):
         run("adb", "-s", serial, "pull", DEVICE_TABLE, str(work / "android.tsv"))
         run("adb", "-s", serial, "shell", f"rm -f {DEVICE_JAR} {DEVICE_TABLE}")
         engine = load(work / "android.tsv")[1]
-        table = TABLES / f"android-{engine.rsplit('API ', 1)[1]}.tsv"
+        table = TABLES / f"android-{api(engine)}.tsv"
         TABLES.mkdir(parents=True, exist_ok=True)
         shutil.copy(work / "android.tsv", table)
         print(f"{table.relative_to(ROOT)}: {engine}")
@@ -247,6 +252,23 @@ def listed(path):
     return found
 
 
+def digests(path):
+    """(engine, {key: digest}) of a table a `PatternsProbe digest` wrote."""
+    engine, *rows = Path(path).read_text(encoding="utf-8").splitlines()
+    return engine.split("\t")[1], dict(row.split("\t") for row in rows)
+
+
+def report(head, old, phone, there, base):
+    """What `patterns` says: each pattern of [head] the JVM finds otherwise than the phone, marked "touched" when
+    [old], [base]'s patterns, lacks it, then the counts."""
+    differ = sorted((where, k) for k, where in head.items() if phone[k] != there[k])
+    lines = [f"{where}: the JVM reads it otherwise{' (touched)' if k not in old else ''}" for where, k in differ]
+    touched = [k for k in head if k not in old]
+    lines.append(f"{len(head)} patterns, {len(touched)} touched since {base}; the JVM reads {len(differ)} otherwise than the phone, "
+                 f"{sum(1 for k in touched if phone[k] != there[k])} of them touched")
+    return lines
+
+
 def patterns(serial, base):
     serial = emulator(serial)
     stdlib, tools, platform = compiled()
@@ -275,20 +297,11 @@ def patterns(serial, base):
         finally:
             run("adb", "-s", serial, "shell", f"rm -f {device}probe.jar {device}list.tsv {device}out.tsv")
         run(*jvm, "digest", str(work / "head.tsv"), str(work / "jvm.tsv"))
-        engine = (work / "android.tsv").read_text(encoding="utf-8").splitlines()[0].split("\t")[1]
-        kept = TABLES / f"patterns-android-{engine.rsplit('API ', 1)[1]}.tsv"
+        engine, phone = digests(work / "android.tsv")
+        kept = TABLES / f"patterns-android-{api(engine)}.tsv"
         shutil.copy(work / "android.tsv", kept)
         print(f"{kept.relative_to(ROOT)}: {engine}")
-        head, old = listed(work / "head.tsv"), listed(work / "base.tsv")
-        phone = dict(line.split("\t") for line in (work / "android.tsv").read_text(encoding="utf-8").splitlines()[1:])
-        there = dict(line.split("\t") for line in (work / "jvm.tsv").read_text(encoding="utf-8").splitlines()[1:])
-        differ = sorted(head[k] for k in head if phone[k] != there[k])
-        for where in differ:
-            touched = next(k for k in head if head[k] == where) not in old
-            print(f"{where}: the JVM reads it otherwise{' (touched)' if touched else ''}")
-        touched = [k for k in head if k not in old]
-        print(f"{len(head)} patterns, {len(touched)} touched since {base}; the JVM reads {len(differ)} otherwise than the phone, "
-              f"{sum(1 for k in touched if phone[k] != there[k])} of them touched")
+        print("\n".join(report(listed(work / "head.tsv"), listed(work / "base.tsv"), phone, digests(work / "jvm.tsv")[1], base)))
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

@@ -103,6 +103,42 @@ def on_emulator(checkout, serial, count, long=None):
     return work / "made.tsv.gz"
 
 
+def copy_in(checkout):
+    """This checkout's fuzz titles, probes and phone pattern writer, into [checkout]: see the top."""
+    shutil.copy(ROOT / TESTS / "TitleFuzz.kt", checkout / TESTS / "TitleFuzz.kt")
+    # A commit with its own TitleProbes.kt, such as a PR's, is read through it; main's through MainTitleProbes.kt.
+    if not (checkout / TESTS / "TitleProbes.kt").exists():
+        shutil.copy(HERE / "MainTitleProbes.kt", checkout / TESTS / "TitleProbes.kt")
+    shutil.copy(HERE / "WriteTitlesBaseline.kt", checkout / TESTS / "WriteTitlesBaseline.kt")
+    shutil.copy(HERE / "LongTitlesProbe.kt", checkout / TESTS / "LongTitlesProbe.kt")
+    # TitleFuzz reads main's song as a phone does, so main's checkout gets phoneRegex too, and the tests' writer.
+    for name in ("PhoneRegex.kt", "PhoneRegexTable.kt"):
+        shutil.copy(ROOT / MAIN / name, checkout / MAIN / name)
+    for name in ("IcuPattern.kt", "PhoneRegexSets.kt"):
+        shutil.copy(ROOT / TESTS / name, checkout / TESTS / name)
+
+
+def timing(args):
+    """What LongTitlesProbe times, as its argument, or None when the readings are made."""
+    if args.long_all:
+        return "all"
+    if args.long_instrumental:
+        return "instrumental"
+    return "" if args.long else None
+
+
+def write_readings(made, out, commit):
+    """The readings in [made], as the writer left them, into [out] with [commit] and the engine first. Gives the
+    engine and how many titles."""
+    with gzip.open(made, "rt", encoding="utf-8") as read:
+        engine, _, lines = read.read().partition("\n")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    # No time in the file, so the same commit on the same engine makes the same bytes.
+    with open(out, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as written:
+        written.write(f"# {commit} {engine}\n{lines}".encode("utf-8"))
+    return engine, lines.count("\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("ref", nargs="?", default="origin/main")
@@ -119,28 +155,14 @@ def main():
     checkout = place / "checkout"
     git("worktree", "add", "--detach", str(checkout), commit)
     try:
-        shutil.copy(ROOT / TESTS / "TitleFuzz.kt", checkout / TESTS / "TitleFuzz.kt")
-        # A commit with its own TitleProbes.kt, such as a PR's, is read through it; main's through MainTitleProbes.kt.
-        if not (checkout / TESTS / "TitleProbes.kt").exists():
-            shutil.copy(HERE / "MainTitleProbes.kt", checkout / TESTS / "TitleProbes.kt")
-        shutil.copy(HERE / "WriteTitlesBaseline.kt", checkout / TESTS / "WriteTitlesBaseline.kt")
-        shutil.copy(HERE / "LongTitlesProbe.kt", checkout / TESTS / "LongTitlesProbe.kt")
-        # TitleFuzz reads main's song as a phone does, so main's checkout gets phoneRegex too, and the tests' writer.
-        for name in ("PhoneRegex.kt", "PhoneRegexTable.kt"):
-            shutil.copy(ROOT / MAIN / name, checkout / MAIN / name)
-        for name in ("IcuPattern.kt", "PhoneRegexSets.kt"):
-            shutil.copy(ROOT / TESTS / name, checkout / TESTS / name)
-        if args.long or args.long_all or args.long_instrumental:
-            on_emulator(checkout, args.serial, args.count, long="all" if args.long_all else "instrumental" if args.long_instrumental else "")
+        copy_in(checkout)
+        long = timing(args)
+        if long is not None:
+            on_emulator(checkout, args.serial, args.count, long=long)
             return
         made = on_jvm(checkout) if args.jvm else on_emulator(checkout, args.serial, args.count)
-        with gzip.open(made, "rt", encoding="utf-8") as read:
-            engine, _, lines = read.read().partition("\n")
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        # No time in the file, so the same commit on the same engine makes the same bytes.
-        with open(args.out, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as out:
-            out.write(f"# {commit} {engine}\n{lines}".encode("utf-8"))
-        print(f"{args.out}: {lines.count(chr(10))} titles read at {commit[:8]} on {engine}, {args.out.stat().st_size} bytes")
+        engine, count = write_readings(made, args.out, commit)
+        print(f"{args.out}: {count} titles read at {commit[:8]} on {engine}, {args.out.stat().st_size} bytes")
     finally:
         git("worktree", "remove", "--force", str(checkout))
         shutil.rmtree(place, ignore_errors=True)

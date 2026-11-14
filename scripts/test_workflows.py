@@ -2,13 +2,16 @@
 
 Each checkout leaves the job's token out of .git/config, so the code and pages a job runs or opens can't
 read it there. Only a job that pushes with git keeps it, and it's named below with what it pushes.
+
+Each script's tests run in a workflow, so a script that makes what the app's tests read is held to its own.
 """
 
 import re
 import unittest
 from pathlib import Path
 
-WORKFLOWS = Path(__file__).resolve().parent.parent / ".github" / "workflows"
+ROOT = Path(__file__).resolve().parent.parent
+WORKFLOWS = ROOT / ".github" / "workflows"
 
 # (file, job): what it pushes with git.
 KEEPS_TOKEN = {
@@ -58,7 +61,24 @@ def checkouts_with_token(text):
     return found
 
 
+def unrun(tests, workflows):
+    """Each of [tests], paths from the repo's root, that no `unittest` line in [workflows]' text runs, alone or by
+    `discover -s` of its folder."""
+    run = set(re.findall(r"python3 -m unittest (\S+\.py)", workflows))
+    folders = set(re.findall(r"python3 -m unittest discover -s (\S+) -p \"test_\*\.py\"", workflows))
+    return [test for test in tests if test not in run and test.rsplit("/", 1)[0] not in folders]
+
+
 class WorkflowsTest(unittest.TestCase):
+    def test_each_scripts_tests_run_in_a_workflow(self):
+        tests = sorted(str(path.relative_to(ROOT)) for path in (ROOT / "scripts").rglob("test_*.py"))
+        self.assertEqual([], unrun(tests, "\n".join(path.read_text(encoding="utf-8") for path in WORKFLOWS.glob("*.yml"))))
+
+    def test_a_test_runs_alone_or_with_its_folder(self):
+        text = 'python3 -m unittest discover -s scripts/a -p "test_*.py"\npython3 -m unittest scripts/test_b.py\n'
+        tests = ["scripts/a/test_x.py", "scripts/test_b.py", "scripts/c/test_y.py", "scripts/a/d/test_z.py"]
+        self.assertEqual(["scripts/c/test_y.py", "scripts/a/d/test_z.py"], unrun(tests, text))
+
     def test_only_a_job_that_pushes_keeps_its_token(self):
         kept = [
             f"{path.name}:{line} {job}"

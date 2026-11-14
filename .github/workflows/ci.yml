@@ -130,6 +130,8 @@ jobs:
           python3 -m unittest discover -s scripts/lyrics -p "test_*.py"
           python3 -m unittest discover -s scripts/ci-warnings -p "test_*.py"
           python3 -m unittest discover -s scripts/perf -p "test_*.py"
+          python3 -m unittest discover -s scripts/regextable -p "test_*.py"
+          python3 -m unittest discover -s scripts/titlefuzz -p "test_*.py"
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
           node --test "report/*.test.mjs"
