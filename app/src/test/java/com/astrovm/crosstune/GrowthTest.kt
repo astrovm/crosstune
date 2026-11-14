@@ -3,7 +3,11 @@ package com.astrovm.crosstune
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.lang.reflect.Method
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.util.Arrays
@@ -113,22 +117,33 @@ class GrowthTest {
                 val unsqueezed = ByteArray(bytes.size)
                 text.indices.sumOf { Inflater().run { setInput(squeezed); inflate(unsqueezed).also { end() } } }
             },
+            // An exception at each level of a recursion: the JVM walks the stack down to the first frame for each, and
+            // makes one of its own, for a division by zero, as one thrown is made.
+            "an exception at each depth" to { text -> thrown(text.length / DEEPER) { error("deep") } },
+            "a division by zero at each depth" to { text -> val none = text.count { it == '#' }; thrown(text.length / DEEPER) { text.length / none } },
         )
         assertEquals(own.keys.toList(), outOfStep(own))
     }
 
     @Test
     fun aReadingThatHandsItsWorkToAnotherThreadFails() {
-        // Work on another thread doesn't count: a reading that starts, wakes or tells another fails, by its text's name.
-        val started = runCatching { Growth.outOfStep(::abs, LENGTH, { it.take(4) }) { text -> thread { squared(text) }.join() } }
+        // Work on another thread isn't counted: a reading that has another do it fails, by its text's name, however it
+        // hands the work over. A pool's thread and each worker are started before, and wait.
         val pool = Executors.newSingleThreadExecutor()
-        // The pool's thread is started before, and waits: the reading wakes it.
         pool.submit { }.get()
-        val woken = runCatching { Growth.outOfStep(::abs, LENGTH, { it.take(4) }) { text -> pool.submit<Int> { squared(text) }.get() } }
+        val handed = mapOf<String, (String) -> Any?>(
+            "a thread it starts" to { text -> thread { squared(text) }.join() },
+            "a pool it wakes" to { text -> pool.submit<Int> { squared(text) }.get() },
+            // Its carrier thread does a virtual thread's work. Started by name, as Android has no virtual threads.
+            "a virtual thread" to { text -> (VIRTUAL.invoke(null, Runnable { squared(text) }) as Thread).join() },
+            "a coroutine elsewhere" to { text -> runBlocking { withContext(Dispatchers.Default) { squared(text) } } },
+        )
+        val failed = handed.filter { (name, read) -> failsByName(name, read) }.keys
         pool.shutdown()
-        val told = runCatching { Growth.outOfStep(::abs, LENGTH, { it.take(4) }) { text -> Told.everyone(text) } }
-        assertEquals(List(3) { IllegalStateException::class }, listOf(started, woken, told).map { it.exceptionOrNull()?.let { failed -> failed::class } })
-        assertEquals(List(3) { "abab" }, listOf(started, woken, told).map { it.exceptionOrNull()?.message?.substringBefore(':') })
+        val woken = Worker.Woken.entries.map(::named).filterIndexed { each, name ->
+            Worker(Worker.Woken.entries[each]) { squared(it) }.use { worker -> failsByName(name, worker::read) }
+        }
+        assertEquals(handed.keys + Worker.Woken.entries.map(::named), failed + woken)
     }
 
     @Test
@@ -140,6 +155,23 @@ class GrowthTest {
         assertEquals(emptyList<String>(), Growth.outOfStep(texts, LENGTH, { it.take(4) }) { text -> word.find(text) })
         val longer = texts(Growth.TIMES * LENGTH).single()
         assertTrue(Growth.stepsOf(longer) { text: String -> word.find(text) } < longer.length)
+    }
+
+    @Test
+    fun aStackTraceCountsEachFrame() {
+        // Made 100 calls deeper, a throwable takes a step for each call, and one for each frame the JVM walks. Read, the
+        // JVM makes an element for each frame, and the throwable gives a copy of them. On a thread of its own, with a
+        // few frames below: on the test runner's thread, reading one 83 frames deeper or more took 2 steps more, once.
+        val made = { levels: Int -> Growth.stepsOf(levels, ::madeAt) }
+        val read = { levels: Int -> madeAt(levels).let { made -> Growth.stepsOf(made) { it.stackTrace.size } } }
+        var more = emptyList<Long>()
+        thread {
+            // Once first, for the classes they load and set up the first time.
+            made(FRAMES)
+            read(FRAMES)
+            more = listOf(made, read).map { it(FRAMES + FRAMES / 10) - it(FRAMES / 10) }
+        }.join()
+        assertEquals(listOf(2L * FRAMES, 2L * FRAMES), more)
     }
 
     @Test
@@ -205,12 +237,27 @@ class GrowthTest {
     private fun outOfStep(readers: Map<String, (String) -> Any?>) =
         readers.filter { (name, read) -> Growth.outOfStep(::abs, LENGTH, { name }, read).isNotEmpty() }.keys.toList()
 
+    /** Whether reading [abs] with [read] fails, by its text's [name]. */
+    private fun failsByName(name: String, read: (String) -> Any?): Boolean {
+        val failed = runCatching { Growth.outOfStep(::abs, LENGTH, { name }, read) }.exceptionOrNull()
+        return failed is IllegalStateException && failed.message.orEmpty().startsWith("$name: ")
+    }
+
+    private fun named(woken: Worker.Woken) = "a worker ${woken.name.lowercase()}"
+
     /** Each letter against each letter after it: time squared. */
     private fun squared(text: String): Int {
         var same = 0
         for (i in text.indices) for (j in i until text.length) if (text[j] == text[i]) same++
         return same
     }
+
+    /** [levels] calls deep, [throwing] at each level, and what it throws caught. */
+    private fun thrown(levels: Int, throwing: () -> Any): Int =
+        if (levels == 0) 0 else runCatching(throwing).fold({ 0 }, { 1 }) + thrown(levels - 1, throwing)
+
+    /** A throwable made [levels] calls deep. */
+    private fun madeAt(levels: Int): Throwable = if (levels == 0) Throwable() else madeAt(levels - 1)
 
     /** Each letter a few times: in step. */
     private fun inStep(text: String) = (1..ROUNDS).sumOf { round -> text.count { it.code % round == 0 } }
@@ -221,6 +268,13 @@ class GrowthTest {
         const val MIXED = 3_000
         const val ROUNDS = 4
         const val BUSY = 50
+
+        /** Starts a virtual thread. */
+        val VIRTUAL: Method = Thread::class.java.getMethod("startVirtualThread", Runnable::class.java)
+
+        /** How many letters make a level of recursion deeper: deep, below the 1024 frames the JVM walks at most. */
+        const val DEEPER = 4
+        const val FRAMES = 100
 
         /** Room past the text for what zlib adds to text that doesn't squeeze. */
         const val SQUEEZE_ROOM = 64

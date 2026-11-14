@@ -17,16 +17,25 @@ import java.lang.invoke.MethodType
  * each element of an array made, cloned or copied, and each byte a checksum or zlib reads or writes, in the app, its
  * libraries and the JDK, its patterns too, but in what runs the JVM and the agent. The growthTests task runs it.
  * Work on other threads isn't counted, and isn't wanted: it's another test's. Each reader here reads on the thread that
- * asks, and one that starts, wakes or tells another thread fails.
+ * asks, and a reading that leaves work to another thread fails, however it hands it over: the agent measures the
+ * processor time the other threads take as it reads ([BESIDE_NANOS]). So no other thread may be busy then.
  *
- * Each pair's growth goes to `build/growth/TASK.tsv`, emptied when the Gradle task starts, by test and text, so how near
- * the line each one is can be seen.
+ * Each pair's growth goes to `build/growth/TASK.tsv`, emptied when the Gradle task starts, by test and text, with the
+ * processor time beside each reading in microseconds, so how near each line each one is can be seen.
  */
 internal object Growth {
-    /** How many steps a reading takes, from the work-count agent, or null where it isn't in this JVM. */
-    private val steps: MethodHandle? = runCatching { Class.forName("com.astrovm.crosstune.workcount.Work", true, null) }.getOrNull()?.let {
-        MethodHandles.publicLookup().findStatic(it, "of", MethodType.methodType(Long::class.javaPrimitiveType, Runnable::class.java))
-    }
+    /** The work-count agent's count, or null where it isn't in this JVM. */
+    private val counter: Class<*>? = runCatching { Class.forName("com.astrovm.crosstune.workcount.Work", true, null) }.getOrNull()
+
+    /** How many steps a reading takes. */
+    private val steps: MethodHandle? = counter?.let { counted(it, "of", Long::class.javaPrimitiveType, Runnable::class.java) }
+
+    /** The processor time the threads beside took as it last counted, in nanoseconds, and the name of the busiest. */
+    private val beside: MethodHandle? = counter?.let { counted(it, "beside", Long::class.javaPrimitiveType) }
+    private val busiest: MethodHandle? = counter?.let { counted(it, "busiest", String::class.java) }
+
+    private fun counted(work: Class<*>, name: String, returned: Class<*>?, vararg taken: Class<*>): MethodHandle =
+        MethodHandles.publicLookup().findStatic(work, name, MethodType.methodType(returned, taken))
 
     /**
      * Whether work is counted: in the growthTests task, where the work-count agent is in the JVM. Elsewhere each text is
@@ -57,8 +66,17 @@ internal object Growth {
         outOfStep(texts, length, name, COUNTING, read)
 
     /**
-     * As [outOfStep], counted or not, as [counting] says. Counted, a reading that starts, wakes or tells another thread
-     * fails, with its text's name: its work may be done there, where nothing counts it.
+     * The processor time the threads beside a reading may take while it's counted, all together. Work handed to another
+     * thread isn't counted, however it's handed over, so a reading that leaves them more fails. In two runs of the
+     * growth tests, 8,834 readings, the threads beside took 107 µs at most, as the JDK cleaned up after the garbage
+     * collector. A reading that hands a squared reader's work on 1,000 letters to another thread
+     * leaves it 4.3 ms, and on 4,000 letters, 67 ms.
+     */
+    const val BESIDE_NANOS = 1_000_000L
+
+    /**
+     * As [outOfStep], counted or not, as [counting] says. Counted, a reading that leaves the threads beside more than
+     * [BESIDE_NANOS] fails, with its text's name: its work may be done there, where nothing counts it.
      */
     fun <T : CharSequence> outOfStep(texts: (Int) -> List<T>, length: Int, name: (T) -> String, counting: Boolean, read: (T) -> Any?): List<String> {
         if (!counting) {
@@ -72,11 +90,9 @@ internal object Growth {
         agent("ready")
         val (short, long) = made(texts, length)
         val out = judged(short, long, name, "steps", MARGIN) { once, longer ->
-            try {
-                Work(stepsOf(once, read), stepsOf(longer, read))
-            } catch (handed: IllegalStateException) {
-                throw IllegalStateException("${name(longer)}: ${handed.message}", handed)
-            }
+            val first = reading(once, read, name(longer))
+            val second = reading(longer, read, name(longer))
+            Work(first.steps, second.steps, first.beside, second.beside)
         }
         check(uncounted().isEmpty()) { "Not counted in: ${uncounted()}" }
         return out
@@ -93,6 +109,23 @@ internal object Growth {
         val counter = checkNotNull(steps) { "The work-count agent counts steps: run the growthTests task" }
         return counter.invoke(Runnable { read(text) }) as Long
     }
+
+    /** One reading's steps, and the processor time the threads beside it took, in nanoseconds. */
+    private class Reading(val steps: Long, val beside: Long)
+
+    /** Reads [text] with [read], counted, and fails, by [name], where it leaves the threads beside more than [BESIDE_NANOS]. */
+    private fun <T> reading(text: T, read: (T) -> Any?, name: String): Reading {
+        val counted = stepsOf(text, read)
+        val took = checkNotNull(beside).invoke() as Long
+        check(took <= BESIDE_NANOS) {
+            "$name: other threads took ${"%.2f".format(took / MILLI)} ms of processor time as it read, most of it ${checkNotNull(busiest).invoke()}, " +
+                "past the ${"%.2f".format(BESIDE_NANOS / MILLI)} ms a reading may leave them: work on another thread isn't counted"
+        }
+        return Reading(counted, took)
+    }
+
+    private const val MILLI = 1e6
+    private const val MICRO = 1_000
 
     /** The classes the agent should count in and doesn't, with why. */
     private fun uncounted(): List<*> = agent("uncounted") as List<*>
@@ -112,13 +145,16 @@ internal object Growth {
         val test = askingTest()
         log.parentFile?.mkdirs()
         log.appendText(
-            grown.joinToString("") { (text, work) -> "$test\t${text.replace(spaces, " ")}\t${"%.2f".format(work.growth)}\t${work.once}\t${work.longer}\t$unit\n" }
+            grown.joinToString("") { (text, work) ->
+                val times = listOfNotNull(work.besideOnce, work.besideLonger).joinToString("") { "\t${it / MICRO}" }
+                "$test\t${text.replace(spaces, " ")}\t${"%.2f".format(work.growth)}\t${work.once}\t${work.longer}\t$unit$times\n"
+            }
         )
         return grown.filter { it.second.growth > margin }.map { (text, work) -> "$text ${"%.1f".format(work.growth)} times as much" }
     }
 
-    /** The work of a text and of it [TIMES] as long. */
-    private class Work(val once: Long, val longer: Long) {
+    /** The work of a text and of it [TIMES] as long, and where counted, the processor time beside each reading. */
+    private class Work(val once: Long, val longer: Long, val besideOnce: Long? = null, val besideLonger: Long? = null) {
         val growth get() = longer.toDouble() / once.coerceAtLeast(1)
     }
 

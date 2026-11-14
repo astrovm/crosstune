@@ -15,8 +15,9 @@ import java.util.jar.JarFile;
 
 /**
  * Puts a step of {@link Work} at the start of each method and before each jump back, and counts each element of an
- * array made, cloned or copied, in the classes {@link Counted} names: those loaded from now on, and those the JVM
- * loaded before. Run the JVM with {@code -XX:TieredStopAtLevel=1 -XX:+UnlockDiagnosticVMOptions
+ * array made, cloned or copied, and each frame of a stack trace, in the classes {@link Counted} names: those loaded from
+ * now on, and those the JVM loaded before. And has each thread that ends keep the processor time it took, which
+ * {@link Work#beside} adds up. Run the JVM with {@code -XX:TieredStopAtLevel=1 -XX:+UnlockDiagnosticVMOptions
  * -XX:-UseVectorizedMismatchIntrinsic -XX:-UseCRC32CIntrinsics}: C2 runs the JDK's text methods as code of its own,
  * with no steps in it, from whenever it gets to them, so the same reading would count differently each time. C1 swaps
  * only methods that never loop, which count no steps ({@link Steps}), and the vectorized mismatch and CRC32C, which

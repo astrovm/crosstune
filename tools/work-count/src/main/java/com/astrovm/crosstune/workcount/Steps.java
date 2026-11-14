@@ -22,6 +22,7 @@ import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.InsnList;
 import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.IntInsnNode;
@@ -126,7 +127,7 @@ public final class Steps implements ClassFileTransformer, Runnable, Supplier<Lis
     @Override
     public byte[] transform(Module module, ClassLoader loader, String name, Class<?> redefined, ProtectionDomain domain, byte[] bytes) {
         if (name == null) return null;
-        if (THREADS.contains(name)) return started(name, bytes);
+        if (name.equals(THREAD)) return ending(bytes);
         if (!Counted.in(name)) return null;
         synchronized (given) {
             given.add(key(name, loader));
@@ -141,24 +142,32 @@ public final class Steps implements ClassFileTransformer, Runnable, Supplier<Lis
         }
     }
 
-    /** The classes whose {@code start} methods start a thread: a platform thread, and a virtual one. */
-    private static final Set<String> THREADS = Set.of("java/lang/Thread", "java/lang/VirtualThread");
+    /** The class of each platform thread, whose {@code exit} method the JVM calls on each as it ends. */
+    private static final String THREAD = "java/lang/Thread";
 
-    /** A thread class, with {@link Work#handed} at the start of each {@code start} method, and no steps: it doesn't count. */
-    private byte[] started(String name, byte[] bytes) {
+    /**
+     * The thread class, with {@link Work#ended} at the start of {@code exit}, and no steps: it doesn't count. A thread
+     * that ends is gone with the processor time it took, so it keeps it there.
+     */
+    private byte[] ending(byte[] bytes) {
         try {
             ClassReader reader = new ClassReader(bytes);
             ClassNode node = new ClassNode();
             reader.accept(node, 0);
+            boolean exits = false;
             for (MethodNode method : node.methods) {
-                if (method.name.equals("start") && method.instructions.size() > 0) method.instructions.insert(handed());
+                if (method.name.equals("exit") && method.desc.equals("()V") && method.instructions.size() > 0) {
+                    method.instructions.insert(new MethodInsnNode(Opcodes.INVOKESTATIC, WORK, "ended", "()V", false));
+                    exits = true;
+                }
             }
+            if (!exits) throw new IllegalStateException("no exit(), which the JVM calls as a thread ends");
             ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS);
             node.accept(writer);
             return writer.toByteArray();
         } catch (RuntimeException | LinkageError error) {
             synchronized (failed) {
-                failed.add(name.concat(": ").concat(String.valueOf(error)));
+                failed.add(THREAD.concat(": ").concat(String.valueOf(error)));
             }
             return null;
         }
@@ -208,7 +217,7 @@ public final class Steps implements ClassFileTransformer, Runnable, Supplier<Lis
     /**
      * One method's work. Where [steps], one step at its start and one before each jump back. And everywhere, the
      * elements of each array it makes, clones or copies, which the JVM goes through in code of its own, and of each
-     * call that does the same in a class that doesn't count ({@link #GROWS}); and each other thread it wakes or tells.
+     * call that does the same in a class that doesn't count ({@link #GROWS}), and the frames of each stack trace taken.
      */
     private static void count(MethodNode method, boolean steps) {
         InsnList code = method.instructions;
@@ -229,12 +238,7 @@ public final class Steps implements ClassFileTransformer, Runnable, Supplier<Lis
                 MethodInsnNode call = (MethodInsnNode) element;
                 String called = call.owner.concat(".").concat(call.name).concat(call.desc);
                 int[] grows = GROWS.get(called);
-                if (called.equals(UNPARK)) {
-                    code.insertBefore(call, new InsnNode(Opcodes.DUP));
-                    code.insertBefore(call, new MethodInsnNode(Opcodes.INVOKESTATIC, WORK, "woke", "(Ljava/lang/Object;)V", false));
-                } else if ((call.name.equals("notify") || call.name.equals("notifyAll")) && call.desc.equals("()V")) {
-                    code.insertBefore(call, handed());
-                } else if (cloned(call.owner, call.name, call.desc)) {
+                if (cloned(call.owner, call.name, call.desc)) {
                     code.insertBefore(call, new InsnNode(Opcodes.DUP));
                     code.insertBefore(call, new MethodInsnNode(Opcodes.INVOKESTATIC, WORK, "cloned", "(Ljava/lang/Object;)V", false));
                 } else if (called.equals(INTERN)) {
@@ -246,6 +250,13 @@ public final class Steps implements ClassFileTransformer, Runnable, Supplier<Lis
                     read.add(new InsnNode(Opcodes.DUP2));
                     read.add(new MethodInsnNode(Opcodes.INVOKESTATIC, WORK, "zlib", "(J)V", false));
                     code.insert(call, read);
+                } else if (called.equals(TRACED)) {
+                    InsnList frames = new InsnList();
+                    frames.add(new InsnNode(Opcodes.DUP));
+                    frames.add(new FieldInsnNode(Opcodes.GETFIELD, "java/lang/Throwable", "depth", "I"));
+                    frames.add(new InsnNode(Opcodes.I2L));
+                    frames.add(elements("(J)V"));
+                    code.insert(call, frames);
                 }
             }
         }
@@ -279,9 +290,10 @@ public final class Steps implements ClassFileTransformer, Runnable, Supplier<Lis
     /**
      * The calls whose work grows with their arguments, which ones, and that do it where nothing counts: in the JVM's
      * own code, or in a class that doesn't count. A checksum grows with what goes in; zlib's squeeze and unsqueeze are
-     * counted by what they give back ({@link #ZLIB}). The rest of the JVM's own code that a counted class
-     * calls takes the same work each time, as a hash of an object or a look at a field, or isn't a reading's, as a
-     * file read, a process started or a stack trace.
+     * counted by what they give back ({@link #ZLIB}), and a stack trace by its frames ({@link #TRACED}), whose elements
+     * a class that doesn't count makes. The rest of the JVM's own code that a counted class calls takes the same work
+     * each time, as a hash of an object or a look at a field, or does what no reader here does, as a file read or a
+     * process started: that work isn't counted.
      */
     private static final Map<String, int[]> GROWS = Map.ofEntries(
         Map.entry("java/lang/System.arraycopy(Ljava/lang/Object;ILjava/lang/Object;II)V", at(4)),
@@ -295,6 +307,8 @@ public final class Steps implements ClassFileTransformer, Runnable, Supplier<Lis
         Map.entry("jdk/internal/misc/ScopedMemoryAccess.copyMemory(Ljdk/internal/foreign/MemorySessionImpl;Ljdk/internal/foreign/MemorySessionImpl;Ljava/lang/Object;JLjava/lang/Object;JJ)V", at(6)),
         Map.entry("jdk/internal/misc/ScopedMemoryAccess.copySwapMemory(Ljdk/internal/foreign/MemorySessionImpl;Ljdk/internal/foreign/MemorySessionImpl;Ljava/lang/Object;JLjava/lang/Object;JJJ)V", at(6)),
         Map.entry("jdk/internal/misc/ScopedMemoryAccess.setMemory(Ljdk/internal/foreign/MemorySessionImpl;Ljava/lang/Object;JJB)V", at(3)),
+        Map.entry("java/lang/StackTraceElement.of(Ljava/lang/Object;I)[Ljava/lang/StackTraceElement;", at(1)),
+        Map.entry("java/lang/StackTraceElement.of(Ljava/lang/Throwable;I)[Ljava/lang/StackTraceElement;", at(1)),
         Map.entry("java/util/zip/CRC32.updateBytes0(I[BII)I", at(3)),
         Map.entry("java/util/zip/CRC32.updateByteBuffer0(IJII)I", at(3)),
         Map.entry("java/util/zip/Adler32.updateBytes(I[BII)I", at(3)),
@@ -308,8 +322,12 @@ public final class Steps implements ClassFileTransformer, Runnable, Supplier<Lis
     /** The classes whose natives squeeze and unsqueeze, each counted after by the bytes it read and wrote. */
     private static final Set<String> ZLIB = Set.of("java/util/zip/Inflater", "java/util/zip/Deflater");
 
-    /** How a thread wakes another, under each lock, queue and pool. And notify, final in Object, tells those that wait. */
-    private static final String UNPARK = "jdk/internal/misc/Unsafe.unpark(Ljava/lang/Object;)V";
+    /**
+     * Where an exception takes the stack trace, in the JVM's own code, which walks each frame of the stack: counted
+     * after, by how many frames it holds, as the exception keeps in {@code depth}. The JVM walks at most
+     * {@code MaxJavaStackTraceDepth} frames, 1024 by default.
+     */
+    private static final String TRACED = "java/lang/Throwable.fillInStackTrace(I)Ljava/lang/Throwable;";
 
     /** A string the JVM keeps one of each of, which it hashes and compares in code of its own. */
     private static final String INTERN = "java/lang/String.intern()Ljava/lang/String;";
@@ -392,10 +410,6 @@ public final class Steps implements ClassFileTransformer, Runnable, Supplier<Lis
         counted.add(elements("([I)V"));
         for (int i = 0; i < dims; i++) counted.add(new VarInsnNode(Opcodes.ILOAD, free + i));
         return counted;
-    }
-
-    private static MethodInsnNode handed() {
-        return new MethodInsnNode(Opcodes.INVOKESTATIC, WORK, "handed", "()V", false);
     }
 
     private static MethodInsnNode step() {
