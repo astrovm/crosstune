@@ -189,7 +189,7 @@ class PlayTest < Minitest::Test
     output, status = play("release", TAG)
     refute status.success?, output
 
-    assert_includes output, "[!] Google Play already has another bundle as version code #{CODE}"
+    assert_includes output, "[!] Google Play already has another bundle as version code #{CODE}, and it takes each version code once. Release this as a new version"
     assert_empty commits
     refute(requests.any? { |r| r["method"] == "POST" && r["path"].end_with?("/bundles") })
   end
@@ -277,12 +277,22 @@ class PlayTest < Minitest::Test
     assert_empty commits
   end
 
-  def test_a_tag_with_a_suffix_keeps_its_version_code
+  def test_a_tag_with_a_suffix_isnt_sent_to_play
     FileUtils.mv(File.join(@dir, "Crosstune-#{TAG}.aab"), File.join(@dir, "Crosstune-#{TAG}-rc.1.aab"))
     output, status = play("release", "#{TAG}-rc.1")
     assert status.success?, output
 
-    assert_equal [CODE.to_s], saved["beta"].flat_map { |r| r["versionCodes"] }
+    assert_includes output, "::notice::#{TAG}-rc.1 has a suffix, so it isn't sent to Google Play"
+    assert_empty requests
+  end
+
+  def test_production_takes_a_plain_version_only
+    tracks("beta" => release(CODE))
+    output, status = play("production", "2.26.0-rc.1")
+    refute status.success?, output
+
+    assert_includes output, "::error::'2.26.0-rc.1' must look like 2.26.0 or v2.26.0"
+    assert_empty requests
   end
 
   def test_the_listing_goes_on_its_own

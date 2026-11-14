@@ -44,8 +44,9 @@ module Crosstune
         return :absent unless bundle
 
         if bundle.sha256 != Digest::SHA256.file(aab).hexdigest
-          FastlaneCore::UI.user_error!("Google Play already has another bundle as version code #{code}, from an " \
-                                       "earlier tag of the same version. Give this release a new versionCode.")
+          FastlaneCore::UI.user_error!("Google Play already has another bundle as version code #{code}, and it " \
+                                       "takes each version code once. Release this as a new version, with a " \
+                                       "new tag.")
         end
         return :on_track if on_track
 

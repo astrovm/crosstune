@@ -16,7 +16,8 @@
 # Every commit asks Play to keep a review in progress, and production never shares an edit with another track
 # (review_guard.rb). While a review is in progress, Play refuses the commit, nothing is sent, and the job fails
 # and says to re-run it when the review ends. A re-run starts over: a bundle that is already on internal testing
-# isn't sent again. Another bundle with the same version code stops the job.
+# isn't sent again. Another bundle with the same version code stops the job. A tag with a suffix (v2.27.0-rc.1)
+# isn't sent to Play.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -66,8 +67,8 @@ play() {
 }
 
 version_code() {
-  # The same as release.yml: a suffix, as in v2.27.0-rc.1, keeps the version code of 2.27.0.
-  if [[ ! "$1" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)([-.][0-9A-Za-z.-]+)?$ ]]; then
+  # The same as release.yml.
+  if [[ ! "$1" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
     echo "::error::'$1' must look like 2.26.0 or v2.26.0" >&2
     exit 1
   fi
@@ -107,6 +108,12 @@ copy_listing() {
 
 release() {
   local tag="$1" code found
+  # A tag with a suffix, as in v2.27.0-rc.1, has the version code of 2.27.0, and Play takes each version code
+  # once. Sent to Play, it would keep 2.27.0 itself out. Testers on Play get each version on the testing tracks.
+  if [[ "$tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+[-.] ]]; then
+    echo "::notice::$tag has a suffix, so it isn't sent to Google Play: Play takes each version code once, and the version without the suffix needs it"
+    exit 0
+  fi
   code="$(version_code "$tag")"
   copy_notes "$work/notes" "$code"
   copy_listing "$work/listing"
