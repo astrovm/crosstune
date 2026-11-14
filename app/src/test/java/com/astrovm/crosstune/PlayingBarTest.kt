@@ -1,12 +1,20 @@
 package com.astrovm.crosstune
 
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.view.View
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
@@ -102,5 +110,68 @@ class PlayingBarTest {
         assertTrue(shown("Fake Band · Fake Radio"))
         assertFalse(shown("Fake FM"))
         assertEquals(listOf("https://example.com/cover.jpg"), covers)
+    }
+
+    /** Shows [state] on a phone drawn edge to edge, as the app is. */
+    private fun showEdgeToEdge(state: UiState) {
+        lateinit var view: View
+        compose.setContent {
+            view = LocalView.current
+            CrosstuneTheme { CrosstuneScreen(state, ScreenActions()) }
+        }
+        compose.runOnIdle {
+            var context = view.context
+            while (context !is Activity) context = (context as ContextWrapper).baseContext
+            activity = context
+            WindowCompat.setDecorFitsSystemWindows(context.window, false)
+        }
+    }
+
+    private lateinit var activity: Activity
+
+    /** Puts a navigation bar [px] high under the app. */
+    private fun navigationBar(px: Int) {
+        compose.runOnIdle {
+            val insets = WindowInsetsCompat.Builder()
+                .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, px))
+                .build()
+            ViewCompat.dispatchApplyWindowInsets(activity.window.decorView, insets)
+        }
+        compose.waitForIdle()
+    }
+
+    private fun top(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
+
+    private fun bottom(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.bottom
+
+    /** Where what's to fix ends, over a navigation bar [px] high. */
+    private fun fixBarBottomOver(px: Int): Float {
+        navigationBar(px)
+        return bottom(FIX_BAR_TAG)
+    }
+
+    /** Something to fix that isn't asked under the field, as a song has been opened before. */
+    private val toFix = UiState(
+        reminder = Reminder(minute = 20 * 60, on = true, exact = false),
+        systemStateKnown = false,
+        history = listOf(HistoryEntry(link, MusicMetadata("Fake Song", "Fake Band")))
+    )
+
+    @Test
+    fun whatsToFixStaysOnAStationsBarAsTheBarTakesTheNavigationBarsRoom() {
+        showEdgeToEdge(toFix.copy(playingUnnamed = PlayingUnnamed(Unnamed("com.example.radio", "Fake Radio", "Fake FM"))))
+        navigationBar(0)
+        val barTop = top(NOW_PLAYING_TAG)
+        val gap = barTop - bottom(FIX_BAR_TAG)
+        navigationBar(100)
+        // The station's bar rises over the navigation bar, and what's to fix rises with it, as close as it was.
+        assertEquals(barTop - 100f, top(NOW_PLAYING_TAG))
+        assertEquals(gap, top(NOW_PLAYING_TAG) - bottom(FIX_BAR_TAG))
+    }
+
+    @Test
+    fun whatsToFixTakesTheNavigationBarsRoomWithNoBarUnderIt() {
+        showEdgeToEdge(toFix)
+        assertEquals(fixBarBottomOver(0) - 100f, fixBarBottomOver(100))
     }
 }
