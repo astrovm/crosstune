@@ -488,7 +488,7 @@ tasks.withType<Test>().configureEach {
         asked.any { pattern -> Regex("""\b$test\b""").containsMatchIn(pattern) || Regex(pattern.split("*").joinToString(".*") { Regex.escape(it) }).matches(test) }
     }
     if (name != "growthTests" && named.isNotEmpty()) {
-        val said = "${named.joinToString()}: each text is read once here, and no timing is judged. Run :app:growthTests for the timing."
+        val said = "${named.joinToString()}: each text is read once here, at the shorter length, and no timing is judged. Run :app:growthTests for the timing."
         doFirst { logger.lifecycle(said) }
     }
     // Each task's growths (Growth.kt) go to a file of its own, emptied when it starts, so one run's stand alone.
@@ -525,7 +525,7 @@ pitest {
     providers.gradleProperty("mutateTests").orNull?.let { targetTests.set(it.split(",")) }
     providers.gradleProperty("mutateLines").orNull?.let { features.set(listOf("+CHANGED(file[$it])")) }
     // The store's screenshots aren't tests of what the app does, and take long to draw; the song check asks real services;
-    // the notices check reads the build, not the app. The timed tests run as in the unit tests: each text read once,
+    // the notices check reads the build, not the app. The timed tests run as in the unit tests: each text at the shorter length read once,
     // nothing timed, as two tests side by side here would make a timing fail at random. LongTitlesTest reads thousands
     // of titles even so, and each change it covers would wait for it: the steps CutTitleTest counts catch a reading
     // that's no longer in step with a title's length.

@@ -29,7 +29,8 @@ import java.lang.management.ManagementFactory
 internal object Growth {
     /**
      * Whether timed work is timed: only in the growthTests task, which runs alone. Elsewhere, with tests beside it, a
-     * timing would fail at random, so each text is read once, for what it runs, and nothing is judged.
+     * timing would fail at random, so each text at the shorter length is read once, for what it runs, and nothing is
+     * judged. The longer ones run the same code: read under Kover's count, they took minutes of the unit tests.
      */
     val TIMING = System.getProperty("crosstune.timed") == "true"
 
@@ -78,7 +79,7 @@ internal object Growth {
     fun <T> outOfStep(texts: (Int) -> List<T>, length: Int, name: (T) -> String, timing: Boolean, read: (T) -> Any?): List<String> {
         val (short, long) = made(texts, length)
         if (!timing) {
-            (short + long).forEach { read(it) }
+            short.forEach { read(it) }
             return emptyList()
         }
         // Each once first, so that what's timed is the reading and not the start-up and compiling of the code that reads it.
