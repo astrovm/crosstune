@@ -12,7 +12,8 @@ import java.lang.management.ManagementFactory
  * The work is counted where it can be, as the letters a pattern looks at, which no machine changes. Where it can't,
  * it's the thread's own time on the processor, which work beside it on the machine doesn't add to. Each text is
  * read once first, so that the code is compiled before a reading counts, and then in turn with its longer one, the
- * best of each kept, until the code is done being compiled.
+ * best of each kept, until the code is done being compiled. A quick reading is timed over many rounds of it, as a
+ * hiccup of the machine's, a few microseconds, would otherwise count for more than the reading.
  *
  * Each pair's growth goes to `build/growth.tsv`, by test and text, so how near the line each one is can be seen.
  */
@@ -28,6 +29,12 @@ internal object Growth {
 
     /** How many times each text is read in turn at most, while the code is still being compiled. */
     private const val MOST_READINGS = 9
+
+    /** How long, at least, a reading of the shorter text takes, read over as many rounds as that needs. */
+    private const val LEAST_NANOS = 1_000_000L
+
+    /** How many rounds a reading takes at most, for one too quick for the clock to see. */
+    private const val MOST_ROUNDS = 10_000L
 
     /** How much quicker a reading is than the best before it when the code that reads it was compiled in between. */
     private const val QUICKER = 1.1
@@ -80,19 +87,22 @@ internal object Growth {
         var readings = 0
         do {
             val before = best
+            // Rounds enough for the shorter text, at its best so far, to take [LEAST_NANOS]: one, at first.
+            val rounds = (LEAST_NANOS / best.once.coerceAtLeast(1) + 1).coerceAtMost(MOST_ROUNDS)
             // The longer one first: a first reading slower than the rest then only makes the pair read again.
-            val longerNow = nanos(longer, read)
-            val onceNow = nanos(once, read)
+            val longerNow = nanos(longer, read, rounds)
+            val onceNow = nanos(once, read, rounds)
             best = Work(minOf(best.once, onceNow), minOf(best.longer, longerNow))
             readings++
         } while (readings < MOST_READINGS && (readings < READINGS || before.quickerIn(best)))
         return best
     }
 
-    private fun <T> nanos(text: T, read: (T) -> Any?): Long {
+    /** The time of a reading of [text], each of [rounds] of it. */
+    private fun <T> nanos(text: T, read: (T) -> Any?, rounds: Long): Long {
         val began = threads.currentThreadCpuTime
-        read(text)
-        return threads.currentThreadCpuTime - began
+        for (round in 1..rounds) read(text)
+        return (threads.currentThreadCpuTime - began) / rounds
     }
 
     /** The work, at its best, of a text and of it [TIMES] as long. */

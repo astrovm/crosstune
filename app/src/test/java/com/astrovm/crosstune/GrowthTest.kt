@@ -39,6 +39,21 @@ class GrowthTest {
     }
 
     @Test
+    fun aHiccupInEachReadingIsSpreadOverManyRoundsOfAQuickOne() {
+        // A runner's hiccup when it turns to the longer text, as a cold cache, costs more than a quick reading itself.
+        val once = "ab".repeat(SHORT / 2)
+        val longer = once.repeat(Growth.TIMES)
+        var last: String? = null
+        val hiccupping = { text: String ->
+            if (text == longer && last != longer) inStep(longer.repeat(HICCUP))
+            last = text
+            inStep(text)
+        }
+        val growth = Growth.growth(once, longer, hiccupping)
+        assertTrue("$growth", growth <= Growth.MARGIN)
+    }
+
+    @Test
     fun workThatIsCountedIsHeldToTheSameLine() {
         val texts = { length: Int -> listOf("a".repeat(length)) }
         val squared = Growth.outOfStepCounting(texts, LENGTH, { it.take(2) }) { it.length.toLong() * it.length }
@@ -67,5 +82,7 @@ class GrowthTest {
         const val LENGTH = 3_000
         const val ROUNDS = 400
         const val SLOWER = 8
+        const val SHORT = 20
+        const val HICCUP = 3
     }
 }
