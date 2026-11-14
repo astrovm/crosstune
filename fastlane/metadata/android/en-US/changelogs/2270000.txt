@@ -1,0 +1,4 @@
+A radio station's name no longer shows as the song: Crosstune names the song by ear.
+The sleep timer pauses radio apps too.
+J-Total chords sit over the right letter, and long pages open fast.
+Reports wait on the phone until they're sent, and go once.
