@@ -51,7 +51,10 @@ class PlayTest < Minitest::Test
     @origin = Dir.mktmpdir("play-origin")
     git(@origin, "init", "-q")
     git(@origin, "commit", "-q", "--allow-empty", "-m", "Fake")
-    tags(TAG)
+    # 2.25.0 is on some tracks in the tests below.
+    tags("v2.25.0", TAG)
+    # The GitHub releases, with their assets, where promote.yml downloads a release's App Bundle.
+    @releases = File.join(@dir, "releases")
     git(@dir, "init", "-q")
     git(@dir, "remote", "add", "origin", @origin)
     @log = File.join(@dir, "requests.jsonl")
@@ -73,6 +76,12 @@ class PlayTest < Minitest::Test
 
   def tags(*names)
     names.each { |name| git(@origin, "tag", name) }
+  end
+
+  # The App Bundle a GitHub release keeps as an asset.
+  def asset(tag = TAG, content = "fake bundle")
+    FileUtils.mkdir_p(File.join(@releases, tag))
+    File.binwrite(File.join(@releases, tag, "Crosstune-#{tag}.aab"), content)
   end
 
   def tracks(tracks, bundles = [])
@@ -105,7 +114,8 @@ class PlayTest < Minitest::Test
       "RUBYOPT" => "-r#{FAKE_PLAY}",
       "FAKE_PLAY_LOG" => @log,
       "FAKE_PLAY_STATE" => @state,
-      "FAKE_PLAY_VERSION_CODE" => CODE.to_s
+      "FAKE_PLAY_VERSION_CODE" => CODE.to_s,
+      "RELEASES_URL" => "file://#{@releases}"
     }.merge(extra)
   end
 
@@ -207,7 +217,8 @@ class PlayTest < Minitest::Test
     output, status = play("release", TAG)
     refute status.success?, output
 
-    assert_includes output, "[!] Google Play already has another bundle as version code #{CODE}, and it takes each version code once. Release this as a new version"
+    assert_includes output, "[!] Google Play already has another bundle as version code #{CODE}, and it takes each " \
+                            "version code once. Release this as a new version"
     assert_empty commits
     refute(requests.any? { |r| r["method"] == "POST" && r["path"].end_with?("/bundles") })
   end
@@ -265,7 +276,7 @@ class PlayTest < Minitest::Test
     assert_equal play_had, saved
   end
 
-  def test_a_backport_goes_to_play_as_a_bundle_on_no_track
+  def test_a_backport_sends_nothing_to_play_and_says_how_to_reach_production
     # v2.26.0 for the first time after v2.27.0, which only one of the testing tracks has. Production has 2.25.0.
     tags("v2.27.0")
     older = CODE - 10_000
@@ -276,21 +287,10 @@ class PlayTest < Minitest::Test
     assert status.success?, output
 
     assert_includes output, "Google Play has a version newer than #{CODE} on alpha (#{NEWER})"
-    assert_includes output, "::notice::#{TAG} is on Google Play as a bundle, on no track. To send it to production, " \
-                            "run promote.yml with 2.26.0"
-    refute_empty uploads
-    assert_every_commit_keeps_the_review
-    assert_equal [[]], committed_tracks
-    assert_equal play_had, saved
-    assert_equal [newer_bundle, bundle], JSON.parse(File.read(@state))["bundles"]
-
-    # Run again, it finds the bundle there.
-    File.write(@log, "")
-    output, status = play("release", TAG, env: { "PLAY_TRACKS" => "beta,alpha" })
-    assert status.success?, output
-    assert_includes output, "::notice::Google Play has #{TAG} already. To send it to production, run promote.yml " \
-                            "with 2.26.0"
+    assert_includes output, "::notice::#{TAG} isn't sent to Google Play, whose testing tracks have a newer version. " \
+                            "To send it to production, run promote.yml with 2.26.0"
     assert_empty writes
+    assert_equal play_had, saved
   end
 
   def test_a_backport_stays_on_github_only_when_production_has_a_newer_version
@@ -329,6 +329,24 @@ class PlayTest < Minitest::Test
     end
   end
 
+  def test_a_version_code_no_tag_has_stops_the_release_below_the_highest_tag_too
+    # A bundle sent by hand between two versions, and a tag that never reached Play, such as one whose build failed.
+    older = CODE - 10_000
+    [[["v2.27.0"], CODE + 500], [["v3.0.0"], 2_990_000], [[], CODE - 500]].each do |more, stray|
+      File.write(@log, "")
+      tags(*more)
+      play_had = { "internal" => release(stray), "beta" => release(older), "production" => release(older) }
+      tracks(play_had)
+      output, status = play("release", TAG)
+      refute status.success?, output
+
+      assert_includes output, "::error::Google Play has version code #{stray} on internal, and no tag has it"
+      assert_empty writes
+      assert_equal play_had, saved
+      more.each { |tag| git(@origin, "tag", "-d", tag) }
+    end
+  end
+
   def test_a_rerun_after_a_refused_commit_goes_on_when_nothing_newer_is_on_play
     # The commit was refused, Play kept the bundle, and the tracks still have the version before.
     older = CODE - 10_000
@@ -356,27 +374,56 @@ class PlayTest < Minitest::Test
     assert_equal play_had, saved
   end
 
-  def test_a_backport_goes_to_production_from_the_bundle_play_has
+  def test_a_backport_goes_to_production_from_its_github_release
+    # Testing has 2.27.0, production 2.25.0, and Play has no 2.26.0: its release sent nothing.
     play_had = { "beta" => release(NEWER), "production" => release(CODE - 10_000) }
-    tracks(play_had, [newer_bundle, bundle])
+    tracks(play_had, [newer_bundle])
+    asset
     output, status = play("production", "2.26.0")
     assert status.success?, output
 
-    assert_includes output, "Track 'beta' doesn't have #{CODE}, so production gets the bundle Google Play has"
+    assert_includes output, "Track 'beta' has a newer version than #{CODE}"
+    assert_includes output, "So production gets #{TAG}'s App Bundle from its GitHub release"
+    refute_empty uploads
     assert_every_commit_keeps_the_review
     assert_equal [["production"]], committed_tracks
-    assert_empty uploads
     assert_equal release(CODE, [{ "language" => "en-US", "text" => "Fake notes" }]), saved["production"]
     assert_equal release(NEWER), saved["beta"]
+    assert_equal [newer_bundle, bundle], JSON.parse(File.read(@state))["bundles"]
+
+    # Play has it already, from an earlier run whose commit it refused: it isn't sent again.
+    File.write(@log, "")
+    tracks(play_had, [newer_bundle, bundle])
+    output, status = play("production", "2.26.0")
+    assert status.success?, output
+    assert_empty uploads
+    assert_equal [["production"]], committed_tracks
   end
 
-  def test_production_takes_a_bundle_on_no_track_only_over_an_older_version
-    [[{ "beta" => release(NEWER), "production" => release(CODE) }, [bundle],
+  def test_promote_refuses_a_version_beta_never_had
+    # v2.26.0 reached internal testing, and the edit that sends it on to beta failed.
+    play_had = { "internal" => release(CODE), "beta" => release(CODE - 10_000), "production" => release(CODE - 10_000) }
+    tracks(play_had, [bundle])
+    asset
+    output, status = play("production", "2.26.0")
+    refute status.success?, output
+
+    assert_includes output, "Track 'beta' has no release with version code #{CODE}"
+    assert_empty writes
+    assert_equal play_had, saved
+  end
+
+  def test_production_takes_a_github_release_only_over_an_older_version
+    [[{ "beta" => release(NEWER), "production" => release(CODE) }, [bundle], true,
       "[!] production has #{CODE} already, so nothing was sent"],
-     [{ "beta" => release(NEWER), "production" => release(CODE - 10_000) }, [],
-      "[!] Google Play has no bundle as #{CODE}, so nothing was sent. Its tag's release sends it"]]
-      .each do |play_had, bundles, message|
+     [{ "beta" => release(NEWER), "production" => release(CODE - 10_000) }, [bundle("another bundle")], true,
+      "[!] Google Play already has another bundle as version code #{CODE}"],
+     [{ "beta" => release(NEWER), "production" => release(CODE - 10_000) }, [], false,
+      "::error::#{TAG}'s GitHub release has no Crosstune-#{TAG}.aab, so nothing was sent"]]
+      .each do |play_had, bundles, with_asset, message|
         File.write(@log, "")
+        FileUtils.rm_rf(@releases)
+        asset if with_asset
         tracks(play_had, bundles)
         output, status = play("production", "2.26.0")
         refute status.success?, output
@@ -385,6 +432,16 @@ class PlayTest < Minitest::Test
         assert_empty writes
         assert_equal play_had, saved
       end
+  end
+
+  def test_promote_names_the_release_notes_it_misses
+    File.delete(File.join(@dir, "fastlane/metadata/android/en-US/changelogs/#{CODE}.txt"))
+    tracks("beta" => release(CODE))
+    output, status = play("production", "2.26.0")
+    refute status.success?, output
+
+    assert_includes output, "::error::fastlane/metadata/android/en-US/changelogs/#{CODE}.txt isn't here"
+    assert_empty requests
   end
 
   def test_an_edit_is_deleted_whatever_stops_it
@@ -416,7 +473,7 @@ class PlayTest < Minitest::Test
   end
 
   def test_the_play_tools_keep_to_120_columns
-    Dir[File.expand_path("../*.{rb,sh}", __dir__)].each do |file|
+    Dir[File.expand_path("../{,test/}*.{rb,sh}", __dir__)].each do |file|
       File.readlines(file).each_with_index do |line, number|
         assert_operator line.chomp.length, :<=, 120, "#{File.basename(file)}:#{number + 1}"
       end
@@ -459,7 +516,8 @@ class PlayTest < Minitest::Test
     assert status.success?, output
     output, status = play("setup")
     refute status.success?, output
-    assert_includes output, "::error::play.sh setup installs gems, which run their own code, so it never runs with the Play key"
+    assert_includes output, "::error::play.sh setup installs gems, which run their own code, so it never runs " \
+                            "with the Play key"
 
     empty = File.join(@dir, "no-gems")
     FileUtils.mkdir_p(empty)
@@ -540,7 +598,7 @@ class PlayTest < Minitest::Test
     output, status = play("production", "2.26.0")
     refute status.success?, output
 
-    assert_includes output, "[!] Google Play has no bundle as #{CODE}, so nothing was sent. Its tag's release sends it"
+    assert_includes output, "Track 'beta' has no release with version code #{CODE}"
     assert_empty commits
   end
 

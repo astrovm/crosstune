@@ -223,6 +223,16 @@ class PublishTest(unittest.TestCase):
     def test_a_draft_counts_for_nothing(self):
         self.assert_flags("v2.28.0", releases("v2.30.0", "v2.27.0", draft=("v2.30.0",)), ["--notes-start-tag", "v2.27.0"])
 
+    def test_the_release_keeps_the_signed_app_bundle_that_promote_sends_to_production(self):
+        run, sent = self.publish("v2.26.1", releases("v2.27.0"))
+        self.assertEqual(0, run.returncode, run.stderr)
+        self.assertEqual(["release", "create", "v2.26.1", "Crosstune-v2.26.1.apk", "Crosstune-v2.26.1.aab"], sent[:5])
+        publish = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))["publish"]
+        self.assertIn("name: Crosstune-${{ env.TAG }}-play", publish)
+        # promote.yml downloads it from the release under that name.
+        play_sh = (ROOT / ".github/play/play.sh").read_text(encoding="utf-8")
+        self.assertIn('releases/download}/$tag/Crosstune-$tag.aab"', play_sh)
+
     def test_no_release_is_made_when_github_cant_list_the_releases(self):
         run, sent = self.publish("v2.26.1", fails=True)
         self.assertNotEqual(0, run.returncode)

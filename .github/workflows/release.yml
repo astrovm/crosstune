@@ -199,7 +199,8 @@ jobs:
           path: Crosstune-${{ env.TAG }}.apk
           if-no-files-found: error
 
-      # Kept as a workflow artifact for uploading to Google Play, not attached to the release.
+      # For Google Play. The release keeps it too, so promote.yml can send a fix to an older version to
+      # production, signed once, here, with no keystore where the Play key is.
       - name: Upload signed App Bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -269,6 +270,12 @@ jobs:
         with:
           name: Crosstune-${{ env.TAG }}
 
+      # The app's update check and the site take the .apk only.
+      - name: Download signed App Bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Crosstune-${{ env.TAG }}-play
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -317,15 +324,15 @@ jobs:
           elif [[ -n "$newer" ]]; then
             args+=(--latest=false)
           fi
-          gh release create "$TAG" "Crosstune-$TAG.apk" "${args[@]}"
+          gh release create "$TAG" "Crosstune-$TAG.apk" "Crosstune-$TAG.aab" "${args[@]}"
 
   # Sends the signed App Bundle and its release notes to Google Play's internal testing, then the same release
   # on to each testing track in the PLAY_TRACKS repository variable (beta when it isn't set), with the store
   # listing, in one edit: one review a release. Production is a step of its own, promote.yml. Skipped until the
   # PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing" in CONTRIBUTING.md. Skipped for a pre-release too:
   # Play takes each version code once, and v2.27.0-rc.1 has the one of 2.27.0, which 2.27.0 itself needs.
-  # A test version never goes to Play. A fix to an older version never changes a track: play.sh finds the newer
-  # version on Play first, and sends the bundle only, for promote.yml to put on production.
+  # A test version never goes to Play. A fix to an older version sends Play nothing: play.sh finds the newer
+  # version on Play first. promote.yml sends it to production from the release's App Bundle.
   play:
     needs: [build, sign, publish]
     if: needs.build.outputs.prerelease == 'false'

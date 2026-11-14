@@ -34,7 +34,8 @@ module FakePlay
     error: {
       code: 400,
       message: "You already have changes in review. Cancel this review or wait for it to complete before you " \
-               "try again. See https://developers.google.com/android-publisher/api-ref/rest/v3/applications.tracks.releases",
+               "try again. See " \
+               "https://developers.google.com/android-publisher/api-ref/rest/v3/applications.tracks.releases",
       status: "FAILED_PRECONDITION",
       details: [{
         "@type": "type.googleapis.com/google.rpc.ErrorInfo",
@@ -103,7 +104,9 @@ module FakePlay
       in [:get, %r{\A/([^/]+)/tracks/([^/]+)\z}]
         releases = @edits.fetch(Regexp.last_match(1))["tracks"][Regexp.last_match(2)]
         # What Play answers for a track with no release yet.
-        releases ? json(track_json(Regexp.last_match(2), releases)) : json({ error: { code: 404, message: "Track not found." } }, 404)
+        return json(track_json(Regexp.last_match(2), releases)) if releases
+
+        json({ error: { code: 404, message: "Track not found." } }, 404)
       in [:put, %r{\A/([^/]+)/tracks/([^/]+)\z}]
         edit = @edits.fetch(Regexp.last_match(1))["tracks"]
         name = Regexp.last_match(2)
@@ -117,12 +120,17 @@ module FakePlay
         json({ bundles: @edits.fetch(Regexp.last_match(1))["bundles"] })
       in [:post, %r{\A/([^/]+)/bundles\z}]
         # Google's client starts the upload, then sends the bundle.
-        return { status: 200, body: "", headers: { "X-Goog-Upload-Status" => "active", "X-Goog-Upload-URL" => request.uri.to_s } } \
-          if request.headers["X-Goog-Upload-Command"] == "start"
+        if request.headers["X-Goog-Upload-Command"] == "start"
+          headers = { "X-Goog-Upload-Status" => "active", "X-Goog-Upload-URL" => request.uri.to_s }
+          return { status: 200, body: "", headers: headers }
+        end
 
-        bundle = { "versionCode" => Integer(ENV.fetch("FAKE_PLAY_VERSION_CODE")), "sha256" => Digest::SHA256.hexdigest(request.body) }
+        bundle = { "versionCode" => Integer(ENV.fetch("FAKE_PLAY_VERSION_CODE")),
+                   "sha256" => Digest::SHA256.hexdigest(request.body) }
         @edits.fetch(Regexp.last_match(1))["bundles"] << bundle
-        File.write(STATE, JSON.generate(saved.merge("bundles" => saved["bundles"] + [bundle]))) if ENV["FAKE_PLAY_KEEPS_UPLOADS"] == "1"
+        if ENV["FAKE_PLAY_KEEPS_UPLOADS"] == "1"
+          File.write(STATE, JSON.generate(saved.merge("bundles" => saved["bundles"] + [bundle])))
+        end
         json(bundle, 200, upload)
       in [:get, %r{\A/[^/]+/listings/[^/]+\z}]
         json({ error: { code: 404, message: "No listing" } }, 404)
