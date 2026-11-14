@@ -2,7 +2,8 @@ name: Promote to production
 
 # Sends a release from open testing on to Google Play's production, with its English release notes, in an edit
 # of its own: production never goes to Google's review with a testing track. The release has to be on the
-# first track of the PLAY_TRACKS repository variable (beta when it isn't set). See "Releasing" in CONTRIBUTING.md.
+# first track of the PLAY_TRACKS repository variable (beta when it isn't set). A version older than the one in
+# production is refused. See "Releasing" in CONTRIBUTING.md.
 on:
   workflow_dispatch:
     inputs:

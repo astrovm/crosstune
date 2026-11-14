@@ -207,13 +207,73 @@ class PlayTest < Minitest::Test
     output, status = play("release", TAG, env: kept)
     assert status.success?, output
 
-    assert_includes output, "Google Play has this bundle as #{CODE} from an earlier run, so it isn't sent again"
+    assert_includes output, "Google Play has this bundle as #{CODE} from an earlier run, and no testing track has a " \
+                            "newer version, so it isn't sent again"
     refute(requests.any? { |r| r["method"] == "POST" && r["path"].end_with?("/bundles") })
     assert_every_commit_keeps_the_review
     assert_equal [["internal"], ["beta"]], committed_tracks
     notes = [{ "language" => "en-US", "text" => "Fake notes" }]
     assert_equal release(CODE, notes), saved["internal"]
     assert_equal release(CODE, notes), saved["beta"]
+  end
+
+  NEWER = 2_270_000
+
+  # What changes Play: anything but reading, and opening or deleting an edit.
+  def writes
+    requests.reject { |r| r["method"] == "GET" || r["path"].end_with?("/edits") || r["method"] == "DELETE" }
+  end
+
+  def test_a_rerun_of_an_older_tag_leaves_the_newer_version_on_play
+    # v2.26.0 again, after v2.27.0 went out: Play has both bundles, and 2.27.0 on the testing tracks.
+    play_had = { "internal" => release(NEWER), "beta" => release(NEWER) }
+    tracks(play_had, [bundle, { "versionCode" => NEWER, "sha256" => Digest::SHA256.hexdigest("newer") }])
+    output, status = play("release", TAG)
+    assert status.success?, output
+
+    assert_includes output, "Google Play has a version newer than #{CODE} on internal (#{NEWER}), beta (#{NEWER})"
+    assert_includes output, "::notice::#{TAG} stays on GitHub only: Google Play already has a newer version on a testing track"
+    assert_empty writes
+    assert_equal play_had, saved
+  end
+
+  def test_a_backport_stays_on_github_only
+    # v2.26.0 sent for the first time after v2.27.0, which only one of the tracks named has.
+    play_had = { "internal" => release(CODE - 10_000), "beta" => release(CODE - 10_000), "alpha" => release(NEWER) }
+    tracks(play_had, [{ "versionCode" => NEWER, "sha256" => Digest::SHA256.hexdigest("newer") }])
+    output, status = play("release", TAG, env: { "PLAY_TRACKS" => "beta,alpha" })
+    assert status.success?, output
+
+    assert_includes output, "Google Play has a version newer than #{CODE} on alpha (#{NEWER})"
+    assert_includes output, "::notice::#{TAG} stays on GitHub only"
+    assert_empty writes
+    assert_equal play_had, saved
+  end
+
+  def test_a_rerun_after_a_refused_commit_goes_on_when_nothing_newer_is_on_play
+    # The commit was refused, Play kept the bundle, and the tracks still have the version before.
+    older = CODE - 10_000
+    tracks({ "internal" => release(older), "beta" => release(older), "alpha" => release(older) }, [bundle])
+    output, status = play("release", TAG, env: { "PLAY_TRACKS" => "beta,alpha" })
+    assert status.success?, output
+
+    assert_includes output, "Google Play has this bundle as #{CODE} from an earlier run, and no testing track has a " \
+                            "newer version, so it isn't sent again"
+    refute(requests.any? { |r| r["method"] == "POST" && r["path"].end_with?("/bundles") })
+    assert_equal [["internal"], %w[beta alpha]], committed_tracks
+    assert_equal [CODE.to_s], saved["alpha"].flat_map { |r| r["versionCodes"] }
+  end
+
+  def test_production_never_goes_back_to_an_older_version
+    play_had = { "beta" => release(CODE), "production" => release(NEWER) }
+    tracks(play_had)
+    output, status = play("production", "2.26.0")
+    refute status.success?, output
+
+    assert_includes output, "[!] Google Play already has a version newer than #{CODE} on production (#{NEWER}), " \
+                            "so nothing was sent: a release never takes a track back to an older version"
+    assert_empty writes
+    assert_equal play_had, saved
   end
 
   def test_the_same_bundle_is_found_whatever_case_play_writes_its_sha256_in

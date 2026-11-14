@@ -18,7 +18,8 @@
 # (review_guard.rb). While a review is in progress, Play refuses the commit, nothing is sent, and the job fails
 # and says to re-run it when the review ends. A re-run starts over: a bundle that Play already has isn't sent
 # again. Another bundle with the same version code stops the job. A tag with a suffix (v2.27.0-rc.1)
-# isn't sent to Play.
+# isn't sent to Play. Nor is a tag older than what a track it goes to has, such as a backport: it stays on
+# GitHub only, and production refuses it.
 set -euo pipefail
 
 # A tag with a suffix, as in v2.27.0-rc.1, has the version code of 2.27.0, and Play takes each version code
@@ -151,14 +152,18 @@ release() {
 
   # Internal testing first: Google doesn't review it, so testers there get each release in minutes, and the
   # track never sits on an old version. While a review is in progress, Play takes no commit, this one included.
-  # A re-run finds the bundle there already.
+  # A re-run finds the bundle there already. Before anything is sent, Play is asked for every track this goes
+  # to: one with a newer version means an older tag run again, or a backport, and neither takes a track back.
   found=0
-  play has-bundle "$key" "$package" internal "$code" "Crosstune-$tag.aab" || found=$?
-  if [[ "$found" == 0 ]]; then
+  play has-bundle "$key" "$package" "$(IFS=,; echo "internal,${tracks[*]}")" "$code" "Crosstune-$tag.aab" || found=$?
+  if [[ "$found" == 5 ]]; then
+    echo "::notice::$tag stays on GitHub only: Google Play already has a newer version on a testing track"
+    return
+  elif [[ "$found" == 0 ]]; then
     echo "Internal testing already has this bundle as $code, so it isn't sent again"
   elif [[ "$found" == 4 ]]; then
     # Sent in a run whose commit Play refused: Play may keep the bundle, and takes each version code once.
-    echo "Google Play has this bundle as $code from an earlier run, so it isn't sent again"
+    echo "Google Play has this bundle as $code from an earlier run, and no testing track has a newer version, so it isn't sent again"
     play edit "$key" "$package" --code "$code" --to internal --notes "$work/notes"
   elif [[ "$found" == 3 ]]; then
     play supply \
