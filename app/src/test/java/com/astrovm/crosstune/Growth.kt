@@ -29,10 +29,14 @@ import java.lang.management.ManagementFactory
 internal object Growth {
     /**
      * Whether timed work is timed: only in the growthTests task, which runs alone. Elsewhere, with tests beside it, a
-     * timing would fail at random, so each text at the shorter length is read once, for what it runs, and nothing is
-     * judged. The longer ones run the same code: read under Kover's count, they took minutes of the unit tests.
+     * timing would fail at random, so each text is read once, [UNTIMED_SHORTER] times shorter, for what it runs, and
+     * nothing is judged. Longer ones run the same code: read under Kover's count at the shorter length, they took 25 s of
+     * the processor in the unit tests on CI, beside tests that needed it.
      */
     val TIMING = System.getProperty("crosstune.timed") == "true"
+
+    /** How many times shorter than the shorter length each text is when it isn't timed. */
+    const val UNTIMED_SHORTER = 10
 
     /** How many times as long the longer text is. */
     const val TIMES = 4
@@ -77,11 +81,11 @@ internal object Growth {
 
     /** As [outOfStep], timed or not, as [timing] says. */
     fun <T> outOfStep(texts: (Int) -> List<T>, length: Int, name: (T) -> String, timing: Boolean, read: (T) -> Any?): List<String> {
-        val (short, long) = made(texts, length)
         if (!timing) {
-            short.forEach { read(it) }
+            texts(length / UNTIMED_SHORTER).forEach { read(it) }
             return emptyList()
         }
+        val (short, long) = made(texts, length)
         // Each once first, so that what's timed is the reading and not the start-up and compiling of the code that reads it.
         short.forEach { read(it) }
         return judged(short, long, name, "ns", MARGIN) { once, longer -> timed(once, longer, read) }

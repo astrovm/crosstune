@@ -16,7 +16,8 @@ class ArtistBeforeTest {
     fun whatsBeforeEachDashIsReadAsSameArtistReadsIt() {
         val random = Random(SEED)
         val seen = mutableMapOf<Boolean, Int>()
-        repeat(COUNT) {
+        val count = Fuzz.sampled(COUNT, COUNT / Fuzz.SAMPLED)
+        repeat(count) {
             val name = buildString { repeat(random.nextInt(1, MAX_PIECES)) { append(PIECES[random.nextInt(PIECES.size)]) } }
             val by = ARTISTS[random.nextInt(ARTISTS.size)]
             val before = SongNames.ArtistBefore(name, by)
@@ -27,7 +28,7 @@ class ArtistBeforeTest {
                 seen.merge(theirs, 1, Int::plus)
             }
         }
-        assertTrue(seen.toString(), seen.values.size == 2 && seen.values.all { it > MIN_SEEN })
+        assertTrue(seen.toString(), seen.values.size == 2 && seen.values.all { it > MIN_SEEN * count / COUNT })
     }
 
     @Test
@@ -69,6 +70,7 @@ class ArtistBeforeTest {
         const val COUNT = 30_000
         const val MAX_PIECES = 12
         const val ASKED_OF = 3
+        /** How many dashes of each kind, theirs and not, are read at least, of [COUNT] names: and that share of fewer. */
         const val MIN_SEEN = 1_000
 
         /** Main's dash or tilde starting a tag, as the app finds them. */

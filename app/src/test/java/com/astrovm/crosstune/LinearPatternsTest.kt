@@ -17,7 +17,8 @@ import java.util.regex.Pattern
 class LinearPatternsTest {
     @Test
     fun noPatternInTheAppTakesTimeSquaredOnLongText() {
-        val slow = AppPatterns.ofApp().found.mapNotNull { (where, _, pattern) ->
+        // Each takes a minute in all: in the unit tests, one in [Fuzz.SAMPLED] (Fuzz.kt).
+        val slow = Fuzz.sample(AppPatterns.ofApp().found).mapNotNull { (where, _, pattern) ->
             outOfStep(pattern)?.let { "$where $it ${pattern.pattern().take(80)}" }
         }
         assertEquals(emptyList<String>(), slow)

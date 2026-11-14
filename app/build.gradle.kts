@@ -491,7 +491,7 @@ tasks.withType<Test>().configureEach {
         doLast {
             val ran = timed.filter { File(results, "TEST-$it.xml").isFile }.map { it.substringAfterLast('.') }
             if (ran.isNotEmpty()) {
-                logger.lifecycle("${ran.joinToString()}: each text is read once here, at the shorter length, and no timing is judged. Run :app:growthTests for the timing.")
+                logger.lifecycle("${ran.joinToString()}: each text is read once here, shorter, and no timing is judged. Run :app:growthTests for the timing.")
             }
         }
     }
@@ -503,8 +503,8 @@ tasks.withType<Test>().configureEach {
     // MatcherCasesTest runs a sample of its matrix and made-up searches, as all of them take minutes: all of them with
     // -PmatcherFull, and only the matrix's songs -PmatcherSongs names, so what main opens can be written in parts.
     if (providers.gradleProperty("matcherFull").isPresent) systemProperty("crosstune.matcherFull", "true")
-    // TitlesAgainstMainTest reads one title in 20 of its 200,000, as all of them take a minute: all of them with -PtitlesFull.
-    if (providers.gradleProperty("titlesFull").isPresent) systemProperty("crosstune.titlesFull", "true")
+    // The fuzzes that take most of a minute read one case in 20 (Fuzz.kt): each case with -PfuzzFull.
+    if (providers.gradleProperty("fuzzFull").isPresent) systemProperty("crosstune.fuzzFull", "true")
     providers.gradleProperty("matcherSongs").orNull?.let { systemProperty("crosstune.matcherSongs", it) }
     testLogging {
         events("failed")

@@ -236,8 +236,9 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-  # TitlesAgainstMainTest's 200,000 titles, against main's readings, where the test job reads one in 20 of them.
-  titles:
+  # The fuzzes the test job reads one case in 20 of (Fuzz.kt), each case: TitlesAgainstMainTest's 200,000 titles against
+  # main's readings, and the letters, titles, patterns and dashes of the rest.
+  fuzz:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
@@ -254,14 +255,18 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
-      - name: Every title against main
-        run: ./gradlew :app:testDebugUnitTest --tests com.astrovm.crosstune.TitlesAgainstMainTest -PtitlesFull --build-cache --configuration-cache
+      - name: Every case of each fuzz
+        run: >-
+          ./gradlew :app:testDebugUnitTest -PfuzzFull --build-cache --configuration-cache
+          --tests com.astrovm.crosstune.TitlesAgainstMainTest --tests com.astrovm.crosstune.PatternLettersTest
+          --tests com.astrovm.crosstune.CutTitleTest --tests com.astrovm.crosstune.LinearPatternsTest
+          --tests com.astrovm.crosstune.ArtistBeforeTest
 
       - name: Upload the differences
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: titles
+          name: fuzz
           path: |
             app/build/reports/tests/testDebugUnitTest/
             app/build/titles-differences.tsv
@@ -428,7 +433,7 @@ jobs:
       - extension
       - test
       - growth
-      - titles
+      - fuzz
       - matcher
       - lint
       - build

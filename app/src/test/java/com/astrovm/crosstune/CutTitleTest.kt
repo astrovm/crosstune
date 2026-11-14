@@ -26,7 +26,7 @@ class CutTitleTest {
     @Test
     fun aTitleIsCutAsMainCutIt() {
         val random = Random(SEED)
-        repeat(Fuzz.count(TITLES, FEW)) {
+        repeat(Fuzz.sampled(TITLES, FEW)) {
             val title = buildString { repeat(random.nextInt(1, MAX_PIECES)) { append(PIECES[random.nextInt(PIECES.size)]) } }
             assertEquals(title, MainLoop.withoutFeaturing(title), SongNames.withoutFeaturing(title))
             assertEquals(title, MainLoop.withoutEditionTag(title), SongNames.withoutEditionTag(title))

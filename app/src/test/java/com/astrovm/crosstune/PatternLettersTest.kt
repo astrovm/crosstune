@@ -52,12 +52,17 @@ class PatternLettersTest {
         assertTrue("${written.pattern.length}", written.pattern.length < 6 * SHORT_SET)
         val boundary = written.toPattern().matcher("")
         // After a letter of two chars, a format letter, or a mark of two chars, it steps back over each whole, as a phone does.
+        // Each letter after each takes a minute in all: in the unit tests, one letter in [Fuzz.SAMPLED] (Fuzz.kt).
+        val codes = 0..Character.MAX_CODE_POINT step Fuzz.every
         for ((row, before) in listOf("\\b@0" to "", "\\b@a" to "a", "\\b@ " to " ") + BOUNDARIES_BEFORE) {
             val found = BitSet()
-            for (code in 0..Character.MAX_CODE_POINT) {
+            val phone = BitSet()
+            val table = TABLE.codes(row)
+            for (code in codes) {
                 if (boundary.reset(before + String(Character.toChars(code))).find(before.length) && boundary.start() == before.length) found.set(code)
+                phone[code] = table[code]
             }
-            assertEquals(row, TABLE.codes(row), found)
+            assertEquals(row, phone, found)
         }
     }
 
