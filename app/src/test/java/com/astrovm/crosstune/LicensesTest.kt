@@ -95,7 +95,7 @@ class LicensesTest {
     fun tearDown() {
         LicenseSplits.split = split
         Notices.open = open
-        Notices.forget()
+        Notices.letGoOfWords()
         background.shutdownNow()
         controller?.destroyAndSettle()
         MainActivity.httpClientFactory = ::httpClient
@@ -176,13 +176,33 @@ class LicensesTest {
     fun aLanguagesWordsForTheNoticesAreReadOffTheMainThread() {
         val reads = Collections.synchronizedList(mutableListOf<Pair<String, Thread>>())
         MainActivity.systemDispatcher = background.asCoroutineDispatcher()
-        Notices.forget()
+        Notices.letGoOfWords()
         Notices.open = { name -> reads += name to Thread.currentThread(); open(name) }
         openLicenses()
         waitForText("Presets de MilkDrop")
         val words = synchronized(reads) { reads.filter { it.first == "notices-es.txt" } }
         assertEquals(listOf("notices-es.txt"), words.map { it.first })
         assertTrue(words.none { it.second == Looper.getMainLooper().thread })
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun aLanguagesWordsAreKeptWhileThePageShowsAndLetGoOnceItIsLeft() {
+        val reads = Collections.synchronizedList(mutableListOf<String>())
+        Notices.letGoOfWords()
+        Notices.open = { name -> reads += name; open(name) }
+        openLicenses()
+        controller = checkNotNull(controller).recreate()
+        composeRule.waitForIdle()
+        // Turned, the page shows the words it read.
+        assertEquals(listOf("notices-es.txt"), reads.filter { it == "notices-es.txt" })
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        composeRule.onNode(hasText(string(R.string.settings_licenses)) and hasClickAction()).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        work("Presets de MilkDrop").assertExists()
+        // Left, the page let go of them: open again, it reads them again.
+        assertEquals(listOf("notices-es.txt", "notices-es.txt"), reads.filter { it == "notices-es.txt" })
     }
 
     @Test

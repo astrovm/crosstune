@@ -800,10 +800,17 @@ private fun LicensesPage(onBack: () -> Unit) {
             }) { name -> open = if (name in open) open - name else open + name }
         }
     }
-    // The pieces are kept for as long as the page is shown, and while it turns, not for as long as the app runs:
+    // The pieces and the words are kept for as long as the page is shown, and while it turns, not for as long as the app runs:
     // it stays up for days behind its notification access, and one text alone is about half a million characters.
     val activity = LocalActivity.current
-    DisposableEffect(Unit) { onDispose { if (activity?.isChangingConfigurations != true) LicenseSplits.clear() } }
+    DisposableEffect(Unit) {
+        onDispose {
+            if (activity?.isChangingConfigurations != true) {
+                LicenseSplits.clear()
+                Notices.letGoOfWords()
+            }
+        }
+    }
     LaunchedEffect(open) {
         // Already split ones are kept. Only a work that is not split yet is split, and not while drawing.
         if (open.any { LicenseSplits.of(it) == null }) {

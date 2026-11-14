@@ -9,6 +9,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
+/** Each work's `covers:` lines in notices.txt, by its name. Only these tests read them; the app doesn't. */
+internal val coverLines: Map<String, List<String>> by lazy {
+    Notices.blocks(checkNotNull(Notices.open("notices.txt"))).associate { lines ->
+        lines.first() to lines.filter { it.startsWith("covers: ") }.map { it.removePrefix("covers: ") }
+    }
+}
+
 /** What notices.txt's `covers:` lines leave out of [parts] and the licence lines in [marks], and the lines that cover nothing. */
 internal data class Report(val uncovered: List<String>, val unclaimed: List<String>, val stale: List<String>)
 
@@ -19,7 +26,7 @@ internal data class Report(val uncovered: List<String>, val unclaimed: List<Stri
  * inside projectM, needs its own notice, as a line for the outer one names only its files and words.
  */
 internal fun check(notices: List<Notice>, parts: List<String>, marks: Map<String, List<String>>, own: List<String>, notBuilt: List<String>): Report {
-    val lines = notices.flatMap { notice -> notice.covers + notice.texts.map { "file $TEXTS$it" } }.distinct()
+    val lines = notices.flatMap { notice -> coverLines[notice.name].orEmpty() + notice.texts.map { "file $TEXTS$it" } }.distinct()
     val (claims, plain) = (lines + own + notBuilt).partition { " ~ " in it }
     fun claimed(path: String, block: String) = claims.any { it.substringBefore(" ~ ") == "source $path" && it.substringAfter(" ~ ") in block }
     val uncovered = parts.filter { part -> (plain + claims.map { it.substringBefore(" ~ ") }).none { covers(it, part) } }
@@ -153,7 +160,7 @@ class InventoryTest {
 
     @Test
     fun onlyFilesAndSourcesTakeWildcards() {
-        val wide = Notices.all.flatMap { it.covers }.filter { line -> '*' in line && line.substringBefore(' ') !in setOf("file", "source") }
+        val wide = coverLines.values.flatten().filter { line -> '*' in line && line.substringBefore(' ') !in setOf("file", "source") }
         assertEquals(emptyList<String>(), wide)
         // A wildcard over a library's group once let IPADIC's and protobuf's notices go unseen.
         assertTrue(!covers("maven androidx.*:*", "maven androidx.core:core"))

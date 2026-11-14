@@ -5,9 +5,9 @@ import androidx.annotation.VisibleForTesting
 /**
  * A work by others that Crosstune ships or downloads, as **Settings** → **About** → **Licenses** shows
  * it: its [name], who it's [by], its [license] by name, the files with its full licence [texts], where
- * it is, [url], and a [note] of what Crosstune changed. [covers] says what of the APK it is, for
- * `NoticesTest`, which fails when something in the APK has no notice. [translate] names the fields in
- * Crosstune's own words, which `notices-TAG.txt` translate; null when the notice doesn't say.
+ * it is, [url], and a [note] of what Crosstune changed. [translate] names the fields in Crosstune's own
+ * words, which `notices-TAG.txt` translate; null when the notice doesn't say. Its `covers:` lines,
+ * what of the APK it is, are only for the notices tests, which read them from the file themselves.
  */
 internal data class Notice(
     val name: String,
@@ -16,7 +16,6 @@ internal data class Notice(
     val texts: List<String>,
     val url: String?,
     val note: String?,
-    val covers: List<String>,
     val translate: List<String>? = null
 )
 
@@ -50,7 +49,6 @@ internal object Notices {
             texts = one("text")?.split(' ').orEmpty(),
             url = one("url"),
             note = one("note"),
-            covers = fields.filter { it.first == "covers" }.map { it.second },
             translate = one("translate")?.split(' ')?.minus("none")
         )
     }
@@ -67,9 +65,8 @@ internal object Notices {
 
     private val translated = HashMap<String, Map<String, NoticeWords>>()
 
-    /** Forgets the words read for each language, so tests see them read again. */
-    @VisibleForTesting
-    fun forget() = synchronized(translated) { translated.clear() }
+    /** Lets go of the words read, once the licences page is left: it keeps them while it shows and while it turns. */
+    fun letGoOfWords() = synchronized(translated) { translated.clear() }
 
     private fun translate(tag: String): Map<String, NoticeWords> {
         val found = open("notices-$tag.txt")?.let(::translations).orEmpty()
