@@ -3966,6 +3966,80 @@ class MainViewModelTest {
         assertTrue(playback.plays.isEmpty())
     }
 
+    @Test
+    fun scratchNoPositionBetweenFilesThenTheNextFileOpensTheOldSong() {
+        fun now() = SystemClock.elapsedRealtime()
+        for (lyrics in listOf(false, true)) {
+            // File 1 is the song: 50 s into both, 200 s long.
+            val start = following(app = untitled.app).copy(clock = PlaybackClock(50_000, now()), durationMs = 200_000)
+            val playback = FakePlayback().apply { playing.value = start }
+            val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+            val model = untitledHeard(ears, playback)
+            pass(10_000)
+            // The app goes on to its next file by itself: a state with no position, then 0 of the next file, same length, no queue.
+            playback.playing.value = null
+            idle()
+            playback.playing.value = start.copy(clock = PlaybackClock(0, now()))
+            idle()
+            pass(5_000)
+            println("SCRATCH-A lyrics=$lyrics heard=${model.uiState.playingUnnamed?.heard?.appleMusicId} asked=${ears.asked.size}")
+            if (lyrics) model.listen(lyrics = true) else model.openPlayingUnnamed()
+            idle()
+            println("SCRATCH-A lyrics=$lyrics linkText=${model.uiState.linkText} lyricsFor=${model.uiState.lyricsFor}")
+        }
+    }
+
+    @Test
+    fun scratchAStationWhoseLengthGrowsIsListenedToEveryMinute() {
+        val start = following(app = station.app).copy(durationMs = 60_000)
+        val playback = FakePlayback().apply { playing.value = start }
+        val ears = EarsOnThePhone(heardSong())
+        val model = radioModel(ears, playback)
+        model.playingBarInSight(true)
+        idle()
+        println("SCRATCH-B t=0 heard=${model.uiState.playingUnnamed?.heard?.appleMusicId} asked=${ears.asked.size}")
+        for (minute in 1..3) {
+            pass(60_000)
+            playback.playing.value = start.copy(durationMs = 60_000L * (minute + 1))
+            idle()
+            println("SCRATCH-B t=${minute}m asked=${ears.asked.size}")
+        }
+    }
+
+    @Test
+    fun scratchAListenUnderWayWhenSkippedNeverShowsItsSong() {
+        val playback = FakePlayback()
+        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+        ears.holdPlaying = CompletableDeferred()
+        val model = radioModel(ears, playback)
+        playback.unnamed.value = untitled
+        idle()
+        model.playingBarInSight(true)
+        idle()
+        println("SCRATCH-C before asked=${ears.asked.size}")
+        model.playingNowSkip()
+        idle()
+        checkNotNull(ears.holdPlaying).complete(Unit)
+        idle()
+        println("SCRATCH-C after asked=${ears.asked.size} heard=${model.uiState.playingUnnamed?.heard?.appleMusicId}")
+    }
+
+    @Test
+    fun scratchTwoAppsOneAfterTheOther() {
+        val playback = FakePlayback()
+        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+        val model = radioModel(ears, playback)
+        model.playingBarInSight(true)
+        idle()
+        println("SCRATCH-E station heard=${model.uiState.playingUnnamed?.heard?.appleMusicId}")
+        playback.unnamed.value = untitled
+        idle()
+        println("SCRATCH-E untitled heard=${model.uiState.playingUnnamed?.heard?.appleMusicId} asked=${ears.asked.size}")
+        model.openPlayingUnnamed()
+        idle()
+        println("SCRATCH-E tap linkText=${model.uiState.linkText} songless=${model.uiState.player?.songless}")
+    }
+
     private companion object {
         /** How long UtaTen takes to answer: a slow one, as a test machine with much else to do may be. */
         const val UTATEN_MS = 200L

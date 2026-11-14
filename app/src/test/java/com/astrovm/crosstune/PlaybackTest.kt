@@ -2942,6 +2942,27 @@ class PlaybackTest {
         assertTrue(back.flags and android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT != 0)
     }
 
+
+    @Test
+    fun scratchVRadioGrowingLengthIsANewFollowing() {
+        allow()
+        sounding()
+        val radio = player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", album = "VRadio", duration = 60_000)
+        shadowOf(sessions).addController(radio)
+        val unnamed = checkNotNull(playback.playingUnnamed())
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(unnamed.played, unnamed.app).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        for (length in listOf(120_000L, 180_000L)) {
+            val grown = MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "RTP Antena 2").putString(MediaMetadata.METADATA_KEY_ARTIST, "")
+                .putString(MediaMetadata.METADATA_KEY_ALBUM, "VRadio").putLong(MediaMetadata.METADATA_KEY_DURATION, length).build()
+            shadowOf(radio).setMetadata(grown)
+            shadowOf(radio).executeOnMetadataChanged(grown)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        println("SCRATCH-P lengths=${seen.map { it?.durationMs }} sessions=${seen.map { it?.session }} unnamed=${playback.playingUnnamed()}")
+    }
+
     private companion object {
         const val NOW = 500_000L
         const val PLAYED_AT = 400_000L
