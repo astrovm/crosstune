@@ -52,6 +52,39 @@ class ArtistBeforeTest {
     }
 
     @Test
+    fun aNameAConjunctionJoinsIsTheirsAtThatDashAndEachAfterIt() {
+        assertEquals(listOf(true, true), dashes("A and B - x - y", "A"))
+        assertEquals(listOf(true, true), dashes("C, A and B - x - y", "A"))
+        assertEquals(listOf(false, false), dashes("C and B - x - y", "A"))
+    }
+
+    @Test
+    fun aNameBeforeAConjunctionEndingInASpaceOnlyPatternsSeeIsTheirsOnlyWhenItIs() {
+        assertEquals(listOf(true), dashes("A and\u0085 - x", "A"))
+        assertEquals(listOf(false), dashes("B and\u0085 - x", "A"))
+        assertEquals(listOf(false), dashes("C, B and\u0085 - x", "A"))
+    }
+
+    @Test
+    fun aLeadingTheIsNoPartOfTheNameBeforeADash() {
+        // Their name with "the" in it is found only in the letters after "The ", at each length and on to a later dash.
+        assertEquals(listOf(false), dashes("The Band - x", "Theband"))
+        assertEquals(listOf(false, false), dashes("The Bandxxxx - x - y", "Theband"))
+        assertEquals(listOf(true), dashes("The Theband - x", "Theband"))
+        assertEquals(listOf(false, true), dashes("The Banda - x Theband - y", "Theband"))
+    }
+
+    /** What's before each dash of [name] by [by], as [SongNames.ArtistBefore] reads it, checked against [SongNames.sameArtist]. */
+    private fun dashes(name: String, by: String): List<Boolean> {
+        val before = SongNames.ArtistBefore(name, by)
+        return DASH.matchesIn(name).map { dash ->
+            val theirs = SongNames.sameArtist(name.substring(0, dash.range.first), by)
+            assertEquals("${name.escaped()} by $by at ${dash.range.first}", theirs, before.isTheirs(dash.range.first))
+            theirs
+        }.toList()
+    }
+
+    @Test
     fun aDashAfterTheArtistStartsTheSongsName() {
         assertFalse(SongNames.saysInstrumental("Band - Instrumental", "Band"))
         assertFalse(SongNames.saysInstrumental("The Band and A - Instrumental", "A"))
