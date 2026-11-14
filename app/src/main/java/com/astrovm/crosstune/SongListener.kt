@@ -401,11 +401,8 @@ internal class PlayingFirst(
     /** What the microphone hears while the phone plays out loud, or null once it doesn't, as when headphones are plugged in. */
     private suspend fun aloud(): Heard? = coroutineScope {
         val listening = async { hearing.listen() }
-        val quiet = async {
-            while (playback.playsAloud()) delay(ALOUD_CHECK_MS)
-            null
-        }
-        select { listening.onAwait { it }; quiet.onAwait { it } }.also { coroutineContext.cancelChildren() }
+        val quiet = launch { while (playback.playsAloud()) delay(ALOUD_CHECK_MS) }
+        select<Heard?> { listening.onAwait { it }; quiet.onJoin { null } }.also { coroutineContext.cancelChildren() }
     }
 
     companion object {

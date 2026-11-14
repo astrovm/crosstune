@@ -258,10 +258,15 @@ internal class MainViewModel(
     private var heardFrom: HeardFrom? = null
 
     /**
-     * The song [heard] by ear, and the app's clock at when the sound heard started, as far as it says where it is:
-     * [appAtMs] on it, going by at [appSpeed]. Null when it doesn't say.
+     * The song [heard] by ear, and how the app said it played it then, [following]: its session, length, queue and clock.
+     * Whatever the app says next is checked against that, never against a follow that went or started over since, so
+     * nothing lost or reset meanwhile lets it through. Null when the app said nothing of it then.
      */
-    private class HeardFrom(val heard: Heard.Song, val appAtMs: Long?, val appSpeed: Float)
+    private class HeardFrom(val heard: Heard.Song, val following: Following?, startedAtMs: Long) {
+        /** Where the app was on its clock when the sound heard started, going by at [appSpeed]; null when it didn't say. */
+        val appAtMs = following?.clock?.positionAt(startedAtMs)
+        val appSpeed = following?.clock?.speed ?: 1f
+    }
 
     /**
      * Whether the song shown is what an app on the phone plays with no song named, as heard there, so
@@ -1119,27 +1124,41 @@ internal class MainViewModel(
                 showUnnamed()
                 if (unnamed == null) return@collectLatest
                 source.follow(unnamed.played, unnamed.app).collect { following ->
-                    val was = followedUnnamed?.second
                     followedUnnamed = following?.let { unnamed to it }
-                    if (was != null && following != null && mayPlayAnother(was, following)) forgetHeardByEar()
+                    checkHeard(following)
                     showUnnamed()
                 }
             }
     }
 
     /**
+     * Keeps the song heard by ear on what the app with no song named plays only while what it says of it, [now], is what
+     * it said when the song was heard, as [HeardFrom] has it. When it says nothing it can be told by, as no position, or
+     * said nothing then, what plays can't be told from the song heard: it goes, as no song is better than the wrong one.
+     */
+    private fun checkHeard(now: Following?) {
+        val from = heardFrom?.takeIf { it.heard === uiState.playingUnnamed?.heard } ?: return
+        val was = from.following
+        val another = if (was == null || now == null) was != now else mayPlayAnother(was, now)
+        if (another) forgetHeardByEar()
+    }
+
+    /**
      * Whether what an app with no song named played on may be another now, as it was followed [was] and is [now]: it
      * isn't where it should be by now, as after a skip or a seek, its queue or its length changed, or it plays in a new
-     * session. Each may be the next file, with the same blank name. Paused, the song heard went already, and it's
-     * listened to again at once once it plays.
+     * session. Each may be the next file, with the same blank name.
      */
     private fun mayPlayAnother(was: Following, now: Following): Boolean {
         val at = now()
-        return was.clock.playing && (
-            abs(was.clock.positionAt(at) - now.clock.positionAt(at)) > BY_EAR_JUMP_MS ||
-                was.upNext != now.upNext || was.durationMs != now.durationMs || was.session != now.session
-            )
+        return abs(was.clock.positionAt(at) - now.clock.positionAt(at)) > BY_EAR_JUMP_MS ||
+            was.upNext != now.upNext || otherLength(was.durationMs, now.durationMs) || was.session != now.session
     }
+
+    /**
+     * Whether an app's length, [was] then [now], says it plays another: any change but one that only grows, as a
+     * station's does that says how long it's played, VRadio's by a minute each minute (Issue #998).
+     */
+    private fun otherLength(was: Long?, now: Long?) = if (was == null || now == null) was != now else now < was
 
     /**
      * What plays may have changed, as by a skip, a seek, or a song up next played: the song heard in it isn't known to be
@@ -1185,17 +1204,21 @@ internal class MainViewModel(
 
     /**
      * Shows the song [heard] by ear on the bar till it should be over, or a while when that isn't known,
-     * then what the app plays alone again, though nothing new was heard yet, and in or out of sight.
+     * then what the app plays alone again, though nothing new was heard yet, and in or out of sight. Only
+     * while the app plays what it played as it was heard, [startedWith]: see [checkHeard]. False when it went on
+     * while it was listened to, as to its next file, so what was heard is of what it played before.
      */
-    private fun showHeardByEar(heard: Heard.Song) {
-        val clock = uiState.playingUnnamed?.following?.clock
-        heardFrom = HeardFrom(heard, clock?.positionAt(heard.startedAtMs ?: now()), clock?.speed ?: 1f)
+    private fun showHeardByEar(heard: Heard.Song, startedWith: Following?): Boolean {
+        heardFrom = HeardFrom(heard, startedWith, heard.startedAtMs ?: now())
         uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = heard)) }
+        checkHeard(uiState.playingUnnamed?.following)
+        if (heardFrom?.heard !== heard) return false
         viewModelScope.launch {
             delay(endOf(heard)?.minus(now()) ?: BY_EAR_UNKNOWN_MS)
             // Only this hearing: a song heard since stays till its own end.
             uiState.playingUnnamed?.takeIf { it.heard === heard }?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = null)) }
         }
+        return true
     }
 
     /**
@@ -1234,6 +1257,8 @@ internal class MainViewModel(
             listOfNotNull(alongJob, singingJob, voiceJob).forEach { it.join() }
             val ears = earsNow(source)
             val byMicrophone = uiState.phone != Phone.TV && mayCalibrate() && source.playsAloud()
+            // How the app said it played as the sound to hear started, which what it says after is checked against.
+            val startedWith = uiState.playingUnnamed?.following
             // Stopped for one of those, it's tried again once that's done.
             val heard = coroutineScope {
                 val listening = async { listener.listenToPlaying(byMicrophone, whileAloud = true) }
@@ -1245,8 +1270,9 @@ internal class MainViewModel(
             val wait = when (heard) {
                 is Heard.Song -> {
                     quietByEar = 0
-                    // Shown till it should be over, which may be well before the next listen.
-                    showHeardByEar(heard)
+                    // Shown till it should be over, which may be well before the next listen. Heard in what the app
+                    // played before it went on, it's never shown, and dropping it listens again at once, in place of this.
+                    if (!showHeardByEar(heard, startedWith)) return
                     byEarLook?.cancel()
                     byEarLook = lyricsFinder?.let { finder -> viewModelScope.launch { finder.firstLook(heard.metadata) } }
                     untilOver(heard)
@@ -1341,8 +1367,9 @@ internal class MainViewModel(
 
     /**
      * Whether where the song [heard] should be now is inside it, which takes its length: from where in it it was
-     * heard, on by as much as the app's clock went since, when it said where it was then and says now, or else by
-     * the time gone by, as the bar's own timer goes ([endOf]).
+     * heard, on by as much as the app's clock went since, when it said where it was then and says now. When it said
+     * neither, by the time gone by, as the bar's own timer goes ([endOf]). When it said only one, as while its follow
+     * starts over, what plays can't be told from the song heard, so it isn't.
      */
     private fun fits(heard: Heard.Song): Boolean {
         val length = heard.metadata.lengthMs ?: return false
@@ -1350,7 +1377,7 @@ internal class MainViewModel(
         val from = heardFrom?.takeIf { it.heard === heard }
         val clock = uiState.playingUnnamed?.following?.clock
         val appAt = from?.appAtMs
-        if (from == null || appAt == null || clock == null) return now() < endOf(heard, length, at)
+        if (from == null || appAt == null || clock == null) return appAt == null && clock == null && now() < endOf(heard, length, at)
         return (at + (clock.positionAt(now()) - appAt) / from.appSpeed * heard.speed).toLong() in 0 until length
     }
 

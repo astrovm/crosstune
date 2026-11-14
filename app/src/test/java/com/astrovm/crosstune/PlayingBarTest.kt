@@ -7,6 +7,7 @@ import android.view.View
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -111,6 +112,34 @@ class PlayingBarTest {
         assertTrue(shown("Fake Band · Fake Radio"))
         assertFalse(shown("Fake FM"))
         assertEquals(listOf("https://example.com/cover.jpg"), covers)
+    }
+
+    /** How far the bar's line is through the song, or null with no line. */
+    private fun played() = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
+        .fetchSemanticsNodes().singleOrNull()?.config?.get(SemanticsProperties.ProgressBarRangeInfo)?.current
+
+    @Test
+    fun aSongsBarSaysWhoAndWhereWithWhatItKnowsAndHowFarItIsByTheAppsLengthFirst() {
+        val song = MusicMetadata("Fake Song", "Fake Band", lengthMs = 100_000)
+        val following = Following(PlaybackClock(25_000, 0, playing = false), "Fake Player", canSeek = true)
+        // The app says how long it is: that, not the song's own length, says how far it is.
+        val state = mutableStateOf(UiState(playingNow = NowPlaying(song, following.copy(durationMs = 50_000))))
+        compose.setContent { CrosstuneTheme { CrosstuneScreen(state.value, ScreenActions()) } }
+        compose.waitForIdle()
+        assertEquals(listOf("Fake Song", "Fake Band · Fake Player"), barWords())
+        assertEquals(0.5f, played())
+        // It doesn't: the song's length does.
+        state.value = UiState(playingNow = NowPlaying(song, following))
+        compose.waitForIdle()
+        assertEquals(0.25f, played())
+        state.value = UiState(playingNow = NowPlaying(song.copy(artist = ""), following))
+        compose.waitForIdle()
+        assertEquals(listOf("Fake Song", "Fake Player"), barWords())
+        // Not followed: no app to name and nothing to say how far it is.
+        state.value = UiState(playingNow = NowPlaying(song))
+        compose.waitForIdle()
+        assertEquals(listOf("Fake Song", "Fake Band"), barWords())
+        assertEquals(null, played())
     }
 
     /** Shows [state] on a phone drawn edge to edge, as the app is. */

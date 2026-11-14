@@ -12,6 +12,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.time.Duration
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -339,6 +340,8 @@ class MainViewModelTest {
         override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
             asked += byMicrophone
             this.whileAloud += whileAloud
+            // Listened to over and over with no time going by is a loop: it stops here, so the test fails on the count, at once.
+            if (asked.size > LISTENS_AT_MOST) awaitCancellation()
             holdPlaying?.await()
             return answers[minOf(asked.size, answers.size) - 1]
         }
@@ -352,15 +355,20 @@ class MainViewModelTest {
         mayCalibrate: () -> Boolean = { true },
         lyricsFinder: LyricsFinder? = null,
         mayCapture: () -> Boolean = { false },
-        sleepTimer: SleepTimer? = null
+        sleepTimer: SleepTimer? = null,
+        watch: Boolean = true
     ): MainViewModel {
         playback.access = true
         playback.unnamed.value = station
         val model = model(playback = playback, listener = ears, phone = phone, mayCalibrate = mayCalibrate, lyricsFinder = lyricsFinder, mayCapture = mayCapture, sleepTimer = sleepTimer)
-        model.viewModelScope.launch { model.watchPlayingNow() }
+        if (watch) model.viewModelScope.launch { model.watchPlayingNow() }
         idle()
         return model
     }
+
+    /** Watches what plays on [model], as while Crosstune is in sight, till the job is cancelled; anything it throws goes in [thrown]. */
+    private fun watching(model: MainViewModel, thrown: MutableList<Throwable>): Job =
+        model.viewModelScope.launch(CoroutineExceptionHandler { _, e -> thrown += e }) { model.watchPlayingNow() }
 
     private fun heardSong(lengthMs: Long? = 200_000, offsetMs: Long? = 50_000) =
         Heard.Song(MusicMetadata("Fake Song", "Fake Artist", lengthMs = lengthMs), "1234", offsetMs, android.os.SystemClock.elapsedRealtime())
@@ -557,6 +565,13 @@ class MainViewModelTest {
         idle()
         assertFalse(over.uiState.linkText.contains("1234"))
         assertEquals(true, over.uiState.player?.songless)
+        // 60 s on at twice the speed, the app's 120 s further: the song is 190 s in, still on, as the app's clock goes
+        // by at the speed it played at when the song was heard, not at the speed of time.
+        val late = untitledHeard(EarsOnThePhone(heard(), Heard.Nothing), FakePlayback().apply { playing.value = start.copy(clock = PlaybackClock(150_000, now(), speed = 2f)) })
+        pass(60_000)
+        late.openPlayingUnnamed()
+        idle()
+        assertTrue(late.uiState.linkText.contains("1234"))
         // Heard at its very start, it opens at once.
         val first = untitledHeard(EarsOnThePhone(heardSong(offsetMs = 0), Heard.Nothing), FakePlayback().apply { playing.value = following(app = untitled.app) })
         first.openPlayingUnnamed()
@@ -591,6 +606,254 @@ class MainViewModelTest {
             idle()
             assertNull(name, model.uiState.playingUnnamed?.heard)
         }
+    }
+
+    @Test
+    fun aFollowThatSaysNoPositionDropsTheSongHeardSoNeitherATapNorTheWordsButtonOpenIt() {
+        fun now() = SystemClock.elapsedRealtime()
+        for (words in listOf(false, true)) {
+            // A file that's the song heard in it: 50 s into both, 200 s long.
+            val start = following(app = untitled.app).copy(clock = PlaybackClock(50_000, now()), durationMs = 200_000)
+            val playback = FakePlayback().apply { playing.value = start }
+            val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+            val model = untitledHeard(ears, playback)
+            pass(10_000)
+            // The app goes on to its next file by itself: a moment with no position, then the start of the next file,
+            // as long, with nothing up next.
+            playback.playing.value = null
+            idle()
+            assertNull("words $words", model.uiState.playingUnnamed?.heard)
+            assertEquals("words $words", 2, ears.asked.size)
+            playback.playing.value = start.copy(clock = PlaybackClock(0, now()))
+            idle()
+            pass(5_000)
+            if (words) model.listen(lyrics = true) else model.openPlayingUnnamed()
+            idle()
+            assertFalse("words $words", model.uiState.linkText.contains("1234"))
+            assertNull("words $words", model.uiState.lyricsFor)
+        }
+    }
+
+    @Test
+    fun comingBackToCrosstuneDropsTheSongHeardThenListensAgainAtOnceOnceTheBarIsInSight() {
+        fun now() = SystemClock.elapsedRealtime()
+        for (held in listOf(true, false)) {
+            val start = following(app = untitled.app).copy(clock = PlaybackClock(50_000, now()), durationMs = 200_000)
+            val playback = FakePlayback().apply { playing.value = start }
+            val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+            val model = radioModel(ears, playback, watch = false)
+            val thrown = mutableListOf<Throwable>()
+            var watch = watching(model, thrown)
+            playback.unnamed.value = untitled
+            idle()
+            model.playingBarInSight(true)
+            idle()
+            assertEquals("held $held", ears.answers[0], model.uiState.playingUnnamed?.heard)
+            // Crosstune goes out of sight, and stops following.
+            model.playingBarInSight(false)
+            watch.cancel()
+            idle()
+            assertEquals("held $held", emptyList<Throwable>(), thrown)
+            // Meanwhile the app goes on to the start of its next file.
+            playback.playing.value = start.copy(clock = PlaybackClock(0, now()))
+            // Back, the follow starts over, and may take a moment to say anything: the song heard before isn't shown,
+            // and nothing is listened to till the bar is in sight.
+            if (held) playback.said = CompletableDeferred()
+            ears.holdPlaying = CompletableDeferred()
+            watch = watching(model, thrown)
+            idle()
+            assertNull("held $held", model.uiState.playingUnnamed?.heard)
+            assertEquals("held $held", 1, ears.asked.size)
+            model.openPlayingUnnamed()
+            idle()
+            assertFalse("held $held", model.uiState.linkText.contains("1234"))
+            assertEquals("held $held", true, model.uiState.player?.songless)
+            // In sight, what plays now is listened to at once.
+            model.playingBarInSight(true)
+            idle()
+            assertEquals("held $held", 2, ears.asked.size)
+            watch.cancel()
+            idle()
+            assertEquals("held $held", emptyList<Throwable>(), thrown)
+        }
+    }
+
+    @Test
+    fun thePlayerOnAStationIsOpenedOnceThoughItsAppSaysNothingOfIt() {
+        // The station plays, and its app says nothing a follow could go by.
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        val before = playback.followed.size
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(PlayerState(station.played, station.app, played = true, songless = true), model.uiState.player)
+        // It's followed once: the app having nothing to say is no next station to open the player on again.
+        assertEquals(listOf(station.played), playback.followed.drop(before))
+    }
+
+    @Test
+    fun watchingWhatPlaysStopsCleanlyWhetherAListenIsUnderWayOrWaitsForTheNext() {
+        for (underWay in listOf(true, false)) {
+            val playback = FakePlayback()
+            val ears = EarsOnThePhone(heardSong())
+            if (underWay) ears.holdPlaying = CompletableDeferred()
+            val model = radioModel(ears, playback, watch = false)
+            val thrown = mutableListOf<Throwable>()
+            val watch = watching(model, thrown)
+            model.playingBarInSight(true)
+            idle()
+            assertEquals("under way $underWay", 1, ears.asked.size)
+            assertEquals("under way $underWay", !underWay, model.uiState.playingUnnamed?.heard != null)
+            // Crosstune goes, with the bar still in sight: the listen, or the wait for the next one, stops with it.
+            watch.cancel()
+            idle()
+            ears.holdPlaying?.complete(Unit)
+            pass(300_000)
+            assertEquals("under way $underWay", emptyList<Throwable>(), thrown)
+            assertTrue("under way $underWay", watch.isCancelled)
+            assertEquals("under way $underWay", 1, ears.asked.size)
+        }
+    }
+
+    @Test
+    fun anAppThatGoesOnWhileItsListenedToHasNoSongShownFromWhatItPlayedBefore() {
+        fun now() = SystemClock.elapsedRealtime()
+        val start = following(app = untitled.app).copy(clock = PlaybackClock(50_000, now()), durationMs = 200_000)
+        val playback = FakePlayback().apply { playing.value = start }
+        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+        ears.holdPlaying = CompletableDeferred()
+        val model = radioModel(ears, playback)
+        playback.unnamed.value = untitled
+        idle()
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(1, ears.asked.size)
+        // While it's listened to, the app goes on to its next file by itself.
+        playback.playing.value = start.copy(clock = PlaybackClock(0, now()))
+        idle()
+        checkNotNull(ears.holdPlaying).complete(Unit)
+        idle()
+        // What was heard was the file before: it's never shown, and what plays now is listened to at once.
+        assertNull(model.uiState.playingUnnamed?.heard)
+        assertEquals(2, ears.asked.size)
+        model.openPlayingUnnamed()
+        idle()
+        assertFalse(model.uiState.linkText.contains("1234"))
+    }
+
+    @Test
+    fun anAppThatSaysWhereItIsOnlyOnceTheSongWasHeardCantBeToldFromIt() {
+        val playback = FakePlayback()
+        // It says no position as the song's heard: the song heard goes by the time gone by.
+        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+        val model = untitledHeard(ears, playback)
+        // Then it says where it is, which can't be told from where it was.
+        playback.playing.value = following(app = untitled.app)
+        idle()
+        assertNull(model.uiState.playingUnnamed?.heard)
+        assertEquals(2, ears.asked.size)
+        model.openPlayingUnnamed()
+        idle()
+        assertFalse(model.uiState.linkText.contains("1234"))
+    }
+
+    @Test
+    fun aStationThatSaysHowLongItsPlayedIsListenedToOncePerSong() {
+        // VRadio says it has played a minute more each minute, and plays on (Issue #998).
+        val start = following(app = station.app).copy(durationMs = 60_000)
+        val playback = FakePlayback().apply { playing.value = start }
+        // The first song heard 50 s into it, of 200 s, so over 150 s on; the next one a long one, on past the test.
+        val ears = EarsOnThePhone(heardSong(), heardSong(lengthMs = 600_000))
+        val model = radioModel(ears, playback)
+        model.playingBarInSight(true)
+        idle()
+        val listens = mutableListOf(ears.asked.size)
+        val shown = mutableListOf(model.uiState.playingUnnamed?.heard)
+        for (minute in 1..3) {
+            pass(60_000)
+            playback.playing.value = start.copy(durationMs = 60_000L * (minute + 1))
+            idle()
+            listens += ears.asked.size
+            shown += model.uiState.playingUnnamed?.heard
+        }
+        // Once at the start, and again once the song heard is over, 160 s on; each shown till then.
+        assertEquals(listOf(1, 1, 1, 2), listens)
+        assertEquals(listOf(ears.answers[0], ears.answers[0], ears.answers[0], ears.answers[1]), shown)
+    }
+
+    @Test
+    fun aSongHeardIsDroppedOnAPauseSoASeekWhilePausedNeverOpensIt() {
+        fun now() = SystemClock.elapsedRealtime()
+        val start = following(app = untitled.app).copy(clock = PlaybackClock(50_000, now()), durationMs = 200_000)
+        val playback = FakePlayback().apply { playing.value = start }
+        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+        val model = untitledHeard(ears, playback)
+        // Paused 10 s on: what plays isn't known once it's paused.
+        pass(10_000)
+        playback.playing.value = start.copy(clock = PlaybackClock(60_000, now(), playing = false))
+        idle()
+        assertNull(model.uiState.playingUnnamed?.heard)
+        // Moved back to the start while paused, then played again: listened to at once, the song before never opened.
+        playback.playing.value = start.copy(clock = PlaybackClock(0, now(), playing = false))
+        idle()
+        playback.playing.value = start.copy(clock = PlaybackClock(0, now()))
+        idle()
+        assertEquals(2, ears.asked.size)
+        model.openPlayingUnnamed()
+        idle()
+        assertFalse(model.uiState.linkText.contains("1234"))
+    }
+
+    @Test
+    fun anAppWhoseLengthShrinksAsItPlaysOnPlaysAnother() {
+        fun now() = SystemClock.elapsedRealtime()
+        // Where it is goes on with no jump, as a stream counts on through its songs, but it says a shorter length.
+        val start = following(app = untitled.app).copy(clock = PlaybackClock(50_000, now()), durationMs = 300_000)
+        val playback = FakePlayback().apply { playing.value = start }
+        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+        val model = untitledHeard(ears, playback)
+        pass(10_000)
+        playback.playing.value = start.copy(durationMs = 240_000)
+        idle()
+        assertNull(model.uiState.playingUnnamed?.heard)
+        assertEquals(2, ears.asked.size)
+    }
+
+    @Test
+    fun aListenUnderWayWhenSkippedNeverShowsWhatItHeard() {
+        val playback = FakePlayback()
+        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+        ears.holdPlaying = CompletableDeferred()
+        val model = radioModel(ears, playback)
+        playback.unnamed.value = untitled
+        idle()
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(1, ears.asked.size)
+        model.playingNowSkip()
+        idle()
+        checkNotNull(ears.holdPlaying).complete(Unit)
+        idle()
+        assertEquals(2, ears.asked.size)
+        assertNull(model.uiState.playingUnnamed?.heard)
+    }
+
+    @Test
+    fun aSongHeardInOneAppIsNeverOpenedFromTheNextApp() {
+        val playback = FakePlayback()
+        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+        val model = radioModel(ears, playback)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(ears.answers[0], model.uiState.playingUnnamed?.heard)
+        playback.unnamed.value = untitled
+        idle()
+        assertNull(model.uiState.playingUnnamed?.heard)
+        assertEquals(2, ears.asked.size)
+        model.openPlayingUnnamed()
+        idle()
+        assertFalse(model.uiState.linkText.contains("1234"))
+        assertEquals(true, model.uiState.player?.songless)
     }
 
     @Test
@@ -3966,81 +4229,10 @@ class MainViewModelTest {
         assertTrue(playback.plays.isEmpty())
     }
 
-    @Test
-    fun scratchNoPositionBetweenFilesThenTheNextFileOpensTheOldSong() {
-        fun now() = SystemClock.elapsedRealtime()
-        for (lyrics in listOf(false, true)) {
-            // File 1 is the song: 50 s into both, 200 s long.
-            val start = following(app = untitled.app).copy(clock = PlaybackClock(50_000, now()), durationMs = 200_000)
-            val playback = FakePlayback().apply { playing.value = start }
-            val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
-            val model = untitledHeard(ears, playback)
-            pass(10_000)
-            // The app goes on to its next file by itself: a state with no position, then 0 of the next file, same length, no queue.
-            playback.playing.value = null
-            idle()
-            playback.playing.value = start.copy(clock = PlaybackClock(0, now()))
-            idle()
-            pass(5_000)
-            println("SCRATCH-A lyrics=$lyrics heard=${model.uiState.playingUnnamed?.heard?.appleMusicId} asked=${ears.asked.size}")
-            if (lyrics) model.listen(lyrics = true) else model.openPlayingUnnamed()
-            idle()
-            println("SCRATCH-A lyrics=$lyrics linkText=${model.uiState.linkText} lyricsFor=${model.uiState.lyricsFor}")
-        }
-    }
-
-    @Test
-    fun scratchAStationWhoseLengthGrowsIsListenedToEveryMinute() {
-        val start = following(app = station.app).copy(durationMs = 60_000)
-        val playback = FakePlayback().apply { playing.value = start }
-        val ears = EarsOnThePhone(heardSong())
-        val model = radioModel(ears, playback)
-        model.playingBarInSight(true)
-        idle()
-        println("SCRATCH-B t=0 heard=${model.uiState.playingUnnamed?.heard?.appleMusicId} asked=${ears.asked.size}")
-        for (minute in 1..3) {
-            pass(60_000)
-            playback.playing.value = start.copy(durationMs = 60_000L * (minute + 1))
-            idle()
-            println("SCRATCH-B t=${minute}m asked=${ears.asked.size}")
-        }
-    }
-
-    @Test
-    fun scratchAListenUnderWayWhenSkippedNeverShowsItsSong() {
-        val playback = FakePlayback()
-        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
-        ears.holdPlaying = CompletableDeferred()
-        val model = radioModel(ears, playback)
-        playback.unnamed.value = untitled
-        idle()
-        model.playingBarInSight(true)
-        idle()
-        println("SCRATCH-C before asked=${ears.asked.size}")
-        model.playingNowSkip()
-        idle()
-        checkNotNull(ears.holdPlaying).complete(Unit)
-        idle()
-        println("SCRATCH-C after asked=${ears.asked.size} heard=${model.uiState.playingUnnamed?.heard?.appleMusicId}")
-    }
-
-    @Test
-    fun scratchTwoAppsOneAfterTheOther() {
-        val playback = FakePlayback()
-        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
-        val model = radioModel(ears, playback)
-        model.playingBarInSight(true)
-        idle()
-        println("SCRATCH-E station heard=${model.uiState.playingUnnamed?.heard?.appleMusicId}")
-        playback.unnamed.value = untitled
-        idle()
-        println("SCRATCH-E untitled heard=${model.uiState.playingUnnamed?.heard?.appleMusicId} asked=${ears.asked.size}")
-        model.openPlayingUnnamed()
-        idle()
-        println("SCRATCH-E tap linkText=${model.uiState.linkText} songless=${model.uiState.player?.songless}")
-    }
-
     private companion object {
+        /** More listens than any test asks for. */
+        const val LISTENS_AT_MOST = 100
+
         /** How long UtaTen takes to answer: a slow one, as a test machine with much else to do may be. */
         const val UTATEN_MS = 200L
     }

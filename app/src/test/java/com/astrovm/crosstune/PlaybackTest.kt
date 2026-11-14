@@ -1820,17 +1820,70 @@ class PlaybackTest {
     @Test
     fun aTitleAndArtistAskedOfLeastLatelyIsReadAgainOnceMoreThanTheKeptAreAsked() {
         val reads = mutableListOf<String>()
-        val songs = SongsRead({ title, _ -> reads += title; MusicMetadata(title, "Fake Band").takeIf { title != "Untitled" } }, kept = 2)
-        assertEquals(MusicMetadata("One", "Fake Band"), songs.of("One", ""))
-        assertNull(songs.of("Untitled", ""))
+        val songs = KeptReads<String, MusicMetadata?>(2) { title -> reads += title; MusicMetadata(title, "Fake Band").takeIf { title != "Untitled" } }
+        assertEquals(MusicMetadata("One", "Fake Band"), songs.of("One"))
+        assertNull(songs.of("Untitled"))
         // Both kept, each read once, even one that names no song; "One" is asked of last.
-        assertEquals(MusicMetadata("One", "Fake Band"), songs.of("One", ""))
+        assertEquals(MusicMetadata("One", "Fake Band"), songs.of("One"))
         assertEquals(listOf("One", "Untitled"), reads)
         // A third takes the place of the one asked of least lately.
-        assertEquals(MusicMetadata("Three", "Fake Band"), songs.of("Three", ""))
-        assertEquals(MusicMetadata("One", "Fake Band"), songs.of("One", ""))
-        assertNull(songs.of("Untitled", ""))
+        assertEquals(MusicMetadata("Three", "Fake Band"), songs.of("Three"))
+        assertEquals(MusicMetadata("One", "Fake Band"), songs.of("One"))
+        assertNull(songs.of("Untitled"))
         assertEquals(listOf("One", "Untitled", "Three", "Untitled"), reads)
+    }
+
+    @Test
+    fun aSessionKeepsItsNumberInAFollowStartedOverAndANewOneGetsAnother() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "", null))
+        val unnamed = checkNotNull(playback.playingUnnamed())
+        fun follow(): Pair<Job, MutableList<Following?>> {
+            val seen = mutableListOf<Following?>()
+            val job = CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(unnamed.played, unnamed.app).collect { seen += it } }
+            shadowOf(Looper.getMainLooper()).idle()
+            return job to seen
+        }
+        val (first, before) = follow()
+        val one = checkNotNull(before.last()).session
+        first.cancel()
+        // Followed again, as when Crosstune comes back in sight, it's the same session, by the same number.
+        val (again, after) = follow()
+        assertEquals(one, checkNotNull(after.last()).session)
+        // The app goes on in a new session, which says just what the last one did: another number.
+        shadowOf(sessions).clearControllers()
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "", null))
+        shadowOf(Looper.getMainLooper()).idle()
+        val two = checkNotNull(after.last()).session
+        assertNotEquals(one, two)
+        again.cancel()
+        // A follow started over on it has its number, never the first one's.
+        val (last, seen) = follow()
+        assertEquals(two, checkNotNull(seen.last()).session)
+        last.cancel()
+    }
+
+    @Test
+    fun vRadioSaysItHasPlayedLongerEachMinuteInOneSession() {
+        allow()
+        sounding()
+        val radio = player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", album = "VRadio", duration = 60_000)
+        shadowOf(sessions).addController(radio)
+        val unnamed = checkNotNull(playback.playingUnnamed())
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(unnamed.played, unnamed.app).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        for (length in listOf(120_000L, 180_000L)) {
+            val grown = MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "RTP Antena 2").putString(MediaMetadata.METADATA_KEY_ARTIST, "")
+                .putString(MediaMetadata.METADATA_KEY_ALBUM, "VRadio").putLong(MediaMetadata.METADATA_KEY_DURATION, length).build()
+            shadowOf(radio).setMetadata(grown)
+            shadowOf(radio).executeOnMetadataChanged(grown)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        assertEquals(listOf(60_000L, 120_000L, 180_000L), seen.map { it?.durationMs })
+        assertEquals(1, seen.map { it?.session }.distinct().size)
+        assertEquals(unnamed, playback.playingUnnamed())
     }
 
     @Test
@@ -2940,27 +2993,6 @@ class PlaybackTest {
         val back = shadowOf(app).nextStartedActivity
         assertEquals(MainActivity::class.java.name, back.component?.className)
         assertTrue(back.flags and android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT != 0)
-    }
-
-
-    @Test
-    fun scratchVRadioGrowingLengthIsANewFollowing() {
-        allow()
-        sounding()
-        val radio = player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", album = "VRadio", duration = 60_000)
-        shadowOf(sessions).addController(radio)
-        val unnamed = checkNotNull(playback.playingUnnamed())
-        val seen = mutableListOf<Following?>()
-        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(unnamed.played, unnamed.app).collect { seen += it } }
-        shadowOf(Looper.getMainLooper()).idle()
-        for (length in listOf(120_000L, 180_000L)) {
-            val grown = MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "RTP Antena 2").putString(MediaMetadata.METADATA_KEY_ARTIST, "")
-                .putString(MediaMetadata.METADATA_KEY_ALBUM, "VRadio").putLong(MediaMetadata.METADATA_KEY_DURATION, length).build()
-            shadowOf(radio).setMetadata(grown)
-            shadowOf(radio).executeOnMetadataChanged(grown)
-            shadowOf(Looper.getMainLooper()).idle()
-        }
-        println("SCRATCH-P lengths=${seen.map { it?.durationMs }} sessions=${seen.map { it?.session }} unnamed=${playback.playingUnnamed()}")
     }
 
     private companion object {

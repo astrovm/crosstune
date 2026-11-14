@@ -96,6 +96,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -803,8 +804,12 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
     }
 }
 
-/** The song a music app plays right now, or has paused: its buttons, where it is, and a tap opens its player. */
+/**
+ * The song a music app plays right now, or has paused: its buttons, where it is, and a tap opens its player. It reads
+ * only what it's handed, so it's never redrawn alone; [PlayingBar] is, as what it shows moves on.
+ */
 @Composable
+@NonRestartableComposable
 private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
     val song = now.song
     val following = now.following
@@ -817,9 +822,10 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
 /**
  * What an app plays while it names no song, e.g. a radio station: the song heard in it, which a tap
  * shows like a link when that's safe, or until one is, what the app calls it, e.g. the station, never
- * as a song. Its buttons and where it is are the app's, as for a song.
+ * as a song. Its buttons and where it is are the app's, as for a song. Never redrawn alone, as [NowPlayingBar] isn't.
  */
 @Composable
+@NonRestartableComposable
 private fun UnnamedBar(now: PlayingUnnamed, actions: ScreenActions) {
     val song = now.heard?.metadata
     // The app's name as following it has it too, as both are from its package.

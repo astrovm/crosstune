@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 
 /**
@@ -84,6 +85,8 @@ internal class FakePlayback : PlaybackSource {
     override fun follow(song: MusicMetadata, app: String?): Flow<Following?> {
         followed += song
         followedApps += app
+        // Followed over and over is a loop, as a player opening itself again: it ends here, so the test fails on what was followed, at once.
+        if (followed.size > FOLLOWS_AT_MOST) return emptyFlow()
         val flow = followedAs(song, app, app?.let(appPlaying::get) ?: playing)
         return said?.let { later -> flow { later.await(); emitAll(flow) } } ?: flow
     }
@@ -341,5 +344,10 @@ internal class FakePlayback : PlaybackSource {
         if (mustStart && !startsInBackground) return false.also { onlyInFront = true }
         listsAsked += app to link
         return true
+    }
+
+    private companion object {
+        /** More follows than any test asks for. */
+        const val FOLLOWS_AT_MOST = 200
     }
 }
