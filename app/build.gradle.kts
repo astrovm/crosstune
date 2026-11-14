@@ -476,10 +476,19 @@ tasks.withType<Test>().configureEach {
     systemProperty("robolectric-deps.properties", layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path)
     // Robolectric loads a full Android runtime per SDK level the tests use.
     maxHeapSize = "3g"
-    // Two test processes, each with that heap, where there's room for them, like CI's runner:
-    // the tests take about half the time.
+    // Test processes side by side, each with that heap, where there's room for them. Gradle hands the test classes to them
+    // in turn by name before any runs, not to whichever is free. So a class added or taken away moves each after it to
+    // another process: with two, PracticeCardsTest, ListeningTest and MainActivityTest, which mostly wait, ended up in the
+    // same one, and it ran 4 minutes past the other on CI's runner. Three, as CI's runner has room for, leave each less to
+    // do whichever classes share one; they mostly wait, so the processor has room for the third.
     val memory = (ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean).totalMemorySize
-    maxParallelForks = if (name != "growthTests" && Runtime.getRuntime().availableProcessors() >= 4 && memory >= (12L shl 30)) 2 else 1
+    val processors = Runtime.getRuntime().availableProcessors()
+    maxParallelForks = when {
+        name == "growthTests" || processors < 4 -> 1
+        memory >= (14L shl 30) -> 3
+        memory >= (12L shl 30) -> 2
+        else -> 1
+    }
     // GrowthTest checks the timing itself, so it runs only where the timing is judged.
     if (name != "growthTests") filter.excludeTestsMatching("com.astrovm.crosstune.GrowthTest")
     // A timed test asked for with --tests here passes without its timing judged: say where it is judged. Which ran is
