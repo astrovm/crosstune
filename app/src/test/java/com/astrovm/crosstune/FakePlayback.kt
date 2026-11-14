@@ -4,6 +4,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 
@@ -90,12 +93,19 @@ internal class FakePlayback : PlaybackSource {
     /** How many are listening for what's on the phone. */
     val nowPlayingWatchers get() = songs.subscriptionCount.value
 
-    /** What an app plays with no song named, e.g. a radio station; see [PlaybackSource.playingUnnamed]. */
+    /**
+     * What an app has with no song named, e.g. a radio station, playing or paused, as its session says. It counts
+     * as [PlaybackSource.playingUnnamed] only while it plays, as Android has it: while what the app plays, its own
+     * in [appPlaying] or else [playing], isn't paused. A test that doesn't say how it plays has it playing.
+     */
     val unnamed = MutableStateFlow<Unnamed?>(null)
 
-    override fun playingUnnamed() = unnamed.value
+    private fun playingOnly(unnamed: Unnamed?, following: Following?) = unnamed?.takeIf { following?.clock?.playing != false }
 
-    override fun unnamedUpdates(): Flow<Unnamed?> = unnamed
+    override fun playingUnnamed() = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value)
+
+    override fun unnamedUpdates(): Flow<Unnamed?> =
+        channelFlow { unnamed.collectLatest { now -> flowOf(now?.app).collect { send(playingOnly(now, it)) } } }.distinctUntilChanged()
 
     /** Whether the phone's music plays out loud, where the microphone hears it. */
     var aloud = true
@@ -226,24 +236,32 @@ internal class FakePlayback : PlaybackSource {
         onQuiet(on)
     }
 
-    override fun skip(song: MusicMetadata, next: Boolean) {
+    /** The app each control other than play, pause and seek was sent to, null for any: skips, shuffle, repeat, like and a queued song. */
+    val controlledApps: MutableList<String?> = CopyOnWriteArrayList()
+
+    override fun skip(song: MusicMetadata, next: Boolean, app: String?) {
         skips += next
+        controlledApps += app
     }
 
-    override fun shuffle(song: MusicMetadata, on: Boolean) {
+    override fun shuffle(song: MusicMetadata, on: Boolean, app: String?) {
         shuffled += on
+        controlledApps += app
     }
 
-    override fun repeat(song: MusicMetadata, how: Repeat) {
+    override fun repeat(song: MusicMetadata, how: Repeat, app: String?) {
         repeated += how
+        controlledApps += app
     }
 
-    override fun like(song: MusicMetadata) {
+    override fun like(song: MusicMetadata, app: String?) {
         liked++
+        controlledApps += app
     }
 
-    override fun playQueued(song: MusicMetadata, id: Long) {
+    override fun playQueued(song: MusicMetadata, id: Long, app: String?) {
         queuedPlayed += id
+        controlledApps += app
     }
 
     private val inApps = mutableMapOf<String, MutableStateFlow<AppPlays?>>()

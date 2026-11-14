@@ -839,19 +839,123 @@ class MainViewModelTest {
     }
 
     @Test
-    fun aStationBackAgainIsNotShownAsItWasFollowedTillItsAppSaysHowItIs() {
+    fun anotherStationIsNotShownAsTheLastWasFollowedTillItsAppSaysHowItIs() {
         val playback = FakePlayback()
-        playback.playing.value = Following(PlaybackClock(1_000, 0, playing = false), "VRadio", canSeek = false)
+        playback.playing.value = Following(PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = false)
         val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
-        assertEquals(false, model.uiState.playingUnnamed?.following?.clock?.playing)
-        // It stops, then plays again, and its app takes a moment to say how.
-        playback.unnamed.value = null
-        idle()
+        assertEquals(true, model.uiState.playingUnnamed?.following?.clock?.playing)
+        // Another station, whose app takes a moment to say how it plays.
+        val other = Unnamed("com.example.radio", "Fake Radio", "Fake FM")
         playback.said = CompletableDeferred()
-        playback.unnamed.value = station
+        playback.unnamed.value = other
         idle()
-        assertEquals(station, model.uiState.playingUnnamed?.playing)
+        assertEquals(other, model.uiState.playingUnnamed?.playing)
         assertNull(model.uiState.playingUnnamed?.following)
+        playback.said?.complete(Unit)
+        idle()
+        assertEquals(true, model.uiState.playingUnnamed?.following?.clock?.playing)
+    }
+
+    /** A model on [station] playing, with its bar in sight, which [ears] named nothing in. */
+    private fun stationPlaying(ears: EarsOnThePhone, playback: FakePlayback = FakePlayback()): MainViewModel {
+        playback.playing.value = Following(PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = false)
+        return radioModel(ears, playback).also { it.playingBarInSight(true); idle() }
+    }
+
+    private fun FakePlayback.pauses() {
+        playing.value = Following(PlaybackClock(2_000, 0, playing = false), "VRadio", canSeek = false)
+        idle()
+    }
+
+    @Test
+    fun aPausedStationStaysOnTheBarWithItsButtonsAndIsntListenedToTillItPlaysAgain() {
+        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+        val playback = FakePlayback()
+        val model = stationPlaying(ears, playback)
+        assertEquals(1, ears.asked.size)
+        assertEquals(heardSong().metadata, model.uiState.playingUnnamed?.heard?.metadata)
+        // Paused from its app, or the bar: it stays, with Play, as a paused song does. The song heard in it isn't known now.
+        playback.pauses()
+        assertEquals(PlayingUnnamed(station, following = playback.playing.value), model.uiState.playingUnnamed)
+        assertNull(model.uiState.playingNow)
+        // Nothing plays to hear, however long it's paused.
+        pass(MainViewModel.BY_EAR_LATEST_MS * 2)
+        assertEquals(1, ears.asked.size)
+        // Its Play asks its app, by package.
+        model.playingNowPlayPause()
+        assertEquals(listOf(true), playback.plays)
+        assertEquals(listOf<String?>(station.app), playback.playedApps)
+        // Played again, it's listened to at once.
+        playback.playing.value = Following(PlaybackClock(2_000, 0, playing = true), "VRadio", canSeek = false)
+        idle()
+        assertEquals(2, ears.asked.size)
+        assertEquals(true, model.uiState.playingUnnamed?.following?.clock?.playing)
+    }
+
+    @Test
+    fun aPausedStationItsAppNoLongerHasLeavesTheBar() {
+        val playback = FakePlayback()
+        val model = stationPlaying(EarsOnThePhone(Heard.Nothing), playback)
+        playback.pauses()
+        assertEquals(station, model.uiState.playingUnnamed?.playing)
+        // Stopped, as a song's app stops it, the app has nothing to play on.
+        playback.unnamed.value = null
+        playback.playing.value = null
+        idle()
+        assertNull(model.uiState.playingUnnamed)
+    }
+
+    @Test
+    fun aSongPlayedSinceTakesAPausedStationsPlaceEvenOnceItsPausedToo() {
+        val playback = FakePlayback()
+        val model = stationPlaying(EarsOnThePhone(Heard.Nothing), playback)
+        playback.pauses()
+        val song = MusicMetadata("Other Fake Song", "Fake Artist")
+        playback.onThePhone = Heard.Song(song, null, 0, SystemClock.elapsedRealtime())
+        idle()
+        assertEquals(song, model.uiState.playingNow?.song)
+        assertNull(model.uiState.playingUnnamed)
+        // Paused too, the song stays, as it played last; the station doesn't come back.
+        playback.onThePhone = null
+        idle()
+        assertEquals(song, model.uiState.playingNow?.song)
+        assertNull(model.uiState.playingUnnamed)
+    }
+
+    @Test
+    fun aPausedStationIsAskedOfItsAppAgainOnceCrosstuneIsBack() {
+        val playback = FakePlayback()
+        val model = stationPlaying(EarsOnThePhone(Heard.Nothing), playback)
+        playback.pauses()
+        // Left and back: its app isn't said to play it, so it's asked whether it still has it.
+        val watching = model.viewModelScope.launch { model.watchPlayingNow() }
+        idle()
+        assertEquals(PlayingUnnamed(station, following = playback.playing.value), model.uiState.playingUnnamed)
+        watching.cancel()
+    }
+
+    @Test
+    fun aStationsButtonsAskItsAppByPackageOnTheBarAndInItsPlayer() {
+        val playback = FakePlayback()
+        val model = stationPlaying(EarsOnThePhone(Heard.Nothing), playback)
+        playback.playing.value = Following(
+            PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = true, canSkipNext = true, shuffle = false, repeat = Repeat.OFF, like = AppAction("like", "Like", 0)
+        )
+        idle()
+        model.playingNowPlayPause()
+        model.playingNowSkip()
+        model.peekPlayingUnnamed()
+        idle()
+        model.playerPlayPause()
+        model.playerSkip(true)
+        model.playerShuffle()
+        model.playerRepeat()
+        model.playerLike()
+        model.playerPlayQueued(3)
+        model.playerSeek(1_000)
+        assertEquals(listOf<String?>(station.app, station.app), playback.playedApps)
+        assertEquals(List<String?>(6) { station.app }, playback.controlledApps)
+        assertEquals(listOf<String?>(station.app), playback.seekedApps)
     }
 
     @Test

@@ -211,7 +211,10 @@ internal interface PlaybackSource {
     /** Whether Android lets Crosstune see what plays, which the user allows in its settings. */
     fun hasAccess(): Boolean
 
-    /** Where [song] is in the app playing it, as that changes; null while no app plays it. Only [app], by package, when one is named. */
+    /**
+     * Where [song] is in the app playing it, as that changes; null while no app plays it. Only [app], by package, when
+     * one is named, where a session that names no song is what it plays, whatever it calls it; see [playingUnnamed].
+     */
     fun follow(song: MusicMetadata, app: String? = null): Flow<Following?>
 
     /** Moves the app playing [song], [app] when named, to [positionMs]. */
@@ -233,20 +236,20 @@ internal interface PlaybackSource {
     /** Brings the app [song] is paused in to the front and has it play on there, from where it is; false when it can't be. */
     suspend fun bringToFront(song: MusicMetadata, app: String? = null): Boolean
 
-    /** Has the app playing [song] go on to its [next] song, or back to the one before, and play it. */
-    fun skip(song: MusicMetadata, next: Boolean)
+    /** Has the app playing [song], [app] when named, go on to its [next] song, or back to the one before, and play it. */
+    fun skip(song: MusicMetadata, next: Boolean, app: String? = null)
 
-    /** Has the app playing [song] shuffle, or play in order. */
-    fun shuffle(song: MusicMetadata, on: Boolean)
+    /** Has the app playing [song], [app] when named, shuffle, or play in order. */
+    fun shuffle(song: MusicMetadata, on: Boolean, app: String? = null)
 
-    /** Has the app playing [song] repeat [how], or, one with a repeat button of its own, the next way it goes on to there. */
-    fun repeat(song: MusicMetadata, how: Repeat)
+    /** Has the app playing [song], [app] when named, repeat [how], or, one with a repeat button of its own, the next way it goes on to there. */
+    fun repeat(song: MusicMetadata, how: Repeat, app: String? = null)
 
-    /** Presses the app's own like for [song], which likes it there, or no longer, as the app has it. */
-    fun like(song: MusicMetadata)
+    /** Presses the own like of the app playing [song], [app] when named, which likes it there, or no longer, as the app has it. */
+    fun like(song: MusicMetadata, app: String? = null)
 
-    /** Has the app playing [song] play the one numbered [id] in its queue now. */
-    fun playQueued(song: MusicMetadata, id: Long)
+    /** Has the app playing [song], [app] when named, play the one numbered [id] in its queue now. */
+    fun playQueued(song: MusicMetadata, id: Long, app: String? = null)
 
     /**
      * Has [app] find [song] by its name and play it, in the background, or YouTube Music play its
@@ -390,7 +393,7 @@ internal class MediaSessionPlayback(
         val callback = object : MediaController.Callback() {
             // Gone on to another song, as TIDAL does at the end of a preview, it plays this one no longer, even before it's said its new name.
             override fun onPlaybackStateChanged(state: PlaybackState?) {
-                trySend(followed?.takeIf { it.plays(song) }?.let(::steadily))
+                trySend(followed?.takeIf { it.has(song, app) }?.let(::steadily))
             }
 
             // What it plays next.
@@ -445,7 +448,14 @@ internal class MediaSessionPlayback(
      */
     @VisibleForTesting
     internal fun appFor(song: MusicMetadata, controllers: List<MediaController> = sessions.getActiveSessions(listener), app: String? = null): MediaController? =
-        controllers.filter { it.plays(song) && (app == null || it.packageName == app) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
+        controllers.filter { (app == null || it.packageName == app) && it.has(song, app) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
+
+    /**
+     * Whether it has [song]: by its name, or, asked of [app] by package, by naming no song, as a station
+     * or a file with no title, so the buttons reach it whatever it calls what it plays.
+     */
+    private fun MediaController.has(song: MusicMetadata, app: String?): Boolean =
+        plays(song) || app != null && metadata.let { Songless.namesNoSong(it?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), it?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
         // Taken back meanwhile, the words just stay where they are. An app that doesn't offer a seek,
@@ -499,15 +509,15 @@ internal class MediaSessionPlayback(
         }
     }
 
-    override fun skip(song: MusicMetadata, next: Boolean) = moveOn(song) { if (next) skipToNext() else skipToPrevious() }
+    override fun skip(song: MusicMetadata, next: Boolean, app: String?) = moveOn(song, app) { if (next) skipToNext() else skipToPrevious() }
 
-    override fun playQueued(song: MusicMetadata, id: Long) = moveOn(song) { skipToQueueItem(id) }
+    override fun playQueued(song: MusicMetadata, id: Long, app: String?) = moveOn(song, app) { skipToQueueItem(id) }
 
-    /** Has the app playing [song] go on to another, as [move] asks it, and play it. */
-    private fun moveOn(song: MusicMetadata, move: MediaController.TransportControls.() -> Unit) {
+    /** Has the app playing [song], [named] when it is, go on to another, as [move] asks it, and play it. */
+    private fun moveOn(song: MusicMetadata, named: String?, move: MediaController.TransportControls.() -> Unit) {
         // Taken back meanwhile, the song just keeps on as it was.
         runCatching {
-            val app = appFor(song) ?: return
+            val app = appFor(song, app = named) ?: return
             val paused = app.playbackState?.state != PlaybackState.STATE_PLAYING
             app.transportControls.run {
                 move()
@@ -517,28 +527,28 @@ internal class MediaSessionPlayback(
         }
     }
 
-    override fun shuffle(song: MusicMetadata, on: Boolean) {
+    override fun shuffle(song: MusicMetadata, on: Boolean, app: String?) {
         // Taken back meanwhile, it plays on as it did.
-        runCatching { appFor(song)?.let { modes.shuffle(it, on) } }
+        runCatching { appFor(song, app = app)?.let { modes.shuffle(it, on) } }
     }
 
-    override fun repeat(song: MusicMetadata, how: Repeat) {
+    override fun repeat(song: MusicMetadata, how: Repeat, app: String?) {
         // Taken back meanwhile, it plays on as it did.
         runCatching {
-            val app = appFor(song) ?: return
+            val playing = appFor(song, app = app) ?: return
             // One with a button of its own for it goes on to its next way as when it's tapped there: YouTube Music
             // only repeats a mix's song, never the endless mix, and won't be told to.
-            val own = app.playbackState?.customActions?.firstOrNull { it.action in REPEATS }
-            if (own != null) app.transportControls.sendCustomAction(own, Bundle()) else modes.repeat(app, how)
+            val own = playing.playbackState?.customActions?.firstOrNull { it.action in REPEATS }
+            if (own != null) playing.transportControls.sendCustomAction(own, Bundle()) else modes.repeat(playing, how)
         }
     }
 
-    override fun like(song: MusicMetadata) {
+    override fun like(song: MusicMetadata, app: String?) {
         // Taken back meanwhile, nothing's liked.
         runCatching {
-            val app = appFor(song) ?: return
-            val like = app.playbackState?.customActions?.firstOrNull { it.action in LIKES } ?: return
-            app.transportControls.sendCustomAction(like, Bundle())
+            val playing = appFor(song, app = app) ?: return
+            val like = playing.playbackState?.customActions?.firstOrNull { it.action in LIKES } ?: return
+            playing.transportControls.sendCustomAction(like, Bundle())
         }
     }
 

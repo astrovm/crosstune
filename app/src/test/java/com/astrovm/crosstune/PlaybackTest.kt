@@ -1551,6 +1551,51 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
+    fun anAppNamingNoSongIsFollowedAndAskedByItsPackageWhateverItCallsItPausedToo() {
+        allow()
+        sounding()
+        // A file with no title at all, as a player may name one.
+        val file = player("com.example.player", "Fake Player", "", null)
+        shadowOf(sessions).addController(file)
+        val unnamed = checkNotNull(playback.playingUnnamed())
+        assertEquals(Unnamed("com.example.player", "Fake Player", null), unnamed)
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(unnamed.played, unnamed.app).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(true, seen.last()?.clock?.playing)
+        // Its buttons reach it by its package; by its name, which is none, nothing does.
+        playback.playPause(unnamed.played, false, unnamed.app)
+        playback.skip(unnamed.played, true, unnamed.app)
+        assertEquals(listOf("pause", "skipToNext"), asked())
+        playback.playPause(unnamed.played, false)
+        playback.skip(unnamed.played, true)
+        assertEquals(emptyList<String>(), asked())
+        // Paused, it no longer counts as playing, but it's still followed, paused, as a song is.
+        shadowOf(file).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 42_000, 0f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(playback.playingUnnamed())
+        assertEquals(false, seen.last()?.clock?.playing)
+        playback.playPause(unnamed.played, true, unnamed.app)
+        assertEquals(listOf("play"), asked())
+        // Stopped, it has nothing to follow.
+        shadowOf(file).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_STOPPED, 0, 0f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSongIsNeverTakenForWhatItsAppPlaysWithNoSongNamed() {
+        allow()
+        sounding()
+        // The same app plays a song now: asked by package for what named none, it isn't that.
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Fake Song", "Fake Band"))
+        playback.playPause(MusicMetadata("", ""), false, "com.example.player")
+        assertEquals(emptyList<String>(), asked())
+    }
+
+    @Test
     fun anAppNamingNoSongIsToldAsItChanges() {
         allow()
         sounding()
