@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.view.View
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -113,6 +114,23 @@ class PlayingBarTest {
     }
 
     /** Shows [state] on a phone drawn edge to edge, as the app is. */
+    @Test
+    fun aStationsBarIsSaidOutOfSightOnceAnotherScreenTakesTheMainOnesPlace() {
+        val station = Unnamed("com.example.radio", "Fake Radio", "Fake FM")
+        val state = mutableStateOf(UiState(playingUnnamed = PlayingUnnamed(station)))
+        val inSight = mutableListOf<Boolean>()
+        compose.setContent {
+            CrosstuneTheme { CrosstuneScreen(state.value, ScreenActions(onPlayingBarInSight = { inSight += it })) }
+        }
+        compose.waitForIdle()
+        assertEquals(listOf(true), inSight)
+        // The player opens over it: the bar is gone with the main screen, so the station is no longer listened to.
+        state.value = state.value.copy(player = PlayerState(station.played, station.app, songless = true))
+        compose.waitForIdle()
+        assertTrue(compose.onAllNodesWithTag(NOW_PLAYING_TAG).fetchSemanticsNodes().isEmpty())
+        assertEquals(listOf(true, false), inSight)
+    }
+
     private fun showEdgeToEdge(state: UiState) {
         lateinit var view: View
         compose.setContent {
