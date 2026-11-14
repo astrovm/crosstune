@@ -145,6 +145,7 @@ class MainActivity : ComponentActivity() {
                         client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
                     ).takeIf { checksForUpdates(applicationContext) },
                     mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
+                    mayCapture = { Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && PlaybackCapture.allowed(applicationContext) },
                     singing = singingFactory(applicationContext, client),
                     reminders = remindersFactory(applicationContext),
                     reports = ReportSender(

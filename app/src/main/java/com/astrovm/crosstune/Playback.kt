@@ -667,7 +667,7 @@ internal class MediaSessionPlayback(
 
     override fun playsAloud(): Boolean =
         !audio.isStreamMute(AudioManager.STREAM_MUSIC) && audio.getStreamVolume(AudioManager.STREAM_MUSIC) > 0 &&
-            audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).none { it.type in PRIVATE_OUTPUTS }
+            audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).all { it.type in ROOM_OUTPUTS }
 
     /**
      * The apps playing now, nearest first. Without the user's say-so Android shows none, and says so by
@@ -798,9 +798,9 @@ internal class MediaSessionPlayback(
     private fun playing(controller: MediaController, asked: Long? = null): Heard.Song? {
         val metadata = controller.metadata ?: return null
         val said = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
-        val label = labelOf(controller.packageName)
-        if (Songless.namesNoSong(said, metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), label)) return null
-        val (title, artist) = MetadataParsers.playerSong(said, Songless.ownName(metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), label)) ?: return null
+        val by = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        if (Songless.namesNoSong(said, by)) return null
+        val (title, artist) = MetadataParsers.playerSong(said, by) ?: return null
         // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
         // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
         // YouTube Music plays videos with no album too, all of them music, "Queen - Bohemian Rhapsody (Lyrics)" by "7clouds".
@@ -1028,12 +1028,20 @@ private const val SPOTIFY_LIKED = "CHECK_FILL"
 private val REPEATS = setOf("loop_mode_action") // YouTube Music
 
 /**
- * Where the phone's music goes when only its listener hears it: headphones, wired or Bluetooth. A Bluetooth
- * speaker can't be told from headphones, so the microphone isn't asked to hear one either.
+ * Where the phone's music is heard in the room, or never goes: its own speaker and earpiece, a call, a TV
+ * over HDMI, a car, a Bluetooth LE speaker. Any other output may be heard by its listener alone, so the
+ * microphone isn't asked to hear it: headphones, a hearing aid, a USB or classic Bluetooth one, which can't
+ * be told from headphones, a line out, a dock, or a kind a later Android adds.
  */
-private val PRIVATE_OUTPUTS = buildSet {
-    addAll(listOf(AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO))
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(AudioDeviceInfo.TYPE_BLE_HEADSET)
+private val ROOM_OUTPUTS = buildSet {
+    addAll(
+        listOf(
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_TELEPHONY,
+            AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_BUS
+        )
+    )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) addAll(listOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE, AudioDeviceInfo.TYPE_REMOTE_SUBMIX))
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) addAll(listOf(AudioDeviceInfo.TYPE_HDMI_EARC, AudioDeviceInfo.TYPE_BLE_SPEAKER))
 }
 
 /** States in which an app plays nothing to follow. */

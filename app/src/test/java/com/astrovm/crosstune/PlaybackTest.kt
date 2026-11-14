@@ -1492,11 +1492,11 @@ class PlaybackTest {
         shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", album = "VRadio", duration = 120_000, art = mapOf(MediaMetadata.METADATA_KEY_ART_URI to cover)))
         assertNull(playback.nowPlaying())
         assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2", cover), playback.playingUnnamed())
-        // Its own name where the artist goes is no artist either.
+        // An artist named as the app that plays them is a song, as "Trust Me" by Pandora in the Pandora app.
         ShadowMediaSessionManager.reset()
-        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "RTP Antena 2", "VRadio"))
-        assertNull(playback.nowPlaying())
-        assertEquals("RTP Antena 2", playback.playingUnnamed()?.name)
+        shadowOf(sessions).addController(player("com.pandora.android", "Pandora", "Trust Me", "Pandora", album = "Fake Album"))
+        assertEquals(MusicMetadata("Trust Me", "Pandora"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertNull(playback.playingUnnamed())
         // As Radio Garden names one: the station, where it is as the artist, and no length, as a video has.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.jonathanpuckey.radiogarden", "Radio Garden", "Fake FM", "Lisbon, Portugal", duration = -1))
@@ -1570,19 +1570,66 @@ class PlaybackTest {
         audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
         // Through headphones, wired or not, the microphone hears nothing of it; a speaker on Bluetooth is told as one too.
         for (type in listOf(AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLE_HEADSET)) {
-            shadowOf(audio).setOutputDevices(listOf(AudioDeviceInfoBuilder.newBuilder().setType(type).build()))
+            outputs(audio, type)
             assertFalse(playback.playsAloud())
         }
-        shadowOf(audio).setOutputDevices(listOf(AudioDeviceInfoBuilder.newBuilder().setType(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER).build()))
+        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
         assertTrue(playback.playsAloud())
     }
+
+    @Test
+    fun anyOutputThatMayBeHeardByItsListenerAloneIsNotAloud() {
+        val audio = app.getSystemService(AudioManager::class.java)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
+        // What a phone always has, and a TV, a car or a speaker that fills the room.
+        val room = listOf(
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE,
+            AudioDeviceInfo.TYPE_TELEPHONY, AudioDeviceInfo.TYPE_REMOTE_SUBMIX
+        )
+        outputs(audio, *room.toIntArray())
+        assertTrue(playback.playsAloud())
+        for (type in listOf(AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_HDMI_EARC, AudioDeviceInfo.TYPE_BUS, AudioDeviceInfo.TYPE_BLE_SPEAKER)) {
+            outputs(audio, *(room + type).toIntArray())
+            assertTrue("$type", playback.playsAloud())
+        }
+        // Each of these may be in one listener's ears, and so may a kind a later Android adds.
+        val private = listOf(
+            AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_ACCESSORY, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_BROADCAST,
+            AudioDeviceInfo.TYPE_HEARING_AID, AudioDeviceInfo.TYPE_BLE_HEARING_AID, AudioDeviceInfo.TYPE_BLE_CENTRAL, AudioDeviceInfo.TYPE_BLE_CENTRAL_BROADCAST,
+            AudioDeviceInfo.TYPE_LINE_ANALOG, AudioDeviceInfo.TYPE_LINE_DIGITAL, AudioDeviceInfo.TYPE_AUX_LINE,
+            AudioDeviceInfo.TYPE_DOCK, AudioDeviceInfo.TYPE_DOCK_ANALOG, AudioDeviceInfo.TYPE_IP, AudioDeviceInfo.TYPE_FM,
+            AudioDeviceInfo.TYPE_MULTICHANNEL_GROUP, AudioDeviceInfo.TYPE_UNKNOWN, 99
+        )
+        for (type in private) {
+            outputs(audio, *(room + type).toIntArray())
+            assertFalse("$type", playback.playsAloud())
+        }
+    }
+
+    private fun outputs(audio: AudioManager, vararg types: Int) =
+        shadowOf(audio).setOutputDevices(types.map { AudioDeviceInfoBuilder.newBuilder().setType(it).build() })
 
     @Test
     @Config(sdk = [Build.VERSION_CODES.R])
     fun beforeBluetoothLeHeadsetsHeadphonesStillCount() {
         val audio = app.getSystemService(AudioManager::class.java)
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
-        shadowOf(audio).setOutputDevices(listOf(AudioDeviceInfoBuilder.newBuilder().setType(AudioDeviceInfo.TYPE_WIRED_HEADSET).build()))
+        outputs(audio, AudioDeviceInfo.TYPE_WIRED_HEADSET)
+        assertFalse(playback.playsAloud())
+        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE, AudioDeviceInfo.TYPE_REMOTE_SUBMIX)
+        assertTrue(playback.playsAloud())
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.Q])
+    fun beforeAndroid11TheSpeakerAloneIsStillAloud() {
+        val audio = app.getSystemService(AudioManager::class.java)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
+        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_TELEPHONY)
+        assertTrue(playback.playsAloud())
+        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_WIRED_HEADPHONES)
         assertFalse(playback.playsAloud())
     }
 

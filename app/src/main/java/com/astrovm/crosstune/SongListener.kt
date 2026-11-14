@@ -370,19 +370,17 @@ internal fun interface SongHearing {
  * and only listens with [hearing] when none is. An app that can't say where in the song it is, as
  * for a video, is still listened to for that, through [played], the phone's own sound, which the
  * microphone hears poorly, and not at all through headphones; with the microphone only when the
- * phone won't share its sound. Nothing heard, it's named as the app does. So is an app that plays
- * with no song named, as [PlaybackSource.playingUnnamed] has it.
+ * phone won't share its sound. Nothing heard, it's named as the app does.
  */
 internal class PlayingFirst(
     private val playback: PlaybackSource,
     private val hearing: SongHearing,
-    private val played: SongHearing = hearing,
-    /** How often a listen by microphone [whileAloud][listenToPlaying] checks the phone still plays out loud. */
-    private val aloudCheckMs: Long = ALOUD_CHECK_MS
+    private val played: SongHearing = hearing
 ) : SongHearing {
     override suspend fun listen(): Heard {
-        // An app that names no song, e.g. a radio station, is heard from the phone's own sound first.
-        val playing = playback.nowPlaying() ?: return if (playback.playingUnnamed() != null) listenToPlaying() else hearing.listen()
+        // With no song named, even while an app plays one it doesn't name, the microphone names one
+        // nearby: naming what the phone plays is the bar's to do.
+        val playing = playback.nowPlaying() ?: return hearing.listen()
         if (playing.clock != null) return playing
         return listenToPlaying() as? Heard.Song ?: playing
     }
@@ -401,7 +399,7 @@ internal class PlayingFirst(
     private suspend fun aloud(): Heard? = coroutineScope {
         val listening = async { hearing.listen() }
         val quiet = async {
-            while (playback.playsAloud()) delay(aloudCheckMs)
+            while (playback.playsAloud()) delay(ALOUD_CHECK_MS)
             null
         }
         select { listening.onAwait { it }; quiet.onAwait { it } }.also { coroutineContext.cancelChildren() }

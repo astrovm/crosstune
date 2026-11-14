@@ -1,6 +1,5 @@
 package com.astrovm.crosstune
 
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,17 +13,14 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class SonglessTest {
 
-    private fun noSong(title: String, artist: String = "", app: String? = "Fake Player") = Songless.namesNoSong(title, artist, app)
+    private fun noSong(title: String, artist: String = "") = Songless.namesNoSong(title, artist)
 
     @Test
     fun aRadioStationAloneNamesNoSong() {
         // As VRadio names RTP Antena 2: the station, no artist, and its own name as the album.
-        assertTrue(noSong("RTP Antena 2", "", "VRadio"))
-        // As Radio Garden names one: the station, and where it is as the artist.
-        assertTrue(noSong("Fake FM", "<unknown>", "Radio Garden"))
-        // An app that puts its own name where the artist goes.
-        assertTrue(noSong("Fake FM", "VRadio", "VRadio"))
-        assertTrue(noSong("Fake FM", " vradio ", "VRadio"))
+        assertTrue(noSong("RTP Antena 2", ""))
+        // A station named with no one where the artist goes.
+        assertTrue(noSong("Fake FM", "<unknown>"))
     }
 
     @Test
@@ -52,12 +48,13 @@ class SonglessTest {
     @Test
     fun aSongWithItsArtistIsOne() {
         // As Spotify, YouTube Music, Apple Music and Poweramp with tags name theirs.
-        assertFalse(noSong("Fake Song", "Fake Artist", "Spotify"))
-        assertFalse(noSong("Fake Song (Remastered 2011)", "Fake Artist", "YouTube Music"))
-        assertFalse(noSong("Fake Song", "Fake Artist & Other Fake", "Apple Music"))
-        assertFalse(noSong("Fake Song", "Fake Artist", "Poweramp"))
-        // No app's name to tell, as when Android won't say it.
-        assertFalse(noSong("Fake Song", "Fake Artist", null))
+        assertFalse(noSong("Fake Song", "Fake Artist"))
+        assertFalse(noSong("Fake Song (Remastered 2011)", "Fake Artist"))
+        assertFalse(noSong("Fake Song", "Fake Artist & Other Fake"))
+        // An artist named as the app that plays them is still the artist: "Trust Me" by Pandora in
+        // the Pandora app, or a band called Pulsar in Pulsar.
+        assertFalse(noSong("Trust Me", "Pandora"))
+        assertFalse(noSong("Fake Song", "Pulsar"))
         // Numbers in a song's name aren't a file's.
         assertFalse(noSong("Song 2", "Fake Band"))
         assertFalse(noSong("Summer of 1999", "Fake Artist"))
@@ -71,14 +68,6 @@ class SonglessTest {
     fun aSongInItsTitleAloneIsOne() {
         // A file, or a station that sends what it plays, "Artist - Song", as ICY does.
         assertFalse(noSong("Fake Artist - Fake Song.mp3", "<unknown>"))
-        assertFalse(noSong("Fake Artist - Fake Song", "", "VRadio"))
-        assertFalse(noSong("Fake Artist - Fake Song", "VRadio", "VRadio"))
-    }
-
-    @Test
-    fun theAppsOwnNameIsNoArtistOnlyWhenItIsTheApps() {
-        assertEquals("", Songless.ownName("VRadio", "VRadio"))
-        assertEquals("Fake Artist", Songless.ownName("Fake Artist", "VRadio"))
-        assertEquals("VRadio", Songless.ownName("VRadio", null))
+        assertFalse(noSong("Fake Artist - Fake Song", ""))
     }
 }
