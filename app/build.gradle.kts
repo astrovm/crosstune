@@ -426,7 +426,7 @@ val notices = tasks.register<Test>("notices") {
     outputs.upToDateWhen { false }
 }
 
-// The tests that time how reading grows (Growth.kt). With two forks, the other one's tests take the same cores and
+// The tests that time how reading grows (Growth.kt). Beside other forks, the other tests take the same cores and
 // caches for minutes, which slowed every reading of a longer page on CI 2.3 times and named a reader in step. So only
 // this task times them: in one fork, after every other task of the build, with nothing beside them. Elsewhere, as in
 // the unit tests Kover counts, Growth reads each text once and judges nothing, so what they run still counts.
@@ -443,6 +443,8 @@ val askedTests: Map<String, List<String>> = buildMap<String, MutableList<String>
         }
     }
 }
+/** Whether this build runs the whole check, which builds and checks everything else in the same Gradle beside the tests. */
+val wholeCheck = gradle.startParameter.taskNames.any { it.substringAfterLast(':') == "ci" }
 tasks.register<Test>("growthTests") {
     group = "verification"
     description = "The tests that time how reading grows, alone in one fork, after the other tasks."
@@ -480,12 +482,15 @@ tasks.withType<Test>().configureEach {
     // in turn by name before any runs, not to whichever is free. So a class added or taken away moves each after it to
     // another process: with two, PracticeCardsTest, ListeningTest and MainActivityTest, which mostly wait, ended up in the
     // same one, and it ran 4 minutes past the other on CI's runner. Three, as CI's runner has room for, leave each less to
-    // do whichever classes share one; they mostly wait, so the processor has room for the third.
+    // do whichever classes share one; they mostly wait, so the processor has room for the third. :app:ci holds about
+    // 13 GiB with two, as lint, detekt and the APKs leave their memory in Gradle, and a third holds over 2 more (2.3 GiB
+    // over 8 of the heaviest classes, in gradle-box): in a 16 GiB box, as gradle-box gives it, that's too near the limit.
     val memory = (ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean).totalMemorySize
     val processors = Runtime.getRuntime().availableProcessors()
+    val forThree = if (wholeCheck) 18L shl 30 else 14L shl 30
     maxParallelForks = when {
         name == "growthTests" || processors < 4 -> 1
-        memory >= (14L shl 30) -> 3
+        memory >= forThree -> 3
         memory >= (12L shl 30) -> 2
         else -> 1
     }
