@@ -27,6 +27,7 @@
     <string name="settings_licenses">Lizenzen</string>
     <string name="license_show">Lizenz anzeigen</string>
     <string name="license_hide">Lizenz ausblenden</string>
+    <string name="language_tag">de</string>
     <string name="settings_links_title">Links öffnen von</string>
     <string name="rule_opens_in">Öffnet in %1$s</string>
     <string name="rule_default">Standard (%1$s)</string>

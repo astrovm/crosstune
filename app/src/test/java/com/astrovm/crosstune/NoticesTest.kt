@@ -49,8 +49,8 @@ class NoticesTest {
         val notices = Notices.parse("# about\n\nOne\nby: Someone\nlicense: MIT License\ntext: a.txt b.txt\ncovers: maven a:b\ncovers: file c\n\n\nTwo\nby: Else\nlicense: None stated\n")
         assertEquals(
             listOf(
-                Notice("One", "Someone", "MIT License", listOf("a.txt", "b.txt"), null, null, listOf("maven a:b", "file c")),
-                Notice("Two", "Else", "None stated", emptyList(), null, null, emptyList())
+                Notice("One", "Someone", "MIT License", listOf("a.txt", "b.txt"), null, null),
+                Notice("Two", "Else", "None stated", emptyList(), null, null)
             ),
             notices
         )
@@ -70,7 +70,7 @@ class NoticesTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun aMissingTextIsAMistake() {
-        Notices.text(Notice("One", "Someone", "MIT License", listOf("nothing.txt"), null, null, emptyList()))
+        Notices.text(Notice("One", "Someone", "MIT License", listOf("nothing.txt"), null, null))
     }
 
     @Test
@@ -114,10 +114,9 @@ class NoticesTest {
         assertEquals(before.size + 1 + jmdict.size, licenseWorkIndex("projectM", open, units))
         LicenseSplits.clear()
         val notice = Notices.all.first { it.name == "JMdict" }
-        assertEquals(licenseUnits(Notices.text(notice)), LicenseSplits.make(notice))
-        assertEquals(1, LicenseSplits.times["JMdict"])
         LicenseSplits.make(notice)
-        assertEquals(1, LicenseSplits.times["JMdict"])
+        assertEquals(licenseUnits(Notices.text(notice)), LicenseSplits.of("JMdict"))
+        LicenseSplits.clear()
     }
 
     @Test

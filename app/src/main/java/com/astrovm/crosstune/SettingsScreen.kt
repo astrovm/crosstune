@@ -1,7 +1,9 @@
 package com.astrovm.crosstune
 
 import androidx.annotation.DrawableRes
+import androidx.annotation.VisibleForTesting
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CornerBasedShape
@@ -87,7 +89,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -748,7 +749,8 @@ private const val LICENSES_PAGE = "licenses"
  * and steps through a licence a piece at a time, each short enough to fit the screen at the largest
  * font, so none is skipped. Back closes the open licence the remote is in, or the last one opened,
  * and returns to that work's row; with none open, Back leaves the page. Turned or otherwise made
- * again, the page keeps what's open, where it was scrolled to, and what the remote was on.
+ * again, the page keeps what's open, where it was scrolled to, and what the remote was on. A text is
+ * read and split once, never on the main thread: the longest is about half a million characters.
  */
 @Composable
 private fun LicensesPage(onBack: () -> Unit) {
@@ -758,19 +760,25 @@ private fun LicensesPage(onBack: () -> Unit) {
     var open by rememberSaveable { mutableStateOf(listOf<String>()) }
     var focusedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var entered by rememberSaveable { mutableStateOf(false) }
-    // Bumps once a licence has been split, so the page draws the pieces it kept. The split itself stays
-    // off this pass: the longest text is hundreds of thousands of characters.
-    var splitGeneration by remember { mutableIntStateOf(0) }
+    // A new one once a licence has been split, so the page draws the pieces it kept. The split itself
+    // stays off this pass: the longest text is hundreds of thousands of characters.
+    var splitDone by remember { mutableStateOf(Any()) }
     val requesters = remember { mutableMapOf<String, FocusRequester>() }
-    // Made again with a licence open, the page needs its pieces at once, or the list can't go back to where it was
-    // scrolled to. Only then is a text split here; one opened by a press is split off this pass, below.
-    val madeAgainWith = remember { Notices.all.filter { it.name in open }.associate { it.name to LicenseSplits.make(it) } }
-    val units = remember(open, splitGeneration) {
-        open.mapNotNull { name -> (LicenseSplits.of(name) ?: madeAgainWith[name])?.let { name to it } }.toMap()
+    // Made again with a licence open after Android stopped the app, its pieces are gone. The list stays
+    // empty until they are split again, below: with fewer rows it would lose where it was scrolled to.
+    // Turned, the pieces are kept, so the page draws at once.
+    var restoring by remember { mutableStateOf(open.any { LicenseSplits.of(it) == null }) }
+    val units = remember(open, splitDone) { open.mapNotNull { name -> LicenseSplits.of(name)?.let { name to it } }.toMap() }
+    // Crosstune's own words in the notices, in the app's language, which picks the file; licence texts stay as published.
+    // The first time, they're read off the main thread and the list waits for them. Turned, they're read already.
+    val tag = stringResource(R.string.language_tag)
+    val words by produceState(Notices.wordsRead(tag), tag) {
+        value = Notices.wordsRead(tag) ?: withContext(MainActivity.systemDispatcher) { Notices.words(tag) }
     }
     val look = LicenseLook(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), MaterialTheme.shapes.large)
-    // One path for a press and for a remote. The page's own Back still leaves once nothing is open.
-    BackHandler(enabled = open.isNotEmpty()) {
+    // One path for a press and for a remote. The page's own Back still leaves once nothing is open, and
+    // while the words are read: nothing is shown to close yet, and the main thread doesn't wait for the notices.
+    BackHandler(enabled = open.isNotEmpty() && words != null) {
         val closing = licenceToClose(focusedKey, open)
         val next = open - closing
         open = next
@@ -786,19 +794,31 @@ private fun LicensesPage(onBack: () -> Unit) {
         },
         listState = listState
     ) {
-        licenseItems(open, units, look, openWebPage, focusing = { key ->
-            Modifier.focusRequester(requesters.getOrPut(key) { FocusRequester() }).onFocusChanged { if (it.isFocused) focusedKey = key }
-        }) { name -> open = if (name in open) open - name else open + name }
+        val shown = words
+        if (!restoring && shown != null) {
+            licenseItems(open, units, shown, look, openWebPage, focusing = { key ->
+                Modifier.focusRequester(requesters.getOrPut(key) { FocusRequester() }).onFocusChanged { if (it.isFocused) focusedKey = key }
+            }) { name -> open = if (name in open) open - name else open + name }
+        }
     }
-    // The pieces are kept for as long as the page is shown, not for as long as the app runs: it stays up for days
-    // behind its notification access, and one text alone is about half a million characters.
-    DisposableEffect(Unit) { onDispose { LicenseSplits.clear() } }
+    // The pieces and the words are kept for as long as the page is shown, and while it turns, not for as long as the app runs:
+    // it stays up for days behind its notification access, and one text alone is about half a million characters.
+    val activity = LocalActivity.current
+    DisposableEffect(Unit) {
+        onDispose {
+            if (activity?.isChangingConfigurations != true) {
+                LicenseSplits.clear()
+                Notices.letGoOfWords()
+            }
+        }
+    }
     LaunchedEffect(open) {
         // Already split ones are kept. Only a work that is not split yet is split, and not while drawing.
-        val openNotices = Notices.all.filter { it.name in open }
-        if (openNotices.none { LicenseSplits.of(it.name) == null }) return@LaunchedEffect
-        withContext(MainActivity.systemDispatcher) { openNotices.forEach { LicenseSplits.make(it) } }
-        splitGeneration++
+        if (open.any { LicenseSplits.of(it) == null }) {
+            withContext(MainActivity.systemDispatcher) { Notices.all.filter { it.name in open }.forEach { LicenseSplits.make(it) } }
+            splitDone = Any()
+        }
+        restoring = false
     }
     LaunchedEffect(Unit) {
         // Wait for the rows to be placed, as the list draws only those on screen.
@@ -843,6 +863,7 @@ private class LicenseLook(val color: Color, val hairline: Color, val corner: Cor
 private fun LazyListScope.licenseItems(
     open: List<String>,
     units: Map<String, List<LicenseUnit>>,
+    words: Map<String, NoticeWords>,
     look: LicenseLook,
     openWebPage: (String) -> Unit,
     focusing: (String) -> Modifier,
@@ -854,7 +875,7 @@ private fun LazyListScope.licenseItems(
         item(key = "work:${notice.name}") {
             Column(look.box(first = index == 0, last = last && !isOpen)) {
                 if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = look.hairline)
-                NoticeRow(notice, isOpen, focusing("work:${notice.name}")) { onToggle(notice.name) }
+                NoticeRow(words.getValue(notice.name), isOpen, focusing("work:${notice.name}")) { onToggle(notice.name) }
             }
         }
         if (isOpen && notice.url != null) {
@@ -872,7 +893,7 @@ private fun LazyListScope.licenseItems(
 
 /** One work: who it's by, its licence and what was changed; tapped, its licence opens under it, and tapped again it closes. */
 @Composable
-private fun NoticeRow(notice: Notice, open: Boolean, modifier: Modifier, onToggle: () -> Unit) {
+private fun NoticeRow(notice: NoticeWords, open: Boolean, modifier: Modifier, onToggle: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -941,29 +962,38 @@ internal data class LicenseUnit(val text: String, val starts: Boolean, val ends:
 /**
  * Each work's licence, split once and kept. Opening another work must not split this one again, and
  * the split stays off the pass that draws the page: one text is about half a million characters.
- * [times] counts the splits, for that test.
  */
 internal object LicenseSplits {
     private val pieces = HashMap<String, List<LicenseUnit>>()
-    val times = mutableMapOf<String, Int>()
+
+    /** A new one at each [clear], so a split that ends after the page was left isn't kept. */
+    private var kept = Any()
 
     fun of(name: String): List<LicenseUnit>? = synchronized(pieces) { pieces[name] }
 
-    fun make(notice: Notice): List<LicenseUnit> {
-        synchronized(pieces) { pieces[notice.name] }?.let { return it }
-        val made = licenseUnits(Notices.text(notice))
-        return synchronized(pieces) {
-            pieces[notice.name]?.let { return it }
-            times[notice.name] = (times[notice.name] ?: 0) + 1
-            pieces[notice.name] = made
-            made
+    /** Reads [Notice]'s texts and splits them. Tests count the reads and see which thread does them. */
+    @VisibleForTesting
+    var split: (Notice) -> List<LicenseUnit> = { licenseUnits(Notices.text(it)) }
+
+    /**
+     * A lock for each work, by its name, so two passes that ask for the same one at once read it once.
+     * Kept for as long as the app runs: one small object for each of the about 40 works.
+     */
+    private val locks = HashMap<String, Any>()
+
+    /** Splits [notice]'s licence and keeps it, unless it's kept already. */
+    fun make(notice: Notice) {
+        synchronized(synchronized(locks) { locks.getOrPut(notice.name) { Any() } }) {
+            val asked = synchronized(pieces) { if (notice.name in pieces) return; kept }
+            val made = split(notice)
+            synchronized(pieces) { if (kept === asked) pieces[notice.name] = made }
         }
     }
 
     fun clear() {
         synchronized(pieces) {
             pieces.clear()
-            times.clear()
+            kept = Any()
         }
     }
 }

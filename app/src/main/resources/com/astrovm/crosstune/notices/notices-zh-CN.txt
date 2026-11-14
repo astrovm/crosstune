@@ -1,0 +1,160 @@
+# Crosstune's own words in notices.txt, in Simplified Chinese: a block per work, its English name, then the words it
+# translates. What a work isn't given here shows in English. Licence texts stay as published.
+# from: names the English the block was made from. When that English changes, NoticeWordsTest fails
+# and gives the new from: to set once the block is translated again.
+
+JMdict
+from: e24ab7fdbdb1
+note: Crosstune 用 JMdict 做的词表经过了修改。读音：只有 JMdict 只给一种读法、而 Crosstune 读法不同的两个及以上汉字的词。假名词：只有第一个假名后面是 い 或 う 的常用词，每个都附上查找方式，以及那里是 ひ 或 ふ 的词。它们同样采用 CC BY-SA 4.0。下面是 Group 的许可证 (https://www.edrdg.org/edrdg/licence.html)、CC BY-SA 4.0 许可证和 JMdict 的文档。
+
+Kuromoji
+from: 962013f376a7
+by: Atilika Inc. 和贡献者
+
+IPADIC
+from: 429fa42d32bb
+by: Nara Institute of Science and Technology (NAIST)，含 ICOT Free Software 的词条
+license: NAIST 和 ICOT 许可证
+note: 包含在 Kuromoji 中，版本为 mecab-ipadic-2.7.0-20070801。
+
+UniDic
+from: a2b1f3173cf4
+note: 第一次需要时从 Maven Central 下载，包含在 Kuromoji 中，版本为 unidic-mecab 2.1.2。UniDic 采用 GPL、LGPL 或 BSD 许可证；Crosstune 按 BSD 许可证使用它。
+
+projectM
+from: 7fe496c42dcb
+license: GNU LGPL 2.1 或更高版本
+note: 从源代码构建，v4.1.8，在 app/src/main/cpp/ 中有改动：画面保持原有大小，并修正了两个构建警告。这个版本的确切源代码，包括 projectM 和改动：git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune ，其中 X.Y.Z 是这个应用的版本，然后按 CONTRIBUTING.md 的说明构建。要把 projectM 换成修改过的副本，请用那份源代码重新构建应用。
+
+MilkDrop's FFT
+from: b45dd4b9f780
+name: MilkDrop 的 FFT
+note: 包含在 projectM 中。
+
+projectM's expression parser
+from: cdf5e51ca218
+name: projectM 的表达式解析器
+note: 包含在 projectM 中。它的解析器由 GNU Bison 生成，Bison 的特别例外（见下文）允许它按 MIT 许可证分享。
+
+HLSLParser
+from: ce6b599ae9e8
+note: 包含在 projectM 中。Crosstune 修改了 GLSLGenerator.cpp，让它构建时不出警告；文件里写明了这一点。
+
+OpenGL Mathematics (GLM)
+from: 4c4874dfd640
+note: 包含在 projectM 中，版本为 0.9.9。
+
+SOIL2
+from: d450bd41d67f
+by: Martín Lucas Golini 和 Jonathan Dummer
+license: 公有领域和 MIT 许可证
+note: 包含在 projectM 中。它的图片函数只提到 MIT 许可证，没有附上全文；许可证全文在下面。
+
+stb_image and stb_image_write
+from: 63db7987e0a8
+name: stb_image 和 stb_image_write
+by: Sean Barrett 和贡献者
+license: 公有领域
+note: 包含在 SOIL2 中，版本为 stb_image 2.05 和 stb_image_write 0.98。
+
+Independent JPEG Group's JPEG software
+from: e98fc27b6e67
+name: Independent JPEG Group 的 JPEG 软件
+by: Thomas G. Lane 和 Independent JPEG Group
+note: 本软件部分基于 Independent JPEG Group 的工作 ("This software is based in part on the work of the Independent JPEG Group")：stb_image 的 JPEG 解码器的 IDCT 取自 IJG 的 jidctint.c。
+
+ETC1 texture code
+from: d19acea5fa8c
+name: ETC1 纹理代码
+note: 包含在 SOIL2 中。
+
+PowerVR SDK texture decompressor
+from: 85a1d04715d1
+name: PowerVR SDK 的纹理解压器
+note: 包含在 SOIL2 中，来自 PowerVR SDK 的 PVRTDecompress.cpp。许可证是 SDK 的，取自它的 R14.2-v3.4 版本，也就是它公开历史中含有这个文件的最早版本。
+
+SDL
+from: d76e46658c64
+note: SOIL2 查找 OpenGL 扩展的方式基于 SDL2 的方式。
+
+MilkDrop presets
+from: c2cee12eb9f2
+name: MilkDrop 预设
+by: 各自的作者，写在每个预设的名字里
+license: 未注明
+note: 来自 projectM 的 Cream of the Crop、Milkdrop Original 和 En D 预设包，以及 Ryan Geiss 2021 年 1 月最喜欢的预设 (https://www.geisswerks.com/about_milkdrop.html)；设置里的静态画面取自这些预设。它们都没有注明许可证；下面的文字是 projectM 对自己预设包的说明。
+
+MilkDrop textures
+from: 1c057dfb0def
+name: MilkDrop 纹理
+by: 各自的作者，来自 MilkDrop 和它的预设
+license: 未注明
+note: 来自 projectM 的 Milkdrop Texture Pack，它没有注明许可证。
+
+whisper.cpp and ggml
+from: 91b66a3811fe
+name: whisper.cpp 和 ggml
+note: 从源代码构建，用来让歌词对上歌声。Crosstune 修改了 whisper.cpp，让它构建时不出警告；文件里写明了这一点。
+
+YaRN
+from: 4294a4fa5771
+by: Jeffrey Quesnelle 和 Bowen Peng
+note: 包含在 ggml 中，是它的旋转位置缩放。
+
+Arm Optimized Routines
+from: ce7ea5fe04b5
+note: 包含在 ggml 中，是它的快速数学函数。Arm Optimized Routines 采用 MIT 许可证或 Apache License 2.0 with LLVM Exceptions；Crosstune 按 MIT 许可证使用它。
+
+Whisper
+from: 1f00add4de09
+note: 小型语音模型 tiny 会在第一次需要时下载，文件为 ggml-tiny-q5_1.bin：这是 Whisper 的 tiny 模型，由 whisper.cpp 的作者转换为 whisper.cpp 的格式。whisper.cpp 给每个词定时间的方式基于 Whisper 的方式。
+
+LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+from: 3ec1e4573208
+name: LLVM 的 libc++、libc++abi、libunwind、compiler-rt 和 clang 头文件
+note: 内置在视觉效果和语音的库中，来自 Android 的 NDK r30 (clang 21)。
+
+Android's C library headers
+from: 3d1c35996aaf
+name: Android 的 C 库头文件
+by: The Android Open Source Project 及其他
+license: BSD 和 Apache License 2.0
+note: 视觉效果和语音的库是用它们构建的，来自 Android 的 NDK r30。正文是 NDK 对它们的声明。
+
+Material Symbols and Material Icons
+from: dc2927001bbd
+name: Material Symbols 和 Material Icons
+
+Simple Icons
+from: c0698b1964e9
+by: Simple Icons 贡献者
+note: 音乐服务的标志。每个标志都是其所有者的商标。
+
+Roboto
+from: 4e488b8da699
+note: 它的粗体字在电视主屏幕的磁贴上画出应用名称。
+
+OkHttp and Okio
+from: ba684c746072
+name: OkHttp 和 Okio
+
+Error Prone and J2ObjC annotations
+from: ddff893ca7e3
+name: Error Prone 和 J2ObjC 注解
+
+AndroidX, Jetpack Compose and Media3
+from: be8fafefbbb5
+name: AndroidX、Jetpack Compose 和 Media3
+
+Protocol Buffers
+from: 69810fb6ac21
+note: 包含在主屏幕小部件的库 Glance 中，版本为 protobuf 4.28.2。
+
+Compose Multiplatform
+from: 15eb7e8ff70c
+by: JetBrains s.r.o. 和 The Android Open Source Project
+
+Kotlin and kotlinx.coroutines
+from: 337b1a1a8db8
+name: Kotlin 和 kotlinx.coroutines
+by: JetBrains s.r.o. 和 Kotlin Programming Language 贡献者
