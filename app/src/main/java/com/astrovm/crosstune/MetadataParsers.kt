@@ -274,10 +274,14 @@ internal object MetadataParsers {
     /**
      * The song a player names. One that names no artist, as Android's "<unknown>" for a file with none,
      * or many, as a compilation's "Various Artists", may name it in the title, "Artist - Song", as a video does.
-     * A title alone still identifies what is playing, even if it cannot say who made it.
+     * A title alone still identifies what is playing, even if it cannot say who made it. A dash left at
+     * the title's end, as a radio app that splits a station's "Artist - Song - " leaves it, is no part of it.
      */
     fun playerSong(title: String, artist: String): MusicMetadata? =
-        (spotifyPageSplitAtItsDash(title, artist) ?: if (noArtist(artist)) youtubeVideo(title.replace(audioExtension, ""), "") else MusicMetadata(title, artist))
+        (
+            spotifyPageSplitAtItsDash(title, artist)
+                ?: if (noArtist(artist)) youtubeVideo(title.replace(audioExtension, ""), "") else MusicMetadata(title.replace(danglingDashRegex, ""), artist)
+        )
             ?.let { if (noArtist(it.artist)) it.copy(artist = "") else it }
             ?.takeIf { it.title.isNotBlank() && !namesAFile(it) }
 
