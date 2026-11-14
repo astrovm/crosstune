@@ -776,8 +776,9 @@ private fun LicensesPage(onBack: () -> Unit) {
         value = Notices.wordsRead(tag) ?: withContext(MainActivity.systemDispatcher) { Notices.words(tag) }
     }
     val look = LicenseLook(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), MaterialTheme.shapes.large)
-    // One path for a press and for a remote. The page's own Back still leaves once nothing is open.
-    BackHandler(enabled = open.isNotEmpty()) {
+    // One path for a press and for a remote. The page's own Back still leaves once nothing is open, and
+    // while the words are read: nothing is shown to close yet, and the main thread doesn't wait for the notices.
+    BackHandler(enabled = open.isNotEmpty() && words != null) {
         val closing = licenceToClose(focusedKey, open)
         val next = open - closing
         open = next

@@ -30,7 +30,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -182,7 +184,7 @@ class LicensesTest {
         waitForText("Presets de MilkDrop")
         val words = synchronized(reads) { reads.filter { it.first == "notices-es.txt" } }
         assertEquals(listOf("notices-es.txt"), words.map { it.first })
-        assertTrue(words.none { it.second == Looper.getMainLooper().thread })
+        assertTrue("notices-es.txt was read on the main thread", words.none { it.second == Looper.getMainLooper().thread })
     }
 
     @Test
@@ -203,6 +205,37 @@ class LicensesTest {
         work("Presets de MilkDrop").assertExists()
         // Left, the page let go of them: open again, it reads them again.
         assertEquals(listOf("notices-es.txt", "notices-es.txt"), reads.filter { it == "notices-es.txt" })
+    }
+
+    @Test
+    fun backWhileTheWordsAreReadAgainAfterAndroidStoppedTheAppLeavesThePage() {
+        splitsCounted()
+        openLicenses()
+        work("projectM").performClick()
+        waitForText("END OF TERMS AND CONDITIONS")
+        // Android stops the app behind another: what was read is gone, the page's state is not. The words come back slowly.
+        val reading = CountDownLatch(1)
+        val letGo = CountDownLatch(1)
+        Notices.open = { name ->
+            if (name == "notices-en.txt") {
+                reading.countDown()
+                letGo.await(5, TimeUnit.SECONDS)
+            }
+            open(name)
+        }
+        LicenseSplits.clear()
+        Notices.letGoOfWords()
+        try {
+            controller = checkNotNull(controller).recreate()
+            composeRule.waitForIdle()
+            assertTrue("The words were never read", reading.await(5, TimeUnit.SECONDS))
+            // Nothing is shown to close yet, so Back leaves, and the main thread doesn't wait for the notices.
+            checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+            composeRule.waitForIdle()
+            assertTrue("Back while the words were read didn't leave the page", shown(string(R.string.settings_about_title)))
+        } finally {
+            letGo.countDown()
+        }
     }
 
     @Test

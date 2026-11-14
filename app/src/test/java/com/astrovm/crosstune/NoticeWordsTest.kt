@@ -1,7 +1,9 @@
 package com.astrovm.crosstune
 
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -9,6 +11,11 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import javax.xml.parsers.DocumentBuilderFactory
 
 /** The res folder of each of the app's languages, by its tag. */
@@ -51,6 +58,25 @@ internal fun stale(notices: List<Notice>, translated: Map<String, Map<String, St
         .filter { (name, from) -> translated.getValue(name)["from"] != from }
         .map { (name, from) -> "$name: translated from other English; translate it again, then set from: $from" }
 
+/** Names a language may write its own way: "TV", and "FFT", which Russian writes БПФ. */
+private val ownWayInSomeLanguages = setOf("TV", "FFT")
+
+/** The names in [english]: words with a digit or with a capital after their first letter, like NAIST, MilkDrop or 2.7.0. */
+internal fun names(english: String): Set<String> =
+    Regex("[A-Za-z0-9][A-Za-z0-9._+-]*[A-Za-z0-9]").findAll(english).map { it.value }
+        .filter { word -> word.any(Char::isDigit) || word.drop(1).any(Char::isUpperCase) }.toSet() - ownWayInSomeLanguages
+
+/**
+ * Each "work: field: name" in [translated], one language's blocks, where a field leaves out a name its
+ * English has. A translated field under another field's key, with the right from:, shows up here.
+ */
+internal fun misplaced(notices: List<Notice>, translated: Map<String, Map<String, String>>): List<String> =
+    notices.filter { it.name in translated }.flatMap { notice ->
+        (translated.getValue(notice.name) - "from").flatMap { (field, words) ->
+            names(english(notice, field).orEmpty()).filterNot { it in words }.map { "${notice.name}: $field: $it" }
+        }
+    }
+
 /**
  * A word for "changed" in each translated language. CC BY-SA 4.0 asks a work's copy to say it was
  * changed, so each note of a work under it says so in every language it's shown in.
@@ -80,6 +106,13 @@ class NoticeWordsTest {
     val temporary = TemporaryFolder()
 
     private val folder = File("src/main/resources/com/astrovm/crosstune/notices")
+    private val open = Notices.open
+
+    @After
+    fun tearDown() {
+        Notices.open = open
+        Notices.letGoOfWords()
+    }
 
     /** Each translated language, by the tag its strings give: every app language but English. */
     private val languages = AppLanguage.tags - "en"
@@ -139,14 +172,65 @@ class NoticeWordsTest {
 
     @Test
     fun aTranslationOfEnglishThatChangedSinceIsStale() {
-        val changed = Notices.all.map { if (it.name == "JMdict") it.copy(note = it.note + " One more sentence.") else it }
-        assertEquals(
-            listOf("JMdict: translated from other English; translate it again, then set from: ${englishOf(changed.first { it.name == "JMdict" })}"),
-            stale(changed, all.getValue("fr"))
-        )
+        val notice = Notice("One", "Someone", "MIT License", emptyList(), null, "A note.", translate = listOf("note"))
+        val translated = mapOf("One" to mapOf("from" to englishOf(notice), "note" to "Una nota."))
+        assertEquals(emptyList<String>(), stale(listOf(notice), translated))
+        val changed = notice.copy(note = "A note. One more sentence.")
+        assertEquals(listOf("One: translated from other English; translate it again, then set from: ${englishOf(changed)}"), stale(listOf(changed), translated))
         // A field it doesn't translate changes nothing.
-        val url = Notices.all.map { if (it.name == "JMdict") it.copy(url = "https://example.com") else it }
-        assertEquals(emptyList<String>(), stale(url, all.getValue("fr")))
+        assertEquals(emptyList<String>(), stale(listOf(notice.copy(url = "https://example.com")), translated))
+    }
+
+    @Test
+    fun eachTranslatedFieldKeepsTheNamesOfItsOwnEnglish() {
+        languages.forEach { tag -> assertEquals("notices-$tag.txt", emptyList<String>(), misplaced(Notices.all, all.getValue(tag))) }
+        assertEquals(setOf("NAIST", "ICOT"), names("Nara Institute of Science and Technology (NAIST), with entries from ICOT Free Software"))
+        assertEquals(setOf("mecab-ipadic-2.7.0-20070801"), names("Inside Kuromoji, as mecab-ipadic-2.7.0-20070801."))
+        assertEquals(setOf("MilkDrop"), names("MilkDrop's FFT, on a TV"))
+        // IPADIC's by and note in Spanish, each under the other's key.
+        val spanish = all.getValue("es")
+        val ipadic = spanish.getValue("IPADIC")
+        val swapped = spanish + ("IPADIC" to ipadic + mapOf("by" to ipadic.getValue("note"), "note" to ipadic.getValue("by")))
+        assertEquals(listOf("IPADIC: by: NAIST", "IPADIC: by: ICOT", "IPADIC: note: mecab-ipadic-2.7.0-20070801"), misplaced(Notices.all, swapped))
+    }
+
+    /** [this] task's result, or a failure that says [what] waited for the read. */
+    private fun <T> Future<T>.atOnce(what: String): T =
+        try {
+            get(1, TimeUnit.SECONDS)
+        } catch (_: TimeoutException) {
+            throw AssertionError("$what waited for the words being read on another thread")
+        }
+
+    @Test
+    fun whileALanguagesWordsAreReadWhatTheMainThreadAsksDoesNotWait() {
+        val reading = CountDownLatch(1)
+        val letGo = CountDownLatch(1)
+        Notices.letGoOfWords()
+        Notices.open = { name ->
+            if (name == "notices-es.txt") {
+                reading.countDown()
+                letGo.await(5, TimeUnit.SECONDS)
+            }
+            open(name)
+        }
+        val threads = Executors.newFixedThreadPool(2)
+        try {
+            val read = threads.submit<Map<String, NoticeWords>> { Notices.words("es") }
+            assertTrue("The words were never read", reading.await(5, TimeUnit.SECONDS))
+            // The page asks for them on each pass, and lets go of them when it's left.
+            assertNull(threads.submit<Map<String, NoticeWords>?> { Notices.wordsRead("es") }.atOnce("wordsRead"))
+            threads.submit { Notices.letGoOfWords() }.atOnce("letGoOfWords")
+            letGo.countDown()
+            // Whoever asked gets them. They were read for a page that was left, so they're not kept.
+            assertEquals("Presets de MilkDrop", read.get(5, TimeUnit.SECONDS).getValue("MilkDrop presets").name)
+            assertNull(Notices.wordsRead("es"))
+            // Asked again, they're read and kept.
+            assertEquals(Notices.words("es"), Notices.wordsRead("es"))
+        } finally {
+            letGo.countDown()
+            threads.shutdownNow()
+        }
     }
 
     @Test

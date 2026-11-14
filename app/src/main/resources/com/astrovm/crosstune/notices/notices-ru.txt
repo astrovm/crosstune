@@ -107,7 +107,7 @@ note: Внутри ggml, его быстрая математика. Arm Optimiz
 
 Whisper
 from: 1f00add4de09
-note: Маленькая речевая модель tiny скачивается, когда нужна впервые, как ggml-tiny-q5_1.bin: модель tiny из Whisper, которую авторы whisper.cpp перевели в формат whisper.cpp. То, как whisper.cpp ставит каждое слово во времени, основано на том, как это делает Whisper.
+note: Маленькая речевая модель tiny скачивается, когда нужна впервые, как ggml-tiny-q5_1.bin: модель tiny из Whisper, которую авторы whisper.cpp преобразовали в формат whisper.cpp. То, как whisper.cpp ставит каждое слово во времени, основано на том, как это делает Whisper.
 
 LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
 from: 3ec1e4573208
