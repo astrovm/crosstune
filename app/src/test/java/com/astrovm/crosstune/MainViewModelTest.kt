@@ -905,6 +905,43 @@ class MainViewModelTest {
         assertEquals(true, ears.closedFirst)
     }
 
+    /** Ears that take [closingMs] to let go, and keep count of the most listens that ever had them at once. */
+    private class SharedEars(val closingMs: Long) : SongHearing {
+        var listens = 0
+        var mostAtOnce = 0
+        private var open = 0
+        private suspend fun held(): Heard {
+            listens++
+            mostAtOnce = maxOf(mostAtOnce, ++open)
+            try {
+                awaitCancellation()
+            } finally {
+                withContext(NonCancellable) { delay(closingMs) }
+                open--
+            }
+        }
+        override suspend fun listen() = held()
+        override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean) = held()
+    }
+
+    @Test
+    fun aListenByHandHasTheEarsAloneThoughAnotherStationCameWhileTheLastListenLetGo() {
+        val playback = FakePlayback()
+        val ears = SharedEars(closingMs = 500)
+        val model = radioModel(ears, playback)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(1, ears.listens)
+        // Another station: the listen on the last one starts to let go, and a listen by hand comes meanwhile.
+        // The listen by hand waits only on that last one; the next station's is put off till the bar's gone
+        // from sight, which the listen by hand already said, so it never starts.
+        playback.unnamed.value = station.copy(name = "Fake FM")
+        model.listen()
+        pass(2_000)
+        assertTrue("listened by hand", ears.listens >= 2)
+        assertEquals(1, ears.mostAtOnce)
+    }
+
     @Test
     fun listeningAlongWaitsForTheListenByEarToLetGoAndTheListenByEarWaitsForItToStop() {
         val ears = LongEars(closingMs = 500)
