@@ -466,24 +466,22 @@ internal class MediaSessionPlayback(
      * file with no title, is only asked of [app] by package, by just what it's called, even nothing: so a station's
      * buttons reach it whatever it's called, and never the station before, as "Los 40" and "Los 40 Classic". Its
      * app may name who sings it later on, and still has it. A song, even one with no artist, as a song shared from
-     * Google is, is had by its name, as any app names it. An app that names no song, as one that sends no artist,
-     * has it by its title, "01 Fake Song" or "Fake Song (Live)" too, but never by words it shares: the station
-     * "Hotel California Radio" never has "Hotel California" by Eagles.
+     * Google is, is had by its name, as any app names it ([SongNames.names]).
      */
     private fun MediaController.has(song: MusicMetadata, app: String?): Boolean {
         val (title, artist) = calls()
         val songless = Songless.namesNoSong(metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), artist)
         if (song.unnamed) return app != null && title == song.title && (artist == song.artist || !songless)
-        return plays(song, byWords = !songless)
+        return plays(song)
     }
 
     /**
      * What it calls what it plays, as what names no song is shown and asked for by: its title, read as Crosstune
-     * once read a song's, "Fake Song" from "01 Fake Song.mp3", "" with none; and its artist, as the app has it.
+     * once read a song's, "Fake Song" from "Fake Song.mp3", "" with none; and its artist, as the app has it.
      */
     private fun MediaController.calls(): Pair<String, String> {
         val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }.orEmpty()
-        val read = said(this)?.takeIf { it.artist.isBlank() }?.title?.let(SongNames::withoutTrackNumber)?.takeIf { it.isNotBlank() }
+        val read = said(this)?.takeIf { it.artist.isBlank() }?.title?.takeIf { it.isNotBlank() }
         return (read ?: title) to metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
     }
 
@@ -1009,11 +1007,10 @@ internal class MediaSessionPlayback(
         return !isVideo() && length != null && song.lengthMs?.let { abs(it - length) > SAME_RECORDING_LENGTH_MS } == true
     }
 
-    /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)"; see [SongNames.names] for [byWords]. */
-    private fun MediaController.plays(song: MusicMetadata, byWords: Boolean = true): Boolean {
+    private fun MediaController.plays(song: MusicMetadata): Boolean {
         val playing = metadata ?: return false
         if (anotherRecording(playing, song)) return false
-        return SongNames.names(playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), song, byWords)
+        return SongNames.names(playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), song)
     }
 }
 

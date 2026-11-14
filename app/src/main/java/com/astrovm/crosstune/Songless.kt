@@ -68,8 +68,12 @@ internal object Songless {
     /** Where a file is rather than what it is: "/storage/emulated/0/Music/…", "file:///…" or "content://…". */
     private val path = Regex("""^(?:/|[a-z]+://)""")
 
-    /** A title that names a file rather than a song: a recording a phone app named with its date, "AUD-20240101-WA0003". */
-    private val recording = Regex("""[A-Za-z]{2,10}[-_ ]\d{6,}[A-Za-z0-9_-]*""")
+    /**
+     * A title that names a file rather than a song: a recording a phone app named with its date, "AUD-20240101-WA0003".
+     * Six digits, then anything a file name has, digits too: the same titles as "six or more digits", read in one pass,
+     * as there's only one place the digits can end.
+     */
+    private val recording = Regex("""[A-Za-z]{2,10}[-_ ]\d{6}[A-Za-z0-9_-]*""")
 }
 
 /** Where an app plays: on the phone, cast to a TV by a music app, or shown from another device, e.g. a computer through KDE Connect. */

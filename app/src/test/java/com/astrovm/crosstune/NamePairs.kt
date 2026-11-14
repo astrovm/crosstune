@@ -62,6 +62,19 @@ internal object NamePairs {
     /** One name on both sides, in other scripts and Latin, with its tag after it or before it. */
     private val scriptBases = listOf("사랑", "爱情", "Любовь", "Canción", "Fake Song", "Live Forever")
 
+    /**
+     * Whole titles, as review round 12 of PR #999 wrote them: marks in other scripts with a space before them, in
+     * full-width brackets or in 【】, and Latin tags in those brackets, each against another name with the same mark.
+     */
+    private val written = listOf(
+        "愛 カバー" to "恋 カバー", "愛【カバー】" to "恋【カバー】", "愛（カバー）" to "恋（カバー）", "愛【歌ってみた】" to "恋【歌ってみた】",
+        "愛 (歌ってみた)" to "恋 (歌ってみた)", "사랑 커버" to "이별 커버", "사랑 (커버)" to "이별 (커버)", "愛 ライブ" to "恋 ライブ",
+        "愛【Cover】" to "恋【Cover】", "Hello【Live】" to "Hello World【Live】", "Hello（Live）" to "Hello World（Live）",
+        "Hello (Live)" to "Hello World (Live)", "愛 (カバー)" to "恋 (カバー)", "ライブ" to "Live", "アイドル" to "アイドル (ライブ)",
+        "Fake Song" to "Fake Song (Live)", "Fake Song" to "Fake Song【Live】", "愛「カバー」" to "恋「カバー」", "愛〔カバー〕" to "恋〔カバー〕",
+        "愛［カバー］" to "恋［カバー］", "愛 - カバー" to "恋 - カバー", "Fake Song【ライブ】" to "Fake Song (Live)"
+    )
+
     fun all(): List<NamePair> {
         val same = bases.flatMap { base ->
             val numbered = base == "Fake Song"
@@ -83,7 +96,8 @@ internal object NamePairs {
                 someTags.flatMap { ours -> sides.map { before -> NamePair(base, theirs, false, base, ours, before) } }
             }
         }
-        return (same + other + scripts).distinct()
+        val asWritten = written.flatMap { (one, two) -> listOf(one to two, two to one) }.map { (title, song) -> NamePair(title, "", false, song, "") }
+        return (same + other + scripts + asWritten).distinct()
     }
 
     /** What every pair is, line by line, to tell whether a file of answers was made from these pairs. */

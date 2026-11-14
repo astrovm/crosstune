@@ -103,12 +103,12 @@ internal class FakePlayback : PlaybackSource {
     /**
      * Whether an app that plays [there], what names no song, or the song it [names], has [song], as the real source
      * has it: what names no song, asked for as [Unnamed.played], only of its [app], by just what it's called, or by
-     * its title once the app names who sings it; a song, by its title, never by words it shares. With nothing
+     * its title once the app names who sings it; a song, by its name, as [SongNames.names] has it. With nothing
      * [there], the app plays [song].
      */
     private fun has(there: MusicMetadata?, names: MusicMetadata?, song: MusicMetadata, app: String?): Boolean {
         if (song.unnamed) return app != null && (there?.let { it.title == song.title && it.artist == song.artist } ?: (names?.title == song.title))
-        return there == null || SongNames.names(there.title, there.artist, song, byWords = false)
+        return there == null || SongNames.names(there.title, there.artist, song)
     }
 
     /** Whether what started isn't believed yet, as the phone's sound takes a moment to follow what an app says it plays. */

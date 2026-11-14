@@ -41,7 +41,7 @@ internal object SongNames {
      * "(電影《我的少女時代》主題曲)". "Live", "Acoustic" or "Remix" are other recordings, so they stay.
      */
     private val editionTag = Regex(
-        """(?:\s+[$DASHES]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$IN_TAG*|$IN_TAG*(?:$TIE_IN)$IN_TAG*)\s*[)\]]?$""",
+        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$IN_TAG*|$IN_TAG*(?:$TIE_IN)$IN_TAG*)\s*[)\]]?$""",
         RegexOption.IGNORE_CASE
     )
     private const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
@@ -50,10 +50,7 @@ internal object SongNames {
     private const val TIE_IN = """主[題题][曲歌]|挿入歌|插曲|片[頭头尾]曲|\bOST\b|\btheme\s+song\b"""
 
     /** A letter of a tag: none of a bracket, nor the dash before another part of the name, "Band - Song - Remastered". */
-    /** A hyphen, or the en or em dash some apps write between a name and what it adds, "Song — Live". */
-    private const val DASHES = "-–—"
-
-    private const val IN_TAG = """(?:(?!\s[$DASHES]\s)[^()\[\]])"""
+    private const val IN_TAG = """(?:(?!\s[-–]\s)[^()\[\]])"""
 
     /**
      * The small words a title may say either way, "de" or "del", "el" or "la": articles and
@@ -130,7 +127,7 @@ internal object SongNames {
         val own = words(title) + words(artist)
         if ((words(name) - own).any { it in VERSION_WORDS }) return true
         val letters = normalize(name)
-        return VERSION_MARKS.keys.any { it in letters && it !in normalize(title) && it !in normalize(artist) }
+        return VERSION_MARKS.any { it in letters && it !in normalize(title) && it !in normalize(artist) }
     }
 
     /** Words a video's title has when it's another version of the song, or not the song at all. */
@@ -143,15 +140,13 @@ internal object SongNames {
     )
 
     /**
-     * The same, as other scripts write them, found anywhere in a title, each with the word it says in
-     * Latin letters; written as [normalize] leaves them, which takes the marks off ブ and splits 커버 into its letters.
+     * The same, as other scripts write them, found anywhere in a title; written as [normalize]
+     * leaves them, which takes the marks off ブ and splits 커버 into its letters.
      */
-    private val VERSION_MARKS = mapOf(
-        "カラオケ" to "karaoke", "ライブ" to "live", "弾き語り" to "acoustic", "歌ってみた" to "cover", "演奏してみた" to "cover",
-        "弾いてみた" to "cover", "叩いてみた" to "cover", "ピアノ" to "piano", "ギター" to "guitar", "カバー" to "cover",
-        "メドレー" to "medley", "練習" to "practice", "オルゴール" to "musicbox", "アカペラ" to "acappella", "翻唱" to "cover",
-        "伴奏" to "instrumental", "伴唱" to "karaoke", "卡拉ok" to "karaoke", "커버" to "cover", "라이브" to "live", "노래방" to "karaoke"
-    ).mapKeys { normalize(it.key) }
+    private val VERSION_MARKS = listOf(
+        "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
+        "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방"
+    ).map(::normalize)
 
     /**
      * Whether [song] is many songs in one, which has no one song's words to find: a medley, a mashup,
@@ -317,7 +312,7 @@ internal object SongNames {
     private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"""
     private val coverTags = listOf(
         Regex("""[(\[【][^)\]】]*(?:$COVER_WORDS)[^)\]】]*[)\]】]""", RegexOption.IGNORE_CASE),
-        Regex("""\s[$DASHES]\s[^$DASHES]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
+        Regex("""\s[-–]\s[^-–]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
     )
     private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made famous by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
 
@@ -359,7 +354,7 @@ internal object SongNames {
     private val bracketTag = Regex("""[(\[【「〔]([^()\[\]【】「」〔〕]*)[)\]】」〕]""")
 
     /** What follows a dash, or a tilde, which a Japanese title may put right after its name: "曲〜伴奏〜". */
-    private val dashTag = Regex("""(?:(?<=\s)[$DASHES]\s?|[~〜])([^$DASHES~〜]*)""")
+    private val dashTag = Regex("""(?:(?<=\s)[-–]\s?|[~〜])([^-–~〜]*)""")
 
     /**
      * "Off vocal" ending the title with nothing around it, after a name in Chinese, Japanese or Korean, "曲 Off Vocal",
@@ -375,61 +370,6 @@ internal object SongNames {
      * "(Backing Track)". These show the words of the song they play, as before; whether they should is still to be decided (Issue #922).
      */
     private val singAlong = Regex("""karaoke|カラオケ|\bmade popular by\b|\blyrics?\b|\bsing[- ]?along\b|\bminus one\b|\bbacking track\b""", RegexOption.IGNORE_CASE)
-
-    /** A track number before a file's title, "01 Fake Song" or "1. Fake Song", but not a name's own, "7 Rings". */
-    private val trackNumber = Regex("""^(?:0\d|\d{1,2}\.)\s+""")
-
-    /** A tag of a name: in brackets, anywhere in it, or after a dash at its end. "(Live)", "[Explicit]", " - Official Audio". */
-    private val anyTag = Regex("""\s*[(\[]([^()\[\]]*)[)\]]|\s+[$DASHES]\s+([^$DASHES()\[\]]*)$""")
-
-    /**
-     * What a tag says that never names another recording: "Explicit", "Clean", "Official Audio", "Official Video", "Lyric Video",
-     * "Lyrics", or the work it's from, up to its closing quote, "From "Fake Movie"". Any other tag may, "(Part 2)", "(Reprise)",
-     * "(Taylor's Version)", "(ライブ)", "(From 'Fake Movie' / Live)", so it stays. Remasters, mono and guests are what
-     * [withoutEditionTag] already takes off.
-     */
-    private val sameRecordingTag = Regex(
-        """\s*(?:explicit|clean|lyrics|(?:official\s+)?(?:audio|video|music\s+video|lyric\s+video)|(from\s+["“'‘«「『][^"”'’»」』]*["”'’»」』]))\s*""",
-        RegexOption.IGNORE_CASE
-    )
-
-    /** The title a file names its song by, without the track number before it: "Fake Song" from "01 Fake Song". */
-    fun withoutTrackNumber(title: String): String = title.replace(trackNumber, "").ifBlank { title }
-
-    /**
-     * Whether [title], as a file or a store names a song, "01 Fake Song.mp3" or "Fake Song [Explicit]", is [song]'s.
-     * Past its track number, its extension and the tags [sameRecordingTag] knows, wherever they are, it's the same name.
-     * Or it differs only in the tags at its end, in brackets or after a dash, every one of them kept, as [wordsMatch]
-     * takes them: "Fake Song (Live)" is "Fake Song", as Crosstune always took it, but "Hello (Live)" isn't "Hello", nor
-     * "Fake Song (Part 2)" "Fake Song (Part 1)".
-     */
-    private fun sameAsAFileNamesIt(title: String, asked: String): Boolean {
-        val file = withVersionsInLatin(withoutTrackNumber(title.replace(MetadataParsers.audioExtension, "")))
-        val song = withVersionsInLatin(asked)
-        val ours = withoutSameRecordingTags(file, worksFrom(song))
-        val theirs = withoutSameRecordingTags(song, worksFrom(file))
-        if (same(ours, theirs)) return true
-        // The same tags in another order, or written another way, "(Live) Fake Song" and "Fake Song - Live".
-        val (ourName, ourTags) = ownName(ours).let { it.name to it.tags.map(::normalize).toSet() }
-        val (theirName, theirTags) = ownName(theirs).let { it.name to it.tags.map(::normalize).toSet() }
-        if (same(ourName, theirName) && ourTags == theirTags) return true
-        return same(ownName(file).name, ownName(song).name) && wordsMatch(file, song)
-    }
-
-    /**
-     * The name without the tags [sameRecordingTag] knows, wherever they are: "Song [Explicit] (Live)" is "Song (Live)". The work
-     * it's from stays when the other name is from [another][from] one: "Main Theme (From "Fake Movie")" is no other film's.
-     */
-    private fun withoutSameRecordingTags(title: String, from: Set<String>): String =
-        title.replace(anyTag) { tag ->
-            val said = sameRecordingTag.matchEntire(tag.groupValues[1] + tag.groupValues[2])
-            val anotherWork = said?.groups?.get(1)?.value?.let { from.isNotEmpty() && normalize(it) !in from } == true
-            if (said == null || anotherWork) tag.value else ""
-        }.trim().ifEmpty { title }
-
-    /** The works a name says it's from, "From "Fake Movie"", as [normalize] writes them. */
-    private fun worksFrom(title: String): Set<String> =
-        anyTag.findAll(title).mapNotNull { tag -> sameRecordingTag.matchEntire(tag.groupValues[1] + tag.groupValues[2])?.groups?.get(1)?.value?.let(::normalize) }.toSet()
 
     /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
     fun bareTitle(title: String): String {
@@ -453,16 +393,13 @@ internal object SongNames {
      * Whether what a player names by [title] and [artist] is [song]. A video's title names more, e.g.
      * "Artist - Song (Official Video)", and its channel may be named "Artist - Topic", or not be the
      * artist at all, when the title names them: "Police, The   Every Little Thing She Does Is Magic
-     * Audio Flac" by "keyloginhot". [byWords] off, the title is the song's, as a file or a store names it,
-     * "01 Fake Song.mp3" or "Fake Song [Explicit]", never one that shares its words: "Hotel California Radio"
-     * isn't "Hotel California".
+     * Audio Flac" by "keyloginhot".
      */
-    fun names(title: String, artist: String, song: MusicMetadata, byWords: Boolean = true): Boolean {
+    fun names(title: String, artist: String, song: MusicMetadata): Boolean {
         if (title.isBlank()) return false
         // Read as the song it names the way the song playing is named, e.g. "YOASOBI「アイドル」 Official Music Video".
         val named = MetadataParsers.youtubeVideo(title, artist)?.title
-        val near = if (byWords) wordsMatch(title, song.title) else sameAsAFileNamesIt(title, song.title)
-        if (!(same(title, song.title) || near || named?.let { same(it, song.title) } == true)) return false
+        if (!(same(title, song.title) || wordsMatch(title, song.title) || named?.let { same(it, song.title) } == true)) return false
         return artist.isBlank() || artistInside(artist, song.artist) || sameArtist(song.artist, artist) ||
             artistNames(song.artist).map(::words).any { it.isNotEmpty() && words(title).containsAll(it) }
     }
@@ -514,7 +451,7 @@ internal object SongNames {
     private const val FUZZY_SOUNDS = 5
 
     /** What a name adds at its end, in brackets or after a dash: "(2018 Remix)", "[Live]", " - Remastered". */
-    private val trailingTag = Regex("""(?:\s*[(\[][^()\[\]]*[)\]]|\s+[$DASHES]\s+[^$DASHES]*)$""")
+    private val trailingTag = Regex("""(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$""")
 
     /** Two credits for one artist, near enough: "Randy" is in "Randy Nota Loca". */
     fun sameArtist(one: String, other: String): Boolean {
@@ -533,9 +470,7 @@ internal object SongNames {
      * A single word only matches the whole of the other title: one word on its own says too
      * little, but two titles reduced to the same word are the same title with a tag left off.
      */
-    fun wordsMatch(one: String, other: String): Boolean = latinWordsMatch(withVersionsInLatin(one), withVersionsInLatin(other))
-
-    private fun latinWordsMatch(one: String, other: String): Boolean {
+    fun wordsMatch(one: String, other: String): Boolean {
         // Entirely non-Latin titles have no words below. Two empty sets say nothing about
         // whether they name the same song; compare their actual letters first.
         if (same(one, other) && normalize(one).isNotEmpty()) return true
@@ -544,100 +479,10 @@ internal object SongNames {
             val bare = normalize(bareTitle(one))
             if (bare.isNotEmpty() && bare == normalize(bareTitle(other))) return true
         }
-        // A tag tells recordings apart, but never names the song: the names must hold each other past their tags first.
-        // "Hello (Live)" isn't "Hello World (Live)", nor "Hello — Live" "Hello World — Live"; "Fake Song (Live)" is "Fake Song".
         val ours = words(withoutEditionTag(one))
         val theirs = words(withoutEditionTag(other))
-        return namesHold(one, other) && oneHoldsTheOther(ours, theirs)
-    }
-
-    /**
-     * The names hold each other past their tags. Or what one adds after a dash is the other's name, as a video names its
-     * band first, "Fake Band - Live Forever" for "Live Forever", though "Live" says a version as often.
-     */
-    private fun namesHold(one: String, other: String): Boolean {
-        val (ours, ourParts) = ownName(one).let { it.name to it.dashed }
-        val (theirs, theirParts) = ownName(other).let { it.name to it.dashed }
-        return namesHoldEachOther(ours, theirs) || ourParts.any { namesHoldEachOther(it, theirs) } || theirParts.any { namesHoldEachOther(ours, it) }
-    }
-
-    /** As [oneHoldsTheOther] has it, by their words; names with no Latin words by their letters, whole. */
-    private fun namesHoldEachOther(one: String, other: String): Boolean {
-        val ours = words(one)
-        val theirs = words(other)
-        if (ours.isEmpty() && theirs.isEmpty()) return normalize(one).let { it.isNotEmpty() && it == normalize(other) }
-        return oneHoldsTheOther(ours, theirs)
-    }
-
-    /** One of these sets of words holds every one of the other, which, of a single word, must be the whole of it. */
-    private fun oneHoldsTheOther(ours: Set<String>, theirs: Set<String>): Boolean {
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
-    }
-
-    /**
-     * The name past its track number, its extension and its tags, and the tags it took off. A tag is any in brackets
-     * at its end; one before it, or after a dash at its end, that starts with what a tag says, "[MV]", "(Live)", "- Live at
-     * Wembley", "— Explicit". "Hello (Live) [Explicit]" and "Hello — Live" are "Hello", but "Fake Band - Fake Song" keeps its
-     * every word, as a video's title names the song after a dash, and "(Don't Fear) The Reaper" keeps its own.
-     */
-    private fun ownName(title: String): OwnName {
-        var name = withoutTrackNumber(withoutEditionTag(title).trim().replace(MetadataParsers.audioExtension, "")).trim()
-        val tags = mutableListOf<String>()
-        while (true) {
-            val tag = leadingTag.find(name) ?: break
-            val rest = name.substring(tag.range.last + 1).trim()
-            if (rest.isEmpty() || !saysATag(tag.groupValues[1])) break
-            tags += tag.groupValues[1]
-            name = rest
-        }
-        val dashed = mutableListOf<String>()
-        while (true) {
-            val tag = trailingTag.find(name) ?: return OwnName(name, tags, dashed)
-            val shorter = name.removeRange(tag.range).trim()
-            val said = tag.value.trim().trimStart(*DASHES.toCharArray()).trim()
-            val afterADash = tag.value.trimStart().first() in DASHES
-            if (shorter.isEmpty() || afterADash && !saysATag(said)) return OwnName(name, tags, dashed)
-            if (afterADash) dashed += said else tags += said.removeSurrounding("(", ")").removeSurrounding("[", "]")
-            name = shorter
-        }
-    }
-
-    /** A name past its tags, every tag it took off, and those of them it took off after a dash. */
-    private data class OwnName(val name: String, private val bracketed: List<String>, val dashed: List<String>) {
-        val tags: List<String> get() = bracketed + dashed
-    }
-
-    private val leadingTag = Regex("""^[(\[]([^()\[\]]*)[)\]]""")
-
-    /** What [said] starts with is what a tag says: a version, "Live", or what names no other recording, "Explicit". */
-    private fun saysATag(said: String): Boolean = wordList(said).firstOrNull()?.let { it in VERSION_WORDS || it in TAG_WORDS } == true
-
-    /** Words of a tag that names no other recording, or what kind of recording it is, besides [VERSION_WORDS]. */
-    private val TAG_WORDS = setOf(
-        "explicit", "clean", "official", "audio", "video", "music", "lyric", "lyrics", "visualizer", "version", "edit", "extended",
-        "mv", "hd", "hq", "4k", "part", "pt"
-    )
-
-    /**
-     * [title] with each version it says in another script in Latin letters, as [words] has words for those alone: "Fake Song
-     * (live)" for "Fake Song (ライブ)", "piano cover" for "ピアノ弾いてみた". A word made only of such marks says one; one inside a
-     * name is the name's: "東京ライブ" stays, as no live recording of "東京".
-     */
-    private fun withVersionsInLatin(title: String): String =
-        title.replace(lettersOnly) { word -> marksMaking(normalize(word.value))?.joinToString(" ") { VERSION_MARKS.getValue(it) } ?: word.value }
-
-    private val lettersOnly = Regex("""[\p{L}\p{N}]+""")
-
-    /** The marks that, one after another, make [word] whole, or null when they can't. */
-    private fun marksMaking(word: String): List<String>? {
-        if (word.isEmpty()) return null
-        // How each start of the word is made, from the shortest: the marks up to there, where they reach it.
-        val made = arrayOfNulls<List<String>>(word.length + 1).also { it[0] = emptyList() }
-        for (end in 1..word.length) {
-            made[end] = VERSION_MARKS.keys.firstNotNullOfOrNull { mark -> made.getOrNull(end - mark.length)?.takeIf { word.startsWith(mark, end - mark.length) }?.plus(mark) }
-        }
-        return made[word.length]
     }
 
     /**

@@ -59,8 +59,7 @@ class PlayGoldenTest {
      *    shown as what names no song, to be named by ear (Issue #998), where `main` took its title for a song.
      * 2. What `main` read no song from, a video that doesn't say it's music or a session with no title, still plays: it's
      *    shown as what names no song, after every app that names one, where `main` showed nothing (owner's call, round 6).
-     * 3. A session that names no song has a song asked for by its own name only, never by words it shares (round 10),
-     *    so "Fake Song" by "<unknown>" isn't "Fake Band - Fake Song". `main` took it so, but not the same file with no artist.
+     * A follow finds what `main` found, every one: a song is had by its name as [SongNames.names] has it.
      */
     private fun meant(key: String, was: String, scene: Scene): String {
         val asked = key.split("\t")
@@ -73,11 +72,6 @@ class PlayGoldenTest {
             if (was == "none") playing.filter { it.kind.name in READ_NO_SONG }.sortedWith(onThePhoneFirst(scene)).firstOrNull()?.let { return nameless(it, said = false) }
             return was
         }
-        // 3. Followed in an app that names no song, by words its name shares with the song's.
-        val (title, _) = asked[2].split("|")
-        val app = was.substringBefore(" ")
-        val session = scene.sessions.firstOrNull { it.kind.app == app }
-        if (session != null && namesNoSong(session.kind) && title != ownName(session.kind)) return "none"
         return was
     }
 

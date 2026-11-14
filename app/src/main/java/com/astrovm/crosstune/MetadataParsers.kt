@@ -77,7 +77,7 @@ internal object MetadataParsers {
     /** A zero-padded track number glued to the song, "06 Una señal". */
     private val paddedTrackRegex = Regex("""^0\d\s+""")
 
-    private val danglingDashRegex = Regex("""\s+[-–—]\s*$""")
+    private val danglingDashRegex = Regex("""\s+[-–]\s*$""")
 
     /**
      * Spotify tracks describe themselves as "Artist · Album · Song · Year" and albums as
@@ -279,21 +279,16 @@ internal object MetadataParsers {
     /**
      * The song a player names. One that names no artist, as Android's "<unknown>" for a file with none,
      * or many, as a compilation's "Various Artists", may name it in the title, "Artist - Song", as a video does.
-     * A title alone still identifies what is playing, even if it cannot say who made it. A dash left at
-     * the title's end, as a radio app that splits a station's "Artist - Song - " leaves it, is no part of it.
+     * A title alone still identifies what is playing, even if it cannot say who made it.
      */
     fun playerSong(title: String, artist: String): MusicMetadata? =
-        (
-            spotifyPageSplitAtItsDash(title, artist)
-                ?: if (noArtist(artist)) youtubeVideo(title.replace(audioExtension, ""), "") else MusicMetadata(title.replace(danglingDashRegex, ""), artist)
-        )
+        (spotifyPageSplitAtItsDash(title, artist) ?: if (noArtist(artist)) youtubeVideo(title.replace(audioExtension, ""), "") else MusicMetadata(title, artist))
             ?.let { if (noArtist(it.artist)) it.copy(artist = "") else it }
             ?.takeIf { it.title.isNotBlank() && !namesAFile(it) }
 
     fun noArtist(artist: String) = artist.isBlank() || noOneArtist.matches(artist.trim())
 
-    /** A file's extension, as a player with no tags names a song by its file: "Fake Song.mp3". */
-    val audioExtension = Regex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
+    private val audioExtension = Regex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
 
     /** A browser playing a bare file names it by its address, under its site, e.g. "example.com/song.mp3" by "example.com". */
     private fun namesAFile(song: MusicMetadata) = '.' in song.artist && song.title.startsWith("${song.artist}/")

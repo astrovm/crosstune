@@ -1715,22 +1715,10 @@ class PlaybackTest {
 
     @Test
     @Config(shadows = [AppAsked::class])
-    fun aSongIsNeverAStationThatSharesItsWords() {
+    fun aStationIsNeverTheOneBeforeThatSharesItsWords() {
         allow()
         sounding()
-        val card = MusicMetadata("Hotel California", "Eagles")
-        shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Hotel California Radio", ""))
-        listOf("com.ilv.vradio", null).forEach { app ->
-            val seen = mutableListOf<Following?>()
-            collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(card, app).collect { seen += it } }
-            shadowOf(Looper.getMainLooper()).idle()
-            assertNull(seen.last())
-            playback.seekTo(card, 10_000, app)
-            playback.playPause(card, false, app)
-            assertEquals(emptyList<String>(), asked())
-        }
-        // Nor a station the one before, sharing its words: "Los 40" isn't "Los 40 Classic", the next one.
-        ShadowMediaSessionManager.reset()
+        // A station isn't the one before it, sharing its words: "Los 40" isn't "Los 40 Classic", the next one.
         val radio = player("com.ilv.vradio", "VRadio", "Los 40", "")
         shadowOf(sessions).addController(radio)
         val seen = mutableListOf<Following?>()
@@ -1743,8 +1731,6 @@ class PlaybackTest {
         // Asked with no app, a station isn't reached by its name either.
         playback.playPause(MusicMetadata("Los 40 Classic", "", unnamed = true), false)
         assertEquals(emptyList<String>(), asked())
-        // Nor is a song by words it shares with the station.
-        assertNull(playback.appFor(MusicMetadata("Los 40", "Fake Band")))
     }
 
     @Test
@@ -1805,16 +1791,18 @@ class PlaybackTest {
             assertEquals(title, "com.example.player", playback.appFor(asked)?.packageName)
             assertEquals(title, "com.example.player", playback.appFor(asked, app = "com.example.player")?.packageName)
         }
-        // Never by words it shares, as a station.
-        // Nor a song whose own name starts with a number, "7 Rings", by the words after it.
-        // Nor another recording of it: what's asked for isn't played, timed or paused in its place.
-        val others = otherRecordingsByTitle.map { (title, song) -> title to MusicMetadata(song, "Fake Band") }
-        for ((station, song) in listOf("Hotel California Radio" to MusicMetadata("Hotel California", "Eagles"), "Los 40 Classic" to MusicMetadata("Los 40", "Fake Band"), "7 Rings" to MusicMetadata("Rings", "Fake Band")) + others) {
-            ShadowMediaSessionManager.reset()
-            shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", station, ""))
-            assertNull(station, playback.appFor(song))
-            assertNull(station, playback.appFor(song, app = "com.ilv.vradio"))
-        }
+    }
+
+    @Test
+    fun aFileNamedWithANumberIsNeverASongOfTheWordAfterIt() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.example.player", "Player", "07 Years.mp3", ""))
+        // The bar shows the title as a song's was read from a file, past its extension.
+        assertEquals("07 Years", playback.playingUnnamed()?.name)
+        // A song is had by what the app sends, as SongNames takes it: one word only as the whole title.
+        assertNull(playback.appFor(MusicMetadata("Years", "Fake Band")))
+        assertNull(playback.appFor(MusicMetadata("Years", "Fake Band"), app = "com.example.player"))
     }
 
     @Test
@@ -1822,7 +1810,7 @@ class PlaybackTest {
     fun aFileIsShownByItsTitleAsASongsWasReadFromIt() {
         allow()
         sounding()
-        for ((title, artist) in listOf("Fake Song.mp3" to "", "Unknown Artist - Fake Song.ogg" to null, "01 Fake Song" to "")) {
+        for ((title, artist) in listOf("Fake Song.mp3" to "", "Unknown Artist - Fake Song.ogg" to null, "Fake Song" to "")) {
             ShadowMediaSessionManager.reset()
             shadowOf(sessions).addController(player("com.example.player", "Player", title, artist))
             val unnamed = checkNotNull(playback.playingUnnamed())
@@ -1851,8 +1839,7 @@ class PlaybackTest {
         }
         playback.playPause(asked, false)
         assertEquals(listOf("pause"), asked())
-        // Only by its whole title: another song of it is another song.
-        assertNull(playback.appFor(MusicMetadata("Fake Song Two", "Fake Band")))
+        // A one-word name only by the whole title: "Fake" isn't "Fake Song".
         assertNull(playback.appFor(MusicMetadata("Fake", "Fake Band")))
     }
 

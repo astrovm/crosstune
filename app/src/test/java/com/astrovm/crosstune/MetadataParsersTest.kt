@@ -180,10 +180,6 @@ class MetadataParsersTest {
         assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Artist - Fake Song.FLAC", "Unknown Artist"))
         // A placeholder named in the title is no artist either.
         assertEquals(MusicMetadata("Fake Song", ""), MetadataParsers.playerSong("Unknown Artist - Fake Song.ogg", ""))
-        // A radio app that splits a station's "Artist - Song - " leaves the last dash on the song, as VRadio does.
-        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Song -", "Fake Artist"))
-        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Song – ", "Fake Artist"))
-        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Song — ", "Fake Artist"))
         // No title, no song.
         assertNull(MetadataParsers.playerSong("", "Fake Artist"))
         assertNull(MetadataParsers.playerSong("  ", ""))
@@ -339,9 +335,6 @@ class MetadataParsersTest {
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song Official Music Video", "BandVEVO"))
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song | Official Audio", "Label"))
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song - Lyric Video", "Label"))
-        // After an em dash, as some channels write it, too.
-        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song — Official Music Video", "Label"))
-        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song — Lyrics |HD|", "Label"))
         // But not a song named so in the middle.
         assertEquals(MusicMetadata("Music Video Killed the Radio Star", "Band"), MetadataParsers.youtubeVideo("Band - Music Video Killed the Radio Star", "Label"))
     }
