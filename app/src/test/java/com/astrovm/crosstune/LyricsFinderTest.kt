@@ -10,6 +10,7 @@ import okhttp3.Response
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -1112,6 +1113,28 @@ class LyricsFinderTest {
         val text = "We stay at the Y M C A\nWe meet NASA tonight\nWe meet Mira AND WALK HOME"
         assertEquals("We stay at the Y M C A\nWe meet NASA tonight\nWe meet Mira and walk home",
             LyricsFinder.cleaned(Lyrics.Found(text), song).words)
+    }
+
+    @Test
+    fun initialsAreNoCapitalPhrase() {
+        // Each a letter and a stop, as spelled-out letters are: the line isn't in capitals.
+        val text = "We meet J. R. tonight"
+        assertEquals(text, LyricsFinder.cleaned(Lyrics.Found(text), song).words)
+    }
+
+    @Test
+    fun aSongIsInCapitalsFromTwentyLettersNineInTenOfThemCapitals() {
+        // One word a line, so no line has a capital phrase: only the song as a whole can be in capitals.
+        fun cleaned(text: String) = LyricsFinder.cleaned(Lyrics.Found(text), song).words
+        assertNotEquals("SUNSHINE\nEVERYWHERE\nOK", cleaned("SUNSHINE\nEVERYWHERE\nOK"))
+        assertEquals("SUNSHINE\nEVERYWHERE\nO", cleaned("SUNSHINE\nEVERYWHERE\nO"))
+        assertNotEquals("SUNSHINE\nEVERYWHEre\nOK", cleaned("SUNSHINE\nEVERYWHEre\nOK"))
+        assertEquals("SUNSHINE\nEVERYWHere\nOK", cleaned("SUNSHINE\nEVERYWHere\nOK"))
+    }
+
+    @Test
+    fun aCapitalPhraseCanStartALine() {
+        assertEquals("Oh I love you", LyricsFinder.cleaned(Lyrics.Found("OH I love you"), song).words)
     }
 
     @Test
@@ -2226,6 +2249,8 @@ class LyricsFinderTest {
         assertEquals(true, isRomaji("ni wa ga sora kaze yume hana michi namida $english"))
         assertEquals(false, isRomaji("ni wa ga sora kaze yume hana michi cloud $english"))
         assertEquals(false, isRomaji("ni wa koe sora kaze yume hana michi namida $english"))
+        // What's before the first word isn't one.
+        assertEquals(true, isRomaji(", ni wa ga sora kaze yume hana michi namida $english"))
     }
 
     @Test
@@ -2248,6 +2273,8 @@ class LyricsFinderTest {
         assertEquals(true, isRomanizedKorean("nae neon geu saram haneul baram kkum sarang nunmul $english"))
         assertEquals(false, isRomanizedKorean("nae neon geu saram haneul baram kkum sarang cloud $english"))
         assertEquals(false, isRomanizedKorean("nae neon gippeum saram haneul baram kkum sarang nunmul $english"))
+        // What's before the first word isn't one.
+        assertEquals(true, isRomanizedKorean(", nae neon geu saram haneul baram kkum sarang nunmul $english"))
     }
 
     @Test
@@ -2393,9 +2420,9 @@ class LyricsFinderTest {
         )
         // The song's page is asked for by its video, and the words as YouTube Music's app, which gets them timed.
         val next = fake.requestBodies[fake.requestedUrls.indexOfFirst { it.startsWith("https://music.youtube.com/youtubei/v1/next") }]
-        assertEquals(true, next.contains(""""videoId":"vid1"""") && next.contains("WEB_REMIX"))
+        assertEquals(true, next.contains(""""videoId":"vid1${'"'}""") && next.contains("WEB_REMIX"))
         val browse = fake.requestBodies[fake.requestedUrls.indexOfFirst { it.startsWith("https://music.youtube.com/youtubei/v1/browse") }]
-        assertEquals(true, browse.contains(""""browseId":"MPLYt_words"""") && browse.contains("ANDROID_MUSIC"))
+        assertEquals(true, browse.contains(""""browseId":"MPLYt_words${'"'}""") && browse.contains("ANDROID_MUSIC"))
     }
 
     /** YouTube Music's page for video vid1, a song [length] long, or a video, with a page for its words. */

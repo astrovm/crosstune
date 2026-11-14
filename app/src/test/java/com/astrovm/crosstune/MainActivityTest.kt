@@ -1779,16 +1779,18 @@ class MainActivityTest {
         val model = ViewModelProvider(activity)[MainViewModel::class.java]
         // Asked while away, and back a while later: it's not opened out of the blue.
         controller!!.pause().stop()
-        composeRule.runOnIdle { model.openResult() }
-        composeRule.waitForIdle()
+        composeRule.settle(activity)
+        model.openResult()
+        composeRule.settle(activity)
         org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(61))
         controller!!.restart().resume()
         composeRule.waitForIdle()
         assertNull(nextStartedActivity())
         // Back soon after, it is.
         controller!!.pause().stop()
-        composeRule.runOnIdle { model.openResult() }
-        composeRule.waitForIdle()
+        composeRule.settle(activity)
+        model.openResult()
+        composeRule.settle(activity)
         controller!!.restart().resume()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
@@ -8298,11 +8300,11 @@ class MainActivityTest {
         assertTrue(phone.nowPlayingWatchers > 0)
         shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMinutes(2))
         controller!!.start()
-        composeRule.waitForIdle()
+        composeRule.settle(controller!!.get())
         assertNull(shadowOf(app).peekNextStartedActivity())
         // The screen doesn't watch once it's gone, and nothing else should be left doing it.
         controller!!.stop()
-        composeRule.waitForIdle()
+        composeRule.settle(controller!!.get())
         assertEquals(0, phone.nowPlayingWatchers)
     }
 

@@ -206,7 +206,7 @@ class LinkResolverTest {
         fake.handler = { request ->
             when {
                 request.url.toString() == ServiceApis.SOUNDCLOUD_URL -> FakeSpotify.html(request, """<script crossorigin src="https://a-v2.sndcdn.com/assets/1.js"></script>""")
-                request.url.host == "a-v2.sndcdn.com" -> FakeSpotify.html(request, """client_id:"${"k".repeat(32)}"""")
+                request.url.host == "a-v2.sndcdn.com" -> FakeSpotify.html(request, """client_id:"${"k".repeat(32)}${'"'}""")
                 request.url.host == "api-v2.soundcloud.com" -> FakeSpotify.html(request, answer.second, code = answer.first)
                 // Its owner lets it play only on SoundCloud, so oEmbed turns it away.
                 else -> FakeSpotify.html(request, "Forbidden", code = 403)
@@ -327,7 +327,7 @@ class LinkResolverTest {
                 request.url.host == "api.tidal.com" -> """{"items":[{"id":1,"title":"Song","artists":[{"name":"Band"}]}],"totalNumberOfItems":1}"""
                 request.url.encodedPath == "/oembed" -> """{"title":"Party by Friend","author_name":"Friend"}"""
                 request.url.toString() == ServiceApis.SOUNDCLOUD_URL -> """<script crossorigin src="https://a-v2.sndcdn.com/assets/1.js"></script>"""
-                request.url.host == "a-v2.sndcdn.com" -> """client_id:"${"k".repeat(32)}""""
+                request.url.host == "a-v2.sndcdn.com" -> """client_id:"${"k".repeat(32)}${'"'}"""
                 request.url.host == "api-v2.soundcloud.com" -> """{"tracks":[{"id":5,"title":"Tune","user":{"username":"Friend"}}]}"""
                 else -> """{"results":{"tracks":[{"title":"Track","artist":"Rapper","url_slug":"track"}],"uploader":{"url_slug":"rapper"}}}"""
             }

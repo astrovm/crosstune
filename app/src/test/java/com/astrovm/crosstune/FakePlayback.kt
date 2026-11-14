@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onStart
 
 /**
  * A music app the test plays from: whether Crosstune may see it, or Android holds that back for now,
@@ -122,7 +124,10 @@ internal class FakePlayback : PlaybackSource {
 
     override fun recording(song: MusicMetadata) = onThePhone?.metadata
 
-    override fun nowPlayingUpdates(): Flow<Heard.Song?> = changes { (ranked(onThePhone) as? WhatPlays.Named)?.song }
+    /** Whether what's on the phone is yet to be said, as by a session slow to answer: [nowPlayingUpdates] says nothing till it's false. */
+    val nowPlayingLate = MutableStateFlow(false)
+
+    override fun nowPlayingUpdates(): Flow<Heard.Song?> = changes { (ranked(onThePhone) as? WhatPlays.Named)?.song }.onStart { nowPlayingLate.first { !it } }
 
     /** How many are listening for what's on the phone. */
     val nowPlayingWatchers get() = songs.subscriptionCount.value

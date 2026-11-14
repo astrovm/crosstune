@@ -28,6 +28,7 @@
     <string name="settings_licenses">ライセンス</string>
     <string name="license_show">ライセンスを表示</string>
     <string name="license_hide">ライセンスを隠す</string>
+    <string name="language_tag">ja</string>
     <string name="settings_links_title">開くリンクの提供元</string>
     <string name="rule_opens_in">%1$s で開く</string>
     <string name="rule_default">デフォルト（%1$s）</string>

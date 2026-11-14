@@ -78,7 +78,7 @@ internal class Translator(
      * sings it: "암만 봐도" ("no matter how I look") came back about cancer, 암.
      */
     private fun written(line: String): String =
-        SPOKEN_KOREAN.fold(line) { text, (spoken, written) -> text.replace(Regex("(?<![가-힣])$spoken(?![가-힣])"), written) }
+        SPOKEN_KOREAN.fold(line) { text, (spoken, written) -> text.replace(phoneRegex("(?<![가-힣])$spoken(?![가-힣])"), written) }
 
     /**
      * Google Translate, as Chrome's dictionary asks it, with no account: up to [GOOGLE_LINES] lines
@@ -193,7 +193,7 @@ internal class Translator(
                     sense.optJSONArray("definitions")?.let { list -> (0 until list.length()).map { Definition(type, list.getJSONObject(it).optString("definition")) } }.orEmpty()
                 }
                 // Wiktionary sends its page styling along with some definitions, which isn't text to show.
-                .map { it.copy(meaning = HtmlCompat.fromHtml(it.meaning.replace(styleSheet, ""), HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim()) }
+                .map { it.copy(meaning = HtmlCompat.fromHtml(styleSheets.cutFrom(it.meaning), HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim()) }
                 .firstOrNull { it.meaning.isNotEmpty() }
         } catch (_: IOException) {
             null
@@ -223,7 +223,7 @@ internal class Translator(
         private const val YORUBA = "yo"
         private const val ENGLISH = "en"
         /** Letters Yoruba writes and English doesn't, e.g. "ọmọ", "ṣé". */
-        private val yorubaLetters = Regex("[ẹọṣẸỌṢ]")
+        private val yorubaLetters = phoneRegex("[ẹọṣẸỌṢ]")
 
         /** The last of the letters English borrows, as in café and Pérignon. */
         private const val LATIN_1 = 0xFF
@@ -254,4 +254,4 @@ internal class Translator(
 internal data class Definition(val type: String?, val meaning: String)
 
 /** A page's styling, as Wiktionary leaves in some definitions. */
-private val styleSheet = Regex("""<style[^>]*>.*?</style>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+internal val styleSheets = PageParts(phoneRegex("<style", RegexOption.IGNORE_CASE), phoneRegex("</style>", RegexOption.IGNORE_CASE))

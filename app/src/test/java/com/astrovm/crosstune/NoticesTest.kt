@@ -49,11 +49,13 @@ class NoticesTest {
         val notices = Notices.parse("# about\n\nOne\nby: Someone\nlicense: MIT License\ntext: a.txt b.txt\ncovers: maven a:b\ncovers: file c\n\n\nTwo\nby: Else\nlicense: None stated\n")
         assertEquals(
             listOf(
-                Notice("One", "Someone", "MIT License", listOf("a.txt", "b.txt"), null, null, listOf("maven a:b", "file c")),
-                Notice("Two", "Else", "None stated", emptyList(), null, null, emptyList())
+                Notice("One", "Someone", "MIT License", listOf("a.txt", "b.txt"), null, null),
+                Notice("Two", "Else", "None stated", emptyList(), null, null)
             ),
             notices
         )
+        // Blank lines before the first block and after the last, as a comment leaves them, make no block.
+        assertEquals(listOf("One"), Notices.parse("# about\n\n\nOne\nby: Someone\nlicense: MIT License\n\n\n# end\n\n").map { it.name })
     }
 
     @Test(expected = IllegalArgumentException::class)
@@ -68,7 +70,7 @@ class NoticesTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun aMissingTextIsAMistake() {
-        Notices.text(Notice("One", "Someone", "MIT License", listOf("nothing.txt"), null, null, emptyList()))
+        Notices.text(Notice("One", "Someone", "MIT License", listOf("nothing.txt"), null, null))
     }
 
     @Test
@@ -85,6 +87,9 @@ class NoticesTest {
         // A sentence ends past a third of the way: cut there.
         val sentence = "a".repeat(200) + ". " + "b ".repeat(100)
         assertEquals(listOf("a".repeat(200) + ".", "b ".repeat(100).trim()), licenseUnits(sentence).map { it.text })
+        // One that ends a third of the way exactly is late enough.
+        val third = "a".repeat(most / 3 - 1) + ". " + "b ".repeat(150)
+        assertEquals("a".repeat(most / 3 - 1) + ".", licenseUnits(third).first().text)
         // None does, or only too early: cut between words, as late as fits.
         val words = "c. " + "word ".repeat(80)
         val cut = licenseUnits(words).map { it.text }
@@ -109,10 +114,9 @@ class NoticesTest {
         assertEquals(before.size + 1 + jmdict.size, licenseWorkIndex("projectM", open, units))
         LicenseSplits.clear()
         val notice = Notices.all.first { it.name == "JMdict" }
-        assertEquals(licenseUnits(Notices.text(notice)), LicenseSplits.make(notice))
-        assertEquals(1, LicenseSplits.times["JMdict"])
         LicenseSplits.make(notice)
-        assertEquals(1, LicenseSplits.times["JMdict"])
+        assertEquals(licenseUnits(Notices.text(notice)), LicenseSplits.of("JMdict"))
+        LicenseSplits.clear()
     }
 
     @Test
