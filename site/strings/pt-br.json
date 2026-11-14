@@ -37,7 +37,7 @@
     ],
     [
       "Que música é essa?",
-      "O Crosstune escuta, reconhece e abre."
+      "O Crosstune escuta uma música tocando perto, num app de rádio ou num arquivo sem tags, reconhece e abre."
     ],
     [
       "Letras no tempo",
@@ -69,7 +69,7 @@
   "privacy_link": "Política de privacidade",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidade do Crosstune",
-  "updated": "Última atualização: 13 de novembro de 2026",
+  "updated": "Última atualização: 14 de novembro de 2026",
   "short_h2": "Em resumo",
   "short_items": [
     "Sem conta, anúncios ou análises.",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "Quando um app toca sem dizer que música é, como um app de rádio que envia só o nome da estação, ou um arquivo sem tags, o Crosstune reconhece a música sozinho da mesma forma, mas só enquanto o Crosstune está aberto com a barra desse app embaixo. Ele só faz isso se você já tiver permitido o microfone. Ele ouve o som que o celular toca, inclusive nos fones de ouvido; com Shizuku ou root, pela captura de áudio do Android, mais limpa, enquanto uma notificação mostra isso. Só usa o microfone se o celular não compartilhar esse som, e só enquanto o celular toca pelo alto-falante, não nos fones de ouvido; o Android mostra que o microfone está ligado. Ele ouve uma vez quando o app começa a tocar, e de novo quando a música que ouviu deveria ter acabado, ou depois de um tempo. Só uma impressão vai para o Shazam, nunca o áudio, e nada é salvo. Ele para quando você sai do Crosstune, esconde a barra ou o app para de tocar."
+      "Quando um app toca sem dizer que música é, como um app de rádio que envia só o nome da estação, ou um arquivo sem tags, o Crosstune reconhece a música sozinho da mesma forma, mas só enquanto o Crosstune está aberto com a barra desse app embaixo, e só se você já tiver permitido o microfone. Ele ouve o som que o celular toca, inclusive nos fones de ouvido; com Shizuku ou root, pela captura de áudio do Android, mais limpa, enquanto uma notificação mostra isso. Só usa o microfone se o celular não compartilhar esse som, só enquanto o celular toca pelo alto-falante, não nos fones de ouvido, e nunca numa TV, onde ouve só o som da própria TV; o Android mostra que o microfone está ligado. Ele ouve quando o app começa a tocar, de novo quando a música que ouviu deveria ter acabado ou depois de um tempo, e na hora quando ganha um novo jeito de ouvir, como quando você permite o microfone ou o Shizuku, ou tira os fones de ouvido. Só uma impressão vai para o Shazam, nunca o áudio, e nada é salvo. Como qualquer música da barra, a música reconhecida tem o título e o artista buscados para encontrar a letra. Ele para quando você sai do Crosstune, esconde a barra ou o app para de tocar."
     ],
     [
       "p",

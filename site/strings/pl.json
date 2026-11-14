@@ -37,7 +37,7 @@
     ],
     [
       "Co to za utwór?",
-      "Crosstune słucha, rozpoznaje i otwiera."
+      "Crosstune słucha utworu w pobliżu, w aplikacji radiowej lub w pliku bez tagów, rozpoznaje go i otwiera."
     ],
     [
       "Tekst w rytm",
@@ -69,7 +69,7 @@
   "privacy_link": "Polityka prywatności",
   "language_label": "Język",
   "privacy_title": "Polityka prywatności Crosstune",
-  "updated": "Ostatnia aktualizacja: 13 listopada 2026",
+  "updated": "Ostatnia aktualizacja: 14 listopada 2026",
   "short_h2": "W skrócie",
   "short_items": [
     "Bez konta, reklam i analityki.",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "Gdy aplikacja odtwarza, nie mówiąc, jaki to utwór, jak aplikacja radiowa, która wysyła tylko nazwę stacji, albo plik bez tagów, Crosstune sam rozpoznaje utwór w ten sam sposób, ale tylko gdy Crosstune jest otwarty z paskiem tej aplikacji na dole. Robi to tylko wtedy, gdy dostęp do mikrofonu jest już dozwolony. Słyszy dźwięk, który odtwarza telefon, także w słuchawkach; z Shizuku lub rootem przez przechwytywanie dźwięku Androida, czyściej, a powiadomienie to pokazuje. Mikrofonu używa tylko wtedy, gdy telefon nie udostępnia swojego dźwięku, i tylko gdy telefon gra przez głośnik, a nie w słuchawkach; Android pokazuje, że mikrofon jest włączony. Słucha raz, gdy aplikacja zaczyna odtwarzać, i znowu, gdy usłyszany utwór powinien się skończyć, albo po chwili. Do Shazam trafia tylko odcisk, nigdy dźwięk, i nic nie jest zapisywane. Przestaje, gdy wyjdziesz z Crosstune, ukryjesz pasek lub aplikacja przestanie grać."
+      "Gdy aplikacja odtwarza, nie mówiąc, jaki to utwór, jak aplikacja radiowa, która wysyła tylko nazwę stacji, albo plik bez tagów, Crosstune sam rozpoznaje utwór w ten sam sposób, ale tylko gdy Crosstune jest otwarty z paskiem tej aplikacji na dole, i tylko wtedy, gdy dostęp do mikrofonu jest już dozwolony. Słyszy dźwięk, który odtwarza telefon, także w słuchawkach; z Shizuku lub rootem przez przechwytywanie dźwięku Androida, czyściej, a powiadomienie to pokazuje. Mikrofonu używa tylko wtedy, gdy telefon nie udostępnia swojego dźwięku, tylko gdy telefon gra przez głośnik, a nie w słuchawkach, i nigdy na telewizorze, gdzie słyszy tylko dźwięk samego telewizora; Android pokazuje, że mikrofon jest włączony. Słucha, gdy aplikacja zaczyna odtwarzać, znowu, gdy usłyszany utwór powinien się skończyć albo po chwili, i od razu, gdy ma nowy sposób, by słyszeć, na przykład gdy pozwolisz na mikrofon lub Shizuku albo odłączysz słuchawki. Do Shazam trafia tylko odcisk, nigdy dźwięk, i nic nie jest zapisywane. Jak każdy utwór na pasku, rozpoznany utwór jest wyszukiwany po tytule i wykonawcy, żeby znaleźć tekst. Przestaje, gdy wyjdziesz z Crosstune, ukryjesz pasek lub aplikacja przestanie grać."
     ],
     [
       "p",

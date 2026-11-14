@@ -37,7 +37,7 @@
     ],
     [
       "Name that song",
-      "Crosstune listens, names it and opens it."
+      "Crosstune listens to a song nearby, or on a radio app or untagged file, names it and opens it."
     ],
     [
       "Lyrics in time",
@@ -69,7 +69,7 @@
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: November 13, 2026",
+  "updated": "Last updated: November 14, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "When an app plays without saying what song it is, like a radio app that sends only the station's name, or a file with no tags, Crosstune names the song the same way by itself, but only while Crosstune is open with that app's bar at the bottom. It does so only if you already allowed the microphone. It hears the sound your phone plays, through headphones too; with Shizuku or root, through Android's playback capture, which is cleaner, while a notification shows it. It uses the microphone only if your phone won't share its sound, and only while your phone plays aloud, not through headphones; Android shows that the microphone is on. It listens once when the app starts playing, and again when the song it heard should be over, or after a while. Only a fingerprint goes to Shazam, never the audio, and nothing is saved. It stops when you leave Crosstune, hide the bar, or the app stops playing."
+      "When an app plays without saying what song it is, like a radio app that sends only the station's name, or a file with no tags, Crosstune names the song the same way by itself, but only while Crosstune is open with that app's bar at the bottom, and only if you already allowed the microphone. It hears the sound your phone plays, through headphones too; with Shizuku or root, through Android's playback capture, which is cleaner, while a notification shows it. It uses the microphone only if your phone won't share its sound, only while your phone plays aloud, not through headphones, and never on a TV, where it hears only the TV's own sound; Android shows that the microphone is on. It listens when the app starts playing, again when the song it heard should be over or after a while, and at once when it gets a new way to hear, like the microphone or Shizuku being allowed, or headphones coming out. Only a fingerprint goes to Shazam, never the audio, and nothing is saved. Like any song on the bar, the song it names has its title and artist looked up for its lyrics. It stops when you leave Crosstune, hide the bar, or the app stops playing."
     ],
     [
       "p",
