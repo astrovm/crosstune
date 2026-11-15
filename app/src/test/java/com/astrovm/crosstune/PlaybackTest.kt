@@ -2201,6 +2201,37 @@ class PlaybackTest {
         }
     }
 
+    @Test
+    fun aCoverRefreshPostedAfterClosingCannotReadPlaybackAgain() {
+        allow()
+        sounding()
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        val source = MediaSessionPlayback(app, readSong = { title, artist ->
+            reads.incrementAndGet()
+            MusicMetadata(title, artist)
+        })
+        val callbacks = java.util.concurrent.LinkedBlockingQueue<Runnable>()
+        val held = object : android.os.Handler(Looper.getMainLooper()) {
+            override fun sendMessageAtTime(message: android.os.Message, uptimeMillis: Long): Boolean {
+                message.callback?.let { callbacks.add(it); return true }
+                return super.sendMessageAtTime(message, uptimeMillis)
+            }
+        }
+        MediaSessionPlayback::class.java.getDeclaredField("handler").apply { isAccessible = true }.set(source, held)
+        val controller = player("com.example.player", "Player", "First Song", "Fake Artist", album = "Fake Album")
+        shadowOf(sessions).addController(controller)
+        val job = CoroutineScope(Dispatchers.Unconfined).launch { source.nowPlayingUpdates().collect {} }
+        collecting += job
+        shadowOf(Looper.getMainLooper()).idle()
+        val late = requireNotNull(callbacks.poll(5, java.util.concurrent.TimeUnit.SECONDS))
+        job.cancel()
+        shadowOf(Looper.getMainLooper()).idle()
+        val before = reads.get()
+        shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build())
+        late.run()
+        assertEquals(before, reads.get())
+    }
+
     private fun coverWhenReady(read: () -> String?): String {
         val end = System.nanoTime() + 5_000_000_000L
         while (System.nanoTime() < end) {

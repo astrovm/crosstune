@@ -36,6 +36,7 @@ import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import kotlin.math.abs
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -822,7 +823,7 @@ internal class MediaSessionPlayback(
     private fun <T> changes(read: () -> T): Flow<T> = callbackFlow {
         var watched: List<MediaController> = emptyList()
         fun update() { trySend(read()) }
-        val refreshCover = Runnable { update() }
+        val refreshCover = Runnable { if (isActive) update() }
         val coverChanges = launch {
             covers.updates.collect {
                 handler.removeCallbacks(refreshCover)
