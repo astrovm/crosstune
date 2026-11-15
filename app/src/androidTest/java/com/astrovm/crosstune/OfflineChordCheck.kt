@@ -1,6 +1,11 @@
 package com.astrovm.crosstune
 
 import android.app.Instrumentation
+import android.app.Activity
+import android.app.Application
+import android.net.ConnectivityManager
+import androidx.lifecycle.ViewModelProvider
+import kotlinx.coroutines.Job
 import android.content.Context
 import android.os.Bundle
 import android.os.SystemClock
@@ -29,6 +34,23 @@ class OfflineChordCheck : Instrumentation() {
     private lateinit var control: File
     @Volatile private var recovered = false
     @Volatile private var state = "ready"
+    private var model: MainViewModel? = null
+    private var emptyRound = 0
+    @Volatile private var offlineRound = 0
+    @Volatile private var offlinePending = false
+    @Volatile private var offlineIdle = false
+    @Volatile private var failedFetchComplete = false
+    private val activityEvents = object : Application.ActivityLifecycleCallbacks {
+        override fun onActivityResumed(activity: Activity) {
+            if (activity is MainActivity) model = ViewModelProvider(activity)[MainViewModel::class.java]
+        }
+        override fun onActivityDestroyed(activity: Activity) { if (activity is MainActivity) model = null }
+        override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
+        override fun onActivityStarted(activity: Activity) = Unit
+        override fun onActivityPaused(activity: Activity) = Unit
+        override fun onActivityStopped(activity: Activity) = Unit
+        override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
+    }
 
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
@@ -39,9 +61,14 @@ class OfflineChordCheck : Instrumentation() {
         val oldHttp = MainActivity.httpClientFactory
         val oldConnection = MainActivity.connectionFactory
         val result = Bundle()
+        val application = targetContext.applicationContext as Application
         var code = 0
         try {
             require(targetContext.packageName == "com.astrovm.crosstune.dev") { "This fixture needs the dev app" }
+            check(targetContext.getSystemService(ConnectivityManager::class.java).activeNetwork == null) {
+                "Disconnect device networks before this isolated fixture"
+            }
+            application.registerActivityLifecycleCallbacks(activityEvents)
             status = File(targetContext.cacheDir, "chordcheck-status.json")
             control = File(targetContext.cacheDir, "chordcheck-control")
             control.delete()
@@ -55,8 +82,11 @@ class OfflineChordCheck : Instrumentation() {
             writeStatus()
             val end = SystemClock.elapsedRealtime() + 180_000
             while (SystemClock.elapsedRealtime() < end && state != "done") {
+                observeOfflineFetch()
+                writeStatus()
                 when (control.takeIf(File::isFile)?.readText()?.trim()) {
                     "recover", "drecover" -> if (!recovered) {
+                        check(failedFetchComplete) { "Wait for offline_failed_complete before recovery" }
                         recovered = true
                         state = "recovered"
                         runBlocking { network.recover() }
@@ -73,6 +103,8 @@ class OfflineChordCheck : Instrumentation() {
             result.putString("error", error.toString())
         } finally {
             runOnMainSync {
+                application.unregisterActivityLifecycleCallbacks(activityEvents)
+                model = null
                 MainActivity.httpClientFactory = oldHttp
                 MainActivity.connectionFactory = oldConnection
             }
@@ -91,7 +123,9 @@ class OfflineChordCheck : Instrumentation() {
     private fun seed() {
         val prefs = targetContext.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
         prefs.edit().clear().putBoolean("setup_complete", true).putBoolean("lyrics_chords", true).putBoolean("auto_reports", false).commit()
-        File(targetContext.noBackupFilesDir, "$KEPT_OFFLINE_DIR/songs.json").delete()
+        check(File(targetContext.noBackupFilesDir, KEPT_OFFLINE_DIR).deleteRecursively()) { "Could not clear pinned fixture data" }
+        check(targetContext.cacheDir.deleteRecursively()) { "Could not clear fixture caches" }
+        check(targetContext.cacheDir.mkdirs()) { "Could not create fixture cache" }
         HistoryStore(prefs).replace(listOf(HistoryEntry(
             MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "0000000000000000000000", "https://open.spotify.com/track/0000000000000000000000"),
             MusicMetadata(TITLE, ARTIST, lengthMs = 60_000)
@@ -122,7 +156,20 @@ class OfflineChordCheck : Instrumentation() {
         }
     }
 
-    private fun snapshot() = JSONObject().put("status", state).put("recovered", recovered).put("requests", JSONObject().apply {
+    private fun observeOfflineFetch() = runOnMainSync {
+        model?.let { current ->
+            offlineRound = current.keptOfflineRounds
+            if (current.uiState.keptOffline.isEmpty()) emptyRound = offlineRound
+            offlinePending = current.uiState.keptOffline.singleOrNull()?.done == false
+            val field = MainViewModel::class.java.getDeclaredField("keepingOffline").apply { isAccessible = true }
+            offlineIdle = (field.get(current) as? Job)?.isCompleted == true
+            failedFetchComplete = offlinePending && offlineRound > emptyRound && offlineIdle
+        }
+    }
+
+    private fun snapshot() = JSONObject().put("offline_round", offlineRound)
+        .put("offline_pending", offlinePending).put("offline_idle", offlineIdle).put("offline_failed_complete", failedFetchComplete)
+        .put("status", state).put("recovered", recovered).put("requests", JSONObject().apply {
         counts.toSortedMap().forEach { (host, count) -> put(host, count.get()) }
     })
 
