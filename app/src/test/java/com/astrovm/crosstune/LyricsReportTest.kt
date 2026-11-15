@@ -393,6 +393,7 @@ class LyricsReportTest {
             val sending = checkNotNull(model().viewModelScope.coroutineContext[Job]?.children?.firstOrNull { it !in before })
             composeRule.runOnIdle {
                 model().sendReport("first")
+                model().reportReading(Word("花", "か", "ka"), 0, "")
                 model().closeReport()
                 model().sendReport("second")
             }
@@ -1579,7 +1580,7 @@ class LyricsReportTest {
         waitUntil { model().uiState.report == null && !shown(string(R.string.reading_what_goes)) }
         assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
         val sent = sentReport()
-        assertEquals(listOf("android", "problem", "reading", "song", "version"), sent.keys().asSequence().sorted().toList())
+        assertEquals(listOf("android", "id", "problem", "reading", "song", "version"), sent.keys().asSequence().sorted().toList())
         assertEquals("wrong_reading", sent.getString("problem"))
         assertEquals("""{"title":"Demo","artist":"Band","source":"lrclib"}""", sent.getJSONObject("song").toString())
         val reading = sent.getJSONObject("reading")
