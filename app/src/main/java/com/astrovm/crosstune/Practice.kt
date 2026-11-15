@@ -118,7 +118,28 @@ internal class PracticeCards(
     /** The small player, once made: a WebView is heavy, and most people never need it. */
     private var made: LinePlayer? = null
 
-    private fun player(): LinePlayer? = made ?: newPlayer?.invoke()?.also { made = it }
+    private var released = false
+
+    private fun player(): LinePlayer? {
+        if (released) return null
+        return made ?: try {
+            newPlayer?.invoke()?.also { made = it }
+        } catch (_: android.util.AndroidRuntimeException) {
+            // Android can have no WebView provider while it is removed or updated.
+            null
+        } catch (_: UnsupportedOperationException) {
+            // Some devices do not support WebView at all.
+            null
+        }
+    }
+
+    /** The view model ended: no delayed page may play a line or keep a WebView alive. */
+    fun release() {
+        soundJob?.cancel()
+        made?.release()
+        made = null
+        released = true
+    }
 
     /** The small player's picture for the card to show, which is made when asked for. */
     fun playerView(): android.view.View? = player()?.view()
@@ -193,7 +214,7 @@ internal class PracticeCards(
             leftOut = false
             val inApp = inBestApp(source, song, line, play)
             // Each card says so for its own chain: one played once it's allowed doesn't, as the last did.
-            uiState.practice?.takeIf { it.line?.isSame(line) == true }?.let { uiState = uiState.copy(practice = it.copy(cantComeBack = leftOut)) }
+            uiState.practice?.takeIf { it.line?.let { shown -> shown.isSame(line) && shown.cardType == line.cardType } == true }?.let { uiState = uiState.copy(practice = it.copy(cantComeBack = leftOut)) }
             if (!inApp) inYouTube(line, play)
         }
     }
@@ -453,7 +474,7 @@ internal class PracticeCards(
         // Stop at the next line when it starts inside the tail, so that line is not heard.
         val end = LineWindow.playedUntil(start, line.endMs ?: start, line.nextMs)
         val now = play || uiState.practice?.turned == true
-        val practice = uiState.practice?.takeIf { it.line?.isSame(line) == true } ?: return
+        val practice = uiState.practice?.takeIf { it.line?.let { shown -> shown.isSame(line) && shown.cardType == line.cardType } == true } ?: return
         uiState = uiState.copy(practice = practice.copy(video = video, sound = if (now) LineSound.PLAYING else LineSound.PLAYED))
         player.show(video, start, end, expectedMs, now) { ended ->
             if (ended == LineEnd.ENDED) setSound(line, LineSound.PLAYED) else noVideo(line)
@@ -475,7 +496,7 @@ internal class PracticeCards(
 
     /** [line]'s video can't be played: it has no sound, and the player's gone from its card. */
     private fun noVideo(line: SavedLine) {
-        val practice = uiState.practice?.takeIf { it.line?.isSame(line) == true } ?: return
+        val practice = uiState.practice?.takeIf { it.line?.let { shown -> shown.isSame(line) && shown.cardType == line.cardType } == true } ?: return
         uiState = uiState.copy(practice = practice.copy(video = null, sound = LineSound.NONE))
     }
 
@@ -629,7 +650,7 @@ internal class PracticeCards(
 
     /** How [line] sounds, unless another card's shown by now. */
     private fun setSound(line: SavedLine, sound: LineSound) {
-        val practice = uiState.practice?.takeIf { it.line?.isSame(line) == true } ?: return
+        val practice = uiState.practice?.takeIf { it.line?.let { shown -> shown.isSame(line) && shown.cardType == line.cardType } == true } ?: return
         uiState = uiState.copy(practice = practice.copy(sound = sound))
     }
 

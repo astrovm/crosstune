@@ -392,6 +392,7 @@ internal class MainViewModel(
     }.also(preferences::registerOnSharedPreferenceChangeListener)
 
     override fun onCleared() {
+        cards.release()
         stopWatchingOneTap?.invoke()
         preferences.unregisterOnSharedPreferenceChangeListener(visualsChanged)
     }

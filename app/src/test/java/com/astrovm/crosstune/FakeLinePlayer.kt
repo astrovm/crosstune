@@ -15,6 +15,9 @@ internal class FakeLinePlayer(context: Context) : LinePlayer {
     /** How many times it was paused. */
     @Volatile var pauses = 0
 
+    /** Whether the owner released the player. */
+    @Volatile var released = false
+
     @Volatile private var done: (LineEnd) -> Unit = {}
 
     override fun view(): View = view
@@ -27,6 +30,8 @@ internal class FakeLinePlayer(context: Context) : LinePlayer {
     override fun pause() {
         pauses++
     }
+
+    override fun release() { released = true }
 
     /** The line it was last shown ends there, or can't be played. */
     fun end(how: LineEnd) = done(how)
