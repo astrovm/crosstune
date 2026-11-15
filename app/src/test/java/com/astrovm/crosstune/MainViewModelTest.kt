@@ -2706,6 +2706,20 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aLateCoverUsesTheFollowingSessionsAppBeforeTheRequestedApp() {
+        val playback = FakePlayback().apply { playing.value = following() }
+        val model = playingModel(playback)
+        playback.playing.value = following(app = "com.other")
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///following-app.jpg"), null, app = "com.other")
+        idle()
+        assertEquals("file:///following-app.jpg", model.uiState.player?.song?.artworkUrl)
+        playback.playing.value = following().copy(appPackage = null)
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///requested-app.jpg"), null, app = "com.spotify")
+        idle()
+        assertEquals("file:///requested-app.jpg", model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
     fun aCoverFromAnotherAppDoesNotReplaceThePlayersCover() {
         val playback = FakePlayback()
         playback.playing.value = following()
