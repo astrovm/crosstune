@@ -35,15 +35,13 @@ import androidx.core.content.edit
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import kotlin.math.abs
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -371,6 +369,7 @@ internal class MediaSessionPlayback(
     private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() }
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
+    private val covers = PlaybackCovers.shared(context)
 
     /**
      * How each title and artist an app says read as a song's, by [readSong]: read once, as a long one takes a while, and
@@ -823,6 +822,7 @@ internal class MediaSessionPlayback(
     private fun <T> changes(read: () -> T): Flow<T> = callbackFlow {
         var watched: List<MediaController> = emptyList()
         fun update() { trySend(read()) }
+        val coverChanges = launch { covers.updates.collect { update() } }
         val callback = object : MediaController.Callback() {
             override fun onMetadataChanged(metadata: MediaMetadata?) = update()
             override fun onPlaybackStateChanged(state: PlaybackState?) = update()
@@ -847,6 +847,7 @@ internal class MediaSessionPlayback(
         }.isSuccess
         if (!watching) update()
         awaitClose {
+            coverChanges.cancel()
             sessions.removeOnActiveSessionsChangedListener(changed)
             audio.unregisterAudioPlaybackCallback(sounding)
             watched.forEach { it.unregisterCallback(callback) }
@@ -906,29 +907,8 @@ internal class MediaSessionPlayback(
      * The cover the app shows, when it gives no link to one, e.g. YouTube Music for a song no other
      * store has: kept as a file with the covers downloaded, once a song, so it shows like those.
      */
-    private fun ownCover(metadata: MediaMetadata): String? {
-        val cover = COVERS.firstNotNullOfOrNull(metadata::getBitmap) ?: return null
-        val bytes = runCatching {
-            // Memory only, so there's nothing to close.
-            val output = ByteArrayOutputStream()
-            if (cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, output)) output.toByteArray() else null
-        }.getOrNull() ?: return null
-        val file = File(context.cacheDir, "$ARTWORK_DIR/playing-${UUID.nameUUIDFromBytes(bytes)}.jpg")
-        if (!file.isFile) {
-            // Written aside and moved in once whole, so one cut short isn't the song's cover from then on.
-            val part = File(file.path + ".part")
-            val saved = runCatching {
-                file.parentFile?.mkdirs()
-                part.writeBytes(bytes)
-                part.renameTo(file)
-            }.getOrDefault(false)
-            if (!saved) {
-                part.delete()
-                return null
-            }
-        }
-        return file.toURI().toString()
-    }
+    private fun ownCover(metadata: MediaMetadata): String? =
+        COVERS.firstNotNullOfOrNull(metadata::getBitmap)?.let(covers::of)
 
     private fun following(controller: MediaController, asked: Long?): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
@@ -1106,7 +1086,6 @@ internal const val SAME_CLOCK_MS = 50L
 /** Where an app puts the cover it shows, the song's own before its album's. */
 private val COVERS = listOf(MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADATA_KEY_ALBUM_ART, MediaMetadata.METADATA_KEY_DISPLAY_ICON)
 
-private const val COVER_QUALITY = 90
 
 /**
  * A music app's own button to like a song, or keep it, by what the app's session calls it. Most call it

@@ -130,7 +130,7 @@ class PlaybackTest {
     }
 
     private fun offered(): MutableList<Heard.Song?> {
-        val seen = mutableListOf<Heard.Song?>()
+        val seen = java.util.concurrent.CopyOnWriteArrayList<Heard.Song?>()
         collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.nowPlayingUpdates().collect { seen += it } }
         shadowOf(Looper.getMainLooper()).idle()
         return seen
@@ -2104,6 +2104,125 @@ class PlaybackTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
+    fun aBitmapCoverNeverEncodesOnTheScreenThread() {
+        val controller = aBitmapCover()
+        shadowOf(sessions).addController(controller)
+        coverWhenReady { playback.nowPlaying()?.metadata?.artworkUrl }
+        assertEquals(0, CoverBitmap.mainEncodes.get())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
+    fun repeatedPlaybackReadsEncodeABitmapOnlyOnce() {
+        val controller = aBitmapCover()
+        shadowOf(sessions).addController(controller)
+        coverWhenReady { playback.nowPlaying()?.metadata?.artworkUrl }
+        repeat(10) { playback.nowPlaying() }
+        assertEquals(1, CoverBitmap.encodes.get())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
+    fun aSavedCoverUpdatesTheSongWithoutAnotherPlaybackEvent() {
+        val seen = offered()
+        shadowOf(sessions).addController(aBitmapCover())
+        val cover = coverWhenReady {
+            shadowOf(Looper.getMainLooper()).idle()
+            seen.lastOrNull()?.metadata?.artworkUrl
+        }
+        assertEquals(cover, playback.nowPlaying()?.metadata?.artworkUrl)
+        assertEquals(1, CoverBitmap.encodes.get())
+        assertEquals(0, CoverBitmap.mainEncodes.get())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
+    fun playbackReadersShareTheSameSavedBitmapAndRecreateAnEvictedFile() {
+        shadowOf(sessions).addController(aBitmapCover())
+        val cover = coverWhenReady { playback.nowPlaying()?.metadata?.artworkUrl }
+        val other = MediaSessionPlayback(app)
+        assertEquals(cover, other.nowPlaying()?.metadata?.artworkUrl)
+        assertEquals(1, CoverBitmap.encodes.get())
+        assertTrue(File(URI(cover)).delete())
+        assertEquals(cover, coverWhenReady { other.nowPlaying()?.metadata?.artworkUrl })
+        assertEquals(2, CoverBitmap.encodes.get())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
+    fun changingABitmapGivesItANewFileWithoutChangingItsOldOne() {
+        val controller = aBitmapCover()
+        shadowOf(sessions).addController(controller)
+        val first = coverWhenReady { playback.nowPlaying()?.metadata?.artworkUrl }
+        val bytes = File(URI(first)).readBytes()
+        requireNotNull(controller.metadata.getBitmap(MediaMetadata.METADATA_KEY_ART)).eraseColor(Color.BLUE)
+        val second = coverWhenReady { playback.nowPlaying()?.metadata?.artworkUrl }
+        assertNotEquals(first, second)
+        org.junit.Assert.assertArrayEquals(bytes, File(URI(first)).readBytes())
+        assertEquals(2, CoverBitmap.encodes.get())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
+    fun aSlowOldCoverCannotBeShownForTheNextSong() {
+        val first = aBitmapCover()
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val finish = java.util.concurrent.CountDownLatch(1)
+        CoverBitmap.before = Runnable { entered.countDown(); finish.await() }
+        val seen = offered()
+        try {
+            shadowOf(sessions).addController(first)
+            playback.nowPlaying()
+            assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            val second = player("com.example.next", "Next", "Next Song", "Next Artist", at = PLAYED_AT + 1)
+            val blue = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLUE) }
+            shadowOf(second).setMetadata(MediaMetadata.Builder(second.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, blue).build())
+            shadowOf(sessions).addController(second)
+            assertEquals("Next Song", playback.nowPlaying()?.metadata?.title)
+            finish.countDown()
+            val cover = coverWhenReady {
+                shadowOf(Looper.getMainLooper()).idle()
+                seen.lastOrNull()?.takeIf { it.metadata.title == "Next Song" }?.metadata?.artworkUrl
+            }
+            assertEquals(cover, playback.nowPlaying()?.metadata?.artworkUrl)
+            val old = coverWhenReady { PlaybackCovers.shared(app).of(requireNotNull(first.metadata.getBitmap(MediaMetadata.METADATA_KEY_ART))) }
+            assertNotEquals(old, cover)
+            assertTrue(seen.filter { it?.metadata?.title == "Next Song" }.none { it?.metadata?.artworkUrl == old })
+        } finally {
+            finish.countDown()
+            CoverBitmap.before = Runnable { }
+        }
+    }
+
+    private fun coverWhenReady(read: () -> String?): String {
+        val end = System.nanoTime() + 5_000_000_000L
+        while (System.nanoTime() < end) {
+            read()?.let { return it }
+            Thread.sleep(5)
+        }
+        error("The bitmap cover was not saved")
+    }
+
+    private fun aBitmapCover(): MediaController {
+        allow()
+        sounding()
+        CoverBitmap.before = Runnable { }
+        CoverBitmap.encodes.set(0)
+        CoverBitmap.mainEncodes.set(0)
+        val controller = player("com.example.player", "Player", "Fake Song", "Fake Artist")
+        val shown = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
+        shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, shown).build())
+        return controller
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun itsCoverIsTheOneItsAppShowsWhenThatsAllItGives() {
         allow()
         sounding()
@@ -2111,7 +2230,7 @@ class PlaybackTest {
         val shown = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
         shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, shown).build())
         shadowOf(sessions).addController(controller)
-        val cover = playback.nowPlaying()?.metadata?.artworkUrl!!
+        val cover = coverWhenReady { playback.nowPlaying()?.metadata?.artworkUrl }
         // Kept with the covers, the same each time it's asked for.
         assertEquals(File(app.cacheDir, ARTWORK_DIR).canonicalFile, File(URI(cover)).canonicalFile.parentFile)
         assertEquals(cover, playback.nowPlaying()?.metadata?.artworkUrl)
@@ -2135,10 +2254,10 @@ class PlaybackTest {
         shadowOf(second).setMetadata(MediaMetadata.Builder(second.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, blue).build())
         // Named by nobody, they're listened to, and shown by their covers meanwhile.
         shadowOf(sessions).addController(first)
-        val firstCover = playback.playingUnnamed()?.artworkUrl
+        val firstCover = coverWhenReady { playback.playingUnnamed()?.artworkUrl }
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(second)
-        val secondCover = playback.playingUnnamed()?.artworkUrl
+        val secondCover = coverWhenReady { playback.playingUnnamed()?.artworkUrl }
         assertNotNull(firstCover)
         assertNotNull(secondCover)
         assertNotEquals(firstCover, secondCover)
@@ -2159,7 +2278,7 @@ class PlaybackTest {
         // Given whole the next time, it's kept whole.
         val shown = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
         shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, shown).build())
-        val cover = playback.nowPlaying()?.metadata?.artworkUrl!!
+        val cover = coverWhenReady { playback.nowPlaying()?.metadata?.artworkUrl }
         val loaded = runBlocking { ArtworkLoader(FakeSpotify().client(), Dispatchers.Unconfined, File(app.cacheDir, ARTWORK_DIR)).load(cover) }
         assertEquals(8, loaded?.width)
     }
