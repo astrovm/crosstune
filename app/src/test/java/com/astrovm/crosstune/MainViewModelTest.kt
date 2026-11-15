@@ -84,6 +84,7 @@ class MainViewModelTest {
         sleepTimer: SleepTimer? = null,
         phone: Phone = Phone.OTHER,
         lyricsFinder: LyricsFinder? = null,
+        chordFinder: ChordFinder? = null,
         songSearcher: SongSearcher? = null,
         reports: ReportSender? = null,
         listener: SongHearing = SongHearing { Heard.Nothing },
@@ -102,6 +103,7 @@ class MainViewModelTest {
             LinkResolver(client, Dispatchers.Unconfined),
             ExactMatcher(client, ioDispatcher = Dispatchers.Unconfined),
             lyricsFinder = lyricsFinder,
+            chordFinder = chordFinder,
             playback = playback,
             preferences = prefs(),
             interception = LinkInterception(app),
@@ -199,6 +201,71 @@ class MainViewModelTest {
         assertEquals(listOf(true), model.uiState.keptOffline.map { it.done })
         File(app.cacheDir, "kept-no-lyrics").deleteRecursively()
         Unit
+    }
+
+    @Test
+    fun failedChordDownloadIsNotKeptAndRetriesOnTheNextNetwork() = runBlocking {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        val dir = File(app.cacheDir, "kept-chord-failure").apply { deleteRecursively() }
+        val kept = OfflineSongs(File(dir, "songs.json"), emptyList(), null, Dispatchers.Unconfined)
+        kept.keep(MusicMetadata("Hush", "Band", lengthMs = 60_000))
+        var down = true
+        fake.handler = { request ->
+            when (request.url.host) {
+                "lrclib.net" -> FakeSpotify.html(request, timed)
+                "www.ultimate-guitar.com" -> if (down) throw java.io.IOException("offline") else FakeSpotify.html(request, "")
+                "solr.sscdn.co" -> FakeSpotify.html(request, "({\"response\":{\"docs\":[]}})")
+                else -> FakeSpotify.html(request, "")
+            }
+        }
+        val lyrics = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val chords = ChordFinder(fake.inlineClient(), Dispatchers.Unconfined)
+        val model = model(offline = kept, lyricsFinder = lyrics, chordFinder = chords)
+        model.unmeteredChanged(true)
+        idle()
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { "ultimate-guitar.com" in it })
+        assertEquals(listOf(false), model.uiState.keptOffline.map { it.done })
+        down = false
+        model.unmeteredChanged(true)
+        idle()
+        assertEquals(listOf(true), model.uiState.keptOffline.map { it.done })
+        dir.deleteRecursively()
+        Unit
+    }
+
+    @Test
+    fun chordWikiChecksLeaveTheSongPendingUntilTheNextNetwork() = runBlocking {
+        for (check in listOf(ChordWikiCheck.AUTOMATIC, ChordWikiCheck.INTERACTIVE)) {
+            prefs().edit().putBoolean("lyrics_chords", true).commit()
+            val dir = File(app.cacheDir, "kept-wiki-$check").apply { deleteRecursively() }
+            val kept = OfflineSongs(File(dir, "songs.json"), emptyList(), null, Dispatchers.Unconfined)
+            kept.keep(MusicMetadata("Hush", "Band", lengthMs = 60_000))
+            var blocked = true
+            fake.handler = { request ->
+                when (request.url.host) {
+                    "lrclib.net" -> FakeSpotify.html(request, """[{"trackName":"Hush","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 川の道を歩いていく\n[00:10.00] 朝の光に歌っている"}]""")
+                    "music.163.com" -> FakeSpotify.html(request, """{"result":{}}""")
+                    "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                    else -> FakeSpotify.html(request, "")
+                }
+            }
+            val lyrics = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+            var pages = 0
+            val chords = ChordFinder(fake.inlineClient(), Dispatchers.Unconfined, chordWiki = ChordWikiPages {
+                pages++
+                if (blocked) throw ChordWikiStopped(check) else ""
+            }, chordWikiPauseMs = 0)
+            val model = model(offline = kept, lyricsFinder = lyrics, chordFinder = chords)
+            model.unmeteredChanged(true)
+            idle()
+            assertTrue("$check: no wiki request", pages > 0)
+            assertEquals("$check", listOf(false), model.uiState.keptOffline.map { it.done })
+            blocked = false
+            model.unmeteredChanged(true)
+            idle()
+            assertEquals("$check", listOf(true), model.uiState.keptOffline.map { it.done })
+            dir.deleteRecursively()
+        }
     }
 
     @Test
