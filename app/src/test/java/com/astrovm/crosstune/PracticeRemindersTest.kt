@@ -516,6 +516,36 @@ class PracticeRemindersTest {
     }
 
     @Test
+    fun aMidnightGapKeepsItsShiftedAlarmBeforeItFires() {
+        val nuuk = ZoneId.of("America/Nuuk")
+        clock = java.time.Instant.parse("2026-03-28T22:00:00Z").toEpochMilli()
+        val local = PracticeReminders(app, now = { clock }, zone = { nuuk })
+        saved(line("One"))
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val shifted = java.time.Instant.parse("2026-03-29T01:30:00Z").toEpochMilli()
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = shifted - 20 * 60_000L
+        local.arm()
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aMidnightGapDeliversItsShiftedAlarmOnTime() {
+        val nuuk = ZoneId.of("America/Nuuk")
+        clock = java.time.Instant.parse("2026-03-28T22:00:00Z").toEpochMilli()
+        val local = PracticeReminders(app, now = { clock }, zone = { nuuk })
+        saved(line("One"))
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = java.time.Instant.parse("2026-03-29T01:30:00Z").toEpochMilli()
+        local.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(clock, prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
     fun aGapInTheClockKeepsTodaysShiftedOccurrence() {
         val berlin = ZoneId.of("Europe/Berlin")
         clock = at(29, 1, zone = berlin)

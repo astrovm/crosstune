@@ -15,6 +15,7 @@ import androidx.core.content.edit
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 
 /** Whether due cards are asked back once a day, as the bell shows it. */
 internal data class Reminder(
@@ -43,23 +44,32 @@ internal val UiState.reminderMinute: Int? get() = reminder.minute?.takeIf { phon
 
 /** The moment after [now] the clock on [zone]'s wall next says [minute], so it stays that hour across time zones and clock changes. */
 internal fun nextReminderAt(minute: Int, now: Long, zone: ZoneId): Long {
-    val today = Instant.ofEpochMilli(now).atZone(zone)
     val time = LocalTime.of(minute / 60, minute % 60)
-    val at = today.toLocalDate().atTime(time).atZone(zone)
-    // Build tomorrow from the chosen minute, not from an hour shifted past a clock gap.
-    return (if (at.isAfter(today)) at else today.toLocalDate().plusDays(1).atTime(time).atZone(zone)).toInstant().toEpochMilli()
+    var date = Instant.ofEpochMilli(now).atOffset(ZoneOffset.MIN).toLocalDate()
+    var next = Long.MAX_VALUE
+    while (true) {
+        val wall = date.atTime(time)
+        // Even the largest UTC offset cannot move this or a later date before the best result.
+        if (wall.toInstant(ZoneOffset.MAX).toEpochMilli() >= next) return next
+        val at = wall.atZone(zone).toInstant().toEpochMilli()
+        if (at > now) next = minOf(next, at)
+        date = date.plusDays(1)
+    }
 }
 
 /** The latest chosen minute that is due, including a day whose clock skips that minute or date. */
 internal fun latestReminderAt(minute: Int, now: Long, zone: ZoneId): Long {
     val time = LocalTime.of(minute / 60, minute % 60)
-    var date = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
-    var at = date.atTime(time).atZone(zone).toInstant().toEpochMilli()
-    while (at > now) {
+    var date = Instant.ofEpochMilli(now).atOffset(ZoneOffset.MAX).toLocalDate()
+    var latest = Long.MIN_VALUE
+    while (true) {
+        val wall = date.atTime(time)
+        // Even the smallest UTC offset cannot move this or an earlier date after the best result.
+        if (wall.toInstant(ZoneOffset.MIN).toEpochMilli() <= latest) return latest
+        val at = wall.atZone(zone).toInstant().toEpochMilli()
+        if (at <= now) latest = maxOf(latest, at)
         date = date.minusDays(1)
-        at = date.atTime(time).atZone(zone).toInstant().toEpochMilli()
     }
-    return at
 }
 
 /** What the clock on [zone]'s wall says at [at], in minutes from midnight. */
