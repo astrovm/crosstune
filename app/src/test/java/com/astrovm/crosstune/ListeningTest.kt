@@ -5002,9 +5002,25 @@ class ListeningTest {
         settle()
         assertFalse(controllerModel().uiState.learning.readingsUnfinished)
         val asked = utatenRequests()
+        val disk = File(app.cacheDir, "kept_words.json")
+        composeRule.runOnIdle { controllerModel().keep() }
+        waitUntil(TIMEOUT_MS) { disk.exists() && runBlocking { LookupCache(disk, Dispatchers.Unconfined).entries().isNotEmpty() } }
+        val kept = runBlocking { LookupCache(disk, Dispatchers.Unconfined).entries() }.single().second
+        val restored = requireNotNull(KeptWords.from(kept))
+        assertEquals("都会の夜", restored.lyrics)
+        assertFalse(restored.learning.readingsUnfinished)
         closedAndOpenedAgain()
         waitUntil(TIMEOUT_MS) { readingShown("とかい") }
         settle()
+        assertEquals(asked, utatenRequests())
+        controller!!.destroyAndSettle()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { readingShown("とかい") }
+        settle()
+        assertFalse(controllerModel().uiState.learning.readingsUnfinished)
         assertEquals(asked, utatenRequests())
     }
 

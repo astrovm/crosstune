@@ -213,6 +213,29 @@ class SungReadingsTest {
     }
 
     @Test
+    fun failuresAreAskedAgainWithAFreshCacheAndCanRecover() {
+        val elsewhere = "<html><body>Just a moment...</body></html>"
+        val cases = listOf(
+            site(emptyList(), emptyMap(), failing = true) to 1,
+            { request: Request -> FakeSpotify.html(request, elsewhere) } to 1,
+            site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to elsewhere)) to 2
+        )
+        cases.forEachIndexed { index, (failure, requests) ->
+            val disk = File(folder.root, "failure-$index.json")
+            fun fresh() = LookupCache(disk, Dispatchers.Unconfined)
+            fake.handler = failure
+            fake.requestedUrls.clear()
+            assertNull(ask(fresh()))
+            assertEquals(requests, fake.requestedUrls.size)
+            assertNull(ask(fresh()))
+            assertEquals(requests * 2, fake.requestedUrls.size)
+            fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
+            assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(fresh())!!)
+            assertEquals(requests * 2 + 2, fake.requestedUrls.size)
+        }
+    }
+
+    @Test
     fun linesWithNoReadingFromTheDictionaryAreMatchedAsWrittenAndAPageWithNoLinesGivesNothing() {
         val theirs = SungReadings.linesOf(page)
         // The dictionary read fewer lines than there are: the rest are compared as written.
