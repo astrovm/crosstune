@@ -2,6 +2,7 @@
 import hashlib
 import os
 import shutil
+import shlex
 import stat
 import subprocess
 import sys
@@ -355,6 +356,62 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         first.communicate(timeout=20)
         output, _ = second.communicate(timeout=20)
         self.assertEqual(0, second.returncode, output)
+        self.assertIn("checkout is already in use", output)
+
+    def test_a_build_cannot_overtake_a_ticket_before_it_is_published(self):
+        publish = self.dir / "hold-publish"
+        publish.touch()
+        self.addCleanup(lambda: publish.unlink(missing_ok=True))
+        self.tool("mv", '\n'.join([
+            'if [ "$FAKE_RUN" = first ]; then',
+            'case "$2" in */queue/*)',
+            'touch "$FAKE_DIR/publishing.first"',
+            'while [ -e "$FAKE_DIR/hold-publish" ]; do sleep 0.02; done',
+            ';; esac; fi',
+            'exec ' + shlex.quote(shutil.which("mv")) + ' "$@"',
+        ]))
+        self.hold("first")
+        first = self.start("first", "help", slots="2", checkout="shared")
+        try:
+            self.wait_for("publishing.first")
+            second = self.start("second", "help", slots="2", checkout="shared")
+            time.sleep(0.5)
+            self.assertFalse((self.dir / "started.second").exists())
+            publish.unlink()
+            self.wait_for("started.first")
+            self.assertFalse((self.dir / "started.second").exists())
+        finally:
+            publish.unlink(missing_ok=True)
+            (self.dir / "hold.first").unlink(missing_ok=True)
+        first.communicate(timeout=20)
+        output, _ = second.communicate(timeout=20)
+        self.assertEqual(0, second.returncode, output)
+
+    def test_memory_tickets_stay_readable_to_older_checkouts(self):
+        self.hold("first")
+        first = self.start("first", "help", GRADLE_BOX_MEMORY="7")
+        self.wait_for("started.first")
+        tickets = list((self.dir / "state" / "queue").iterdir())
+        self.assertEqual(1, len(tickets))
+        self.assertEqual(7, int(tickets[0].read_text()))
+        self.release("first")
+        first.communicate(timeout=20)
+        self.assertEqual([], list((self.dir / "state" / "checkouts").iterdir()))
+
+    def test_an_intermediate_multi_line_ticket_still_protects_its_checkout(self):
+        root = self.checkout("shared")
+        queue = self.dir / "state" / "queue"
+        queue.mkdir(parents=True)
+        old = queue / f"1.{os.getpid()}"
+        old.write_text(f"1\n{root}\n")
+        box = self.start("second", "help", slots="2", checkout="shared")
+        try:
+            time.sleep(0.5)
+            self.assertFalse((self.dir / "started.second").exists())
+        finally:
+            old.unlink(missing_ok=True)
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(0, box.returncode, output)
         self.assertIn("checkout is already in use", output)
 
     def test_also_checkout_overlap_waits_in_both_directions(self):

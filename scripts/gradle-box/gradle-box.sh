@@ -163,20 +163,28 @@ if [[ -n ${GRADLE_BOX_CPUS:-} ]] && awk -v want="$GRADLE_BOX_CPUS" -v have="$cpu
 fi
 
 # A ticket's name sorts by when it asked and ends in who asked, so one left by a killed build can go.
-# Its first line is the memory requested; later lines name each checkout. Publish all of it atomically.
-mkdir -p "$state/queue"
+# Keep the memory ticket readable by older checkouts. Store checkout paths beside it.
+mkdir -p "$state/queue" "$state/checkouts"
+# Name and publish in one turn. A later build must not overtake an unpublished earlier ticket.
+exec 7>"$state/queue.lock"
+lock 7
 ticket=$state/queue/$(date +%s%N).$$
-{
-    echo "$memory"
-    printf '%s\n' "${checkouts[@]}"
-} > "$state/ticket.$$"
+checkout_ticket=$state/checkouts/${ticket##*/}
+for recorded in "$state"/checkouts/*; do
+    [[ -f $recorded ]] || continue
+    kill -0 "${recorded##*.}" 2>/dev/null || rm -f "$recorded"
+done
+printf '%s\n' "${checkouts[@]}" > "$state/checkouts.$$"
+mv "$state/checkouts.$$" "$checkout_ticket"
+echo "$memory" > "$state/ticket.$$"
 mv "$state/ticket.$$" "$ticket"
-trap 'rm -f "$ticket"' EXIT
+exec 7>&-
+trap 'rm -f "$ticket" "$checkout_ticket"' EXIT
 
 # How many asked before this build and aren't done, and the memory they asked for, added up. A ticket
 # with nothing in it is from a checkout whose script doesn't write it: that one asked for 16 or less.
 ahead_of_me() {
-    local other asked checkout line count=0 sum=0 overlap=0
+    local other asked checkout line recorded count=0 sum=0 overlap=0
     for other in "$state"/queue/*; do
         [[ $other == "$ticket" || $other > "$ticket" ]] && continue
         if kill -0 "${other##*.}" 2>/dev/null; then
@@ -184,13 +192,16 @@ ahead_of_me() {
             [[ $asked =~ ^[0-9]+$ ]] || asked=16
             count=$((count + 1))
             sum=$((sum + asked))
+            recorded=$state/checkouts/${other##*/}
+            # Also read the intermediate multi-line tickets while those builds finish.
+            [[ -f $recorded ]] || recorded=$other
             while IFS= read -r line; do
                 for checkout in "${checkouts[@]}"; do
                     [[ $line != "$checkout" ]] || overlap=1
                 done
-            done < <(tail -n +2 "$other" 2>/dev/null)
+            done < <(cat "$recorded" 2>/dev/null)
         else
-            rm -f "$other"
+            rm -f "$other" "$state/checkouts/${other##*/}"
         fi
     done
     echo "$count $sum $overlap"
