@@ -11,7 +11,8 @@ A mark in the body is a line of its own:
 
   golden: none               the readings code changes, and no reading does
   golden: accept WORD KANA   the locked rows of WORD read as KANA go, on purpose
-  golden: lock changed       the lock itself changes: this checker, the golden code, its tests, or where the file is
+  golden: lock changed       the lock itself changes: this checker, the golden code, its tests, the dependency guard
+                             and the parser it runs, or where the file is
   golden: lines checked D    readingsaudit.py lines read every audit line whole with main's code and this one, and no
                              right reading changed; D names what the readings are made of on both sides
   golden: new audit          the golden file's audit line changes: lines reads another audit from now on, on purpose
@@ -49,6 +50,10 @@ LOCK_FILES = (
     CHECKER,
     f"{SCRIPTS}/golden.py",
     f"{SCRIPTS}/source_calls.py",
+    f"{SCRIPTS}/SourceTree.java",
+    f"{SCRIPTS}/test_source_calls.py",
+    "scripts/kotlinc/kotlinc.py",
+    "scripts/kotlinc/kotlinc.lock",
     f"{SCRIPTS}/test_golden.py",
     "app/src/test/java/com/astrovm/crosstune/GoldenReadings.kt",
     "app/src/test/java/com/astrovm/crosstune/ReadingsGoldenTest.kt",

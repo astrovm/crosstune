@@ -279,7 +279,9 @@ class FakeDiff(unittest.TestCase):
                 self.assertEqual((0, ""), self.run_check(repo, "golden: none\n" + self.checked(repo)))
 
     def test_the_transitive_source_guard_is_part_of_the_lock(self):
-        for path in ("scripts/readingsaudit/source_calls.py", "scripts/readingsaudit/test_golden.py"):
+        # The guard, its tests, the parser it runs and the compiler that parser is built on.
+        for path in ("scripts/readingsaudit/source_calls.py", "scripts/readingsaudit/test_golden.py", "scripts/readingsaudit/test_source_calls.py",
+                     "scripts/readingsaudit/SourceTree.java", "scripts/kotlinc/kotlinc.py", "scripts/kotlinc/kotlinc.lock"):
             with self.subTest(path=path), tempfile.TemporaryDirectory() as folder:
                 repo = self.repo(folder, golden_text(ROW))
                 self.write(repo, path, "changed guard\n")

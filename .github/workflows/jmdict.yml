@@ -20,6 +20,7 @@ on:
     paths:
       - .github/workflows/jmdict.yml
       - scripts/readingsaudit/**
+      - scripts/kotlinc/**
       - app/src/test/java/com/astrovm/crosstune/songcheck/JmdictReadings.kt
 
 permissions:
@@ -50,6 +51,20 @@ jobs:
         with:
           persist-credentials: false
 
+      # Gradle builds with this JDK, and the readings guard's tests parse with the Kotlin compiler on it.
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/kotlinc
+          key: kotlinc-${{ hashFiles('scripts/kotlinc/kotlinc.lock') }}
+
+      - name: Fetch the locked Kotlin compiler
+        run: python3 scripts/kotlinc/kotlinc.py fetch
+
       - name: Test the scripts
         run: |
           python3 -m unittest discover -s scripts/readingsaudit -p "test_*.py"
@@ -68,11 +83,6 @@ jobs:
           if [ -n "$TAG" ]; then args+=(--tag "$TAG"); fi
           # It writes tag= to GITHUB_OUTPUT, once the tag has the form of jmdict-simplified's.
           python3 scripts/readingsaudit/readingsaudit.py fetch "${args[@]}"
-
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
-        with:
-          distribution: temurin
-          java-version: "25"
 
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:

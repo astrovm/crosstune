@@ -107,6 +107,20 @@ jobs:
           # apt's own files are root's, and the cache is saved as the runner's user.
           sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
 
+      # The readings guard parses Kotlin and Java with the Kotlin compiler, and syncreplay's tests ask it what to compile.
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/kotlinc
+          key: kotlinc-${{ hashFiles('scripts/kotlinc/kotlinc.lock') }}
+
+      - name: Fetch the locked Kotlin compiler
+        run: python3 scripts/kotlinc/kotlinc.py fetch
+
       # The committed site has to be what build-site.py makes, new pages included.
       - name: Test site and media scripts
         run: |
@@ -116,6 +130,7 @@ jobs:
           python3 -m unittest discover -s scripts/milkdrop-render -p "test_*.py"
           python3 -m unittest discover -s scripts/shots -p "test_*.py"
           python3 -m unittest discover -s scripts/songcheck -p "test_*.py"
+          python3 -m unittest discover -s scripts/kotlinc -p "test_*.py"
           python3 -m unittest discover -s scripts/readingsaudit -p "test_*.py"
           python3 -m unittest discover -s scripts/syncreplay -p "test_*.py"
           python3 -m unittest discover -s scripts/contrast -p "test_*.py"

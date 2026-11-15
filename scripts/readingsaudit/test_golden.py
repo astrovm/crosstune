@@ -748,8 +748,14 @@ class Sources(unittest.TestCase):
 
     def test_every_app_file_the_locks_read_through_is_a_reading_source(self):
         names = declared(readingsaudit.ROOT)
+        reached = set()
         for harness in HARNESSES:
-            self.assertEqual(set(), called(readingsaudit.ROOT, harness, names) - set(golden.READING_SOURCES) - set(HARNESSES), harness)
+            found = called(readingsaudit.ROOT, harness, names)
+            reached |= found
+            # The golden file is what a harness checks against, not what readings are made of.
+            self.assertEqual(set(), found - set(golden.READING_SOURCES) - set(HARNESSES) - {golden.GOLDEN_REL}, harness)
+        # Each reading source is one the harnesses reach: a source they no longer run would lock nothing.
+        self.assertEqual(set(), set(golden.READING_SOURCES) - reached)
 
     def test_a_file_named_in_a_harness_is_found(self):
         with tempfile.TemporaryDirectory() as folder:
