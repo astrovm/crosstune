@@ -2127,8 +2127,9 @@ class PlaybackTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(shadows = [CoverBitmap::class])
     fun aSavedCoverUpdatesTheSongWithoutAnotherPlaybackEvent() {
+        val controller = aBitmapCover()
         val seen = offered()
-        shadowOf(sessions).addController(aBitmapCover())
+        shadowOf(sessions).addController(controller)
         val cover = coverWhenReady {
             shadowOf(Looper.getMainLooper()).idle()
             seen.lastOrNull()?.metadata?.artworkUrl
@@ -2180,7 +2181,7 @@ class PlaybackTest {
             shadowOf(sessions).addController(first)
             playback.nowPlaying()
             assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
-            val second = player("com.example.next", "Next", "Next Song", "Next Artist", at = PLAYED_AT + 1)
+            val second = player("com.example.next", "Next", "Next Song", "Next Artist", at = PLAYED_AT + 1, album = "Next Album")
             val blue = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLUE) }
             shadowOf(second).setMetadata(MediaMetadata.Builder(second.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, blue).build())
             shadowOf(sessions).addController(second)
@@ -2206,7 +2207,7 @@ class PlaybackTest {
             read()?.let { return it }
             Thread.sleep(5)
         }
-        error("The bitmap cover was not saved")
+        error("The bitmap cover was not saved: encodes=${CoverBitmap.encodes.get()}, result=${CoverBitmap.result}, named=${playback.nowPlaying()?.metadata}, unnamed=${playback.playingUnnamed()}, artDir=${File(app.cacheDir, ARTWORK_DIR).let { it.toString() + ":file=" + it.isFile + ":dir=" + it.isDirectory }}")
     }
 
     private fun aBitmapCover(): MediaController {
@@ -2215,7 +2216,7 @@ class PlaybackTest {
         CoverBitmap.before = Runnable { }
         CoverBitmap.encodes.set(0)
         CoverBitmap.mainEncodes.set(0)
-        val controller = player("com.example.player", "Player", "Fake Song", "Fake Artist")
+        val controller = player("com.example.player", "Player", "Fake Song", "Fake Artist", album = "Fake Album")
         val shown = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
         shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, shown).build())
         return controller

@@ -1972,7 +1972,8 @@ internal class MainViewModel(
 
     /** [lines] under [song]'s player, while it shows it, timed [byEar] or not; words that aren't timed show their first line. */
     private fun showPeek(song: MusicMetadata, lines: List<LyricLine>, words: String, byEar: Boolean) {
-        val player = uiState.player?.takeIf { it.song == song } ?: return
+        // The cover can arrive while these words load; it does not change which song they belong to.
+        val player = uiState.player?.takeIf { it.song.copy(artworkUrl = null) == song.copy(artworkUrl = null) } ?: return
         val shown = lines.ifEmpty { words.lines().filter { it.isNotBlank() }.take(1).map { LyricLine(0, it) } }
         uiState = uiState.copy(player = player.copy(lines = shown, linesByEar = byEar))
     }
@@ -1999,9 +2000,17 @@ internal class MainViewModel(
                 // In the app that plays it, which may not be the one the song before played in.
                 if (next != null) return@collect openPlayer(next.metadata, next.app ?: player.following?.appPackage ?: player.app, played = true)
                 if (tookUpUnnamed(unnamed, playing, following, played, song)) return@collect
-                uiState = uiState.copy(player = player.copy(following = following, played = played))
+                uiState = uiState.copy(player = player.withCurrentCover(playing, following).copy(following = following, played = played))
             }
         }
+    }
+
+    /** A bitmap cover can be saved after the song has already reached the player. */
+    private fun PlayerState.withCurrentCover(playing: Heard.Song?, following: Following?): PlayerState {
+        val cover = playing?.takeIf {
+            sameSong(it.metadata, song) && sameApp(following?.appPackage ?: app, it.app, interception::isInstalled)
+        }?.metadata?.artworkUrl ?: return this
+        return copy(song = song.copy(artworkUrl = cover))
     }
 
     /**

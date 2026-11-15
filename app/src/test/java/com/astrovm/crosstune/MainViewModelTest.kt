@@ -2558,6 +2558,61 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aCoverSavedLaterReachesTheOpenPlayer() {
+        val playback = FakePlayback()
+        playback.playing.value = following()
+        val model = playingModel(playback)
+        val cover = "file:///fake-cover.jpg"
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = cover), null, app = "com.spotify")
+        idle()
+        assertEquals(cover, model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
+    fun aCoverFromAnotherAppDoesNotReplaceThePlayersCover() {
+        val playback = FakePlayback()
+        playback.playing.value = following()
+        val model = playingModel(playback)
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///another-app.jpg"), null, app = "com.other")
+        idle()
+        assertNull(model.uiState.player?.song?.artworkUrl)
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///current.jpg"), null, app = "com.spotify")
+        idle()
+        assertEquals("file:///current.jpg", model.uiState.player?.song?.artworkUrl)
+        playback.onThePhone = Heard.Song(song, null, app = "com.spotify")
+        idle()
+        assertEquals("file:///current.jpg", model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
+    fun aCoverArrivingWhileThePlayersWordsLoadDoesNotDropThem() {
+        val arrived = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") {
+                arrived.countDown()
+                release.await()
+                FakeSpotify.html(request, timed)
+            } else FakeSpotify.html(request, "")
+        }
+        val playback = FakePlayback().apply { playing.value = following() }
+        val finder = LyricsFinder(fake.client(), "test", Dispatchers.IO, busyPauseMs = 0)
+        val model = playingModel(playback, lyricsFinder = finder)
+        try {
+            assertTrue(arrived.await(5, TimeUnit.SECONDS))
+            val field = MainViewModel::class.java.getDeclaredField("peekJob").apply { isAccessible = true }
+            val peek = field.get(model) as Job
+            playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///late-cover.jpg"), null, app = "com.spotify")
+            idle()
+            release.countDown()
+            until("the player's words finished loading") { peek.isCompleted }
+            assertEquals(listOf("One", "Two", "Three"), model.uiState.player?.lines?.map { it.text })
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
     fun timedWordsFollowTheAppAndItsButtonsMoveIt() {
         val playback = FakePlayback()
         val model = lyricsModel(playback)
