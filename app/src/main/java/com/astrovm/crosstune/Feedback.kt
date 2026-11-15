@@ -85,7 +85,7 @@ internal data class Report(
     /** Where the words came from, and their timing when it was borrowed. */
     val source: String? = null,
     val player: PlayerTiming? = null,
-    /** Its own id, for one Crosstune keeps to send: in what [json] measures, as it goes with it. See [AutoReports.ID]. */
+    /** Its own id, reused on an unchanged retry: included in what [json] measures. See [AutoReports.ID]. */
     private val id: String? = null
 ) {
     val title: String get() = song?.let { "Lyrics of ${it.title} by ${it.artist}" }.orEmpty()

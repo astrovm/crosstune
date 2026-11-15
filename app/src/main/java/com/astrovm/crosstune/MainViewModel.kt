@@ -3848,11 +3848,11 @@ internal class MainViewModel(
         manualReport = draft
         uiState = uiState.copy(report = ReportStatus.SENDING)
         val previous = manualReportJob
-        manualReportJob = viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+        manualReportJob = viewModelScope.launch {
             previous?.join()
             val sent = sender.send(draft.report) == Delivery.SENT
             if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
-        }.also { it.start() }
+        }
     }
 
     /**
@@ -3871,11 +3871,11 @@ internal class MainViewModel(
         manualReport = draft
         uiState = uiState.copy(report = ReportStatus.SENDING)
         val previous = manualReportJob
-        manualReportJob = viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+        manualReportJob = viewModelScope.launch {
             previous?.join()
             val sent = sender.send(draft.report) == Delivery.SENT
             if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
-        }.also { it.start() }
+        }
     }
 
     fun closeReport() {
