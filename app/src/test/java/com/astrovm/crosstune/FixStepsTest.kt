@@ -442,13 +442,27 @@ class FixStepsTest {
     }
 
     @Test
-    fun onlyALateReminderIsLeftToDoByHand() {
+    fun onlyALateReminderLeftIsStillOneTapWithShizuku() {
         showList {
             copy(
                 reminder = Reminder(minute = 20 * 60, on = true, exact = false),
                 canFollowApps = true,
                 unapprovedHosts = emptyMap(),
                 canSetUpInOneTap = true
+            )
+        }
+        assertShown(string(R.string.practice_reminder_exact), string(R.string.practice_reminder_late), string(R.string.fix_all))
+        click(string(R.string.fix_all))
+        assertEquals(listOf("one tap"), done)
+    }
+
+    @Test
+    fun onlyALateReminderIsLeftToDoByHandWithoutShizuku() {
+        showList {
+            copy(
+                reminder = Reminder(minute = 20 * 60, on = true, exact = false),
+                canFollowApps = true,
+                unapprovedHosts = emptyMap()
             )
         }
         assertShown(string(R.string.practice_reminder_exact), string(R.string.practice_reminder_late), string(R.string.fix_one_by_one))

@@ -13,8 +13,10 @@ import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 
 /** Whether due cards are asked back once a day, as the bell shows it. */
 internal data class Reminder(
@@ -25,7 +27,7 @@ internal data class Reminder(
     val allowed: Boolean = true,
     /** Turned off by hand, so the end of a session stops offering it. */
     val turnedOff: Boolean = false,
-    /** Whether Android lets the alarm go at the exact minute: from Android 12 the user allows that in its settings. */
+    /** Whether Android lets the alarm go at the exact minute: from Android 12 it needs alarms and reminders access. */
     val exact: Boolean = true
 ) {
     /** On, but Android won't show it, which needs saying. */
@@ -43,9 +45,36 @@ internal val UiState.reminderMinute: Int? get() = reminder.minute?.takeIf { phon
 
 /** The moment after [now] the clock on [zone]'s wall next says [minute], so it stays that hour across time zones and clock changes. */
 internal fun nextReminderAt(minute: Int, now: Long, zone: ZoneId): Long {
-    val today = Instant.ofEpochMilli(now).atZone(zone)
-    val at = today.toLocalDate().atTime(LocalTime.of(minute / 60, minute % 60)).atZone(zone)
-    return (if (at.isAfter(today)) at else at.plusDays(1)).toInstant().toEpochMilli()
+    val time = LocalTime.of(minute / 60, minute % 60)
+    var date = Instant.ofEpochMilli(now).atOffset(ZoneOffset.MIN).toLocalDate()
+    var next = Long.MAX_VALUE
+    while (true) {
+        val wall = date.atTime(time)
+        // Even the largest UTC offset cannot move this or a later date before the best result.
+        if (wall.toInstant(ZoneOffset.MAX).toEpochMilli() >= next) return next
+        val at = wall.atZone(zone).toInstant().toEpochMilli()
+        if (at > now) next = minOf(next, at)
+        date = date.plusDays(1)
+    }
+}
+
+/** The latest chosen minute that is due, including a day whose clock skips that minute or date. */
+internal fun latestReminderAt(minute: Int, now: Long, zone: ZoneId): Long = latestReminderOccurrence(minute, now, zone).at
+
+private class ReminderOccurrence(val at: Long, val day: LocalDate)
+
+private fun latestReminderOccurrence(minute: Int, now: Long, zone: ZoneId): ReminderOccurrence {
+    val time = LocalTime.of(minute / 60, minute % 60)
+    var date = Instant.ofEpochMilli(now).atOffset(ZoneOffset.MAX).toLocalDate()
+    var latest: ReminderOccurrence? = null
+    while (true) {
+        val wall = date.atTime(time)
+        // Keep equal instants too: a skipped date can share the next date's occurrence.
+        if (latest != null && wall.toInstant(ZoneOffset.MIN).toEpochMilli() < latest.at) return latest
+        val at = wall.atZone(zone).toInstant().toEpochMilli()
+        if (at <= now && (latest == null || at >= latest.at)) latest = ReminderOccurrence(at, date)
+        date = date.minusDays(1)
+    }
 }
 
 /** What the clock on [zone]'s wall says at [at], in minutes from midnight. */
@@ -108,12 +137,12 @@ internal class PracticeReminders(
 
     private val allowed get() = notifications.areNotificationsEnabled() && notifications.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
 
-    /** Before Android 12 exact alarms need nothing asked; from it, the user allows them. */
+    /** Before Android 12 exact alarms need no access grant. */
     private val exact get() = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
 
     val state get() = Reminder(minute, on, allowed, preferences.getBoolean(KEY_TURNED_OFF, false), exact)
 
-    /** Android's page where alarms and reminders are allowed for the app, which only the user can do. */
+    /** Android's page for allowing alarms and reminders without Shizuku or root. */
     val exactPage: Intent get() = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))
 
     /** Android's page where they're allowed: the channel's, when it's only that that's off. */
@@ -138,13 +167,19 @@ internal class PracticeReminders(
 
     /** From now on, at [minute] on the wall. */
     fun at(minute: Int) {
-        preferences.edit { putInt(KEY_MINUTE, minute) }
+        preferences.edit {
+            putInt(KEY_MINUTE, minute)
+            remove(KEY_ARMED_FOR)
+        }
         arm()
     }
 
     /** A card was practised, or a reminder tapped: it's what they're for, so they start over, and one showing is out of date. */
     fun practised() {
-        preferences.edit { putInt(KEY_IGNORED, 0) }
+        preferences.edit {
+            putInt(KEY_IGNORED, 0)
+            remove(KEY_ARMED_FOR)
+        }
         clear()
         arm()
     }
@@ -173,7 +208,8 @@ internal class PracticeReminders(
      * is what still fires. Before Android 12 the exact one cannot be taken away, so there is no spare.
      */
     private fun setNext(minute: Int) {
-        val at = nextReminderAt(minute, now(), zone())
+        val at = nextAt(minute)
+        preferences.edit { putLong(KEY_ARMED_FOR, at) }
         val onTime = exact
         if (onTime) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending(ACTION_REMIND, at))
@@ -187,32 +223,72 @@ internal class PracticeReminders(
         }
     }
 
+    /** Keep the latest due occurrence of an undelivered alarm, rather than skip today's too. */
+    private fun nextAt(minute: Int): Long {
+        val armed = preferences.getLong(KEY_ARMED_FOR, 0L)
+        val now = now()
+        val zone = zone()
+        val pending = pendingOccurrence(minute, armed, now, zone)
+        return if (pending != null && pending.at != preferences.getLong(KEY_CONSUMED_FOR, 0L)) pending.at else nextReminderAt(minute, now, zone)
+    }
+
+    private fun pendingOccurrence(minute: Int, slot: Long, now: Long, zone: ZoneId): ReminderOccurrence? {
+        if (slot == 0L || slot > now) return null
+        if (nextReminderAt(minute, slot - 1, zone) != slot) return null
+        return latestReminderOccurrence(minute, now, zone)
+    }
+
     private fun cancelBoth() {
+        preferences.edit { remove(KEY_ARMED_FOR) }
         alarms.cancel(pending(ACTION_REMIND))
         alarms.cancel(pending(ACTION_REMIND_KEEP))
     }
 
     /** The alarm went: says what's due, unless there's no reason to, and sets tomorrow's. */
     fun remind(intent: Intent = Intent()) {
-        val slot = intent.getLongExtra(EXTRA_AT, 0L)
-        // The exact alarm and the spare can both be on their way. The second must not ask again.
-        val again = slot != 0L && slot == preferences.getLong(KEY_POSTED_FOR, 0L)
         val at = now()
+        val zone = zone()
+        val occurrence = deliverySlot(intent.getLongExtra(EXTRA_AT, 0L), at, zone)
+        if (occurrence == null) {
+            arm()
+            return
+        }
+        val slot = occurrence.at
+        // Both alarms can be on their way. Old and current deliveries share the latest due minute.
+        val again = slot != 0L && slot == preferences.getLong(KEY_CONSUMED_FOR, 0L)
+        // A valid delivery consumes the slot even with no due cards or blocked notifications.
+        preferences.edit {
+            remove(KEY_ARMED_FOR)
+            // Legacy alarms have no occurrence to record.
+            if (slot != 0L) putLong(KEY_CONSUMED_FOR, slot)
+        }
         val types = loadCardTypes(preferences)
         val due = sessionOf(SavedLinesStore(preferences).load(), at, max = Int.MAX_VALUE, types = types)
-        if (!again && due.isNotEmpty() && mayAsk(at)) {
+        if (!again && due.isNotEmpty() && mayAsk(at, occurrence, zone)) {
             post(due)
             preferences.edit {
                 putInt(KEY_IGNORED, ignored + 1)
-                // No minute on the intent, as when a test asks directly: nothing to tell the next one by.
-                if (slot != 0L) putLong(KEY_POSTED_FOR, slot)
             }
         }
         arm()
     }
 
-    /** Wanted, shown by Android, and not already answered for today by a session. */
-    private fun mayAsk(at: Long) = on && allowed && !practisedLately(preferences.getLong(KEY_DONE_AT, 0), at, zone())
+    /** Advance a held alarm to the latest due minute, so missed days do not hide today's reminder. */
+    private fun deliverySlot(slot: Long, now: Long, zone: ZoneId): ReminderOccurrence? {
+        if (slot == 0L) return ReminderOccurrence(0L, Instant.ofEpochMilli(now).atZone(zone).toLocalDate())
+        val minute = minute ?: return null
+        return pendingOccurrence(minute, slot, now, zone)
+    }
+
+    /** Practice on the intended day still counts when its occurrence shifts or arrives late. */
+    private fun mayAsk(at: Long, occurrence: ReminderOccurrence, zone: ZoneId): Boolean {
+        if (!on || !allowed) return false
+        val done = preferences.getLong(KEY_DONE_AT, 0)
+        if (occurrence.at == 0L) return !practisedLately(done, at, zone)
+        val dayStart = occurrence.day.atStartOfDay(zone).toInstant().toEpochMilli()
+        val practised = done >= dayStart || occurrence.at - done < RESTED_AFTER_MS
+        return !practised
+    }
 
     private fun post(due: List<SavedLine>) {
         // The alarm has no screen, so Android hasn't put the app's language on it.
@@ -266,7 +342,9 @@ internal class PracticeReminders(
         private const val KEY_IGNORED = "practice_reminder_ignored"
         private const val KEY_TURNED_OFF = "practice_reminder_turned_off"
         private const val KEY_DONE_AT = "practice_reminder_done_at"
-        private const val KEY_POSTED_FOR = "practice_reminder_posted_for"
+        // Keep the old key so upgrades still recognize occurrences that already posted.
+        private const val KEY_CONSUMED_FOR = "practice_reminder_posted_for"
+        private const val KEY_ARMED_FOR = "practice_reminder_armed_for"
     }
 }
 

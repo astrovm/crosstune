@@ -84,6 +84,9 @@ Turn the service on in **Settings** → **Open links from**. Then in Android, go
 **I got a search, not the song.**
 Crosstune found no confident match. Choose what happens then in **Settings** → **When a song isn't found**.
 
+**Practice reminders arrive late.**
+In **Settings** → **Practice**, use **Allow exact time**. Without that access, Android can hold a reminder. A pending reminder can arrive after midnight or when Crosstune opens again. If several days pass, only the latest due reminder is shown.
+
 ## Privacy
 
 - No account, analytics or ads. History stays on your device.
@@ -98,7 +101,7 @@ Crosstune found no confident match. Choose what happens then in **Settings** →
 - A card tries the music apps on the phone first, three at most. Before it tries an app that isn't the one you prefer or the one the line was kept from, it sends the song's title and artist to that app's service, through the same search that opens a link, and skips the app if the song isn't there. Spotify is opened on the song's own link, found through ListenBrainz as above. YouTube Music's search gets the song's title and artist when YouTube Music is the app tried, and when the app tried can't be asked for a song by name, like Spotify without a link for it, since YouTube Music is asked to play the song then. Without showing over other apps, opening Spotify would cover the card, so it's used only if Android says it already has the song open, and nothing about the song is sent for it. Whenever a card asks YouTube Music's search, a song it finds nothing named like goes on to Apple's and Deezer's searches, as for a link. Which apps could move to a line and kept playing is remembered on the phone, and nothing about it is sent.
 - When no music app can move to a card's line, a small YouTube player on the card plays it. The song's title and artist go to YouTube Music's search for its video and, as for a link, on to Apple's and Deezer's, once, and once more only if the search fails, as when the phone is offline. YouTube sees the video and the line's time, and your phone's address, as for any video. You aren't signed in there, and no audio is sent. It loads only while a card has sound.
 - Practice reminders are worked out on the phone: it counts its own cards, and nothing is sent.
-- Shizuku or root is used only to change Android's link, microphone, lyrics and floating settings for Crosstune, and to let lyrics hear what music apps play without Android asking each time. That sound stays on your phone, while a notification shows it.
+- Shizuku or root is used only to change Android's link, microphone, lyrics, alarms and reminders, and floating settings for Crosstune, and to let lyrics hear what music apps play without Android asking each time. That sound stays on your phone, while a notification shows it.
 - The [browser extension](extension) asks a link's service for its title and artist, and the search of the service it opens in, or ListenBrainz for Spotify, as the app does. Its lyrics panel reads the song's title and artist from the music site's page. Only while the panel is open, it asks LRCLIB, YouTube Music, NetEase Cloud Music, Letras and Genius for the words by title and artist, and a video that doesn't say it's music isn't looked up. Its settings stay in your browser, and it sends nothing to the developer.
 
 Full [privacy policy](https://crosstune.cc/privacy/).

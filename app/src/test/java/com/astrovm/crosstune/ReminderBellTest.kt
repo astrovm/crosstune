@@ -11,6 +11,8 @@ import android.os.Looper
 import android.provider.Settings
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasContentDescription
@@ -24,6 +26,7 @@ import androidx.test.core.app.ApplicationProvider
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.ZoneId
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import com.astrovm.crosstune.ui.theme.LightColorScheme
 import com.astrovm.crosstune.ui.theme.Palette
@@ -61,6 +64,7 @@ class ReminderBellTest {
     private var clock = LocalDateTime.of(2026, 3, 2, 20, 5).atZone(zone).toInstant().toEpochMilli()
     private val realPhone = MainActivity.phoneFactory
     private val realReminders = MainActivity.remindersFactory
+    private val realShells = MainActivity.shellFactory
     private val manager get() = app.getSystemService(NotificationManager::class.java)
     private val alarms get() = shadowOf(app.getSystemService(AlarmManager::class.java))
     private val activity get() = requireNotNull(controller).get()
@@ -94,6 +98,7 @@ class ReminderBellTest {
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.remindersFactory = realReminders
         MainActivity.phoneFactory = realPhone
+        MainActivity.shellFactory = realShells
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -346,6 +351,127 @@ class ReminderBellTest {
         val set = alarms.scheduledAlarms
         assertEquals(2, set.size)
         assertEquals(1, set.count { it.windowLengthMs == 0L })
+    }
+
+    /** Shizuku allowing alarms and reminders as Android's switch would, or failing to. */
+    private fun shizuku(works: Boolean = true) = FakeShell { command ->
+        if (OneTapSetup.EXACT_ALARM_OP in command && works) exactAllowed(true)
+        works
+    }.also { shell -> MainActivity.shellFactory = { listOf(shell) } }
+
+    private val exactCommand get() = listOf("appops", "set", "--user", (android.os.Process.myUid() / 100_000).toString(), "--uid", app.packageName, OneTapSetup.EXACT_ALARM_OP, "allow")
+
+    @Test
+    fun withShizukuTheTapThatTurnsItOnAllowsTheExactMinuteToo() {
+        exactAllowed(false)
+        val shell = shizuku()
+        launch()
+        finishASession()
+        drainStartedActivities()
+        click(remindMe)
+        waitUntil { model().uiState.reminder.exact }
+        assertEquals(exactCommand, shell.ran.last())
+        // Nothing asked, no page of Android's opened, and the alarm set again for the exact minute.
+        assertNull(shadowOf(activity).nextStartedActivity)
+        assertFalse(model().uiState.reminder.late)
+        assertTrue(alarms.scheduledAlarms.any { it.windowLengthMs == 0L })
+    }
+
+    @Test
+    fun withShizukuFailingItIsLeftToDoByHand() {
+        exactAllowed(false)
+        val shell = shizuku(works = false)
+        launch()
+        finishASession()
+        drainStartedActivities()
+        click(remindMe)
+        waitUntil { shell.ran.isNotEmpty() }
+        assertTrue(model().uiState.reminder.late)
+        // What one tap couldn't do is left to do by hand, saying so.
+        waitUntil { model().uiState.fixes?.need == Need.Exact }
+        assertTrue(requireNotNull(model().uiState.fixes).failed)
+    }
+
+    @Test
+    fun aDifferentFixInProgressStillOpensExactAccessByHand() {
+        exactAllowed(false)
+        val shell = shizuku().apply { answer = CompletableDeferred() }
+        launch()
+        finishASession()
+        composeRule.runOnIdle { assertTrue(model().fixInOneTap(OneTapFix.FOLLOW)) }
+        waitUntil { model().uiState.fixingInOneTap == OneTapFix.FOLLOW }
+        // The same request is already handled. Another request still needs its manual path.
+        composeRule.runOnIdle { assertTrue(model().fixInOneTap(OneTapFix.FOLLOW)) }
+        try {
+            drainStartedActivities()
+            click(remindMe)
+            assertExactPage(shadowOf(activity).nextStartedActivity)
+        } finally {
+            shell.answer.complete(Unit)
+        }
+        waitUntil { model().uiState.fixingInOneTap == null }
+    }
+
+    @Test
+    fun aReportedShellSuccessWithoutExactAccessStillShowsTheManualFix() {
+        exactAllowed(false)
+        MainActivity.shellFactory = { listOf(FakeShell()) }
+        launch()
+        finishASession()
+        click(remindMe)
+        waitUntil { model().uiState.fixes?.need == Need.Exact }
+        assertTrue(requireNotNull(model().uiState.fixes).failed)
+        assertTrue(model().uiState.reminder.late)
+    }
+
+    @Test
+    fun withShizukuSettingsAllowsTheExactMinuteInOneTap() {
+        exactAllowed(false)
+        // Shizuku not running yet when the bell was tapped, so the reminder is late.
+        val shell = shizuku().apply { ready = false }
+        launch()
+        finishASession()
+        click(remindMe)
+        drainStartedActivities()
+        backToTheList()
+        click(app.getString(R.string.back_button))
+        shell.ready = true
+        shell.changed!!()
+        openSettings()
+        composeRule.onNodeWithTextScrolled(app.getString(R.string.practice_reminders))
+        click(app.getString(R.string.allow_button))
+        waitUntil { !shown(exactTime) }
+        assertEquals(exactCommand, shell.ran.last())
+        assertNull(shadowOf(activity).nextStartedActivity)
+    }
+
+    @Test
+    fun exactAccessInSettingsShowsItsOneTapActionAndWorkingState() {
+        exactAllowed(false)
+        val shell = shizuku().apply { ready = false }
+        launch()
+        finishASession()
+        click(remindMe)
+        drainStartedActivities()
+        backToTheList()
+        click(app.getString(R.string.back_button))
+        shell.ready = true
+        shell.changed?.invoke()
+        openSettings()
+        composeRule.onNodeWithTextScrolled(app.getString(R.string.practice_reminders))
+        val allow = composeRule.onNode(hasText(app.getString(R.string.allow_button)))
+        allow.assertIsEnabled()
+        shell.answer = CompletableDeferred()
+        try {
+            allow.performClick()
+            waitUntil { model().uiState.fixingInOneTap == OneTapFix.EXACT }
+            allow.assertIsNotEnabled()
+        } finally {
+            shell.answer.complete(Unit)
+        }
+        waitUntil { !model().uiState.reminder.late }
+        assertEquals(exactCommand, shell.ran.last())
+        assertNull(shadowOf(activity).nextStartedActivity)
     }
 
     @Test

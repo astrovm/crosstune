@@ -105,6 +105,30 @@ class PracticeRemindersTest {
     }
 
     @Test
+    fun theDayAfterAGapReturnsToTheChosenMinute() {
+        val berlin = ZoneId.of("Europe/Berlin")
+        assertEquals(at(30, 2, 30, berlin), nextReminderAt(150, at(29, 3, 33, berlin), berlin))
+    }
+
+    @Test
+    fun theLatestDueMinuteAndNextOneBoundNowAcrossTimeZones() {
+        val instants = listOf("2026-03-29T01:10:00Z", "2026-11-01T06:15:00Z", "2011-12-30T12:00:00Z")
+        for (name in ZoneId.getAvailableZoneIds()) {
+            val local = ZoneId.of(name)
+            for (instant in instants) {
+                val now = java.time.Instant.parse(instant).toEpochMilli()
+                for (minute in listOf(0, 150, 1410)) {
+                    val due = latestReminderAt(minute, now, local)
+                    val context = "$name $instant $minute"
+                    assertTrue(context, due <= now)
+                    assertTrue(context, nextReminderAt(minute, due, local) > now)
+                    assertEquals(context, due, nextReminderAt(minute, due - 1, local))
+                }
+            }
+        }
+    }
+
+    @Test
     fun theMinuteOfTheDayIsWhatTheWallSays() {
         assertEquals(20 * 60 + 5, minuteOfDay(at(2, 20, 5), zone))
         assertEquals(0, minuteOfDay(at(2, 0), zone))
@@ -245,7 +269,7 @@ class PracticeRemindersTest {
         assertTrue(alarms.scheduledAlarms.isEmpty())
         // One minute on, so the stored minute is the alarm's own, not whatever the clock says now.
         clock = at(3, 20, 6)
-        PracticeReminderReceiver().onReceive(app, delivered)
+        reminders.remind(delivered)
         assertEquals(1, shown.size)
         assertEquals("1 card to practice", shown.single().title())
         assertEquals(delivered.getLongExtra(PracticeReminders.EXTRA_AT, 0L), prefs().getLong("practice_reminder_posted_for", 0L))
@@ -363,6 +387,331 @@ class PracticeRemindersTest {
         reminders.at(9 * 60)
         assertEquals(9 * 60, reminders.state.minute)
         assertEquals(at(3, 9), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun returningAfterTheMinuteKeepsAnUndeliveredReminderForToday() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        setUpWith(line("One"))
+        val today = at(3, 20, 5)
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = today
+        reminders.arm()
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(3, 20, 8)
+        reminders.arm()
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+
+        // A new process and a newly allowed exact alarm must retain that same due minute too.
+        val restarted = PracticeReminders(app, now = { clock }, zone = { zone })
+        restarted.arm()
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        restarted.arm()
+        assertEquals(2, alarms.scheduledAlarms.size)
+        assertTrue(alarms.scheduledAlarms.all { it.triggerAtMs == today })
+        assertEquals(1, alarms.scheduledAlarms.count { it.windowLengthMs == 0L })
+    }
+
+    @Test
+    fun restartingAfterSeveralOccurrencesArmsTheLatestDueMinute() {
+        setUpWith(line("One"))
+        for (day in listOf(4, 6)) {
+            prefs().edit().putLong("practice_reminder_armed_for", at(3, 20, 5)).commit()
+            clock = at(day, 21)
+            PracticeReminders(app, now = { clock }, zone = { zone }).arm()
+            assertEquals(at(day, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        }
+    }
+
+    @Test
+    fun rearmingALateEveningDeliveryCanCrossMidnightBeforeItsNextOccurrence() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        clock = at(2, 23, 30)
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(4, 0, 5)
+        reminders.arm()
+        assertEquals(at(3, 23, 30), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(4, 0, 10)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(4, 23, 30), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun restartingWithinTheCurrentOccurrenceKeepsItsUndeliveredSlot() {
+        setUpWith(line("One"))
+        clock = at(4, 7)
+        PracticeReminders(app, now = { clock }, zone = { zone }).arm()
+        assertEquals(at(3, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aDeliveryBeforeItsSlotDoesNotPost() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 4)
+        // Android removes a delivered alarm. A rejected early delivery must put it back.
+        val manager = app.getSystemService(AlarmManager::class.java)
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        manager.cancel(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE)))
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(at(3, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aDeliveryAtItsSlotPosts() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+    }
+
+    @Test
+    fun aDeliveryWithoutAChosenMinuteDoesNotPost() {
+        saved(line("One"))
+        reminders.turn(true)
+        reminders.remind(Intent().putExtra(PracticeReminders.EXTRA_AT, clock))
+        assertTrue(shown.isEmpty())
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+    }
+
+    @Test
+    fun aDeliveryPastItsNextOccurrencePostsTheLatestDueMinuteOnce() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(4, 20, 30)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(at(4, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
+        assertEquals(at(5, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        reminders.remind(delivered)
+        reminders.remind(Intent(delivered).putExtra(PracticeReminders.EXTRA_AT, at(4, 20, 5)))
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        clock = at(6, 20, 30)
+        reminders.remind(delivered)
+        assertEquals(2, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(6, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
+    fun anOlderPendingSlotCannotRearmAnOccurrenceAlreadyPosted() {
+        setUpWith(line("One"))
+        prefs().edit().putLong("practice_reminder_posted_for", at(4, 20, 5)).commit()
+        clock = at(4, 21)
+        reminders.arm()
+        assertEquals(at(5, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aDeliveryForAnotherMinuteCannotConsumeThePendingReminder() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 8)
+        reminders.remind(Intent(delivered).putExtra(PracticeReminders.EXTRA_AT, at(3, 19)))
+        assertTrue(shown.isEmpty())
+        assertEquals(at(3, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+    }
+
+    @Test
+    fun aBlockedDeliveryConsumesTheOccurrenceBeforeItsSpareArrives() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        val spare = Intent(shadowOf(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        shadowOf(manager).setNotificationsEnabled(false)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        shadowOf(manager).setNotificationsEnabled(true)
+        reminders.remind(spare)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(3, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
+    fun aDeliveryWithNoDueCardsConsumesTheOccurrenceBeforeItsSpareArrives() {
+        setUpWith(line("One", due = at(4, 20, 5)))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        val spare = Intent(shadowOf(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        saved(line("One"))
+        reminders.remind(spare)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(3, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
+    fun practiceOnTheIntendedDayStillCountsAfterMidnightOrRestart() {
+        val berlin = ZoneId.of("Europe/Berlin")
+        clock = at(3, 7, zone = berlin)
+        val local = PracticeReminders(app, now = { clock }, zone = { berlin })
+        saved(line("One"))
+        local.sessionDone()
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        for (hour in listOf(0, 7)) {
+            clock = at(4, hour, 10, berlin)
+            PracticeReminders(app, now = { clock }, zone = { berlin }).arm()
+            local.remind(delivered)
+            assertTrue(shown.isEmpty())
+            assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+        }
+    }
+
+    @Test
+    fun practiceOnTheGapDayCountsForTheShiftedMidnightOccurrence() {
+        val nuuk = ZoneId.of("America/Nuuk")
+        clock = java.time.Instant.parse("2026-03-28T14:00:00Z").toEpochMilli()
+        val local = PracticeReminders(app, now = { clock }, zone = { nuuk })
+        saved(line("One"))
+        local.sessionDone()
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = java.time.Instant.parse("2026-03-29T01:30:00Z").toEpochMilli()
+        local.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
+    fun practiceAtTheStartOfTheIntendedDaySuppressesItsReminder() {
+        clock = at(3, 0)
+        saved(line("One"))
+        reminders.sessionDone()
+        reminders.at(20 * 60 + 5)
+        reminders.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
+    fun exactlySixHoursOfRestBeforeTheIntendedDayAllowsItsReminder() {
+        clock = at(2, 18)
+        saved(line("One"))
+        reminders.sessionDone()
+        reminders.at(0)
+        reminders.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 0)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
+    fun restBeforeTheOccurrenceStillCountsWhenDeliveryIsHeld() {
+        clock = at(3, 19)
+        saved(line("One"))
+        reminders.sessionDone()
+        reminders.at(30)
+        reminders.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(4, 8)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
+    fun aMidnightGapKeepsItsShiftedAlarmBeforeItFires() {
+        val nuuk = ZoneId.of("America/Nuuk")
+        clock = java.time.Instant.parse("2026-03-28T22:00:00Z").toEpochMilli()
+        val local = PracticeReminders(app, now = { clock }, zone = { nuuk })
+        saved(line("One"))
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val shifted = java.time.Instant.parse("2026-03-29T01:30:00Z").toEpochMilli()
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = shifted - 20 * 60_000L
+        local.arm()
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aMidnightGapDeliversItsShiftedAlarmOnTime() {
+        val nuuk = ZoneId.of("America/Nuuk")
+        clock = java.time.Instant.parse("2026-03-28T22:00:00Z").toEpochMilli()
+        val local = PracticeReminders(app, now = { clock }, zone = { nuuk })
+        saved(line("One"))
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = java.time.Instant.parse("2026-03-29T01:30:00Z").toEpochMilli()
+        local.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(clock, prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
+    fun aGapInTheClockKeepsTodaysShiftedOccurrence() {
+        val berlin = ZoneId.of("Europe/Berlin")
+        clock = at(29, 1, zone = berlin)
+        val local = PracticeReminders(app, now = { clock }, zone = { berlin })
+        saved(line("One"))
+        local.at(2 * 60 + 30)
+        local.turn(true)
+        val shifted = at(29, 3, 30, berlin)
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(29, 3, 33, berlin)
+        local.arm()
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun choosingTheMinutePractisingOrTurningOffStartsAfresh() {
+        setUpWith(line("One"))
+        clock = at(3, 20, 8)
+        reminders.at(20 * 60 + 7)
+        assertEquals(at(4, 20, 7), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(4, 20, 8)
+        reminders.practised()
+        assertEquals(at(5, 20, 7), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(5, 20, 8)
+        reminders.turn(false)
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        reminders.turn(true)
+        assertEquals(at(6, 20, 7), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun anUndeliveredReminderMovesToTheRequestedMinuteInTheNewZone() {
+        setUpWith(line("One"))
+        clock = at(3, 20, 8)
+        val tokyo = ZoneId.of("Asia/Tokyo")
+        PracticeReminders(app, now = { clock }, zone = { tokyo }).arm()
+        assertEquals(at(4, 20, 5, zone = tokyo), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun deliveringAnOverdueAlarmConsumesItsSlotAndStillIgnoresDuplicates() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 8)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        reminders.arm()
+        assertEquals(at(4, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(4, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
     }
 
     @Test
@@ -540,8 +889,10 @@ class PracticeRemindersTest {
         assertNotNull(alarms.peekNextScheduledAlarm())
         // A session long ago, as its clock moved on past the same day.
         prefs().edit().remove("practice_reminder_done_at").commit()
-        PracticeReminderReceiver().onReceive(app, Intent(PracticeReminders.ACTION_REMIND))
-        assertEquals(1, shown.size)
+        for (action in listOf(PracticeReminders.ACTION_REMIND, PracticeReminders.ACTION_REMIND_KEEP)) {
+            PracticeReminderReceiver().onReceive(app, Intent(action))
+            assertEquals(1, shown.size)
+        }
     }
 
     @Test

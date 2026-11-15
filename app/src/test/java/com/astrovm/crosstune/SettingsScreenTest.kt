@@ -9,12 +9,15 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.material3.DividerDefaults
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,6 +44,24 @@ class SettingsScreenTest {
     }
 
     private val models = listOf(ChatGptModel("gpt-a", "Model A"), ChatGptModel("gpt-b", "Model B"))
+
+    @Test
+    @Config(qualifiers = "de-w411dp-h891dp-xxhdpi")
+    fun theSignedOutChatGptHintStaysWholeWithLargeGermanText() {
+        composeRule.setContent {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 2f)
+            ) {
+                CrosstuneTheme { SettingsScreen(UiState(), ScreenActions(), onBack = {}) }
+            }
+        }
+        val hint = composeRule.onNodeWithText(string(R.string.chatgpt_use_plan)).performScrollTo()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        hint.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.single().lineCount > 1)
+        assertFalse(layouts.single().hasVisualOverflow)
+    }
 
     @Test
     fun signedInWithChatGptTheAccountsModelsAndWhereToTranslateAreOffered() {
