@@ -396,27 +396,38 @@ class PracticeRemindersTest {
     }
 
     @Test
-    fun restartingOnAnotherDayDoesNotDeliverYesterdaysMinute() {
+    fun restartingAfterTheNextOccurrenceDoesNotDeliverAnExpiredSlot() {
         setUpWith(line("One"))
         for (day in listOf(4, 6)) {
             prefs().edit().putLong("practice_reminder_armed_for", at(3, 20, 5)).commit()
-            clock = at(day, 7)
+            clock = at(day, 21)
             PracticeReminders(app, now = { clock }, zone = { zone }).arm()
-            assertEquals(at(day, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+            assertEquals(at(day + 1, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
         }
     }
 
     @Test
-    fun aLateEveningDeliveryCanCrossMidnightBeforeItsNextOccurrence() {
+    fun rearmingALateEveningDeliveryCanCrossMidnightBeforeItsNextOccurrence() {
         ShadowAlarmManager.setCanScheduleExactAlarms(false)
         clock = at(2, 23, 30)
         setUpWith(line("One"))
         val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(4, 0, 5)
+        reminders.arm()
+        assertEquals(at(3, 23, 30), alarms.peekNextScheduledAlarm()?.triggerAtMs)
         clock = at(4, 0, 10)
         reminders.remind(delivered)
         assertEquals(1, shown.size)
         assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
         assertEquals(at(4, 23, 30), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun restartingWithinTheCurrentOccurrenceKeepsItsUndeliveredSlot() {
+        setUpWith(line("One"))
+        clock = at(4, 7)
+        PracticeReminders(app, now = { clock }, zone = { zone }).arm()
+        assertEquals(at(3, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
     }
 
     @Test

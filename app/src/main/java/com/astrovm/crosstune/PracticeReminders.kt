@@ -196,17 +196,17 @@ internal class PracticeReminders(
         }
     }
 
-    /** Retain today's undelivered occurrence, including a minute shifted past a clock gap. */
+    /** Retain an undelivered occurrence until its next chosen minute, including across midnight. */
     private fun nextAt(minute: Int): Long {
         val armed = preferences.getLong(KEY_ARMED_FOR, 0L)
         val now = now()
         val zone = zone()
-        val overdueToday = armed != 0L && armed <= now && sameDay(armed, now, zone)
-        return if (overdueToday && nextReminderAt(minute, armed - 1, zone) == armed) armed else nextReminderAt(minute, now, zone)
+        val pending = armed != 0L && currentOccurrence(minute, armed, now, zone)
+        return if (pending && nextReminderAt(minute, armed - 1, zone) == armed) armed else nextReminderAt(minute, now, zone)
     }
 
-    private fun sameDay(first: Long, second: Long, zone: ZoneId): Boolean =
-        Instant.ofEpochMilli(first).atZone(zone).toLocalDate() == Instant.ofEpochMilli(second).atZone(zone).toLocalDate()
+    private fun currentOccurrence(minute: Int, slot: Long, now: Long, zone: ZoneId): Boolean =
+        slot <= now && now < nextReminderAt(minute, slot, zone)
 
     private fun cancelBoth() {
         preferences.edit { remove(KEY_ARMED_FOR) }
@@ -240,7 +240,7 @@ internal class PracticeReminders(
     private fun deliveryIsCurrent(slot: Long, now: Long): Boolean {
         if (slot == 0L) return true
         val minute = minute ?: return false
-        return slot <= now && now < nextReminderAt(minute, slot, zone())
+        return currentOccurrence(minute, slot, now, zone())
     }
 
     /** Wanted, shown by Android, and not already answered for today by a session. */
