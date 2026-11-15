@@ -7,6 +7,8 @@
 # It checks SHA out in a worktree in the agent cache, copies NamePairs.kt and NamesGoldenWriter.kt into it, runs the
 # writer there in the Gradle box, and removes the worktree. It needs git, gzip and what gradle-box.sh needs.
 # It can't read a SHA whose SongNames has no names(title, artist, song) and wordsMatch(one, other).
+# Parse the whole run before starting work, so an edit cannot change an active run.
+main() {
 set -euo pipefail
 here=$(cd "$(dirname "$0")/../.." && pwd)
 sha=${1:-2c24d2d4}
@@ -22,3 +24,7 @@ cp "$here/app/src/test/java/com/astrovm/crosstune/NamePairs.kt" "$here/scripts/n
 (cd "$tree" && GRADLE_BOX_MEMORY=${GRADLE_BOX_MEMORY:-7} nice -n 10 scripts/gradle-box/gradle-box.sh --max-workers=2 :app:testDebugUnitTest --tests '*.NamesGoldenWriter')
 gzip -9n < "$tree/app/build/names-golden.tsv" > "$here/app/src/test/resources/names-golden.tsv.gz"
 echo "Wrote app/src/test/resources/names-golden.tsv.gz from $sha: $(gzip -dc "$here/app/src/test/resources/names-golden.tsv.gz" | wc -l) lines"
+
+}
+
+main "$@"; exit

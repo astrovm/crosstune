@@ -1,7 +1,10 @@
 """Runs gradle-box.sh for real, with a stand-in podman that says what it was asked and waits when told."""
 import hashlib
+import gzip
 import os
 import shutil
+import shlex
+import signal
 import stat
 import subprocess
 import sys
@@ -11,7 +14,6 @@ import unittest
 from pathlib import Path
 
 BOX = Path(__file__).with_name("gradle-box.sh")
-ROOT = Path(__file__).resolve().parents[2]
 FAKE_PODMAN = """#!/bin/sh
 if [ "$1" = "info" ]; then
     echo "$*" >> "$FAKE_DIR/info"
@@ -65,10 +67,22 @@ class GradleBoxTest(unittest.TestCase):
         self.meminfo = self.dir / "meminfo"
         self.meminfo.write_text("MemTotal:       67108864 kB\nMemFree:         1000000 kB\n")
         self.stall(lately=0, total_s=0)
+        self.checkouts = {}
 
-    def start(self, run, *args, slots="1", **env):
-        return subprocess.Popen(
-            [str(BOX), *args],
+    def checkout(self, name):
+        if name not in self.checkouts:
+            root = self.dir / ("checkout " + name)
+            root.mkdir()
+            subprocess.run(["git", "init", "--quiet", str(root)], check=True,
+                           env={**os.environ, "HOME": str(self.home)})
+            shutil.copytree(BOX.parent, root / "scripts" / "gradle-box")
+            self.checkouts[name] = root
+        return self.checkouts[name]
+
+    def start(self, run, *args, slots="1", checkout=None, **env):
+        root = self.checkout(checkout or run)
+        process = subprocess.Popen(
+            [str(root / "scripts" / "gradle-box" / BOX.name), *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -89,6 +103,14 @@ class GradleBoxTest(unittest.TestCase):
                 **env,
             }.items() if value is not None},
         )
+        self.addCleanup(self.stop, process)
+        return process
+
+    @staticmethod
+    def stop(process):
+        if process.poll() is None:
+            process.terminate()
+        process.communicate(timeout=20)
 
     def tool(self, name, script):
         """A stand-in for one of the machine's tools, ahead of the real one."""
@@ -125,9 +147,14 @@ class GradleBoxTest(unittest.TestCase):
         path = self.dir / "asked"
         return path.read_text().splitlines() if path.exists() else []
 
-    def wait_for(self, name):
+    def wait_for(self, name, process=None):
         deadline = time.monotonic() + 20
         while not (self.dir / name).exists():
+            if process is not None and process.poll() is not None:
+                if (self.dir / name).exists():
+                    return
+                output, _ = process.communicate(timeout=20)
+                self.fail(f"{name} never showed up: exit {process.returncode}\n{output}")
             self.assertLess(time.monotonic(), deadline, f"{name} never showed up")
             time.sleep(0.02)
 
@@ -186,13 +213,25 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         for other in others:
             self.assertIn(f"-v {other}:{other}", self.asked()[0])
         ran = (self.dir / "ran").read_text().splitlines()
-        self.assertEqual([f"{where} --no-daemon :app:songCheck -Pa=b c" for where in (ROOT, *others)], ran)
+        self.assertEqual([f"{where} --no-daemon :app:songCheck -Pa=b c" for where in (self.checkout("also"), *others)], ran)
         # A failure in one still runs the rest, and the first one is the exit code.
         (self.dir / "ran").unlink()
         box = self.start("also", *(f"--also={other}" for other in others), "help", FAKE_GRADLEW=str(gradlew), FAKE_FAIL_IN=str(others[0]), FAKE_FAIL_TOO=str(others[1]))
         output, _ = box.communicate(timeout=20)
         self.assertEqual(3, box.returncode, output)
         self.assertEqual(3, len((self.dir / "ran").read_text().splitlines()))
+
+    def test_repeated_also_paths_run_and_mount_each_checkout_once(self):
+        gradlew = self.box_that_runs()
+        root, other = self.checkout("also"), self.checkout("other")
+        box = self.start("also", f"--also={root}", f"--also={other}", f"--also={other}", "help", FAKE_GRADLEW=str(gradlew))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(0, box.returncode, output)
+        self.assertEqual([f"{where} --no-daemon help" for where in (root, other)],
+                         (self.dir / "ran").read_text().splitlines())
+        command = self.asked()[0]
+        self.assertEqual(1, command.count(f"-v {root}:{root}"))
+        self.assertEqual(1, command.count(f"-v {other}:{other}"))
 
     def test_also_a_folder_that_is_not_there_stops_before_the_box(self):
         box = self.start("missing", f"--also={self.dir / 'nowhere'}", "help")
@@ -232,8 +271,8 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         command = self.asked()[0]
         self.assertTrue(command.split(" ", 2)[2].startswith("--rm "), command)
         self.assertIn(f"-v {self.sdk}:{self.sdk}:ro", command)
-        self.assertIn(f"-v {ROOT}:{ROOT}", command)
-        self.assertIn(f"-w {ROOT}", command)
+        self.assertIn(f"-v {self.checkout('a')}:{self.checkout('a')}", command)
+        self.assertIn(f"-w {self.checkout('a')}", command)
         self.assertIn("--memory-swap", command)
         self.assertIn(self.image(), command)
         self.assertNotIn("/usr/bin/git", command)
@@ -249,7 +288,7 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         build, run = self.asked()
         self.assertIn("build", build.split())
         self.assertIn(self.image(), build)
-        self.assertIn(str(BOX.parent / "Containerfile"), build)
+        self.assertIn(str(self.checkout("a") / "scripts" / "gradle-box" / "Containerfile"), build)
         self.assertIn(self.image(), run)
         self.assertNotIn("/usr/bin/git", run)
         self.assertIn("image built in", output)
@@ -312,6 +351,391 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
             box.communicate(timeout=20)
         self.assertTrue(self.asked()[1].endswith(" second"), self.asked())
         self.assertTrue(self.asked()[2].endswith(" third"), self.asked())
+
+    def test_same_checkout_waits_even_when_memory_and_slots_fit(self):
+        self.hold("first")
+        first = self.start("first", "help", slots="2", checkout="shared")
+        self.wait_for("started.first")
+        second = self.start("second", "help", slots="2", checkout="shared")
+        time.sleep(0.5)
+        self.assertFalse((self.dir / "started.second").exists())
+        self.release("first")
+        first.communicate(timeout=20)
+        output, _ = second.communicate(timeout=20)
+        self.assertEqual(0, second.returncode, output)
+        self.assertIn("checkout is already in use", output)
+
+    def test_a_build_cannot_overtake_a_ticket_before_it_is_published(self):
+        publish = self.dir / "hold-publish"
+        publish.touch()
+        self.addCleanup(lambda: publish.unlink(missing_ok=True))
+        self.tool("mv", '\n'.join([
+            'if [ "$FAKE_RUN" = first ]; then',
+            'case "$2" in */queue/*)',
+            'touch "$FAKE_DIR/publishing.first"',
+            'while [ -e "$FAKE_DIR/hold-publish" ]; do sleep 0.02; done',
+            ';; esac; fi',
+            'exec ' + shlex.quote(shutil.which("mv")) + ' "$@"',
+        ]))
+        self.hold("first")
+        first = self.start("first", "help", slots="2", checkout="shared")
+        try:
+            self.wait_for("publishing.first")
+            second = self.start("second", "help", slots="2", checkout="shared")
+            time.sleep(0.5)
+            self.assertFalse((self.dir / "started.second").exists())
+            publish.unlink()
+            self.wait_for("started.first")
+            self.assertFalse((self.dir / "started.second").exists())
+        finally:
+            publish.unlink(missing_ok=True)
+            (self.dir / "hold.first").unlink(missing_ok=True)
+        first.communicate(timeout=20)
+        output, _ = second.communicate(timeout=20)
+        self.assertEqual(0, second.returncode, output)
+
+    def test_a_running_build_keeps_its_script_when_the_file_is_edited(self):
+        self.hold("first")
+        first = self.start("first", "help")
+        self.wait_for("started.first")
+        script = self.checkout("first") / "scripts" / "gradle-box" / BOX.name
+        # Move every later byte offset while the stand-in build is held.
+        script.write_text("exit 99\n" * 8_192 + script.read_text())
+        self.release("first")
+        output, _ = first.communicate(timeout=20)
+        self.assertEqual(0, first.returncode, output)
+        self.assertEqual(1, len(self.asked()))
+
+    def test_a_backward_or_unchanged_clock_cannot_overtake_a_running_build(self):
+        self.tool("date", 'if [ "$1" = +%s%N ]; then echo "$FAKE_NOW"; else exec ' +
+                  shlex.quote(shutil.which("date")) + ' "$@"; fi\n')
+        for second_time in ("1000000000000000000", "2000000000000000000"):
+            with self.subTest(second_time=second_time):
+                self.hold("first")
+                self.hold("second")
+                first = self.start("first", "help", slots="2", checkout="shared", FAKE_NOW="2000000000000000000")
+                self.wait_for("started.first")
+                second = self.start("second", "help", slots="2", checkout="shared", FAKE_NOW=second_time)
+                try:
+                    queue = self.dir / "state/queue"
+                    deadline = time.monotonic() + 20
+                    while len(list(queue.iterdir())) < 2:
+                        self.assertLess(time.monotonic(), deadline, "second ticket was not published")
+                        time.sleep(0.02)
+                    self.assertFalse((self.dir / "started.second").exists())
+                    stamps = {int(p.name.rsplit(".", 1)[1]): int(p.name.rsplit(".", 1)[0]) for p in queue.iterdir()}
+                    self.assertGreater(stamps[second.pid], stamps[first.pid])
+                finally:
+                    self.release("first")
+                    self.release("second")
+                    first.communicate(timeout=20)
+                    output, _ = second.communicate(timeout=20)
+                    for name in ("started.first", "started.second"):
+                        (self.dir / name).unlink(missing_ok=True)
+                self.assertEqual(0, second.returncode, output)
+
+    def test_an_also_build_keeps_its_helper_when_the_file_is_edited(self):
+        gradlew = self.box_that_runs()
+        gradlew.write_text('#!/bin/sh\necho "$PWD $*" >> "$FAKE_DIR/ran"\n'
+                           'touch "$FAKE_DIR/started.first"\n'
+                           'while [ -e "$FAKE_DIR/hold.first" ]; do sleep 0.02; done\nexit 0\n')
+        self.hold("first")
+        other = self.checkout("other")
+        box = self.start("first", f"--also={other}", "help", FAKE_GRADLEW=str(gradlew))
+        self.wait_for("started.first")
+        # box_that_runs copies the helper to stand in for the container's mounted file.
+        script = self.dir / "each-checkout.sh"
+        script.write_text("exit 99\n" * 8_192 + script.read_text())
+        self.release("first")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(0, box.returncode, output)
+        self.assertEqual([f"{root} --no-daemon help" for root in (self.checkout("first"), other)],
+                         (self.dir / "ran").read_text().splitlines())
+
+    def start_script(self, script, *args, interruptible=False, **extra):
+        def reset_signals():
+            for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+                signal.signal(sig, signal.SIG_DFL)
+        process = subprocess.Popen([str(script), *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                   start_new_session=interruptible, preexec_fn=reset_signals if interruptible else None,
+                                   env={**os.environ, "PATH": f"{self.dir / 'bin'}:{os.environ['PATH']}",
+                                        "HOME": str(self.home), "FAKE_DIR": str(self.dir), **extra})
+        self.addCleanup(self.stop, process)
+        return process
+
+    def test_replay_setup_finishes_all_installs_after_an_in_place_edit(self):
+        self.tool("uv", 'echo "$*" >> "$FAKE_DIR/installs"\n'
+                  'if [ "$1" = venv ]; then\n'
+                  'for folder in "$@"; do :; done; mkdir -p "$folder/bin"; touch "$folder/bin/python"; chmod +x "$folder/bin/python"\n'
+                  'touch "$FAKE_DIR/started.first"\n'
+                  'while [ -e "$FAKE_DIR/hold.first" ]; do /bin/sleep 0.02; done\nfi\n')
+        for tool in ("ffmpeg", "yt-dlp", "cmake"):
+            self.tool(tool, 'exit 0\n')
+        self.tool("uname", 'case "$1" in -s) echo Linux;; -m) echo x86_64;; esac\n')
+        for rocm, count in (("0", 4), ("1", 7)):
+            with self.subTest(rocm=rocm):
+                script = self.dir / "setup.sh"
+                shutil.copy2(BOX.parent.parent / "syncreplay/setup.sh", script)
+                self.hold("first")
+                job = self.start_script(script, REPLAY_CACHE=str(self.dir / ("replay" + rocm)), REPLAY_ROCM=rocm)
+                try:
+                    self.wait_for("started.first", job)
+                    script.write_text("exit 99\n" * 8_192 + script.read_text())
+                finally:
+                    self.release("first")
+                    output, _ = job.communicate(timeout=20)
+                    (self.dir / "started.first").unlink(missing_ok=True)
+                    installs = self.dir / "installs"
+                    calls = installs.read_text().splitlines() if installs.exists() else []
+                    installs.unlink(missing_ok=True)
+                self.assertEqual(0, job.returncode, output)
+                self.assertEqual(count, len(calls), calls)
+                self.assertIn("openai-whisper" if rocm == "0" else "triton-rocm==3.8.0", calls[-1])
+
+    def test_recording_help_keeps_only_the_user_instructions(self):
+        for name, heading in (("record.sh", "Records the emulator"), ("emulator.sh", "Gets an emulator ready")):
+            with self.subTest(name=name):
+                script = BOX.parent.parent / "record" / name
+                job = self.start_script(script)
+                output, _ = job.communicate(timeout=20)
+                self.assertEqual(2, job.returncode, output)
+                self.assertIn(heading, output)
+                self.assertNotIn("Parse the", output)
+
+    def icon_writer(self):
+        folder = self.dir / "extension"
+        (folder / "scripts").mkdir(parents=True)
+        (folder / "icons").mkdir()
+        script = folder / "scripts/icons.sh"
+        shutil.copy2(BOX.parent.parent.parent / "extension/scripts/icons.sh", script)
+        tool = self.dir / "bin/magick"
+        tool.write_text(f'''#!{sys.executable}
+import os, sys, time
+from pathlib import Path
+root = Path(os.environ["FAKE_DIR"])
+run = os.environ["FAKE_RUN"]
+args = sys.argv[1:]
+if "-extent" in args:
+    source = Path(args[0]).resolve()
+    (root / (run + ".input")).write_text(str(source))
+    (root / ("started." + run)).touch()
+    while (root / ("hold." + run)).exists(): time.sleep(0.02)
+    if os.environ.get("FAIL_MAGICK"): sys.exit(7)
+    if source.read_text() != run:
+        print("another run replaced the temporary image", file=sys.stderr)
+        sys.exit(23)
+Path(args[-1].removeprefix("PNG32:")).write_text(run)
+''')
+        tool.chmod(0o755)
+        return script
+
+    def test_icon_writers_keep_separate_images_when_they_run_together(self):
+        script = self.icon_writer()
+        self.hold("a")
+        self.hold("b")
+        first = self.start_script("/bin/sh", str(script), FAKE_RUN="a")
+        self.wait_for("started.a", first)
+        second = self.start_script("/bin/sh", str(script), FAKE_RUN="b")
+        try:
+            self.wait_for("started.b", second)
+            a = Path((self.dir / "a.input").read_text())
+            b = Path((self.dir / "b.input").read_text())
+            self.assertNotEqual(a, b)
+        finally:
+            self.release("a")
+            self.release("b")
+            first_output, _ = first.communicate(timeout=20)
+            second_output, _ = second.communicate(timeout=20)
+        self.assertEqual(0, first.returncode, first_output)
+        self.assertEqual(0, second.returncode, second_output)
+        self.assertFalse(a.exists())
+        self.assertFalse(b.exists())
+
+    def test_an_icon_writer_removes_its_image_when_conversion_fails(self):
+        script = self.icon_writer()
+        job = self.start_script("/bin/sh", str(script), FAKE_RUN="failed", FAIL_MAGICK="1")
+        output, _ = job.communicate(timeout=20)
+        self.assertEqual(7, job.returncode, output)
+        temporary = Path((self.dir / "failed.input").read_text())
+        try:
+            self.assertFalse(temporary.exists())
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def test_an_interrupted_icon_writer_cleans_up_and_keeps_the_signal_status(self):
+        script = self.icon_writer()
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            for group in (True, False):
+                with self.subTest(signal=sig, group=group):
+                    run = f"signal-{int(sig)}-{group}"
+                    self.hold(run)
+                    job = self.start_script("/bin/sh", str(script), interruptible=True, FAKE_RUN=run)
+                    try:
+                        self.wait_for("started." + run, job)
+                        temporary = Path((self.dir / (run + ".input")).read_text())
+                        if group:
+                            os.killpg(job.pid, sig)
+                        else:
+                            job.send_signal(sig)
+                    finally:
+                        self.release(run)
+                        try:
+                            output, _ = job.communicate(timeout=20)
+                        except subprocess.TimeoutExpired:
+                            os.killpg(job.pid, signal.SIGKILL)
+                            job.communicate(timeout=20)
+                            raise
+                    self.assertFalse(temporary.exists())
+                    self.assertEqual(-int(sig), job.returncode, output)
+
+    def test_interrupting_icon_generation_stops_a_calling_shell(self):
+        script = self.icon_writer()
+        caller = self.dir / "caller.sh"
+        caller.write_text('#!/bin/bash\n/bin/sh "$1"\necho continued > "$FAKE_DIR/continued"\n')
+        self.hold("caller")
+        job = self.start_script("/bin/bash", str(caller), str(script), interruptible=True, FAKE_RUN="caller")
+        try:
+            self.wait_for("started.caller", job)
+            temporary = Path((self.dir / "caller.input").read_text())
+            os.killpg(job.pid, signal.SIGINT)
+        finally:
+            self.release("caller")
+            try:
+                output, _ = job.communicate(timeout=20)
+            except subprocess.TimeoutExpired:
+                os.killpg(job.pid, signal.SIGKILL)
+                job.communicate(timeout=20)
+                raise
+        self.assertFalse((self.dir / "continued").exists(), output)
+        self.assertNotEqual(0, job.returncode, output)
+        self.assertFalse(temporary.exists())
+
+    def test_golden_writers_finish_and_remove_their_tree_after_an_in_place_edit(self):
+        writer = self.dir / "writer"
+        writer.write_text('#!/bin/sh\nmkdir -p app/build\nprintf "fake row\\n" > "app/build/$FAKE_TABLE-golden.tsv"\n'
+                          'touch "$FAKE_DIR/started.first"\n'
+                          'while [ -e "$FAKE_DIR/hold.first" ]; do sleep 0.02; done\nexit 0\n')
+        writer.chmod(0o755)
+        self.tool("git", 'case "$4" in\nadd)\n'
+                  'mkdir -p "$6/scripts/gradle-box" "$6/app/src/test/java/com/astrovm/crosstune"\n'
+                  'cp "$FAKE_WRITER" "$6/scripts/gradle-box/gradle-box.sh";;\n'
+                  'remove) rm -rf "$6";;\nesac\n')
+        for table, source, helper in (("names", "NamePairs.kt", "NamesGoldenWriter.kt"),
+                                      ("play", "PlayScenes.kt", "PlayGoldenWriter.kt")):
+            with self.subTest(table=table):
+                root = self.checkout(table)
+                here = root / "scripts" / (table + "check")
+                here.mkdir()
+                script = here / "golden.sh"
+                shutil.copy2(BOX.parent.parent / (table + "check") / "golden.sh", script)
+                (here / helper).touch()
+                tests = root / "app/src/test/java/com/astrovm/crosstune"
+                tests.mkdir(parents=True)
+                (tests / source).touch()
+                resources = root / "app/src/test/resources"
+                resources.mkdir()
+                self.hold("first")
+                job = self.start_script(script, "fake-sha", FAKE_WRITER=str(writer), FAKE_TABLE=table)
+                try:
+                    self.wait_for("started.first")
+                    script.write_text("exit 99\n" * 8_192 + script.read_text())
+                finally:
+                    self.release("first")
+                    output, _ = job.communicate(timeout=20)
+                    (self.dir / "started.first").unlink(missing_ok=True)
+                self.assertEqual(0, job.returncode, output)
+                self.assertEqual("fake row\n", gzip.decompress((resources / (table + "-golden.tsv.gz")).read_bytes()).decode())
+                self.assertFalse((self.home / ".cache/agent-cache" / ("crosstune-" + table + "check-fake-sha")).exists())
+
+    def test_a_recording_finishes_and_restores_animation_after_an_in_place_edit(self):
+        script = self.dir / "record.sh"
+        shutil.copy2(BOX.parent.parent / "record/record.sh", script)
+        self.tool("adb", 'echo "$*" >> "$FAKE_DIR/settings"\n')
+        self.tool("sleep", 'case "$1" in 1|1.5) exit 0;; esac\nexec ' + shlex.quote(shutil.which("sleep")) + ' "$@"\n')
+        self.tool("scrcpy", 'echo "$$" > "$FAKE_DIR/recorder.pid"\ntrap \'exit 0\' TERM\nwhile :; do sleep 0.02; done\n')
+        self.tool("ffprobe", 'echo 1.0\n')
+        self.tool("ffmpeg", 'case "$*" in *mpdecimate*) printf "pts_time:0.00\\npts_time:0.016\\npts_time:0.032\\n" >&2;;\n'
+                  '*) for last in "$@"; do :; done; touch "$last";; esac\n')
+        command = self.dir / "drive"
+        command.write_text('#!/bin/sh\ntouch "$FAKE_DIR/started.first"\n'
+                           'while [ -e "$FAKE_DIR/hold.first" ]; do sleep 0.02; done\n')
+        command.chmod(0o755)
+        self.hold("first")
+        target = self.dir / "take.mp4"
+        job = self.start_script(script, str(target), str(command))
+        self.wait_for("started.first")
+        script.write_text("exit 99\n" * 8_192 + script.read_text())
+        self.release("first")
+        output, _ = job.communicate(timeout=20)
+        self.assertEqual(0, job.returncode, output)
+        self.assertTrue(target.exists())
+        self.assertIn("2 moving frames, 0 late", output)
+        settings = (self.dir / "settings").read_text().splitlines()
+        self.assertEqual([f"shell settings put global {name} 1" for name in
+                          ("window_animation_scale", "transition_animation_scale", "animator_duration_scale")], settings[-3:])
+        # A failed driving command must restore settings and reap its recorder too.
+        shutil.copy2(BOX.parent.parent / "record/record.sh", script)
+        command.write_text('#!/bin/sh\nwhile [ ! -f "$FAKE_DIR/recorder.pid" ]; do sleep 0.02; done\nexit 3\n')
+        (self.dir / "recorder.pid").unlink()
+        job = self.start_script(script, str(target), str(command))
+        output, _ = job.communicate(timeout=20)
+        self.assertEqual(3, job.returncode, output)
+        self.assertEqual(settings[-3:], (self.dir / "settings").read_text().splitlines()[-3:])
+        self.wait_for("recorder.pid")
+        recorder = int((self.dir / "recorder.pid").read_text())
+        try:
+            with self.assertRaises(ProcessLookupError):
+                os.kill(recorder, 0)
+        finally:
+            try:
+                os.kill(recorder, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+    def test_memory_tickets_stay_readable_to_older_checkouts(self):
+        self.hold("first")
+        first = self.start("first", "help", GRADLE_BOX_MEMORY="7")
+        self.wait_for("started.first")
+        tickets = list((self.dir / "state" / "queue").iterdir())
+        self.assertEqual(1, len(tickets))
+        self.assertEqual(7, int(tickets[0].read_text()))
+        self.release("first")
+        first.communicate(timeout=20)
+        self.assertEqual([], list((self.dir / "state" / "checkouts").iterdir()))
+
+    def test_an_intermediate_multi_line_ticket_still_protects_its_checkout(self):
+        root = self.checkout("shared")
+        queue = self.dir / "state" / "queue"
+        queue.mkdir(parents=True)
+        old = queue / f"1.{os.getpid()}"
+        old.write_text(f"1\n{root}\n")
+        box = self.start("second", "help", slots="2", checkout="shared")
+        try:
+            time.sleep(0.5)
+            self.assertFalse((self.dir / "started.second").exists())
+        finally:
+            old.unlink(missing_ok=True)
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(0, box.returncode, output)
+        self.assertIn("checkout is already in use", output)
+
+    def test_also_checkout_overlap_waits_in_both_directions(self):
+        for first_also in (True, False):
+            shared = self.checkout("shared")
+            first_args = [f"--also={shared}"] if first_also else []
+            second_args = [] if first_also else [f"--also={shared}"]
+            first_name, second_name = str(first_also) + "first", str(first_also) + "second"
+            self.hold(first_name)
+            first = self.start(first_name, *first_args, "help", slots="2", checkout="other" if first_also else "shared")
+            self.wait_for("started." + first_name)
+            second = self.start(second_name, *second_args, "help", slots="2", checkout="shared" if first_also else "other")
+            time.sleep(0.5)
+            self.assertFalse((self.dir / ("started." + second_name)).exists())
+            self.release(first_name)
+            first.communicate(timeout=20)
+            output, _ = second.communicate(timeout=20)
+            self.assertEqual(0, second.returncode, output)
+            self.assertIn("checkout is already in use", output)
 
     def test_two_slots_build_at_once_each_with_its_own_gradle_home(self):
         self.hold("first")

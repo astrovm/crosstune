@@ -10,7 +10,8 @@
 # The container sees this checkout, the Android SDK read-only and the debug key, and not the rest
 # of $HOME. Git comes from the image (eclipse-temurin:25-jdk plus Git), so whisper.cpp can read its
 # commit on Linux and on a Mac. Builds wait in line for memory, first come first served, and say how many
-# are ahead: waiting is normal, not a hang. Each build takes a slot, which keeps its Gradle home, so a
+# are ahead: waiting is normal, not a hang. Builds that share a checkout, including --also, wait for each other.
+# Distinct checkouts can run together. Each build takes a slot, which keeps its Gradle home, so a
 # new worktree downloads nothing again.
 #
 # The first build to succeed keeps its downloads in seed/, which every later build reads, read-only,
@@ -45,6 +46,8 @@
 # Running slots and the shared seed stay intact, even if they alone exceed the target.
 # A new seed is made only when the cache and its copy fit; its contents are then read-only.
 # An older seed or a lowered limit can still leave the cache over target.
+# Parse the complete body before running it. Edits to this file cannot change an active build.
+main() {
 set -euo pipefail
 
 also=()
@@ -64,6 +67,20 @@ containerfile=$here/Containerfile
 image_id=$(python3 -c 'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' "$containerfile")
 image=localhost/crosstune-gradle-box:$image_id
 root=$(git -C "$here" rev-parse --show-toplevel)
+root=$(cd "$root" && pwd -P)
+checkouts=("$root")
+unique_also=()
+for dir in ${also[@]+"${also[@]}"}; do
+    seen=0
+    for checkout in "${checkouts[@]}"; do
+        [[ $checkout != "$dir" ]] || seen=1
+    done
+    if ((!seen)); then
+        checkouts+=("$dir")
+        unique_also+=("$dir")
+    fi
+done
+also=(${unique_also[@]+"${unique_also[@]}"})
 common=$(cd "$root" && cd "$(git rev-parse --git-common-dir)" && pwd)
 state=${GRADLE_BOX_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/crosstune-gradle-box}
 sdk=${ANDROID_HOME:-$HOME/Android/Sdk}
@@ -148,29 +165,57 @@ if [[ -n ${GRADLE_BOX_CPUS:-} ]] && awk -v want="$GRADLE_BOX_CPUS" -v have="$cpu
 fi
 
 # A ticket's name sorts by when it asked and ends in who asked, so one left by a killed build can go.
-# In it is the memory it asked for. Written apart and moved in, so nobody reads it half written.
-mkdir -p "$state/queue"
-ticket=$state/queue/$(date +%s%N).$$
+# Keep the memory ticket readable by older checkouts. Store checkout paths beside it.
+mkdir -p "$state/queue" "$state/checkouts"
+# Name and publish in one turn. A later build must not overtake an unpublished earlier ticket.
+exec 7>"$state/queue.lock"
+lock 7
+stamp=$(date +%s%N)
+# A clock step or an equal timestamp must not put a new build before one already published.
+for queued in "$state"/queue/*; do
+    [[ -f $queued ]] || continue
+    order=${queued##*/}
+    order=${order%.*}
+    [[ $order =~ ^[0-9]+$ ]] || continue
+    if ((10#$order >= 10#$stamp)); then stamp=$((10#$order + 1)); fi
+done
+ticket=$state/queue/$stamp.$$
+checkout_ticket=$state/checkouts/${ticket##*/}
+for recorded in "$state"/checkouts/*; do
+    [[ -f $recorded ]] || continue
+    kill -0 "${recorded##*.}" 2>/dev/null || rm -f "$recorded"
+done
+printf '%s\n' "${checkouts[@]}" > "$state/checkouts.$$"
+mv "$state/checkouts.$$" "$checkout_ticket"
 echo "$memory" > "$state/ticket.$$"
 mv "$state/ticket.$$" "$ticket"
-trap 'rm -f "$ticket"' EXIT
+exec 7>&-
+trap 'rm -f "$ticket" "$checkout_ticket"' EXIT
 
 # How many asked before this build and aren't done, and the memory they asked for, added up. A ticket
 # with nothing in it is from a checkout whose script doesn't write it: that one asked for 16 or less.
 ahead_of_me() {
-    local other asked count=0 sum=0
+    local other asked checkout line recorded count=0 sum=0 overlap=0
     for other in "$state"/queue/*; do
         [[ $other == "$ticket" || $other > "$ticket" ]] && continue
         if kill -0 "${other##*.}" 2>/dev/null; then
-            asked=$(cat "$other" 2>/dev/null) || continue
+            asked=$(head -n 1 "$other" 2>/dev/null) || continue
             [[ $asked =~ ^[0-9]+$ ]] || asked=16
             count=$((count + 1))
             sum=$((sum + asked))
+            recorded=$state/checkouts/${other##*/}
+            # Also read the intermediate multi-line tickets while those builds finish.
+            [[ -f $recorded ]] || recorded=$other
+            while IFS= read -r line; do
+                for checkout in "${checkouts[@]}"; do
+                    [[ $line != "$checkout" ]] || overlap=1
+                done
+            done < <(cat "$recorded" 2>/dev/null)
         else
-            rm -f "$other"
+            rm -f "$other" "$state/checkouts/${other##*/}"
         fi
     done
-    echo "$count $sum"
+    echo "$count $sum $overlap"
 }
 
 pressure=${GRADLE_BOX_PRESSURE:-/proc/pressure/memory}
@@ -200,14 +245,16 @@ take_a_slot() {
 
 said=
 while :; do
-    read -r ahead asked_ahead < <(ahead_of_me)
+    read -r ahead asked_ahead overlap < <(ahead_of_me)
     lately=$(stalled avg10)
     # The first in line always fits, as nothing is ahead of it.
-    fits=$((ahead < slots && (ahead == 0 || asked_ahead + memory <= budget)))
+    fits=$((!overlap && ahead < slots && (ahead == 0 || asked_ahead + memory <= budget)))
     if ((fits && lately <= stall_limit)) && take_a_slot; then
         break
     fi
-    if ((!fits)); then
+    if ((overlap)); then
+        why="a checkout is already in use, $ahead ahead of you"
+    elif ((!fits)); then
         why="$ahead ahead of you"
     else
         why="the machine is out of memory, stalled $lately% of the last 10 s"
@@ -311,4 +358,8 @@ if ((lost >= 5)); then
     echo "gradle-box: the machine was out of memory for $lost s of this build. A test that timed out may have waited on that, not on the app (Issue #852)." >&2
 fi
 touch "$home"
-exit "$status"
+return "$status"
+
+}
+
+main "$@"; exit

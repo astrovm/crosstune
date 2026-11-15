@@ -1,8 +1,10 @@
 """Runs scripts/record/emulator.sh for real, with a stand-in adb that says what it was asked."""
 import os
+import shutil
 import stat
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -42,6 +44,10 @@ class RecordingSetupTest(unittest.TestCase):
         adb = self.fake / "adb"
         adb.write_text(FAKE_ADB)
         adb.chmod(adb.stat().st_mode | stat.S_IEXEC)
+        # The fake device changes at once. Only the held-edit test needs a real wait.
+        sleep = self.fake / "sleep"
+        sleep.write_text("#!/bin/sh\nexit 0\n")
+        sleep.chmod(0o755)
         (self.fake / "locale").write_text("en-US\n")
         (self.fake / "night").write_text("Night mode: no\n")
         (self.fake / "zone").write_text("+0000\n")
@@ -63,6 +69,35 @@ class RecordingSetupTest(unittest.TestCase):
             self.assertFalse(asked.startswith("root"), asked)
             self.assertNotIn("setprop", asked)
             self.assertNotIn("shell date 1", asked)
+
+    def test_setup_finishes_its_commands_after_an_in_place_edit(self):
+        script = self.fake / "emulator.sh"
+        shutil.copy2(SCRIPT, script)
+        adb = self.fake / "adb"
+        adb.write_text(FAKE_ADB.replace('shift 2\n', '''shift 2
+case "$*" in *"cmd locale set-device-locale"*)
+touch "$FAKE/started"
+while [ -e "$FAKE/hold" ]; do /bin/sleep 0.02; done;;
+esac
+'''))
+        hold = self.fake / "hold"
+        hold.touch()
+        env = dict(os.environ, PATH=f"{self.fake}:{os.environ['PATH']}", FAKE=str(self.fake), ANDROID_SERIAL="emulator-5580")
+        job = subprocess.Popen(["bash", str(script), "setup", "es-AR", "01:46"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        try:
+            deadline = time.monotonic() + 10
+            while not (self.fake / "started").exists():
+                self.assertLess(time.monotonic(), deadline, "setup did not reach the held command")
+                time.sleep(0.02)
+            script.write_text("exit 99\n" * 8_192 + script.read_text())
+        finally:
+            hold.unlink()
+            output, error = job.communicate(timeout=20)
+        self.assertEqual(0, job.returncode, error)
+        self.assertEqual("es-AR", self.state("locale"))
+        self.assertEqual("Night mode: yes", self.state("night"))
+        self.assertEqual(2, len([a for a in self.asked() if "notification snooze" in a]))
+        self.assertIn("Ready: es-AR, dark, 01:46", output)
 
     def test_setup_sets_the_language_dark_mode_and_the_clock(self):
         self.run_script("setup", "de-DE", "01:46")

@@ -129,7 +129,12 @@ class LicensesTest {
         composeRule.waitForIdle()
     }
 
-    private fun work(name: String) = (hasText(name) and hasClickAction()).let { scrollTo(it); composeRule.onNode(it) }
+    private fun work(name: String) = (hasText(name) and hasClickAction()).let {
+        // Notices load off the main thread. Compose can be idle while the list is still empty.
+        waitForText(name)
+        scrollTo(it)
+        composeRule.onNode(it)
+    }
 
     private fun text(words: String) = scrollTo(hasText(words, substring = true)).let { composeRule.onAllNodesWithText(words, substring = true).onFirst() }
 
