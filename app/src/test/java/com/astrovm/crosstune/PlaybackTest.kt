@@ -2229,6 +2229,58 @@ class PlaybackTest {
         assertEquals(2, CoverBitmap.encodes.get())
     }
 
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
+    fun readingActiveSessionsDropsAnInactiveCoversAlias() {
+        val controller = aBitmapCover()
+        shadowOf(sessions).addController(controller)
+        val original = requireNotNull(requireNotNull(controller.metadata).getBitmap(MediaMetadata.METADATA_KEY_ART))
+        val copied = Bitmap.createBitmap(original)
+        val writer = PlaybackCovers.shared(app)
+        val name = listOf("Fake Song", "Fake Artist", "Fake Album", null, null)
+        val saved = coverWhenReady { writer.of(copied, controller.sessionToken, name) }
+        assertEquals(saved, writer.of(original, controller.sessionToken, name))
+        shadowOf(sessions).clearControllers()
+        assertNull(playback.nowPlaying())
+        assertNull(writer.of(original, controller.sessionToken, name))
+        assertEquals(saved, coverWhenReady { writer.of(original, controller.sessionToken, name) })
+        assertEquals(2, CoverBitmap.encodes.get())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
+    fun aFailedCoverDoesNotDiscardAnotherSessionsSavedAlias() {
+        val controller = aBitmapCover()
+        val other = player("com.other", "Other", "Other Song", "Fake Artist")
+        val original = requireNotNull(requireNotNull(controller.metadata).getBitmap(MediaMetadata.METADATA_KEY_ART))
+        val copied = Bitmap.createBitmap(original)
+        val writer = PlaybackCovers.shared(app)
+        val name = listOf("Fake Song", "Fake Artist", "Fake Album", null, null)
+        val saved = coverWhenReady { writer.of(copied, controller.sessionToken, name) }
+        val directory = File(app.cacheDir, ARTWORK_DIR)
+        val moved = File(app.cacheDir, "held-artwork")
+        assertTrue(directory.renameTo(moved))
+        directory.writeText("not a directory")
+        val failed = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
+        try {
+            assertNull(writer.of(failed, other.sessionToken, listOf("Other Song")))
+            val field = PlaybackCovers::class.java.getDeclaredField("entries").apply { isAccessible = true }
+            val entries = field.get(writer) as Map<*, *>
+            val end = System.nanoTime() + 5_000_000_000L
+            while (synchronized(entries) { entries.containsKey(failed) } && System.nanoTime() < end) Thread.sleep(5)
+            assertFalse(synchronized(entries) { entries.containsKey(failed) })
+            assertTrue(directory.delete())
+            assertTrue(moved.renameTo(directory))
+            assertEquals(saved, writer.of(original, controller.sessionToken, name))
+            assertEquals(2, CoverBitmap.encodes.get())
+        } finally {
+            if (directory.isFile) directory.delete()
+            if (moved.isDirectory) moved.renameTo(directory)
+        }
+    }
+
     private fun copyCoverToken(original: MediaSession.Token, binder: Any): MediaSession.Token {
         val uid = MediaSession.Token::class.java.getDeclaredField("mUid").apply { isAccessible = true }.get(original)
         val constructor = MediaSession.Token::class.java.declaredConstructors.single { it.parameterCount == 2 }.apply { isAccessible = true }
@@ -3100,6 +3152,23 @@ class PlaybackTest {
         assertTrue(playback.playList(music, list))
         assertEquals(listOf("playFromUri $list"), asked())
         assertTrue(woken.isEmpty())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aPlaylistUsesAPatchedAppOnlyWhenTheOfficialAppIsMissing() = runBlocking {
+        val official = MusicService.YOUTUBE_MUSIC.packageName
+        val patched = "app.morphe.android.apps.youtube.music"
+        val link = "https://music.youtube.com/watch?v=fake0000000&list=fake-list"
+        allow()
+        shadowOf(sessions).addController(player(patched, "Patched Player", "Fake Song", "Fake Artist"))
+        assertTrue(playback.playList(official, link))
+        assertEquals(listOf("playFromUri $link"), asked())
+        assertTrue(woken.isEmpty())
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = official })
+        assertFalse(playback.playList(official, link))
+        assertTrue(asked().isEmpty())
+        assertEquals(listOf(MusicService.YOUTUBE_MUSIC.packageNames), woken)
     }
 
     @Test

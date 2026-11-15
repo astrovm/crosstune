@@ -2688,6 +2688,24 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aNamedSongsLateCoverDoesNotNeedIdenticalServiceMetadata() {
+        val playback = FakePlayback().apply { playing.value = following() }
+        val model = playingModel(playback)
+        playback.onThePhone = Heard.Song(song.copy(url = "https://example.com/song", lengthMs = 180_000, artworkUrl = "file:///service-cover.jpg"), null, app = "com.spotify")
+        idle()
+        assertEquals(song.copy(artworkUrl = "file:///service-cover.jpg"), model.uiState.player?.song)
+    }
+
+    @Test
+    fun aDifferentSongsCoverCannotReplaceTheSongStillFollowed() {
+        val playback = FakePlayback().apply { playing.value = following() }
+        val model = playingModel(playback)
+        playback.onThePhone = Heard.Song(song.copy(title = "Another Song", artworkUrl = "file:///other-song.jpg"), null, app = "com.spotify")
+        idle()
+        assertEquals(song, model.uiState.player?.song)
+    }
+
+    @Test
     fun aCoverFromAnotherAppDoesNotReplaceThePlayersCover() {
         val playback = FakePlayback()
         playback.playing.value = following()
