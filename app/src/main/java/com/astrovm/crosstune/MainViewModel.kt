@@ -5549,7 +5549,7 @@ internal class MainViewModel(
         for (kept in offline.all()) {
             for (song in kept.songs.filter { OfflineSongs.keyOf(it).let { key -> key !in kept.saved || key in kept.unread } }) {
                 if (!unmetered || uiState.offlineUsedBytes >= uiState.offlineSpaceMb * BYTES_PER_MB) return
-                // Its words unreachable for a moment, the network's gone: it's tried again on the next one. Only its sung
+                // Its words or chords unreachable for a moment, it's tried again on the next network. Only its sung
                 // readings, it's kept without them for now and the next songs are fetched, and they're asked for on the next.
                 when (withContext(Pinning(kept.id)) { fetchForOffline(song) }) {
                     Fetched.NOT -> return
@@ -5561,7 +5561,7 @@ internal class MainViewModel(
         }
     }
 
-    /** What a song kept for offline could fetch: all it needs, all but its sung readings, or not its words. */
+    /** What a song kept for offline could fetch: all it needs, all but its sung readings, or not its words or chords. */
     private enum class Fetched { ALL, UNREAD, NOT }
 
     /**
@@ -5575,7 +5575,12 @@ internal class MainViewModel(
         val found = lyrics as? LyricsFinder.Lyrics.Found ?: return Fetched.ALL
         val lines = found.lines.map { it.text }.ifEmpty { found.words.lines() }
         if (uiState.learning.translation) translator?.translate(lines, translateInto())
-        if (uiState.chords.on) chordFinder?.chordsOf(song, lines)
+        if (uiState.chords.on) {
+            when (chordFinder?.chordsOf(song, lines)) {
+                ChordFinder.Chords.Unavailable, ChordFinder.Chords.WikiTimedOut, ChordFinder.Chords.WikiCheck -> return Fetched.NOT
+                else -> Unit
+            }
+        }
         val script = Readings.scriptOf(lines)
         // Asked as when the words show: romaji and kana are made from the readings too.
         val sung = if (uiState.learning.reads && script == Script.JAPANESE) sungReadingsOf(song, lines, withContext(systemDispatcher) { Readings.of(lines, script) }) else emptyList()
