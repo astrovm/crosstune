@@ -777,3 +777,62 @@ Each takes lines main had right back, and puts others off, some over 3 s: droppi
 | BciS5krYL80 7 | 1 | 75.4 | 75.3 | 72.5 | Its one-letter first word heard 2.8 s before the next |
 | CH6t8l-jGYI 16 | 1 | 173.0 | 173.1 | 171.8 | Its first word heard 1.6 s before the next |
 | OtXIsUjDOk8 18 | 1 | 106.0 | 106.2 | 110.3 | Its words heard again 4.9 s later, nearer than 6 s, so taken as one place |
+
+### The first word of a while (Issue #892, after main's `f8d8709b`)
+
+In the four lines above whose first word is heard early (YkLLcIKhJ64 24, uEV4RqqnlSE 4, BciS5krYL80 7, CH6t8l-jGYI 16), that word is the first heard in its while: 0.44, 0.2, 0.0 and 1.34 s after it starts. The speech model pins it there. Of 721 first words of a while, 140 are in its first 100 ms and 317 in its first 0.5 s. Against the true start of a line, by the line's first word (`untimed --again 12000` inputs):
+
+| A line's first word, heard | Words | Median | Over 1 s early | Over 1 s late | Within 1 s |
+|---|---:|---:|---:|---:|---:|
+| First in its while | 80 | -0.34 s | 18 | 6 | 56 |
+| Later in its while | 739 | -0.17 s | 129 | 160 | 450 |
+
+So a line's first word heard first in its while no longer says where the line starts, unless it is all that's heard of the line. A sound told of before it, as "[Music]", takes the while's start, so a word after one still counts. The made-up singing (`synthetic`) hears every first word where it's sung, so there the rule costs lines that were right.
+
+Each try, two plays then one (within 1.0 s / off / over 3 s / wrong, then right on main, wrong now), and the made-up singing against the floors:
+
+| Change | Two plays | One play | Made-up singing |
+|---|---|---|---|
+| Before: the merge with main | 597 / 61 / 14 / 93, 6 | 364 / 52 / 20 / 53, 6 | The floors |
+| No start from the first word of a while | 598 / 59 / 16 / 87, 2 | 373 / 53 / 22 / 54, 2 | Not run: iH8To-d2pX0 3 goes 7.2 s late, its first word 8 s into the while, after "[MÚSICA]", and right |
+| No start from the first word row of a while (a sound counts as a row) | 598 / 58 / 15 / 86, 2 | 372 / 52 / 21 / 53, 2 | Latin at 400 ms: 382 / 3 to 362 / 22 |
+| That, only for a line's own first word | 598 / 58 / 14 / 86, 3 | 371 / 51 / 20 / 52, 3 | 5 rows down 1 to 3 lines |
+| No start from a word heard in the first 550 ms of a while | 598 / 59 / 14 / 90, 4 | Not run | 8 rows down |
+| The line's own first word rule, and all starts 200 ms later (to check the lean isn't a knob) | 593 / 64 / 15 / 91, 5 | Not run | Not run |
+| Two lines in a chain share no heard word: one's last word before the other's first, with the plain earliest rule | 590 / 57 / 15, 1 new (xTvyyoF_LZY 2) | Not run | Not run |
+| No start from the first word row, and no shared words | 595 / 55 / 15 / 82, 1 | 370 / 51 / 21 / 52, 1 | Not run |
+| A line put between two at its own word heard alike | 569 / 85 / 25, 27 | Not run | Not run |
+| A line put between two at the first voice in its span | Same totals: fixes FXovf5dsRTw 16, breaks WEuDVcXnElc 46 | Not run | Not run |
+| **Now: the line's own first word rule, and no shared words** | **595 / 55 / 14 / 82, 2** | **369 / 50 / 20 / 51, 2** | **9 rows down 1 to 4 lines, 2 up** |
+| That, and a line put between two at the first voice in its span | 595 / 55, 1 (WEuDVcXnElc 46) | 1 (OtXIsUjDOk8 18) | 12 rows down |
+| That, and two singings with no word in common taken as two places | 568 / 40 / 6 / 70, 4 | Not run | Most rows down far |
+
+"No shared words" fixes iH8To-d2pX0 16: its one match took "no hay nada más" from its own second half and from line 17, which starts with it. It costs lines whose end is the next one's start, as "your love" then "Your love" (xTvyyoF_LZY 40, 41, dark now).
+
+| Timing | Plays | Timed | Within 1.0 s | Within 0.5 s | Off | > 3 s | Unheard | Wrong | Right on main, wrong now | Dark now | Right now, not on main |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Main | 2 | 724 | 594 | 485 | 130 | 49 | 0 | 173 | 0 | 0 | 0 |
+| The merge with main | 2 | 658 | 597 | 499 | 61 | 14 | 0 | 93 | 6 | 45 | 54 |
+| Now | 2 | 650 | 595 | 503 | 55 | 14 | 0 | 82 | 2 | 49 | 52 |
+| Main | 1 | 447 | 372 | 316 | 92 | 43 | 0 | 100 | 0 | 0 | 0 |
+| The merge with main | 1 | 408 | 364 | 313 | 52 | 20 | 0 | 53 | 6 | 29 | 27 |
+| Now | 1 | 411 | 369 | 321 | 50 | 20 | 0 | 51 | 2 | 29 | 28 |
+
+By part, within 1.0 s / off / over 3 s / wrong, main then now:
+
+| Part | Plays | Main | Now | Right on main, wrong now |
+|---|---|---|---|---|
+| Tune | 2 | 393 / 86 / 26 / 115 | 400 / 30 / 5 / 49 | FXovf5dsRTw 16 |
+| Tune | 1 | 245 / 62 / 28 / 66 | 246 / 31 / 11 / 32 | OtXIsUjDOk8 18 |
+| Held | 2 | 201 / 44 / 23 / 58 | 195 / 25 / 9 / 33 | LhLmgg_u29k 6 |
+| Held | 1 | 127 / 30 / 15 / 34 | 123 / 19 / 9 / 19 | LhLmgg_u29k 6 |
+
+The lines still right on main and wrong now, sung / main / now, in s:
+
+| Song, line | Plays | Sung | Main | Now | Why |
+|---|---|---:|---:|---:|---|
+| FXovf5dsRTw 16 | 2 | 64.0 | 63.1 | 63.0 | Put between two by its letters: 1.008 s early, 0.1 s from main |
+| LhLmgg_u29k 6 | 1, 2 | 28.3 | 27.7 | 27.3 | Put between two by its letters: 1.001 s early; the line after is 1.0 s early on main too |
+| OtXIsUjDOk8 18 | 1 | 106.0 | 106.2 | 110.3 | Lines 15 and 18 are both "Tell it to my heart."; heard again 4.9 s later, nearer than 6 s, so taken as one place |
+
+iH8To-d2pX0 13 is put 11.1 s early now, and 11.6 s early on main. Lines 13, 14 and 15 are all "Y por eso nena", heard at 352, 357.5 and 363 s; the true start puts line 13 at 363.6 s, which is likely line 15's.
