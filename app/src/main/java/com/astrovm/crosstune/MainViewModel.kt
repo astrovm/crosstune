@@ -4378,13 +4378,13 @@ internal class MainViewModel(
                         if (saved.line != null) saved.copy(line = if (saved.line == was.line) moved.line else saved.line)
                         else if (!occupied.add(moved.text)) saved
                         else {
+                            // Bounds are one edit: mixing an old end with a newer start can reverse the window.
+                            val timing = if (saved.startMs == was.startMs && saved.endMs == was.endMs && saved.nextMs == was.nextMs) moved else saved
                             val replacement = saved.copy(
                                 text = moved.text, reading = moved.reading, romanized = moved.romanized, ruby = moved.ruby,
                                 readByHand = false, typed = moved.typed, readWith = moved.readWith,
                                 translation = if (saved.translation == was.translation) moved.translation else saved.translation,
-                                startMs = if (saved.startMs == was.startMs) moved.startMs else saved.startMs,
-                                endMs = if (saved.endMs == was.endMs) moved.endMs else saved.endMs,
-                                nextMs = if (saved.nextMs == was.nextMs) moved.nextMs else saved.nextMs,
+                                startMs = timing.startMs, endMs = timing.endMs, nextMs = timing.nextMs,
                                 lengthMs = if (saved.lengthMs == was.lengthMs) moved.lengthMs else saved.lengthMs,
                                 leadMs = if (saved.leadMs == was.leadMs) moved.leadMs else saved.leadMs,
                                 app = if (saved.app == was.app) moved.app else saved.app,

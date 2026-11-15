@@ -5104,6 +5104,17 @@ class ListeningTest {
     }
 
     @Test
+    fun aMovedLineKeepsTheWholeNewTimingWhenOnlyItsStartChanged() {
+        aLineMovesWhile(timed = true) { store, old ->
+            store.replaceAll(listOf(old to old.copy(startMs = 4_000)))
+        }
+        val moved = SavedLinesStore(prefs()).load().single()
+        assertEquals(4_000L, moved.startMs)
+        assertEquals(5_000L, moved.endMs)
+        assertEquals(6_000L, moved.nextMs)
+    }
+
+    @Test
     fun aLineSavedAtTheDestinationWhileAMoveWaitsIsNotDuplicated() {
         aLineMovesWhile { store, old ->
             store.addAll(listOf(old.copy(text = "Night sky above", translation = "Kept separately", interval = 8, due = 123_000)))
@@ -5118,13 +5129,15 @@ class ListeningTest {
     }
 
     /** Hold the move's background work while another save changes the current store. */
-    private fun aLineMovesWhile(change: (SavedLinesStore, SavedLine) -> Unit) {
+    private fun aLineMovesWhile(timed: Boolean = false, change: (SavedLinesStore, SavedLine) -> Unit) {
+        val timing = if (timed) ""","start":1000,"end":5000,"next":6000""" else ""
         prefs().edit().putString(
-            "saved_lines", """[{"text":"Night sky","title":"Demo","artist":"Band","readWith":${Readings.VERSION}}]"""
+            "saved_lines", """[{"text":"Night sky","title":"Demo","artist":"Band","readWith":${Readings.VERSION}$timing}]"""
         ).commit()
         val gate = Gate()
         MainActivity.systemDispatcher = gate
-        wordsOf(null, "Night sky above", translations = 503, before = { gate.held = true })
+        val synced = if (timed) "[00:01.00] Night sky above\\n[00:03.00] Clear dawn" else null
+        wordsOf(synced, "Night sky above", translations = 503, before = { gate.held = true })
         try {
             waitUntil(TIMEOUT_MS) { gate.queued.isNotEmpty() }
             val store = SavedLinesStore(prefs())
