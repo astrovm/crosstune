@@ -32,7 +32,7 @@ android {
         versionCode = 2270000
         versionName = "2.27.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = providers.gradleProperty("crosstuneTestRunner").orElse("androidx.test.runner.AndroidJUnitRunner").get()
 
         // MilkDrop visuals, drawn by projectM, built for phones and for emulators.
         ndk {

@@ -2160,7 +2160,7 @@ class PlaybackTest {
         shadowOf(sessions).addController(controller)
         val first = coverWhenReady { playback.nowPlaying()?.metadata?.artworkUrl }
         val bytes = File(URI(first)).readBytes()
-        requireNotNull(controller.metadata.getBitmap(MediaMetadata.METADATA_KEY_ART)).eraseColor(Color.BLUE)
+        requireNotNull(requireNotNull(controller.metadata).getBitmap(MediaMetadata.METADATA_KEY_ART)).eraseColor(Color.BLUE)
         val second = coverWhenReady { playback.nowPlaying()?.metadata?.artworkUrl }
         assertNotEquals(first, second)
         org.junit.Assert.assertArrayEquals(bytes, File(URI(first)).readBytes())
@@ -2191,7 +2191,7 @@ class PlaybackTest {
                 seen.lastOrNull()?.takeIf { it.metadata.title == "Next Song" }?.metadata?.artworkUrl
             }
             assertEquals(cover, playback.nowPlaying()?.metadata?.artworkUrl)
-            val old = coverWhenReady { PlaybackCovers.shared(app).of(requireNotNull(first.metadata.getBitmap(MediaMetadata.METADATA_KEY_ART))) }
+            val old = coverWhenReady { PlaybackCovers.shared(app).of(requireNotNull(requireNotNull(first.metadata).getBitmap(MediaMetadata.METADATA_KEY_ART))) }
             assertNotEquals(old, cover)
             assertTrue(seen.filter { it?.metadata?.title == "Next Song" }.none { it?.metadata?.artworkUrl == old })
         } finally {

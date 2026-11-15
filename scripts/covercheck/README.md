@@ -6,8 +6,10 @@ Build the dev APK separately from the test APK, in the Gradle box:
 
 ```
 scripts/gradle-box/gradle-box.sh :app:assembleDebug
-scripts/gradle-box/gradle-box.sh :app:assembleDebugAndroidTest
+scripts/gradle-box/gradle-box.sh :app:assembleDebugAndroidTest -PcrosstuneTestRunner=com.astrovm.crosstune.CoverEncodingCheck
 ```
+
+Or use `scripts/covercheck/build.sh` to build both APKs and record their hashes in `build/covercheck/`.
 
 After installing both APKs on the locked test device, use the SDK adb to run the project test runner:
 
