@@ -430,6 +430,30 @@ class InitializationAndImportedLoads(unittest.TestCase):
             with self.subTest(imported=imported), self.assertRaisesRegex(ValueError, 'reflection'):
                 walk({'Harness.kt': f'{imported}\nval result = {reference}'})
 
+    def test_runtime_load_forms_and_references_fail_closed(self):
+        kotlin = ('fun read() = listOf("fake").forEach(Runtime.getRuntime()::load)',
+                  'fun read() = java.lang.Runtime.getRuntime().load("fake")',
+                  'import java.lang.Runtime.getRuntime\nfun read() = getRuntime().load("fake")',
+                  'import java.lang.Runtime.*\nfun read() = getRuntime().load("fake")')
+        java = ('class Adapter { static void read() { java.lang.Runtime.getRuntime().load("fake"); } }',
+                'import static java.lang.Runtime.getRuntime; class Adapter { static void read() { getRuntime().load("fake"); } }',
+                'import static java.lang.Runtime.*; class Adapter { static void read() { getRuntime().load("fake"); } }',
+                'class Adapter { static java.util.function.BiConsumer<Runtime,String> value = Runtime::load; static Object read() { return value; } }')
+        for code in kotlin:
+            with self.subTest(code=code), self.assertRaisesRegex(ValueError, 'native'):
+                walk({'Harness.kt': code + '\nval result = read()'})
+        for code in java:
+            with self.subTest(code=code), self.assertRaisesRegex(ValueError, 'native'):
+                walk({'Harness.kt': 'val result = Adapter.read()', TEST + 'Adapter.java': code})
+
+    def test_an_explicit_receiver_does_not_use_an_unrelated_static_import(self):
+        for expression in ('dictionary().load()', '(if (true) Dictionary() else Dictionary()).load()'):
+            files = {'Harness.kt': f'import java.util.ServiceLoader.load\nval result = {expression}',
+                     MAIN + 'Dictionary.kt': 'class Dictionary { fun load() = 1 }', MAIN + 'Factory.kt': 'fun dictionary() = Dictionary()'}
+            wanted = {MAIN + 'Dictionary.kt'} | ({MAIN + 'Factory.kt'} if expression.startswith('dictionary') else set())
+            with self.subTest(expression=expression):
+                self.assertEqual(wanted, walk(files))
+
     def test_relative_resource_names_keep_other_receiver_packages(self):
         for name, code in (('Harness.kt', 'package harness\nval result = app.Reader::class.java.getResourceAsStream("rules.txt")'),
                            ('Harness.java', 'package harness; class Harness { Object result = app.Reader.class.getResourceAsStream("rules.txt"); }')):

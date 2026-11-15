@@ -336,11 +336,12 @@ public final class SourceTree {
             }
             // Static wildcard imports can name these loaders without their declaring class.
             for (String[] imported : imports) {
-                if (imported[2] == null || !imported[2].endsWith("*") || chain.size() != 1) continue;
+                if (imported[2] == null || !imported[2].endsWith("*")) continue;
                 String target = imported[0];
                 String name = chain.get(0);
-                if (target.equals("java.util.ServiceLoader") && (name.equals("load") || name.equals("loadInstalled"))
-                    || target.equals("java.lang.System") && NATIVE_LOADS.contains(name)) {
+                if (target.equals("java.lang.Runtime") && name.equals("getRuntime")
+                    || chain.size() == 1 && (target.equals("java.util.ServiceLoader") && (name.equals("load") || name.equals("loadInstalled"))
+                        || target.equals("java.lang.System") && NATIVE_LOADS.contains(name))) {
                     List<String> found = new ArrayList<>(List.of(target.split("\\.")));
                     found.addAll(chain);
                     return found;
@@ -350,9 +351,20 @@ public final class SourceTree {
         }
 
         List<String> callNames(String name, List<String> receiver) {
+            // An explicit receiver that cannot be named is not a bare imported function.
+            if (receiver != null && receiver.isEmpty()) return List.of(name);
             List<String> chain = new ArrayList<>(receiver == null ? List.of() : receiver);
             chain.add(name);
             return importedChain(chain);
+        }
+
+        /** The same native-loader rules for calls and callable references in both languages. */
+        boolean nativeLoad(List<String> call) {
+            String name = call.get(call.size() - 1);
+            if (!NATIVE_LOADS.contains(name)) return false;
+            if (name.equals("loadLibrary")) return true;
+            String receiver = String.join(".", call.subList(0, call.size() - 1));
+            return Set.of("System", "java.lang.System", "Runtime", "java.lang.Runtime", "Runtime.getRuntime", "java.lang.Runtime.getRuntime").contains(receiver);
         }
 
         String importedName(String name) {
@@ -956,6 +968,23 @@ public final class SourceTree {
             return null;
         }
 
+        /** Names through a receiver's calls, so Runtime.getRuntime() and imported getRuntime() stay identifiable. */
+        private static List<String> receiverPath(KtExpression expression) {
+            KtExpression value = bare(expression);
+            if (value instanceof KtNameReferenceExpression name) return new ArrayList<>(List.of(name.getReferencedName()));
+            if (value instanceof KtCallExpression call && call.getCalleeExpression() instanceof KtNameReferenceExpression name) {
+                return new ArrayList<>(List.of(name.getReferencedName()));
+            }
+            if (value instanceof KtQualifiedExpression qualified) {
+                List<String> receiver = receiverPath(qualified.getReceiverExpression());
+                List<String> selector = receiverPath(qualified.getSelectorExpression());
+                if (receiver.isEmpty() || selector.isEmpty()) return List.of();
+                receiver.addAll(selector);
+                return receiver;
+            }
+            return List.of();
+        }
+
         private void name(KtNameReferenceExpression name) {
             PsiElement parent = name.getParent();
             String text = name.getReferencedName();
@@ -1023,24 +1052,25 @@ public final class SourceTree {
             if (call.getTypeArgumentList() != null) visit(call.getTypeArgumentList());
             if (call.getValueArgumentList() != null) visit(call.getValueArgumentList());
             for (KtLambdaArgument lambda : call.getLambdaArguments()) visit(lambda);
-            if (callee instanceof KtNameReferenceExpression name && RESOURCE_LOADS.contains(importedName(name.getReferencedName()))) resourceLoad(call);
+            if (callee instanceof KtNameReferenceExpression name) {
+                KtExpression receiver = call.getParent() instanceof KtQualifiedExpression qualified && qualified.getSelectorExpression() == call ? qualified.getReceiverExpression() : null;
+                List<String> names = callNames(name.getReferencedName(), receiver == null ? null : receiverPath(receiver));
+                if (RESOURCE_LOADS.contains(names.get(names.size() - 1))) resourceLoad(call);
+            }
         }
 
         private void reflection(KtCallExpression call, String name, KtExpression receiver) {
-            List<String> receiverNames = receiver == null ? null : chainOf(receiver);
+            List<String> receiverNames = receiver == null ? null : receiverPath(receiver);
             List<String> names = callNames(name, receiverNames);
             name = names.get(names.size() - 1);
             String last = names.size() < 2 ? null : names.get(names.size() - 2);
             List<KtValueArgument> arguments = call.getValueArguments();
-            PsiElement root = receiver == null ? null : leftmost(bare(receiver));
-            List<String> rootNames = root instanceof KtNameReferenceExpression first ? importedChain(List.of(first.getReferencedName())) : List.of();
-            boolean runtime = !rootNames.isEmpty() && rootNames.get(rootNames.size() - 1).equals("Runtime");
             if (CLASS_LOADS.contains(name) && (!name.equals("forName") || receiver == null || "Class".equals(last))) {
                 String target = arguments.isEmpty() ? null : literal(arguments.get(0).getArgumentExpression());
                 reflection(call, "class", target, null, call.getText());
             } else if (name.equals("load") && "ServiceLoader".equals(last) || name.equals("loadInstalled") && "ServiceLoader".equals(last)) {
                 reflection(call, "service", null, null, call.getText());
-            } else if (NATIVE_LOADS.contains(name) && (!name.equals("load") || "System".equals(last) || runtime)) {
+            } else if (nativeLoad(names)) {
                 reflection(call, "native", null, null, call.getText());
             } else if (MEMBER_LOOKUPS.contains(name) && name.startsWith("find") && !arguments.isEmpty()) {
                 classTarget(call, arguments.get(0).getArgumentExpression());
@@ -1090,12 +1120,12 @@ public final class SourceTree {
         private void callable(KtCallableReferenceExpression reference) {
             KtExpression receiver = reference.getReceiverExpression();
             String text = reference.getCallableReference().getReferencedName();
-            List<String> names = callNames(text, chainOf(receiver));
+            List<String> names = callNames(text, receiver == null ? null : receiverPath(receiver));
             String canonical = names.get(names.size() - 1);
             String last = names.size() < 2 ? null : names.get(names.size() - 2);
             if ((canonical.equals("load") || canonical.equals("loadInstalled")) && "ServiceLoader".equals(last)) {
                 reflection(reference, "service", null, null, reference.getText());
-            } else if (NATIVE_LOADS.contains(canonical) && (canonical.equals("loadLibrary") || "System".equals(last) || "Runtime".equals(last))) {
+            } else if (nativeLoad(names)) {
                 reflection(reference, "native", null, null, reference.getText());
             } else if (CLASS_LOADS.contains(canonical) || MEMBER_LOOKUPS.contains(canonical) || RESOURCE_LOADS.contains(canonical)) {
                 reflection(reference, CLASS_LOADS.contains(canonical) ? "class" : RESOURCE_LOADS.contains(canonical) ? "resource" : "member", null, null, reference.getText());
@@ -1315,6 +1345,19 @@ public final class SourceTree {
             return reference.getParent() instanceof PsiMethodCallExpression call ? call.getArgumentList().getExpressionCount() : -1;
         }
 
+        private static List<String> receiverPath(PsiExpression expression) {
+            if (expression instanceof PsiParenthesizedExpression parentheses) return receiverPath(parentheses.getExpression());
+            if (expression instanceof PsiMethodCallExpression call) return receiverPath(call.getMethodExpression());
+            if (expression instanceof PsiReferenceExpression reference && reference.getReferenceName() != null) {
+                PsiExpression qualifier = reference.getQualifierExpression();
+                List<String> receiver = qualifier == null ? new ArrayList<>() : receiverPath(qualifier);
+                if (qualifier != null && receiver.isEmpty()) return List.of();
+                receiver.add(reference.getReferenceName());
+                return receiver;
+            }
+            return List.of();
+        }
+
         private void reference(PsiReferenceExpression reference) {
             PsiExpression qualifier = reference.getQualifierExpression();
             String name = reference.getReferenceName();
@@ -1323,13 +1366,13 @@ public final class SourceTree {
                 return;
             }
             if (reference instanceof PsiMethodReferenceExpression method) {
-                String receiver = method.getQualifierType() != null ? method.getQualifierType().getText() : qualifier == null ? "" : qualifier.getText();
-                List<String> names = callNames(name, receiver.isEmpty() ? null : List.of(receiver.split("\\.")));
+                List<String> receiver = method.getQualifierType() != null ? List.of(method.getQualifierType().getText().split("\\.")) : qualifier == null ? null : receiverPath(qualifier);
+                List<String> names = callNames(name, receiver);
                 String canonical = names.get(names.size() - 1);
                 String last = names.size() < 2 ? null : names.get(names.size() - 2);
                 if ((canonical.equals("load") || canonical.equals("loadInstalled")) && "ServiceLoader".equals(last)) {
                     reflection(method, "service", null, null, method.getText());
-                } else if (NATIVE_LOADS.contains(canonical) && (canonical.equals("loadLibrary") || "System".equals(last) || receiver.startsWith("Runtime."))) {
+                } else if (nativeLoad(names)) {
                     reflection(method, "native", null, null, method.getText());
                 } else if (CLASS_LOADS.contains(canonical) || MEMBER_LOOKUPS.contains(canonical) || RESOURCE_LOADS.contains(canonical)) {
                     reflection(method, CLASS_LOADS.contains(canonical) ? "class" : RESOURCE_LOADS.contains(canonical) ? "resource" : "member", null, null, method.getText());
@@ -1376,7 +1419,7 @@ public final class SourceTree {
             String name = method.getReferenceName();
             if (name == null) return;
             PsiExpression receiver = method.getQualifierExpression();
-            List<String> names = callNames(name, receiver == null ? null : List.of(receiver.getText().split("\\.")));
+            List<String> names = callNames(name, receiver == null ? null : receiverPath(receiver));
             name = names.get(names.size() - 1);
             String last = names.size() < 2 ? null : names.get(names.size() - 2);
             PsiExpression[] arguments = call.getArgumentList().getExpressions();
@@ -1384,7 +1427,7 @@ public final class SourceTree {
                 reflection(call, "class", arguments.length == 0 ? null : literal(arguments[0]), null, call.getText());
             } else if ((name.equals("load") || name.equals("loadInstalled")) && "ServiceLoader".equals(last)) {
                 reflection(call, "service", null, null, call.getText());
-            } else if (NATIVE_LOADS.contains(name) && (!name.equals("load") || "System".equals(last) || receiver != null && receiver.getText().startsWith("Runtime."))) {
+            } else if (nativeLoad(names)) {
                 reflection(call, "native", null, null, call.getText());
             } else if (MEMBER_LOOKUPS.contains(name)) {
                 PsiExpression target = name.startsWith("find") && arguments.length > 0 ? arguments[0] : receiver;
