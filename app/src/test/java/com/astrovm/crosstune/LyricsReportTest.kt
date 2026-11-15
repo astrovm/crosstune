@@ -353,15 +353,22 @@ class LyricsReportTest {
         composeRule.runOnIdle { model().showLyrics(); model().sendReport("same") }
         waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.FAILED }
         assertEquals(first.toString(), sentReport().toString())
-        composeRule.runOnIdle { model().dismissLyrics(); model().sendReport("same") }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertNull(model().uiState.report)
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricsFor != null && !model().uiState.isLoadingLyrics }
+        composeRule.runOnIdle { model().sendReport("same") }
         waitUntil { sentReports().size == 3 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(first.getString("id") == sentReport().getString("id"))
+        composeRule.runOnIdle { model().dismissLyrics(); model().sendReport("same") }
+        waitUntil { sentReports().size == 4 && model().uiState.report == ReportStatus.FAILED }
         val noSong = sentReport()
         assertFalse(first.getString("id") == noSong.getString("id"))
         assertFalse(noSong.has("song"))
         composeRule.runOnIdle { model().showLyrics() }
         waitUntil { model().uiState.lyricsFor != null && !model().uiState.isLoadingLyrics }
         composeRule.runOnIdle { model().sendReport("same") }
-        waitUntil { sentReports().size == 4 && model().uiState.report == ReportStatus.FAILED }
+        waitUntil { sentReports().size == 5 && model().uiState.report == ReportStatus.FAILED }
         assertFalse(noSong.getString("id") == sentReport().getString("id"))
         assertFalse(first.getString("id") == sentReport().getString("id"))
     }
