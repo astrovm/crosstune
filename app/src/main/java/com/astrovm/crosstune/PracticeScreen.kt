@@ -454,7 +454,7 @@ private fun SongChip(line: SavedLine, actions: ScreenActions, kind: CardType? = 
     val song: @Composable () -> Unit = {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             CoverArt(line.artworkUrl, actions.loadArtwork, size = 24.dp)
-            Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            LabelText(line.title, style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant), modifier = Modifier.weight(1f))
         }
     }
     if (kind == null) {
