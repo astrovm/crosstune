@@ -51,6 +51,7 @@ internal class OneTapSetup(private val context: Context, private val shells: Lis
      * notification, and set [exact] alarms. Each is tried, so one failing leaves the rest done; whether all worked.
      */
     suspend fun setUp(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean, floating: Boolean, exact: Boolean): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
         val shell = shell() ?: return false
         if (!shell.allowed()) return false
         val worked = commands(apps, links, follow, microphone, floating, exact).map { shell.run(it) }.all { it }

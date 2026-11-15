@@ -20,6 +20,16 @@ class OneTapSetupTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
 
     @Test
+    @Config(sdk = [26, 30])
+    fun beforeAndroid12OneTapDoesNotRunAnyPrivilegedCommands() = runBlocking {
+        val shell = FakeShell()
+        val setup = OneTapSetup(app, listOf(shell))
+        assertFalse(setup.available())
+        assertFalse(setup.setUp(listOf("demo.player"), links = true, follow = true, microphone = true, floating = true, exact = true))
+        assertTrue(shell.ran.isEmpty())
+    }
+
+    @Test
     fun withNoShellReadyNothingIsRun() = runBlocking {
         val shell = FakeShell(ready = false)
         assertFalse(OneTapSetup(app, listOf(shell)).setUp(listOf("a.b"), links = true, follow = true, microphone = true, floating = true, exact = false))
