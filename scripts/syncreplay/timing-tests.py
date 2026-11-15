@@ -5,7 +5,6 @@ Uses the Kotlin compiler and JUnit jars already in the Gradle box cache.
 SYNCREPLAY_DIR has the same meaning as in syncreplay.py. All outputs stay ignored.
 """
 import argparse
-import hashlib
 from pathlib import Path
 import shutil
 import subprocess
@@ -43,13 +42,14 @@ def run(timing=None):
     compiler = replay.kotlin_jars()
     libraries = [next(jar for jar in compiler if jar.name.startswith('kotlin-stdlib-')), *junit_jars()]
     classpath = ':'.join(map(str, libraries))
-    key = hashlib.sha256(b''.join(path.read_bytes() for path in [*sources, *libraries]) + replay.kotlinc.LOCK.read_bytes()).hexdigest()[:16]
-    classes = replay.own() / 'unit-classes' / key
+    key = replay.kotlin_cache_key([*sources, *libraries])
     container = replay.replay_container((replay.ROOT, replay.ROOT, 'ro'), (replay.OUT, replay.OUT, 'ro'), (replay.own(), replay.own(), 'rw'), (compiler[0].parent, compiler[0].parent, 'ro'))
-    if not (classes / 'done').exists():
+
+    def build(classes):
         subprocess.run(container + ['java', '-cp', ':'.join(map(str, compiler)), 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
                                    '-no-stdlib', '-no-reflect', '-cp', classpath, '-d', str(classes), *map(str, sources)], check=True)
-        (classes / 'done').write_text('')
+
+    classes = replay.compiled_cache(replay.own() / 'unit-classes-v2', key, build)
     subprocess.run(container + ['java', '-cp', f'{classes}:{classpath}', 'org.junit.runner.JUnitCore',
                                *(f'com.astrovm.crosstune.{name}' for name in TEST_CLASSES)], check=True)
 

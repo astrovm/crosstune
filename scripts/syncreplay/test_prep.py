@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import contextlib
 import io
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -41,7 +42,7 @@ class ReplayContainerTest(unittest.TestCase):
             def compile(command, **_):
                 self.assertEqual(command[:len(r.replay_container()) - 1], r.replay_container()[:-1])
                 self.assertIn('/compiler:/compiler:ro', command)
-                Path(command[command.index('-d') + 1]).mkdir(parents=True)
+                Path(command[command.index('-d') + 1]).mkdir(parents=True, exist_ok=True)
             with patch.object(r, 'kotlin_jars', return_value=[Path('/compiler/kotlin-stdlib-2.jar')]), patch.object(r.subprocess, 'run', side_effect=compile):
                 r.untimed_classes([source])
 
@@ -214,7 +215,7 @@ class AgainstMainTest(unittest.TestCase):
             other = Path(directory) / 'main.kt'
             other.write_text('main')
             sources = r.timing_copied(other, [Path('SungTiming.kt'), Path('SyncedLyrics.kt')])
-            self.assertEqual(sources, [Path(directory) / 'other-timing' / 'SungTiming.kt', Path('SyncedLyrics.kt')])
+            self.assertEqual(sources, [Path(directory) / 'other-timing' / hashlib.sha256(b'main').hexdigest() / 'SungTiming.kt', Path('SyncedLyrics.kt')])
             self.assertEqual(sources[0].read_text(), 'main')
 
 

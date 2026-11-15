@@ -71,6 +71,7 @@ Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the P
 import argparse
 from array import array
 import fcntl
+import errno
 import hashlib
 import html
 import json
@@ -83,6 +84,7 @@ import statistics
 import subprocess
 import sys
 import threading
+import tempfile
 import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
@@ -1111,18 +1113,55 @@ def replay_container(*mounts):
     """Bound the Kotlin compiler and replay JVM; mount only their explicit inputs and outputs."""
     command = ["nice", "-n", "10", "podman", "run", "--rm", "--network", "none",
                "--memory", "2g", "--memory-swap", "2g", "--cpus", "2"]
+    by_target = {}
     for source, target, mode in mounts:
+        source, target = os.path.abspath(source), os.path.abspath(target)
+        if mode not in ("ro", "rw"):
+            raise ValueError(f"unsupported mount access: {mode}")
+        previous = by_target.get(target)
+        if previous is not None and previous[0] != source:
+            raise ValueError(f"conflicting mount sources for {target}")
+        access = "rw" if mode == "rw" or previous is not None and previous[1] == "rw" else "ro"
+        by_target[target] = source, access
+    for target, (source, mode) in by_target.items():
         command += ["-v", f"{source}:{target}:{mode}"]
     return command + [JDK_IMAGE]
 
 
+def kotlin_cache_key(paths):
+    """Version the cache and frame each file, so old mutable-input results are never reused."""
+    digest = hashlib.sha256(b"crosstune-kotlin-cache-v2\0" + kotlinc.LOCK.read_bytes())
+    for path in paths:
+        data = path.read_bytes()
+        digest.update(path.name.encode() + b"\0" + str(len(data)).encode() + b"\0" + data)
+    return digest.hexdigest()[:16]
+
+
+def compiled_cache(folder, key, build):
+    """Publish a complete compiler result atomically, even when another caller builds the same key."""
+    classes = folder / key
+    marker = classes / "done"
+    if marker.exists() and marker.read_text() == key:
+        return classes
+    folder.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=f".{key}-", dir=folder) as temporary:
+        stage = Path(temporary)
+        build(stage)
+        (stage / "done").write_text(key)
+        try:
+            stage.rename(classes)
+        except OSError as error:
+            if error.errno not in (errno.EEXIST, errno.ENOTEMPTY) or not marker.exists() or marker.read_text() != key:
+                raise
+    return classes
+
+
 def untimed_classes(sources=None):
     """SungTiming.kt and the replay compiled, in a container, once for each change to them."""
-    import hashlib
     sources = sources or [ROOT / name for name in UNTIMED_SOURCES]
-    key = hashlib.sha256(b"".join(path.read_bytes() for path in sources) + kotlinc.LOCK.read_bytes()).hexdigest()[:16]
-    classes = OUT / "untimed-classes" / key
-    if not (classes / "done").exists():
+    key = kotlin_cache_key(sources)
+
+    def build(classes):
         jars = kotlin_jars()
         compiler = ":".join(str(jar) for jar in jars)
         stdlib = next(str(jar) for jar in jars if jar.name.startswith("kotlin-stdlib-"))
@@ -1130,8 +1169,8 @@ def untimed_classes(sources=None):
         subprocess.run(replay_container((ROOT, ROOT, "ro"), (OUT, OUT, "rw"), (folder, folder, "ro")) + [
                         "java", "-cp", compiler, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",
                         "-cp", stdlib, "-d", str(classes), *map(str, sources)], check=True)
-        (classes / "done").write_text("")
-    return classes
+
+    return compiled_cache(OUT / "untimed-classes-v2", key, build)
 
 
 def untimed_whiles(length_ms, start, work):
@@ -1260,10 +1299,23 @@ def print_against_main(found, verbose=False):
 
 
 def timing_copied(timing, sources):
-    """[sources] with another SungTiming.kt, as main's, in place of the checkout's: copied where the container sees it."""
-    copy = OUT / "other-timing" / "SungTiming.kt"
-    copy.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(timing, copy)
+    """Snapshot an override once. Other callers can never overwrite this compiler input."""
+    data = Path(timing).read_bytes()
+    folder = OUT / "other-timing" / hashlib.sha256(data).hexdigest()
+    copy = folder / "SungTiming.kt"
+    folder.mkdir(parents=True, exist_ok=True)
+    if copy.exists():
+        if copy.read_bytes() != data:
+            raise ValueError(f"changed immutable timing input: {copy}")
+    else:
+        output = tempfile.NamedTemporaryFile(dir=folder, prefix=".SungTiming-", delete=False)
+        temporary = Path(output.name)
+        try:
+            with output:
+                output.write(data)
+            temporary.replace(copy)
+        finally:
+            temporary.unlink(missing_ok=True)
     return [copy, *sources[1:]]
 
 

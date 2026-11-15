@@ -11,7 +11,6 @@ import unittest
 from pathlib import Path
 
 BOX = Path(__file__).with_name("gradle-box.sh")
-ROOT = Path(__file__).resolve().parents[2]
 FAKE_PODMAN = """#!/bin/sh
 if [ "$1" = "info" ]; then
     echo "$*" >> "$FAKE_DIR/info"
@@ -65,10 +64,22 @@ class GradleBoxTest(unittest.TestCase):
         self.meminfo = self.dir / "meminfo"
         self.meminfo.write_text("MemTotal:       67108864 kB\nMemFree:         1000000 kB\n")
         self.stall(lately=0, total_s=0)
+        self.checkouts = {}
 
-    def start(self, run, *args, slots="1", **env):
-        return subprocess.Popen(
-            [str(BOX), *args],
+    def checkout(self, name):
+        if name not in self.checkouts:
+            root = self.dir / ("checkout " + name)
+            root.mkdir()
+            subprocess.run(["git", "init", "--quiet", str(root)], check=True,
+                           env={**os.environ, "HOME": str(self.home)})
+            shutil.copytree(BOX.parent, root / "scripts" / "gradle-box")
+            self.checkouts[name] = root
+        return self.checkouts[name]
+
+    def start(self, run, *args, slots="1", checkout=None, **env):
+        root = self.checkout(checkout or run)
+        process = subprocess.Popen(
+            [str(root / "scripts" / "gradle-box" / BOX.name), *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -89,6 +100,14 @@ class GradleBoxTest(unittest.TestCase):
                 **env,
             }.items() if value is not None},
         )
+        self.addCleanup(self.stop, process)
+        return process
+
+    @staticmethod
+    def stop(process):
+        if process.poll() is None:
+            process.terminate()
+        process.communicate(timeout=20)
 
     def tool(self, name, script):
         """A stand-in for one of the machine's tools, ahead of the real one."""
@@ -186,13 +205,25 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         for other in others:
             self.assertIn(f"-v {other}:{other}", self.asked()[0])
         ran = (self.dir / "ran").read_text().splitlines()
-        self.assertEqual([f"{where} --no-daemon :app:songCheck -Pa=b c" for where in (ROOT, *others)], ran)
+        self.assertEqual([f"{where} --no-daemon :app:songCheck -Pa=b c" for where in (self.checkout("also"), *others)], ran)
         # A failure in one still runs the rest, and the first one is the exit code.
         (self.dir / "ran").unlink()
         box = self.start("also", *(f"--also={other}" for other in others), "help", FAKE_GRADLEW=str(gradlew), FAKE_FAIL_IN=str(others[0]), FAKE_FAIL_TOO=str(others[1]))
         output, _ = box.communicate(timeout=20)
         self.assertEqual(3, box.returncode, output)
         self.assertEqual(3, len((self.dir / "ran").read_text().splitlines()))
+
+    def test_repeated_also_paths_run_and_mount_each_checkout_once(self):
+        gradlew = self.box_that_runs()
+        root, other = self.checkout("also"), self.checkout("other")
+        box = self.start("also", f"--also={root}", f"--also={other}", f"--also={other}", "help", FAKE_GRADLEW=str(gradlew))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(0, box.returncode, output)
+        self.assertEqual([f"{where} --no-daemon help" for where in (root, other)],
+                         (self.dir / "ran").read_text().splitlines())
+        command = self.asked()[0]
+        self.assertEqual(1, command.count(f"-v {root}:{root}"))
+        self.assertEqual(1, command.count(f"-v {other}:{other}"))
 
     def test_also_a_folder_that_is_not_there_stops_before_the_box(self):
         box = self.start("missing", f"--also={self.dir / 'nowhere'}", "help")
@@ -232,8 +263,8 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         command = self.asked()[0]
         self.assertTrue(command.split(" ", 2)[2].startswith("--rm "), command)
         self.assertIn(f"-v {self.sdk}:{self.sdk}:ro", command)
-        self.assertIn(f"-v {ROOT}:{ROOT}", command)
-        self.assertIn(f"-w {ROOT}", command)
+        self.assertIn(f"-v {self.checkout('a')}:{self.checkout('a')}", command)
+        self.assertIn(f"-w {self.checkout('a')}", command)
         self.assertIn("--memory-swap", command)
         self.assertIn(self.image(), command)
         self.assertNotIn("/usr/bin/git", command)
@@ -249,7 +280,7 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         build, run = self.asked()
         self.assertIn("build", build.split())
         self.assertIn(self.image(), build)
-        self.assertIn(str(BOX.parent / "Containerfile"), build)
+        self.assertIn(str(self.checkout("a") / "scripts" / "gradle-box" / "Containerfile"), build)
         self.assertIn(self.image(), run)
         self.assertNotIn("/usr/bin/git", run)
         self.assertIn("image built in", output)
@@ -312,6 +343,37 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
             box.communicate(timeout=20)
         self.assertTrue(self.asked()[1].endswith(" second"), self.asked())
         self.assertTrue(self.asked()[2].endswith(" third"), self.asked())
+
+    def test_same_checkout_waits_even_when_memory_and_slots_fit(self):
+        self.hold("first")
+        first = self.start("first", "help", slots="2", checkout="shared")
+        self.wait_for("started.first")
+        second = self.start("second", "help", slots="2", checkout="shared")
+        time.sleep(0.5)
+        self.assertFalse((self.dir / "started.second").exists())
+        self.release("first")
+        first.communicate(timeout=20)
+        output, _ = second.communicate(timeout=20)
+        self.assertEqual(0, second.returncode, output)
+        self.assertIn("checkout is already in use", output)
+
+    def test_also_checkout_overlap_waits_in_both_directions(self):
+        for first_also in (True, False):
+            shared = self.checkout("shared")
+            first_args = [f"--also={shared}"] if first_also else []
+            second_args = [] if first_also else [f"--also={shared}"]
+            first_name, second_name = str(first_also) + "first", str(first_also) + "second"
+            self.hold(first_name)
+            first = self.start(first_name, *first_args, "help", slots="2", checkout="other" if first_also else "shared")
+            self.wait_for("started." + first_name)
+            second = self.start(second_name, *second_args, "help", slots="2", checkout="shared" if first_also else "other")
+            time.sleep(0.5)
+            self.assertFalse((self.dir / ("started." + second_name)).exists())
+            self.release(first_name)
+            first.communicate(timeout=20)
+            output, _ = second.communicate(timeout=20)
+            self.assertEqual(0, second.returncode, output)
+            self.assertIn("checkout is already in use", output)
 
     def test_two_slots_build_at_once_each_with_its_own_gradle_home(self):
         self.hold("first")
