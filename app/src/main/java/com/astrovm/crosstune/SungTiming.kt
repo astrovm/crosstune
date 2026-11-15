@@ -72,33 +72,40 @@ internal object SungTiming {
         val written = written(lines)
         if (written.isEmpty()) return emptyMap()
         val total = written.last().letters + SpokenWords.sungLetters(written.last().text)
-        val candidates = written.groupBy { it.line }.flatMap { (line, pieces) ->
+        val byLine = written.groupBy { it.line }
+        val candidates = byLine.flatMap { (line, pieces) ->
             val expected = lengthMs * (INTRO + (1 - INTRO - OUTRO) * pieces.first().letters / total)
             // Each while alone, as words heard at the end of one and the start of the next weren't sung together.
-            stretches.flatMap { found(sung(it.words), pieces) }.map { (ms, score, alike, heardMs) ->
+            stretches.flatMap { found(sung(it.words, it.fromMs), pieces) }.map { (ms, score, alike, heardMs) ->
                 Placed(line, ms, score - PRIOR * maxOf(0.0, abs(ms - expected) / lengthMs - TOLERANCE), alike, heardMs)
             }
         }.filter { it.support >= MIN_SUPPORT }
-        val firstLetters = written.groupBy { it.line }.mapValues { (_, its) -> its.first().letters }
+        val firstLetters = byLine.mapValues { (_, its) -> its.first().letters }
         // However fast it's sung, a Japanese or Korean letter takes no longer than a Latin one: a syllable can be that quick.
-        val fastest = written.groupBy { it.line }.mapValues { (_, its) -> its.first().written }
-        val chain = backed(sure(candidates, fastest), firstLetters)
-        val placed = chain + filled(chain, firstLetters, stretches)
+        val fastest = byLine.mapValues { (_, its) -> its.first().written }
+        val durations = byLine.mapValues { (_, pieces) -> pieces.sumOf { SpokenWords.sungLetters(it.text) } * LETTER_MS }
+        val chain = backed(sure(candidates, fastest, durations), firstLetters)
+        val placed = chain + filled(chain, firstLetters, stretches, byLine)
         return placed.filter { placed -> stretches.any { placed.ms in it.fromMs - EDGE_MS..it.toMs } }.associate { it.line to it.ms }
     }
 
-    /** A line put at [ms], by [words] heard alike to its own, the first and last of them starting over [heardMs]: none for a line put between two. */
-    private class Placed(val line: Int, val ms: Long, val support: Double, val words: Int, val heardMs: LongRange)
+    /** A piece's place in the singing: its word's time, then its position in that word. No guessed time between letters. */
+    private data class HeardAt(val ms: Long, val within: Int) : Comparable<HeardAt> {
+        override fun compareTo(other: HeardAt): Int = compareValuesBy(this, other, HeardAt::ms, HeardAt::within)
+    }
+
+    /** A line put at [ms], by [words] heard alike, over [heardMs]. An empty span for a line filled between two. */
+    private class Placed(val line: Int, val ms: Long, val support: Double, val words: Int, val heardMs: ClosedRange<HeardAt>)
 
     /** Where a line is found in a while: where it starts, how sure, by how many words heard, and when the first and last of them start. */
-    private data class Found(val ms: Long, val score: Double, val words: Int, val heardMs: LongRange)
+    private data class Found(val ms: Long, val score: Double, val words: Int, val heardMs: ClosedRange<HeardAt>)
 
     /**
      * The lines of the best chain of [candidates] that it can't do about as well without: with one gone,
      * another line found at its time often takes its place, as a chorus sung again has the same words.
      * Of two such chains, nothing heard says which is right, so the line isn't put at all.
      */
-    private fun sure(candidates: List<Placed>, fastest: Map<Int, Int>): List<Placed> {
+    private fun sure(candidates: List<Placed>, fastest: Map<Int, Int>, durations: Map<Int, Long>): List<Placed> {
         val best = chained(candidates, fastest)
         val weight = best.sumOf { it.support }
         val sorted = candidates.sortedBy { it.ms }
@@ -106,7 +113,7 @@ internal object SungTiming {
         val starting = starting(sorted, fastest)
         val after = after(sorted, starting, fastest.keys.max() + 2, fastest)
         return best.filter { placed ->
-            val elsewhere = sorted.indices.filter { sorted[it].line == placed.line && abs(sorted[it].ms - placed.ms) > SAME_PLACE_MS }
+            val elsewhere = sorted.indices.filter { sorted[it].line == placed.line && elsewhere(placed, sorted[it], durations.getValue(placed.line)) }
                 .maxOfOrNull { ending[it] + starting[it] - sorted[it].support } ?: 0.0
             val before = sorted.indices.filter { sorted[it].line < placed.line }
             val skipped = maxOf(
@@ -115,6 +122,13 @@ internal object SungTiming {
             )
             maxOf(elsewhere, skipped) < weight - placed.support * SURE_SHARE
         }
+    }
+
+    /** One phrase heard as one word has no internal timing to make two separate singings one observation. */
+    private fun elsewhere(a: Placed, b: Placed, durationMs: Long): Boolean {
+        val singleWords = a.heardMs.start.ms == a.heardMs.endInclusive.ms && b.heardMs.start.ms == b.heardMs.endInclusive.ms
+        val samePlaceMs = if (singleWords) minOf(SAME_PLACE_MS, durationMs) else SAME_PLACE_MS
+        return abs(a.ms - b.ms) > samePlaceMs
     }
 
     /** The weight of the best chain ending at each of [sorted]; one that can follow another is always later. */
@@ -161,19 +175,47 @@ internal object SungTiming {
      * Lines between two placed close together, all heard, where their letters put them between: each
      * only with a voice heard while it'd be sung, as a line is never put where nothing was heard.
      */
-    private fun filled(chain: List<Placed>, firstLetters: Map<Int, Int>, stretches: List<HeardStretch>): List<Placed> =
+    private fun filled(chain: List<Placed>, firstLetters: Map<Int, Int>, stretches: List<HeardStretch>, written: Map<Int, List<Written>>): List<Placed> =
         chain.zipWithNext().flatMap { (a, b) ->
             val between = (a.line + 1 until b.line).filter { it in firstLetters }
             // Lines next to each other, or with only lines with no words between, have nothing to put.
-            if (between.isEmpty() || b.ms - a.ms > FILL_MS) return@flatMap emptyList()
+            if (between.isEmpty()) return@flatMap emptyList()
             val heard = stretches.filter { a.ms >= it.fromMs && b.ms <= it.toMs }
             val from = firstLetters.getValue(a.line)
             val to = firstLetters.getValue(b.line)
-            val put = between.map { line -> Placed(line, a.ms + (b.ms - a.ms) * (firstLetters.getValue(line) - from) / (to - from), 0.0, 0, LongRange.EMPTY) }
+            val put = between.map { line -> Placed(line, a.ms + (b.ms - a.ms) * (firstLetters.getValue(line) - from) / (to - from), 0.0, 0, HeardAt(1, 0)..HeardAt(0, 0)) }
             // Heard in no one while from one to the other, no voice says anything is sung between.
-            val voice = heard.flatMap { sung(it.words) }.map { it.ms }
-            put.filterIndexed { k, placed -> voice.any { it in placed.ms until (put.getOrNull(k + 1)?.ms ?: b.ms) } }
+            val wordsHeard = heard.flatMap { sung(it.words, it.fromMs) }
+            val voice = wordsHeard.map { it.ms }
+            put.filterIndexed { k, placed -> voice.any { it in placed.ms until (put.getOrNull(k + 1)?.ms ?: b.ms) } }.mapNotNull { placed ->
+                fillAt(placed, a, b, written.getValue(placed.line), wordsHeard)?.let { ms ->
+                    Placed(placed.line, ms, placed.support, placed.words, placed.heardMs)
+                }
+            }
         }
+
+    /** A fill cannot start before the preceding line's last word, or after the following line starts. */
+    private fun fillAt(placed: Placed, a: Placed, b: Placed, pieces: List<Written>, heard: List<HeardPiece>): Long? {
+        val after = maxOf(placed.ms, a.heardMs.endInclusive.ms)
+        val start = when {
+            // Too far to interpolate: only an exact, distinct word can put it there.
+            b.ms - a.ms > FILL_MS -> distinctWordStarts(pieces, heard, a.ms until b.ms).singleOrNull()
+            // A one-word line has no other word to recover its start when its letters put it early.
+            pieces.size == 1 -> heard.filter { it.ms in after until b.ms && likeness(it.text, pieces.single().text) >= ALIKE }
+                .minByOrNull { abs(it.ms - placed.ms) }?.ms ?: after
+            else -> after
+        }
+        return start?.takeIf { it in after until b.ms }
+    }
+
+    /** One of the line's longest words, heard exactly once. A short word or an unspaced letter cannot identify it alone. */
+    private fun distinctWordStarts(pieces: List<Written>, heard: List<HeardPiece>, span: LongRange): List<Long> {
+        val longest = pieces.maxOf { it.text.length }
+        return heard.filter { it.ms in span }.flatMap { word ->
+            pieces.filter { it.text == word.text && it.text.length > 1 && it.text.length == longest && matchScore(word.text, it) >= MIN_SUPPORT }
+                .map { word.ms - (it.before - word.within) * LETTER_MS }
+        }.distinct()
+    }
 
     /**
      * Each place in [heard] a line's [pieces] are sung, as far as they can be told: where the line
@@ -188,28 +230,49 @@ internal object SungTiming {
             best[i][j] = maxOf(0.0, best[i - 1][j - 1] + score[i - 1][j - 1], best[i - 1][j] - SKIP_HEARD, best[i][j - 1] - SKIP_WRITTEN)
         }
         val ends = (1..n).flatMap { i -> (1..m).map { j -> i to j } }.filter { (i, j) -> best[i][j] >= MIN_SUPPORT }.sortedByDescending { (i, j) -> best[i][j] }
-        val taken = mutableListOf<IntRange>()
+        val taken = mutableSetOf<List<Pair<Int, Int>>>()
         val out = mutableListOf<Found>()
         for ((endI, endJ) in ends) {
-            var i = endI
-            var j = endJ
-            val pairs = mutableListOf<Pair<Int, Int>>()
-            while (i > 0 && j > 0 && best[i][j] > 0) {
-                when {
-                    abs(best[i][j] - best[i - 1][j - 1] - score[i - 1][j - 1]) < 1e-9 -> { pairs += (i - 1 to j - 1); i--; j-- }
-                    abs(best[i][j] - best[i - 1][j] + SKIP_HEARD) < 1e-9 -> i--
-                    else -> j--
-                }
-            }
+            val pairs = traced(best, score, endI, endJ)
             val alike = pairs.filter { (h, w) -> likeness(heard[h].text, pieces[w].text) >= ALIKE }
             // Followed back from the end, the pairs come last word first.
-            val span = pairs.last().first..pairs.first().first
-            if (alike.size < MIN_WORDS || taken.any { it.first <= span.last && span.first <= it.last }) continue
-            taken += span
-            val heardMs = alike.minOf { (h, _) -> heard[h].wordMs }..alike.maxOf { (h, _) -> heard[h].wordMs }
-            out += Found(startOf(alike.map { (h, w) -> heard[h] to pieces[w] }), best[endI][endJ], alike.size, heardMs)
+            for (from in 0..alike.size - MIN_WORDS) {
+                val selected = alike.dropLast(from)
+                if (!taken.add(selected) || !supported(selected, pieces)) continue
+                val match = matched(heard, pieces, score, selected)
+                if (match.score >= MIN_SUPPORT) out += match
+            }
         }
         return out
+    }
+
+    /** The local match, last pair first. Keep its shorter matches too, so a neighbor can own its own words. */
+    private fun traced(best: Array<DoubleArray>, score: Array<DoubleArray>, endI: Int, endJ: Int): List<Pair<Int, Int>> {
+        var i = endI
+        var j = endJ
+        val pairs = mutableListOf<Pair<Int, Int>>()
+        while (i > 0 && j > 0 && best[i][j] > 0) {
+            when {
+                abs(best[i][j] - best[i - 1][j - 1] - score[i - 1][j - 1]) < 1e-9 -> { pairs += (i - 1 to j - 1); i--; j-- }
+                abs(best[i][j] - best[i - 1][j] + SKIP_HEARD) < 1e-9 -> i--
+                else -> j--
+            }
+        }
+        return pairs
+    }
+
+    /** A fragment needs two words with more than one letter; an unspaced syllable is more than one letter sung. */
+    private fun supported(pairs: List<Pair<Int, Int>>, pieces: List<Written>) =
+        pairs.size == pieces.size || pairs.count { (_, w) -> SpokenWords.sungLetters(pieces[w].text) > 1 } >= MIN_WORDS
+
+    /** The support and span of just these pairs, without charging the words a neighboring line consumes. */
+    private fun matched(heard: List<HeardPiece>, pieces: List<Written>, score: Array<DoubleArray>, pairs: List<Pair<Int, Int>>): Found {
+        val skipped = pairs.reversed().zipWithNext().sumOf { (a, b) ->
+            (b.first - a.first - 1) * SKIP_HEARD + (b.second - a.second - 1) * SKIP_WRITTEN
+        }
+        val support = pairs.sumOf { (h, w) -> score[h][w] } - skipped
+        val span = pairs.minOf { (h, _) -> HeardAt(heard[h].wordMs, heard[h].within) }..pairs.maxOf { (h, _) -> HeardAt(heard[h].wordMs, heard[h].within) }
+        return Found(startOf(pairs.map { (h, w) -> heard[h] to pieces[w] }), support, pairs.size, span)
     }
 
     /**
@@ -222,7 +285,12 @@ internal object SungTiming {
         // Each word heard once, by the first of its pieces found: how many letters into the line it starts, and when.
         // The speech model puts the first word of a while at the while's start, however late it's sung, so a line's
         // first word heard first says nothing of where the line starts, unless it's all that's heard of it.
-        val timed = alike.filter { (heard, written) -> !heard.opening || written.before - heard.within > 0 }.ifEmpty { alike }
+        val timed = alike.filter { (heard, written) ->
+            !heard.opening || written.before - heard.within > 0 || alike.any { (other, next) ->
+                !other.opening && other.wordMs > heard.wordMs &&
+                    other.wordMs - heard.wordMs <= (next.before - written.before) * LETTER_MS
+            }
+        }.ifEmpty { alike }
         val words = timed.groupBy { (heard, _) -> heard.wordMs }
             .map { (ms, its) -> its.minBy { (_, written) -> written.before }.let { (heard, written) -> written.before - heard.within to ms } }
             .sortedBy { it.first }
@@ -267,7 +335,7 @@ internal object SungTiming {
      * twice before "No hay nada más que hablar", is found as well with the next one's words as with its own.
      */
     private fun follows(a: Placed, b: Placed, fastest: Map<Int, Int>) =
-        b.line > a.line && b.ms - a.ms >= (fastest.getValue(b.line) - fastest.getValue(a.line)) * FAST_LETTER_MS && a.heardMs.last <= b.heardMs.first
+        b.line > a.line && b.ms - a.ms >= (fastest.getValue(b.line) - fastest.getValue(a.line)) * FAST_LETTER_MS && a.heardMs.endInclusive <= b.heardMs.start
 
     /** The pieces of [lines]' words, each with its line, the letters sung before it in its line and in all, and the letters written before it in all. */
     private fun written(lines: List<String>): List<Written> {
@@ -290,13 +358,13 @@ internal object SungTiming {
     }
 
     /** Pieces of the words sung, with where they start, less the sounds the model tells of, as "[MUSIC]" or "♪". */
-    private fun sung(words: List<Pair<String, Long>>): List<HeardPiece> {
+    private fun sung(words: List<Pair<String, Long>>, fromMs: Long): List<HeardPiece> {
         var told = false
         return words.mapIndexed { index, (text, ms) ->
             val sound = told || text.startsWith('[') || text.startsWith('(')
             told = sound && !text.endsWith(']') && !text.endsWith(')')
             // A sound told of first, as "[Music]", takes the while's start, so the first word after it is heard where it's sung.
-            if (sound) emptyList() else SpokenWords.heardFrom(text, ms - HEARD_LATE_MS, opening = index == 0)
+            if (sound) emptyList() else SpokenWords.heardFrom(text, ms - HEARD_LATE_MS, opening = index == 0 && ms - HEARD_LATE_MS <= fromMs + EDGE_MS)
         }.flatten()
     }
 

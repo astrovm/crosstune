@@ -836,3 +836,64 @@ The lines still right on main and wrong now, sung / main / now, in s:
 | OtXIsUjDOk8 18 | 1 | 106.0 | 106.2 | 110.3 | Lines 15 and 18 are both "Tell it to my heart."; heard again 4.9 s later, nearer than 6 s, so taken as one place |
 
 iH8To-d2pX0 13 is put 11.1 s early now, and 11.6 s early on main. Lines 13, 14 and 15 are all "Y por eso nena", heard at 352, 357.5 and 363 s; the true start puts line 13 at 363.6 s, which is likely line 15's.
+
+
+### PR #917: shorter alignments and word ownership (2026-11-15)
+
+The starting head was `d62eaa29`. Its unchanged timing reproduced two plays:
+595 within 1 s, 55 off, 14 over 3 s, 0 unheard, and 2 main-right lines now wrong.
+The original synthetic floors failed on the nine rows reported above. No floors,
+fixtures, truths, tolerances, or measured lateness were changed in this pass.
+
+The fast loop runs the actual Kotlin in bounded Podman containers. Each compiler
+and JVM has 2 GiB RAM, no swap, 2 CPUs, no network, and nice level 10. Only explicit
+source, cache, and output folders are mounted. The command-construction tests
+failed before this limit was added. All 115 Python tests then passed, with 2 skips.
+
+`timing-tests.py` also runs `SungTimingTest` and `SyntheticSingingTest` directly with
+the app's Kotlin compiler and cached JUnit. It avoids an Android build. The first
+new regressions failed on the starting code: a valid slow first word was discarded,
+a line's only exact long word was ignored, and a partial match of a Latin letter
+plus one word placed a longer line. The new repeated-word case and complete short
+phrase case protect those surfaces too.
+
+Commands, with recorded inputs retained in the shared ignored cache:
+
+```sh
+SYNCREPLAY_DIR=/mnt/data/agent-cache/crosstune-syncreplay nice -n 10 python3 scripts/syncreplay/timing-tests.py
+SYNCREPLAY_DIR=/mnt/data/agent-cache/crosstune-syncreplay nice -n 10 python3 scripts/syncreplay/syncreplay.py untimed
+SYNCREPLAY_DIR=/mnt/data/agent-cache/crosstune-syncreplay nice -n 10 python3 scripts/syncreplay/syncreplay.py untimed --again 12000
+```
+
+The causes were checked separately:
+
+1. Dropping every first row discards valid words well inside the window. Only its
+   existing edge margin is treated as the opening. A later word can confirm an
+   opening word at the line's pace. This restored the slow synthetic starts.
+2. Discarding every overlapping local alignment removes the shorter match needed
+   to give the next line its own repeated words. Keeping prefixes and suffixes
+   restored xTvyyoF_LZY lines 40 and 41 at 109.59 and 112.09 s, respectively.
+   Matching fragments need two informative words. A complete short phrase such
+   as "I know" is still allowed. Unspaced syllables keep their existing weight.
+3. Interpolation placed LhLmgg_u29k line 6 before the preceding line's last matched
+   word. Bounding it by that word changed 27.299 to 27.470 s. A one-word line can
+   instead use its own matched word: FXovf5dsRTw line 16 changed 62.992 to 63.550 s.
+   WEuDVcXnElc line 46 stayed within 1 s; blindly taking the next voice had broken it.
+4. A single exact longest word can support a line between distant anchors. A short
+   word such as "to", or one unspaced character, cannot supply that evidence alone.
+   This restored the last missing Latin synthetic line at 400 ms per syllable.
+5. A phrase heard as one ASR word has no independent timing inside it. Two such
+   observations separated by more than the phrase's estimated duration are kept
+   as competing places, even inside the general 6 s margin. Applying that shorter
+   margin to all multi-word observations failed the original slow-Latin floor and
+   the existing 6 s boundary tests, so that broader variant was rejected.
+6. Heard positions include the letter position within a raw ASR word. An overlapping
+   long unspaced word no longer hides overlap behind equal word-start timestamps.
+
+All 40 focused JUnit tests pass, including every original synthetic floor. The
+measured candidate before the behavior-preserving refactor gave two plays:
+601 within 1 s, 57 off, 14 over 3 s, 0 unheard, 0 main-right lines now wrong.
+The production refactor gave one play: 378 within 1 s, 53 off, 24 over 3 s,
+0 unheard, 0 main-right lines now wrong. Full checks and final replay verification
+are recorded below when complete. Private logs and inputs remain under `build/`
+and the shared cache, outside git.

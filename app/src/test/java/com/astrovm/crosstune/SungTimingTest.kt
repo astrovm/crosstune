@@ -469,6 +469,53 @@ class SungTimingTest {
     }
 
     @Test
+    fun aFirstWordWellInsideAWhileStillSaysWhereASlowLineStarts() {
+        val text = listOf("Morning lantern river")
+        val late = SungTiming.HEARD_LATE_MS
+        val words = listOf("Morning" to 5_000L + late, "lantern" to 8_000L + late, "river" to 11_000L + late)
+        assertEquals(mapOf(0 to 5_000L), SungTiming.linesMs(text, listOf(heard(0, words)), 30_000))
+    }
+
+    @Test
+    fun adjacentLinesKeepTheirOwnRepeatedWordsThoughOneWordWasMissed() {
+        val text = listOf("Carry every lantern toward our home", "Our home rests beside the river", "Silver birds cross the meadow")
+        val words = sungAt(10_000, text[0]).dropLast(2) + sungAt(13_000, text[1]) + sungAt(16_000, text[2])
+        assertEquals(mapOf(0 to 10_000L, 1 to 13_000L, 2 to 16_000L), SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+    }
+
+    @Test
+    fun anExactDistinctWordCanPlaceALineBetweenAnchorsTooFarApartToInterpolate() {
+        val text = listOf("Amber lanterns glow", "A wandering river rolls", "Silver rivers bend")
+        val words = sungAt(10_000, text[0]) + listOf("wandering" to 16_000L + SungTiming.HEARD_LATE_MS) + sungAt(20_000, text[2])
+        assertEquals(mapOf(0 to 10_000L, 1 to 15_930L, 2 to 20_000L), SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+    }
+
+    @Test
+    fun oneWordAndALatinLetterDoNotPlacePartOfALongerLine() {
+        val text = listOf("Bright lanterns rise over rooftops", "Maybe a river carries the lantern down")
+        val words = sungAt(10_000, text[0]) + listOf("a" to 16_000L + SungTiming.HEARD_LATE_MS, "river" to 16_070L + SungTiming.HEARD_LATE_MS)
+        assertEquals(mapOf(0 to 10_000L), SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+    }
+
+    @Test
+    fun aPhraseHeardAsOneWordAtSeparatePlacesDoesNotChooseTheFirst() {
+        val text = listOf("君の名前を呼んだ")
+        fun withSecondAt(ms: Long) = SungTiming.linesMs(text, listOf(
+            heard(0, listOf(text[0] to 10_000L + SungTiming.HEARD_LATE_MS)),
+            heard(5_000, listOf(text[0] to ms + SungTiming.HEARD_LATE_MS))
+        ), 40_000)
+        assertEquals(mapOf(0 to 10_000L), withSecondAt(12_000))
+        assertEquals(emptyMap<Int, Long>(), withSecondAt(13_000))
+    }
+
+    @Test
+    fun aCompleteShortPhraseCanContainALatinLetter() {
+        val text = listOf("Bright lamps guide us", "I know", "Silver birds cross the meadow")
+        val words = sungAt(10_000, text[0]) + sungAt(13_000, text[1]) + sungAt(16_000, text[2])
+        assertEquals(mapOf(0 to 10_000L, 1 to 13_000L, 2 to 16_000L), SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+    }
+
+    @Test
     fun nothingSungHeardTimesNothing() {
         assertEquals(emptyList<LyricLine>(), SungTiming.timed(lines, listOf(heard(0, listOf("[Music]" to 1_000L))), 120_000))
         assertEquals(emptyList<LyricLine>(), SungTiming.timed(lines, emptyList(), 120_000))
