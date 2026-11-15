@@ -12,12 +12,18 @@ import org.junit.Test
  */
 class SyntheticSingingTest {
 
-    /** Within a second and further off, of 400 lines, for each pace in [SyntheticSinging.PACES]. */
+    /**
+     * Within a second and further off, of 400 lines, for each pace in [SyntheticSinging.PACES]. Here the first
+     * word of each while is heard where it's sung, but the speech model often puts it near the while's start: in
+     * the recordings, a line's first word heard first in a while is a median 0.34 s early, and 3 times as often over
+     * a second early as over a second late; heard later in a while, it's 0.17 s early, and late about as often as
+     * early (Issue #892). So [SungTiming] doesn't time a line by it, which costs up to 4 lines a row here.
+     */
     private val floors = mapOf(
-        Writing.LATIN to listOf(388 to 0, 392 to 0, 391 to 1, 390 to 0, 382 to 3),
-        Writing.JAPANESE to listOf(396 to 2, 394 to 5, 395 to 5, 399 to 1, 397 to 2),
-        Writing.KOREAN to listOf(395 to 3, 398 to 0, 398 to 0, 400 to 0, 396 to 2),
-        Writing.CHINESE to listOf(397 to 1, 398 to 0, 398 to 0, 399 to 0, 399 to 1),
+        Writing.LATIN to listOf(386 to 0, 391 to 0, 387 to 1, 388 to 0, 378 to 6),
+        Writing.JAPANESE to listOf(395 to 1, 394 to 5, 395 to 3, 399 to 1, 398 to 1),
+        Writing.KOREAN to listOf(395 to 3, 398 to 0, 398 to 0, 400 to 0, 395 to 3),
+        Writing.CHINESE to listOf(395 to 3, 396 to 0, 398 to 0, 399 to 0, 399 to 1),
     )
 
     @Test

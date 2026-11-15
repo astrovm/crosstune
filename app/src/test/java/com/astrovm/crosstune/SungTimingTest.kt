@@ -125,16 +125,42 @@ class SungTimingTest {
             "lantern" to 12_200L + late + 10 * SungTiming.LETTER_MS, "down" to 12_100L + late + 17 * SungTiming.LETTER_MS
         )
         // The last three agree, but a line held or with a rest in it is sung slower than its letters say, so the first says it.
-        assertEquals(mapOf(0 to 10_000L), SungTiming.linesMs(one, listOf(heard(9_000, heardSo)), 60_000))
+        val music = listOf("[Music]" to 9_000L)
+        assertEquals(mapOf(0 to 10_000L), SungTiming.linesMs(one, listOf(heard(9_000, music, heardSo)), 60_000))
         // Without the first word, the second says it.
-        assertEquals(mapOf(0 to 12_000L), SungTiming.linesMs(one, listOf(heard(9_000, heardSo.drop(1))), 60_000))
+        assertEquals(mapOf(0 to 12_000L), SungTiming.linesMs(one, listOf(heard(9_000, music, heardSo.drop(1))), 60_000))
         // Any word can be the earliest: here "lantern" says 11.9 s, by its 10 letters before.
         val middleEarliest = listOf(heardSo[1], "lantern" to 11_900L + late + 10 * SungTiming.LETTER_MS, heardSo[3])
-        assertEquals(mapOf(0 to 11_900L), SungTiming.linesMs(one, listOf(heard(9_000, middleEarliest)), 60_000))
+        assertEquals(mapOf(0 to 11_900L), SungTiming.linesMs(one, listOf(heard(9_000, music, middleEarliest)), 60_000))
         // Words closer together than their letters take are sung faster: here 12 letters in 640 ms, from "every" to
         // "down", so the 5 before "every" take 266 ms, not 350, and the line starts at 12.084 s.
         val fast = heardSo.drop(1).dropLast(1) + ("down" to 11_800L + late + 17 * SungTiming.LETTER_MS)
-        assertEquals(mapOf(0 to 12_084L), SungTiming.linesMs(one, listOf(heard(9_000, fast)), 60_000))
+        assertEquals(mapOf(0 to 12_084L), SungTiming.linesMs(one, listOf(heard(9_000, music, fast)), 60_000))
+    }
+
+    @Test
+    fun aLinesFirstWordHeardFirstInAWhileDoesntSayWhereItStarts() {
+        // The speech model puts the first word of a while at the while's start, here 2 s before it's sung.
+        val one = listOf("Carry every lantern down")
+        val pinned = listOf("Carry" to 9_000L) + sungAt(11_000, one[0]).drop(1)
+        assertEquals(mapOf(0 to 11_000L), SungTiming.linesMs(one, listOf(heard(9_000, pinned)), 60_000))
+        // A word heard first that isn't the line's first still says where the line starts, as nothing is heard before it.
+        val lastWords = sungAt(11_000, one[0]).drop(1)
+        assertEquals(mapOf(0 to 11_000L), SungTiming.linesMs(one, listOf(heard(11_000, lastWords)), 60_000))
+        // A line in unspaced writing heard as one word has nothing else to say where it starts.
+        val japanese = listOf("君の名前を呼んだ")
+        assertEquals(mapOf(0 to 10_000L), SungTiming.linesMs(japanese, listOf(heard(9_000, listOf(japanese[0] to 10_000L + SungTiming.HEARD_LATE_MS))), 60_000))
+    }
+
+    @Test
+    fun aLineIsTimedByItsOwnWordsNotTheNextLines() {
+        // A line that ends as the next starts: its first half misheard, its second half and the next line's start make it.
+        val repeated = listOf("Morning comes over the hill", "No more to say, no more to say", "No more to say than that", "Paper boats along the gutter")
+        val misheard = heardAs(20_000, repeated[1], "So me la say, no more to say")
+        // Heard well before the while ends, then in a while that hears the next line too.
+        val first = heard(1_500, sungAt(15_000, repeated[0]), sungAt(20_000, repeated[1]).filter { it.second < 21_500 })
+        val second = heard(14_000, sungAt(15_000, repeated[0]), misheard, sungAt(24_000, repeated[2]), sungAt(28_000, repeated[3]))
+        assertEquals(mapOf(0 to 15_000L, 1 to 20_000L, 2 to 24_000L, 3 to 28_000L), SungTiming.linesMs(repeated, listOf(first, second), 60_000))
     }
 
     @Test
@@ -377,7 +403,8 @@ class SungTimingTest {
             for (syllableMs in listOf(120L, 150L, 200L, 280L, 400L)) {
                 val lines = words.map { it.joinToString(space) }
                 val starts = mutableListOf<Long>()
-                val heardSo = mutableListOf<Pair<String, Long>>()
+                // Music first, so the first word is heard where it's sung, not at the while's start.
+                val heardSo = mutableListOf("[Music]" to 9_000L)
                 var ms = 10_000L
                 for (line in words) {
                     starts += ms
