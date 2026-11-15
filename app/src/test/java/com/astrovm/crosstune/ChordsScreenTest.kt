@@ -27,6 +27,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -102,7 +103,7 @@ class ChordsScreenTest {
     /** How [text] is laid out, room over its rows for chords or readings included. */
     private fun layoutOf(text: String): TextLayoutResult {
         val layouts = mutableListOf<TextLayoutResult>()
-        lineOf(text).config[SemanticsActions.GetTextLayoutResult].action!!(layouts)
+        requireNotNull(lineOf(text).config[SemanticsActions.GetTextLayoutResult].action)(layouts)
         return layouts.single()
     }
 
@@ -123,6 +124,34 @@ class ChordsScreenTest {
         // words run up into the chords.
         val chordLine = with(words.layoutInput.density) { (words.layoutInput.style.lineHeight * 0.55f).toPx() }
         assertTrue("$room px over a row for a $chordLine px line of chords", room >= chordLine - 1f)
+    }
+
+    @Test
+    @Config(fontScale = 2f)
+    fun atTheLargestFontARowWithReadingsHasRoomForThemAndItsChordsEachAndOneWithoutForItsChordsOnly() {
+        val text = "夜空の星を見上げて君を想う夜"
+        val sheet = ChordSheet(listOf(SheetLine(text, listOf(Chord(0, "Am"), Chord(3, "F")))), capo = 0, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/x-1")
+        var state by mutableStateOf(japanese(LyricLine(1_000, text), sheet).let { it.copy(chords = ChordsState(), learning = it.learning.copy(readings = false)) })
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state, ScreenActions()) } }
+        composeRule.waitForIdle()
+        val words = layoutOf(text)
+        val wordsRow = words.firstRow()
+        val (chordLine, readingLetters) = with(words.layoutInput.density) {
+            (words.layoutInput.style.lineHeight * 0.55f).toPx() to (words.layoutInput.style.fontSize * READING_SCALE).toPx()
+        }
+        // Chords only: their line over each row, and no readings.
+        state = state.copy(chords = ChordsState(on = true, sheet = sheet))
+        chordsOver(text)
+        val chordsOnly = layoutOf(text).firstRow() - wordsRow
+        assertTrue("$chordsOnly px over a row for a $chordLine px line of chords", chordsOnly >= chordLine - 1f)
+        assertNull(readingsOver(text))
+        // With readings: room for them as well, on top of the chords' room, so neither runs into the
+        // other or the words; without them that room isn't kept.
+        state = state.copy(learning = state.learning.copy(readings = true))
+        composeRule.waitUntil(5_000) { readingsOver(text) != null }
+        assertEquals(listOf("よぞら", "ほし"), readingsOver(text))
+        val both = layoutOf(text).firstRow() - wordsRow
+        assertTrue("$both px over a row for chords and readings, ${both - chordsOnly} px for $readingLetters px readings", both - chordsOnly >= readingLetters)
     }
 
     @Test

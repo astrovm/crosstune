@@ -2,12 +2,16 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.os.Build
+import android.view.View
+import android.view.accessibility.AccessibilityManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -15,6 +19,10 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
@@ -26,7 +34,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /** The steps to fix each thing, as each kind of phone and Android version shows them, and the list they're picked from. */
 @RunWith(RobolectricTestRunner::class)
@@ -68,9 +78,27 @@ class FixStepsTest {
         state = broken.copy(phone = phone, fixes = Fixes(steps = listOf(need))).change()
     }
 
+    private lateinit var view: View
+
+    /** How many things a screen reader finds with [text] in them, as Android's accessibility asks the page. */
+    private fun spoken(text: String): Int {
+        val manager = app.getSystemService(AccessibilityManager::class.java)
+        shadowOf(manager).setEnabled(true)
+        shadowOf(manager).setTouchExplorationEnabled(true)
+        composeRule.waitForIdle()
+        val provider = requireNotNull(view.accessibilityNodeProvider)
+        // Compose numbers its nodes for accessibility by their semantics ids.
+        val ids = composeRule.onAllNodes(SemanticsMatcher("any") { true }, useUnmergedTree = true).fetchSemanticsNodes().map { it.id }
+        return ids.mapNotNull { provider.createAccessibilityNodeInfo(it) }
+            .count { it.text?.contains(text) == true || it.contentDescription?.contains(text) == true }
+    }
+
     private fun showSteps(need: Need, phone: Phone = Phone.PIXEL, change: UiState.() -> UiState = { this }) {
         steps(need, phone, change)
-        composeRule.setContent { CrosstuneTheme { FixStepPage(state, actions) } }
+        composeRule.setContent {
+            view = LocalView.current
+            CrosstuneTheme { FixStepPage(state, actions) }
+        }
         composeRule.waitForIdle()
     }
 
@@ -91,7 +119,8 @@ class FixStepsTest {
     private fun turnOn(word: Int) = string(R.string.fix_step_turn_on, string(word))
 
     private fun click(text: String) {
-        composeRule.onNode(hasText(text) or hasContentDescription(text)).performClick()
+        // The button, not the same words drawn in a picture of Android's page.
+        composeRule.onNode((hasText(text) or hasContentDescription(text)) and hasClickAction()).performClick()
         composeRule.waitForIdle()
     }
 
@@ -205,7 +234,10 @@ class FixStepsTest {
             string(R.string.fix_step_menu, string(R.string.android_allow_restricted)),
             string(R.string.fix_step_turn_on_then, string(R.string.android_allow_notification_access), string(R.string.allow_button))
         )
-        click(string(R.string.follow_help_app_info))
+        // A screen reader hears the step and its button, never the picture's words again.
+        val appInfo = string(R.string.follow_help_app_info)
+        assertEquals(1, spoken(appInfo))
+        click(appInfo)
         assertEquals(listOf("open follow", "app info"), done)
     }
 
@@ -375,6 +407,8 @@ class FixStepsTest {
 
     @Test
     @Config(qualifiers = "w240dp-h135dp")
+    // Real text measuring, so the steps take the room they would on a phone.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun theFloatingGuideShrinksItsStepsToFitTheSmallWindow() {
         state = broken.copy(phone = Phone.SAMSUNG)
         composeRule.setContent { CrosstuneTheme { FloatingGuide(Need.Links, state) } }
@@ -383,6 +417,29 @@ class FixStepsTest {
         assertTrue("the last step ends at ${last.bottom}, below the window's ${window.bottom}", last.bottom <= window.bottom)
         assertTrue("the last step starts at ${last.left}, left of the window", last.left >= window.left)
         assertTrue("the last step ends at ${last.right}, right of the window's ${window.right}", last.right <= window.right)
+        // Drawn smaller, not cut off or left out: each step as wide and as tall as it's laid out, times one
+        // shrink for them all, the same across as down, and the steps as tall as the window.
+        val texts = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
+        val shrinks = texts.fetchSemanticsNodes().indices.map { index ->
+            val layouts = mutableListOf<TextLayoutResult>()
+            texts[index].performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val laid = layouts.single().size
+            val drawn = texts[index].fetchSemanticsNode().boundsInRoot
+            assertTrue("${layouts.single().layoutInput.text} isn't drawn: $drawn", drawn.width > 0f && drawn.height > 0f)
+            drawn.width / laid.width to drawn.height / laid.height
+        }
+        assertTrue(shrinks.size >= 3)
+        val shrink = shrinks.first().first
+        assertTrue("shrunk by $shrink", shrink > 0.1f && shrink < 0.9f)
+        shrinks.forEach { (across, down) ->
+            assertEquals(shrink, across, 0.02f)
+            assertEquals(shrink, down, 0.02f)
+        }
+        val steps = composeRule.onNodeWithTag(FLOATING_STEPS_TAG).getBoundsInRoot()
+        assertEquals((window.bottom - window.top).value, (steps.bottom - steps.top).value, 1f)
+        assertEquals(window.top.value, steps.top.value, 1f)
+        // In the middle across.
+        assertEquals((window.left + window.right).value / 2, (steps.left + steps.right).value / 2, 1f)
     }
 
     @Test

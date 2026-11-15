@@ -1056,8 +1056,10 @@ private fun ReadingSwitch(@StringRes label: Int, on: Boolean, onChange: (Boolean
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(on, role = Role.Switch, onValueChange = onChange)
     ) {
-        Text(stringResource(label), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 12.dp))
-        Switch(checked = on, onCheckedChange = null)
+        // Under its words where a word of theirs wouldn't fit beside it.
+        LabelAndValue(label = { LabelText(stringResource(label), style = MaterialTheme.typography.bodyMedium) }, modifier = Modifier.weight(1f)) {
+            Switch(checked = on, onCheckedChange = null)
+        }
     }
 }
 
@@ -1585,7 +1587,7 @@ private fun MenuAction(@DrawableRes icon: Int, @StringRes label: Int, trailing: 
         if (trailing == null) {
             Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         } else {
-            LabelAndValue(label = { Text(stringResource(label), style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+            LabelAndValue(label = { LabelText(stringResource(label), style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
                 Text(
                     trailing,
                     style = MaterialTheme.typography.bodyMedium,
@@ -1604,8 +1606,10 @@ internal fun MenuSwitch(@StringRes label: Int, on: Boolean, @DrawableRes icon: I
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(on, role = Role.Switch, onValueChange = onChange)
     ) {
         if (icon != null) AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
-        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
-        Switch(checked = on, onCheckedChange = null)
+        // Under its words where a word of theirs wouldn't fit beside it.
+        LabelAndValue(label = { LabelText(stringResource(label), style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+            Switch(checked = on, onCheckedChange = null)
+        }
     }
 }
 

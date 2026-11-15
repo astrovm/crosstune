@@ -247,7 +247,7 @@ private fun SettingsList(
                 onSelect = actions.onTargetChange,
                 installed = state.installed,
                 label = stringResource(R.string.settings_default_label),
-                modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
             )
             SettingSwitch(
                 label = stringResource(R.string.setting_show_in_crosstune_first),
@@ -599,7 +599,7 @@ private const val VISUALS_PAGE = "visuals"
 private fun VisualsListRow(settings: VisualsSettings, modifier: Modifier, onOpen: () -> Unit) {
     val names = presetNames()
     LabelAndValue(
-        label = { Text(stringResource(R.string.setting_visuals_list), style = MaterialTheme.typography.bodyLarge) },
+        label = { LabelText(stringResource(R.string.setting_visuals_list), style = MaterialTheme.typography.bodyLarge) },
         modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
         Text(
@@ -666,7 +666,7 @@ private fun StepsRow(
     Column(modifier = modifier.fillMaxWidth().padding(start = inset, end = inset, top = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
-            LabelAndValue(label = { Text(label, style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+            LabelAndValue(label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
                 Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
         }
@@ -703,7 +703,7 @@ private const val SOURCES_PAGE = "sources"
 private fun SourcesRow(sources: List<SourceSettings>, modifier: Modifier, onOpen: () -> Unit) {
     val trouble = sources.firstNotNullOfOrNull { it.trouble() }
     LabelAndValue(
-        label = { Text(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge) },
+        label = { LabelText(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge) },
         modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1469,7 +1469,7 @@ private fun PickedMark(picked: Boolean) {
 private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, icon: ((T) -> Int)? = null) {
     var expanded by remember { mutableStateOf(false) }
     LabelAndValue(
-        label = { Text(text = label, style = MaterialTheme.typography.bodyLarge) },
+        label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
@@ -1514,7 +1514,7 @@ private fun PaletteRow(selected: Palette, onSelect: (Palette) -> Unit) {
     val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
         // The picked one by name, as the other rows say theirs, since a swatch alone doesn't say it.
-        LabelAndValue(label = { Text(text = stringResource(R.string.setting_color), style = MaterialTheme.typography.bodyLarge) }) {
+        LabelAndValue(label = { LabelText(stringResource(R.string.setting_color), style = MaterialTheme.typography.bodyLarge) }) {
             Text(text = stringResource(selected.labelRes), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }
         // All in sight, spread across the row, onto another only on a screen too narrow for them.
@@ -1579,7 +1579,7 @@ private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
     val appLanguage = stringResource(R.string.translate_into_app_language)
     var expanded by remember { mutableStateOf(false) }
     LabelAndValue(
-        label = { Text(stringResource(R.string.setting_translate_into), style = MaterialTheme.typography.bodyLarge) },
+        label = { LabelText(stringResource(R.string.setting_translate_into), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
@@ -1618,7 +1618,7 @@ private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
 private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     LabelAndValue(
-        label = { Text(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge) },
+        label = { LabelText(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
@@ -1631,9 +1631,10 @@ private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -
                     text = AppLanguage.untranslatedTags.filter { it in untranslated }.joinToString { AppLanguage.displayName(it) }.ifEmpty { none },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
+                    // A long list moves under the name and runs out at the row's end, never one word cut short.
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 160.dp)
+                    modifier = Modifier.weight(1f, fill = false)
                 )
                 AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
             }
@@ -1661,7 +1662,7 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
     val systemDefault = stringResource(R.string.language_system_default)
     var expanded by remember { mutableStateOf(false) }
     LabelAndValue(
-        label = { Text(text = stringResource(R.string.setting_language), style = MaterialTheme.typography.bodyLarge) },
+        label = { LabelText(stringResource(R.string.setting_language), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }

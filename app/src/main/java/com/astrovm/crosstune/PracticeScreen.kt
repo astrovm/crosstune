@@ -261,8 +261,11 @@ private data class ComeBack(val fixing: Boolean)
 /** At the card's foot, on its text inset: the music app that might play the line needs Crosstune to show over other apps, and how to allow it. */
 @Composable
 private fun ComeBackOffer(comeBack: ComeBack, actions: ScreenActions) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 12.dp).testTag(PRACTICE_COME_BACK_TAG)) {
-        Text(stringResource(R.string.practice_float_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    // Allow under the words where a word of theirs wouldn't fit beside it.
+    LabelAndValue(
+        label = { LabelText(stringResource(R.string.practice_float_allow), style = MaterialTheme.typography.bodyMedium) },
+        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 12.dp).testTag(PRACTICE_COME_BACK_TAG)
+    ) {
         OneTapButton(stringResource(R.string.allow_button), actions.onAllowFloat, fixing = comeBack.fixing)
     }
 }

@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -465,21 +467,23 @@ internal fun FixStepPage(state: UiState, actions: ScreenActions) {
             Column {
                 // A single thing needs no counting.
                 if (fixes.steps.size > 1) StepProgress(fixes.steps.indexOf(shown) + 1, fixes.steps.size)
-                Row(modifier = Modifier.padding(top = 24.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AnimatedContent(targetState = state.done(shown) == true, transitionSpec = { fade() }, label = "done") { checked ->
-                        if (checked) {
-                            AppIcon(
-                                R.drawable.ic_check,
-                                contentDescription = stringResource(R.string.setup_done),
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        } else {
-                            NeedIcon(shown)
+                LeadAndWords(
+                    lead = {
+                        AnimatedContent(targetState = state.done(shown) == true, transitionSpec = { fade() }, label = "done") { checked ->
+                            if (checked) {
+                                AppIcon(
+                                    R.drawable.ic_check,
+                                    contentDescription = stringResource(R.string.setup_done),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            } else {
+                                NeedIcon(shown)
+                            }
                         }
-                    }
-                    Text(needTitle(shown), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 12.dp))
-                }
+                    },
+                    modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)
+                ) { Text(needTitle(shown), style = MaterialTheme.typography.headlineSmall) }
                 if (fixes.failed) {
                     Text(
                         stringResource(R.string.fix_failed),
@@ -490,16 +494,14 @@ internal fun FixStepPage(state: UiState, actions: ScreenActions) {
                 }
                 val steps = fixSteps(shown, state, actions)
                 steps.forEachIndexed { index, step ->
-                    NumberedStep(index + 1, step.text)
-                    step.button?.let { (label, onClick) ->
-                        FilledTonalButton(onClick = onClick, modifier = Modifier.padding(start = 44.dp, bottom = 4.dp)) { Text(label) }
-                    }
-                    step.picture?.let { picture ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 44.dp, top = 4.dp, bottom = 16.dp)
-                        ) { picture() }
+                    // Its button and picture under its words, wherever its number leaves them.
+                    NumberedStep(index + 1, step.text) {
+                        step.button?.let { (label, onClick) ->
+                            FilledTonalButton(onClick = onClick, modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)) { Text(label) }
+                        }
+                        step.picture?.let { picture ->
+                            Box(modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp)) { picture() }
+                        }
                     }
                 }
             }
@@ -685,20 +687,36 @@ private fun UiState.hostsToTick(): List<String> =
 
 /** A step's number beside what to do. */
 @Composable
-internal fun NumberedStep(number: Int, text: AnnotatedString) {
-    Row(
+internal fun NumberedStep(number: Int, text: AnnotatedString, more: @Composable ColumnScope.() -> Unit = {}) {
+    LeadAndWords(
+        lead = {
+            // The circle grows with its number at a big font, rather than cutting it off.
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.round().defaultMinSize(28.dp, 28.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(number.toString(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(4.dp))
+                }
+            }
+        },
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+        gap = 16.dp,
+        top = true
     ) {
-        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(28.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(number.toString(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
+        Column {
+            Text(text, style = MaterialTheme.typography.bodyLarge)
+            more()
         }
-        Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 16.dp))
     }
+}
+
+internal const val FLOATING_STEPS_TAG = "floating_steps"
+
+/** As wide as it is tall, whichever is bigger, so a circle stays round. */
+private fun Modifier.round() = layout { measurable, constraints ->
+    val side = maxOf(measurable.maxIntrinsicWidth(constraints.maxHeight), measurable.maxIntrinsicHeight(constraints.maxWidth))
+    val placeable = measurable.measure(Constraints.fixed(side, side))
+    layout(side, side) { placeable.placeRelative(0, 0) }
 }
 
 /**
@@ -719,7 +737,7 @@ internal fun FloatingGuide(need: Need, state: UiState) {
             }
             return@Surface
         }
-        Column(modifier = Modifier.fitsHeight().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.fitsHeight().testTag(FLOATING_STEPS_TAG).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             AppLogo(size = 18.dp)
             steps.forEachIndexed { index, step ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

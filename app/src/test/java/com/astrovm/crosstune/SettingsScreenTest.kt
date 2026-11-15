@@ -10,9 +10,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -20,6 +24,9 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.text.Paragraph
 import androidx.compose.ui.unit.DpRect
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
@@ -72,12 +79,27 @@ class SettingsScreenTest {
     }
 
     @Test
-    @Config(qualifiers = "es-w411dp-h891dp-xxhdpi")
+    @Config(qualifiers = "es-w411dp-h891dp-xxhdpi", fontScale = 2f)
     fun aSettingsNameKeepsItsWordsWholeBesideWhatItIsSetToInSpanishAtTheLargestFont() = namesWholeAtTheLargestFont()
 
     @Test
-    @Config(qualifiers = "de-w320dp-h891dp-xxhdpi")
+    @Config(qualifiers = "es-w411dp-h891dp-xxhdpi", fontScale = 3.2f)
+    fun aSettingsNameKeepsItsWordsWholeBesideWhatItIsSetToInSpanishAtTheBiggestFontAndroidHas() = namesWholeAtTheLargestFont()
+
+    @Test
+    @Config(qualifiers = "de-w320dp-h891dp-xxhdpi", fontScale = 2f)
     fun aSettingsNameKeepsItsWordsWholeBesideWhatItIsSetToInGermanOnANarrowPhone() = namesWholeAtTheLargestFont()
+
+    @Test
+    @Config(qualifiers = "de-w411dp-h891dp-xxhdpi", fontScale = 3.2f)
+    fun aSettingsNameKeepsItsWordsWholeBesideWhatItIsSetToInGermanAtTheBiggestFontAndroidHas() = namesWholeAtTheLargestFont()
+
+    @Test
+    fun theMusicAppRowSaysWhatItIsForWithTheAppItIsSetTo() {
+        show(UiState())
+        // One button, so a screen reader says both, as the other rows do.
+        composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.settings_default_label))).assert(hasText(string(R.string.target_youtube_music)))
+    }
 
     @Test
     fun aShortValueStaysBesideItsSettingAtTheUsualFont() {
@@ -92,17 +114,14 @@ class SettingsScreenTest {
 
     /** Every setting with what it's set to beside it: its name a line a word at most, never broken inside one. */
     private fun namesWholeAtTheLargestFont() {
-        composeRule.setContent {
-            val density = LocalDensity.current
-            CompositionLocalProvider(
-                LocalDensity provides Density(density.density, 2f)
-            ) {
-                CrosstuneTheme { SettingsScreen(UiState(), ScreenActions(), onBack = {}) }
-            }
-        }
+        // At the font the test is set to, grown as Android grows it.
+        composeRule.setContent { CrosstuneTheme { SettingsScreen(UiState(), ScreenActions(), onBack = {}) } }
         val names = listOf(
             R.string.setting_language, R.string.setting_theme, R.string.setting_color, R.string.settings_links_title, R.string.setting_translate_into,
-            R.string.setting_untranslated, R.string.setting_lines_early, R.string.setting_next_line_first, R.string.setting_visuals_list, R.string.setting_visuals_change
+            R.string.setting_untranslated, R.string.setting_lines_early, R.string.setting_next_line_first, R.string.setting_visuals_list, R.string.setting_visuals_change,
+            // The app songs open in, what isn't translated, and the switches, each beside its row's words or over them.
+            R.string.settings_default_label, R.string.untranslated_none, R.string.setting_show_in_crosstune_first, R.string.setting_play_right_away,
+            R.string.setting_lyrics_follow, R.string.setting_auto_report
         )
         for (id in names) {
             val name = string(id)
@@ -110,10 +129,17 @@ class SettingsScreenTest {
             val layouts = mutableListOf<TextLayoutResult>()
             node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             val layout = layouts.single()
-            val words = name.split(' ')
-            // A line ends only where a word does.
+            // A line ends only where a word does, or after a hyphen, as in "Song-Probleme"; or inside a word
+            // wider than the whole row, as "automáticamente" is at the biggest font, which nothing could fit.
+            val input = layout.layoutInput
+            val row = with(input.density) { (composeRule.onRoot().getBoundsInRoot().right - 40.dp).toPx() }
+            fun widerThanTheRow(word: String) = Paragraph(word, input.style, Constraints(), input.density, input.fontFamilyResolver).maxIntrinsicWidth > row
+            val pieces = name.split(' ', '-').size
             val ends = (0 until layout.lineCount - 1).map { line -> name.substring(0, layout.getLineEnd(line, visibleEnd = true)).trimEnd() }
-            assertTrue("\"$name\" breaks as ${ends.map { it.substringAfterLast(' ') }}", ends.all { end -> end.isEmpty() || words.any { end.endsWith(it) } } && layout.lineCount <= words.size)
+            val inWords = ends.filterNot { end -> end.isEmpty() || end.endsWith('-') || name.getOrNull(end.length) == ' ' }
+            val word = { end: String -> end.substringAfterLast(' ') + name.substring(end.length).substringBefore(' ') }
+            assertTrue("\"$name\" breaks as ${ends.map { it.takeLast(6) }}", inWords.all { widerThanTheRow(word(it)) } && layout.lineCount <= pieces + inWords.size)
+            assertFalse("\"$name\" is cut short", layout.isLineEllipsized(layout.lineCount - 1))
             // And every line is inside the name's room, none cut off at its edge.
             val widest = (0 until layout.lineCount).maxOf { layout.getLineRight(it) }
             assertTrue("\"$name\" is $widest px wide in ${layout.size.width} px", widest <= layout.size.width + 0.5f && !layout.didOverflowHeight)

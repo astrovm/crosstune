@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,7 +29,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.testTag
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 internal const val ANDROID_PICTURE_TAG = "android_picture"
@@ -80,25 +80,29 @@ internal fun AndroidRow(
     ringed: Boolean = false,
     leading: (@Composable () -> Unit)? = null
 ) = Ringed(ringed) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        val first = control in LEADING
-        if (first) ControlFor(control)
-        leading?.invoke()
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        if (!first) ControlFor(control)
+    val first = control in LEADING
+    // Every line its words take, as Android's own page grows them at a big font: a control before
+    // them goes over them, and one after them under them, where a word wouldn't fit beside it.
+    val words: @Composable () -> Unit = { Text(label, style = MaterialTheme.typography.bodyMedium) }
+    val lead: (@Composable () -> Unit)? = if (first || leading != null) {
+        {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (first) ControlFor(control)
+                leading?.invoke()
+            }
+        }
+    } else {
+        null
+    }
+    val named: @Composable () -> Unit = if (lead != null) ({ LeadAndWords(lead, words = words) }) else words
+    val modifier = Modifier
+        .fillMaxWidth()
+        .heightIn(min = 48.dp)
+        .padding(horizontal = 12.dp, vertical = 4.dp)
+    if (first || control == Control.NONE) {
+        Box(modifier, contentAlignment = Alignment.CenterStart) { named() }
+    } else {
+        LabelAndValue(label = named, modifier = modifier) { ControlFor(control) }
     }
 }
 
@@ -141,7 +145,8 @@ internal fun AndroidHeading(text: String) {
 /** A dialog's buttons side by side, as Android lays them out, the one to tap ringed. */
 @Composable
 internal fun AndroidButtons(vararg labels: String, ringed: String) {
-    Row(
+    // One under the other once they don't fit side by side, as Android does, never a word broken.
+    FlowRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 6.dp, vertical = 4.dp),

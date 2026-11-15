@@ -79,6 +79,7 @@ import androidx.compose.material3.FabPosition
 import androidx.compose.material3.Icon
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.material3.Scaffold
@@ -1161,7 +1162,11 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     }
 }
 
-/** "Music app   Spotify ▾": the app songs open and play in, in settings. */
+/**
+ * "Music app   Spotify ▾": the app songs open and play in, in settings. The whole row is the button,
+ * so a screen reader says what's set with what it's for, and the name keeps its words whole beside
+ * the app, or over it at a big font.
+ */
 @Composable
 internal fun DefaultDestinationMenu(
     destinations: List<Destination>,
@@ -1172,13 +1177,15 @@ internal fun DefaultDestinationMenu(
     installed: Set<MusicService>
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+    LabelAndValue(
+        label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) },
+        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { expanded = true }.testTag(DEFAULT_MENU_TAG).then(modifier)
+    ) {
         Box {
-            TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 DestinationIcon(selected, installed, size = 20.dp)
                 Spacer(Modifier.size(8.dp))
-                Text(selected.label())
+                Text(selected.label(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 AppIcon(
                     R.drawable.ic_expand_more,
                     contentDescription = null,
