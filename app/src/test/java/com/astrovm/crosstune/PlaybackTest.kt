@@ -2209,7 +2209,9 @@ class PlaybackTest {
             binder
         }
         val token = copyCoverToken(controller.sessionToken, stable)
-        val (cover, bitmap) = saveThroughATemporaryToken(controller, token)
+        // Collect the temporary token and bitmap, while retaining this test's cache itself.
+        val writer = PlaybackCovers(File(app.cacheDir, "temporary-session-cover"))
+        val (cover, bitmap) = saveThroughATemporaryToken(writer, controller, token)
         val end = System.nanoTime() + 5_000_000_000L
         while (bitmap.get() != null && System.nanoTime() < end) {
             System.gc()
@@ -2218,7 +2220,6 @@ class PlaybackTest {
         }
         assertNull("the temporary bitmap was still retained", bitmap.get())
         val original = requireNotNull(requireNotNull(controller.metadata).getBitmap(MediaMetadata.METADATA_KEY_ART))
-        val writer = PlaybackCovers.shared(app)
         val name = listOf("Fake Song", "Fake Artist", "Fake Album", null, null)
         writer.retainSessions(setOf(token))
         assertEquals(cover, writer.of(original, token, name))
@@ -2287,7 +2288,7 @@ class PlaybackTest {
         return constructor.newInstance(uid, binder) as MediaSession.Token
     }
 
-    private fun saveThroughATemporaryToken(controller: MediaController, originalToken: MediaSession.Token): Pair<String, java.lang.ref.WeakReference<Bitmap>> {
+    private fun saveThroughATemporaryToken(writer: PlaybackCovers, controller: MediaController, originalToken: MediaSession.Token): Pair<String, java.lang.ref.WeakReference<Bitmap>> {
         // Two different token wrappers share the same Binder, as across system queries.
         val binder = requireNotNull(MediaSession.Token::class.java.getDeclaredField("mBinder").apply { isAccessible = true }.get(originalToken))
         val token = copyCoverToken(originalToken, binder)
@@ -2295,7 +2296,6 @@ class PlaybackTest {
         assertEquals(originalToken, token)
         val original = requireNotNull(requireNotNull(controller.metadata).getBitmap(MediaMetadata.METADATA_KEY_ART))
         val bitmap = requireNotNull(original.copy(Bitmap.Config.ARGB_8888, false))
-        val writer = PlaybackCovers.shared(app)
         val name = listOf("Fake Song", "Fake Artist", "Fake Album", null, null)
         val cover = coverWhenReady { writer.of(bitmap, token, name) }
         return cover to java.lang.ref.WeakReference(bitmap)
