@@ -35,6 +35,7 @@ class OfflineChordCheck : Instrumentation() {
     @Volatile private var recovered = false
     @Volatile private var state = "ready"
     private var model: MainViewModel? = null
+    private var observedActivity: Activity? = null
     private var emptyRound = 0
     @Volatile private var offlineRound = 0
     @Volatile private var offlinePending = false
@@ -42,9 +43,15 @@ class OfflineChordCheck : Instrumentation() {
     @Volatile private var failedFetchComplete = false
     private val activityEvents = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityResumed(activity: Activity) {
-            if (activity is MainActivity) model = ViewModelProvider(activity)[MainViewModel::class.java]
+            if (activity is MainActivity && activity !== observedActivity) {
+                resetObservation()
+                observedActivity = activity
+                model = ViewModelProvider(activity)[MainViewModel::class.java]
+            }
         }
-        override fun onActivityDestroyed(activity: Activity) { if (activity is MainActivity) model = null }
+        override fun onActivityDestroyed(activity: Activity) {
+            if (activity === observedActivity) resetObservation()
+        }
         override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
         override fun onActivityStarted(activity: Activity) = Unit
         override fun onActivityPaused(activity: Activity) = Unit
@@ -104,7 +111,7 @@ class OfflineChordCheck : Instrumentation() {
         } finally {
             runOnMainSync {
                 application.unregisterActivityLifecycleCallbacks(activityEvents)
-                model = null
+                resetObservation()
                 MainActivity.httpClientFactory = oldHttp
                 MainActivity.connectionFactory = oldConnection
             }
@@ -125,7 +132,7 @@ class OfflineChordCheck : Instrumentation() {
         prefs.edit().clear().putBoolean("setup_complete", true).putBoolean("lyrics_chords", true).putBoolean("auto_reports", false).commit()
         check(File(targetContext.noBackupFilesDir, KEPT_OFFLINE_DIR).deleteRecursively()) { "Could not clear pinned fixture data" }
         check(targetContext.cacheDir.deleteRecursively()) { "Could not clear fixture caches" }
-        check(targetContext.cacheDir.mkdirs()) { "Could not create fixture cache" }
+        check(targetContext.cacheDir.isDirectory || targetContext.cacheDir.mkdirs()) { "Could not create fixture cache" }
         HistoryStore(prefs).replace(listOf(HistoryEntry(
             MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "0000000000000000000000", "https://open.spotify.com/track/0000000000000000000000"),
             MusicMetadata(TITLE, ARTIST, lengthMs = 60_000)
@@ -154,6 +161,16 @@ class OfflineChordCheck : Instrumentation() {
         } finally {
             writeStatus()
         }
+    }
+
+    private fun resetObservation() {
+        model = null
+        observedActivity = null
+        emptyRound = 0
+        offlineRound = 0
+        offlinePending = false
+        offlineIdle = false
+        failedFetchComplete = false
     }
 
     private fun observeOfflineFetch() = runOnMainSync {
