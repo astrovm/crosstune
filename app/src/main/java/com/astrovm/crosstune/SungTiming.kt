@@ -79,25 +79,12 @@ internal object SungTiming {
             stretches.flatMap { found(sung(it.words, it.fromMs), pieces) }.map { (ms, score, alike, heardMs) ->
                 Placed(line, ms, score - PRIOR * maxOf(0.0, abs(ms - expected) / lengthMs - TOLERANCE), alike, heardMs, pieces.first().written)
             }
-        }.filter { it.support >= MIN_SUPPORT }.let(::undominated)
+        }.filter { it.support >= MIN_SUPPORT }
         val firstLetters = byLine.mapValues { (_, its) -> its.first().letters }
         val durations = byLine.mapValues { (_, pieces) -> pieces.sumOf { SpokenWords.sungLetters(it.text) } * LETTER_MS }
         val chain = backed(sure(candidates, byLine.keys.max() + 2, durations), firstLetters)
         val placed = chain + filled(chain, firstLetters, stretches, byLine)
         return placed.filter { placed -> stretches.any { placed.ms in it.fromMs - EDGE_MS..it.toMs } }.associate { it.line to it.ms }
-    }
-
-    /** A stronger match at the same start, with a narrower heard span, can replace a weaker one in every chain. */
-    private fun undominated(candidates: List<Placed>): List<Placed> = candidates.groupBy { it.line to it.ms }.values.flatMap { group ->
-        group.filterIndexed { i, a -> group.withIndex().none { (j, b) -> j != i && replaces(b, a, j < i) } }
-    }
-
-    private fun replaces(b: Placed, a: Placed, earlier: Boolean): Boolean {
-        val enough = b.support >= a.support && b.words >= a.words
-        val narrower = b.heardMs.start >= a.heardMs.start && b.heardMs.endInclusive <= a.heardMs.endInclusive
-        val sameKind = singleWord(b) == singleWord(a)
-        val better = b.support > a.support || b.words > a.words || b.heardMs != a.heardMs || earlier
-        return enough && narrower && sameKind && better
     }
 
     /** A raw ASR word has one time even when it covers many written syllables. */
@@ -125,7 +112,7 @@ internal object SungTiming {
      * another line found at its time often takes its place, as a chorus sung again has the same words.
      * Of two such chains, nothing heard says which is right, so the line isn't put at all.
      */
-    private fun sure(candidates: List<Placed>, lines: Int, durations: Map<Int, Long>): List<Placed> {
+    internal fun sure(candidates: List<Placed>, lines: Int, durations: Map<Int, Long>): List<Placed> {
         val sorted = candidates.sortedBy { it.ms }
         val (ending, from) = ending(sorted)
         val best = chained(sorted, ending, from)
@@ -314,7 +301,9 @@ internal object SungTiming {
             val fills = put.mapIndexedNotNull { k, placed ->
                 val slotEnd = put.getOrNull(k + 1)?.ms ?: b.ms
                 val pieces = written.getValue(placed.line)
-                val after = maxOf(if (far) a.ms else placed.ms, a.heardMs.endInclusive.ms)
+                // Sung and written letters have different weights across scripts. Keep a near guess inside the anchors' minimum pace.
+                val guess = if (far) placed.ms else placed.ms + (placed.orderMs.coerceIn(a.orderMs, b.orderMs) - placed.orderMs)
+                val after = maxOf(if (far) a.ms else guess, a.heardMs.endInclusive.ms)
                 val start = if (far) {
                     // A word shared with an anchor or another middle line cannot tell which line was heard.
                     distinctWordStarts(pieces, wordsHeard.filter {
@@ -324,7 +313,7 @@ internal object SungTiming {
                 } else if (voice.any { it in placed.ms until slotEnd }) {
                     // A one-word line can use only its own slot. A later line's word cannot move it past that line.
                     if (pieces.size == 1) wordsHeard.filter { it.ms in after until slotEnd && likeness(it.text, pieces.single().text) >= ALIKE }
-                        .minByOrNull { abs(it.ms - placed.ms) }?.ms ?: after
+                        .minByOrNull { abs(it.ms - guess) }?.ms ?: after
                     else after
                 } else null
                 start?.takeIf { it in after until (if (far) b.ms else slotEnd) }?.let { ms ->

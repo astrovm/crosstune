@@ -620,7 +620,7 @@ class SungTimingTest {
     }
 
     @Test
-    fun pruningANarrowerMatchKeepsTheFollowingHeardLines() {
+    fun partialMatchesKeepTheFollowingHeardLines() {
         val text = listOf("Light sky river", "River wandering quiet home", "Amber lantern home", "River glitter", "Wandering sky glitter glitter copper")
         val words = listOf("light" to 10_000L, "river" to 14_000L, "wandering" to 14_350L, "quiet" to 14_980L,
             "home" to 15_330L, "amber" to 18_000L, "home" to 18_840L, "river" to 22_000L,
@@ -691,6 +691,138 @@ class SungTimingTest {
                 }
                 candidates.indices.forEach { checkBest(it) }
             }
+        }
+    }
+
+    @Test
+    fun aMixedScriptNearFillStaysWithinItsPaceWindow() {
+        val text = listOf("Wandering through the darkest woods tonight", "夜空に光る星", "Copper rivers bend home")
+        val words = sungAt(10_000, text[0]) + listOf("la" to 12_660L + SungTiming.HEARD_LATE_MS) + sungAt(13_600, text[2])
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000)
+        assertEquals(mapOf(0 to 10_000L, 1 to 12_280L, 2 to 13_600L), got)
+    }
+
+    @Test
+    fun aNearFillAfterUnspacedWordsStaysWithinTheNextAnchorsPace() {
+        val text = listOf("夜空に光る星", "Wandering through the darkest woods tonight", "Copper rivers bend home")
+        val words = sungAt(10_000, text[0]) + listOf("la" to 11_600L + SungTiming.HEARD_LATE_MS) + sungAt(13_600, text[2])
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000)
+        assertEquals(mapOf(0 to 10_000L, 1 to 11_320L, 2 to 13_600L), got)
+    }
+
+    @Test
+    fun aFarFillCannotUseOneLetterAsItsOnlyEvidence() {
+        for (middle in listOf("I", "我")) {
+            val text = listOf("Amber lanterns glow", middle, "Copper rivers bend")
+            val words = listOf(middle to 17_000L + SungTiming.HEARD_LATE_MS)
+            assertEquals(mapOf(0 to 10_000L, 2 to 25_000L), SungTiming.linesMs(text,
+                listOf(heard(9_000, sungAt(10_000, text[0]), words, sungAt(25_000, text[2]))), 40_000))
+        }
+    }
+
+    @Test
+    fun aOneWordFillChoosesTheNearestOfTwoWordsInItsSlot() {
+        val text = listOf("Amber lanterns glow", "Lantern", "Silver rivers bend")
+        val words = listOf("Lantern" to 14_250L + SungTiming.HEARD_LATE_MS, "Lantern" to 15_000L + SungTiming.HEARD_LATE_MS)
+        assertEquals(mapOf(0 to 10_000L, 1 to 14_250L, 2 to 16_000L), SungTiming.linesMs(text,
+            listOf(heard(9_000, sungAt(10_000, text[0]), words, sungAt(16_000, text[2]))), 40_000))
+    }
+
+    @Test
+    fun aOneWordFillAcceptsTheLikenessBoundary() {
+        val text = listOf("Amber lanterns glow", "Home", "Silver rivers bend")
+        val words = listOf("rose" to 15_500L + SungTiming.HEARD_LATE_MS)
+        assertEquals(mapOf(0 to 10_000L, 1 to 15_500L, 2 to 16_000L), SungTiming.linesMs(text,
+            listOf(heard(9_000, sungAt(10_000, text[0]), words, sungAt(16_000, text[2]))), 40_000))
+    }
+
+    @Test
+    fun aOneWordFillCannotBorrowAtTheNextSlotsStart() {
+        val text = listOf("Amber lanterns glow", "Home", "River", "Copper bells chime")
+        val words = listOf("mm" to 15_300L + SungTiming.HEARD_LATE_MS, "rose" to 16_461L + SungTiming.HEARD_LATE_MS)
+        assertEquals(mapOf(0 to 10_000L, 1 to 15_230L, 2 to 16_461L, 3 to 18_000L), SungTiming.linesMs(text,
+            listOf(heard(9_000, sungAt(10_000, text[0]), words, sungAt(18_000, text[3]))), 40_000))
+    }
+
+    @Test
+    fun aLongUnspacedOpeningPhraseDoesNotSetTheLinesStart() {
+        val first = "夜明けの空に光る星を探して歩く道の先"
+        val last = "風が歌う"
+        val words = listOf(first to 9_000L + SungTiming.HEARD_LATE_MS,
+            last to 12_000L + SpokenWords.pieces(first).sumOf { SpokenWords.sungLetters(it) } * SungTiming.LETTER_MS + SungTiming.HEARD_LATE_MS)
+        assertEquals(mapOf(0 to 12_000L), SungTiming.linesMs(listOf(first + last), listOf(heard(9_000, words)), 40_000))
+    }
+
+    @Test
+    fun aLaterWordAtThePaceBoundaryCanConfirmAnOpeningPhrase() {
+        val first = "夜明けの空に光る星を探して歩く道の先"
+        val heardFirst = "山川花月" + first.drop(4)
+        val words = listOf(heardFirst to 10_000L + SungTiming.HEARD_LATE_MS, "lantern" to 13_920L + SungTiming.HEARD_LATE_MS)
+        assertEquals(mapOf(0 to 10_000L), SungTiming.linesMs(listOf("$first lantern"), listOf(heard(9_000, words)), 40_000))
+    }
+
+    @Test
+    fun aPinnedPhraseCannotUseItsOwnTimestampAsLaterEvidence() {
+        val first = "夜明けの空に光る星を探して歩く道の先"
+        val heardFirst = "山川花月" + first.drop(4)
+        val words = listOf(heardFirst to 10_000L + SungTiming.HEARD_LATE_MS, "lantern" to 10_000L + SungTiming.HEARD_LATE_MS)
+        assertEquals(emptyMap<Int, Long>(), SungTiming.linesMs(listOf("$first lantern"), listOf(heard(9_000, words)), 40_000))
+    }
+
+    @Test
+    fun aNonchronologicalWordCannotHideALineOverlap() {
+        val text = listOf("Amber lanterns glow", "Copper rivers bend")
+        val words = listOf("Amber" to 10_000L, "lanterns" to 25_000L, "glow" to 11_000L).map { (word, ms) -> word to ms + SungTiming.HEARD_LATE_MS }
+        assertEquals(emptyMap<Int, Long>(), SungTiming.linesMs(text, listOf(heard(9_000, words, sungAt(20_000, text[1]))), 40_000))
+    }
+
+    @Test
+    fun aSkippedLineCanStillHaveStrongMatchesBeforeAndAfterIt() {
+        fun point(line: Int, ms: Long, support: Double) = SungTiming.Placed(line, ms, support, 3,
+            SungTiming.HeardAt(ms, 0)..SungTiming.HeardAt(ms + 500, 0), line * 10)
+        val candidates = listOf(point(0, 10_000, 5.0), point(2, 14_000, 6.0), point(1, 15_000, 3.0), point(2, 20_000, 4.0))
+        // The best chain weighs 12. Skipping line 1 still weighs 11, above its confidence cutoff of 10.5.
+        val sure = SungTiming.sure(candidates, 4, mapOf(0 to 1_000L, 1 to 1_000L, 2 to 1_000L))
+        assertEquals(mapOf(0 to 10_000L, 2 to 20_000L), sure.associate { it.line to it.ms })
+    }
+
+    @Test
+    fun aNearFillCannotPassItsSlotWhenTheAnchorEndsLate() {
+        val text = listOf("Carry every lantern down", "Yo", "Lantern", "Copper bells chime")
+        for (end in listOf(16_133L, 17_000L)) {
+            val first = listOf("Carry" to 10_000L, "every" to 15_800L, "lantern" to 16_000L, "down" to end)
+                .map { (word, ms) -> word to ms + SungTiming.HEARD_LATE_MS }
+            val voice = listOf("Lantern" to 17_500L + SungTiming.HEARD_LATE_MS)
+            assertEquals(mapOf(0 to 10_000L, 2 to 17_500L, 3 to 18_000L), SungTiming.linesMs(text,
+                listOf(heard(9_000, listOf("[Music]" to 9_000L), first, voice, sungAt(18_000, text[3]))), 40_000))
+        }
+    }
+
+    @Test
+    fun anAnchorsTimestampCannotDoubleAsDistinctFillEvidence() {
+        val text = listOf("Amber bells lanterns", "Wandering home", "Copper rivers bend")
+        val first = sungAt(10_000, text[0]).dropLast(1) + listOf("lanterns" to 12_000L + SungTiming.HEARD_LATE_MS)
+        val voice = listOf("Wandering" to 12_000L + SungTiming.HEARD_LATE_MS)
+        assertEquals(mapOf(0 to 10_000L, 2 to 25_000L), SungTiming.linesMs(text,
+            listOf(heard(9_000, first, voice, sungAt(25_000, text[2]))), 40_000))
+    }
+
+    @Test
+    fun aSecondPhraseCannotUseTheNextAnchorsOwnedPiece() {
+        val text = listOf("Amber bells lanterns", "Wandering home", "Copper rivers bend")
+        val words = listOf("Amber bells lanterns Copper" to 9_000L + SungTiming.HEARD_LATE_MS,
+            "mmmmmmmmmmmmmmmmmm Wandering" to 9_000L + SungTiming.HEARD_LATE_MS,
+            "rivers" to 20_420L + SungTiming.HEARD_LATE_MS, "bend" to 20_840L + SungTiming.HEARD_LATE_MS)
+        assertEquals(mapOf(0 to 9_000L, 2 to 20_000L), SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+    }
+
+    @Test
+    fun aFillOutsideTheHearingStaysUntimed() {
+        val text = listOf("a b c", "Yo", "Sun moon stars")
+        for ((start, end, first, second) in listOf(listOf(-500L, 0L, -200L, -100L), listOf(-550L, 100L, -50L, 90L))) {
+            val voice = listOf("Yo" to first + SungTiming.HEARD_LATE_MS, "Yo" to second + SungTiming.HEARD_LATE_MS)
+            assertEquals(mapOf(0 to start, 2 to end), SungTiming.linesMs(text,
+                listOf(heard(0, sungAt(start, text[0]), voice, sungAt(end, text[2]))), 4_000))
         }
     }
 

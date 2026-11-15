@@ -1052,3 +1052,41 @@ truth and main's stored right-line sets:
 The targets still pass. The previous local full build was stopped because these
 new production fixes replace its head. Full checks and a fresh review are needed
 on this change. No GitHub run was cancelled by hand.
+
+### Mixed-script pace and mutation follow-up
+
+The next static review found that the new pace filter could remove a near fill
+when its two anchors use different scripts. The sung-letter spacing and the
+written-letter pace assign different weights to Japanese and Korean characters.
+The parent reproduced the missing line in Kotlin. A near guess now stays inside
+the anchors' written-letter pace window before the existing evidence and order
+checks run. Both script directions pass, at 12280 and 11320 ms.
+
+The old dominance-pruning layer is removed. The indexed chain no longer needs
+it to meet the measured cost target. On the same 60-line fake input, three warm
+calls with pruning had median 457.776 ms and maximum 461.020 ms. Without pruning,
+the median was 415.042 ms and maximum 463.929 ms. Both measurements used the
+bounded 2-CPU, 2-GiB container. This comparison does not establish a phone time
+or a stable speed improvement. It supports removing the extra matching rules.
+
+All 72 focused Kotlin tests pass. Sixteen targeted faulty versions fail those
+tests: opening-word offsets, equal timestamp and pace bounds, one-word slots,
+confidence through a skipped line, nonchronological heard-word ownership, fill
+bounds and anchor ownership. The production code passes each same fixture.
+
+The mutation report on aa518e15 caught 401 of 457 changes. Of its 56 remaining
+leads, 13 belong to the removed pruning layer and 16 now have failing assertions.
+Nineteen preserve the result under the timing rules: ties, redundant bounds,
+unused successor cells and arithmetic that keeps the same candidate order.
+Three affect unused generated getters. Five time out because they stop the
+Fenwick index from advancing or terminating. These diagnoses do not change the
+mutation workflow or hide its diagnostics. Fresh CI must check the new head.
+
+The parent compiled the final code and replayed all 84 inputs again. The result
+is unchanged: two plays 600 / 57 / 14 / 89; one play 378 / 51 / 22 / 54. Both
+modes have zero main-right lines placed wrong and zero unheard placements. The
+original synthetic floors, truth and tolerances are unchanged. The timed-lyrics
+code is unchanged from the fresh 312 / 624 / 85 / 407 measurement.
+
+Full local checks, current GitHub checks, a fresh review and app verification
+remain pending on this follow-up.
