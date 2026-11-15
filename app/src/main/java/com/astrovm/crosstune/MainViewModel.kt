@@ -46,6 +46,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
 
 internal sealed interface Effect {
     /**
@@ -194,6 +195,8 @@ internal class MainViewModel(
 
     private val historyStore = HistoryStore(preferences)
     private val savedLinesStore = SavedLinesStore(preferences)
+    /** Keep a translation behind a pending move, so it finds the line under its new words. */
+    private val savedLineUpdates = Mutex()
     private val syncStore = LyricsSyncStore(preferences)
     private val leadStore = LeadStore(preferences)
     private val gapStore = ShazamGapStore(preferences)
@@ -4381,9 +4384,11 @@ internal class MainViewModel(
         // Move the words and their corrections together. Reading them may need the dictionary, away from the screen.
         val script = uiState.learning.script
         viewModelScope.launch {
-            savedLinesStore.change(systemDispatcher) { current ->
-                followedSavedLines(current, changes, song, script)
-            }?.let { uiState = uiState.copy(savedLines = it) }
+            savedLineUpdates.withLock {
+                savedLinesStore.change(systemDispatcher) { current ->
+                    followedSavedLines(current, changes, song, script)
+                }?.let { uiState = uiState.copy(savedLines = it) }
+            }
         }
     }
 
@@ -4421,11 +4426,16 @@ internal class MainViewModel(
     private fun retranslateSavedLines(song: MusicMetadata) {
         val lines = wordLines()
         val translations = uiState.learning.translations
-        val changes = uiState.savedLines.filter { it.isOf(song) && it.line == null }.mapNotNull { saved ->
-            val now = translations.getOrNull(lines.indexOf(saved.text))?.takeIf { it != saved.translation } ?: return@mapNotNull null
-            saved to saved.copy(translation = now)
+        // Keep this result even if the user closes the words while a move finishes.
+        viewModelScope.launch {
+            savedLineUpdates.withLock {
+                val changes = savedLinesStore.load().filter { it.isOf(song) && it.line == null }.mapNotNull { saved ->
+                    val now = translations.getOrNull(lines.indexOf(saved.text))?.takeIf { it != saved.translation } ?: return@mapNotNull null
+                    saved to saved.copy(translation = now)
+                }
+                if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
+            }
         }
-        if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
     }
 
     /**

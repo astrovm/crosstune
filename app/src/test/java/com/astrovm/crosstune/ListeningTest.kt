@@ -5533,7 +5533,12 @@ class ListeningTest {
     }
 
     @Test
-    fun aTranslationThatFinishesWhileALineMovesIsKeptWithItsNewWords() {
+    fun aTranslationThatFinishesWhileALineMovesIsKeptWithItsNewWords() = aTranslationFinishesWhileALineMoves(close = false)
+
+    @Test
+    fun closingTheWordsDoesNotLoseATranslationThatFinishedWhileALineMoves() = aTranslationFinishesWhileALineMoves(close = true)
+
+    private fun aTranslationFinishesWhileALineMoves(close: Boolean) {
         prefs().edit().putString(
             "saved_lines", """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band"}]"""
         ).putBoolean("lyrics_translation", true).commit()
@@ -5546,6 +5551,7 @@ class ListeningTest {
                 controllerModel().uiState.learning.let { it.translations == listOf("[Night sky]") && !it.translating }
             }
             assertEquals("Night  Sky!", SavedLinesStore(prefs()).load().single().text)
+            if (close) closeWords()
         } finally {
             gate.letGo()
         }
