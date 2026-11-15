@@ -176,19 +176,11 @@ internal object SungTiming {
         val groups = sorted.indices.groupBy { sorted[it].line }
         for (line in lines - 2 downTo 0) {
             val group = groups[line].orEmpty()
-            for (k in group) {
-                val next = scores.best(k)
-                if (next >= 0) starting[k] += starting[next]
-            }
+            for (k in group) starting[k] += scores.weight(k)
             group.forEach(scores::add)
             for (k in sorted.indices) {
                 if (sorted[k].line >= line) continue
-                if (group.isEmpty()) {
-                    after[k][line] = after[k][line + 1]
-                } else {
-                    val next = scores.best(k)
-                    after[k][line] = if (next >= 0) starting[next] else 0.0
-                }
+                after[k][line] = if (group.isEmpty()) after[k][line + 1] else scores.weight(k)
             }
         }
         return starting to after
@@ -275,6 +267,11 @@ internal object SungTiming {
                 }
             }
             return found
+        }
+
+        fun weight(k: Int): Double {
+            val found = best(k)
+            return if (found >= 0) weights[found] else 0.0
         }
 
         // The pairwise pass keeps the first candidate on equal weights. Keep that tie rule here too.
