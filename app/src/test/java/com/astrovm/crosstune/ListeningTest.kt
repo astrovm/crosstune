@@ -6032,7 +6032,11 @@ class ListeningTest {
             }
         }
         wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSites)
-        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") && shown("[Singing to the morning light]") }
+        // The title is translated after the lines. Finish that initial request before counting any reopen work.
+        waitUntil(TIMEOUT_MS) {
+            chordsOver("Walking down the river road") == listOf("G", "C") && shown("[Singing to the morning light]") &&
+                composeRule.runOnIdle { controllerModel().uiState.learning.titleMeaning == "[Demo]" }
+        }
         val asked = fake.requestedUrls.size
         composeRule.runOnIdle { controllerModel().dismissLyrics() }
 
@@ -6044,6 +6048,7 @@ class ListeningTest {
             assertEquals("Walking down the river road\nSinging to the morning light", state.lyrics)
             assertEquals(listOf("[Walking down the river road]", "[Singing to the morning light]"), state.learning.translations)
             assertNotNull(state.chords.sheet)
+            assertEquals("[Demo]", state.learning.titleMeaning)
         }
         assertEquals(listOf("G", "C"), chordsOver("Walking down the river road"))
         assertTrue(shown("[Singing to the morning light]"))
