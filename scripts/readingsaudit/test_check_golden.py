@@ -252,13 +252,15 @@ class FakeDiff(unittest.TestCase):
             commit(repo, "build: bump kuromoji")
             self.assertEqual(1, self.run_check(repo)[0])
 
-    def test_shared_regex_changes_need_a_fresh_whole_line_check(self):
+    def test_shared_reading_helpers_need_a_fresh_whole_line_check(self):
         paths = (
             "app/src/main/java/com/astrovm/crosstune/PhoneRegex.kt",
             "app/src/main/java/com/astrovm/crosstune/PhoneRegexTable.kt",
             "app/src/main/java/com/astrovm/crosstune/Patterns.kt",
             "app/src/test/java/com/astrovm/crosstune/IcuPattern.kt",
             "app/src/test/java/com/astrovm/crosstune/PhoneRegexSets.kt",
+            "app/src/test/java/com/astrovm/crosstune/TestUniDic.kt",
+            "app/src/main/java/com/astrovm/crosstune/SongNames.kt",
         )
         for path in paths:
             with self.subTest(path=path), tempfile.TemporaryDirectory() as folder:

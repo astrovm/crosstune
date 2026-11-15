@@ -1,5 +1,4 @@
 import json
-import re
 import sys
 import tempfile
 import unittest
@@ -10,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import golden
 import readingsaudit
+from source_calls import called, declared
 
 
 def audit_line(text, built, uni=None, truth=None):
@@ -724,22 +724,23 @@ HARNESSES = (
 APP_DIR = "app/src/main/java/com/astrovm/crosstune"
 
 
-def declared(root):
-    """Each class, object and interface the app declares, by name, with the file it is in."""
-    found = {}
-    for path in sorted((root / APP_DIR).glob("*.kt")):
-        for name in re.findall(r"^(?:[a-z]+\s+)*(?:class|object|interface)\s+([A-Z]\w*)", path.read_text(encoding="utf-8"), re.MULTILINE):
-            found.setdefault(name, set()).add(f"{APP_DIR}/{path.name}")
-    return found
-
-
-def called(root, harness, names):
-    """The app files whose names [harness] uses."""
-    text = (root / harness).read_text(encoding="utf-8")
-    return {path for name, paths in names.items() if re.search(rf"\b{name}\b", text) for path in paths}
-
-
 class Sources(unittest.TestCase):
+
+    def test_shared_functions_properties_and_test_adapters_are_followed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            sources = {
+                f"{APP_DIR}/Readings.kt": "object Readings { fun of() = phoneRegex(RULE) }\n",
+                f"{APP_DIR}/Regex.kt": "internal fun phoneRegex(pattern: String) = IcuWriter().write(pattern)\n",
+                f"{APP_DIR}/Table.kt": 'internal const val RULE = "x"\n',
+                "app/src/test/java/com/astrovm/crosstune/Writer.kt": "internal class IcuWriter { fun write(pattern: String) = pattern }\n",
+                "Harness.kt": "val answer = Readings.of()\n",
+            }
+            for name, text in sources.items():
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                (root / name).write_text(text)
+            expected = set(sources) - {"Harness.kt"}
+            self.assertEqual(expected, called(root, "Harness.kt", declared(root)))
 
     def test_each_reading_source_is_there(self):
         for path in golden.READING_SOURCES:
@@ -748,7 +749,7 @@ class Sources(unittest.TestCase):
     def test_every_app_file_the_locks_read_through_is_a_reading_source(self):
         names = declared(readingsaudit.ROOT)
         for harness in HARNESSES:
-            self.assertEqual(set(), called(readingsaudit.ROOT, harness, names) - set(golden.READING_SOURCES), harness)
+            self.assertEqual(set(), called(readingsaudit.ROOT, harness, names) - set(golden.READING_SOURCES) - set(HARNESSES), harness)
 
     def test_a_file_named_in_a_harness_is_found(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -758,7 +759,7 @@ class Sources(unittest.TestCase):
             (root / APP_DIR / "Two.kt").write_text("private object SungReadings\n// class Commented is still a name\n")
             (root / "Harness.kt").write_text("val x = SungReadings.matched(Readings.of())\nval RubyLike = 1\n")
             names = declared(root)
-            self.assertEqual({"Ruby": {f"{APP_DIR}/One.kt"}, "Readings": {f"{APP_DIR}/One.kt"}, "SungReadings": {f"{APP_DIR}/Two.kt"}}, names)
+            self.assertEqual({"Ruby": {f"{APP_DIR}/One.kt": "class"}, "Readings": {f"{APP_DIR}/One.kt": "object"}, "SungReadings": {f"{APP_DIR}/Two.kt": "object"}}, names)
             self.assertEqual({f"{APP_DIR}/One.kt", f"{APP_DIR}/Two.kt"}, called(root, "Harness.kt", names))
 
 
