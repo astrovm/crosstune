@@ -2621,6 +2621,64 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun releasingPracticeDestroysItsMadePlayerAndDoesNotMakeAnother() {
+        val cards = cards()
+        assertEquals(player.view(), cards.playerView())
+        cards.release()
+        assertTrue(player.released)
+        assertNull(cards.playerView())
+    }
+
+    @Test
+    fun releasingPracticeDoesNotMakeAnUnusedPlayer() {
+        val cards = cards()
+        cards.release()
+        assertFalse(player.released)
+        assertNull(cards.playerView())
+    }
+
+    @Test
+    fun aDeviceWithoutWebViewSupportLeavesPracticeWithoutASmallPlayer() {
+        val cards = PracticeCards(
+            screen, scope, playback, ExactMatcher(sites.client(), "AR"), store, traits,
+            { wall }, { System.currentTimeMillis() }, newPlayer = { throw UnsupportedOperationException("WebView unsupported") }
+        )
+        assertNull(cards.playerView())
+    }
+
+    @Test
+    fun anOldPlayersAnswerCannotFinishAnotherCardTypeForTheSameWords() {
+        youTubeHasTheSong()
+        keep(line())
+        playback.access = true
+        val cards = cards()
+        cards.start(null, before = null)
+        waitForThePlayer()
+        val first = requireNotNull(practice)
+        screen.value = screen.value.copy(practice = first.copy(
+            queue = listOf(requireNotNull(first.line).copy(cardType = HEAR_TYPE)), sound = LineSound.PLAYING
+        ))
+        player.end(LineEnd.ENDED)
+        assertEquals(LineSound.PLAYING, practice?.sound)
+        player.end(LineEnd.FAILED)
+        assertEquals(first.video, practice?.video)
+    }
+
+    @Test
+    fun aMissingWebViewProviderLeavesPracticeWithoutASmallPlayer() {
+        var attempts = 0
+        val cards = PracticeCards(
+            screen, scope, playback, ExactMatcher(sites.client(), "AR"), store, traits,
+            { wall }, { System.currentTimeMillis() }, newPlayer = {
+                attempts++
+                throw android.util.AndroidRuntimeException("No WebView provider")
+            }
+        )
+        assertNull(cards.playerView())
+        assertEquals(1, attempts)
+    }
+
+    @Test
     fun aVideoSearchThatFailedIsAskedOnceMore() {
         youTubeHasTheSong()
         val found = sites.handler
