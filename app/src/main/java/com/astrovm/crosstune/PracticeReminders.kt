@@ -138,13 +138,19 @@ internal class PracticeReminders(
 
     /** From now on, at [minute] on the wall. */
     fun at(minute: Int) {
-        preferences.edit { putInt(KEY_MINUTE, minute) }
+        preferences.edit {
+            putInt(KEY_MINUTE, minute)
+            remove(KEY_ARMED_FOR)
+        }
         arm()
     }
 
     /** A card was practised, or a reminder tapped: it's what they're for, so they start over, and one showing is out of date. */
     fun practised() {
-        preferences.edit { putInt(KEY_IGNORED, 0) }
+        preferences.edit {
+            putInt(KEY_IGNORED, 0)
+            remove(KEY_ARMED_FOR)
+        }
         clear()
         arm()
     }
@@ -173,7 +179,8 @@ internal class PracticeReminders(
      * is what still fires. Before Android 12 the exact one cannot be taken away, so there is no spare.
      */
     private fun setNext(minute: Int) {
-        val at = nextReminderAt(minute, now(), zone())
+        val at = nextAt(minute)
+        preferences.edit { putLong(KEY_ARMED_FOR, at) }
         val onTime = exact
         if (onTime) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending(ACTION_REMIND, at))
@@ -187,13 +194,24 @@ internal class PracticeReminders(
         }
     }
 
+    /** Opening the app must not replace a reminder Android still holds with tomorrow's. */
+    private fun nextAt(minute: Int): Long {
+        val armed = preferences.getLong(KEY_ARMED_FOR, 0L)
+        val now = now()
+        val zone = zone()
+        return if (armed != 0L && armed <= now && minuteOfDay(armed, zone) == minute) armed else nextReminderAt(minute, now, zone)
+    }
+
     private fun cancelBoth() {
+        preferences.edit { remove(KEY_ARMED_FOR) }
         alarms.cancel(pending(ACTION_REMIND))
         alarms.cancel(pending(ACTION_REMIND_KEEP))
     }
 
     /** The alarm went: says what's due, unless there's no reason to, and sets tomorrow's. */
     fun remind(intent: Intent = Intent()) {
+        // This delivery consumes the old slot even when there is nothing due or notifications are blocked.
+        preferences.edit { remove(KEY_ARMED_FOR) }
         val slot = intent.getLongExtra(EXTRA_AT, 0L)
         // The exact alarm and the spare can both be on their way. The second must not ask again.
         val again = slot != 0L && slot == preferences.getLong(KEY_POSTED_FOR, 0L)
@@ -267,6 +285,7 @@ internal class PracticeReminders(
         private const val KEY_TURNED_OFF = "practice_reminder_turned_off"
         private const val KEY_DONE_AT = "practice_reminder_done_at"
         private const val KEY_POSTED_FOR = "practice_reminder_posted_for"
+        private const val KEY_ARMED_FOR = "practice_reminder_armed_for"
     }
 }
 

@@ -366,6 +366,68 @@ class PracticeRemindersTest {
     }
 
     @Test
+    fun returningAfterTheMinuteKeepsAnUndeliveredReminderForToday() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        setUpWith(line("One"))
+        val today = at(3, 20, 5)
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(3, 20, 8)
+        reminders.arm()
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+
+        // A new process and a newly allowed exact alarm must retain that same due minute too.
+        val restarted = PracticeReminders(app, now = { clock }, zone = { zone })
+        restarted.arm()
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        restarted.arm()
+        assertEquals(2, alarms.scheduledAlarms.size)
+        assertTrue(alarms.scheduledAlarms.all { it.triggerAtMs == today })
+        assertEquals(1, alarms.scheduledAlarms.count { it.windowLengthMs == 0L })
+    }
+
+    @Test
+    fun choosingTheMinutePractisingOrTurningOffStartsAfresh() {
+        setUpWith(line("One"))
+        clock = at(3, 20, 8)
+        reminders.at(20 * 60 + 7)
+        assertEquals(at(4, 20, 7), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(4, 20, 8)
+        reminders.practised()
+        assertEquals(at(5, 20, 7), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(5, 20, 8)
+        reminders.turn(false)
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        reminders.turn(true)
+        assertEquals(at(6, 20, 7), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun anUndeliveredReminderMovesToTheRequestedMinuteInTheNewZone() {
+        setUpWith(line("One"))
+        clock = at(3, 20, 8)
+        val tokyo = ZoneId.of("Asia/Tokyo")
+        PracticeReminders(app, now = { clock }, zone = { tokyo }).arm()
+        assertEquals(at(4, 20, 5, zone = tokyo), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun deliveringAnOverdueAlarmConsumesItsSlotAndStillIgnoresDuplicates() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 8)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        reminders.arm()
+        assertEquals(at(4, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(4, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
     fun itSaysHowManyAndWhichSongsThenOpensThePractice() {
         setUpWith(line("One"), line("Two"), line("Three", "Other"))
         // A new card is the one due longest, so they're all there, and the session's over a day ago.
