@@ -1090,3 +1090,27 @@ code is unchanged from the fresh 312 / 624 / 85 / 407 measurement.
 
 Full local checks, current GitHub checks, a fresh review and app verification
 remain pending on this follow-up.
+
+### Pace across several mixed-script near fills
+
+A fresh review found that clamping each guess to the anchors was insufficient.
+Two adjacent fills could still have decreasing pace orders and both go dark.
+The parent reproduced the exact fake input in Kotlin: only the 10000 and 16000 ms
+anchors remained. The fixed result also contains 12352 and 14632 ms.
+
+Near guesses now have nondecreasing pace orders across every intervening line,
+inside both anchor bounds. Voice evidence and one-word matches keep their raw
+spacing slots. A guessed start uses the next pace-adjusted bound. This last rule
+also fixes a second measured case: when a pace bound moves the next guess, the
+old raw slot end could remove the previous line at a valid start. Japanese and
+Korean fixtures both need starts at 11740 and 13480 ms, between anchors at 10000
+and 15220 ms. They failed before the bound change.
+
+The 75 focused tests pass, including the original synthetic floors. A six-gap
+sweep keeps both mixed-script fills within one second of their voice and at the
+60 ms written-letter minimum pace. The initial sweep assertion incorrectly used
+the model's 70 ms letter estimate; the check now uses the actual 60 ms minimum
+pace requirement. Production did not change for that test correction.
+
+The local build on d6b1377f was stopped because these production fixes replace
+it. Current full CI, replay and a fresh review remain pending.

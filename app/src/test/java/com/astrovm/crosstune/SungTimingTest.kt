@@ -711,6 +711,44 @@ class SungTimingTest {
     }
 
     @Test
+    fun adjacentMixedScriptNearFillsKeepTheirMinimumPaceTogether() {
+        val text = listOf("夜空に光る星を見た夜", "Wandering through the darkest woods tonight", "風が歌う朝の", "Copper rivers bend home")
+        val words = sungAt(10_000, text[0]) + listOf("la" to 12_402L + SungTiming.HEARD_LATE_MS,
+            "la" to 14_638L + SungTiming.HEARD_LATE_MS) + sungAt(16_000, text[3])
+        assertEquals(mapOf(0 to 10_000L, 1 to 12_352L, 2 to 14_632L, 3 to 16_000L),
+            SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+    }
+
+    @Test
+    fun mixedScriptNearFillsKeepTheirPaceAcrossAnchorGaps() {
+        val text = listOf("夜空に光る星を見た夜", "Wandering through the darkest woods tonight", "風が歌う朝の", "Copper rivers bend home")
+        for (gap in listOf(3_400L, 3_880L, 4_200L, 5_000L, 6_000L, 7_000L)) {
+            val firstVoice = 10_000 + gap * 40 / 102 + 50
+            val secondVoice = 10_000 + gap * 78 / 102 + 50
+            val words = sungAt(10_000, text[0]) + listOf("la" to firstVoice + SungTiming.HEARD_LATE_MS,
+                "la" to secondVoice + SungTiming.HEARD_LATE_MS) + sungAt(10_000 + gap, text[3])
+            val got = SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000)
+            assertEquals("gap=$gap", text.indices.toSet(), got.keys)
+            assertTrue(got.getValue(1) in firstVoice - 1_000..firstVoice + 1_000)
+            assertTrue(got.getValue(2) in secondVoice - 1_000..secondVoice + 1_000)
+            for ((line, letters) in listOf(10, 38, 6).withIndex()) {
+                assertTrue("gap=$gap, line=$line: $got", got.getValue(line + 1) - got.getValue(line) >= letters * 60L)
+            }
+        }
+    }
+
+    @Test
+    fun nearFillsKeepTheirVoiceSlotsWhenPaceMovesTheNextGuess() {
+        for (middle in listOf("夜".repeat(29), "밤".repeat(29))) {
+            val text = listOf("Amber lanterns brighten the night", "Quiet rivers wander through woods", middle, "Copper rivers bend home")
+            val words = sungAt(10_000, text[0]) + listOf("la" to 11_000L + SungTiming.HEARD_LATE_MS,
+                "la" to 13_000L + SungTiming.HEARD_LATE_MS) + sungAt(15_220, text[3])
+            assertEquals(mapOf(0 to 10_000L, 1 to 11_740L, 2 to 13_480L, 3 to 15_220L),
+                SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+        }
+    }
+
+    @Test
     fun aFarFillCannotUseOneLetterAsItsOnlyEvidence() {
         for (middle in listOf("I", "我")) {
             val text = listOf("Amber lanterns glow", middle, "Copper rivers bend")

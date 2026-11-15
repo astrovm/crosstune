@@ -298,11 +298,13 @@ internal object SungTiming {
             val far = b.ms - a.ms > FILL_MS
             val wordLines = (listOf(a.line) + between + b.line).flatMap { written.getValue(it) }.groupBy { it.text }
                 .mapValues { (_, pieces) -> pieces.map { it.line }.distinct().size }
+            // Sung and written letters have different weights across scripts. Keep near guesses at the minimum pace together.
+            val nearOrders = put.runningFold(a.orderMs) { previous, placed -> placed.orderMs.coerceIn(previous, b.orderMs) }
+            val nearGuesses = put.mapIndexed { k, placed -> placed.ms + (nearOrders[k + 1] - placed.orderMs) } + b.ms
             val fills = put.mapIndexedNotNull { k, placed ->
                 val slotEnd = put.getOrNull(k + 1)?.ms ?: b.ms
                 val pieces = written.getValue(placed.line)
-                // Sung and written letters have different weights across scripts. Keep a near guess inside the anchors' minimum pace.
-                val nearGuess = placed.ms + (placed.orderMs.coerceIn(a.orderMs, b.orderMs) - placed.orderMs)
+                val nearGuess = nearGuesses[k]
                 val after = maxOf(if (far) a.ms else nearGuess, a.heardMs.endInclusive.ms)
                 val start = if (far) {
                     // A word shared with an anchor or another middle line cannot tell which line was heard.
@@ -316,7 +318,8 @@ internal object SungTiming {
                         .minByOrNull { abs(it.ms - nearGuess) }?.ms ?: after
                     else after
                 } else null
-                start?.takeIf { it in after until (if (far) b.ms else slotEnd) }?.let { ms ->
+                // Voice stays in its original slot; a guessed start uses the next pace-adjusted bound.
+                start?.takeIf { it in after until (if (far) b.ms else nearGuesses[k + 1]) }?.let { ms ->
                     Placed(placed.line, ms, placed.support, placed.words, placed.heardMs, pieces.first().written)
                 }
             }
