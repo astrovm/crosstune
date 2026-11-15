@@ -5128,6 +5128,20 @@ class ListeningTest {
         assertTrue(kept.any { it.text == "Night sky" })
     }
 
+    @Test
+    fun aWordSavedAtTheDestinationWhileAMoveWaitsIsNotDuplicated() {
+        aLineMovesWhile { store, old ->
+            store.addAll(listOf(old.copy(text = "Night sky above", line = "Under the Night sky above", translation = "Kept word", interval = 8)))
+        }
+        val kept = SavedLinesStore(prefs()).load()
+        assertEquals(kept.size, kept.distinctBy { Triple(it.text, it.title, it.artist) }.size)
+        val destination = kept.single { it.text == "Night sky above" }
+        assertEquals("Kept word", destination.translation)
+        assertEquals("Under the Night sky above", destination.line)
+        assertEquals(8, destination.interval)
+        assertTrue(kept.any { it.text == "Night sky" })
+    }
+
     /** Hold the move's background work while another save changes the current store. */
     private fun aLineMovesWhile(timed: Boolean = false, change: (SavedLinesStore, SavedLine) -> Unit) {
         val timing = if (timed) ""","start":1000,"end":5000,"next":6000""" else ""

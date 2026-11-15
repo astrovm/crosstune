@@ -4351,7 +4351,7 @@ internal class MainViewModel(
         val lines = wordLines()
         val times = uiState.lyricLines.takeIf { it.isNotEmpty() }?.map { it.timeMs }
         val kept = uiState.savedLines.filter { it.isOf(song) }
-        val taken = kept.filter { it.line == null }.mapTo(mutableSetOf()) { it.text }
+        val taken = kept.mapTo(mutableSetOf()) { it.text }
         val changes = kept.mapNotNull { saved ->
             val was = saved.line ?: saved.text
             if (was in lines) return@mapNotNull null
@@ -4370,7 +4370,7 @@ internal class MainViewModel(
         viewModelScope.launch {
             savedLinesStore.change(systemDispatcher) { current ->
                 // Another save can finish while the readings are worked out. Keep its destination and edits.
-                val occupied = current.filter { it.line == null && it.isOf(song) }.mapTo(mutableSetOf()) { it.text }
+                val occupied = current.filter { it.isOf(song) }.mapTo(mutableSetOf()) { it.text }
                 current.map { saved ->
                     val change = changes.firstOrNull { it.first.isSame(saved) }
                     if (change == null) saved else {
