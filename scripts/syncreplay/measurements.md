@@ -967,3 +967,54 @@ installed 1.30.2 API marks it deprecated and provides a seven-argument construct
 with `CodeSource`. The test now uses that constructor. Other Gradle deprecation
 notices originate inside the existing Kover and Android plugins; no plugin or
 app version is changed here.
+
+
+### Root verification of the Mac review and chain index
+
+The Mac review used a Python port. The parent then reproduced all three findings
+with the actual Kotlin code, on both the reviewed `57a3a4e8` and the updated
+`c8fd753c`. The new fake-data tests failed before the fill changes and pass now.
+
+1. A one-word line could take a later line's word beyond its interpolated slot.
+   In the fake case, `Hey` moved from main's 12586 ms to 14500 ms, after the next
+   line at 13043 ms. Its search now stops at the next slot. It stays at 12586 ms.
+2. Across a gap over 8 s, one word shared by two intervening lines put the wrong
+   line 3.35 s late. Exact evidence now needs a word unique among those line
+   indices. Repeated identical lines count separately. A unique word can put its
+   line before the unreliable spacing guess. Conflicting placements stay dark.
+3. A word inside a raw heard phrase had its character offset added twice. The
+   fake line went to 23260 ms instead of 22000 ms. The offset is now used once.
+4. An anchor's final word could identify a missing line too. A new test reproduced
+   the extra line at 10700 ms. Far fills now use only heard pieces strictly
+   between the anchors' owned pieces. The extra line stays dark.
+
+The candidate graph also became large enough to make pairwise chain passes slow.
+A fake 60-line song, 20 unspaced characters per line, heard twice, produced 33572
+raw candidates. On `57a3a4e8`, its first actual Kotlin call took 48060.8 ms. The
+existing dominance optimization on `c8fd753c` kept 16238 candidates and took
+3521.3 ms cold and 2248.3 ms warm. The new two-dimensional prefix index keeps the
+same ordering and tie rules without comparing every candidate pair.
+
+Before the fill fixes, all 84 recorded replay outputs were byte-for-byte
+unchanged by the new chain index, including every intermediate round. The
+indexed fake case took 1843.35 ms cold and 551.08 ms on the second call. The
+committed benchmark now has `--fake`; it needs no private recording. With the
+final fill fixes, its median of three warm calls was 482.99 ms, maximum 562.07 ms,
+in a 2-CPU, 2-GiB container. This measures JVM work on mr, not phone latency.
+
+```sh
+SYNCREPLAY_DIR=/mnt/data/agent-cache/crosstune-syncreplay nice -n 10 python3 scripts/syncreplay/timing-bench.py --fake
+```
+
+The parent compiled the final production Kotlin code and replayed all 84 inputs
+again, then used `untimed_score` and `against_main` on the original truth and
+main's stored right-line sets. No audio, truth, tolerance or case was changed.
+
+| Plays | Main: within / off / over 3 s / wrong | Before this review | Now | Main right, now wrong | Unheard placements |
+|---|---|---|---|---:|---:|
+| Two | 594 / 130 / 49 / 173 | 601 / 57 / 14 / 91 | 601 / 57 / 14 / 89 | 0 | 0 |
+| One | 372 / 92 / 43 / 100 | 378 / 53 / 24 / 56 | 379 / 51 / 22 / 54 | 0 | 0 |
+
+The 51 focused tests pass, including the original synthetic accuracy floors.
+The full Android checks, timed replay and fresh independent review are pending
+on this final change. Their results must be checked before marking it ready.

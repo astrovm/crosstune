@@ -560,6 +560,58 @@ class SungTimingTest {
     }
 
     @Test
+    fun aOneWordFillCannotUseWordsFromTheNextFilledLine() {
+        val text = listOf("Amber lanterns glow", "Hey", "Quiet river runs", "They ride slow", "Copper bells chime")
+        val middle = listOf("mm" to 11_800L + SungTiming.HEARD_LATE_MS,
+            "river" to 12_720L + SungTiming.HEARD_LATE_MS, "They" to 14_500L + SungTiming.HEARD_LATE_MS)
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, sungAt(10_000, text[0]), middle, sungAt(17_000, text[4]))), 40_000)
+        assertEquals(mapOf(0 to 10_000L, 1 to 12_586L, 2 to 13_043L, 4 to 17_000L), got)
+    }
+
+    @Test
+    fun oneWordCannotIdentifyEitherOfTwoLinesAcrossALongGap() {
+        for (middle in listOf(listOf("Wandering through dark woods", "Still wandering home"), listOf("Wandering home", "Wandering home"))) {
+            val text = listOf("Amber lanterns glow") + middle + "Copper bells chime"
+            val at = if (middle[0] == middle[1]) 16_000L else 16_350L
+            val got = SungTiming.linesMs(text, listOf(heard(9_000, sungAt(10_000, text[0]),
+                listOf("Wandering" to at + SungTiming.HEARD_LATE_MS), sungAt(20_000, text[3]))), 40_000)
+            assertEquals(mapOf(0 to 10_000L, 3 to 20_000L), got)
+        }
+    }
+
+    @Test
+    fun aDistinctWordCanPutALineBeforeItsLongGapGuess() {
+        val text = listOf("Amber lanterns glow", "Wandering through dark woods", "Glittering river returns", "Copper bells chime")
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, sungAt(10_000, text[0]),
+            listOf("Glittering" to 14_000L + SungTiming.HEARD_LATE_MS), sungAt(20_000, text[3]))), 40_000)
+        assertEquals(mapOf(0 to 10_000L, 2 to 14_000L, 3 to 20_000L), got)
+    }
+
+    @Test
+    fun aWordInsideOneHeardPhraseUsesItsLetterOffsetOnce() {
+        val text = listOf("Amber lanterns glow", "Wandering home", "Copper bells chime")
+        val prefix = "unrecognizedprefix"
+        val raw = "$prefix wandering" to 22_000L - prefix.length * SungTiming.LETTER_MS + SungTiming.HEARD_LATE_MS
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, sungAt(10_000, text[0]), listOf(raw), sungAt(25_000, text[2]))), 40_000)
+        assertEquals(mapOf(0 to 10_000L, 1 to 22_000L, 2 to 25_000L), got)
+    }
+
+    @Test
+    fun conflictingDistinctWordsDoNotPutLongGapLinesOutOfOrder() {
+        val text = listOf("Amber lanterns glow", "Wandering home", "Glittering river", "Copper bells chime")
+        val words = listOf("Glittering" to 14_000L + SungTiming.HEARD_LATE_MS, "Wandering" to 18_000L + SungTiming.HEARD_LATE_MS)
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, sungAt(10_000, text[0]), words, sungAt(25_000, text[3]))), 40_000)
+        assertEquals(mapOf(0 to 10_000L, 3 to 25_000L), got)
+    }
+
+    @Test
+    fun aLongGapCannotUseAWordAlreadyOwnedByItsAnchor() {
+        val text = listOf("Amber bells lanterns", "Lanterns glow", "Copper rivers bend")
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, sungAt(10_000, text[0]), sungAt(25_000, text[2]))), 40_000)
+        assertEquals(mapOf(0 to 10_000L, 2 to 25_000L), got)
+    }
+
+    @Test
     fun nothingSungHeardTimesNothing() {
         assertEquals(emptyList<LyricLine>(), SungTiming.timed(lines, listOf(heard(0, listOf("[Music]" to 1_000L))), 120_000))
         assertEquals(emptyList<LyricLine>(), SungTiming.timed(lines, emptyList(), 120_000))
