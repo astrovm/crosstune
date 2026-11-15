@@ -452,8 +452,12 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         self.assertEqual([f"{root} --no-daemon help" for root in (self.checkout("first"), other)],
                          (self.dir / "ran").read_text().splitlines())
 
-    def start_script(self, script, *args, **extra):
+    def start_script(self, script, *args, interruptible=False, **extra):
+        def reset_signals():
+            for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+                signal.signal(sig, signal.SIG_DFL)
         process = subprocess.Popen([str(script), *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                   start_new_session=interruptible, preexec_fn=reset_signals if interruptible else None,
                                    env={**os.environ, "PATH": f"{self.dir / 'bin'}:{os.environ['PATH']}",
                                         "HOME": str(self.home), "FAKE_DIR": str(self.dir), **extra})
         self.addCleanup(self.stop, process)
@@ -557,6 +561,32 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
             self.assertFalse(temporary.exists())
         finally:
             temporary.unlink(missing_ok=True)
+
+    def test_an_interrupted_icon_writer_cleans_up_and_keeps_the_signal_status(self):
+        script = self.icon_writer()
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            for group in (True, False):
+                with self.subTest(signal=sig, group=group):
+                    run = f"signal-{int(sig)}-{group}"
+                    self.hold(run)
+                    job = self.start_script("/bin/sh", str(script), interruptible=True, FAKE_RUN=run)
+                    try:
+                        self.wait_for("started." + run, job)
+                        temporary = Path((self.dir / (run + ".input")).read_text())
+                        if group:
+                            os.killpg(job.pid, sig)
+                        else:
+                            job.send_signal(sig)
+                    finally:
+                        self.release(run)
+                        try:
+                            output, _ = job.communicate(timeout=20)
+                        except subprocess.TimeoutExpired:
+                            os.killpg(job.pid, signal.SIGKILL)
+                            job.communicate(timeout=20)
+                            raise
+                    self.assertFalse(temporary.exists())
+                    self.assertEqual(128 + int(sig), job.returncode, output)
 
     def test_golden_writers_finish_and_remove_their_tree_after_an_in_place_edit(self):
         writer = self.dir / "writer"

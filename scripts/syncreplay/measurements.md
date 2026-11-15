@@ -1254,3 +1254,22 @@ generated all four icons with zero pixel differences from the old script. Two
 real concurrent runs also passed and left no temporary image. ShellCheck and
 Ruff pass. The app and its tests remain unchanged from the successful full checks.
 Fresh GitHub checks and an independent review of these small fixes are pending.
+
+### POSIX signal cleanup and unshipped icon scratch files
+
+The icon-helper review found that dash does not run an EXIT trap for an unhandled
+signal. The parent reproduced all six cases with the actual script: INT, TERM
+and HUP, sent either to the shell or its process group. Each left its temporary
+image. Explicit traps now exit with 130, 143 or 129 and run the shared cleanup.
+The test resets inherited signal dispositions and starts a private process group,
+so an ignored background INT cannot make a false pass. All six cases now remove
+the image and keep the expected status; all 67 runner tests pass.
+
+Temporary images now live in the extension's ignored .cache folder, outside the
+icons folder that the build copies. This also keeps an untrappable kill's leftover
+file out of packaged assets. The parent installed the locked extension packages
+in an isolated container (zero audit vulnerabilities), left a stray icon image in
+.cache, then ran the real extension build offline. Chrome and Firefox each built
+28 files, with no cache or stray image copied. git check-ignore also recognizes
+the scratch path. The app and its tests are unchanged. ShellCheck and Ruff pass.
+Fresh GitHub checks and review of this final signal fix remain pending.

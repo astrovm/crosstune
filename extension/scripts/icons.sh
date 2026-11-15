@@ -5,8 +5,12 @@
 main() {
 set -eu
 cd "$(dirname "$0")/.."
-take=$(mktemp icons/.icon-112.XXXXXX)
+mkdir -p .cache
+take=$(mktemp .cache/icon-112.XXXXXX)
 trap 'rm -f "$take"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 source=../fastlane/metadata/android/en-US/images/icon.png
 # The middle of the icon, so the note isn't lost at 16 pixels, with its corners rounded.
 rounded() {
