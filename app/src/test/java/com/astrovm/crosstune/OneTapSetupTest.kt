@@ -83,6 +83,7 @@ class OneTapSetupTest {
     }
 
     @Test
+    @Config(sdk = [31])
     fun aLateReminderGetsAlarmsAndRemindersAllowedLikeAndroidsSwitch() = runBlocking {
         val shell = FakeShell { command ->
             if (OneTapSetup.EXACT_ALARM_OP in command) ShadowAlarmManager.setCanScheduleExactAlarms(true)

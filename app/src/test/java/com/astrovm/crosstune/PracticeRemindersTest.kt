@@ -455,7 +455,8 @@ class PracticeRemindersTest {
         clock = at(3, 20, 4)
         // Android removes a delivered alarm. A rejected early delivery must put it back.
         val manager = app.getSystemService(AlarmManager::class.java)
-        alarms.scheduledAlarms.toList().forEach { manager.cancel(it.operation) }
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        manager.cancel(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE)))
         assertTrue(alarms.scheduledAlarms.isEmpty())
         reminders.remind(delivered)
         assertTrue(shown.isEmpty())
