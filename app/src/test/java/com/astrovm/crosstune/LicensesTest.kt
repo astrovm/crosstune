@@ -21,10 +21,18 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.core.app.ApplicationProvider
+import android.os.Looper
+import androidx.compose.ui.test.assertIsDisplayed
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -61,9 +69,40 @@ class LicensesTest {
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear().putBoolean("setup_complete", true).commit()
     }
 
+    /** Each licence read and split, by its work, with the thread that did it. */
+    private val splits = Collections.synchronizedList(mutableListOf<Pair<String, Thread>>())
+    private val split = LicenseSplits.split
+    private val open = Notices.open
+    private val background = Executors.newSingleThreadExecutor { Thread(it, "licence-split") }
+
+    /** Splits on a thread of their own, as on a phone, and counts each read and split. */
+    private fun splitsCounted() {
+        MainActivity.systemDispatcher = background.asCoroutineDispatcher()
+        LicenseSplits.clear()
+        LicenseSplits.split = { notice -> splits += notice.name to Thread.currentThread(); split(notice) }
+    }
+
+    /** Waits for [words], drawn once a licence's split comes back from its thread. */
+    private fun waitForText(words: String) {
+        composeRule.waitUntil(10_000) {
+            runCatching { scrollTo(hasText(words, substring = true)) }.isSuccess && shown(words)
+        }
+    }
+
+    private fun splitWorks() = synchronized(splits) { splits.map { it.first } }
+
+    private fun splitOnTheMainThread() = synchronized(splits) { splits.filter { it.second == Looper.getMainLooper().thread }.map { it.first } }
+
     @After
     fun tearDown() {
+        LicenseSplits.split = split
+        Notices.open = open
         controller?.destroyAndSettle()
+        // A read a test held, then let go, may not have woken yet: it ends on its own. Interrupted, it would
+        // throw into the page's coroutine, and Compose would fail the test with it.
+        background.shutdown()
+        assertTrue("A licence read still runs after the test", background.awaitTermination(10, TimeUnit.SECONDS))
+        Notices.letGoOfWords()
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
@@ -90,7 +129,12 @@ class LicensesTest {
         composeRule.waitForIdle()
     }
 
-    private fun work(name: String) = (hasText(name) and hasClickAction()).let { scrollTo(it); composeRule.onNode(it) }
+    private fun work(name: String) = (hasText(name) and hasClickAction()).let {
+        // Notices load off the main thread. Compose can be idle while the list is still empty.
+        waitForText(name)
+        scrollTo(it)
+        composeRule.onNode(it)
+    }
 
     private fun text(words: String) = scrollTo(hasText(words, substring = true)).let { composeRule.onAllNodesWithText(words, substring = true).onFirst() }
 
@@ -117,6 +161,89 @@ class LicensesTest {
             "Kotlin and kotlinx.coroutines", "Reorderable"
         )
         (names + Notices.all.map { it.name }).distinct().forEach { work(it).assertExists() }
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun inSpanishCrosstunesOwnWordsAreSpanishAndTheLicencesAndTheWorksOwnNamesAsPublished() {
+        openLicenses()
+        // What a work is, who it's by and its licence, in Crosstune's words.
+        work("Presets de MilkDrop")
+        assertTrue(shown("Sus autores, nombrados en el nombre de cada preset · No indica ninguna"))
+        work("JMdict")
+        assertTrue(shown("Las listas de palabras que Crosstune hizo con JMdict están cambiadas"))
+        assertTrue(!shown("word lists made from JMdict are changed"))
+        // The licence itself, and the names works and groups give themselves, stay as they wrote them.
+        assertTrue(shown("Electronic Dictionary Research and Development Group · CC BY-SA 4.0"))
+        work("JMdict").performClick()
+        composeRule.waitForIdle()
+        text("Attribution-ShareAlike 4.0 International").assertExists()
+        work("Guava").assertExists()
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun aLanguagesWordsForTheNoticesAreReadOffTheMainThread() {
+        val reads = Collections.synchronizedList(mutableListOf<Pair<String, Thread>>())
+        MainActivity.systemDispatcher = background.asCoroutineDispatcher()
+        Notices.letGoOfWords()
+        Notices.open = { name -> reads += name to Thread.currentThread(); open(name) }
+        openLicenses()
+        waitForText("Presets de MilkDrop")
+        val words = synchronized(reads) { reads.filter { it.first == "notices-es.txt" } }
+        assertEquals(listOf("notices-es.txt"), words.map { it.first })
+        assertTrue("notices-es.txt was read on the main thread", words.none { it.second == Looper.getMainLooper().thread })
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun aLanguagesWordsAreKeptWhileThePageShowsAndLetGoOnceItIsLeft() {
+        val reads = Collections.synchronizedList(mutableListOf<String>())
+        Notices.letGoOfWords()
+        Notices.open = { name -> reads += name; open(name) }
+        openLicenses()
+        controller = checkNotNull(controller).recreate()
+        composeRule.waitForIdle()
+        // Turned, the page shows the words it read.
+        assertEquals(listOf("notices-es.txt"), reads.filter { it == "notices-es.txt" })
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        composeRule.onNode(hasText(string(R.string.settings_licenses)) and hasClickAction()).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        work("Presets de MilkDrop").assertExists()
+        // Left, the page let go of them: open again, it reads them again.
+        assertEquals(listOf("notices-es.txt", "notices-es.txt"), reads.filter { it == "notices-es.txt" })
+    }
+
+    @Test
+    fun backWhileTheWordsAreReadAgainAfterAndroidStoppedTheAppLeavesThePage() {
+        splitsCounted()
+        openLicenses()
+        work("projectM").performClick()
+        waitForText("END OF TERMS AND CONDITIONS")
+        // Android stops the app behind another: what was read is gone, the page's state is not. The words come back slowly.
+        val reading = CountDownLatch(1)
+        val letGo = CountDownLatch(1)
+        Notices.open = { name ->
+            if (name == "notices-en.txt") {
+                reading.countDown()
+                letGo.await(5, TimeUnit.SECONDS)
+            }
+            open(name)
+        }
+        LicenseSplits.clear()
+        Notices.letGoOfWords()
+        try {
+            controller = checkNotNull(controller).recreate()
+            composeRule.waitForIdle()
+            assertTrue("The words were never read", reading.await(5, TimeUnit.SECONDS))
+            // Nothing is shown to close yet, so Back leaves, and the main thread doesn't wait for the notices.
+            checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+            composeRule.waitForIdle()
+            assertTrue("Back while the words were read didn't leave the page", shown(string(R.string.settings_about_title)))
+        } finally {
+            letGo.countDown()
+        }
     }
 
     @Test
@@ -164,14 +291,64 @@ class LicensesTest {
     @Test
     fun openingAnotherWorkDoesNotSplitAnOpenOneAgain() {
         LicenseSplits.clear()
+        LicenseSplits.split = { notice -> splits += notice.name to Thread.currentThread(); split(notice) }
         openLicenses()
         work("projectM").performClick()
         composeRule.waitForIdle()
-        assertEquals(1, LicenseSplits.times["projectM"])
+        assertEquals(listOf("projectM"), splitWorks())
         work("JMdict").performClick()
         composeRule.waitForIdle()
-        assertEquals(1, LicenseSplits.times["projectM"])
-        assertEquals(1, LicenseSplits.times["JMdict"])
+        assertEquals(listOf("projectM", "JMdict"), splitWorks())
+    }
+
+    @Test
+    fun openingOneMoreWorkReadsOnlyItOffTheMainThread() {
+        splitsCounted()
+        openLicenses()
+        work("projectM").performClick()
+        waitForText("GNU LESSER GENERAL PUBLIC LICENSE")
+        work("JMdict").performClick()
+        waitForText("Attribution-ShareAlike 4.0 International")
+        work("Kuromoji").performClick()
+        waitForText("Kuromoji Japanese Morphological Analyzer")
+        assertEquals(listOf("projectM", "JMdict", "Kuromoji"), splitWorks())
+        assertEquals(emptyList<String>(), splitOnTheMainThread())
+    }
+
+    @Test
+    fun turnedWithALicenceOpenThePageReadsNoTextAgain() {
+        splitsCounted()
+        openLicenses()
+        work("projectM").performClick()
+        waitForText("END OF TERMS AND CONDITIONS")
+        val piece = composeRule.onAllNodesWithText("END OF TERMS AND CONDITIONS", substring = true).onFirst().fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+
+        controller = checkNotNull(controller).recreate()
+        composeRule.waitForIdle()
+
+        // Still open, where it was, from the pieces split before it turned.
+        composeRule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString(piece)))).assertIsDisplayed()
+        assertEquals(listOf("projectM"), splitWorks())
+        assertEquals(emptyList<String>(), splitOnTheMainThread())
+    }
+
+    @Test
+    fun madeAgainAfterAndroidStoppedTheAppAnOpenLicenceIsReadOffTheMainThreadAndShownWhereItWas() {
+        splitsCounted()
+        openLicenses()
+        work("projectM").performClick()
+        waitForText("END OF TERMS AND CONDITIONS")
+        val piece = composeRule.onAllNodesWithText("END OF TERMS AND CONDITIONS", substring = true).onFirst().fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+
+        // Android stops the app behind another and starts it again: what was split is gone, the page's state is not.
+        LicenseSplits.clear()
+        controller = checkNotNull(controller).recreate()
+        val shownAgain = SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString(piece)))
+        composeRule.waitUntil(10_000) { composeRule.onAllNodes(shownAgain).fetchSemanticsNodes().isNotEmpty() }
+
+        composeRule.onNode(shownAgain).assertIsDisplayed()
+        assertEquals(listOf("projectM", "projectM"), splitWorks())
+        assertEquals(emptyList<String>(), splitOnTheMainThread())
     }
 
     @Test

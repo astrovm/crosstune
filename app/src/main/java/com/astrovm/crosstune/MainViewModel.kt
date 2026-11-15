@@ -17,17 +17,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -39,7 +45,6 @@ import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 internal sealed interface Effect {
@@ -121,6 +126,8 @@ internal class MainViewModel(
     private val updates: UpdateChecker? = null,
     /** Calibration may use the microphone only when its permission has already been granted. */
     private val mayCalibrate: () -> Boolean = { false },
+    /** Whether Shizuku or root let Crosstune hear the phone's own sound cleanly, as playback capture. */
+    private val mayCapture: () -> Boolean,
     /** Hears the words sung in what the phone plays, to line the timed words up to them; nullable so tests need none. */
     private val singing: SingingHearing? = null,
     /** Where reports on the words go, kept private; nullable so tests need none. */
@@ -191,7 +198,7 @@ internal class MainViewModel(
     private val leadStore = LeadStore(preferences)
     private val gapStore = ShazamGapStore(preferences)
     private val sungStore = SungStore(preferences)
-    private val autoReports = AutoReports(preferences)
+    private val autoReports = AutoReports(preferences, now = wallClock)
 
     /** The timed words as found, before the lines put in time by hand, [syncPoints], move them. */
     private var foundLines: List<LyricLine> = emptyList()
@@ -236,6 +243,63 @@ internal class MainViewModel(
     /** What [UiState.playingNow] is made of: the song heard playing, and the one an app is followed on. */
     private var heardNow: MusicMetadata? = null
     private var followedNow: Pair<MusicMetadata, Following>? = null
+
+    /** Whether the bar with what's playing is on screen, the only time a song's named by ear on its own. */
+    private val barInSight = MutableStateFlow(false)
+
+    /** When the song an app names none for is listened to next, on the [now] clock, and how many times in a row nothing was heard. */
+    private var nextByEarAtMs = 0L
+    private var quietByEar = 0
+
+    /** A new one each time what plays may have changed, to listen again at once; see [forgetHeardByEar]. */
+    private val byEarAgain = MutableStateFlow(Any())
+
+    /** The song last heard by ear, and where the app said it was then, to tell where in it it is now; see [fits]. */
+    private var heardFrom: HeardFrom? = null
+
+    /**
+     * The song [heard] by ear, and how the app said it played it then, [following]: its session, length, queue and clock.
+     * Whatever the app says next is checked against that, never against a follow that went or started over since, so
+     * nothing lost or reset meanwhile lets it through. Null when the app said nothing of it then.
+     */
+    private class HeardFrom(val heard: Heard.Song, val following: Following?, startedAtMs: Long) {
+        /** Where the app was on its clock when the sound heard started, going by at [appSpeed]; null when it didn't say. */
+        val appAtMs = following?.clock?.positionAt(startedAtMs)
+        val appSpeed = following?.clock?.speed ?: 1f
+    }
+
+    /**
+     * Whether the song shown is what an app on the phone plays with no song named, as heard there, so
+     * listening along with its words hears the phone's own sound first, as the microphone hears the room too.
+     */
+    private var alongByPhone = false
+
+    /** What an app plays now with no song named, as Android says while it plays; null while none does, or it's paused. */
+    private var liveUnnamed: Unnamed? = null
+
+    /**
+     * The last one seen playing, and how it's followed in its app, paused too, as long as the app has it,
+     * as a song is; see [PlayingUnnamed.following]. A song or another one seen playing since takes its place.
+     */
+    private var followedUnnamed: Pair<Unnamed, Following>? = null
+
+    /** What the last listen by ear could hear with, as [earsNow] has it, when it named no song; null after one that did. */
+    private var unheardWith: List<Boolean>? = null
+
+    /** Whether the last listen by ear to what an app plays now, with no song named, named none: talk, a song Shazam doesn't know, or a failure. */
+    private var unheardByEar = false
+
+    /** The work naming a song by ear, which a listen asked for waits on, so the microphone isn't opened twice. */
+    private var byEar: Job? = null
+
+    /** The one listen by ear going on, which listening along or hearing the singing stops and waits on first. */
+    private var byEarListen: Job? = null
+
+    /**
+     * The words of the song last named by ear, looked for ahead, apart from listening: a slow lookup
+     * holds neither the next listen nor one asked for.
+     */
+    private var byEarLook: Job? = null
 
     /** The screen's state, which the parts work is handed to change too. */
     private val screen = mutableStateOf(
@@ -686,7 +750,7 @@ internal class MainViewModel(
             // does. NOT_FOUND reads as a link that went missing, and would sit over the songs of
             // the next search, so any error from before is cleared with it.
             // Signed in, a description, more than a name, is asked of ChatGPT too.
-            val describes = usesChatGpt() && words.split(Regex("\\s+")).size >= DESCRIPTION_WORDS
+            val describes = usesChatGpt() && words.split(phoneRegex("\\s+")).size >= DESCRIPTION_WORDS
             uiState = uiState.copy(
                 isSearchingSongs = false,
                 isAskingForSongs = describes,
@@ -941,6 +1005,14 @@ internal class MainViewModel(
      * With [lyrics], its words open as soon as it's named. The microphone permission is already granted.
      */
     fun listen(lyrics: Boolean = false) {
+        // The words of what's playing are the song's heard in what an app plays, while it's still on, without listening again.
+        if (lyrics) {
+            // Shown as any song is, which stops whatever else was under way, and keeps the player on this song under its words.
+            // Only when a tap would open it too; else it's listened to again.
+            uiState.playingUnnamed?.heard?.takeIf(::opens)?.let { heard -> return showHeard(heard, lyrics = true, byPhone = true) }
+        }
+        // The bar goes while it listens, and its own listening with it, so the microphone isn't opened twice.
+        barInSight.value = false
         cancelContentWork()
         heardSong = null
         hear(null)
@@ -950,20 +1022,26 @@ internal class MainViewModel(
             destinationUrls = emptyMap(), selectedDestination = null, link = null, showDestinationPicker = false,
             handlingIncomingLink = false, handingOff = false
         )
+        val byEar = byEar
+        // Its words are of what an app plays with no song named, heard from the phone's own sound first, as the
+        // microphone hears the room too; with no app playing, one on a speaker it's cast to, or to name a song, the
+        // microphone hears what's nearby.
+        val unnamed = lyrics && liveUnnamed?.away == false
         job = viewModelScope.launch {
+            byEar?.cancelAndJoin()
             val heard = try {
-                listener.listen()
+                if (unnamed) listener.listenToPlaying() else listener.listen()
             } finally {
                 if (isActive) uiState = uiState.copy(listening = false)
             }
-            answer(heard, lyrics)
+            answer(heard, lyrics, byPhone = unnamed)
         }
     }
 
-    /** Shows what listening found, its words too when asked for [lyrics]. */
-    private fun answer(heard: Heard, lyrics: Boolean) {
+    /** Shows what listening found, its words too when asked for [lyrics]; [byPhone] when it's what an app on the phone plays. */
+    private fun answer(heard: Heard, lyrics: Boolean, byPhone: Boolean = false) {
         when (heard) {
-            is Heard.Song -> showHeard(heard, lyrics)
+            is Heard.Song -> showHeard(heard, lyrics, byPhone)
             Heard.Nothing -> showListenError(AppError.NO_MATCH)
             is Heard.Failed -> showListenError(heard.error)
             is Heard.Unsent -> {
@@ -1000,11 +1078,14 @@ internal class MainViewModel(
      */
     suspend fun watchPlayingNow() {
         val previous = uiState.playingNow?.song
+        val previousUnnamed = uiState.playingUnnamed?.playing
         heardNow = null
         followedNow = null
+        liveUnnamed = null
+        followedUnnamed = null
         val source = playback?.takeIf { it.hasAccess() }
         if (source == null) {
-            uiState = uiState.copy(playingNow = null)
+            uiState = uiState.copy(playingNow = null, playingUnnamed = null)
             return
         }
         // Registration, callbacks and cancellation share the main thread, so none can reattach
@@ -1034,11 +1115,293 @@ internal class MainViewModel(
                         }
                     }
             }
+            launch { nameUnnamed(source) }
+            launch { followUnnamed(source, previousUnnamed) }
         }
     }
 
+    /**
+     * Follows the last thing an app played with no song named in that app, for the bar's buttons and where it is,
+     * and keeps it on the bar once it's paused, as long as the app has it, as a song is. A song seen playing since,
+     * or another one with no song named, takes its place.
+     */
+    private suspend fun followUnnamed(source: PlaybackSource, previous: Unnamed?) {
+        merge<Unnamed?>(source.unnamedUpdates().filterNotNull(), source.nowPlayingUpdates().filterNotNull().map { null })
+            // Paused, it isn't said to play; ask the last one's app whether it still has it.
+            .onStart { previous?.let { emit(it) } }
+            .distinctUntilChanged { was, now -> was?.app == now?.app && was?.played == now?.played }
+            .collectLatest { unnamed ->
+                followedUnnamed = null
+                showUnnamed()
+                if (unnamed == null) return@collectLatest
+                source.follow(unnamed.played, unnamed.app).collect { following ->
+                    followedUnnamed = following?.let { unnamed to it }
+                    checkHeard(following)
+                    showUnnamed()
+                }
+            }
+    }
+
+    /**
+     * Keeps the song heard by ear on what the app with no song named plays only while what it says of it, [now], is what
+     * it said when the song was heard, as [HeardFrom] has it. When it says nothing it can be told by, as no position, or
+     * said nothing then, what plays can't be told from the song heard: it goes, as no song is better than the wrong one.
+     */
+    private fun checkHeard(now: Following?) {
+        val from = heardFrom?.takeIf { it.heard === uiState.playingUnnamed?.heard } ?: return
+        val was = from.following
+        val another = if (was == null || now == null) was != now else mayPlayAnother(was, now)
+        if (another) forgetHeardByEar()
+    }
+
+    /**
+     * Whether what an app with no song named played on may be another now, as it was followed [was] and is [now]: it
+     * isn't where it should be by now, as after a skip or a seek, its queue or its length changed, or it plays in a new
+     * session. Each may be the next file, with the same blank name.
+     */
+    private fun mayPlayAnother(was: Following, now: Following): Boolean {
+        val at = now()
+        return abs(was.clock.positionAt(at) - now.clock.positionAt(at)) > BY_EAR_JUMP_MS ||
+            was.upNext != now.upNext || otherLength(was.durationMs, now.durationMs) || was.session != now.session
+    }
+
+    /**
+     * Whether an app's length, [was] then [now], says it plays another: any change but one that only grows, as a
+     * station's does that says how long it's played, VRadio's by a minute each minute (Issue #998).
+     */
+    private fun otherLength(was: Long?, now: Long?) = if (was == null || now == null) was != now else now < was
+
+    /**
+     * What plays may have changed, as by a skip, a seek, or a song up next played: the song heard in it isn't known to be
+     * on, so it's shown no more, and what plays is listened to again at once.
+     */
+    private fun forgetHeardByEar() {
+        uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = null)) }
+        heardFrom = null
+        nextByEarAtMs = 0L
+        quietByEar = 0
+        unheardByEar = false
+        unheardWith = null
+        byEarAgain.value = Any()
+    }
+
+    /** A button Crosstune sent to [app] may have moved what it plays on: see [forgetHeardByEar]. Only for the app that names no song. */
+    private fun movedOn(app: String?) {
+        if (app != null && app == uiState.playingUnnamed?.playing?.app) forgetHeardByEar()
+    }
+
+    /**
+     * Shows what an app plays with no song named: what plays now, else the last one, paused, while its app has it,
+     * unless a song plays. The song heard in it stays only while it plays on, as it isn't known once it's paused.
+     */
+    private fun showUnnamed() {
+        val shown = liveUnnamed ?: followedUnnamed?.first?.takeIf { heardNow == null }
+        val following = followedUnnamed?.takeIf { (followed) -> shown != null && followed.app == shown.app && followed.played == shown.played }?.second
+        val was = uiState.playingUnnamed?.takeIf { it.playing == shown }
+        val heard = was?.heard?.takeIf { liveUnnamed != null }
+        uiState = uiState.copy(playingUnnamed = shown?.let { PlayingUnnamed(it, heard, following) })
+        showPlayingNow()
+    }
+
+    /** Tells whether the bar with what's playing is on screen, as it comes and goes. */
+    fun playingBarInSight(shown: Boolean) {
+        barInSight.value = shown
+    }
+
+    /** Stops a listen by ear, and waits till it lets go of the microphone and the phone's sound, so neither is opened twice. */
+    private suspend fun byEarLetsGo() {
+        byEarListen?.cancelAndJoin()
+    }
+
+    /**
+     * Shows the song [heard] by ear on the bar till it should be over, or a while when that isn't known,
+     * then what the app plays alone again, though nothing new was heard yet, and in or out of sight. Only
+     * while the app plays what it played as it was heard, [startedWith]: see [checkHeard]. False when it went on
+     * while it was listened to, as to its next file, so what was heard is of what it played before.
+     */
+    private fun showHeardByEar(heard: Heard.Song, startedWith: Following?): Boolean {
+        heardFrom = HeardFrom(heard, startedWith, heard.startedAtMs ?: now())
+        uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = heard)) }
+        checkHeard(uiState.playingUnnamed?.following)
+        if (heardFrom?.heard !== heard) return false
+        viewModelScope.launch {
+            delay(endOf(heard)?.minus(now()) ?: BY_EAR_UNKNOWN_MS)
+            // Only this hearing: a song heard since stays till its own end.
+            uiState.playingUnnamed?.takeIf { it.heard === heard }?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = null)) }
+        }
+        return true
+    }
+
+    /**
+     * Shows what an app plays while it names no song, e.g. a radio station, and names the song by
+     * ear while its bar is on screen. A new name from the app starts over; the app naming a song ends it.
+     */
+    private suspend fun nameUnnamed(source: PlaybackSource) {
+        source.unnamedUpdates().distinctUntilChanged()
+            .onEach { unnamed ->
+                // Started, paused or played again, it's listened to at once once it plays.
+                nextByEarAtMs = 0L
+                quietByEar = 0
+                unheardByEar = false
+                liveUnnamed = unnamed
+                showUnnamed()
+            }
+            // Paused, nothing plays to hear; nor on a speaker it's cast to, which the phone doesn't play.
+            // Moved on, as by a skip, it's listened to again at once, the listen under way stopped.
+            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight && !it.away } }
+            .combine(byEarAgain) { unnamed, again -> unnamed?.let { it to again } }
+            .distinctUntilChanged()
+            .collectLatest { listened -> if (listened != null) nameByEar(source) }
+    }
+
+    /**
+     * Listens to what plays, again once the song heard should be over, as the next one has started by
+     * then. Shared sound first; the microphone only when it was allowed before, never on a TV, and only
+     * while the phone plays aloud, as through headphones or muted it hears nothing. Any failure is quiet:
+     * what plays stays named as the app has it.
+     */
+    private suspend fun nameByEar(source: PlaybackSource) {
+        byEar = currentCoroutineContext()[Job]
+        while (true) {
+            untilByEar(source)
+            // Listening along with the words, or hearing them sung, has the microphone and the phone's sound till it's done.
+            listOfNotNull(alongJob, singingJob, voiceJob).forEach { it.join() }
+            val ears = earsNow(source)
+            val byMicrophone = uiState.phone != Phone.TV && mayCalibrate() && source.playsAloud()
+            // How the app said it played as the sound to hear started, which what it says after is checked against.
+            val startedWith = uiState.playingUnnamed?.following
+            // Stopped for one of those, it's tried again once that's done.
+            val heard = coroutineScope {
+                val listening = async { listener.listenToPlaying(byMicrophone, whileAloud = true) }
+                byEarListen = listening
+                listening.join()
+                listening.takeUnless { it.isCancelled }?.await()
+            } ?: continue
+            unheardByEar = heard !is Heard.Song
+            val wait = when (heard) {
+                is Heard.Song -> {
+                    quietByEar = 0
+                    // Shown till it should be over, which may be well before the next listen. Heard in what the app
+                    // played before it went on, it's never shown, and dropping it listens again at once, in place of this.
+                    if (!showHeardByEar(heard, startedWith)) return
+                    byEarLook?.cancel()
+                    byEarLook = lyricsFinder?.let { finder -> viewModelScope.launch { finder.firstLook(heard.metadata) } }
+                    untilOver(heard)
+                }
+                // Talk, ads or a pause: no song plays, so none is shown, and the next try waits longer each time.
+                Heard.Nothing -> {
+                    uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = null)) }
+                    BY_EAR_RETRY_MS shl minOf(quietByEar++, QUIET_PAUSE_DOUBLINGS)
+                }
+                else -> BY_EAR_RETRY_MS
+            }
+            nextByEarAtMs = now() + wait
+            unheardWith = ears.takeUnless { heard is Heard.Song }
+        }
+    }
+
+    /**
+     * Waits till the next listen by ear. After one that named no song, a new way to hear starts it at
+     * once, the rests from the shortest: the microphone or the phone's own sound allowed, or the phone
+     * playing aloud again, or no longer, as when headphones come or go.
+     */
+    private suspend fun untilByEar(source: PlaybackSource) {
+        while (now() < nextByEarAtMs) {
+            val with = unheardWith ?: return delay(nextByEarAtMs - now())
+            delay(minOf(EARS_CHECK_MS, nextByEarAtMs - now()))
+            if (with != earsNow(source)) {
+                quietByEar = 0
+                nextByEarAtMs = now()
+            }
+        }
+    }
+
+    /** What naming by ear can hear with now: the microphone allowed, the phone's own sound shared, the phone playing aloud. */
+    private fun earsNow(source: PlaybackSource) = listOf(mayCalibrate(), mayCapture(), source.playsAloud())
+
+    /**
+     * When the song [heard] should be over, on the [now] clock, from its length and where in it it was heard, going by
+     * at the speed it was heard at; null when either isn't known.
+     */
+    private fun endOf(heard: Heard.Song): Long? {
+        val length = heard.metadata.lengthMs ?: return null
+        val at = heard.offsetMs ?: return null
+        return endOf(heard, length, at)
+    }
+
+    /** When the song [heard], [length] long, should be over, heard [at] that far into it. */
+    private fun endOf(heard: Heard.Song, length: Long, at: Long) = (heard.startedAtMs ?: now()) + ((length - at) / heard.speed).toLong()
+
+    /**
+     * How long until the next listen: a little after the song [heard] should be over, as the next one has
+     * started by then, or a while when its length isn't known.
+     */
+    private fun untilOver(heard: Heard.Song): Long {
+        val end = endOf(heard) ?: return BY_EAR_UNKNOWN_MS
+        return (end - now() + BY_EAR_AFTER_MS).coerceIn(BY_EAR_SOONEST_MS, BY_EAR_LATEST_MS)
+    }
+
+    /**
+     * Shows the song heard in what an app plays, as a pasted link would, when it's safe to. With none heard
+     * when it can't be named by ear, what Crosstune once took it for, a song by its title alone, opens as
+     * that did, card and player, as the user asks for it, never by itself. Else, the player on what the app
+     * plays, as it names it.
+     */
+    fun openPlayingUnnamed() {
+        val playing = uiState.playingUnnamed ?: return
+        playing.heard?.let { heard ->
+            if (opens(heard)) return showHeard(heard, lyrics = false, byPhone = true)
+            // No longer where it could be, the bar no longer shows it either.
+            if (!fits(heard)) forgetHeardByEar()
+        }
+        val song = playing.playing.asSong?.takeIf { cantName(playing.playing) } ?: return peekPlayingUnnamed()
+        if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
+        if (uiState.player?.song != song) openPlayer(song, playing.playing.app, played = true)
+    }
+
+    /**
+     * Whether what [unnamed] plays can't be named by ear now: it plays away from the phone, nothing can hear it, or the
+     * last listen to it named no song. The phone's own sound is heard when it's shared, or, with the microphone
+     * allowed, through Android's own, the way the visuals hear it, on a TV and through headphones too.
+     */
+    private fun cantName(unnamed: Unnamed): Boolean {
+        val ears = mayCapture() || mayCalibrate()
+        return unnamed.away || !ears || unheardByEar
+    }
+
+    /**
+     * Whether a tap opens the song [heard], as opening the wrong song is worse than opening none: only
+     * while it's known to be still on ([fits]), and not when only the microphone heard it, as that may be
+     * another song in the room.
+     */
+    private fun opens(heard: Heard.Song) = !heard.inRoom && fits(heard)
+
+    /**
+     * Whether where the song [heard] should be now is inside it, which takes its length: from where in it it was
+     * heard, on by as much as the app's clock went since, when it said where it was then and says now. When it said
+     * neither, by the time gone by, as the bar's own timer goes ([endOf]). When it said only one, as while its follow
+     * starts over, what plays can't be told from the song heard, so it isn't.
+     */
+    private fun fits(heard: Heard.Song): Boolean {
+        val length = heard.metadata.lengthMs ?: return false
+        val at = heard.offsetMs ?: return false
+        val from = heardFrom?.takeIf { it.heard === heard }
+        val clock = uiState.playingUnnamed?.following?.clock
+        val appAt = from?.appAtMs
+        if (from == null || appAt == null || clock == null) return appAt == null && clock == null && now() < endOf(heard, length, at)
+        return (at + (clock.positionAt(now()) - appAt) / from.appSpeed * heard.speed).toLong() in 0 until length
+    }
+
+    /** The player on what an app plays with no song named, as the app names it, with its buttons, as a swipe up from the bar opens it. */
+    fun peekPlayingUnnamed() {
+        val unnamed = uiState.playingUnnamed?.playing ?: return
+        openPlayer(unnamed.played, unnamed.app, played = true, songless = true)
+    }
+
     private fun showPlayingNow() {
-        val song = heardNow ?: followedNow?.first
+        // A song another app paused isn't offered over what an app plays now, even with no song named, as a
+        // station; over what says nothing a song could be read from, as a vlog, it is, as Crosstune always had it.
+        val song = heardNow ?: followedNow?.first?.takeIf { uiState.playingUnnamed?.playing?.said != true }
         uiState = uiState.copy(playingNow = song?.let { NowPlaying(it, followedNow?.takeIf { (followed) -> followed == song }?.second) })
     }
 
@@ -1060,14 +1423,22 @@ internal class MainViewModel(
 
     /** Pauses the song playing now, or plays it again: as its button shows, playing when its app doesn't say where it is. */
     fun playingNowPlayPause() {
-        val now = uiState.playingNow ?: return
-        playback?.playPause(now.song, now.following?.clock?.playing == false)
+        val (song, following, app) = onTheBar() ?: return
+        playback?.playPause(song, following?.clock?.playing == false, app)
     }
 
     fun playingNowSkip() {
-        val now = uiState.playingNow ?: return
-        playback?.skip(now.song, true)
+        val (song, _, app) = onTheBar() ?: return
+        playback?.skip(song, true, app)
+        movedOn(app)
     }
+
+    /**
+     * What the bar's buttons are for: the song playing now, or what an app plays with no song named, as the app
+     * names it, asked of that app by package, so they reach it whatever it calls it, even nothing.
+     */
+    private fun onTheBar(): Triple<MusicMetadata, Following?, String?>? =
+        uiState.playingNow?.let { Triple(it.song, it.following, null) } ?: uiState.playingUnnamed?.let { Triple(it.playing.played, it.following, it.playing.app) }
 
     /**
      * Shows [song] as a result, like a pasted link, by the Shazam page [appleMusicId] names when it's
@@ -1079,10 +1450,11 @@ internal class MainViewModel(
         resolve(input, openWhenReady = false, underPlayer = uiState.player?.let { sameSong(it.song, song) } == true)
     }
 
-    private fun showHeard(heard: Heard.Song, lyrics: Boolean) {
+    private fun showHeard(heard: Heard.Song, lyrics: Boolean, byPhone: Boolean) {
         TimingLog.note("recognized ${heard.offsetMs} at ${heard.startedAtMs} match ${heard.matchId} received ${now()} speed ${heard.speed} length ${heard.metadata.lengthMs}")
         retryListens = false
         showSong(heard.metadata, heard.appleMusicId)
+        alongByPhone = byPhone
         // Once it's shown, as showing it forgets what was heard for whatever was shown before.
         heardSong = heard.metadata
         // Its words aren't found yet, so the gap for them moves it once they are.
@@ -1565,11 +1937,11 @@ internal class MainViewModel(
 
     private var playerJob: Job? = null
 
-    /** Opens the player on [song], asked of [app] at [link], and follows it there as it plays. */
-    private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false) {
+    /** Opens the player on [song], asked of [app] at [link], and follows it there as it plays; [songless] when it names no song, see [PlayerState.songless]. */
+    private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false, songless: Boolean = false) {
         // The app may be on another song as it's asked, which isn't the one it goes on to play.
         val over = playback?.takeIf { !played && it.hasAccess() }?.nowPlaying()?.takeIf { sameApp(app, it.app, interception::isInstalled) }?.metadata
-        uiState = uiState.copy(player = PlayerState(song, app, link, played = played, over = over), canFollowApps = playback?.hasAccess() == true)
+        uiState = uiState.copy(player = PlayerState(song, app, link, played = played, over = over, songless = songless), canFollowApps = playback?.hasAccess() == true)
         followPlayer()
         peekWords()
     }
@@ -1582,7 +1954,8 @@ internal class MainViewModel(
      */
     private fun peekWords() {
         peekJob?.cancel()
-        val song = uiState.player?.song ?: return
+        // What names no song has no words to look up.
+        val song = uiState.player?.takeIf { !it.songless }?.song ?: return
         val asked = asPlayed(song)
         val key = RecordingKey.of(asked)
         kept[key]?.let { return showPeek(song, it.lines, it.lyrics, it.timedByEar) }
@@ -1610,10 +1983,12 @@ internal class MainViewModel(
     private fun followPlayer() {
         playerJob?.cancel()
         playerJob = null
-        val song = uiState.player?.song ?: return
+        val opened = uiState.player ?: return
+        val song = opened.song
         val source = playback?.takeIf { it.hasAccess() } ?: return
         playerJob = viewModelScope.launch {
-            combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).collect { (following, playing) ->
+            // What names no song is only told apart by the app that plays it.
+            combine(source.follow(song, opened.askedOf), source.nowPlayingUpdates(), source.unnamedUpdates(), ::Triple).collect { (following, playing, unnamed) ->
                 val player = uiState.player ?: return@collect
                 val played = player.played || following?.clock?.playing == true
                 // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
@@ -1622,9 +1997,23 @@ internal class MainViewModel(
                 val next = playing?.takeIf { (played || startedAsked(it, player.app, player.over, player.link)) && following == null && uiState.practice == null && !sameSong(it.metadata, song) }
                 // In the app that plays it, which may not be the one the song before played in.
                 if (next != null) return@collect openPlayer(next.metadata, next.app ?: player.following?.appPackage ?: player.app, played = true)
+                if (tookUpUnnamed(unnamed, playing, following, played, song)) return@collect
                 uiState = uiState.copy(player = player.copy(following = following, played = played))
             }
         }
+    }
+
+    /**
+     * Opens the player on [unnamed], what an app plays with no song named, e.g. the next station or a file
+     * with no tags, when the app went on to it from [song] once it [played], as it would to the next song;
+     * not while a song is [playing], or [song] is still [following]. Only in the player's own app: what
+     * another app plays is no next song of this one.
+     */
+    private fun tookUpUnnamed(unnamed: Unnamed?, playing: Heard.Song?, following: Following?, played: Boolean, song: MusicMetadata): Boolean {
+        val app = uiState.player?.let { it.following?.appPackage ?: it.app }
+        val next = unnamed?.takeIf { playing == null && following == null && played && uiState.practice == null && it.played != song && it.app == app } ?: return false
+        openPlayer(next.played, next.app, played = true, songless = true)
+        return true
     }
 
     /**
@@ -1655,7 +2044,7 @@ internal class MainViewModel(
      * card isn't of, e.g. the next one its app went on to, rather than each song as it plays.
      */
     fun playerMenu() {
-        val song = uiState.player?.song ?: return
+        val song = uiState.player?.takeIf { !it.songless }?.song ?: return
         if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
     }
 
@@ -1665,17 +2054,27 @@ internal class MainViewModel(
         uiState = uiState.copy(showDestinationPicker = true, pickerHides = null)
     }
 
-    /** Plays or pauses the player's song; asked of its app again when it isn't playing it. */
+    /** The app the player's buttons ask, by package: for what names no song, its own, whatever it calls it, even nothing; else whichever plays the song. */
+    private val PlayerState.askedOf: String? get() = app.takeIf { songless }
+
+    /**
+     * Plays or pauses the player's song; asked of its app again when it isn't playing it. What names no song has no
+     * name to be asked for by, so once its app is on to another, the app plays whatever it has.
+     */
     fun playerPlayPause() {
         val player = uiState.player ?: return
         val following = player.following ?: return run {
+            if (player.songless) {
+                player.app?.let { playback?.playApp(it) }
+                return
+            }
             // Still being asked for, a second ask would start it over.
             if (!uiState.playingResult) viewModelScope.launch {
                 // On a TV, YouTube lets go of a song once Crosstune is in front, so it's opened on it again, covered.
                 if (playback?.playSong(player.song, player.app, player.link) == false && uiState.phone == Phone.TV) player.app?.let { app -> player.link?.let { playback.openSong(app, it) } }
             }
         }
-        playback?.playPause(player.song, !following.clock.playing)
+        playback?.playPause(player.song, !following.clock.playing, player.askedOf)
     }
 
     /** Has the app go on to its [next] song, or back to the one before, which the player then shows. */
@@ -1684,35 +2083,37 @@ internal class MainViewModel(
         val following = player.following ?: return
         if (!(if (next) following.canSkipNext else following.canSkipPrevious)) return
         uiState = uiState.copy(player = player.copy(played = true))
-        playback?.skip(player.song, next)
+        playback?.skip(player.song, next, player.askedOf)
+        movedOn(player.app)
     }
 
     /** Has the app shuffle, or play in order again. */
     fun playerShuffle() {
         val player = uiState.player ?: return
         val shuffles = player.following?.shuffle ?: return
-        playback?.shuffle(player.song, !shuffles)
+        playback?.shuffle(player.song, !shuffles, player.askedOf)
     }
 
     /** Has the app repeat the next way, as music apps go round them: not at all, all of its list, then the song. */
     fun playerRepeat() {
         val player = uiState.player ?: return
         val repeats = player.following?.repeat ?: return
-        playback?.repeat(player.song, Repeat.entries[(repeats.ordinal + 1) % Repeat.entries.size])
+        playback?.repeat(player.song, Repeat.entries[(repeats.ordinal + 1) % Repeat.entries.size], player.askedOf)
     }
 
     /** Presses the app's own like for the player's song. */
     fun playerLike() {
         val player = uiState.player ?: return
         if (player.following?.like == null) return
-        playback?.like(player.song)
+        playback?.like(player.song, player.askedOf)
     }
 
     /** Has the app play one of the songs it has up next now, which the player then shows. */
     fun playerPlayQueued(id: Long) {
         val player = uiState.player ?: return
         uiState = uiState.copy(player = player.copy(played = true))
-        playback?.playQueued(player.song, id)
+        playback?.playQueued(player.song, id, player.askedOf)
+        movedOn(player.app)
     }
 
     /** Plays the list on from the song up next at [index], one it still has to ask the app for. */
@@ -1721,6 +2122,7 @@ internal class MainViewModel(
         val apps = player.following?.upNext.orEmpty().count { it.id != null }
         uiState = uiState.copy(player = player.copy(played = true))
         viewModelScope.launch { playQueue?.playFrom(index - apps) }
+        movedOn(player.app)
     }
 
     /**
@@ -1741,7 +2143,7 @@ internal class MainViewModel(
 
     /** The player's song's card, under it, with its links. */
     fun playerCard() {
-        val song = uiState.player?.song ?: return
+        val song = uiState.player?.takeIf { !it.songless }?.song ?: return
         closePlayer()
         if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
     }
@@ -1750,7 +2152,7 @@ internal class MainViewModel(
     fun playerSleep(minutes: Int?) {
         val timer = sleepTimer ?: return
         if (minutes != null) return timer.after(minutes)
-        uiState.player?.song?.let(timer::afterSong)
+        uiState.player?.let { timer.afterSong(it.song, it.askedOf) }
     }
 
     fun playerSleepOff() {
@@ -1760,12 +2162,13 @@ internal class MainViewModel(
     fun playerSeek(positionMs: Long) {
         val player = uiState.player ?: return
         if (player.following?.canSeek != true) return
-        playback?.seekTo(player.song, positionMs)
+        playback?.seekTo(player.song, positionMs, player.askedOf)
+        movedOn(player.app)
     }
 
     /** The player's song's words, over it. */
     fun playerLyrics() {
-        val player = uiState.player ?: return
+        val player = uiState.player?.takeIf { !it.songless } ?: return
         showLyricsFor(player.song, playing = player.played)
     }
 
@@ -1918,17 +2321,32 @@ internal class MainViewModel(
 
     private var nextJob: Job? = null
 
-    /** A song with no words found, still to be heard for a voice: whether it's taken for an instrumental, and the whiles heard so far. */
-    private data class Unsung(val song: MusicMetadata, val likelyInstrumental: Boolean, val tries: Int = 0)
+    /**
+     * A song with no words shown, still to be heard for a voice: whether it's taken for an instrumental, and the whiles heard
+     * so far. Words found for it that LRCLIB's marks or its title say no one sings are [held], [final] or still to be timed better.
+     */
+    private data class Unsung(
+        val song: MusicMetadata,
+        val likelyInstrumental: Boolean,
+        val tries: Int = 0,
+        val held: LyricsFinder.Lyrics.Found? = null,
+        val final: Boolean = true
+    )
 
     private var unsung: Unsung? = null
     private var voiceJob: Job? = null
+
+    /** Shows held words if no listen settles them in the time one takes: see [HELD_MS]. */
+    private var heldJob: Job? = null
 
     /** Hearing the words sung, to line them up, or to time them; [singingTries] since the app's clock last started or jumped. */
     private var singingJob: Job? = null
 
     /** What was heard sung of the song shown, its words found with no timing, to time them by: this time, and the times before. */
     private var heardStretches: List<HeardStretch> = emptyList()
+
+    /** The [heardStretches] the lines shown were timed by: the timing of the last while heard is stopped when Crosstune goes out of sight. */
+    private var timedBy: List<HeardStretch> = emptyList()
     private var singingTries = 0
 
     /**
@@ -2006,7 +2424,10 @@ internal class MainViewModel(
         foundLines = emptyList()
         found = null
         heardStretches = emptyList()
+        timedBy = emptyList()
         unsung = null
+        voiceJob?.cancel()
+        heldJob?.cancel()
         restored = null
         syncPoints = emptyList()
         wordsPace = 1.0
@@ -2016,6 +2437,8 @@ internal class MainViewModel(
         } else {
             lyricsJob = viewModelScope.launch {
                 var first: LyricsFinder.FirstLook? = null
+                // No words found, and whether it's taken for an instrumental: worked out once that shows, as it may wait on the app.
+                var noWords: Boolean? = null
                 uiState = uiState.copy(
                     lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsTimedByEar = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
                     canFollowApps = playback?.hasAccess() == true
@@ -2023,54 +2446,66 @@ internal class MainViewModel(
                 try {
                     // A lookup that failed says so, rather than claiming the song has no words. The words
                     // show as soon as they're found, and their timing may get better after.
-                    first = lookingAhead.remove(RecordingKey.of(song))?.await() ?: finder.firstLook(song)
-                    when (val answer = first.lyrics) {
-                        is LyricsFinder.Lyrics.Found -> {
-                            foundLines = answer.lines
-                            found = answer
-                            syncPoints = syncStore.load(song, answer.lines)
-                            wordsPace = syncStore.pace(song, answer.lines)
-                            uiState = uiState.copy(
-                                lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints, pace), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
-                                lyricsOffTake = timedForAnother(song)
-                            )
-                            uiState = uiState.copy(learning = uiState.learning.fresh(Readings.displayScriptOf(wordLines())))
-                            // Words with no timing, heard sung before, are timed as they were heard.
-                            if (answer.lines.isEmpty()) {
-                                heardStretches = heardUntimed?.let { HeardSongs(it).load(song, answer.words) }.orEmpty()
-                                timeByEar(song)
-                            }
-                            followSavedLines(song)
-                            timeSavedLines(song)
-                            learn()
-                            chords()
-                            // Japanese in romaji or Korean in Latin letters is written back in its own script, so it
-                            // reads like any song in it.
-                            if (usesChatGpt()) romanizedScript(answer.words)?.let { writeInOwnScript(song, it) }
-                        }
+                    val look = lookingAhead.remove(RecordingKey.of(song))?.await() ?: finder.firstLook(song)
+                    first = look
+                    when (val answer = look.lyrics) {
+                        is LyricsFinder.Lyrics.Found -> if (answer.markedInstrumental) held(song, answer, look.final) else showWords(song, answer)
                         // No words were shown while looking, so there's none to clear.
-                        LyricsFinder.Lyrics.None -> noWordsFound(song, likelyInstrumental = false)
+                        LyricsFinder.Lyrics.None -> noWords = false
                         // Having no words is what an instrumental is, not a problem.
                         LyricsFinder.Lyrics.Instrumental -> uiState = uiState.copy(lyricsInstrumental = true)
+                        // Taken for an instrumental by its genre, which can be wrong: heard for a voice first.
                         LyricsFinder.Lyrics.LikelyInstrumental -> {
                             uiState = uiState.copy(lyricsInstrumental = true)
-                            noWordsFound(song, likelyInstrumental = true)
+                            noWords = true
                         }
                         LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
                     }
                 } finally {
                     if (isActive) uiState = uiState.copy(isLoadingLyrics = false)
                 }
+                noWords?.let { noWordsFound(song, likelyInstrumental = it) }
                 follow(song)
                 first.takeIf { !it.final }?.let { retime(song, it.lyrics) }
-                // Not timed even after looking further. A cover's words taken from the original are untimed as
-                // they should be, as it's sung in its own time.
-                if (found?.lines?.isEmpty() == true && found?.ofTheOriginal != true) problemFound(SongProblem.NO_TIMING)
+                reportUntimed()
             }
         }
         watchNext(song)
         // A song Crosstune just heard is still playing nearby, so it keeps listening, to stay in time with it.
         if (heardSong?.let { sameSong(it, song) } == true) listenAlong()
+    }
+
+    /** [answer], the words found for [song], shown. */
+    private suspend fun showWords(song: MusicMetadata, answer: LyricsFinder.Lyrics.Found) {
+        foundLines = answer.lines
+        found = answer
+        syncPoints = syncStore.load(song, answer.lines)
+        wordsPace = syncStore.pace(song, answer.lines)
+        uiState = uiState.copy(
+            lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints, pace), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
+            lyricsInstrumental = false, lyricsOffTake = timedForAnother(song)
+        )
+        uiState = uiState.copy(learning = uiState.learning.fresh(Readings.displayScriptOf(wordLines())))
+        // Words with no timing, heard sung before, are timed as they were heard.
+        if (answer.lines.isEmpty()) {
+            heardStretches = heardUntimed?.let { HeardSongs(it).load(song, answer.words) }.orEmpty()
+            timeByEar(song)
+        }
+        followSavedLines(song)
+        timeSavedLines(song)
+        learn()
+        chords()
+        // Japanese in romaji or Korean in Latin letters is written back in its own script, so it
+        // reads like any song in it.
+        if (usesChatGpt()) romanizedScript(answer.words)?.let { writeInOwnScript(song, it) }
+    }
+
+    /**
+     * The words shown not timed even after looking further. A cover's words taken from the original are untimed as
+     * they should be, as it's sung in its own time.
+     */
+    private fun reportUntimed() {
+        if (found?.lines?.isEmpty() == true && found?.ofTheOriginal != true) problemFound(SongProblem.NO_TIMING)
     }
 
     /**
@@ -2094,7 +2529,7 @@ internal class MainViewModel(
         val key = RecordingKey.of(song)
         // Where lines were heard this time only isn't kept: next time the app's clock may be sure.
         val points = withGuess(syncPoints)
-        val lines = if (heardPoints.isEmpty() && points == syncPoints) uiState.lyricLines else shown(LyricsSync.adjust(foundLines, points, pace))
+        val lines = if (heardPoints.isEmpty() && points == syncPoints) uiState.lyricLines else linesFrom(points)
         val words = KeptWords(
             uiState.lyrics, lines, uiState.lyricsSynced, found, foundLines, restored, points,
             // A translation that failed is asked for again.
@@ -2125,7 +2560,10 @@ internal class MainViewModel(
         wordsPace = kept.pace
         uiState = uiState.copy(
             lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsTimedByEar = kept.timedByEar, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
-            learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, names = kept.learning.names, translations = kept.learning.translations, titleMeaning = kept.learning.titleMeaning, fromRomaji = kept.learning.fromRomaji),
+            learning = uiState.learning.fresh(kept.learning.script).copy(
+                lines = kept.learning.lines, names = kept.learning.names, readingsUnfinished = kept.learning.readingsUnfinished, translations = kept.learning.translations,
+                titleMeaning = kept.learning.titleMeaning, fromRomaji = kept.learning.fromRomaji
+            ),
             chords = kept.chords.copy(on = uiState.chords.on), canFollowApps = playback?.hasAccess() == true
         )
         uiState = uiState.copy(lyricsOffTake = timedForAnother(song))
@@ -2133,6 +2571,8 @@ internal class MainViewModel(
         timeSavedLines(song)
         // Whatever's switched on since, and wasn't worked out then.
         learn()
+        // Readings that lacked something then, shown as they were until they're read again.
+        if (kept.learning.readingsUnfinished) readWords(wordLines())
         chords()
         return true
     }
@@ -2151,13 +2591,18 @@ internal class MainViewModel(
      * of the song; kept as they are when they're put in time by hand meanwhile.
      */
     private suspend fun retime(song: MusicMetadata, found: LyricsFinder.Lyrics) {
+        // Words held while a voice is listened for aren't shown yet: they're timed once they are.
+        if (found !is LyricsFinder.Lyrics.Found || (found.markedInstrumental && found !== this.found)) return
         val better = lyricsFinder?.retimed(song, found) as? LyricsFinder.Lyrics.Found ?: return
-        if (found !is LyricsFinder.Lyrics.Found || better.lines == found.lines || uiState.lyricsFor?.let { sameSong(it, song) } != true || syncPoints.isNotEmpty() || handGap != null) return
+        if (better.lines == found.lines || !mayRetime(song)) return
         foundLines = better.lines
         this.found = better
         uiState = uiState.copy(lyricLines = better.lines, lyricsTimedByEar = false, lyricsOffTake = timedForAnother(song))
         followSavedLines(song)
     }
+
+    /** Whether [song]'s words may still be timed anew: they're still shown, and no one has put them in time by hand. */
+    private fun mayRetime(song: MusicMetadata) = uiState.lyricsFor?.let { sameSong(it, song) } == true && syncPoints.isEmpty() && handGap == null
 
     private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
         SongNames.titleNames(one.title).any { title -> SongNames.titleNames(other.title).any { SongNames.same(title, it) } } && SongNames.sameArtist(one.artist, other.artist) &&
@@ -2202,7 +2647,15 @@ internal class MainViewModel(
 
     private val playerSpeed get() = appFollowing?.clock?.speed ?: 1f
 
+    /**
+     * Hears what plays, to keep the words in time: what a music app plays through its own sound first, as
+     * does what an app with no song named plays, else the microphone; [quietly], never the microphone.
+     */
+    private suspend fun hearAlong(quietly: Boolean) =
+        if (lining || alongByPhone) listener.listenToPlaying(byMicrophone = !quietly) else listener.listen()
+
     private fun listeningAlong() = viewModelScope.launch {
+        byEarLetsGo()
         var quiet = 0
         var calibrationTries = 0
         while (isActive) {
@@ -2216,7 +2669,7 @@ internal class MainViewModel(
             // Shazam measures against wall time, so its speed already includes the player's rate.
             // Keep that rate before capture: the player can change it while Shazam answers.
             val capturedSpeed = playerSpeed
-            when (val heard = if (lining) listener.listenToPlaying(byMicrophone = !quietly) else listener.listen()) {
+            when (val heard = hearAlong(quietly)) {
                 is Heard.Song -> {
                     quiet = 0
                     heardAlong(heard, capturedSpeed)
@@ -2384,7 +2837,8 @@ internal class MainViewModel(
      * later as it goes on. Words that say they're timed for one as long as this keep its pace.
      */
     private fun learnPace(app: Following, shown: MusicMetadata, heard: Heard.Song, playerSpeed: Float) {
-        if (heard.clock == null || !sameSong(heard.metadata, shown)) return
+        // Words found with no timing are timed by ear, by the clock of what plays: there's no release they're timed for to pace.
+        if (heard.clock == null || !sameSong(heard.metadata, shown) || foundLines.isEmpty()) return
         if (found?.lengthMs != null && app.durationMs != null && found?.timedFor(app.durationMs) == true) return
         val speed = heard.speed / playerSpeed
         val heardPace = if (abs(speed - 1) >= MIN_SKEW) 1.0 / speed else 1.0
@@ -2485,6 +2939,7 @@ internal class MainViewModel(
         // With the app's clock sure, the words are heard once for the song; unsure, once each time it's picked up.
         if (if (clockSure) (uiState.lyricsSynced && !liningUp) || timedByHand || handGap != null || sungStore.heard(song, lines) else heardThisTime) return
         singingJob = viewModelScope.launch {
+            byEarLetsGo()
             try {
                 hearOn(hearing, song, lines)
             } finally {
@@ -2505,8 +2960,11 @@ internal class MainViewModel(
         if (!mayHearUntimed()) return
         val store = heardUntimed?.let(::HeardSongs)
         singingJob = viewModelScope.launch {
+            byEarLetsGo()
             // Shown from what was kept, what was heard before isn't loaded yet.
             if (heardStretches.isEmpty()) heardStretches = store?.load(song, words).orEmpty()
+            // What was heard last time, kept as its timing was stopped, is timed now: heard enough, it's never heard again.
+            if (heardStretches != timedBy) timeByEar(song)
             // A few whiles in a row with nothing sung heard, it's let be till the app's clock starts or jumps.
             while (!heardEnough(song) && singingTries < SINGING_TRIES) {
                 val heard = hearStretch(hearing, song, words) ?: return@launch
@@ -2559,10 +3017,19 @@ internal class MainViewModel(
     private fun untimedLengthMs(song: MusicMetadata) = appFollowing?.durationMs ?: song.lengthMs ?: found?.lengthMs
 
     /** [song]'s words, found with no timing, timed by the singing heard in [heardStretches], once any line's been heard. */
-    private fun timeByEar(song: MusicMetadata) {
-        val length = untimedLengthMs(song) ?: heardStretches.maxOfOrNull { it.toMs } ?: return
-        val lines = SungTiming.timed(uiState.lyrics.lines(), heardStretches, length).ifEmpty { return }
-        uiState = uiState.copy(lyricLines = lines, lyricsTimedByEar = true)
+    private suspend fun timeByEar(song: MusicMetadata) {
+        val heard = heardStretches
+        val words = uiState.lyrics
+        val length = untimedLengthMs(song) ?: heard.maxOfOrNull { it.toMs } ?: return
+        // A long song heard through twice takes a while to line up, so it's done away from the screen.
+        val lines = withContext(systemDispatcher) { SungTiming.timed(words.lines(), heard, length) }
+        // Timed words found meanwhile, or these written otherwise, as in their own script: this is out of date.
+        // Left, or heard again, the job doing this is stopped, so it never gets here.
+        if (foundLines.isNotEmpty() || uiState.lyrics != words) return
+        timedBy = heard
+        // Nothing heard is sure of any line now, so the lines lit before go dark too.
+        if (lines.isEmpty() && !uiState.lyricsTimedByEar) return
+        uiState = uiState.copy(lyricLines = lines, lyricsTimedByEar = lines.isNotEmpty())
         uiState = uiState.copy(following = inSong(appFollowing) ?: uiState.following)
     }
 
@@ -2573,11 +3040,12 @@ internal class MainViewModel(
      * [likelyInstrumental] by its genre alone, a voice heard says it's sung after all. Not heard, as when
      * it plays elsewhere, it's reported as it always was.
      */
-    private fun noWordsFound(song: MusicMetadata, likelyInstrumental: Boolean) {
+    private suspend fun noWordsFound(song: MusicMetadata, likelyInstrumental: Boolean) {
         if (SongNames.manySongs(song)) return
         // With reports turned off, a voice heard changes nothing, but for a song taken for an instrumental.
         if (!likelyInstrumental && autoReports.allowed == false) return
-        val canHear = singing != null && shownPlayed && mayCalibrate()
+        // The app is asked, as no words may come back before following it has said it plays the song.
+        val canHear = singing != null && mayCalibrate() && (shownPlayed || appPlays(song))
         // Noted, as a report of no words then says how it came to be one.
         TimingLog.note("no words, likely instrumental $likelyInstrumental, a voice ${if (canHear) "is listened for" else "can't be heard"}")
         if (canHear) {
@@ -2586,6 +3054,74 @@ internal class MainViewModel(
         } else if (!likelyInstrumental) {
             problemFound(SongProblem.NO_LYRICS)
         }
+    }
+
+    /**
+     * Whether a listen for a voice in [song] can start: the microphone's allowed, Crosstune is in sight and not naming a
+     * song, and a music app on this phone plays it now. Asked of the apps, as the words come before the song's followed,
+     * while what's followed is still the song before. A song heard from another device, or in an app Crosstune can't
+     * see, can't be listened to.
+     */
+    private suspend fun listenCanStart(song: MusicMetadata): Boolean {
+        if (singing == null || !mayCalibrate()) return false
+        // Naming a song has the microphone, and out of sight, nothing's heard.
+        if (shazamLeads || nextPaused) return false
+        return appPlays(song)
+    }
+
+    /**
+     * Whether a music app on this phone plays [song] now, as the apps say when asked: one that doesn't say in
+     * [APP_ASKED_MS], or a song heard from another device, isn't.
+     */
+    private suspend fun appPlays(song: MusicMetadata): Boolean {
+        val source = playback?.takeIf { it.hasAccess() } ?: return false
+        val following = withTimeoutOrNull(APP_ASKED_MS) { source.follow(song).first() }
+        return following?.let { it.app != null && it.clock.playing } == true
+    }
+
+    /**
+     * [words] found for [song], [final] or still to be timed better, that LRCLIB's marks or its title say no one sings
+     * (Issue #861): hidden while a voice is listened for, and kept hidden only as [hidesHeldWords] says. Where no listen can
+     * start they show at once, and with nothing settled in the time a listen takes, they show then.
+     */
+    private suspend fun held(song: MusicMetadata, words: LyricsFinder.Lyrics.Found, final: Boolean) {
+        val waiting = Unsung(song, likelyInstrumental = true, held = words, final = final)
+        if (!listenCanStart(song)) {
+            settle(waiting, Listen.NOT_STARTED)
+            return
+        }
+        TimingLog.note("LRCLIB or the title says no one sings in it: a voice is listened for before its words show")
+        uiState = uiState.copy(lyricsInstrumental = true)
+        unsung = waiting
+        heldJob = viewModelScope.launch {
+            delay(HELD_MS)
+            unsung?.takeIf { it.held === words }?.let {
+                voiceJob?.cancel()
+                settleLate(it, Listen.TIMED_OUT)
+            }
+        }
+        hearVoice()
+    }
+
+    /** [heard]'s held words, by what the listen came to, [listen]: shown unless [hidesHeldWords] says. Whether they show. */
+    private suspend fun settle(heard: Unsung, listen: Listen): Boolean {
+        val words = heard.held ?: return false
+        unsung = null
+        TimingLog.note("held words, the listen: $listen")
+        if (hidesHeldWords(listen)) {
+            uiState = uiState.copy(lyricsInstrumental = true)
+            return false
+        }
+        showWords(heard.song, words)
+        return true
+    }
+
+    /** [settle], once the lookup's done: the words shown are timed better too, or said to be untimed. */
+    private suspend fun settleLate(heard: Unsung, listen: Listen) {
+        val words = heard.held ?: return
+        if (!settle(heard, listen)) return
+        if (!heard.final) retime(heard.song, words)
+        reportUntimed()
     }
 
     /**
@@ -2599,20 +3135,42 @@ internal class MainViewModel(
         val waiting = unsung ?: return
         if (!mayHearVoice(waiting.song)) return
         voiceJob = viewModelScope.launch {
+            byEarLetsGo()
             var heard = waiting
             while (heard.tries < VOICE_TRIES) {
                 if (heard.tries > 0) delay(VOICE_PAUSE_MS)
                 val sung = hearing.hear(null, null)
                 TimingLog.note("voice while ${heard.tries + 1}: ${if (sung == null) "nothing heard, model missing ${hearing.missesModel}, no sound ${hearing.heardNoSound}" else "sings ${sung.sings}"}")
+                // Stopped: heard again once it plays, or, for held words, shown if it isn't in time.
                 if (unsung !== heard || uiState.following?.clock?.playing != true) return@launch
-                // Without the speech model, or with no sound to hear, as from a phone turned all the way down, nothing can be heard, so it's as if it couldn't be.
-                val couldNotHear = sung == null && (hearing.missesModel || hearing.heardNoSound)
-                if (sung?.sings == true || couldNotHear) return@launch voiceHeard(heard, sung != null)
+                voiceIn(hearing, sung, held = heard.held != null)?.let { return@launch heardOut(heard, it) }
                 heard = heard.copy(tries = heard.tries + 1)
                 unsung = heard
             }
-            unsung = null
+            heardOut(heard, Listen.NO_VOICE)
         }
+    }
+
+    /**
+     * What a while heard, [sung], says of a voice in the song: null while it may still be music alone. Without the speech
+     * model, or with no sound to hear, as from a phone turned all the way down, nothing can be heard, so it's as if it
+     * couldn't be; for [held] words, so is any while heard with nothing in it, as only sound heard can say no one sings.
+     */
+    private fun voiceIn(hearing: SingingHearing, sung: Sung?, held: Boolean): Listen? = when {
+        sung?.sings == true -> Listen.VOICE
+        sung != null -> null
+        held || hearing.missesModel || hearing.heardNoSound -> Listen.FAILED
+        else -> null
+    }
+
+    /** The listen for a voice in [heard] came to [listen]: its held words settled, or its missing words a problem, as they always were. */
+    private suspend fun heardOut(heard: Unsung, listen: Listen) {
+        if (heard.held != null) {
+            heldJob?.cancel()
+            return settleLate(heard, listen)
+        }
+        unsung = null
+        if (listen != Listen.NO_VOICE) voiceHeard(heard, sung = listen == Listen.VOICE)
     }
 
     /** Whether [song], with no words found, may be heard for a voice now: shown, played by a music app on the phone, Crosstune in sight. */
@@ -2624,7 +3182,6 @@ internal class MainViewModel(
 
     /** [heard] was heard sung, or [sung] false, couldn't be heard at all: its missing words are a problem, as they always were. */
     private fun voiceHeard(heard: Unsung, sung: Boolean) {
-        unsung = null
         if (sung && heard.likelyInstrumental) uiState = uiState.copy(lyricsInstrumental = false)
         if (sung || !heard.likelyInstrumental) problemFound(SongProblem.NO_LYRICS)
     }
@@ -2795,8 +3352,15 @@ internal class MainViewModel(
     private val shownPoints get() = heardPoints.ifEmpty { syncPoints }
 
     private fun showPoints() {
-        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, shownPoints, pace)))
+        uiState = uiState.copy(lyricLines = linesFrom(shownPoints))
     }
+
+    /**
+     * The lines found, put in time by [points] and at the words' pace, as they show. Words found with no
+     * timing have no lines found: those shown were timed by ear, by the clock of what plays at the speed
+     * it plays, so no point or pace moves them, and they stay as they are.
+     */
+    private fun linesFrom(points: List<SyncPoint>) = if (foundLines.isEmpty()) uiState.lyricLines else shown(LyricsSync.adjust(foundLines, points, pace))
 
     /** Forgets where lines were heard this time, as the app's clock is sure now, or it stopped. */
     private fun forgetHeard() {
@@ -3037,6 +3601,7 @@ internal class MainViewModel(
         if (!(if (next) uiState.canSkipNext else uiState.canSkipPrevious)) return
         shownPlayed = true
         playback?.skip(song, next)
+        movedOn(uiState.following?.appPackage)
     }
 
     private fun stopFollowing() {
@@ -3214,6 +3779,7 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         if (uiState.following?.let { it.canSeek && it.timingKnown } != true) return
         playback?.seekTo(song, inApp(positionMs))
+        movedOn(uiState.following?.appPackage)
     }
 
     /**
@@ -3298,14 +3864,28 @@ internal class MainViewModel(
     /** The timing log as it was when the words were last put in time by hand. */
     private var timingAtCorrection: Pair<String?, PlayerTiming>? = null
 
+    private sealed interface ManualReportDraft {
+        data class Song(val target: String?, val comment: String, val report: Report) : ManualReportDraft
+        data class Reading(val input: ReadingReport, val report: ReadingReport) : ManualReportDraft
+    }
+
+    private var manualReport: ManualReportDraft? = null
+    private var manualReportJob: Job? = null
+
     /** Sends a report on the words shown, with what the user says is wrong. [UiState.report] says how it goes. */
     fun sendReport(comment: String) {
         val sender = reports ?: return
-        val report = reportOn(sender, uiState.lyricsFor, comment)
+        if (uiState.report == ReportStatus.SENDING) return
+        val target = uiState.lyricsFor?.let(RecordingKey::of)
+        val draft = (manualReport as? ManualReportDraft.Song)?.takeIf { it.target == target && it.comment == comment }
+            ?: ManualReportDraft.Song(target, comment, reportOn(sender, uiState.lyricsFor, comment).copy(id = java.util.UUID.randomUUID().toString()))
+        manualReport = draft
         uiState = uiState.copy(report = ReportStatus.SENDING)
-        viewModelScope.launch {
-            val sent = sender.send(report)
-            uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+        val previous = manualReportJob
+        manualReportJob = viewModelScope.launch {
+            previous?.join()
+            val sent = sender.send(draft.report) == Delivery.SENT
+            if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
         }
     }
 
@@ -3315,18 +3895,25 @@ internal class MainViewModel(
      */
     fun reportReading(word: Word, index: Int, right: String) {
         val sender = reports ?: return
+        if (uiState.report == ReportStatus.SENDING) return
         val song = uiState.lyricsFor ?: return
         val script = uiState.learning.script ?: return
         val line = wordLines().getOrNull(index) ?: return
-        val report = ReadingReport(sender.version, song, found?.source, line, word, word.shown(uiState.learning.romajiTyped), script, right)
+        val input = ReadingReport(sender.version, song, found?.source, line, word, word.shown(uiState.learning.romajiTyped), script, right)
+        val draft = (manualReport as? ManualReportDraft.Reading)?.takeIf { it.input == input }
+            ?: ManualReportDraft.Reading(input, input.copy(id = java.util.UUID.randomUUID().toString()))
+        manualReport = draft
         uiState = uiState.copy(report = ReportStatus.SENDING)
-        viewModelScope.launch {
-            val sent = sender.send(report)
-            uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+        val previous = manualReportJob
+        manualReportJob = viewModelScope.launch {
+            previous?.join()
+            val sent = sender.send(draft.report) == Delivery.SENT
+            if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
         }
     }
 
     fun closeReport() {
+        manualReport = null
         uiState = uiState.copy(report = null)
     }
 
@@ -3363,13 +3950,34 @@ internal class MainViewModel(
     private fun reportProblem(song: MusicMetadata, problem: SongProblem) {
         val sender = reports ?: return
         if (autoReports.reported(song, problem)) return
-        val report = reportOn(sender, song, problem = problem)
+        val report = reportOn(sender, song, problem = problem).copy(id = autoReports.idFor(song, problem))
+        // On the phone at once, as it is so far, so nothing that ends the work below loses it: it goes at the next start.
+        autoReports.owe(song, problem, report.json())
         viewModelScope.launch {
             // Found before it's followed, or before following it said anything, as a song with no words always is.
             val playing = if (report.app == null) playback?.takeIf { it.hasAccess() }?.follow(song)?.first() else null
             val player = report.player?.let { it.copy(appPackage = it.appPackage ?: playing?.appPackage, speed = it.speed ?: playing?.clock?.speed) }
-            // One that didn't get there goes the next time it's found.
-            if (sender.send(report.copy(app = report.app ?: playing?.app, player = player))) autoReports.remember(song, problem)
+            val json = withContext(systemDispatcher) { report.copy(app = report.app ?: playing?.app, player = player).json() }
+            // In place of the one kept above, with its id, then sent from there.
+            deliver(sender, autoReports.owe(song, problem, json))
+        }
+    }
+
+    /**
+     * [owed], kept on the phone, goes now, and how it went is null where it didn't go: past the day's share, it waits
+     * for a later day, and one gone another way, or on its way already, isn't sent twice. Once on its way, it's seen
+     * through, whatever cancels the rest: a report the box got is never kept to go again, and one that didn't go
+     * takes no place of the day.
+     */
+    private suspend fun deliver(sender: ReportSender, owed: AutoReports.Owed): Delivery? {
+        val going = autoReports.take(owed) ?: return null
+        return withContext(NonCancellable) {
+            var delivery: Delivery? = null
+            try {
+                sender.send(owed.json).also { delivery = it }
+            } finally {
+                autoReports.went(going, delivery)
+            }
         }
     }
 
@@ -3378,7 +3986,10 @@ internal class MainViewModel(
      * an offer made for them goes.
      */
     private fun leaveWords() {
-        if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
+        closeReport()
+        if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) {
+            uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
+        }
         timedByHand = false
         uiState = uiState.copy(reportOfferFor = emptySet())
     }
@@ -3392,28 +4003,26 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         val sender = reports ?: return
         if (!timedByHand) return
-        autoReports.owe(song, reportOn(sender, song, problem = SongProblem.TIMED_BY_HAND).json())
+        val report = reportOn(sender, song, problem = SongProblem.TIMED_BY_HAND).copy(id = autoReports.idFor(song, SongProblem.TIMED_BY_HAND))
+        autoReports.owe(song, SongProblem.TIMED_BY_HAND, report.json())
     }
 
-    /** Held while reports owed go, so a start and a yes close together don't send one twice. */
-    private val owedGoing = Mutex()
-
     /**
-     * Each report owed goes, once a song, and is dropped when it got there; one that didn't waits for the next
-     * time. Words still in front of the user are left out: they may be put in time some more, and go once they're left.
+     * Each report owed goes, once a song, and is dropped when it got there or the box turned it away; one that
+     * didn't get there waits for the next time, and a problem found past the day's share for a later day.
+     * Words still in front of the user are left out: they may be put in time some more, and go once they're left.
      */
     private fun sendOwed() {
         val sender = reports ?: return
         if (autoReports.allowed != true) return
         viewModelScope.launch {
-            owedGoing.withLock {
+            autoReports.sending.withLock {
                 val inFront = uiState.lyricsFor?.takeIf { timedByHand }?.let(autoReports::owedKey)
                 for (owed in autoReports.owed().filter { it.key != inFront }) {
-                    // Gone another way meanwhile, as the words it's for were left.
-                    if (!autoReports.owes(owed)) continue
+                    // Past the day's share, or gone another way meanwhile, as the words it's for were left: it's skipped.
+                    val delivery = deliver(sender, owed) ?: continue
                     // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
-                    if (!sender.send(owed.json)) break
-                    autoReports.paid(owed)
+                    if (delivery == Delivery.FAILED) break
                     // Paced under the box's 5 a minute from one phone, with room left for what's found meanwhile.
                     delay(reportPaceMs)
                 }
@@ -3538,7 +4147,7 @@ internal class MainViewModel(
         heardPoints = emptyList()
         // Kept for the words as found, which is how they're found next time.
         syncStore.save(song, foundLines, withGuess(points), wordsPace)
-        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points, pace)), lyricsSynced = points.isNotEmpty(), lyricsOffTake = false)
+        uiState = uiState.copy(lyricLines = linesFrom(points), lyricsSynced = points.isNotEmpty(), lyricsOffTake = false)
         keepInTime()
         // Lines kept to practise play from where they're heard now.
         timeSavedLines(song, again = true)
@@ -3600,6 +4209,9 @@ internal class MainViewModel(
 
     fun dismissLyrics() {
         heardSong = null
+        // Words held for a listen are closed with the rest: nothing shows them, or looks them up, once they're gone.
+        heldJob?.cancel()
+        unsung = null
         leaveWords()
         keepShown()
         lyricsJob?.cancel()
@@ -3718,21 +4330,22 @@ internal class MainViewModel(
     private fun recordingLength(): Long? = found?.lengthMs?.takeIf { it > 0 } ?: appFollowing?.durationMs?.takeIf { it > 0 }
 
     /**
-     * Lines of [song] kept are read as its lines are now, put right, but for the ones put right by
-     * hand; only those with no reading yet when [unread].
+     * Lines of [song] kept are read as its lines are now, put right, but for what the user put right in
+     * them, and those that can't tell that apart; only those with no reading yet when [unread].
      */
     private suspend fun rereadSavedLines(song: MusicMetadata, unread: Boolean = false) {
         val lines = wordLines()
-        val again = uiState.savedLines.filter { it.isOf(song) && it.line == null && !it.readByHand && (!unread || it.ruby == null) }
+        val again = uiState.savedLines.filter { it.isOf(song) && it.line == null && it.rereadable && (!unread || it.ruby == null) }
             .mapNotNull { saved -> lines.indexOf(saved.text).takeIf { it >= 0 }?.let(::savedLineAt) }
-        if (again.isEmpty()) return
-        savedLinesStore.change(systemDispatcher) { kept -> rereadAs(kept, again) }?.let { uiState = uiState.copy(savedLines = it) }
+        val script = uiState.learning.script
+        if (again.isEmpty() || script == null) return
+        savedLinesStore.change(systemDispatcher) { kept -> rereadAs(kept, again, script) }?.let { uiState = uiState.copy(savedLines = it) }
     }
 
     /**
      * Lines of [song] kept from its words as they were, before they changed, e.g. found again on another
      * site, are kept as the lines they are now, practised as far as they had been: read and translated as
-     * these are, and where these are sung. One kept already as it is now is left as it was.
+     * these are, and where these are sung, with what was put right in them. One kept already as it is now is left as it was.
      */
     private fun followSavedLines(song: MusicMetadata) {
         val lines = wordLines()
@@ -3751,7 +4364,11 @@ internal class MainViewModel(
             val moved = saved.copy(text = now, reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = false, typed = read.typed, readWith = read.readWith, translation = read.translation ?: saved.translation)
             saved to if (times != null) moved.timedAt(index) else moved
         }
-        if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
+        if (changes.isEmpty()) return
+        uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
+        // What was put right in them goes with them, read away from the screen, as the dictionary may have to read them first.
+        val script = uiState.learning.script ?: return
+        viewModelScope.launch { savedLinesStore.change(systemDispatcher) { kept -> carried(kept, changes, script) }?.let { uiState = uiState.copy(savedLines = it) } }
     }
 
     /** Lines of [song] kept are translated as its lines are now, e.g. into another language. */
@@ -3796,7 +4413,11 @@ internal class MainViewModel(
         // The song the words follow, in its app; or else whatever plays, which the last app played has.
         val playing = uiState.following?.takeIf { it.clock.playing && it.appPackage != null }
         val before = uiState.lyricsFor?.let { shown -> playing?.let { Before(shown, inApp(it.clock.positionAt(now())), it.appPackage) } }
-            ?: playback?.nowPlaying()?.let { heard -> heard.clock?.let { Before(heard.metadata, it.positionAt(now()), app = null) } }
+            ?: when (val first = playback?.whatPlays()) {
+                is WhatPlays.Named -> first.song.clock?.let { Before(first.song.metadata, it.positionAt(now()), app = null) }
+                is WhatPlays.Nameless -> Before(first.playing.played, 0, first.playing.app, songless = true)
+                null -> null
+            }
         cards.start(song, before)
     }
 
@@ -4094,6 +4715,7 @@ internal class MainViewModel(
         repeatJob?.cancel()
         uiState = uiState.copy(repeating = index)
         playback?.seekTo(song, inApp(start))
+        movedOn(uiState.following?.appPackage)
         var sought = now()
         repeatJob = viewModelScope.launch {
             while (isActive) {
@@ -4112,6 +4734,14 @@ internal class MainViewModel(
         repeatJob?.cancel()
         repeatJob = null
         uiState = uiState.copy(repeating = null)
+    }
+
+    /**
+     * The readings shown, to be read again when the words show again, as something they need couldn't be had. Only
+     * while they're read: whatever replaces them stops that first.
+     */
+    private fun unfinished() {
+        uiState = uiState.copy(learning = uiState.learning.copy(readingsUnfinished = true))
     }
 
     /** The words shown, line by line: the timed ones, or else the plain ones. */
@@ -4142,47 +4772,12 @@ internal class MainViewModel(
     private fun learn() {
         val learning = uiState.learning
         val lines = wordLines()
-        val script = learning.script
         if (!learning.reads && readingsJob?.isActive == true) {
             // Turned off while they're worked out: nothing more is asked for them, and they're worked out again once on.
             readingsJob?.cancel()
             uiState = uiState.copy(learning = uiState.learning.copy(lines = emptyList()))
         }
-        val unread = learning.lines.isEmpty() && readingsJob?.isActive != true
-        if (learning.reads && script != null && unread) {
-            readingsJob = viewModelScope.launch {
-                if (script == Script.JAPANESE) readWithUniDic()
-                // Japanese loads its dictionary the first time, a moment better spent away from the screen.
-                val song = uiState.lyricsFor
-                var read = withContext(systemDispatcher) { Readings.of(lines, script) }
-                // The song's name and its artist's read the same way, to show how to say them.
-                val names = song?.let { withContext(systemDispatcher) { Readings.of(listOf(it.title, it.artist), script) } }.orEmpty()
-                uiState = uiState.copy(learning = uiState.learning.copy(lines = read, names = names))
-                // Lines kept with no reading, as ones once written otherwise, are read as they are now; all of them, but
-                // for what was put right in them, once the dictionary's readings are all there are, as for Japanese once
-                // UtaTen's are known, since Japanese ones kept before UtaTen's were marked can't be told from the dictionary's.
-                song?.let { rereadSavedLines(it, unread = script == Script.JAPANESE) }
-                if (script != Script.JAPANESE || song == null) return@launch
-                // Sung readings, 都会 as まち, from a site that writes them over the words.
-                sungReadingsOf(song, lines, read)?.let { fixes ->
-                    if (wordLines() != lines || uiState.learning.lines != read) return@launch
-                    if (fixes.isNotEmpty()) {
-                        read = Readings.corrected(read, fixes)
-                        uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
-                    }
-                    // With none from UtaTen, and no ChatGPT to put them right, the dictionary's are all there are.
-                    if (fixes.isNotEmpty() || !usesChatGpt()) rereadSavedLines(song)
-                }
-                // Signed in, ChatGPT puts right the readings the dictionary gets wrong in this song.
-                if (usesChatGpt()) {
-                    val checked = tutor?.checkReadings(song, lines, read) ?: return@launch
-                    if (wordLines() == lines && uiState.learning.lines == read) {
-                        uiState = uiState.copy(learning = uiState.learning.copy(lines = checked))
-                        rereadSavedLines(song)
-                    }
-                }
-            }
-        }
+        if (learning.lines.isEmpty()) readWords(lines)
         val translator = translator ?: return
         if (learning.translation && uiState.lyrics.isNotEmpty() && learning.translations.isEmpty() && !learning.translating) {
             translationJob = viewModelScope.launch {
@@ -4221,6 +4816,68 @@ internal class MainViewModel(
                     ?.firstOrNull()?.takeUnless { it.equals(song.title.trim(), ignoreCase = true) }
                 if (uiState.lyricsFor == song) uiState = uiState.copy(learning = uiState.learning.copy(titleMeaning = meaning))
             }
+        }
+    }
+
+    /**
+     * Works out how [lines], the words shown, read, while readings are on and they aren't being worked out already. Read
+     * again, what UtaTen or ChatGPT put right in the readings shown stays until it answers again.
+     */
+    private fun readWords(lines: List<String>) {
+        val script = uiState.learning.script
+        if (!uiState.learning.reads || script == null || readingsJob?.isActive == true) return
+        val kept = uiState.learning.lines
+        readingsJob = viewModelScope.launch {
+            if (script == Script.JAPANESE) readWithUniDic()
+            // Japanese loads its dictionary the first time, a moment better spent away from the screen.
+            val song = uiState.lyricsFor
+            val read = withContext(systemDispatcher) { Readings.of(lines, script) }
+            // The song's name and its artist's read the same way, to show how to say them.
+            val names = song?.let { withContext(systemDispatcher) { Readings.of(listOf(it.title, it.artist), script) } }.orEmpty()
+            // Read without UniDic while it may still come: read again with it, once it's here, when the words show again.
+            val withoutUniDic = script == Script.JAPANESE && uniDic != null && Readings.uniDic == null
+            val coming = puttingRight(script, song)
+            val shown = keeping(kept, read, coming)
+            uiState = uiState.copy(learning = uiState.learning.copy(lines = shown, names = names, readingsUnfinished = withoutUniDic))
+            // Lines kept with no reading, as ones once written otherwise, are read as they are now; all of them, but
+            // for what was put right in them, once the dictionary's readings are all there are, as for Japanese once
+            // UtaTen's are known, since Japanese ones kept before UtaTen's were marked can't be told from the dictionary's.
+            song?.let { rereadSavedLines(it, unread = script == Script.JAPANESE) }
+            if (song != null && coming.isNotEmpty()) putRight(song, lines, read, kept, coming)
+        }
+    }
+
+    /** What may put right how [song]'s words in [script] read: UtaTen, for Japanese, and ChatGPT, signed in. */
+    private fun puttingRight(script: Script, song: MusicMetadata?): Set<Reader> =
+        if (script == Script.JAPANESE && song != null) setOfNotNull(Reader.SUNG, Reader.CHATGPT.takeIf { usesChatGpt() }) else emptySet()
+
+    /**
+     * [dictionary], how [song]'s [lines] read by the dictionary, put right where they're sung otherwise, from a site that
+     * writes the kana over the words, and by ChatGPT, signed in. What either put right in [kept], the readings shown
+     * before, stays shown until it answers, as it's [coming]. One that can't be had is asked for again when the words
+     * show again; a song UtaTen has no page for is kept as having none, and isn't.
+     */
+    private suspend fun putRight(song: MusicMetadata, lines: List<String>, dictionary: List<LineReading>, kept: List<LineReading>, coming: Set<Reader>) {
+        var read = dictionary
+        val waiting = coming.toMutableSet()
+        // Sung readings, 都会 as まち.
+        val sung = sungReadingsOf(song, lines, read)
+        if (sung == null && sungReadings != null) unfinished()
+        sung?.let { fixes ->
+            // Words timed better meanwhile from another copy, which may write them otherwise.
+            if (wordLines() != lines) return
+            waiting -= Reader.SUNG
+            read = Readings.corrected(read, fixes)
+            uiState = uiState.copy(learning = uiState.learning.copy(lines = keeping(kept, read, waiting)))
+            // With none from UtaTen, and no ChatGPT to put them right, the dictionary's are all there are.
+            if (fixes.isNotEmpty() || Reader.CHATGPT !in waiting) rereadSavedLines(song)
+        }
+        // Signed in, ChatGPT puts right the readings the dictionary gets wrong in this song.
+        if (Reader.CHATGPT !in waiting) return
+        val checked = tutor?.checkReadings(song, lines, read) ?: return unfinished()
+        if (wordLines() == lines) {
+            uiState = uiState.copy(learning = uiState.learning.copy(lines = keeping(kept, checked, waiting - Reader.CHATGPT)))
+            rereadSavedLines(song)
         }
     }
 
@@ -4616,6 +5273,7 @@ internal class MainViewModel(
         retryListens = false
         dismissSongSearch()
         if (!keepsWords) dismissLyrics()
+        if (!keepsWords) alongByPhone = false
         if (closesPlayer && !keepsWords) closePlayer()
         cancelTrackWork()
         coverJob?.cancel()
@@ -4825,6 +5483,15 @@ internal class MainViewModel(
     private var fetchAgain = false
 
     /**
+     * How many times what's kept for offline was gone round, so a test can tell a request of one time
+     * round from one of the next: their requests are the same, and the song's card asks its own too.
+     */
+    @VisibleForTesting
+    @Volatile
+    internal var keptOfflineRounds = 0
+        private set
+
+    /**
      * Fetches what each song kept for offline needs and isn't saved yet, one at a time, on a network
      * that costs no data, while there's room.
      */
@@ -4838,6 +5505,7 @@ internal class MainViewModel(
         keepingOffline = viewModelScope.launch {
             do {
                 fetchAgain = false
+                keptOfflineRounds++
                 fetchEachKept(offline)
             } while (fetchAgain)
         }
@@ -4845,32 +5513,40 @@ internal class MainViewModel(
 
     private suspend fun fetchEachKept(offline: OfflineSongs) {
         for (kept in offline.all()) {
-            for (song in kept.songs.filterNot { OfflineSongs.keyOf(it) in kept.saved }) {
+            for (song in kept.songs.filter { OfflineSongs.keyOf(it).let { key -> key !in kept.saved || key in kept.unread } }) {
                 if (!unmetered || uiState.offlineUsedBytes >= uiState.offlineSpaceMb * BYTES_PER_MB) return
-                // Unreachable for a moment, it's tried again on the next network.
-                if (!withContext(Pinning(kept.id)) { fetchForOffline(song) }) return
-                offline.saved(kept.id, song)
+                // Its words unreachable for a moment, the network's gone: it's tried again on the next one. Only its sung
+                // readings, it's kept without them for now and the next songs are fetched, and they're asked for on the next.
+                when (withContext(Pinning(kept.id)) { fetchForOffline(song) }) {
+                    Fetched.NOT -> return
+                    Fetched.UNREAD -> offline.saved(kept.id, song, unread = true)
+                    Fetched.ALL -> offline.saved(kept.id, song)
+                }
                 showKeptOffline(offline)
             }
         }
     }
 
+    /** What a song kept for offline could fetch: all it needs, all but its sung readings, or not its words. */
+    private enum class Fetched { ALL, UNREAD, NOT }
+
     /**
      * Looks up all the song's words screen may need, as it's set to show them: the words and their
-     * timing, their translation, chords, how Japanese ones are sung, and its cover. Whether it could.
+     * timing, their translation, chords, how Japanese ones are sung, and its cover. How much it could.
      */
-    private suspend fun fetchForOffline(song: MusicMetadata): Boolean {
-        val lyrics = lyricsFinder?.lyricsOf(song) ?: return true
+    private suspend fun fetchForOffline(song: MusicMetadata): Fetched {
+        val lyrics = lyricsFinder?.lyricsOf(song) ?: return Fetched.ALL
         song.artworkUrl?.let { artwork.keep(it) }
-        if (lyrics == LyricsFinder.Lyrics.Unavailable) return false
-        val found = lyrics as? LyricsFinder.Lyrics.Found ?: return true
+        if (lyrics == LyricsFinder.Lyrics.Unavailable) return Fetched.NOT
+        val found = lyrics as? LyricsFinder.Lyrics.Found ?: return Fetched.ALL
         val lines = found.lines.map { it.text }.ifEmpty { found.words.lines() }
         if (uiState.learning.translation) translator?.translate(lines, translateInto())
         if (uiState.chords.on) chordFinder?.chordsOf(song, lines)
         val script = Readings.scriptOf(lines)
         // Asked as when the words show: romaji and kana are made from the readings too.
-        if (uiState.learning.reads && script == Script.JAPANESE) sungReadingsOf(song, lines, withContext(systemDispatcher) { Readings.of(lines, script) })
-        return true
+        val sung = if (uiState.learning.reads && script == Script.JAPANESE) sungReadingsOf(song, lines, withContext(systemDispatcher) { Readings.of(lines, script) }) else emptyList()
+        // Readings turned off while UtaTen was asked: none are wanted any more, so the song has all it needs.
+        return if (sung != null || sungReadings == null || !uiState.learning.reads) Fetched.ALL else Fetched.UNREAD
     }
 
     /**
@@ -5035,6 +5711,15 @@ internal class MainViewModel(
         /** The pause between them, so they're heard across the song, a verse apart, rather than all in its intro. */
         const val VOICE_PAUSE_MS = 20_000L
 
+        /**
+         * How long words held for a listen wait for it to settle them before they show: the time one listen takes,
+         * [VOICE_TRIES] whiles heard [VOICE_PAUSE_MS] apart, and a while more for the speech model to hear the last.
+         */
+        const val HELD_MS = (VOICE_TRIES + 1) * SingingListener.SECONDS * 1_000L + (VOICE_TRIES - 1) * VOICE_PAUSE_MS
+
+        /** How long the music apps are asked whether one plays a song before a listen for a voice in it starts: they say at once. */
+        const val APP_ASKED_MS = 1_000L
+
         /** Times the singing is heard for a song, at most, while too few words heard match its words to tell. */
         const val SINGING_TRIES = 3
 
@@ -5073,6 +5758,31 @@ internal class MainViewModel(
 
         /** How many times the rest after hearing nothing doubles: 8 s, then 16, 32 and at most 64. */
         const val QUIET_PAUSE_DOUBLINGS = 3
+
+        /**
+         * How long naming by ear waits after a failure, or after hearing nothing, doubled as for
+         * [QUIET_PAUSE_DOUBLINGS]: talk between songs often runs a minute or two.
+         */
+        const val BY_EAR_RETRY_MS = 30_000L
+
+        /** How long after a song heard should be over it's listened to again: past a fade and a cross-fade into the next. */
+        const val BY_EAR_AFTER_MS = 10_000L
+
+        /** How long naming by ear waits after a song whose length isn't known: about half a song. */
+        const val BY_EAR_UNKNOWN_MS = 90_000L
+
+        /** The soonest and the latest naming by ear listens again after a song: the end of a song may be misheard, and a long one may be skipped. */
+        const val BY_EAR_SOONEST_MS = 20_000L
+        const val BY_EAR_LATEST_MS = 360_000L
+
+        /** How often, while naming by ear rests after hearing no song, it checks for a new way to hear. */
+        const val EARS_CHECK_MS = 1_000L
+
+        /**
+         * How far off from where it should be by now an app may say it is, and still play on from where it was:
+         * an app saying where it is now and then is a moment off, at most; further, it was moved, or plays another.
+         */
+        const val BY_EAR_JUMP_MS = 2_000L
 
         /** How long the last line repeats for, with no next line to end at. */
         const val LAST_LINE_MS = 6_000L

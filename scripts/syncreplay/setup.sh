@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Prep tools only. Requires uv, ffmpeg, yt-dlp, cmake and a C++ compiler on PATH.
 # REPLAY_ROCM=1 installs the ROCm wheels on Linux x86_64; it does not configure the GPU driver.
+
+# Parse the full run before work starts, so an edit cannot change an active run.
+main() {
 set -euo pipefail
 cache=${REPLAY_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/agent-cache/crosstune-syncreplay}
 export UV_CACHE_DIR=${UV_CACHE_DIR:-$cache/downloads}
@@ -26,3 +29,7 @@ if [[ ${REPLAY_ROCM:-0} == 1 ]]; then
 else
     uv pip install --python "$cache/venv/bin/python" openai-whisper
 fi
+
+}
+
+main "$@"; exit

@@ -566,9 +566,9 @@ internal const val TRANSLATION_VERSION = 2
  * a line of em or en dashes, in Spanish.
  */
 internal fun explanationParts(text: String): List<String> {
-    val parts = plainText(text).split(Regex("""\n[ \t]*(?:-{3,}|[—–―]+)[ \t]*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }
+    val parts = plainText(text).split(phoneRegex("""\n[ \t]*(?:-{3,}|[—–―]+)[ \t]*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }
     if (parts.size > 1) return parts
-    return parts.single().split(Regex("""\n[ \t]*\n\s*""")).map { it.trim() }
+    return parts.single().split(phoneRegex("""\n[ \t]*\n\s*""")).map { it.trim() }
 }
 
 /**
@@ -587,8 +587,8 @@ internal data class Sheet(
     val known: List<Pair<String, String>>
 )
 
-private val FACT = Regex("""^([^:.,()·]{1,30}): (.+)$""")
-private val KNOWN = Regex("""^(.+) · (\d{4}\S*)$""")
+private val FACT = phoneRegex("""^([^:.,()·]{1,30}): (.+)$""")
+private val KNOWN = phoneRegex("""^(.+) · (\d{4}\S*)$""")
 private const val QUOTE_MARKS = "\"“«„「『‘'"
 
 /** [text] sorted into a [Sheet]; while it's still being written, what's come so far. */
@@ -599,7 +599,7 @@ internal fun sheet(text: String): Sheet {
     var mood = emptyList<String>()
     var quote: String? = null
     var means: String? = null
-    val lines = plainText(text).lines().map { it.trim() }.filter { it.isNotEmpty() && !it.matches(Regex("""-{3,}|[—–―]+""")) }
+    val lines = plainText(text).lines().map { it.trim() }.filter { it.isNotEmpty() && !it.matches(phoneRegex("""-{3,}|[—–―]+""")) }
     var at = 0
     while (at < lines.size) {
         val line = lines[at++]
@@ -628,11 +628,66 @@ internal fun sheet(text: String): Sheet {
  * [text] as plain words: ChatGPT, told not to, still writes *album names* in Markdown and adds
  * sources as "([site](https://…))", which would show as they are.
  */
-internal fun plainText(text: String): String = text
-    .replace(Regex("""\s*\(\[[^\]]*]\([^)]*\)\)"""), "")
-    .replace(Regex("""\[([^\]]+)]\(https?://[^)]*\)"""), "$1")
-    .replace(Regex("""\*\*(.+?)\*\*"""), "$1")
-    .replace(Regex("""(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])"""), "$1")
+internal fun plainText(text: String): String = withoutLinks(withoutSources(text))
+    .replace(phoneRegex("""\*\*(.+?)\*\*"""), "$1")
+    .replace(phoneRegex("""(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])"""), "$1")
+
+/**
+ * [text] without each source ChatGPT adds after what it says, "([site](https://…))", and the spaces before it, as main's
+ * `\s*\(\[[^\]]*]\([^)]*\)\)` cut them: from `([` to the first `]`, a `(`, then to the first `)`, and another.
+ */
+internal fun withoutSources(text: String): String {
+    val kept = StringBuilder()
+    var from = 0
+    val names = NextFound(text, "]")
+    val ends = NextFound(text, ")")
+    var at = text.indexOf("([")
+    while (at >= 0) {
+        val name = names.from(at + 2)
+        if (name == text.length) break
+        if (text.getOrNull(name + 1) == '(') {
+            val end = ends.from(name + 2)
+            if (end == text.length) break
+            if (text.getOrNull(end + 1) == ')') {
+                kept.append(text, from, spacesStart(text, at, from))
+                from = end + 2
+                at = text.indexOf("([", from)
+                continue
+            }
+        }
+        at = text.indexOf("([", at + 1)
+    }
+    return kept.append(text, from, text.length).toString()
+}
+
+/**
+ * [text] with each link in Markdown, "[words](https://…)", as its words, as main's `\[([^\]]+)]\(https?://[^)]*\)` read
+ * them: from a `[` to the first `]`, words between, then the address, to the first `)`.
+ */
+internal fun withoutLinks(text: String): String {
+    val kept = StringBuilder()
+    var from = 0
+    val closes = NextFound(text, "]")
+    val ends = NextFound(text, ")")
+    var at = text.indexOf('[')
+    while (at >= 0) {
+        // From the `[`, which isn't one.
+        val close = closes.from(at)
+        if (close == text.length) break
+        val linked = listOf("(https://", "(http://").any { text.startsWith(it, close + 1) }
+        if (close > at + 1 && linked) {
+            // From the `]`: what's between is the address's start, with no `)`.
+            val end = ends.from(close)
+            if (end == text.length) break
+            kept.append(text, from, at).append(text, at + 1, close)
+            from = end + 1
+            at = text.indexOf('[', from)
+            continue
+        }
+        at = text.indexOf('[', at + 1)
+    }
+    return kept.append(text, from, text.length).toString()
+}
 
 /**
  * The strings of a JSON array finished so far in [text], an answer still being written: those

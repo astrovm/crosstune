@@ -1,0 +1,78 @@
+package com.astrovm.crosstune
+
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+/**
+ * What a player says it plays, and whether it names a song, as the bar and listening go by. Names are
+ * made up, apart from a radio station's, and each is as an app on a phone sent it.
+ */
+@RunWith(RobolectricTestRunner::class)
+class SonglessTest {
+
+    private fun noSong(title: String, artist: String = "") = Songless.namesNoSong(title, artist)
+
+    @Test
+    fun aRadioStationAloneNamesNoSong() {
+        // As VRadio names RTP Antena 2: the station, no artist, and its own name as the album.
+        assertTrue(noSong("RTP Antena 2", ""))
+        // A station named with no one where the artist goes.
+        assertTrue(noSong("Fake FM", "<unknown>"))
+    }
+
+    @Test
+    fun noTitleNamesNoSong() {
+        assertTrue(noSong("", "Fake Artist"))
+        assertTrue(noSong("   ", ""))
+    }
+
+    @Test
+    fun aFileNamesNoSong() {
+        assertTrue(noSong("Fake Song.mp3", "<unknown>"))
+        assertTrue(noSong("fake_song.flac", ""))
+        assertTrue(noSong("Fake Song.m4a", "Unknown"))
+        assertTrue(noSong("Fake Song", "Unknown Artist"))
+        assertTrue(noSong("Track 7.mp3", "<unknown>"))
+        assertTrue(noSong("Pista 03", ""))
+        assertTrue(noSong("AUD-20240101-WA0003", ""))
+        assertTrue(noSong("AUD-20240101-WA0003.opus", "<unknown>"))
+        assertTrue(noSong("VID_20240101_123456.mp4", ""))
+        assertTrue(noSong("/storage/emulated/0/Music/Fake Artist - Fake Song.mp3", ""))
+        assertTrue(noSong("content://media/external/audio/media/42", ""))
+        assertTrue(noSong("file:///sdcard/Download/fake.ogg", "<unknown>"))
+    }
+
+    @Test
+    fun aSongWithItsArtistIsOne() {
+        // As Spotify, YouTube Music, Apple Music and Poweramp with tags name theirs.
+        assertFalse(noSong("Fake Song", "Fake Artist"))
+        assertFalse(noSong("Fake Song (Remastered 2011)", "Fake Artist"))
+        assertFalse(noSong("Fake Song", "Fake Artist & Other Fake"))
+        // An artist named as the app that plays them is still the artist: "Trust Me" by Pandora in
+        // the Pandora app, or a band called Pulsar in Pulsar.
+        assertFalse(noSong("Trust Me", "Pandora"))
+        assertFalse(noSong("Fake Song", "Pulsar"))
+        // Numbers in a song's name aren't a file's.
+        assertFalse(noSong("Song 2", "Fake Band"))
+        assertFalse(noSong("Summer of 1999", "Fake Artist"))
+        assertFalse(noSong("Track 01 Remix Edition", "Fake Artist"))
+        // A title with a real artist is a song, even one shaped like a file's or a recording's name.
+        assertFalse(noSong("Demo 20230415", "Fake Artist"))
+        assertFalse(noSong("Session 210415", "Fake Band"))
+        assertFalse(noSong("Jenny 8675309", "Fake Band"))
+        assertFalse(noSong("file:///sdcard/Download/fake.ogg", "Fake Artist"))
+        // A song an artist named for its place on the album, as some do.
+        assertFalse(noSong("Track 10", "Fake Artist"))
+        assertFalse(noSong("Pista 03", "Fake Band"))
+    }
+
+    @Test
+    fun aSongInItsTitleAloneIsOne() {
+        // A file, or a station that sends what it plays, "Artist - Song", as ICY does.
+        assertFalse(noSong("Fake Artist - Fake Song.mp3", "<unknown>"))
+        assertFalse(noSong("Fake Artist - Fake Song", ""))
+    }
+}

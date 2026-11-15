@@ -2,15 +2,11 @@ package com.astrovm.crosstune
 
 import java.io.File
 import java.nio.charset.Charset
-import org.json.JSONArray
-import org.json.JSONObject
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 
 // Not part of the app's tests: compare_sheets.py copies this into the test folder for one run and takes it out again.
-// It runs ChordSheets.fromJTotal as ChordFinder does, on every crawled page.
-@RunWith(RobolectricTestRunner::class)
+// It runs ChordSheets.fromJTotal as ChordFinder does, on every crawled page. It is a plain JUnit test, with no
+// Android classes, so it runs where Robolectric's native runtime does not, as in the Gradle box on an arm64 Mac.
 class CrawlDumpTest {
     @Test
     fun dump() {
@@ -18,22 +14,32 @@ class CrawlDumpTest {
         val tag = File(dir, "tag.txt").readText().trim()
         val region = Regex("""<!--HPSTART-->(.*?)<!--HPEND-->""", RegexOption.DOT_MATCHES_ALL)
         val out = File(dir, "app-$tag.jsonl").bufferedWriter()
-        val items = JSONArray(File(dir, "urls.json").readText())
-        for (i in 0 until items.length()) {
-            val item = items.getJSONObject(i)
-            val page = String(File(dir, "sheets/" + item.getString("file")).readBytes(), Charset.forName("windows-31j"))
-            val sheet = region.find(page)?.groupValues?.get(1) ?: continue
+        // compare_sheets.py writes one sheet a line: its file, a tab, its address.
+        File(dir, "urls.tsv").readLines().filter { it.isNotBlank() }.forEach { row ->
+            val (file, url) = row.split('\t', limit = 2)
+            val page = String(File(dir, "sheets/$file").readBytes(), Charset.forName("windows-31j"))
+            val sheet = region.find(page)?.groupValues?.get(1) ?: return@forEach
             val mono = ChordSheets.jTotalMonospace(page)
             val lines = ChordSheets.fromJTotal(ChordFinder.unescape(sheet), mono)
-            val arr = JSONArray()
-            lines.forEach { line ->
-                val chords = JSONArray()
-                line.chords.forEach { chords.put(JSONArray().put(it.at).put(it.name)) }
-                arr.put(JSONObject().put("text", line.text).put("chords", chords))
+            val written = lines.joinToString(",", "[", "]") { line ->
+                val chords = line.chords.joinToString(",", "[", "]") { "[${it.at},${json(it.name)}]" }
+                """{"text":${json(line.text)},"chords":$chords}"""
             }
-            out.write(JSONObject().put("url", item.getString("url")).put("mono", mono).put("lines", arr).toString())
+            out.write("""{"url":${json(url)}""" + ""","mono":$mono""" + ""","lines":$written}""")
             out.newLine()
         }
         out.close()
+    }
+
+    private fun json(text: String): String = buildString {
+        append('"')
+        text.forEach { char ->
+            when {
+                char == '"' || char == '\\' -> append('\\').append(char)
+                char < ' ' -> append("\\u%04x".format(char.code))
+                else -> append(char)
+            }
+        }
+        append('"')
     }
 }

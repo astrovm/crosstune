@@ -29,24 +29,24 @@ internal object SyncedLyrics {
     /** Too short to tell: "Oh, yeah" can go by in a moment. */
     private const val MIN_SOUNDS = 3
     private const val RUSHED_LINES = 2
-    private val syllable = Regex("[\\u3040-\\u30FF\\u4E00-\\u9FFF\\uAC00-\\uD7AF]")
-    private val latinWord = Regex("[A-Za-z\\u00C0-\\u024F']+")
+    private val syllable = phoneRegex("[\\u3040-\\u30FF\\u4E00-\\u9FFF\\uAC00-\\uD7AF]")
+    private val latinWord = phoneRegex("[A-Za-z\\u00C0-\\u024F']+")
 
     /**
      * A line's time: "[01:02.34]". NetEase ends the stamp of a line it has no time for with "-1", as in
      * "[00:00.00-1]", which is no part of the time.
      */
-    private val stamp = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?(?:-\d+)?]""")
+    private val stamp = phoneRegex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?(?:-\d+)?]""")
 
     /** A word's time in a line, as enhanced LRC writes it: "<01:02.34>". */
-    private val wordStamp = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
+    private val wordStamp = phoneRegex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
 
     /** A line as NetEase times it word by word: "[start,length]" and then "(start,length,0)" before each word. */
-    private val netEaseLine = Regex("""^\[(\d+),(\d+)](.*)""")
-    private val netEaseWord = Regex("""\((\d+),\d+,\d+\)""")
+    private val netEaseLine = phoneRegex("""^\[(\d+),(\d+)](.*)""")
+    private val netEaseWord = phoneRegex("""\((\d+),\d+,\d+\)""")
 
     /** "[offset:+500]": how many milliseconds sooner every line comes, or later when it's less than none. */
-    private val offsetTag = Regex("""^\[offset:\s*([+-]?\d+)\s*]""", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+    private val offsetTag = phoneRegex("""^\[offset:\s*([+-]?\d+)\s*]""", RegexOption.IGNORE_CASE, RegexOption.MULTILINE)
 
     /**
      * The timed lines in [lrc], in the order they're sung, moved as its offset tag says. A line sung
@@ -83,7 +83,7 @@ internal object SyncedLyrics {
      * unless every word has one. Spaces stay with the word before them, so the words together are the line.
      */
     private fun timedWords(text: String, stamps: Regex, timeOf: (MatchResult) -> Long): List<TimedWord> {
-        val found = stamps.findAll(text).toList()
+        val found = stamps.matchesIn(text).toList()
         if (found.isEmpty() || text.substring(0, found.first().range.first).isNotBlank()) return emptyList()
         val words = mutableListOf<TimedWord>()
         found.forEachIndexed { index, match ->
@@ -127,7 +127,7 @@ internal object SyncedLyrics {
      * About how many sounds a line has, to sing it: a word for each in Latin letters, and a syllable
      * for each Japanese kana, Chinese character or Korean block.
      */
-    private fun soundsIn(text: String): Int = syllable.findAll(text).count() + latinWord.findAll(text).count()
+    private fun soundsIn(text: String): Int = syllable.matchesIn(text).count() + latinWord.matchesIn(text).count()
 
     /**
      * The line being sung at [positionMs], or -1 before the first. Of words timed [byEar], a line with

@@ -2,12 +2,17 @@
 # Runs ./gradlew for this checkout in a container, in turn with every other checkout on this machine.
 #
 #   scripts/gradle-box/gradle-box.sh :app:testDebugUnitTest --tests '*LyricsFinderTest*'
+#   scripts/gradle-box/gradle-box.sh --also=/path/to/other/checkout :app:songCheck ...
+#
+# --also=DIR, before the rest, runs the same Gradle command in another checkout of this repository too, after this
+# one, in the same box and slot: it waits in line once. The box sees DIR as well. The exit code is the first that failed.
 #
 # The container sees this checkout, the Android SDK read-only and the debug key, and not the rest
 # of $HOME. Git comes from the image (eclipse-temurin:25-jdk plus Git), so whisper.cpp can read its
-# commit on Linux and on a Mac. Builds wait in line for a slot, first come first served, and say how many
-# are ahead: waiting is normal, not a hang. Each slot keeps its Gradle home, so a new worktree
-# downloads nothing again.
+# commit on Linux and on a Mac. Builds wait in line for memory, first come first served, and say how many
+# are ahead: waiting is normal, not a hang. Builds that share a checkout, including --also, wait for each other.
+# Distinct checkouts can run together. Each build takes a slot, which keeps its Gradle home, so a
+# new worktree downloads nothing again.
 #
 # The first build to succeed keeps its downloads in seed/, which every later build reads, read-only,
 # through Gradle's GRADLE_RO_DEP_CACHE, so a slot starting empty downloads only what's new since. To
@@ -16,9 +21,11 @@
 #
 # GRADLE_BOX_MEMORY is each build's limit in GiB, 16 by default: :app:ci holds about 13 at its peak,
 # between Gradle, the Kotlin compiler and, from 12 GiB, two test processes side by side, and at 8 or 12
-# one of them gets killed. As many run at once as fit in three quarters of the RAM, and at least one.
-# GRADLE_BOX_SLOTS can lower that, never raise it: every checkout shares the machine, so one asking for
-# more slots than fit would run builds side by side that run it out of memory.
+# one of them gets killed. A few test classes (--tests) hold up to 6, so 7 is enough for them. Builds
+# run side by side while what they ask for, added up, fits in three quarters of the RAM, and one
+# always runs: three that ask for 7 run beside each other where one that asks for 16 runs alone. Each
+# gets the share of the CPUs that its memory is of that. GRADLE_BOX_SLOTS can lower how many run at
+# once, never raise it: every checkout shares the machine, so more than fit would run it out of memory.
 #
 # A machine out of memory stalls a build so long that a test times out and looks broken (Issue #852).
 # So a build waits to start while every task on the machine waited on memory for more than
@@ -34,11 +41,25 @@
 # not the Mac's. A box asking for more than is there gets what is there, and is told. Nothing here needs
 # GNU's tools or a newer bash than the Mac's own: locks are taken through python3, which is needed anyway.
 #
-# Idle slot homes are evicted oldest first above 10 GiB (GRADLE_BOX_CACHE_BYTES overrides it).
+# Idle slot homes are evicted oldest first above 40 GiB (GRADLE_BOX_CACHE_BYTES overrides it): a home
+# is about 6, and a build in a new one starts cold.
 # Running slots and the shared seed stay intact, even if they alone exceed the target.
 # A new seed is made only when the cache and its copy fit; its contents are then read-only.
 # An older seed or a lowered limit can still leave the cache over target.
+# Parse the complete body before running it. Edits to this file cannot change an active build.
+main() {
 set -euo pipefail
+
+also=()
+while [[ ${1:-} == --also=* ]]; do
+    dir=${1#--also=}
+    if [[ ! -d $dir ]]; then
+        echo "gradle-box: --also: no folder at $dir" >&2
+        exit 1
+    fi
+    also+=("$(cd "$dir" && pwd -P)")
+    shift
+done
 
 here=$(dirname "${BASH_SOURCE[0]}")
 containerfile=$here/Containerfile
@@ -46,6 +67,20 @@ containerfile=$here/Containerfile
 image_id=$(python3 -c 'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' "$containerfile")
 image=localhost/crosstune-gradle-box:$image_id
 root=$(git -C "$here" rev-parse --show-toplevel)
+root=$(cd "$root" && pwd -P)
+checkouts=("$root")
+unique_also=()
+for dir in ${also[@]+"${also[@]}"}; do
+    seen=0
+    for checkout in "${checkouts[@]}"; do
+        [[ $checkout != "$dir" ]] || seen=1
+    done
+    if ((!seen)); then
+        checkouts+=("$dir")
+        unique_also+=("$dir")
+    fi
+done
+also=(${unique_also[@]+"${unique_also[@]}"})
 common=$(cd "$root" && cd "$(git rev-parse --git-common-dir)" && pwd)
 state=${GRADLE_BOX_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/crosstune-gradle-box}
 sdk=${ANDROID_HOME:-$HOME/Android/Sdk}
@@ -113,11 +148,16 @@ else
         ((memory >= 1)) || memory=1
     fi
 fi
-fit=$((ram * 3 / 4 / memory))
-slots=${GRADLE_BOX_SLOTS:-$fit}
-((slots <= fit)) || slots=$fit
+# What every build together may ask for. One that asks for more than that still runs, alone.
+budget=$((ram * 3 / 4))
+((budget >= memory)) || budget=$memory
+# No more builds than fit at 1 GiB each, however small they ask.
+slots=${GRADLE_BOX_SLOTS:-$budget}
+((slots <= budget)) || slots=$budget
 ((slots >= 1)) || slots=1
-cpus=$((cores / slots))
+cpus=$((cores * memory / budget))
+# With the builds at once held to fewer than fit, each has the room of those that don't run.
+((cpus >= cores / slots)) || cpus=$((cores / slots))
 ((cpus >= 1)) || cpus=1
 # A fraction, like 0.5, is fine: podman takes it as a share of one CPU.
 if [[ -n ${GRADLE_BOX_CPUS:-} ]] && awk -v want="$GRADLE_BOX_CPUS" -v have="$cpus" 'BEGIN { exit !(want > 0 && want < have) }'; then
@@ -125,22 +165,57 @@ if [[ -n ${GRADLE_BOX_CPUS:-} ]] && awk -v want="$GRADLE_BOX_CPUS" -v have="$cpu
 fi
 
 # A ticket's name sorts by when it asked and ends in who asked, so one left by a killed build can go.
-mkdir -p "$state/queue"
-ticket=$state/queue/$(date +%s%N).$$
-touch "$ticket"
-trap 'rm -f "$ticket"' EXIT
+# Keep the memory ticket readable by older checkouts. Store checkout paths beside it.
+mkdir -p "$state/queue" "$state/checkouts"
+# Name and publish in one turn. A later build must not overtake an unpublished earlier ticket.
+exec 7>"$state/queue.lock"
+lock 7
+stamp=$(date +%s%N)
+# A clock step or an equal timestamp must not put a new build before one already published.
+for queued in "$state"/queue/*; do
+    [[ -f $queued ]] || continue
+    order=${queued##*/}
+    order=${order%.*}
+    [[ $order =~ ^[0-9]+$ ]] || continue
+    if ((10#$order >= 10#$stamp)); then stamp=$((10#$order + 1)); fi
+done
+ticket=$state/queue/$stamp.$$
+checkout_ticket=$state/checkouts/${ticket##*/}
+for recorded in "$state"/checkouts/*; do
+    [[ -f $recorded ]] || continue
+    kill -0 "${recorded##*.}" 2>/dev/null || rm -f "$recorded"
+done
+printf '%s\n' "${checkouts[@]}" > "$state/checkouts.$$"
+mv "$state/checkouts.$$" "$checkout_ticket"
+echo "$memory" > "$state/ticket.$$"
+mv "$state/ticket.$$" "$ticket"
+exec 7>&-
+trap 'rm -f "$ticket" "$checkout_ticket"' EXIT
 
+# How many asked before this build and aren't done, and the memory they asked for, added up. A ticket
+# with nothing in it is from a checkout whose script doesn't write it: that one asked for 16 or less.
 ahead_of_me() {
-    local other count=0
+    local other asked checkout line recorded count=0 sum=0 overlap=0
     for other in "$state"/queue/*; do
         [[ $other == "$ticket" || $other > "$ticket" ]] && continue
         if kill -0 "${other##*.}" 2>/dev/null; then
+            asked=$(head -n 1 "$other" 2>/dev/null) || continue
+            [[ $asked =~ ^[0-9]+$ ]] || asked=16
             count=$((count + 1))
+            sum=$((sum + asked))
+            recorded=$state/checkouts/${other##*/}
+            # Also read the intermediate multi-line tickets while those builds finish.
+            [[ -f $recorded ]] || recorded=$other
+            while IFS= read -r line; do
+                for checkout in "${checkouts[@]}"; do
+                    [[ $line != "$checkout" ]] || overlap=1
+                done
+            done < <(cat "$recorded" 2>/dev/null)
         else
-            rm -f "$other"
+            rm -f "$other" "$state/checkouts/${other##*/}"
         fi
     done
-    echo "$count"
+    echo "$count $sum $overlap"
 }
 
 pressure=${GRADLE_BOX_PRESSURE:-/proc/pressure/memory}
@@ -170,12 +245,16 @@ take_a_slot() {
 
 said=
 while :; do
-    ahead=$(ahead_of_me)
+    read -r ahead asked_ahead overlap < <(ahead_of_me)
     lately=$(stalled avg10)
-    if ((ahead < slots && lately <= stall_limit)) && take_a_slot; then
+    # The first in line always fits, as nothing is ahead of it.
+    fits=$((!overlap && ahead < slots && (ahead == 0 || asked_ahead + memory <= budget)))
+    if ((fits && lately <= stall_limit)) && take_a_slot; then
         break
     fi
-    if ((ahead >= slots)); then
+    if ((overlap)); then
+        why="a checkout is already in use, $ahead ahead of you"
+    elif ((!fits)); then
         why="$ahead ahead of you"
     else
         why="the machine is out of memory, stalled $lately% of the last 10 s"
@@ -223,8 +302,15 @@ fi
 if [[ -n ${SONGCHECK_DIR:-} ]]; then
     box+=(-v "$SONGCHECK_DIR:$SONGCHECK_DIR")
 fi
+# So are the matcher's, as they're what the services answered (scripts/matchcheck/replay.py).
+if [[ -n ${MATCHCHECK_DIR:-} ]]; then
+    box+=(-v "$MATCHCHECK_DIR:$MATCHCHECK_DIR" -e "MATCHCHECK_DIR=$MATCHCHECK_DIR" -e "MATCHCHECK_LABEL=${MATCHCHECK_LABEL:-head}")
+fi
 # A worktree keeps its Git data in the main checkout, which may be somewhere else.
 [[ $common == "$root"/* ]] || box+=(-v "$common:$common:ro")
+for dir in ${also[@]+"${also[@]}"}; do
+    box+=(-v "$dir:$dir")
+done
 # The same key as builds outside the box, so its APKs install over theirs.
 [[ -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
 
@@ -236,7 +322,7 @@ fi
 # Made apart and moved in whole, so no build reads half of it. A build holds this slot until it's done.
 keep_downloads() {
     [[ -d $home/caches/modules-2 && ! -e $seed ]] || return 0
-    local limit=${GRADLE_BOX_CACHE_BYTES:-10737418240} used downloads
+    local limit=${GRADLE_BOX_CACHE_BYTES:-42949672960} used downloads
     used=$(bytes "$state")
     downloads=$(bytes "$home/caches/modules-2")
     [[ ! -d $home/wrapper ]] || downloads=$((downloads + $(bytes "$home/wrapper")))
@@ -253,7 +339,13 @@ keep_downloads() {
 
 stalled_before=$(stalled total)
 # A child rather than exec, so the ticket goes when it ends, and stopping this stops the build.
-nice -n 10 podman run "${box[@]}" "$image" ./gradlew --no-daemon "$@" &
+if ((${#also[@]})); then
+    # Each checkout in turn, all of them whatever fails: the first failure is the exit code.
+    run=(bash "$root/scripts/gradle-box/each-checkout.sh" "${#also[@]}" "${also[@]}" "$@")
+else
+    run=(./gradlew --no-daemon "$@")
+fi
+nice -n 10 podman run "${box[@]}" "$image" "${run[@]}" &
 child=$!
 trap 'kill -TERM "$child" 2>/dev/null || true' INT TERM
 status=0
@@ -266,4 +358,8 @@ if ((lost >= 5)); then
     echo "gradle-box: the machine was out of memory for $lost s of this build. A test that timed out may have waited on that, not on the app (Issue #852)." >&2
 fi
 touch "$home"
-exit "$status"
+return "$status"
+
+}
+
+main "$@"; exit

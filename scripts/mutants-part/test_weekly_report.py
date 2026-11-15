@@ -13,7 +13,7 @@ LOST_32 = '**No results from part 32, so its mutants are not listed.** Rerun the
 
 
 class WeeklyReport(unittest.TestCase):
-    def run_report(self, present, contents="", jobs="success", parts=(32,)):
+    def run_report(self, present, contents="", jobs="success", parts=(32,), matcher="success"):
         workflow = (ROOT / '.github/workflows/mutants-weekly.yml').read_text()
         step = workflow.split('      - name: List what lived in the open issue\n', 1)[1]
         script = step.split('        run: |\n', 1)[1]
@@ -48,7 +48,7 @@ if args[:2] in (["issue", "create"], ["issue", "comment"]):
                 file.parent.mkdir(parents=True)
                 file.write_text(contents)
             env = {**os.environ, 'PATH': f"{root / 'bin'}:{os.environ['PATH']}",
-                   'PARTS': json.dumps(list(parts)), 'JOBS': jobs, 'RUN': 'https://example.invalid/run',
+                   'PARTS': json.dumps(list(parts)), 'JOBS': jobs, 'MATCHER': matcher, 'RUN': 'https://example.invalid/run',
                    'GITHUB_STEP_SUMMARY': str(root / 'summary'), 'GH_REPO': 'example/repo'}
             result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], cwd=root, env=env, capture_output=True, text=True)
             self.posted = (root / 'posted.md').read_text() if (root / 'posted.md').exists() else ''
@@ -89,6 +89,12 @@ if args[:2] in (["issue", "create"], ["issue", "comment"]):
         self.assertEqual(self.posted.count('No results from part'), 1)
         self.assertIn(LOST_32, self.posted)
         self.assertIn('Example.kt:3  survived: boundary', self.posted)
+
+    def test_a_failed_matcher_run_reaches_the_issue(self):
+        result, summary = self.run_report((32,), matcher='failure')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('The full MatcherCasesTest run ended failure', summary)
+        self.assertIn('The full MatcherCasesTest run ended failure', self.posted)
 
     def test_a_clean_run_posts_nothing(self):
         result, _ = self.run_report((32,))

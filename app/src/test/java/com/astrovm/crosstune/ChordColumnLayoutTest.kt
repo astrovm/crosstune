@@ -34,14 +34,14 @@ class ChordColumnLayoutTest {
     private fun jTotal(name: String) = """<a href="JavaScript:jump_1('../../../cd/$name.html');">$name</a>"""
 
     @Test
-    fun aChordAfterATrimmedBracketSitsOnTheLetterComposeMeasuresThere() {
-        // ） before an ideographic space is one column on the page, so four Latin columns are い.
-        sitsOn("あ）　い", "abcd", 3)
+    fun aChordAfterAFullwidthBracketSitsOnTheLetterComposeMeasuresThere() {
+        // ） before an ideographic space is two columns on the page, as Windows draws it, so six Latin columns are い.
+        sitsOn("あ）　い", "abcdef", 3)
     }
 
     @Test
-    fun aChordAfterABracketTrimmedByAFullwidthColonSitsOnTheLetterComposeMeasuresThere() {
-        sitsOn("あ）：い", "abcd", 3)
+    fun aChordAfterAFullwidthBracketAndColonSitsOnTheLetterComposeMeasuresThere() {
+        sitsOn("あ）：い", "abcdef", 3)
     }
 
     @Test

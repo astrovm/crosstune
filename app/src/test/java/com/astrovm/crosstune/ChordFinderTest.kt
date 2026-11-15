@@ -243,12 +243,19 @@ Singing to the morning light</div>"""
 
     @Test
     fun jTotalUsesTheFontStackFromThePage() {
-        val words = "あ".repeat(22)
-        val page = "<style>tt { font-family: 'Inconsolata', monospace; }</style>" +
-            jTotalSong("${"x".repeat(41)}$jTotalChord", words)
-        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to page))
-        val found = chords(kawa, listOf(words)) as ChordFinder.Chords.Found
-        assertEquals(20, found.sheet.lines.single().chords.single().at)
+        // Both stacks draw a Windows-31J letter at one width. ۰ is not one, so a page writes it as an entity, and
+        // each stack draws it from another font on Windows: 1.144 columns on the main stack, 1.200 on the monospace
+        // one. Drawn there in Chromium, Edge and Chrome (scripts/jtotal-widths/invented.py), the chord after eleven
+        // columns lands on letter 10 with the main stack and on letter 9 with the monospace one.
+        // The kana at the end makes the words Japanese, as J-Total is asked only for those.
+        val words = "\u06F0".repeat(20) + "あ"
+        val sheet = jTotalSong("${"x".repeat(11)}$jTotalChord", "&#1776;".repeat(20) + "あ")
+        for ((stack, letter) in listOf("'Inconsolata','MS Gothic','Hiragino Kaku Gothic','Monaco',sans-serif" to 10, "'Inconsolata', monospace" to 9)) {
+            jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to "<style>tt { font-family: $stack; }</style>$sheet"))
+            val found = chords(kawa, listOf(words)) as ChordFinder.Chords.Found
+            assertEquals(words, found.sheet.lines.single().text)
+            assertEquals(letter, found.sheet.lines.single().chords.single().at)
+        }
     }
 
     @Test
@@ -367,8 +374,9 @@ Singing to the morning light</div>"""
             answer(
                 request,
                 mapOf(
-                    "https://www.ufret.jp/search.php" to uFretResult(3, "川の道", "歩く人", beginner = true) + uFretResult(1, "川の道", "他の人") +
-                        uFretResult(2, "川の道", "歩く人") + uFretResult(4, "別の歌", "歩く人"),
+                    // Another song by the artist first, which isn't looked at.
+                    "https://www.ufret.jp/search.php" to uFretResult(4, "別の歌", "歩く人") + uFretResult(3, "川の道", "歩く人", beginner = true) +
+                        uFretResult(1, "川の道", "他の人") + uFretResult(2, "川の道", "歩く人"),
                     "https://www.ufret.jp/song.php?data=2" to uFretSong("[Am]川の[Em]道を歩いていく\r", "[F]朝の光に[G]歌っている\r"),
                     "https://www.ufret.jp/song.php?data=3" to uFretSong("[C]川の道を歩いていく\r", "朝の光に歌っている")
                 )

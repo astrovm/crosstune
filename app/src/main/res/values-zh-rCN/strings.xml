@@ -27,6 +27,7 @@
     <string name="settings_licenses">许可证</string>
     <string name="license_show">显示许可证</string>
     <string name="license_hide">隐藏许可证</string>
+    <string name="language_tag">zh-CN</string>
     <string name="settings_links_title">打开来自以下服务的链接</string>
     <string name="rule_opens_in">在 %1$s 中打开</string>
     <string name="rule_default">默认（%1$s）</string>
@@ -318,7 +319,7 @@
     <string name="report_failed">无法发送。请检查网络连接后重试。</string>
     <string name="reading_wrong">读音有误</string>
     <string name="reading_right">正确读音（可选）</string>
-    <string name="reading_what_goes">会发送这个词、显示的读音、所在的行、歌名，以及应用和 Android 版本。只有 Crosstune 的开发者会看到。</string>
+    <string name="reading_what_goes">会发送这个词、显示的读音及其来源、所在的行和文字、你输入的读音、歌名和歌手、歌词来源，以及应用和 Android 版本。只有 Crosstune 的开发者会看到。</string>
     <string name="auto_report_offer">自动报告这类问题？</string>
     <string name="auto_report_offer_words_off">这首歌的歌词不同步。自动报告这类问题？</string>
     <string name="auto_report_yes">好</string>

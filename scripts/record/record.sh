@@ -18,11 +18,8 @@
 #   python3 scripts/emulator/emulator.py start crosstune-phone
 # Needs scrcpy and ffmpeg. Uses ANDROID_SERIAL, or emulator-5580. MAX_SIZE sets the longer side
 # of the recording (default 1280; bigger records fewer frames).
-set -euo pipefail
 
-serial=${ANDROID_SERIAL:-emulator-5580}
-export ANDROID_SERIAL=$serial
-
+# Parse the whole run before starting work, so an edit cannot change an active run.
 check() {
     ffprobe -v error -show_entries format=duration -of csv=p=0 "$1" | xargs printf '%.1f s, '
     # Frames that change, and moving stretches where the next change took longer than a 60 fps frame.
@@ -31,6 +28,26 @@ check() {
         awk -F: 'NR > 1 { gap = ($2 - last) * 1000; if (gap < 400) { moving++; if (gap > 20) late++ } } { last = $2 }
                  END { printf "%d moving frames, %d late\n", moving, late }'
 }
+
+normal() {
+    if [[ -n ${recorder:-} ]]; then
+        kill -TERM "$recorder" 2>/dev/null || true
+        wait "$recorder" || true
+        recorder=
+    fi
+    [[ -n ${take:-} ]] || return 0
+    for scale in $scales; do adb shell settings put global "$scale" 1; done
+    rm -f "$take"
+    take=
+}
+
+trap 'normal' EXIT
+
+main() {
+set -euo pipefail
+
+serial=${ANDROID_SERIAL:-emulator-5580}
+export ANDROID_SERIAL=$serial
 
 if [[ ${1:-} == --check ]]; then
     [[ -f ${2:-} ]] || { echo "No video at ${2:-}" >&2; exit 2; }
@@ -44,13 +61,8 @@ fi
 
 out=$1
 shift
-take=$(mktemp)
 scales="window_animation_scale transition_animation_scale animator_duration_scale"
-normal() {
-    for scale in $scales; do adb shell settings put global "$scale" 1; done
-    rm -f "$take"
-}
-trap normal EXIT
+take=$(mktemp)
 
 for scale in $scales; do adb shell settings put global "$scale" 2; done
 scrcpy -s "$serial" --no-playback --no-window --no-audio --max-fps 60 --max-size "${MAX_SIZE:-1280}" \
@@ -62,7 +74,13 @@ sleep 1
 # Background jobs ignore Ctrl+C in scripts, so it stops on TERM, which scrcpy also saves on.
 kill -TERM "$recorder"
 wait "$recorder" || true
+recorder=
 
 ffmpeg -v error -y -i "$take" -vf "setpts=0.5*PTS,fps=60" -an -c:v libx264 -crf 14 -preset slow -pix_fmt yuv420p "$out"
 printf '%s: ' "$out"
 check "$out"
+normal
+
+}
+
+main "$@"; exit

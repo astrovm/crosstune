@@ -59,6 +59,6 @@ class OldKanaNotes {
     }.filter { line -> line.any { it in '぀'..'ヿ' } }.distinct()
 
     private companion object {
-        val STRING = Regex(""""((?:[^"\\\n]|\\.)*)"""")
+        val STRING = Regex(""""((?:[^"\\\n]|\\.)*)${'"'}""")
     }
 }

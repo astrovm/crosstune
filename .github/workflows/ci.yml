@@ -23,6 +23,8 @@ concurrency:
 
 jobs:
   # A pull request that only changes the site, docs, store listing, the reports' Worker, the browser extension or their scripts skips the app's jobs.
+  # One that changes the YouTube Music matcher, what it reads names and links with, its MatcherCasesTest or what main
+  # opened in it runs that test in full.
   changes:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -31,21 +33,29 @@ jobs:
     outputs:
       app: ${{ steps.filter.outputs.app }}
       extension: ${{ steps.filter.outputs.extension }}
+      matcher: ${{ steps.filter.outputs.matcher }}
     steps:
       - id: filter
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          EVENT: ${{ github.event_name }}
         run: |
           if [ -z "$PR" ]; then
             echo "app=true" >> "$GITHUB_OUTPUT"
             echo "extension=true" >> "$GITHUB_OUTPUT"
+            # A push to main ran it in its pull request already, and the weekly mutants workflow runs it too.
+            if [ "$EVENT" = workflow_dispatch ]; then
+              echo "matcher=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "matcher=false" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
           files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename')
           printf '%s\n' "$files"
           # Any file outside these makes it the app's change.
-          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|report/|extension/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/|gradle-box/|reports/|ci-warnings/))' <<< "$files" > /dev/null; then
+          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|report/|extension/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/|gradle-box/|reports/|ci-warnings/|perf/))' <<< "$files" > /dev/null; then
             echo "app=true" >> "$GITHUB_OUTPUT"
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
@@ -55,12 +65,19 @@ jobs:
           else
             echo "extension=false" >> "$GITHUB_OUTPUT"
           fi
+          if grep -qE '^app/src/(main/java/com/astrovm/crosstune/(ExactMatcher|SongNames|CutTitle|MetadataParsers|Patterns|PhoneRegex|PhoneRegexTable|MusicLinks)\.kt|test/java/com/astrovm/crosstune/MatcherCasesTest\.kt|test/resources/matcher-(matrix|fuzz)-main\.tsv\.gz)$' <<< "$files"; then
+            echo "matcher=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "matcher=false" >> "$GITHUB_OUTPUT"
+          fi
 
   site:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Check Play Store changelog and texts
         run: |
@@ -90,6 +107,20 @@ jobs:
           # apt's own files are root's, and the cache is saved as the runner's user.
           sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
 
+      # The readings guard parses Kotlin and Java with the Kotlin compiler, and syncreplay's tests ask it what to compile.
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/kotlinc
+          key: kotlinc-${{ hashFiles('scripts/kotlinc/kotlinc.lock') }}
+
+      - name: Fetch the locked Kotlin compiler
+        run: python3 scripts/kotlinc/kotlinc.py fetch
+
       # The committed site has to be what build-site.py makes, new pages included.
       - name: Test site and media scripts
         run: |
@@ -99,6 +130,7 @@ jobs:
           python3 -m unittest discover -s scripts/milkdrop-render -p "test_*.py"
           python3 -m unittest discover -s scripts/shots -p "test_*.py"
           python3 -m unittest discover -s scripts/songcheck -p "test_*.py"
+          python3 -m unittest discover -s scripts/kotlinc -p "test_*.py"
           python3 -m unittest discover -s scripts/readingsaudit -p "test_*.py"
           python3 -m unittest discover -s scripts/syncreplay -p "test_*.py"
           python3 -m unittest discover -s scripts/contrast -p "test_*.py"
@@ -106,15 +138,44 @@ jobs:
           python3 -m unittest discover -s scripts/emulator -p "test_*.py"
           python3 -m unittest scripts/test_devicelock.py
           python3 -m unittest scripts/test_notices.py
+          python3 -m unittest scripts/test_workflows.py
           python3 -m unittest discover -s scripts/record -p "test_*.py"
           python3 -m unittest discover -s scripts/reports -p "test_*.py"
           python3 -m unittest discover -s scripts/jtotal-widths -p "test_*.py"
           python3 -m unittest discover -s scripts/lyrics -p "test_*.py"
           python3 -m unittest discover -s scripts/ci-warnings -p "test_*.py"
           python3 -m unittest discover -s scripts/reminder-lateness -p "test_*.py"
+          python3 -m unittest discover -s scripts/perf -p "test_*.py"
+          python3 -m unittest discover -s scripts/regextable -p "test_*.py"
+          python3 -m unittest discover -s scripts/titlefuzz -p "test_*.py"
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
           node --test "report/*.test.mjs"
+
+  # What the release, promote and store listing workflows send to Google Play: .github/play/play.sh with the real
+  # fastlane of Gemfile.lock, against a fake Play. Every commit has to keep a review in progress, and production
+  # never shares an edit with another track. The runner's own Ruby, as those workflows use.
+  play:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    env:
+      BUNDLE_GEMFILE: .github/play/Gemfile
+      BUNDLE_FROZEN: "true"
+      BUNDLE_WITHOUT: ""
+      BUNDLE_PATH: ${{ github.workspace }}/../play-gems
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/play
+          sparse-checkout-cone-mode: false
+
+      - name: Test the Google Play steps
+        run: |
+          shellcheck .github/play/play.sh
+          ruby --version
+          .github/play/play.sh setup
+          bundle exec ruby .github/play/test/play_test.rb
 
   # The browser extension in extension/, built and tested only when its files change. Its lyrics panel's browser test answers everything itself; the two that follow real links need the network, so they run by hand (see CONTRIBUTING.md).
   extension:
@@ -127,6 +188,8 @@ jobs:
         working-directory: extension
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -155,6 +218,8 @@ jobs:
     steps:
       # A shallow clone keeps the Git-derived version constant, so task outputs are reused across commits.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
@@ -173,9 +238,118 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-reports
+          # The results' XML too: it has when each class started, so how the classes were split between the test
+          # processes, and which one ran longest, can be read from a run.
           path: |
             app/build/reports/tests/
+            app/build/test-results/testDebugUnitTest/
             app/build/reports/kover/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # The tests that count how the work of reading grows (Growth.kt). A count is the same on any runner. They run
+  # apart from the test job, which they'd otherwise add minutes to, as counting runs the JVM without its fast compiler.
+  growth:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Count growth
+        run: ./gradlew :app:growthTests --build-cache --configuration-cache
+
+      - name: Upload the growths
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: growth
+          path: |
+            app/build/reports/tests/growthTests/
+            app/build/growth/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # The fuzzes the test job reads one case in 20 of (Fuzz.kt), each case: TitlesAgainstMainTest's 200,000 titles against
+  # main's readings, and the letters, titles, patterns and dashes of the rest.
+  fuzz:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Every case of each fuzz
+        run: >-
+          ./gradlew :app:testDebugUnitTest -PfuzzFull --build-cache --configuration-cache
+          --tests com.astrovm.crosstune.TitlesAgainstMainTest --tests com.astrovm.crosstune.PatternLettersTest
+          --tests com.astrovm.crosstune.CutTitleTest --tests com.astrovm.crosstune.LinearPatternsTest
+          --tests com.astrovm.crosstune.ArtistBeforeTest
+
+      - name: Upload the differences
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/titles-differences.tsv
+          retention-days: 14
+          if-no-files-found: warn
+
+  # MatcherCasesTest's whole matrix and all its made-up searches, where the test job runs one in 20 of them: about
+  # 600,000 searches, against what main opened. What opened is uploaded, to make main's again from (see the test).
+  matcher:
+    needs: changes
+    if: needs.changes.outputs.matcher == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          # Main's runs of CI save the caches; this one only reads them.
+          cache-read-only: true
+
+      - name: Matcher cases in full
+        run: ./gradlew :app:testDebugUnitTest --tests com.astrovm.crosstune.MatcherCasesTest -PmatcherFull --build-cache --configuration-cache
+
+      - name: Upload what opened
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: matcher-cases
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/matcher-*-now.tsv
           retention-days: 14
           if-no-files-found: warn
 
@@ -184,22 +358,81 @@ jobs:
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      # The golden readings check reads the pull request's body.
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           # The pull request merged into main, and main before it, to see what it adds to detekt's baseline.
           fetch-depth: 2
+
+      # The pull request keeps every locked reading, and a readings change changes the golden file.
+      # Its marks are lines of its body, read as the body is now: after an edit, run this job again.
+      # The step runs the checker main has, copied out of main's commit, and imports no file of the pull request:
+      # a pull request can't loosen it by editing the checker or the code it imports. Only the pull request that
+      # adds the checker, when main has none, is checked by its own. test_check_golden.py runs this step.
+      - name: A pull request keeps the locked readings
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          # HEAD^1 is the base the pull request merges into. The lock is main's, so a pull request into another
+          # branch, one stacked on another pull request, is checked once it goes into main.
+          if [ "$BASE_REF" != main ]; then
+            echo "::error::This pull request goes into $BASE_REF. The golden readings are checked against main: point it at main."
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '.body // ""' > "$RUNNER_TEMP/pr-body.md"
+          checker=scripts/readingsaudit/check_golden.py
+          # ls-tree fails when HEAD^1 is not there, which stops the step, and prints nothing when main has no checker yet.
+          # It is a line of its own: in a test, set -e would not see it fail.
+          listed=$(git ls-tree --name-only HEAD^1 -- "$checker")
+          if [ -n "$listed" ]; then
+            mkdir -p "$RUNNER_TEMP/golden-base"
+            git archive HEAD^1 scripts/readingsaudit | tar -x -C "$RUNNER_TEMP/golden-base"
+            checker="$RUNNER_TEMP/golden-base/$checker"
+          fi
+          # -E and -s: no PYTHONPATH and no user site, so Python finds the golden code next to the checker only.
+          python3 -E -s "$checker" --repo "$GITHUB_WORKSPACE" --base HEAD^1 --head HEAD --body-file "$RUNNER_TEMP/pr-body.md"
 
       # Tangled new code is split up, never listed in detekt's baseline to pass.
       - name: Detekt's baseline only shrinks
         if: github.event_name == 'pull_request'
         run: |
-          added=$(git diff HEAD^1 HEAD -- config/detekt/baseline.xml | grep '^+.*<ID>' || true)
+          # The diff is taken first, so a git diff that fails stops the step instead of reading as no change.
+          # --text, so a .gitattributes that calls the file binary can't hide what it adds.
+          diff=$(git diff --text HEAD^1 HEAD -- config/detekt/baseline.xml)
+          # Only grep's "no match" (exit 1) means nothing was added. Any other failure stops the step.
+          added=$(grep '^+.*<ID>' <<< "$diff") || [ $? = 1 ]
           if [ -n "$added" ]; then
             echo "::error file=config/detekt/baseline.xml::This adds to detekt's baseline. Split the code it flags up instead."
             echo "$added"
             exit 1
           fi
+
+      # The workflows, with shellcheck on their scripts. actionlint's own release, checked against the
+      # SHA-256 its checksums file gives for that version.
+      - name: Lint workflows
+        env:
+          VERSION: 1.7.12
+          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          # actionlint skips the scripts without a word when shellcheck is missing.
+          if ! command -v shellcheck > /dev/null; then
+            echo "::error::shellcheck isn't on this runner, so actionlint wouldn't check the workflows' scripts"
+            exit 1
+          fi
+          tarball="actionlint_${VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$tarball" "https://github.com/rhysd/actionlint/releases/download/v$VERSION/$tarball"
+          echo "$SHA256  $RUNNER_TEMP/$tarball" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
 
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
@@ -231,6 +464,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           # projectM, which draws the MilkDrop visuals, is built from source.
           submodules: recursive
 
@@ -279,8 +513,12 @@ jobs:
       - site
       - extension
       - test
+      - growth
+      - fuzz
+      - matcher
       - lint
       - build
+      - play
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions: {}

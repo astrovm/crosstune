@@ -104,7 +104,18 @@ public final class ChangedLinesFactory implements MutationInterceptorFactory {
                 || description.contains("kotlin/ResultKt")
                 || description.contains("androidx/compose/runtime/Composer")
                 || description.contains("androidx/compose/runtime/ComposerKt")
+                || isBridge(mutation)
                 || isGenerated(mutation);
+        }
+
+        /**
+         * A bridge: Kotlin's length() to getLength() in a CharSequence of its own, or contains(Object) to
+         * contains(MatchGroup) in a collection. PIT counts no test as running a bridge (its BridgeMethodFilter),
+         * so each mutant in one would show as never run, though the tests run it. Kotlin, unlike javac, doesn't
+         * mark them synthetic, which is what keeps PIT from changing javac's.
+         */
+        private boolean isBridge(MutationDetails mutation) {
+            return clazz.method(mutation.getId().getLocation()).map(method -> GeneratedCode.bridge(method.rawNode())).orElse(false);
         }
 
         private boolean isGenerated(MutationDetails mutation) {

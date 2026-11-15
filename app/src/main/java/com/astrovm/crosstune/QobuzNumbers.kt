@@ -8,7 +8,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -57,7 +59,7 @@ internal class QobuzNumbers(
     private suspend fun tryOther(song: MusicMetadata, app: String, link: String, over: MusicMetadata?, launched: CompletableDeferred<Unit>) = coroutineScope {
         val other = async { otherLink(song, link) }
         val watching = launch {
-            playback.nowPlayingUpdates().first(endsTheWatch(song, app, over))
+            merge(playback.nowPlayingUpdates().filter(endsTheWatch(song, app, over)), playback.unnamedUpdates().filter(startedElsewhere(app))).first()
             this@coroutineScope.cancel()
         }
         launched.await()
@@ -76,6 +78,16 @@ internal class QobuzNumbers(
             val elsewhere = playing != null && !inTheApp && (playing.app != before?.app || playing.metadata.title != before?.metadata?.title)
             before = playing
             elsewhere || inTheApp && playing.metadata.title != over?.title && isTheSong(playing.metadata, song)
+        }
+    }
+
+    /** Whether what an app plays with no song named, e.g. a radio station, is the user's going on to another app's since. */
+    private fun startedElsewhere(app: String): suspend (Unnamed?) -> Boolean {
+        var before = playback.playingUnnamed()
+        return { playing ->
+            val elsewhere = playing != null && !sameApp(app, playing.app, installed) && (playing.app != before?.app || playing.name != before?.name)
+            before = playing
+            elsewhere
         }
     }
 

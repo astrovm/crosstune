@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -56,13 +57,13 @@ internal fun isFiller(text: String): Boolean {
     val letters = text.filter { it.isLetter() }
     if (letters.isEmpty()) return true
     if (letters.all { it in FILLER_KANA }) return true
-    val words = text.lowercase().split(Regex("[^\\p{L}]+")).filter { it.isNotEmpty() }
+    val words = text.lowercase().split(phoneRegex("[^\\p{L}]+")).filter { it.isNotEmpty() }
     return words.all { word -> FILLER_WORD.matches(word) }
 }
 
 private const val FILLER_KANA = "ラらナなアあオおウうーぁッっ"
 
-private val FILLER_WORD = Regex("(la|na|da|oh|ah|uh|eh|ooh|oo|hey|yeah|yeh|ya|woah|whoa|wo|mm+|hm+|ha|doo|ba|sha)+")
+private val FILLER_WORD = phoneRegex("(la|na|da|oh|ah|uh|eh|ooh|oo|hey|yeah|yeh|ya|woah|whoa|wo|mm+|hm+|ha|doo|ba|sha)+")
 
 /** A line of a song, as it's offered to learn: once, however many times it's sung, from where it's first sung. */
 internal data class SongLine(
@@ -121,6 +122,9 @@ internal class PracticeCards(
 
     /** The small player's picture for the card to show, which is made when asked for. */
     fun playerView(): android.view.View? = player()?.view()
+
+    /** Where each app was sent lately, so a report of the last card's line isn't taken for where it stopped on this one. */
+    private val sentPlaces = SentPlaces()
 
     /** The apps that failed a card since Crosstune started, by package, so the next card doesn't wait on them again. */
     private val unusable = mutableSetOf<String>()
@@ -199,14 +203,34 @@ internal class PracticeCards(
         val preferred = (uiState.defaultDestination as? Destination.Service)?.service
         var tried = 0
         for (app in ranked(line)) {
-            // An app that's neither preferred nor the one the line was kept from needs the song on its service, or it plays whatever it finds by the name.
+            // The preferred app, and the one the line was kept from, are tried whatever their services say.
             val known = app == null || app == line.app || MusicService.ofPackage(app) == preferred
-            if (tried >= MAX_APPS || (!known && !hasSong(app, song))) continue
+            if (tried >= MAX_APPS || !worthATry(source, song, line, app, known)) continue
             tried++
             step("trying ${app ?: "any app"}")
             if (inMusicApp(source, song, line, app, play)) return true
         }
         return false
+    }
+
+    /**
+     * Whether [app] is worth one of the card's tries. One the card can't open, as it would cover the card, is only when it already
+     * has [song] open and can move in it, as its media session says, which asks no service. One that has it and can't, as on
+     * Spotify's free plan, is skipped: opening it wouldn't move it either. Else it's left out, and the card offers to Allow it, as
+     * it may be tried then. Any other app that isn't [known] needs the song on its service, or it plays whatever it finds by the name.
+     */
+    private suspend fun worthATry(source: PlaybackSource, song: MusicMetadata, line: SavedLine, app: String?, known: Boolean): Boolean {
+        if (source.comesBackByItself() || !playsOnlyFromItsOwnLink(app)) return known || hasSong(app, song)
+        val open = openIn(source, song, app)
+        if (open?.canSeek == true) return true
+        if (open == null) leaveOut(app, line) else step("$app has the song open and can't move in it")
+        return false
+    }
+
+    /** [song] as [app] has it open, playing or paused, as its media session says: as soon as it can move in it, or as it last was. */
+    private suspend fun openIn(source: PlaybackSource, song: MusicMetadata, app: String?): Following? {
+        var last: Following? = null
+        return withTimeoutOrNull(FIND_SONG_MS) { source.follow(song, app).first { following -> following?.also { last = it }?.canSeek == true } } ?: last
     }
 
     /** Whether the service [app] is of has [song], as its links say. */
@@ -257,8 +281,8 @@ internal class PracticeCards(
         // What the app plays may end before the line does, as TIDAL's 30 s preview without an account: it's paused at its end, before it goes on to its next song.
         val window = LineWindow.of(line, lead = if (following()?.video == true) line.leadMs else 0L).within(following()?.durationMs)
             ?: return notThere(source, song, app, packageName, play || uiState.practice?.turned == true)
-        val (at, playing) = reachAsAsked(source, song, app, window, play, following)
-        if (at == null) return notThere(source, song, app, packageName, playing)
+        val (reached, playing) = reachAsAsked(source, song, app, window, play, following)
+        val at = reached.at ?: return notThere(source, song, app, packageName, playing, remember = !reached.short)
         // The card says the line plays before the sound comes out. A listener can already hear it
         // while the card still says it is loading, if the sound is let out first.
         if (playing) setSound(line, LineSound.PLAYING)
@@ -273,19 +297,22 @@ internal class PracticeCards(
 
     /**
      * Gets [app] to [window], playing when [play] or the card's turned; turned while it got there, it plays now. Where it
-     * said it was, null when it never did, and whether it was asked to play.
+     * said it was, see [Reached], and whether it was asked to play.
      */
-    private suspend fun reachAsAsked(source: PlaybackSource, song: MusicMetadata, app: String?, window: LineWindow, play: Boolean, following: () -> Following?): Pair<Long?, Boolean> {
+    private suspend fun reachAsAsked(source: PlaybackSource, song: MusicMetadata, app: String?, window: LineWindow, play: Boolean, following: () -> Following?): Pair<Reached, Boolean> {
         val turned = { uiState.practice?.turned == true }
         val playing = play || turned()
-        val at = reach(source, song, app, window, playing, following)
-        if (at == null || playing || !turned()) return at to playing
+        val reached = reach(source, song, app, window, playing, following)
+        if (reached.at == null || playing || !turned()) return reached to playing
         return reach(source, song, app, window, true, following) to true
     }
 
-    /** [packageName] didn't get to the line, or play it once there: it's remembered, and stopped, for the next app. */
-    private fun notThere(source: PlaybackSource, song: MusicMetadata, app: String?, packageName: String?, playing: Boolean): Boolean {
-        packageName?.let { if (playing) traits.keeps(it, false) else traits.seeks(it, false) }
+    /**
+     * [packageName] didn't get to the line, or play it once there: it's stopped, for the next app, and, when [remember], remembered
+     * for a week. One that stopped short of this line may well get to the next, so it's left out only till Crosstune starts again.
+     */
+    private fun notThere(source: PlaybackSource, song: MusicMetadata, app: String?, packageName: String?, playing: Boolean, remember: Boolean = true): Boolean {
+        if (remember) packageName?.let { if (playing) traits.keeps(it, false) else traits.seeks(it, false) }
         stopIn(source, song, app, packageName)
         step("${packageName ?: "the app"} did not ${if (playing) "play" else "get to"} the line")
         return false
@@ -306,30 +333,43 @@ internal class PracticeCards(
 
     /**
      * Sends [app] to [window] and has it [play] there, or pause, once it's ready: following the song, able to move, and not in
-     * an ad. Then waits for it to say it's at the line, as asked; where it said it was, or null when it doesn't in
-     * [LineWindow.SEEK_WAIT_MS]. One that falls out on the way, as YouTube Music errs, and comes back is asked once more.
+     * an ad. Then waits for it to say it's at the line, as asked; where it said it was, or nowhere when it doesn't in
+     * [LineWindow.SEEK_WAIT_MS], or says it stopped short of it, see [LineWindow.stoppedShort]: TIDAL at its preview's
+     * end has nowhere else to go. One that falls out on the way, as YouTube Music errs, and comes back is asked once more.
      */
-    private suspend fun reach(source: PlaybackSource, song: MusicMetadata, app: String?, window: LineWindow, play: Boolean, following: () -> Following?): Long? =
+    private suspend fun reach(source: PlaybackSource, song: MusicMetadata, app: String?, window: LineWindow, play: Boolean, following: () -> Following?): Reached =
         withTimeoutOrNull(LineWindow.SEEK_WAIT_MS) {
             var asks = 0
             var wasReady = false
             var at: Long? = null
+            // When it was last sent, on the app's clock, so a report from before isn't taken as its answer, and the places it was since.
+            var sentAt = 0L
+            val was = mutableListOf<PlaybackClock>()
             while (at == null) {
                 val latest = following()
-                val ready = latest != null && latest.canSeek && !latest.ad
-                if (ready && !wasReady && asks < ASKS) {
+                val ready = latest?.takeIf { it.canSeek && !it.ad }
+                if (ready != null && !wasReady && asks < ASKS) {
                     hushed = false
+                    sentAt = now()
+                    was += sentPlaces.lately(app, sentAt) + ready.clock
+                    sentPlaces.note(app, window.start, sentAt)
                     source.seekTo(song, window.start, app)
                     source.playPause(song, play, app)
                     asks++
                 } else if (asks > 0) {
+                    if (ready != null && ready.clock.atMs >= sentAt && window.stoppedShort(ready.clock, was)) {
+                        step("${app ?: "the app"} stopped at ${ready.clock.positionMs} ms, short of the line")
+                        return@withTimeoutOrNull Reached(null, short = true)
+                    }
+                    // Said again every look while nothing changes: kept once.
+                    latest?.clock?.takeIf { it != was.lastOrNull() }?.let(was::add)
                     at = latest?.clock?.takeIf { it.playing == play && window.near(it.positionMs) && window.holds(it.positionAt(now())) }?.positionMs
                 }
-                wasReady = ready
+                wasReady = ready != null
                 delay(SOUND_CHECK_MS)
             }
-            at
-        }
+            Reached(at)
+        } ?: Reached(null)
 
     /**
      * Watches the app play [window] out: true once it's at the line's end; false when it stops playing the line on the way
@@ -425,10 +465,11 @@ internal class PracticeCards(
         val song = MusicMetadata(line.title, line.artist)
         // The length kept with the line is the recording the words were timed on. This session's is only a stand-in.
         val expectedMs = line.lengthMs ?: lengths[line.title to line.artist]
-        val music = matcher.find(MusicService.YOUTUBE_MUSIC, song)
-        // Any other video is taken only when it's as long as the song, which has to be known to tell.
-        val link = music ?: expectedMs?.let { matcher.find(MusicService.YOUTUBE, song) }
-        val id = link?.toHttpUrlOrNull()?.queryParameter("v") ?: return null
+        // Asked once more only when the search failed, as offline or slow: one that found nothing would find the same again,
+        // and ask Apple, Deezer and ChatGPT the same again too.
+        val asked = matcher.lookFor(MusicService.YOUTUBE_MUSIC, song)
+        val found = if (asked == ExactMatcher.Match.Failed) matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) else asked
+        val id = (found as? ExactMatcher.Match.Found)?.url?.toHttpUrlOrNull()?.queryParameter("v") ?: return null
         return id to expectedMs
     }
 
@@ -484,11 +525,11 @@ internal class PracticeCards(
     private suspend fun openUntilItCanMove(source: PlaybackSource, song: MusicMetadata, app: String?, at: Long?, latest: () -> Following?, onStuck: (Following?) -> Unit, line: SavedLine?): Boolean {
         // Opened, an app covers the card, and without showing over other apps Crosstune can't come back, nor open the next app from behind it.
         val opens = source.comesBackByItself()
-        // This app plays only its own link, and opening it would cover the card. The link is not read first:
-        // the card leaves the app out either way, and the line plays on. The link is read after, so a later card that can open the app already has it.
+        // This app plays only its own link, and opening it would cover the card, so it's left out. A card checks that before it tries
+        // the app, see [worthATry]; this is for going back to what played before, or the song gone from it since. Its link isn't
+        // looked up either: a service is asked about a song only for an app about to be opened, see Privacy in the README.
         if (!opens && playsOnlyFromItsOwnLink(app)) {
             leaveOut(app, line)
-            scope.launch { ownLinkOf(song, app) }
             return false
         }
         val ownLink = ownLinkOf(song, app)
@@ -674,11 +715,15 @@ internal class PracticeCards(
         practice.line?.let { setSound(it, LineSound.PLAYED) }
     }
 
-    /** Done, the music app goes back to what it played before, where it was, and practice closes. */
+    /**
+     * Done, the music app goes back to what it played before, where it was, and practice closes. What named no song,
+     * e.g. a radio station, plays on, as there's nowhere in it to go back to.
+     */
     fun backToBefore() {
         val before = uiState.practice?.before ?: return
         val source = playback ?: return
         stop()
+        if (before.songless) return source.playPause(before.song, true, before.app)
         soundJob = scope.launch {
             inApp(source, before.song, before.app) {
                 source.seekTo(before.song, before.positionMs)
@@ -704,3 +749,6 @@ internal class PracticeCards(
         const val CHAIN_LOG = "CrosstuneChain"
     }
 }
+
+/** Where the app said it got to, sent to a line, or null when it didn't; [short] when it said it stopped before it, see [LineWindow.stoppedShort]. */
+private class Reached(val at: Long?, val short: Boolean = false)

@@ -18,21 +18,21 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent / "mutants-part"))
-from mutants_part import lived  # noqa: E402  the weekly run lists changes the same way
+from mutants_part import CODE, lived  # noqa: E402  the weekly run lists changes the same way
 SOURCES = "app/src/main/java/"
 LINES = ROOT / "app/build/mutants/changed-lines.txt"
 REPORT = ROOT / "app/build/reports/pitest/debug/mutations.xml"
 
 
 def changed_lines(base):
-    """Each changed Kotlin line, as "com/astrovm/crosstune/File.kt:12", the way PIT names one."""
+    """Each changed line of code, as "com/astrovm/crosstune/File.kt:12", the way PIT names one."""
     since = subprocess.run(["git", "merge-base", base, "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
     diff = subprocess.run(["git", "diff", "-U0", "--no-color", since, "--", SOURCES], cwd=ROOT, check=True, capture_output=True, text=True).stdout
     lines, file = [], None
     for line in diff.splitlines():
         if line.startswith("+++ "):
             path = line[4:].removeprefix("b/")
-            file = path.removeprefix(SOURCES) if path.endswith(".kt") else None
+            file = path.removeprefix(SOURCES) if path.endswith(CODE) else None
         elif line.startswith("@@") and file:
             start, _, count = re.match(r"@@ -\S+ \+(\d+)(,(\d+))? @@", line).groups()
             lines += [f"{file}:{n}" for n in range(int(start), int(start) + int(count or 1))]
@@ -47,7 +47,7 @@ def main():
 
     lines = changed_lines(args.base)
     if not lines:
-        print("No Kotlin lines changed in the app.")
+        print("No lines of code changed in the app.")
         return 0
     LINES.parent.mkdir(parents=True, exist_ok=True)
     LINES.write_text("\n".join(lines) + "\n")

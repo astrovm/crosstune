@@ -325,10 +325,17 @@ class DeclarationTest(unittest.TestCase):
 
     def test_every_phone_emulator_has_the_play_store(self):
         for name, emulator in DECLARED.items():
-            if "tv" not in name:
+            # An engine emulator only runs what a script pushes over adb, with no apps or sign-in to get from Play.
+            if "tv" not in name and emulator.get("kind") != "engine":
                 self.assertIn("playstore", emulator["image"], name)
                 # avdmanager writes "no" even on a Play image.
                 self.assertEqual(emulator["config"].get("PlayStore.enabled"), "yes", name)
+
+    def test_an_engine_emulator_has_no_apps_and_no_sign_in(self):
+        engines = {name: e for name, e in DECLARED.items() if e.get("kind") == "engine"}
+        self.assertEqual(list(engines), ["crosstune-android8"])
+        for name, emulator in engines.items():
+            self.assertEqual((emulator["play_apps"], emulator["optional_apps"], emulator["sign_in"], emulator["by_hand"]), ({}, {}, False, []), name)
 
     def test_no_two_emulators_share_a_port(self):
         ports = [e["port"] for e in DECLARED.values()]

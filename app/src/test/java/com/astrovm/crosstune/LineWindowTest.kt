@@ -74,6 +74,64 @@ class LineWindowTest {
     }
 
     @Test
+    fun anAppStoppedShortIsPausedAtANewPlaceBeforeTheLine() {
+        val window = LineWindow(43_270, 48_270)
+        val slack = LineWindow.SEEK_SLACK_MS
+        fun paused(at: Long) = PlaybackClock(at, atMs = 1_000, playing = false)
+        fun short(clock: PlaybackClock, vararg was: PlaybackClock) = window.stoppedShort(clock, was.toList())
+        // TIDAL, sent from its start past its 30 s preview, paused at the preview's end.
+        val playingItsStart = PlaybackClock(65, atMs = 800)
+        assertTrue(short(paused(29_952), playingItsStart))
+        // Just short of where the line counts as reached, and no nearer.
+        assertTrue(short(paused(43_270 - slack - 1), playingItsStart))
+        assertFalse(short(paused(43_270 - slack), playingItsStart))
+        // Still playing on, it hasn't stopped.
+        assertFalse(short(PlaybackClock(29_952, atMs = 1_000, playing = true), playingItsStart))
+        // Back at the song's start, where an app sits while it loads, up to the slack.
+        assertFalse(short(paused(0), paused(20_000)))
+        assertFalse(short(paused(slack - 1), paused(20_000)))
+        assertTrue(short(paused(slack), paused(20_000)))
+        // Where it was, said again, or where playing on from there took it by then: it may not have moved yet.
+        assertFalse(short(paused(29_952), paused(29_952)))
+        assertFalse(short(paused(29_952 + slack), paused(29_952)))
+        assertTrue(short(paused(29_952 + slack + 1), paused(29_952)))
+        assertFalse(short(paused(29_952 - slack), paused(29_952)))
+        assertTrue(short(paused(29_952 - slack - 1), paused(29_952)))
+        assertFalse(short(paused(10_200), PlaybackClock(10_000, atMs = 800)))
+        // Playing from 10000 at 0, anywhere from there to where it played on to by then is where it was, and no further.
+        val playing = PlaybackClock(10_000, atMs = 0)
+        assertFalse(short(paused(10_000 - slack), playing))
+        assertTrue(short(paused(10_000 - slack - 1), playing))
+        assertFalse(short(paused(11_000 + slack), playing))
+        assertTrue(short(paused(11_000 + slack + 1), playing))
+        // Any place it was counts, not only the first.
+        assertFalse(short(paused(20_000), playingItsStart, paused(20_000)))
+        assertTrue(short(paused(20_000), playingItsStart, paused(29_952)))
+        // Nowhere it was known to be, a place short of the line is new.
+        assertTrue(short(paused(20_000)))
+    }
+
+    @Test
+    fun placesAnAppWasSentToAreKeptAFewSeconds() {
+        val places = SentPlaces()
+        val lately = SentPlaces.LATELY_MS
+        assertEquals(emptyList<PlaybackClock>(), places.lately("tide", 0))
+        places.note("tide", 20_000, atMs = 1_000)
+        places.note("tide", 43_270, atMs = 2_000)
+        places.note("wave", 5_000, atMs = 2_000)
+        // Each app's own, as paused there.
+        assertEquals(listOf(PlaybackClock(20_000, 1_000, playing = false), PlaybackClock(43_270, 2_000, playing = false)), places.lately("tide", 2_000))
+        assertEquals(listOf(5_000L), places.lately("wave", 2_000).map { it.positionMs })
+        // Each kept as long as it may still be said, and no longer.
+        assertEquals(listOf(20_000L, 43_270L), places.lately("tide", 1_000 + lately).map { it.positionMs })
+        assertEquals(listOf(43_270L), places.lately("tide", 1_001 + lately).map { it.positionMs })
+        // Noting another forgets what's too old.
+        places.note("tide", 10_000, atMs = 2_001 + lately)
+        assertEquals(listOf(10_000L), places.lately("tide", 0).map { it.positionMs })
+        assertEquals(2 * LineWindow.SEEK_WAIT_MS, lately)
+    }
+
+    @Test
     fun aLineIsOverAtItsEndNotBefore() {
         val window = LineWindow(10_000, 16_000)
         assertFalse(window.over(15_999))

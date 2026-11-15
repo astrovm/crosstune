@@ -8,7 +8,7 @@ import sys
 
 state = Path(sys.argv[1])
 own_slot = int(sys.argv[2])
-limit = int(os.environ.get("GRADLE_BOX_CACHE_BYTES", 10 * 1024**3))
+limit = int(os.environ.get("GRADLE_BOX_CACHE_BYTES", 40 * 1024**3))
 
 
 def size(path):

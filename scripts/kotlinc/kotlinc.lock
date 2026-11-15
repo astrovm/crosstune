@@ -1,0 +1,10 @@
+# The Kotlin 2.4.21 compiler and what it runs with, from its POMs. Remake with: python3 scripts/kotlinc/kotlinc.py lock
+# group:artifact:version sha256
+org.jetbrains:annotations:23.0.0 7b0f19724082cbfcbc66e5abea2b9bc92cf08a1ea11e191933ed43801eb3cd05
+org.jetbrains.kotlin:kotlin-build-tools-api:2.4.21 c5cd6a49bd072b529ae10809111c16a7aa0f92147e95d288354017fd65799461
+org.jetbrains.kotlin:kotlin-compiler-embeddable:2.4.21 ef19419c765e7ac8404465fa026ca8fc4dbb8a822de0fc79aa53c8dce29f1d02
+org.jetbrains.kotlin:kotlin-daemon-embeddable:2.4.21 7b3ef24674e5bcffcadfc4e43202ea314194939ecbcdd90a4770b2f1b04e0d07
+org.jetbrains.kotlin:kotlin-reflect:1.6.10 3277ac102ae17aad10a55abec75ff5696c8d109790396434b496e75087854203
+org.jetbrains.kotlin:kotlin-script-runtime:2.4.21 a658cf5902a1525a06c264a5e42b437e97a6679ddeef8ca641246f270cf6a013
+org.jetbrains.kotlin:kotlin-stdlib:2.4.21 bd8250210584cb659847dce9cda660f8e9906e5def7fbebcea93dc6dcb6a88a3
+org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0 9860906a1937490bf5f3b06d2f0e10ef451e65b95b269f22daf68a3d1f5065c5
