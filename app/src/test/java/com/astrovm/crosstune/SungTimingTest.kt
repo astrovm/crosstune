@@ -545,6 +545,21 @@ class SungTimingTest {
     }
 
     @Test
+    fun repeatingTheSameHearingDoesNotChangeAnyLinePlacement() {
+        val random = kotlin.random.Random(917)
+        repeat(50) { song ->
+            val text = List(6) { line -> "Amber${song}r$line lantern${song}r$line river${song}r$line" }
+            val words = text.flatMapIndexed { line, value ->
+                sungAt(10_000L + line * 4_000L, value).map { (word, ms) -> word to ms + random.nextLong(-40, 41) }
+            }
+            val whiles = listOf(HeardStretch(9_000, 29_000, words.filter { it.second < 29_000 }), HeardStretch(29_000, 49_000, words.filter { it.second >= 29_000 }))
+            val once = SungTiming.linesMs(text, whiles, 50_000)
+            assertEquals(6, once.size)
+            assertEquals(once, SungTiming.linesMs(text, whiles + whiles.reversed(), 50_000))
+        }
+    }
+
+    @Test
     fun nothingSungHeardTimesNothing() {
         assertEquals(emptyList<LyricLine>(), SungTiming.timed(lines, listOf(heard(0, listOf("[Music]" to 1_000L))), 120_000))
         assertEquals(emptyList<LyricLine>(), SungTiming.timed(lines, emptyList(), 120_000))

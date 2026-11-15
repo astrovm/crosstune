@@ -915,3 +915,55 @@ of one unspaced ASR word. They do not change the original assertions.
 
 The original synthetic floor file remains byte-for-byte as restored in `d62eaa29`
 and as recorded in `3ff563b1`. No new audio or ASR inference was needed.
+
+
+### Alignment cost and equivalent candidate pruning
+
+The first accurate version was too slow on repeated phrases. A final alignment
+of xTvyyoF_LZY, in a 2-CPU container, took a median 9181.886187 ms over 3 measured
+calls after a warm-up. Starting timing took 404.079944 ms. nOj6d-HOw2w and
+BSTsnWoslP4 did not have that regression. These are wall times on a shared busy
+machine, not isolated CPU throughput.
+
+Each optimization kept the scores and line choices:
+
+1. Direct word-position comparison removes a vararg allocation from every edge.
+2. The minimum pace condition is rearranged once per candidate, rather than
+   looking up the two line positions on every edge.
+3. The chosen chain and its prefix weights share one pass. Suffix weights and
+   the skipped-line alternatives share a second pass, with the original tie rule.
+4. At the same line start, a stronger match consuming a narrower heard span can
+   replace a weaker one in every chain. The word-count and single-word confidence
+   classes are preserved too. Only such dominated candidates are removed.
+
+The repeated song's candidates fell to 11696. Its measured median fell to
+1449.303960 ms under load (maximum 1649.796224 ms), from 9181.886187 ms.
+A later run, after local CI finished, measured 921.524433 ms (maximum
+1289.367190 ms). The same later run measured 152.432058 ms for nOj6d-HOw2w and
+40.017056 ms for BSTsnWoslP4. Load changed, so the latter is not a controlled
+speedup ratio.
+
+`timing-bench.py` and `TimingBenchmark.kt` retain the actual Kotlin benchmark.
+They read the TSV inputs made by `untimed` without changing a replay request:
+
+```sh
+SYNCREPLAY_DIR=/mnt/data/agent-cache/crosstune-syncreplay nice -n 10 python3 scripts/syncreplay/timing-bench.py xTvyyoF_LZY nOj6d-HOw2w BSTsnWoslP4
+```
+
+Before and after the optimizer, all 84 recorded replay outputs were byte-for-byte
+identical: one and two plays of each of the 42 recordings, including every round,
+not only the final placements. Private copies are in this checkout's ignored
+`build/syncreplay/optimization/`. A generated property test also repeats the same
+hearing on 50 fake songs and requires every placement to stay unchanged.
+
+Local `:app:ci` passed on `57a3a4e8` in 20 min 40 s, including 100% Kover line
+coverage (22011 covered, 0 missed), detekt, lint, and both APKs. Its attached
+command client ended with signal 143 while the container continued. Reconnecting
+to that same container recovered exit 0 and the successful build log. The final
+optimizer needs the same checks on its new head.
+
+The full build also exposed an obsolete six-argument PIT test constructor. The
+installed 1.30.2 API marks it deprecated and provides a seven-argument constructor
+with `CodeSource`. The test now uses that constructor. Other Gradle deprecation
+notices originate inside the existing Kover and Android plugins; no plugin or
+app version is changed here.

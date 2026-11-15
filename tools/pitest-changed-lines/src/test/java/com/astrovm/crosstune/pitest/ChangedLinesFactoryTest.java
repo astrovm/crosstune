@@ -51,7 +51,7 @@ public class ChangedLinesFactoryTest {
         file.toFile().deleteOnExit();
         Files.write(file, lines);
         FeatureSetting setting = new FeatureSetting("CHANGED", ToggleStatus.ACTIVATE, Map.of("file", List.of(file.toString())));
-        return new ChangedLinesFactory().createInterceptor(new InterceptorParameters(setting, null, null, null, null, null));
+        return new ChangedLinesFactory().createInterceptor(new InterceptorParameters(setting, null, null, null, null, null, null));
     }
 
     /** A mutant of [method]'s return, on [LINE]. */
