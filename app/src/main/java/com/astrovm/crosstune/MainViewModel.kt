@@ -4384,7 +4384,7 @@ internal class MainViewModel(
         }
     }
 
-    private suspend fun movedSavedLine(saved: SavedLine, was: SavedLine, moved: SavedLine, script: Script?): SavedLine {
+    private fun movedSavedLine(saved: SavedLine, was: SavedLine, moved: SavedLine, script: Script?): SavedLine {
         // Bounds are one edit: mixing an old end with a newer start can reverse the window.
         val timing = if (saved.startMs == was.startMs && saved.endMs == was.endMs && saved.nextMs == was.nextMs) moved else saved
         val replacement = saved.copy(
