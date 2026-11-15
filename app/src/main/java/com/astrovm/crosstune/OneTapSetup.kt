@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.AlarmManager
 import android.content.ComponentName
 import android.content.Context
 import android.os.Build
@@ -52,7 +53,8 @@ internal class OneTapSetup(private val context: Context, private val shells: Lis
     suspend fun setUp(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean, floating: Boolean, exact: Boolean): Boolean {
         val shell = shell() ?: return false
         if (!shell.allowed()) return false
-        return commands(apps, links, follow, microphone, floating, exact).map { shell.run(it) }.all { it }
+        val worked = commands(apps, links, follow, microphone, floating, exact).map { shell.run(it) }.all { it }
+        return worked && (!exact || context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms())
     }
 
     private fun commands(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean, floating: Boolean, exact: Boolean): List<List<String>> = buildList {
@@ -77,7 +79,7 @@ internal class OneTapSetup(private val context: Context, private val shells: Lis
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(listOf("pm", "grant", "--user", user, own, android.Manifest.permission.POST_NOTIFICATIONS))
         }
         // Alarms and reminders, the switch in Android's settings, so a practice reminder isn't held up to an hour.
-        if (exact) add(listOf("appops", "set", "--user", user, own, EXACT_ALARM_OP, "allow"))
+        if (exact) add(listOf("appops", "set", "--user", user, "--uid", own, EXACT_ALARM_OP, "allow"))
     }
 
     companion object {

@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.app.Application
+import android.app.AlarmManager
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -10,6 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowAlarmManager
 
 /** What one tap sets up through Shizuku or root, and what it leaves alone. */
 @RunWith(RobolectricTestRunner::class)
@@ -49,11 +51,36 @@ class OneTapSetupTest {
     }
 
     @Test
+    fun aUidDenialIsClearedBeforeExactAccessIsReportedAsAllowed() = runBlocking {
+        var uidMode = "deny"
+        var packageMode = "allow"
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        val shell = FakeShell { command ->
+            if (OneTapSetup.EXACT_ALARM_OP in command) {
+                if ("--uid" in command) uidMode = "allow" else packageMode = "allow"
+                ShadowAlarmManager.setCanScheduleExactAlarms(uidMode == "allow" || uidMode == "default" && packageMode == "allow")
+            }
+            true
+        }
+        assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = false, exact = true))
+        assertTrue(app.getSystemService(AlarmManager::class.java).canScheduleExactAlarms())
+    }
+
+    @Test
+    fun aSuccessfulCommandThatLeavesExactAccessDeniedIsNotAWorkingFix() = runBlocking {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        assertFalse(OneTapSetup(app, listOf(FakeShell())).setUp(emptyList(), links = false, follow = false, microphone = false, floating = false, exact = true))
+    }
+
+    @Test
     fun aLateReminderGetsAlarmsAndRemindersAllowedLikeAndroidsSwitch() = runBlocking {
-        val shell = FakeShell()
+        val shell = FakeShell { command ->
+            if (OneTapSetup.EXACT_ALARM_OP in command) ShadowAlarmManager.setCanScheduleExactAlarms(true)
+            true
+        }
         assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = false, exact = true))
         val user = (android.os.Process.myUid() / 100_000).toString()
-        assertEquals(listOf("appops", "set", "--user", user, app.packageName, "SCHEDULE_EXACT_ALARM", "allow"), shell.ran.last())
+        assertEquals(listOf("appops", "set", "--user", user, "--uid", app.packageName, "SCHEDULE_EXACT_ALARM", "allow"), shell.ran.last())
         assertEquals(2, shell.ran.size)
     }
 }

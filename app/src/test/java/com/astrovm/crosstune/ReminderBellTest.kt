@@ -359,7 +359,7 @@ class ReminderBellTest {
         works
     }.also { shell -> MainActivity.shellFactory = { listOf(shell) } }
 
-    private val exactCommand get() = listOf("appops", "set", "--user", (android.os.Process.myUid() / 100_000).toString(), app.packageName, OneTapSetup.EXACT_ALARM_OP, "allow")
+    private val exactCommand get() = listOf("appops", "set", "--user", (android.os.Process.myUid() / 100_000).toString(), "--uid", app.packageName, OneTapSetup.EXACT_ALARM_OP, "allow")
 
     @Test
     fun withShizukuTheTapThatTurnsItOnAllowsTheExactMinuteToo() {
@@ -410,6 +410,18 @@ class ReminderBellTest {
             shell.answer.complete(Unit)
         }
         waitUntil { model().uiState.fixingInOneTap == null }
+    }
+
+    @Test
+    fun aReportedShellSuccessWithoutExactAccessStillShowsTheManualFix() {
+        exactAllowed(false)
+        MainActivity.shellFactory = { listOf(FakeShell()) }
+        launch()
+        finishASession()
+        click(remindMe)
+        waitUntil { model().uiState.fixes?.need == Need.Exact }
+        assertTrue(requireNotNull(model().uiState.fixes).failed)
+        assertTrue(model().uiState.reminder.late)
     }
 
     @Test
