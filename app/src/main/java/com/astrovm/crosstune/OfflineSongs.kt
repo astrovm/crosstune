@@ -16,15 +16,17 @@ internal const val KEPT_OFFLINE_DIR = "kept"
 
 /**
  * A song, album or playlist kept for offline, as [item], by [id]; its [songs], those of them
- * whose words and the rest are [saved] already, and those [liked] in the music app that played them,
- * so it downloads them too, by [OfflineSongs.keyOf].
+ * whose words and the rest are [saved] already, those of these whose sung readings UtaTen couldn't give
+ * yet, [unread], to be asked for again, and those [liked] in the music app that played them, so it
+ * downloads them too, by [OfflineSongs.keyOf].
  */
 internal data class KeptOffline(
     val id: String,
     val item: MusicMetadata,
     val songs: List<MusicMetadata>,
     val saved: Set<String> = emptySet(),
-    val liked: Set<String> = emptySet()
+    val liked: Set<String> = emptySet(),
+    val unread: Set<String> = emptySet()
 ) {
     val done: Boolean get() = songs.all { OfflineSongs.keyOf(it) in saved }
 }
@@ -55,9 +57,10 @@ internal class OfflineSongs(
     /** Whether [item] is kept for offline. */
     suspend fun has(item: MusicMetadata): KeptOffline? = lock.withLock { loaded().firstOrNull { it.id == idOf(item) } }
 
-    /** [song] of the one kept as [id] has all it needs. */
-    suspend fun saved(id: String, song: MusicMetadata) = lock.withLock {
-        save(loaded().map { if (it.id == id) it.copy(saved = it.saved + keyOf(song)) else it })
+    /** [song] of the one kept as [id] has all it needs, or all but its sung readings when [unread]. */
+    suspend fun saved(id: String, song: MusicMetadata, unread: Boolean = false) = lock.withLock {
+        val key = keyOf(song)
+        save(loaded().map { if (it.id == id) it.copy(saved = it.saved + key, unread = if (unread) it.unread + key else it.unread - key) else it })
     }
 
     /** The songs kept that are still to be liked in the app that plays them, each once. */
@@ -128,12 +131,13 @@ internal class OfflineSongs(
         .put("songs", JSONArray().apply { kept.songs.forEach { put(song(it)) } })
         .put("saved", JSONArray(kept.saved.toList()))
         .put("liked", JSONArray(kept.liked.toList()))
+        .put("unread", JSONArray(kept.unread.toList()))
 
     private fun kept(json: JSONObject?): KeptOffline? {
         val item = json?.optJSONObject("item")?.let(::song) ?: return null
         val songs = json.optJSONArray("songs")?.let { list -> (0 until list.length()).mapNotNull { song(list.optJSONObject(it)) } }.orEmpty()
         val saved = strings(json.optJSONArray("saved"))
-        return KeptOffline(json.optString("id").ifEmpty { idOf(item) }, item, songs, saved, strings(json.optJSONArray("liked")))
+        return KeptOffline(json.optString("id").ifEmpty { idOf(item) }, item, songs, saved, strings(json.optJSONArray("liked")), strings(json.optJSONArray("unread")))
     }
 
     private fun strings(list: JSONArray?): Set<String> = list?.let { (0 until it.length()).map(it::optString).toSet() }.orEmpty()

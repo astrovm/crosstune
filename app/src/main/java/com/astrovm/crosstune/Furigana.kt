@@ -20,9 +20,10 @@ internal object Furigana {
             if (runs.isNotEmpty() && !Readings.isKana(c) && !Readings.isKana(runs.last().first())) runs[runs.lastIndex] += c else runs += c.toString()
             runs
         }
-        val plan = Aligner(runs, kana).best(0, 0)
-        // Nothing to read it over: no kanji, or no reading. The word stays as written.
-        return if (plan.kept < 0) listOf(Ruby(surface)) else plan.parts.fold(mutableListOf()) { parts, part ->
+        // No reading, or too long a word to count its kana: the word stays as written. So it does with no way to lay the reading.
+        if (kana.isEmpty() || surface.length > MAX_LETTERS) return listOf(Ruby(surface))
+        val laid = Aligner(runs, kana).parts() ?: return listOf(Ruby(surface))
+        return laid.fold(mutableListOf()) { parts, part ->
             if (part.reading == null && parts.lastOrNull()?.reading == null && parts.isNotEmpty()) parts[parts.lastIndex] = Ruby(parts.last().text + part.text) else parts += part
             parts
         }
@@ -159,74 +160,174 @@ internal object Furigana {
     private const val OLD = "ゐゑひふほヰヱ"
     private val OLD_KANA = OLD.map(Char::toString).toSet()
 
-    /** A way to lay the reading along the runs from some point on: [parts] of it, and how many kana of the word it finds in the reading. */
-    private class Plan(val kept: Int, val parts: List<Ruby>)
-
-    private val order = compareBy<Plan> { it.kept }.thenBy { -it.parts.count { part -> part.reading != null } }
+    /**
+     * How good a way to lay the reading along the runs is, as one number to compare: more kana of the word found in the
+     * reading first, then fewer readings laid over it. Each fits in 16 bits, see [MAX_LETTERS].
+     */
+    private fun score(kept: Int, readings: Int) = (kept shl 16) or (0xFFFF - readings)
 
     /** No way at all. */
-    private val NONE = Plan(-1, emptyList())
+    private const val NONE = -1
+
+    /** The runs and the reading both used up. */
+    private val DONE = score(0, 0)
+
+    /** The longest word laid out letter by letter; a longer one stays as written. */
+    const val MAX_LETTERS = 0x7FFF
+
+    /** How a kana is found at a place in the reading: not there, said as written, or said as something else. */
+    private enum class Said { NOT, AS_WRITTEN, OTHERWISE }
 
     /**
      * The best way to lay [kana] along [runs] finds the most written kana in the reading. If some
      * cannot be found, adjacent kanji and kana can share a reading. Among equally good matches,
-     * fewer readings win: 飛び立つ read ゆく gets ゆく over 飛び立, not a guessed split.
+     * fewer readings win: 飛び立つ read ゆく gets ゆく over 飛び立, not a guessed split. Of ways as good, the first
+     * tried wins: a kana found before one left out before a kanji group, and of groups, the shortest, read the shortest.
+     *
+     * Worked out from the last run back, once for each run and place in the reading. A kanji group from a run may end at
+     * any later run and any later place in the reading; the best of those is kept for each run and place as it's worked
+     * out, so a group is picked in one step, not by trying them all. A long word, a reading in brackets over a quoted
+     * phrase, takes as long as its runs times its kana. Each run and place keeps two numbers, how good its best way is and
+     * where that way's first part ends, and parts are made only for the way picked, so it takes as much memory too.
      */
     private class Aligner(private val runs: List<String>, private val kana: String) {
         private val sounds = kana.map(::sound)
-        private val memo = HashMap<Pair<Int, Int>, Plan>()
+        private val size = kana.length
 
-        /** The best plan for the runs from the [i]th, with what's left of the reading from [at]. */
-        fun best(i: Int, at: Int): Plan = memo.getOrPut(i to at) {
-            when {
-                i == runs.size -> if (at == kana.length) Plan(0, emptyList()) else NONE
-                Readings.isKana(runs[i].first()) -> written(i, at)
-                else -> kanji(i, at)
+        /** What draws out the vowel before each place in the reading, as in [stretched]; nothing at the start. */
+        private val drawsOut = Array(size + 1) { at -> sounds.getOrNull(at - 1)?.let(::drawsOutAfter).orEmpty() }
+
+        /** How each kana run sounds, as in [sound], and what it's said as when the reading spells it the other way, or another, as in [SAID_AS]. */
+        private val runSounds = runs.map { sound(it.first()) }
+        private val spelledBack = runSounds.map { sound -> SAID_AS.filter { it[1] == sound }.map { it[0] }.joinToString("") }
+        private val saidOtherwise = runSounds.map { sound -> SAID_AS.filter { it[0] == sound }.map { it[1] }.joinToString("") }
+
+        /** How many places a run has in the tables: one for each place in the reading, and its end. */
+        private val width = size + 1
+        private val isKana = runs.map { Readings.isKana(it.first()) }
+
+        /** Where each run starts in the word, and where the last one ends. */
+        private val starts = runs.runningFold(0) { at, run -> at + run.length }
+        private val word = runs.joinToString("")
+
+        /** Whether all runs before the [i]th are kana. */
+        private val kanaBefore = isKana.runningFold(true) { all, it -> all && it }
+
+        /** The first run from the [i]th on with kanji in it; [runs]' size when none has. */
+        private val nextKanji = IntArray(runs.size + 1) { runs.size }.also { next -> for (i in runs.indices.reversed()) next[i] = if (isKana[i]) next[i + 1] else i }
+
+        /** How good the best way is from each run and place in the reading on, at the run times [width] plus the place. */
+        private val best = IntArray((runs.size + 1) * width) { NONE }.also { it[runs.size * width + size] = DONE }
+
+        /** Where that way's first part ends, the same way: the run after it times [width], plus the place in the reading after it. */
+        private val next = IntArray(runs.size * width)
+
+        /** The best of the ways tried for a run and place so far, and where its first part ends. */
+        private var found = NONE
+        private var foundNext = 0
+
+        /** The parts of the best way to lay the reading; null when there's none. */
+        fun parts(): List<Ruby>? {
+            // A kanji group ending at a run from the next one on, and at a place from each on: where the best of them ends,
+            // as the run it ends at and the place in the reading. Kept for the next run, and for the first with kanji after it.
+            // Three rows each, used in turn: one for this run, one for the next and one for the first with kanji after it.
+            // Its reading ends after the kanji's starts, so a group whose reading ends from a place on is kept one before it.
+            val runRows = Array(3) { IntArray(size) }
+            val endRows = Array(3) { IntArray(size) }
+            var later = 0
+            var kanjiRow = 0
+            for (i in runs.indices.reversed()) {
+                val row = (0..2).first { it != later && it != kanjiRow }
+                groups(i, runRows[later], endRows[later], runRows[row], endRows[row])
+                if (!isKana[i]) kanjiRow = row
+                for (at in 0..size) {
+                    found = NONE
+                    if (isKana[i]) written(i, at)
+                    if (at < size) kanji(i, runRows[kanjiRow][at], endRows[kanjiRow][at])
+                    best[i * width + at] = found
+                    next[i * width + at] = foundNext
+                }
+                later = row
             }
-        }
-
-        /** A kana found in the reading, left out at the edge, or grouped with the kanji after it. */
-        private fun written(i: Int, at: Int): Plan {
-            val c = runs[i].single()
-            val found = spelledAt(c, at)?.let { then(i + 1, at + 1, listOf(it), 1) } ?: NONE
-            // Left out at the end, the kana after it are left out too: if one of them were read as written, this one would be too.
-            val left = when {
-                runs.take(i).all { Readings.isKana(it.first()) } -> then(i + 1, at, listOf(Ruby(c.toString())), 0)
-                runs.drop(i).all { Readings.isKana(it.first()) } -> then(runs.size, at, listOf(Ruby(runs.drop(i).joinToString(""))), 0)
-                else -> NONE
-            }
-            return listOf(found, left, kanji(i, at)).maxWith(order)
-        }
-
-        /** A group containing kanji, read as far as [kana] goes. */
-        private fun kanji(i: Int, at: Int): Plan {
-            val plans = (i until runs.size).filter { j -> runs.subList(i, j + 1).any { !Readings.isKana(it.first()) } }.flatMap { j ->
-                (at + 1..kana.length).map { end ->
-                    then(j + 1, end, listOf(Ruby(runs.subList(i, j + 1).joinToString(""), kana.substring(at, end))), 0)
+            if (best[0] == NONE) return null
+            return buildList {
+                var i = 0
+                var at = 0
+                while (i < runs.size) {
+                    val end = next[i * width + at]
+                    add(part(i, at, end / width, end % width))
+                    i = end / width
+                    at = end % width
                 }
             }
-            return plans.maxWithOrNull(order) ?: NONE
-        }
-
-        /** [parts], and then the best of the rest of the runs from the [next]th, if it can be done. */
-        private fun then(next: Int, at: Int, parts: List<Ruby>, kept: Int): Plan {
-            val rest = best(next, at)
-            return if (rest.kept < 0) NONE else Plan(rest.kept + kept, parts + rest.parts)
         }
 
         /**
-         * [c] as found in the reading at [at]: as written, or with what it's said as over it when it
-         * isn't said as written. Nothing when it isn't found there.
+         * The best ends of a kanji group ending at the [j]th run or later, for each place its reading may end from, as tried
+         * in order, into [groupRun] and [groupEnd] one before that place, from [laterRun] and [laterEnd], the same for the run
+         * after it, if any.
+         * Of ends as good, the first tried: the group ending soonest, its reading ending soonest.
          */
-        private fun spelledAt(c: Char, at: Int): Ruby? {
-            // Past the reading's end, it isn't in it.
-            val said = sounds.getOrNull(at) ?: return null
-            val written = sound(c)
-            val before = sounds.getOrNull(at - 1)
+        private fun groups(j: Int, laterRun: IntArray, laterEnd: IntArray, groupRun: IntArray, groupEnd: IntArray) {
+            val after = (j + 1) * width
+            var end = size
+            for (at in size downTo 1) {
+                // This run, the reading ending here or, when that's better, later.
+                if (best[after + at] >= best[after + end]) end = at
+                val laterBetter = j != runs.lastIndex && best[after + end] < best[(laterRun[at - 1] + 1) * width + laterEnd[at - 1]]
+                groupRun[at - 1] = if (laterBetter) laterRun[at - 1] else j
+                groupEnd[at - 1] = if (laterBetter) laterEnd[at - 1] else end
+            }
+        }
+
+        /** A kana found in the reading, or left out at the edge. */
+        private fun written(i: Int, at: Int) {
+            val said = said(i, at)
+            if (said != Said.NOT) offer(i + 1, at + 1, 1, said == Said.OTHERWISE)
+            // Left out at the end, the kana after it are left out too: if one of them were read as written, this one would be too.
+            if (kanaBefore[i]) offer(i + 1, at, 0, false) else if (nextKanji[i] == runs.size) offer(runs.size, at, 0, false)
+        }
+
+        /** A group containing kanji, from the [i]th run to the [last]th, read from where it starts as far as [end] in the reading. */
+        private fun kanji(i: Int, last: Int, end: Int) {
+            if (nextKanji[i] < runs.size) offer(last + 1, end, 0, true)
+        }
+
+        /** A first part ending before the [run]th run and at [at] in the reading, finding [kept] kana, with a reading over it when [read]. */
+        private fun offer(run: Int, at: Int, kept: Int, read: Boolean) {
+            val rest = best[run * width + at]
+            if (rest == NONE) return
+            val score = rest + (kept shl 16) - (if (read) 1 else 0)
+            // The first found wins a tie.
+            if (score > found) {
+                found = score
+                foundNext = run * width + at
+            }
+        }
+
+        /** The part from the [i]th run and [at] in the reading to the [run]th and [end]. */
+        private fun part(i: Int, at: Int, run: Int, end: Int): Ruby {
+            val text = word.substring(starts[i], starts[run])
             return when {
-                written == said || stretched(written, before) == stretched(said, before) || "$said$written" in SAID_AS -> Ruby(c.toString())
-                "$written$said" in SAID_AS -> Ruby(c.toString(), kana.substring(at, at + 1))
-                else -> null
+                end == at -> Ruby(text)
+                isKana[i] && run == i + 1 && said(i, at) == Said.AS_WRITTEN -> Ruby(text)
+                else -> Ruby(text, kana.substring(at, end))
+            }
+        }
+
+        /**
+         * How the kana of the [i]th run is found in the reading at [at]: as written, as something it isn't written as, or not at
+         * all. Asked once for each run and place, so it makes nothing new.
+         */
+        private fun said(i: Int, at: Int): Said {
+            // Past the reading's end, it isn't in it.
+            if (at == size) return Said.NOT
+            val heard = sounds[at]
+            val written = runSounds[i]
+            return when {
+                written == heard || stretched(written, drawsOut[at]) == stretched(heard, drawsOut[at]) || heard in spelledBack[i] -> Said.AS_WRITTEN
+                heard in saidOtherwise[i] -> Said.OTHERWISE
+                else -> Said.NOT
             }
         }
     }
@@ -234,11 +335,11 @@ internal object Furigana {
     /** [c] as kana are told apart here: in hiragana, with the small ones as their big ones and the ones said alike as one. */
     private fun sound(c: Char): Char = FOLDED[Readings.hiragana(c.toString())[0]] ?: Readings.hiragana(c.toString())[0]
 
-    /** A long vowel is one sound, however it's spelled: the mark ー, or the vowel that follows [before], あ, い, う, え or お. */
-    private fun stretched(c: Char, before: Char?): Char {
-        val row = ROWS.entries.firstOrNull { before != null && before in it.value }?.key
-        return if (c == 'ー' || (row != null && c in STRETCHES.getValue(row))) 'ー' else c
-    }
+    /** A long vowel is one sound, however it's spelled: the mark ー, or one of the vowels that [drawOut] the kana before. */
+    private fun stretched(c: Char, drawOut: String): Char = if (c == 'ー' || c in drawOut) 'ー' else c
+
+    /** The vowels that draw out the one [before] ends in, あ, い, う, え or お; nothing after a kana with no vowel. */
+    private fun drawsOutAfter(before: Char): String = ROWS.entries.firstOrNull { before in it.value }?.let { STRETCHES.getValue(it.key) }.orEmpty()
 
     /** The small kana, and the ones said alike, as the one kana they're said as. */
     private val FOLDED = mapOf(

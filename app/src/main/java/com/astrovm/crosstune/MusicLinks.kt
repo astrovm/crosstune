@@ -42,16 +42,16 @@ internal object MusicLinks {
     private val frontendSites = Frontend.SOURCES.flatMap { it.sites }.toSet()
 
     /** Stops at quotes, angle brackets and CJK brackets, which share text often wraps links in. */
-    private val urlRegex = Regex("""https?://[^\s"'<>「」『』（）【】]+""", RegexOption.IGNORE_CASE)
-    private val spotifyIdRegex = Regex("""^[A-Za-z0-9]{22}$""")
-    private val youtubeIdRegex = Regex("""^[A-Za-z0-9_-]{11}$""")
+    private val urlRegex = phoneRegex("""https?://[^\s"'<>「」『』（）【】]+""", RegexOption.IGNORE_CASE)
+    private val spotifyIdRegex = phoneRegex("""^[A-Za-z0-9]{22}$""")
+    private val youtubeIdRegex = phoneRegex("""^[A-Za-z0-9_-]{11}$""")
     /** Playlist IDs, e.g. PL… for user playlists or OLAK5uy_… for albums on YouTube Music. */
-    private val youtubeListRegex = Regex("""^[A-Za-z0-9_-]{12,}$""")
-    private val numericIdRegex = Regex("""^\d+$""")
-    private val googleHostRegex = Regex("""(www\.)?google\.[a-z]{2,3}(\.[a-z]{2})?""")
-    private val tidalIdRegex = Regex("""^[A-Za-z0-9-]+$""")
+    private val youtubeListRegex = phoneRegex("""^[A-Za-z0-9_-]{12,}$""")
+    private val numericIdRegex = phoneRegex("""^\d+$""")
+    private val googleHostRegex = phoneRegex("""(www\.)?google\.[a-z]{2,3}(\.[a-z]{2})?""")
+    private val tidalIdRegex = phoneRegex("""^[A-Za-z0-9-]+$""")
     private val spotifyUrlInPageRegex =
-        Regex("""https://open\.spotify\.com/(?:intl-[A-Za-z-]+/)?(track|album|artist|playlist)/([A-Za-z0-9]{22})""")
+        phoneRegex("""https://open\.spotify\.com/(?:intl-[A-Za-z-]+/)?(track|album|artist|playlist)/([A-Za-z0-9]{22})""")
 
     private val shortLinkHosts = setOf(
         "spotify.link", "link.deezer.com", "deezer.page.link", "dzr.page.link", "on.soundcloud.com",
@@ -72,7 +72,7 @@ internal object MusicLinks {
     fun parse(text: String): LinkInput? {
         nowPlayingSong(text)?.let { return it }
         // Text with more than one link, e.g. a post sharing a song, is about the first that's music.
-        val urls = urlRegex.findAll(text).map { it.value.trimEnd(*URL_END) }.toList()
+        val urls = urlRegex.matchesIn(text).map { it.value.trimEnd(*URL_END) }.toList()
         if (urls.isEmpty()) return parseOne(text.trim())
         return urls.firstNotNullOfOrNull { parseOne(it.trim()) }
     }
@@ -104,18 +104,34 @@ internal object MusicLinks {
         val song = text.substring(0, start).trim()
         val search = text.substring(start).trim()
         return nowPlayingPatterns.firstNotNullOfOrNull { (shared, searched) ->
-            val groups = shared.regex.matchEntire(song)?.groupValues ?: return@firstNotNullOfOrNull null
-            val title = groups[shared.titleGroup].takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
-            val artist = groups[3 - shared.titleGroup].takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
+            val (first, second) = shared.split(song) ?: return@firstNotNullOfOrNull null
+            val title = (if (shared.titleFirst) first else second).takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
+            val artist = (if (shared.titleFirst) second else first).takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
             if (search != nowPlayingSearch(searched.fill(title, artist))) return@firstNotNullOfOrNull null
             recognizedSong(MusicMetadata(title, artist))
         }
     }
 
     /** One of Now Playing's wordings, "%1$s" being the title and "%2$s" the artist. */
-    private class SongPattern(val text: String) {
-        val titleGroup = if (text.indexOf("%1\$s") < text.indexOf("%2\$s")) 1 else 2
-        val regex = text.split("%1\$s", "%2\$s").joinToString("(.+)") { Regex.escape(it) }.toRegex()
+    internal class SongPattern(private val text: String) {
+        val titleFirst = "%1\$s" in text.substringBefore("%2\$s")
+        private val words = text.split("%1\$s", "%2\$s")
+
+        /**
+         * The two names in [song], first and second, as the pattern `Before(.+)Between(.+)After` matched whole reads
+         * them: the first runs to the last "Between" that leaves the second a letter, and neither holds a line break.
+         * In code, as that pattern tried each "Between" to the end of the text, and took time squared on a long one.
+         */
+        fun split(song: String): Pair<String, String>? {
+            val (before, between, after) = words
+            val secondEnd = song.length - after.length
+            if (!song.startsWith(before) || !song.endsWith(after)) return null
+            // Where the words before and after overlap, there's nothing between them, and no "Between" is found in it.
+            if (song.substring(before.length, maxOf(before.length, secondEnd)).any(::isLineBreak)) return null
+            val at = song.lastIndexOf(between, secondEnd - between.length - 1).takeIf { it > before.length } ?: return null
+            return song.substring(before.length, at) to song.substring(at + between.length, secondEnd)
+        }
+
         fun fill(title: String, artist: String) = text.replace("%1\$s", title).replace("%2\$s", artist)
     }
 
@@ -135,7 +151,7 @@ internal object MusicLinks {
      * A scheme with its "//", or one of the few that go without, e.g. "spotify:" or "mailto:". A colon
      * alone is no scheme: "Re:make" and "Re:Zero" are songs.
      */
-    private val schemeRegex = Regex(
+    private val schemeRegex = phoneRegex(
         """^(?:[a-z][a-z0-9+.-]*://|(?:spotify|mailto|tel|sms|geo|data|intent|market|javascript|about|file):)""",
         RegexOption.IGNORE_CASE
     )
@@ -146,7 +162,7 @@ internal object MusicLinks {
      * or lost. An id mixes letters and digits, while a long one-word title, e.g.
      * "Supercalifragilisticexpialidocious", is letters only.
      */
-    private val bareIdRegex = Regex("""(?=[A-Za-z0-9]*[0-9])(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{20,}""")
+    private val bareIdRegex = phoneRegex("""(?<![A-Za-z0-9])(?=[A-Za-z0-9]*[0-9])(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{20,}""")
 
     /**
      * Whether [text] was meant as a link rather than as a song's name: it carries a scheme, or a

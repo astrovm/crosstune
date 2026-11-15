@@ -2048,10 +2048,16 @@ internal fun <T> whilePlaying(following: Following, of: Any?, changesAt: (Long) 
     }
 }
 
-/** Where the song is while [following] it, to the [POSITION_STEP_MS], which is as fine as a bar or clock shows; null while not. */
+/**
+ * Where the song is while [following] it, to the second, as the player's clock shows it; null while
+ * not. Finer, the player's clock and slider were composed again 10 times a second for one new second.
+ */
 @Composable
-internal fun rememberPosition(following: Following?): Long? =
-    rememberWhilePlaying(following, null, { it - it % POSITION_STEP_MS + POSITION_STEP_MS }) { it - it % POSITION_STEP_MS }
+internal fun rememberSecond(following: Following?): Long? =
+    rememberWhilePlaying(following, null, { it - it % SECOND_MS + SECOND_MS }) { it - it % SECOND_MS }
+
+/** A second, the step the player's clock and slider move in. */
+private const val SECOND_MS = 1_000L
 
 /** How often a song's place moves on screen: more often would only draw the screen again for nothing. */
 internal const val POSITION_STEP_MS = 100L
@@ -2351,7 +2357,7 @@ private const val READING_GAP = 0.05f
  * Japanese and Chinese wrap anywhere, a single character (Korean, spaced, wraps by word), keeping the marks that can't start a
  * line, like 。 or ー or small kana, with the one before.
  */
-private val WORDS = Regex("""[\p{IsLatin}\p{IsHangul}\p{N}'’.,!?:;&()\-]+\s*|\S[ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ・、。，．！？」』）〕】]*\s*|\s+""")
+private val WORDS = phoneRegex("""[\p{sc=Latin}\p{sc=Hangul}\p{N}'’.,!?:;&()\-]+\s*|\S[ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ・、。，．！？」』）〕】]*\s*|\s+""")
 
 /**
  * One line, open to study: what helps read it, its words to tap for their meaning and, signed in, examples, and what can be
@@ -2395,7 +2401,10 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                     val examples = learning.examples?.takeIf { it.word == meaning.word && it.index == index }?.asking
                     WordCard(
                         meaning, examples, canFindExamples = signedIn, romajiTyped = learning.romajiTyped,
-                        onWrongReading = { markingWrong = meaning.word }, flag = flag
+                        // Offered only when the box takes it: a word and a reading, in a song with a title and an artist.
+                        onWrongReading = { markingWrong = meaning.word }
+                            .takeIf { state.lyricsFor?.let { ReadingReport.takes(it, meaning.word, meaning.word.shown(learning.romajiTyped)) } == true },
+                        flag = flag
                     ) { actions.onFindExamples(index) }
                 }
             }
@@ -2494,7 +2503,7 @@ private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?
         var at = 0
         parts.forEach { part ->
             // A part with a reading stays whole; one without wraps as the lyrics do.
-            val pieces = if (part.reading == null) WORDS.findAll(part.text).map { it.value }.toList() else listOf(part.text)
+            val pieces = if (part.reading == null) WORDS.matchesIn(part.text).map { it.value }.toList() else listOf(part.text)
             pieces.forEach { piece ->
                 val start = at
                 at += piece.length

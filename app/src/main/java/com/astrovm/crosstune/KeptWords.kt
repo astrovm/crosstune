@@ -37,6 +37,7 @@ internal data class KeptWords(
         .put("syncPoints", syncPoints.json { JSONArray().put(it.lineMs).put(it.songMs) })
         .put("script", learning.script?.name)
         .put("readings", learning.lines.json(::readingJson))
+        .put("readingsUnfinished", learning.readingsUnfinished)
         .put("translations", learning.translations.json { it ?: JSONObject.NULL })
         .put("fromRomaji", learning.fromRomaji)
         .put("madeWith", madeWith)
@@ -62,6 +63,8 @@ internal data class KeptWords(
                 Learning(
                     script = if (kept.has("script")) Script.valueOf(kept.getString("script")) else null,
                     lines = kept.getJSONArray("readings").list(::reading),
+                    // Kept before this was said, they may lack UtaTen's: read again once.
+                    readingsUnfinished = kept.optBoolean("readingsUnfinished", true),
                     translations = kept.getJSONArray("translations").list { array, index -> if (array.isNull(index)) null else array.getString(index) },
                     fromRomaji = kept.getBoolean("fromRomaji")
                 ),

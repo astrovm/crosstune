@@ -40,31 +40,31 @@ internal const val SAME_RECORDING_LENGTH_MS = 3_000L
  * A credit line: who wrote, composed, arranged, produced or published it, in Chinese, Japanese or English: "SP：…".
  * A Chinese label of two characters or more needs no colon: "编曲 Someone".
  */
-private val netEaseCredit = Regex(
+private val netEaseCredit = phoneRegex(
     """^\s*(?:(?:作词|作詞|作曲|编曲|編曲|制作人|製作人)\s+\S|(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer|OP|SP)\s*[:：])""",
     RegexOption.IGNORE_CASE
 )
 
 /** What parts a title's words. */
-private val whitespace = Regex("""\s+""")
+private val whitespace = phoneRegex("""\s+""")
 
 /** What a contributor ends a song with, not sung: "END", "THE END", "music...". */
-private val closingFiller = Regex("""(?:the\s+)?end\.?|music\s*(?:\.{2,}|…)""", RegexOption.IGNORE_CASE)
+private val closingFiller = phoneRegex("""(?:the\s+)?end\.?|music\s*(?:\.{2,}|…)""", RegexOption.IGNORE_CASE)
 
 /** A note under a heading, not sung: wholly in brackets, "（Some Writer / Another）", or who it's by, "BY SOMEONE". */
-private val headingNote = Regex("""[（(\[].*[）)\]]|by\s+\S.*""", RegexOption.IGNORE_CASE)
+private val headingNote = phoneRegex("""^(?:[（(\[].*[）)\]]|by\s+\S.*)""", RegexOption.IGNORE_CASE)
 
 /** A bracketed stretch, in any of the brackets lyrics are written with: "（repeat and fade）", "(x2)", "[fade out]", "【2x】". */
-private val bracketed = Regex("""[（(\[【][^（()）\[\]【】]*[）)\]】]""")
+private val bracketed = phoneRegex("""[（(\[【][^（()）\[\]【】]*[）)\]】]""")
 
 /** What a note on how a song is played says besides its direction: "repeat and fade", "fade out", "repeat chorus 2 times". */
 private val noteFiller = setOf("and", "to", "in", "out", "the", "then", "till", "until", "chorus", "verse", "bridge", "intro", "outro", "last", "final", "times")
 
 /** What makes a note a direction to the band: repeating, fading or a count, "x2", "2x", "×4". */
-private val noteDirection = Regex("""repeat(?:s|ed|ing)?|fad(?:e|es|ed|ing)|x\d+|\d+x""")
+private val noteDirection = phoneRegex("""repeat(?:s|ed|ing)?|fad(?:e|es|ed|ing)|x\d+|\d+x""")
 
 /** A count alone, "x2" or "2x", which no one sings. */
-private val noteCount = Regex("""x\d+|\d+x""")
+private val noteCount = phoneRegex("""x\d+|\d+x""")
 
 /**
  * Whether what's in a bracket is a note on how the song is played, not sung: only words of such a
@@ -73,7 +73,7 @@ private val noteCount = Regex("""x\d+|\d+x""")
  */
 private fun isPerformanceNote(inside: String): Boolean {
     val words = Normalizer.normalize(inside, Normalizer.Form.NFKC).lowercase().replace('×', 'x')
-        .split(Regex("""[^\p{L}\p{N}]+""")).filter { it.isNotEmpty() }.toSet()
+        .split(phoneRegex("""[^\p{L}\p{N}]+""")).filter { it.isNotEmpty() }.toSet()
     val counted = "times" in words && words.any { word -> word.all(Char::isDigit) }
     val onlyNote = words.all { it in noteFiller || noteDirection.matches(it) || it.all(Char::isDigit) }
     return onlyNote && (counted || words.any(noteDirection::matches)) && (words.size >= 2 || noteCount.matches(words.first()))
@@ -81,7 +81,7 @@ private fun isPerformanceNote(inside: String): Boolean {
 
 /** Which characters of [text] are performance notes, with the space before each; null when it has none. A note that starts the line leaves a space to trim. */
 private fun noteMask(text: String): BooleanArray? {
-    val notes = bracketed.findAll(text).filter { isPerformanceNote(it.value.substring(1, it.value.length - 1)) }.toList()
+    val notes = bracketed.matchesIn(text).filter { isPerformanceNote(it.value.substring(1, it.value.length - 1)) }.toList()
     if (notes.isEmpty()) return null
     val cut = BooleanArray(text.length)
     for (note in notes) {
@@ -143,25 +143,25 @@ private fun endBeforeNote(line: LyricLine, cutWords: List<TimedWord>): Long? {
 }
 
 /** A year, as after the artist under a heading: "The Band（1972）". */
-private val year = Regex("""(?:19|20)\d\d""")
+private val year = phoneRegex("""(?:19|20)\d\d""")
 
 /** A credit NetEase opens some songs with, a short label and who: "Producers: …", "Writers：…", "母帯工程師：…". */
-private val netEaseOpeningCredit = Regex("""^([^:：]{1,40}?)\s*[:：]\s*\S""")
+private val netEaseOpeningCredit = phoneRegex("""^([^:：]{1,40}?)\s*[:：]\s*\S""")
 
 /** A credit NetEase closes some songs with, a part and who played it: "Bass Guitar : John Deacon", "贝斯：Someone". */
-private val netEaseClosingCredit = Regex("""^([^:：]{1,60})\s*[:：]\s*\S""")
+private val netEaseClosingCredit = phoneRegex("""^([^:：]{1,60})\s*[:：]\s*\S""")
 
 /** Where it was made, or who published it, which can come among those credits: "Recorded at Rockfield Studio, …". */
-private val netEaseStudio = Regex("""^(?:(?:Recorded|Mixed|Mastered)\b[^:：]*\bat|Published by)\b""", RegexOption.IGNORE_CASE)
+private val netEaseStudio = phoneRegex("""^(?:(?:Recorded|Mixed|Mastered)\b[^:：]*\bat|Published by)\b""", RegexOption.IGNORE_CASE)
 
 /** Who sings a line, in a duet's words, rather than who played on it: "Male : …", "Chorus : …". */
-private val sungPart = Regex("""^(?:male|female|both|all|verse|chorus|hook|bridge|rap|intro|outro|pre-?chorus|男|女|合)(?:\s*\d+)?$""", RegexOption.IGNORE_CASE)
+private val sungPart = phoneRegex("""^(?:male|female|both|all|verse|chorus|hook|bridge|rap|intro|outro|pre-?chorus|男|女|合)(?:\s*\d+)?$""", RegexOption.IGNORE_CASE)
 
 /** A line NetEase's contributors fill an intro or an outro with, not sung: the song's name, "♪Artist - Song", or a dash. */
-private val netEaseFiller = Regex("""♪.*\s[-–]\s.*|[-–—]+""")
+private val netEaseFiller = phoneRegex("""^(?:♪.*\s[-–]\s.*|[-–—]+)""")
 
 /** A part's name, which some of NetEase's contributors head each part with: "[Verse 1]", "[Chorus: Drake]". */
-private val netEasePart = Regex("""\[(?:intro|verse|pre-?chorus|chorus|post-?chorus|hook|bridge|interlude|refrain|outro)\b[^\]]*\]""", RegexOption.IGNORE_CASE)
+private val netEasePart = phoneRegex("""\[(?:intro|verse|pre-?chorus|chorus|post-?chorus|hook|bridge|interlude|refrain|outro)\b[^\]]*\]""", RegexOption.IGNORE_CASE)
 
 /**
  * The lines without what NetEase's contributors fill a song's quiet parts with: a note in 【】, which
@@ -278,13 +278,13 @@ private fun isHeading(line: String, song: MusicMetadata): Boolean {
 private val headingWords = listOf("lyrics", "explicit", "featuring", "feat", "ft", "and", "the")
 
 /** A line that's only a guest's credit: "（feat. Dwele）", "ft. Someone". */
-private val guestCredit = Regex("""(?i)\s*[(（\[]?\s*(?:feat\.?|ft\.?|featuring)\s+[^)）\]]+[)）\]]?\s*""")
+private val guestCredit = phoneRegex("""(?i)^\s*+[(（\[]?\s*+(?:feat\.?|ft\.?|featuring)\s[^)）\]]++[)）\]]?\s*+""")
 
 /** A web address, as a lyrics site's ad for itself: "{more ILLIT lyrics at lyricsify.com/u/KPopLRCFiles}". */
-private val webAddress = Regex("""(?i)https?://|www\.|\b[a-z0-9-]+\.[a-z]{2,6}/""")
+private val webAddress = phoneRegex("""(?i)https?://|www\.|\b[a-z0-9-]+\.[a-z]{2,6}/""")
 
 /** A line of the header some LRCLIB answers open with: "Artist: …", "Album: …", "Title: …". */
-private val namesHeader = Regex("""(?:artist|album|title)\s*:.*""", RegexOption.IGNORE_CASE)
+private val namesHeader = phoneRegex("""(?:artist|album|title)\s*:.*""", RegexOption.IGNORE_CASE)
 
 /** Brackets a lyrics line uses, in matching pairs: (), [], （）, 【】. */
 private const val INSTRUMENTAL_OPEN = "([（【"
@@ -316,7 +316,7 @@ private fun withoutNamesHeader(words: String): String {
 }
 
 /** An apostrophe ending a word, before a space or the line's end, not one escaped: "friend' and". */
-private val apostropheForComma = Regex("""(?<=\p{L})'(?=\s|$)""")
+private val apostropheForComma = phoneRegex("""(?<=\p{L})'(?=\s|$)""")
 
 /**
  * The lines without those NetEase opens a song with that pass in a moment, quicker than anything is
@@ -330,10 +330,10 @@ private fun List<LyricLine>.withoutOpeningMoments(): List<LyricLine> =
 private const val MOMENT_MS_A_WORD = 150L
 
 /** A character NetEase lost, as it writes it: "Don't锟斤拷锟斤拷look". */
-private val lostCharacters = Regex("""\s*(?:锟斤拷)+\s*""")
+private val lostCharacters = phoneRegex("""$SPACES_START\s*+(?:锟斤拷)++\s*+""")
 
 /** UTF-8 read once as Windows-1252 or Latin-1: "Ã¢" for "â", "â€™" for "’". */
-private val misread = Regex("""[ÃÂâ][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]""")
+private val misread = phoneRegex("""[ÃÂâ][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]""")
 
 /**
  * [line] as it was meant to read, where a site broke it in a way that can be undone: an apostrophe
@@ -350,38 +350,59 @@ internal fun mended(line: String): String {
     return mended
 }
 
-/** Whether [words] are in capitals, nearly every letter that has them, as some sites keep a whole song. */
+/**
+ * Whether [words] are in capitals, nearly every letter that has them, as some sites keep a whole song. Read letter by
+ * letter, a letter past U+FFFF whole.
+ */
 private fun inCapitals(words: String): Boolean {
-    val cased = words.filter { it.isLetter() && it.lowercaseChar() != it.uppercaseChar() }
-    return cased.length >= MIN_CASED_LETTERS && cased.count(Char::isUpperCase) >= cased.length * CAPITALS_SHARE
+    val cased = words.codePoints().filter { Character.isLetter(it) && Character.toLowerCase(it) != Character.toUpperCase(it) }.toArray()
+    return cased.size >= MIN_CASED_LETTERS && cased.count(Character::isUpperCase) >= cased.size * CAPITALS_SHARE
 }
 
 /**
  * [line], written in capitals, as a sentence is written: a capital to start it and each sentence in
- * it, and I. Letter for letter, so words timed one by one can be cut from it again.
+ * it, and I. Letter for letter, a letter past U+FFFF whole, so words timed one by one can be cut from it again.
  */
 internal fun inSentenceCase(line: String): String {
-    val letters = line.map(Char::lowercaseChar).toCharArray()
+    val letters = line.codePoints().map(Character::toLowerCase).toArray()
     var capital = true
     for (i in letters.indices) {
         val letter = letters[i]
-        val alone = letters.getOrNull(i - 1)?.isLetter() != true && letters.getOrNull(i + 1)?.isLetter() != true
+        val alone = letters.getOrNull(i - 1)?.let(Character::isLetter) != true && letters.getOrNull(i + 1)?.let(Character::isLetter) != true
         when {
-            letter in ".!?" -> capital = true
-            !letter.isLetter() -> Unit
-            capital -> letters[i] = letter.uppercaseChar().also { capital = false }
-            letter == 'i' && alone -> letters[i] = 'I'
+            letter in SENTENCE_ENDS -> capital = true
+            !Character.isLetter(letter) -> Unit
+            capital -> letters[i] = Character.toUpperCase(letter).also { capital = false }
+            letter == 'i'.code && alone -> letters[i] = 'I'.code
         }
     }
-    return String(letters)
+    return String(letters, 0, letters.size)
 }
 
-/** Consecutive capital words are a phrase; spelled-out letters such as Y M C A aren't words. */
-private fun capitalWord(word: String) = word.any(Char::isUpperCase) && word.none(Char::isLowerCase)
+/** What ends a sentence in a line: ".", "!" or "?". */
+private val SENTENCE_ENDS = ".!?".map(Char::code)
 
-private fun capitalLetters(line: String): Set<Int> =
-    Regex("\\S+").findAll(line).toList().windowed(2).filter { pair -> pair.all { capitalWord(it.value) } && pair.any { it.value.count(Char::isLetter) > 1 } }
-        .flatten().flatMap { it.range }.toSet()
+/**
+ * Consecutive capital words are a phrase; spelled-out letters such as Y M C A aren't words. Read letter by letter, a
+ * letter past U+FFFF whole, "𐐀" (Deseret) too.
+ */
+private fun capitalWord(word: String) = word.codePoints().anyMatch(Character::isUpperCase) && word.codePoints().noneMatch(Character::isLowerCase)
+
+/** Where each letter of [line]'s capital phrases is, as `\S+` reads its words: between spaces a pattern reads. */
+private fun capitalLetters(line: String): Set<Int> {
+    val words = mutableListOf<IntRange>()
+    var start = -1
+    // To the end too, which ends the last word.
+    var at = 0
+    while (at <= line.length) {
+        val space = at == line.length || isPatternSpace(line[at])
+        if (space && start != -1) words += start until at
+        if (space) start = -1 else if (start == -1) start = at
+        at++
+    }
+    return words.windowed(2).filter { pair -> pair.all { capitalWord(line.substring(it)) } && pair.any { line.substring(it).codePoints().filter(Character::isLetter).count() > 1 } }
+        .flatten().flatMap { it }.toSet()
+}
 
 private fun capitalLine(line: String) = capitalLetters(line).isNotEmpty()
 
@@ -390,7 +411,14 @@ private fun needsSentenceCase(words: String) = inCapitals(words) || words.lines(
 /** Nearly all-capital sheets cannot supply names, even when a contributor missed a letter. */
 private fun caseEvidence(copy: String) = if (inCapitals(copy)) "" else copy.lines().joinToString("\n") { line ->
     val capitals = capitalLetters(line)
-    if (line.none(Char::isLowerCase)) "" else line.mapIndexed { at, letter -> if (at in capitals) letter.lowercaseChar() else letter }.joinToString("")
+    if (line.codePoints().noneMatch(Character::isLowerCase)) "" else buildString {
+        var at = 0
+        while (at < line.length) {
+            val letter = line.codePointAt(at)
+            appendCodePoint(if (at in capitals) Character.toLowerCase(letter) else letter)
+            at += Character.charCount(letter)
+        }
+    }
 }
 
 /** Words timed one by one, [texts], in sentence case as the line they make up. */
@@ -434,8 +462,6 @@ private const val GARBLED_MIN_HAN = 10
 /** Whether any of it is written in Latin letters. */
 internal fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
 
-/** A name in brackets after a name, what it's called in Chinese: " （夫·埃里克森）". */
-private val netEaseGloss = Regex("""\s*[（(][^）)]*[）)]""")
 
 /**
  * The lines up to the credits NetEase closes some songs with: at least two, with nothing sung after
@@ -501,7 +527,18 @@ internal class LyricsFinder(
          * timed. [lengthMs] is how long the recording they're timed for lasts, when the service says.
          */
         /** [source] is where the words came from, and their timing when it was borrowed, so a report can say. */
-        data class Found(val words: String, val lines: List<LyricLine> = emptyList(), val lengthMs: Long? = null, val source: String? = null) : Lyrics {
+        /**
+         * Words found for the song. [markedInstrumental] when LRCLIB's copies of the very recording, or its title, say no one
+         * sings in it, which can be wrong (Issue #861): they're kept, downloaded and timed as any, and hidden only once a
+         * listen hears sound in it and no voice.
+         */
+        data class Found(
+            val words: String,
+            val lines: List<LyricLine> = emptyList(),
+            val lengthMs: Long? = null,
+            val source: String? = null,
+            val markedInstrumental: Boolean = false
+        ) : Lyrics {
             /** Whether they're timed for a recording as long as [playingMs], or there's no telling they aren't. */
             fun timedFor(playingMs: Long?): Boolean {
                 val timedFor = lengthMs ?: return true
@@ -519,8 +556,8 @@ internal class LyricsFinder(
         data object Instrumental : Lyrics
 
         /**
-         * No service has words, and the store files the song under a genre that has none: most likely an
-         * instrumental, though no service says so, and a singer in that genre may still sing it.
+         * No service has words, and the store files the song under a genre that has none, or LRCLIB's marks or the
+         * title say no one sings in it: most likely an instrumental, though a singer may still sing it.
          */
         data object LikelyInstrumental : Lyrics
 
@@ -554,13 +591,34 @@ internal class LyricsFinder(
         val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { withContext(lookup + matching) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs).orNamedInTitle(metadata, timeoutMs) } } ?: Best(Lyrics.Unavailable)
         val found = (best as? Lyrics.Found)?.let { cleaned(it, metadata, lookup.copies.toList()) } ?: best
         if (found == Lyrics.Unavailable) keptUnderName(metadata)?.let { return FirstLook(asKept(it, metadata), final = true) }
-        // Kept at once, so the song shown again soon needs no lookup; still to be timed better, unless
-        // they're the recording's own, which no copy found elsewhere times better.
+        return settled(metadata, found, own, lookup)
+    }
+
+    /** [found], as the first look gives it: kept, and final when they're the recording's own words. */
+    private suspend fun settled(metadata: MusicMetadata, found: Lyrics, own: Boolean, lookup: Answers): FirstLook {
+        val said = if (own) found else saidInstrumental(metadata, found, lookup)
+        // Kept at once, so the song shown again soon, or offline, needs no lookup; still to be timed better,
+        // unless they're the recording's own, which no copy found elsewhere times better.
         cache?.let { cache ->
-            toCache(found, provisional = !own)?.let { cache.put(cacheKey(metadata), it) }
+            toCache(said, provisional = !own)?.let { cache.put(cacheKey(metadata), it) }
             cache.save()
         }
-        return FirstLook(asJapanWrites(found), final = own)
+        return FirstLook(asJapanWrites(said), final = own)
+    }
+
+    /**
+     * [found], as LRCLIB's marks or the title say no one sings in the recording: its words marked so, or with none,
+     * likely an instrumental, which a voice heard says is sung after all. Not a cover's words, from the song it covers, nor a track's to sing along to, which
+     * show the song's words as they always did (Issue #922).
+     */
+    private fun saidInstrumental(metadata: MusicMetadata, found: Lyrics, lookup: Answers): Lyrics {
+        val said = lookup.marks(metadata.title) || SongNames.saysInstrumental(metadata.title, metadata.artist)
+        if (!said || SongNames.sungAlong(metadata.title, metadata.artist)) return found
+        return when {
+            found is Lyrics.Found -> if (found.ofTheOriginal) found else found.copy(markedInstrumental = true)
+            found == Lyrics.None || found == Lyrics.Instrumental -> Lyrics.LikelyInstrumental
+            else -> found
+        }
     }
 
     /**
@@ -568,7 +626,7 @@ internal class LyricsFinder(
      * song kept offline, played from an app that names its recording otherwise, still has its words.
      */
     private suspend fun keptUnderName(metadata: MusicMetadata): Lyrics.Found? {
-        val names = listOf(CACHE_VERSION, 15).map { version -> "$version\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}" }
+        val names = listOf(CACHE_VERSION, 16, 15).map { version -> "$version\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}" }
         return cache?.entries()?.lastOrNull { (key) -> names.any { name -> key == name || key.startsWith("$name\u0000") } }?.let { (_, kept) -> fromCache(kept)?.first }
     }
 
@@ -577,7 +635,7 @@ internal class LyricsFinder(
      * all and there's one, and kept so.
      */
     suspend fun retimed(metadata: MusicMetadata, found: Lyrics, timeoutMs: Long = TIMEOUT_MS): Lyrics {
-        val answer = (found as? Lyrics.Found)?.let { words -> withTimeoutOrNull(BORROW_TIMEOUT_MS) { withContext(matching) { timedWell(metadata, words, timeoutMs) } } } ?: found
+        val answer = (found as? Lyrics.Found)?.let { words -> timedBetter(metadata, words, timeoutMs).copy(markedInstrumental = words.markedInstrumental) } ?: found
         cache?.let { cache ->
             toCache(answer)?.let { cache.put(cacheKey(metadata), it) }
             cache.save()
@@ -585,13 +643,17 @@ internal class LyricsFinder(
         return asJapanWrites(answer)
     }
 
+    /** [words], timed as a well-timed copy of the song times them, when there's one in time. */
+    private suspend fun timedBetter(metadata: MusicMetadata, words: Lyrics.Found, timeoutMs: Long): Lyrics.Found =
+        withTimeoutOrNull(BORROW_TIMEOUT_MS) { withContext(matching) { timedWell(metadata, words, timeoutMs) } } ?: words
+
     /**
      * [found] as it would be shown now. A sheet kept when a mark such as "[Instrumental]" was still
      * taken for words, and that mark is all it holds, is an instrumental: looking it up again can't
      * say more, and a blank sheet would show nothing.
      */
     private fun asKept(found: Lyrics.Found, song: MusicMetadata): Lyrics {
-        val clean = asJapanWrites(cleaned(found, song)) as Lyrics.Found
+        val clean = asJapanWrites(cleaned(found, song))
         val blank = clean.words.isBlank() && clean.lines.all { it.text.isBlank() }
         return if (blank && found.words.lineSequence().any(::isInstrumentalMark)) Lyrics.Instrumental else clean
     }
@@ -600,19 +662,19 @@ internal class LyricsFinder(
      * Words in Japanese as Japan writes them, as NetEase, a Chinese site, often has them written
      * China's way: see [Readings.asJapanWrites].
      */
-    private fun asJapanWrites(found: Lyrics): Lyrics {
-        if (found !is Lyrics.Found || Readings.scriptOf(found.words.lines()) != Script.JAPANESE) return found
-        return Lyrics.Found(
-            found.words.lines().joinToString("\n", transform = Readings::asJapanWrites),
-            found.lines.map { line ->
+    private fun asJapanWrites(found: Lyrics): Lyrics = (found as? Lyrics.Found)?.let(::asJapanWrites) ?: found
+
+    private fun asJapanWrites(found: Lyrics.Found): Lyrics.Found {
+        if (Readings.scriptOf(found.words.lines()) != Script.JAPANESE) return found
+        return found.copy(
+            words = found.words.lines().joinToString("\n", transform = Readings::asJapanWrites),
+            lines = found.lines.map { line ->
                 // The comma left off a line is left off its last word.
                 val words = line.words.map { it.copy(text = Readings.inJapansKanji(it.text)) }.toMutableList()
                 val last = words.indexOfLast { it.text.isNotBlank() }
                 if (last >= 0) words[last] = words[last].copy(text = Readings.asJapanWrites(words[last].text))
                 line.copy(text = Readings.asJapanWrites(line.text), words = words)
-            },
-            found.lengthMs,
-            found.source
+            }
         )
     }
 
@@ -693,7 +755,7 @@ internal class LyricsFinder(
         val official = async { fromYouTubeMusic(metadata, timeoutMs)?.seen() }
         // Words timed word by word beat any timed a line at a time, and only NetEase has them.
         val byWord = async { (fromNetEase(metadata, null, timeoutMs).seen() as? Lyrics.Found)?.takeIf { timing(it) == WORD_TIMED } }
-        val elsewhere = async { anywhere(metadata, timeoutMs) }
+        val elsewhere = async { anywhere(metadata, timeoutMs, recording = true) }
         val own = official.await()
         // Other copies cannot improve this recording's own times. Only capitalized words need
         // their case evidence before those copies are cancelled.
@@ -824,7 +886,7 @@ internal class LyricsFinder(
 
     /** Who Apple Music's page for the store's song [id] says wrote it; none when it says none, or won't answer. */
     private suspend fun writersOf(id: Long): Set<String> = try {
-        credit.findAll(browserPage("$APPLE_MUSIC_SONG_URL$id")).filter { writerRole.containsMatchIn(it.groupValues[2]) }.map { it.groupValues[1].lowercase() }.toSet()
+        credit.matchesIn(browserPage("$APPLE_MUSIC_SONG_URL$id")).filter { writerRole.containsMatchIn(it.groupValues[2]) }.map { it.groupValues[1].lowercase() }.toSet()
     } catch (_: IOException) {
         emptySet()
     }
@@ -877,6 +939,7 @@ internal class LyricsFinder(
         JSONObject()
             .put("words", found.words)
             .apply { if (provisional) put("provisional", true) }
+            .apply { if (found.markedInstrumental) put("marked", true) }
             .apply { found.lengthMs?.let { put("length", it) } }
             .apply { found.source?.let { put("source", it) } }
             .put("lines", JSONArray().apply { found.lines.forEach { put(lineToCache(it)) } })
@@ -902,7 +965,8 @@ internal class LyricsFinder(
             val lines = json.getJSONArray("lines").let { list ->
                 (0 until list.length()).map { index -> lineFromCache(list.getJSONArray(index)) }
             }
-            Lyrics.Found(json.getString("words"), lines, json.optLong("length", -1L).takeIf { it > 0 }, json.optString("source").ifEmpty { null }) to json.optBoolean("provisional")
+            Lyrics.Found(json.getString("words"), lines, json.optLong("length", -1L).takeIf { it > 0 }, json.optString("source").ifEmpty { null }, json.optBoolean("marked")) to
+                json.optBoolean("provisional")
         } catch (_: JSONException) {
             null
         }
@@ -913,16 +977,22 @@ internal class LyricsFinder(
      * gives "ミステリー・ガール - Mystery Girl", under each of them, and last under its bare title: a
      * video named "Song (Loop y Extendido)" has the song's words, though no one keeps them under that.
      * Words in Latin letters, Japanese in romaji or Korean, found under one give way to the song's
-     * own, in its script, under another, when they're timed as well.
+     * own, in its script, under another, when they're timed as well. For the [recording] played, the names
+     * LRCLIB's copies mark instrumental under are noted in the lookup's [Answers], as the words found may be
+     * another recording's (Issue #861).
      */
-    private suspend fun anywhere(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
+    private suspend fun anywhere(metadata: MusicMetadata, timeoutMs: Long, recording: Boolean = false): Lyrics {
         var fallback: Lyrics.Found? = null
         val names = SongNames.titleNames(metadata.title).distinct()
         val answers = (names + SongNames.bareTitle(metadata.title)).distinct().map { title ->
             val kept = fallback
             // A bare title may name another edit; timedWell checks whether its times can be lent.
             if (title !in names && kept != null && romanizedScript(kept.words) == null) return kept
-            underName(metadata.copy(title = title), timeoutMs).also { answer ->
+            val marks = Marks()
+            withContext(marks) { underName(metadata.copy(title = title), timeoutMs) }.also { answer ->
+                // The bare title is another recording's name, as "Song" is for "Song (Piano Version)".
+                val lookup = currentCoroutineContext()[Answers]?.takeIf { recording && title in names }
+                if (marks.marked) lookup?.marked?.add(title) else if (answer is Lyrics.Found) lookup?.named = true
                 if (answer is Lyrics.Found) {
                     val native = romanizedScript(answer.words) == null
                     fallback = if (kept == null) answer else betterNamed(kept, answer)
@@ -1122,6 +1192,8 @@ internal class LyricsFinder(
     private suspend fun wordsOf(answers: List<Answer>, metadata: MusicMetadata, timeoutMs: Long): Lyrics? {
         // The service's own answers first, then a close one, as [ExactMatcher] does. Among those, one
         // with timed words wins, so they can follow the song.
+        // Some copies of an instrumental hold the song's words, sent for its name (Issue #861): noted, for the voice to settle.
+        if (noOneSings(answers, metadata)) currentCoroutineContext()[Marks]?.marked = true
         val named = answers.filter { it.isExact(metadata) }.ifEmpty { answers.filter { it.belongsTo(metadata) } }
         // Timed copies of different lengths are different takes, e.g. a live one named the same, so
         // the one as long as the song comes first: as the app playing it or its service says, or
@@ -1135,6 +1207,17 @@ internal class LyricsFinder(
         // Timed words are the words too, once their timings are taken off.
         val words = song.plain() ?: lines.joinToString("\n") { it.text }.trim().ifEmpty { return Lyrics.Instrumental.takeIf { named.any(Answer::instrumental) } }
         return Lyrics.Found(words, lines, song.lengthMs(), LRCLIB)
+    }
+
+    /**
+     * Whether LRCLIB's copies of the very recording [metadata] names mostly say no one sings in it: two at least,
+     * as one may be a copy sent with no words, as a sung song of 欅坂46's has. Another recording's copies say
+     * nothing of it, so they're left out (Issue #861).
+     */
+    private fun noOneSings(answers: List<Answer>, metadata: MusicMetadata): Boolean {
+        val copies = answers.filter { it.isRecording(metadata) }
+        val marked = copies.count(Answer::instrumental)
+        return marked >= MIN_MARKED && marked * 2 > copies.size
     }
 
     /**
@@ -1355,13 +1438,13 @@ internal class LyricsFinder(
                     doc.optString("art").let { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, SongNames.withGuests(metadata.artist, metadata.title)) }
             } ?: return@withTimeoutOrNull Lyrics.None
             val page = LETRAS_URL.toHttpUrl().newBuilder().addPathSegment(song.optString("dns")).addPathSegment(song.optString("url")).build()
-            val shown = withoutAds(browserPage(page.toString()))
+            val shown = withoutLetrasAds(browserPage(page.toString()))
             // A song in another language has Letras's own translation beside it: its words are the ones on the left.
-            val content = (letrasOriginal.find(shown) ?: letrasWords.find(shown))?.groupValues?.get(1)
+            val content = letrasOriginal(shown) ?: letrasWords.firstBetween(shown)
             // An instrumental's page says so where the words would be, in the page's language.
             if (content?.contains(LETRAS_INSTRUMENTAL) == true) return@withTimeoutOrNull Lyrics.Instrumental
             val words = content
-                ?.replace(letrasStanza, "\n\n")?.replace(letrasBreak, "\n")?.replace(letrasTag, "")
+                ?.replace(letrasStanza, "\n\n")?.replace(letrasBreak, "\n")?.let(::withoutTags)
                 ?.let { ChordFinder.unescape(it).trim() }?.takeIf { it.isNotEmpty() }
             words?.let { Lyrics.Found(it, source = LETRAS) } ?: Lyrics.None
         } catch (_: IOException) {
@@ -1423,39 +1506,15 @@ internal class LyricsFinder(
     private fun geniusWords(page: String, title: String): String? {
         // A box of lyrics starts with the page's language menu ("Translations", "Romanization") and the name it opens with,
         // all marked as not part of the words.
-        val body = withoutBoxes(page, geniusNotWords)
-        val boxes = geniusBox.findAll(body).map { start ->
-            var depth = 0
-            val end = letrasBox.findAll(body, start.range.first).firstOrNull { tag ->
-                depth += if (tag.value == "</div>") -1 else 1
-                depth == 0
-            }
-            body.substring(start.range.last + 1, end?.range?.first ?: body.length)
-        }.filter { it.isNotBlank() }.joinToString("\n")
-        val text = ChordFinder.unescape(boxes.replace(letrasBreak, "\n").replace(letrasTag, ""))
+        val body = withoutGeniusNotWords(page)
+        val boxes = geniusBoxes(body).filter { it.isNotBlank() }.joinToString("\n")
+        val text = ChordFinder.unescape(withoutTags(boxes.replace(letrasBreak, "\n")))
         val lines = text.lines().map { it.trim() }
         // The first box opens with the song's name and "Lyrics", and maybe how the page calls it.
         val opening = lines.firstOrNull()?.takeIf { it.startsWith(title) && " Lyrics" in it }
         val words = lines.drop(if (opening != null) 1 else 0).filterNot { geniusTag.matches(it) }
-            .joinToString("\n").replace(Regex("""\n{3,}"""), "\n\n").trim()
+            .joinToString("\n").replace(phoneRegex("""\n{3,}"""), "\n\n").trim()
         return words.ifEmpty { null }
-    }
-
-    /** [page] without the ads Letras puts between a song's verses, each a box of boxes, taken out whole. */
-    private fun withoutAds(page: String): String = withoutBoxes(page, letrasAd)
-
-    /** [page] without each box that [opening] starts, and all that's inside it. */
-    private fun withoutBoxes(page: String, opening: Regex): String {
-        var text = page
-        while (true) {
-            val start = opening.find(text)?.range?.first ?: return text
-            var depth = 0
-            val end = letrasBox.findAll(text, start).firstOrNull { tag ->
-                depth += if (tag.value == "</div>") -1 else 1
-                depth == 0
-            } ?: return text
-            text = text.removeRange(start, end.range.last + 1)
-        }
     }
 
     /** A page that only answers a request that looks like a browser's. */
@@ -1555,6 +1614,19 @@ internal class LyricsFinder(
 
         val copies = ConcurrentLinkedQueue<Lyrics.Found>()
 
+        /** The recording's names LRCLIB's copies mark instrumental under. */
+        val marked = ConcurrentLinkedQueue<String>()
+
+        /** Whether words were found under one of the recording's names that isn't [marked]. */
+        @Volatile
+        var named = false
+
+        /**
+         * Whether LRCLIB marks the recording played as [title] instrumental: under that name, or under another of
+         * its names with no words found under the rest, as a sung song may have a name an instrumental has too.
+         */
+        fun marks(title: String) = title in marked || (marked.isNotEmpty() && !named)
+
         private val answers = mutableMapOf<String, CompletableDeferred<Any>>()
 
         suspend fun of(url: String, ask: suspend () -> Any): Any {
@@ -1570,6 +1642,14 @@ internal class LyricsFinder(
                 throw e
             }
         }
+    }
+
+    /** Whether LRCLIB's copies, asked for under one name, mark the recording instrumental: see [noOneSings]. */
+    private class Marks : AbstractCoroutineContextElement(Marks) {
+        companion object Key : CoroutineContext.Key<Marks>
+
+        @Volatile
+        var marked = false
     }
 
     private suspend fun parse(url: String, referer: String? = null): Any {
@@ -1621,6 +1701,19 @@ internal class LyricsFinder(
          */
         fun isExact(metadata: MusicMetadata) =
             SongNames.normalize(title) == SongNames.normalize(metadata.title) && SongNames.sameArtist(artist, metadata.artist)
+
+        /**
+         * The very recording, name for name but for a guest or remaster tag, so not "Song (Inst.)" for "Song (feat.
+         * Guest)"; by its artist, not one whose name holds theirs, "Band Piano Tribute"; not on an album of
+         * instrumentals, "Album (Instrumentals)", whose recording is named as the sung one; and as long, when both say.
+         */
+        fun isRecording(metadata: MusicMetadata): Boolean {
+            if (!SongNames.same(title, metadata.title) || SongNames.artists(artist).none { it in SongNames.artists(metadata.artist) }) return false
+            if (SongNames.albumOfInstrumentals(json.optString("albumName"))) return false
+            val copyMs = lengthMs() ?: return true
+            val playingMs = metadata.lengthMs ?: return true
+            return abs(copyMs - playingMs) <= SAME_LENGTH_MS
+        }
 
         /**
          * The same song, near enough: LRCLIB credits an artist as others do, so "Randy" is in
@@ -1683,11 +1776,11 @@ internal class LyricsFinder(
          * A movement index at the start of a title or after a colon: "1. Allegro", "Op. 3: IV. Allegro".
          * The period keeps a pronoun, "I Want You", and a work number, "Op. 3", from being read as one.
          */
-        private val MOVEMENT_INDEX = Regex("""(^|:\s*)(\d{1,2}|[IVXLCDM]{1,7})\.(?=\s)""", RegexOption.IGNORE_CASE)
+        private val MOVEMENT_INDEX = phoneRegex("""(^|:\s*)(\d{1,2}|[IVXLCDM]{1,7})\.(?=\s)""", RegexOption.IGNORE_CASE)
         private const val GENIUS_FUZZY_LENGTH = 7
         private const val GENIUS_MAX_TITLE = 256
-        private val GENIUS_LATIN_NAME = Regex("[a-z0-9]+")
-        private val GENIUS_ALTERNATE_TITLE = Regex("""([^()]+)\s*\(([^()]+)\)""")
+        private val GENIUS_LATIN_NAME = phoneRegex("[a-z0-9]+")
+        private val GENIUS_ALTERNATE_TITLE = phoneRegex("""^([^()]++)\(([^()]++)\)""")
         const val GENIUS_URL = "https://genius.com/"
         const val GENIUS_SEARCH_URL = "https://genius.com/api/search/multi"
 
@@ -1712,22 +1805,102 @@ internal class LyricsFinder(
         const val LETRAS = "letras"
         const val GENIUS = "genius"
         const val LETRAS_BROWSER = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-        val letrasWords = Regex("""<div class="lyric-content[^"]*">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+        val letrasWords = PageParts(phoneRegex("""<div class="lyric-content"""), phoneRegex("</div>"), tagEnd = "\">")
 
-        /** On a page with Letras's own translation beside the song, the song's words, after its name. */
-        val letrasOriginal = Regex("""<div class="lyric-translation-left">\s*(?:<strong>.*?</strong>)?(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
-        private val letrasBox = Regex("""<div\b|</div>""")
-        private val letrasAd = Regex("""<div id="pub_""")
-        private val geniusNotWords = Regex("""<div\b[^>]*data-exclude-from-selection="true"[^>]*>""")
-        private val geniusBox = Regex("""<div\b[^>]*data-lyrics-container="true"[^>]*>""")
-        private val geniusTag = Regex("""\[[^\]]*]""")
+        /**
+         * On a page with Letras's own translation beside the song, the song's words, after its name, as main's
+         * `<div class="lyric-translation-left">\s*(?:<strong>.*?</strong>)?(.*?)</div>` read them: after the name only when
+         * a `</div>` follows it, and up to the first `</div>`.
+         */
+        fun letrasOriginal(page: String): String? {
+            val open = page.indexOf(LETRAS_LEFT).orNone() ?: return null
+            val words = spacesEnd(page, open + LETRAS_LEFT.length)
+            if (page.startsWith(STRONG, words)) {
+                // From the `<strong>`, which isn't a `</strong>`.
+                val nameEnd = page.indexOf(STRONG_END, words).orNone()?.plus(STRONG_END.length)
+                nameEnd?.let { page.indexOf(BOX_END, it).orNone() }?.let { return page.substring(nameEnd, it) }
+            }
+            val end = page.indexOf(BOX_END, words).orNone() ?: return null
+            return page.substring(words, end)
+        }
+
+        private const val LETRAS_LEFT = """<div class="lyric-translation-left">"""
+        private const val STRONG = "<strong>"
+        private const val STRONG_END = "</strong>"
+        private const val BOX_END = "</div>"
+        private val letrasAd = phoneRegex("""<div id="pub_""")
+        internal val geniusNotWords = PageParts(phoneRegex("""<div\b"""), null, holds = "data-exclude-from-selection=\"true\"")
+        internal val geniusBox = PageParts(phoneRegex("""<div\b"""), null, holds = "data-lyrics-container=\"true\"")
+        private val geniusTag = phoneRegex("""^\[[^\]]*]""")
+
+        /** [page] without the ads Letras puts between a song's verses, each a box of boxes, taken out whole. */
+        internal fun withoutLetrasAds(page: String): String =
+            withoutBoxes(page, letrasAd.matchesIn(page).map { it.range.first }) { window -> letrasAd.find(window)?.range?.first }
+
+        /** [page] without the boxes Genius marks as not part of a song's words, its language menu and the name it opens with. */
+        internal fun withoutGeniusNotWords(page: String): String =
+            withoutBoxes(page, geniusNotWords.allIn(page).map { it.whole.first }) { window -> geniusNotWords.firstIn(window)?.whole?.first }
+
+        /**
+         * What's in each of [body]'s boxes of lyrics, to where it closes, or to the end where it doesn't. A box whose tag
+         * ends on the `>` of a `</div>`, `<div data-lyrics-container="true"</div>`, closes there, as main counted, so it
+         * has no words, where main threw. A box inside another is in its words already, so it isn't read again: main read
+         * it again, and on a page of boxes that never close, each to the end, that was time and memory squared.
+         */
+        internal fun geniusBoxes(body: String): Sequence<String> = sequence {
+            val tags = BoxTags(body)
+            var read = 0
+            for (box in geniusBox.allIn(body)) {
+                if (box.whole.first < read) continue
+                val words = box.whole.last + 1
+                read = (tags.closing(tags.at(box.whole.first)) ?: body.length).coerceAtLeast(words)
+                yield(body.substring(words, read))
+            }
+        }
+
+        /**
+         * [page] without each box that starts where [openings] says, the first again and again, and all that's inside it,
+         * as main took them out: from the first opening on the page left, to the `</div>` where as many have closed as
+         * opened since. A box that never closes ends it: it and all after it stay. [openings] are where one opens on
+         * [page], in order; [joined] finds where one opens in a short text, as a cut can join a `<di` to a `v` after it.
+         * Each opening and each tag is looked for once, so a page of boxes is read in time in step with it, where main
+         * looked again from the start of the page for each.
+         */
+        private fun withoutBoxes(page: String, openings: Sequence<Int>, joined: (String) -> Int?): String {
+            val tags = BoxTags(page)
+            val kept = StringBuilder()
+            val opens = openings.iterator()
+            var from = 0
+            var next = -1
+            val nextCloses = NextFound(page, ">")
+            while (true) {
+                // One a cut made is first, as all before the cut opened none. It opens before the cut and ends after.
+                val tail = minOf(kept.length, JOIN_REACH)
+                // To the next `>`, which it takes: the opening's tag ends on it, or the opening ends before it.
+                val window = kept.substring(kept.length - tail) + page.substring(from, minOf(page.length, nextCloses.from(from) + 1))
+                val across = joined(window)?.takeIf { it < tail }
+                if (across != null) {
+                    val end = tags.endFrom(tags.firstFrom(from)) ?: break
+                    kept.setLength(kept.length - tail + across)
+                    from = end
+                    continue
+                }
+                while (next < from) next = if (opens.hasNext()) opens.next() else return kept.append(page, from, page.length).toString()
+                val end = tags.end(tags.at(next)) ?: break
+                kept.append(page, from, next)
+                from = end
+            }
+            return kept.append(page, from, page.length).toString()
+        }
+
+        /** How far before a cut a box's opening can start and still be one only once the cut joins it, `<div id="pub_` less a letter. */
+        private const val JOIN_REACH = 12
 
         /** Someone credited on an Apple Music song page, and their roles. */
-        private val credit = Regex(""""name":"([^"]+)","roleNames":\[([^\]]*)]""")
-        private val writerRole = Regex("Songwriter|Composer|Lyricist")
-        val letrasStanza = Regex("""(?:<br\s*/?>\s*)?</p>\s*<p>""")
-        val letrasBreak = Regex("""<br\s*/?>""")
-        val letrasTag = Regex("""<[^>]+>""")
+        private val credit = phoneRegex(""""name":"([^"]+)","roleNames":\[([^\]]*)]""")
+        private val writerRole = phoneRegex("Songwriter|Composer|Lyricist")
+        val letrasStanza = phoneRegex("""(?:<br\s*/?>\s*)?</p>\s*<p>""")
+        val letrasBreak = phoneRegex("""<br\s*/?>""")
         const val NETEASE_SEARCH_URL = "https://music.163.com/api/search/get"
         const val NETEASE_LYRIC_URL = "https://music.163.com/api/song/lyric"
         const val NETEASE_REFERER = "https://music.163.com/"
@@ -1742,9 +1915,10 @@ internal class LyricsFinder(
          * Bumped when words kept from before should be looked up again, the words kept as shown too: 8 for Japanese songs NetEase writes
          * with China's kanji, and words in romaji found under a song's name in Latin letters; 11 for
          * Korean songs found in Latin letters; 12 for Korean words NetEase keeps garbled; 13 for commas it keeps as apostrophes, and the notes it opens with for a moment;
-         * 14 for untimed words kept before the other title names were checked for timings; 15 for lines timed late and rushed; 16 for spaces and name capitals in saved words.
+         * 14 for untimed words kept before the other title names were checked for timings; 15 for lines timed late and rushed; 16 for spaces and name capitals in saved words;
+         * 17 for a song's words kept for an instrumental recording of it.
          */
-        const val CACHE_VERSION = 16
+        const val CACHE_VERSION = 17
 
         /**
          * [found] without what's since learned to be left out: a site's ad, and a note on how the song is played, "（repeat and fade）", from any site, and what
@@ -1812,6 +1986,9 @@ internal class LyricsFinder(
         /** How far apart two copies of the same take of a song may be in length. */
         const val SAME_LENGTH_MS = 3_000L
 
+        /** Fewer LRCLIB copies marked instrumental than this may be a copy someone sent with no words. */
+        const val MIN_MARKED = 2
+
         /** How close two copies' times are, on the middle line, when they're timed alike. */
         const val CLOSE_MS = 2_500L
 
@@ -1833,7 +2010,7 @@ internal class LyricsFinder(
 
 
 /** The page YouTube Music shows a song's words on, by its id. */
-private val lyricsPage = Regex(""""browseId":"(MPLY[^"]+)"""")
+private val lyricsPage = phoneRegex(""""browseId":"(MPLY[^"]+)${'"'}""")
 
 /** How well words are timed: well, so they follow the song; badly; or not at all. */
 private const val WELL_TIMED = 2
@@ -1861,7 +2038,7 @@ private fun String.hasHangul() = any { it in '\uAC00'..'\uD7A3' }
 private fun String.isIn(script: Script) = if (script == Script.KOREAN) hasHangul() else hasJapanese()
 
 /** A word that could be Japanese in Latin letters: syllables like "ka", "shi", "tsu", "n", and doubled consonants. */
-private val romajiWord = Regex("""^(?:(?:ch|sh|ts|[kgsztdnhbpmyrwfj])?y?[aiueo]|n(?![aiueoy])|([kstpgdbc])(?=\1))+$""")
+private val romajiWord = phoneRegex("""^(?:(?:ch|sh|ts|[kgsztdnhbpmyrwfj])?y?[aiueo]|n(?![aiueoy])|([kstpgdbc])(?=\1))+$""")
 
 /** Little words Japanese can't do without, which English rarely uses. */
 private val romajiParticles = setOf("ni", "wa", "ga", "wo", "de", "mo", "kara", "made", "yo", "ne", "dake", "kimi", "boku", "watashi", "anata")
@@ -1872,7 +2049,7 @@ private val romajiParticles = setOf("ni", "wa", "ga", "wo", "de", "mo", "kara", 
  */
 internal fun isRomaji(words: String): Boolean {
     if (words.hasJapanese()) return false
-    val all = words.lowercase().split(Regex("[^a-z']+")).filter { it.isNotEmpty() }
+    val all = words.lowercase().split(phoneRegex("[^a-z']+")).filter { it.isNotEmpty() }
     if (all.isEmpty()) return false
     val japanese = all.count { romajiWord.matches(it) }
     return japanese * 20 >= all.size * 9 && all.count { it in romajiParticles } >= 3
@@ -1880,7 +2057,7 @@ internal fun isRomaji(words: String): Boolean {
 
 /** A word that could be Korean in Latin letters: syllables like "geu", "saek", "ttae", "jeong". */
 private val romanizedKoreanWord =
-    Regex("""^(?:(?:kk|tt|pp|ss|jj|ch|[gkndtrlmbpsjh])?(?:yae|yeo|wae|ae|ya|eo|ye|wa|oe|yo|wo|we|wi|yu|eu|ui|[aeoui])(?:ng|[knltmpgbds])?)+$""")
+    phoneRegex("""^(?:(?:kk|tt|pp|ss|jj|ch|[gkndtrlmbpsjh])?(?:yae|yeo|wae|ae|ya|eo|ye|wa|oe|yo|wo|we|wi|yu|eu|ui|[aeoui])(?:ng|[knltmpgbds])?)+$""")
 
 /** Little words Korean songs can't do without, which other languages rarely use. */
 private val koreanLittleWords = setOf(
@@ -1895,7 +2072,7 @@ private val koreanLittleWords = setOf(
  */
 internal fun isRomanizedKorean(words: String): Boolean {
     if (words.hasHangul() || words.hasJapanese()) return false
-    val all = words.lowercase().split(Regex("[^a-z']+")).filter { it.isNotEmpty() }
+    val all = words.lowercase().split(phoneRegex("[^a-z']+")).filter { it.isNotEmpty() }
     if (all.isEmpty()) return false
     val korean = all.count { romanizedKoreanWord.matches(it) }
     return korean * 20 >= all.size * 9 && all.count { it in koreanLittleWords } >= 3
@@ -1919,3 +2096,50 @@ internal fun Request.Builder.asPhoneBrowser(): Request.Builder = header("User-Ag
     .header("Sec-Fetch-Mode", "navigate")
     .header("Sec-Fetch-Dest", "document")
     .header("Sec-Fetch-Site", "none")
+
+private val BOX_TAG = phoneRegex("""<div\b|</div>""")
+
+/**
+ * The `<div` and `</div>` tags of [page], as main's `<div\b|</div>` found them, and where each box closes as main
+ * counted them: at the first `</div>` after it where as many have closed as opened since. Each is looked for once:
+ * for each place in the tags, the first tag after it where fewer are open than there.
+ */
+internal class BoxTags(page: String) {
+    private val starts: IntArray
+    private val ends: IntArray
+
+    /**
+     * For each place between the tags, by how many come before it, the first place after it where fewer boxes are open
+     * than there, or 0 for none: no place after another is the first.
+     */
+    private val fewerOpen: IntArray
+
+    init {
+        val found = BOX_TAG.matchesIn(page).toList()
+        starts = IntArray(found.size) { found[it].range.first }
+        ends = IntArray(found.size) { found[it].range.last + 1 }
+        val open = IntArray(found.size + 1)
+        found.forEachIndexed { at, tag -> open[at + 1] = open[at] + if (tag.value == "</div>") -1 else 1 }
+        fewerOpen = IntArray(open.size)
+        val waiting = ArrayDeque<Int>()
+        for (count in open.indices) {
+            while (waiting.isNotEmpty() && open[waiting.last()] > open[count]) fewerOpen[waiting.removeLast()] = count
+            waiting.addLast(count)
+        }
+    }
+
+    /** Which tag starts at [place], which is one's. */
+    fun at(place: Int): Int = starts.binarySearch(place)
+
+    /** Which tag is the first at [place] or after it, or how many there are for none. */
+    fun firstFrom(place: Int): Int = starts.binarySearch(place).let { if (it < 0) -it - 1 else it }
+
+    /** Where the `</div>` that closes the box tag [tag] opens starts, or null where none does. */
+    fun closing(tag: Int): Int? = fewerOpen[tag + 1].takeIf { it != 0 }?.let { starts[it - 1] }
+
+    /** Where the box tag [tag] opens ends, past its `</div>`, or null where none closes it. */
+    fun end(tag: Int): Int? = endFrom(tag + 1)
+
+    /** Where a box opened before tag [tag], with all after it in it, ends, past its `</div>`, or null where none closes it. */
+    fun endFrom(tag: Int): Int? = fewerOpen[tag].takeIf { it != 0 }?.let { ends[it - 1] }
+}

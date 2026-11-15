@@ -9,9 +9,9 @@ internal data class HeardStretch(val fromMs: Long, val toMs: Long, val words: Li
 /** Words as they sound, near enough to tell the same word heard and written. */
 internal object SpokenWords {
     /** Match unspaced writing by letters, as the model can split the same phrase anywhere. */
-    fun pieces(text: String): List<String> = text.split(' ').flatMap { word -> writing.findAll(plain(word)).map { it.value }.toList() }
+    fun pieces(text: String): List<String> = text.split(' ').flatMap { word -> writing.matchesIn(plain(word)).map { it.value }.toList() }
 
-    private val writing = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]|[^\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]+")
+    private val writing = phoneRegex("[\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}\\p{sc=Hangul}]|[^\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}\\p{sc=Hangul}]+")
 
     /** A word as it sounds, near enough: lower case, without accents or anything but letters and digits. */
     private fun plain(word: String): String =

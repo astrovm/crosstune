@@ -1,0 +1,160 @@
+# Crosstune's own words in notices.txt, in Japanese: a block per work, its English name, then the words it
+# translates. What a work isn't given here shows in English. Licence texts stay as published.
+# from: names the English the block was made from. When that English changes, NoticeWordsTest fails
+# and gives the new from: to set once the block is translated again.
+
+JMdict
+from: e24ab7fdbdb1
+note: Crosstune が JMdict から作った単語リストは変更されています。読み：JMdict が一通りにしか読まない二字以上の漢字の語のうち、Crosstune が別の読み方をするものだけ。かなの語：最初のかなのあとに い か う が来るよく使う語だけで、それぞれに引き方を付けたもの、そしてそこに ひ か ふ がある語。これらも CC BY-SA 4.0 です。下に Group のライセンス (https://www.edrdg.org/edrdg/licence.html)、CC BY-SA 4.0 ライセンス、JMdict のドキュメントがあります。
+
+Kuromoji
+from: 962013f376a7
+by: Atilika Inc. とコントリビューター
+
+IPADIC
+from: 429fa42d32bb
+by: Nara Institute of Science and Technology (NAIST)、ICOT Free Software の項目を含む
+license: NAIST と ICOT のライセンス
+note: Kuromoji に含まれています。mecab-ipadic-2.7.0-20070801 として。
+
+UniDic
+from: a2b1f3173cf4
+note: 初めて必要になったときに Maven Central からダウンロードされます。Kuromoji に含まれた unidic-mecab 2.1.2 として。UniDic は GPL、LGPL、BSD ライセンスのいずれかで、Crosstune は BSD ライセンスで使っています。
+
+projectM
+from: 7fe496c42dcb
+license: GNU LGPL 2.1 以降
+note: ソースからビルドしています。v4.1.8 で、app/src/main/cpp/ に変更があります：映像のサイズを保つことと、ビルド時の警告二つの修正です。このリリースの正確なソース（projectM と変更を含む）：git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune（X.Y.Z はこのアプリのバージョン）のあと、CONTRIBUTING.md のとおりにビルドしてください。projectM を変更したものに置き換えるには、そのソースからアプリをビルドし直してください。
+
+MilkDrop's FFT
+from: b45dd4b9f780
+name: MilkDrop の FFT
+note: projectM に含まれています。
+
+projectM's expression parser
+from: cdf5e51ca218
+name: projectM の式パーサー
+note: projectM に含まれています。そのパーサーは GNU Bison で生成されていて、下にある Bison の特別な例外により MIT ライセンスで共有できます。
+
+HLSLParser
+from: ce6b599ae9e8
+note: projectM に含まれています。Crosstune はビルド時に警告が出ないよう GLSLGenerator.cpp を変更していて、ファイルにもそう書いてあります。
+
+OpenGL Mathematics (GLM)
+from: 4c4874dfd640
+note: projectM に含まれています。0.9.9 として。
+
+SOIL2
+from: d450bd41d67f
+by: Martín Lucas Golini と Jonathan Dummer
+license: パブリックドメインと MIT ライセンス
+note: projectM に含まれています。その画像機能は MIT ライセンスの名前だけで本文を載せていないので、ライセンスの本文を下に載せています。
+
+stb_image and stb_image_write
+from: 63db7987e0a8
+name: stb_image と stb_image_write
+by: Sean Barrett とコントリビューター
+license: パブリックドメイン
+note: SOIL2 に含まれています。stb_image 2.05 と stb_image_write 0.98 として。
+
+Independent JPEG Group's JPEG software
+from: e98fc27b6e67
+name: Independent JPEG Group の JPEG ソフトウェア
+by: Thomas G. Lane と Independent JPEG Group
+note: このソフトウェアは、一部 Independent JPEG Group の成果に基づいています ("This software is based in part on the work of the Independent JPEG Group")：stb_image の JPEG デコーダーは、IDCT を IJG の jidctint.c から取っています。
+
+ETC1 texture code
+from: d19acea5fa8c
+name: ETC1 テクスチャのコード
+note: SOIL2 に含まれています。
+
+PowerVR SDK texture decompressor
+from: 85a1d04715d1
+name: PowerVR SDK のテクスチャ展開
+note: SOIL2 に含まれています。PowerVR SDK の PVRTDecompress.cpp から。ライセンスは SDK のもので、このファイルを含む公開履歴で最も古いリリース R14.2-v3.4 のものです。
+
+SDL
+from: d76e46658c64
+note: SOIL2 が OpenGL 拡張を探す方法は、SDL2 の方法に基づいています。
+
+MilkDrop presets
+from: c2cee12eb9f2
+name: MilkDrop のプリセット
+by: その作者。各プリセットの名前に書かれています
+license: 記載なし
+note: projectM の Cream of the Crop、Milkdrop Original、En D パックと、Ryan Geiss の 2021 年 1 月のお気に入りプリセット (https://www.geisswerks.com/about_milkdrop.html) から。設定の静止画はこれらから描いています。どれもライセンスを記載していません。下の文章は、projectM が自分のパックについて述べたものです。
+
+MilkDrop textures
+from: 1c057dfb0def
+name: MilkDrop のテクスチャ
+by: その作者。MilkDrop とそのプリセットから
+license: 記載なし
+note: projectM の Milkdrop Texture Pack から。ライセンスは記載されていません。
+
+whisper.cpp and ggml
+from: 91b66a3811fe
+name: whisper.cpp と ggml
+note: 歌詞を歌声に合わせるために、ソースからビルドしています。Crosstune はビルド時に警告が出ないよう whisper.cpp を変更していて、ファイルにもそう書いてあります。
+
+YaRN
+from: 4294a4fa5771
+by: Jeffrey Quesnelle と Bowen Peng
+note: ggml に含まれています。その回転位置のスケーリングです。
+
+Arm Optimized Routines
+from: ce7ea5fe04b5
+note: ggml に含まれています。その高速な数学関数です。Arm Optimized Routines は MIT ライセンスまたは Apache License 2.0 with LLVM Exceptions で、Crosstune は MIT ライセンスで使っています。
+
+Whisper
+from: 1f00add4de09
+note: 小さな音声モデル tiny は、初めて必要になったときに ggml-tiny-q5_1.bin としてダウンロードされます。これは Whisper の tiny モデルを、whisper.cpp の作者が whisper.cpp の形式に変換したものです。whisper.cpp が各単語を時間に合わせる方法は、Whisper の方法に基づいています。
+
+LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+from: 3ec1e4573208
+name: LLVM の libc++、libc++abi、libunwind、compiler-rt と clang のヘッダー
+note: ビジュアルと音声のライブラリに組み込まれています。Android の NDK r30 (clang 21) から。
+
+Android's C library headers
+from: 3d1c35996aaf
+name: Android の C ライブラリのヘッダー
+by: The Android Open Source Project ほか
+license: BSD と Apache License 2.0
+note: ビジュアルと音声のライブラリは、これらを使ってビルドされています。Android の NDK r30 から。本文は、これらについての NDK の通知です。
+
+Material Symbols and Material Icons
+from: dc2927001bbd
+name: Material Symbols と Material Icons
+
+Simple Icons
+from: c0698b1964e9
+by: Simple Icons のコントリビューター
+note: 音楽サービスのロゴです。各ロゴはその所有者の商標です。
+
+Roboto
+from: 4e488b8da699
+note: その太字で、TV のホーム画面のタイルにアプリ名を描いています。
+
+OkHttp and Okio
+from: ba684c746072
+name: OkHttp と Okio
+
+Error Prone and J2ObjC annotations
+from: ddff893ca7e3
+name: Error Prone と J2ObjC のアノテーション
+
+AndroidX, Jetpack Compose and Media3
+from: be8fafefbbb5
+name: AndroidX、Jetpack Compose と Media3
+
+Protocol Buffers
+from: 69810fb6ac21
+note: ホーム画面ウィジェットのライブラリ Glance に含まれています。protobuf 4.28.2 として。
+
+Compose Multiplatform
+from: 15eb7e8ff70c
+by: JetBrains s.r.o. と The Android Open Source Project
+
+Kotlin and kotlinx.coroutines
+from: 337b1a1a8db8
+name: Kotlin と kotlinx.coroutines
+by: JetBrains s.r.o. と Kotlin Programming Language のコントリビューター

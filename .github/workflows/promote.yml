@@ -1,0 +1,63 @@
+name: Promote to production
+
+# Sends a release from open testing on to Google Play's production, with its English release notes, in an edit
+# of its own: production never goes to Google's review with a testing track. The release is the one on the
+# first track of the PLAY_TRACKS repository variable (beta when it isn't set). A version not on that track is
+# refused with an error, and so is one older than production's. See "Releasing" in CONTRIBUTING.md.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to send to production, as in its tag (e.g. 2.26.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  # Every checkout prints Git's hint to name the initial branch. This is what it asks for.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  production:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    environment: release
+    permissions: {}
+    # One Google Play job at a time, across the release, promote and store listing workflows: Play takes one edit
+    # of an app at a time. GitHub keeps one job waiting in the group: a newer one cancels it, so re-run that one.
+    concurrency:
+      group: google-play
+      cancel-in-progress: false
+    steps:
+      # Only the tools that talk to Google Play and the English release notes, so none of the app's build code
+      # is checked out where the Play key is. Every version's notes are on main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/play
+            fastlane/metadata/android/en-US/changelogs
+          sparse-checkout-cone-mode: false
+
+      # Bundler and fastlane at the versions Gemfile.lock pins and checks, before the key is there: installing a
+      # gem runs its own code.
+      - name: Install fastlane
+        run: .github/play/play.sh setup
+
+      # The commit asks Google Play to keep a review in progress. While one is, Play refuses it, nothing is
+      # sent, and the job says to re-run it when the review ends.
+      - name: Send the release to production
+        env:
+          PLAY_KEY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          PLAY_TRACKS: ${{ vars.PLAY_TRACKS }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -z "$PLAY_KEY_JSON" ]]; then
+            echo "::notice::PLAY_SERVICE_ACCOUNT_JSON isn't set, so nothing was sent to Google Play"
+            exit 0
+          fi
+          .github/play/play.sh production "$VERSION"

@@ -30,6 +30,8 @@ jobs:
   build:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
+    outputs:
+      prerelease: ${{ steps.tag.outputs.prerelease }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,7 +47,9 @@ jobs:
       - name: Check the JMdict word lists are recent
         run: python3 scripts/readingsaudit/readingsaudit.py age
 
+      # A tag with a suffix, as in v2.27.0-rc.1, is a pre-release: its version code is the one of 2.27.0.
       - name: Validate tag
+        id: tag
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -65,6 +69,11 @@ jobs:
           elif ! git tag --points-at HEAD | grep -qxF "$TAG"; then
             echo "::error::Tag $TAG doesn't point at the commit being built"
             exit 1
+          fi
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
@@ -190,7 +199,8 @@ jobs:
           path: Crosstune-${{ env.TAG }}.apk
           if-no-files-found: error
 
-      # Kept as a workflow artifact for uploading to Google Play, not attached to the release.
+      # For Google Play, signed once, here, with no keystore where the Play key is. The GitHub release keeps it
+      # too, for an upload in Play Console by hand.
       - name: Upload signed App Bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -249,7 +259,7 @@ jobs:
           fi
 
   publish:
-    needs: [sign, verify]
+    needs: [build, sign, verify]
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
@@ -260,10 +270,17 @@ jobs:
         with:
           name: Crosstune-${{ env.TAG }}
 
+      # The app's update check and the site take the .apk only.
+      - name: Download signed App Bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Crosstune-${{ env.TAG }}-play
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           CERT_SHA256: ${{ needs.sign.outputs.cert_sha256 }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
           # Lets users and tools like Obtainium check the APK's signer before installing.
           notes="Signing certificate SHA-256: \`$CERT_SHA256\`"
@@ -274,23 +291,64 @@ jobs:
             # Create the tag on the built commit.
             args+=(--target "$GITHUB_SHA")
           fi
-          gh release create "$TAG" "Crosstune-$TAG.apk" "${args[@]}"
+          # A version as one string that sorts as the versions do: X, Y and Z, then 1 for X.Y.Z itself, or 0 for a
+          # test version with a suffix, which comes before it.
+          key() {
+            [[ "$1" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(.*)$ ]]
+            printf '%010d%010d%010d%d' "$((10#${BASH_REMATCH[1]}))" "$((10#${BASH_REMATCH[2]}))" \
+              "$((10#${BASH_REMATCH[3]}))" "$([[ -z "${BASH_REMATCH[4]}" ]] && echo 1 || echo 0)"
+          }
+          # The releases out as vX.Y.Z: no draft, no pre-release, and no test version from before they were marked.
+          out="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[] | [.tag_name, .draft, .prerelease] | @tsv')"
+          mine="$(key "$TAG")"
+          start="" start_key=""
+          while IFS=$'\t' read -r tag draft prerelease; do
+            if [[ "$draft" == false && "$prerelease" == false && "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              version="$(key "$tag")"
+              if [[ "$version" < "$mine" && "$version" > "$start_key" ]]; then
+                start="$tag" start_key="$version"
+              fi
+            fi
+          done <<< "$out"
+          # The notes list what changed since the final release before, never since its own test versions.
+          if [[ -n "$start" ]]; then
+            args+=(--notes-start-tag "$start")
+          fi
+          # The app's update check and the site's download button offer the latest release. A pre-release is
+          # never the latest.
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "$TAG" "Crosstune-$TAG.apk" "Crosstune-$TAG.aab" "${args[@]}"
 
-  # Sends the signed App Bundle and its release notes to Google Play's internal testing, then the same
-  # release on to PLAY_TRACK. Skipped until the PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing"
-  # in CONTRIBUTING.md.
+  # Sends the signed App Bundle and its release notes to Google Play's internal testing, then the same release
+  # on to each testing track in the PLAY_TRACKS repository variable (beta when it isn't set), with the store
+  # listing, in one edit: one review a release. Production is a step of its own, promote.yml. Skipped until the
+  # PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing" in CONTRIBUTING.md. Skipped for a pre-release too:
+  # Play takes each version code once, and v2.27.0-rc.1 has the one of 2.27.0, which 2.27.0 itself needs.
+  # A test version never goes to Play. When Play has a newer version, as for an older tag's release run again,
+  # play.sh sends nothing and the job fails.
   play:
-    needs: [sign, publish]
+    needs: [build, sign, publish]
+    if: needs.build.outputs.prerelease == 'false'
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     environment: release
     permissions: {}
+    # One Google Play job at a time, across the release, promote and store listing workflows: Play takes one edit
+    # of an app at a time. GitHub keeps one job waiting in the group: a newer one cancels it, so re-run that one.
+    concurrency:
+      group: google-play
+      cancel-in-progress: false
     steps:
-      # Only the release notes, so none of the build's code is checked out where the Play key is.
+      # Only the tools that talk to Google Play and the store text, so none of the build's code is checked out
+      # where the Play key is.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: fastlane/metadata/android/en-US/changelogs
+          sparse-checkout: |
+            .github/play
+            fastlane/metadata/android
           sparse-checkout-cone-mode: false
 
       - name: Download signed App Bundle
@@ -298,65 +356,27 @@ jobs:
         with:
           name: Crosstune-${{ env.TAG }}-play
 
+      # Bundler and fastlane at the versions Gemfile.lock pins and checks, before the key is there: installing a
+      # gem runs its own code.
+      - name: Install fastlane
+        run: .github/play/play.sh setup
+
+      # Every commit asks Google Play to keep a review in progress. While one is, Play refuses it, nothing is
+      # sent, and the job says to re-run it when the review ends. A re-run doesn't send the bundle twice.
       - name: Upload to Google Play
         env:
-          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          # A repository variable can send releases to another track, e.g. "alpha" for closed testing.
-          PLAY_TRACK: ${{ vars.PLAY_TRACK || 'production' }}
-          # The version below is pinned. Skip the update check, and send no usage metrics.
-          FASTLANE_SKIP_UPDATE_CHECK: "1"
-          FASTLANE_OPT_OUT_USAGE: "1"
+          PLAY_KEY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          # The testing tracks, with commas between, e.g. "beta,alpha" to send closed testing the same release.
+          PLAY_TRACKS: ${{ vars.PLAY_TRACKS }}
+          # The listing's languages: folders of fastlane/metadata/android, with spaces between.
+          PLAY_LANGUAGES: ${{ vars.PLAY_LANGUAGES }}
+          OLD_PLAY_TRACK: ${{ vars.PLAY_TRACK }}
         run: |
-          if [[ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]]; then
+          if [[ -z "$PLAY_KEY_JSON" ]]; then
             echo "::notice::PLAY_SERVICE_ACCOUNT_JSON isn't set, so the App Bundle wasn't sent to Google Play"
             exit 0
           fi
-          key="$RUNNER_TEMP/play.json"
-          trap 'rm -f "$key"' EXIT
-          printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$key"
-          [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+) ]]
-          code=$((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 10000 + 10#${BASH_REMATCH[3]} * 100))
-          # Just the English release notes: other folders use F-Droid's language codes, which Play doesn't all accept.
-          notes="$RUNNER_TEMP/metadata"
-          mkdir -p "$notes/en-US/changelogs"
-          cp "fastlane/metadata/android/en-US/changelogs/$code.txt" "$notes/en-US/changelogs/"
-          # bundle exec is what stops the "start using a Gemfile" notice. The version stays 2.240.1.
-          gemfile="$RUNNER_TEMP/Gemfile"
-          cat > "$gemfile" << 'EOF'
-          source "https://rubygems.org"
-          gem "fastlane", "2.240.1"
-          EOF
-          if ! command -v bundle >/dev/null; then
-            sudo gem install bundler --no-document --silent
+          if [[ -n "$OLD_PLAY_TRACK" ]]; then
+            echo "::warning::The PLAY_TRACK variable isn't read any more. PLAY_TRACKS names the testing tracks, and promote.yml sends a release to production"
           fi
-          bundle config set --global path "$RUNNER_TEMP/bundle"
-          BUNDLE_GEMFILE="$gemfile" bundle install
-          # Internal testing first: Google doesn't review it, so testers there get each release in
-          # minutes, and the track never sits on an old version.
-          BUNDLE_GEMFILE="$gemfile" bundle exec fastlane supply \
-            --package_name com.astrovm.crosstune \
-            --json_key "$key" \
-            --aab "Crosstune-$TAG.aab" \
-            --track internal \
-            --metadata_path "$notes" \
-            --skip_upload_apk true \
-            --skip_upload_metadata true \
-            --skip_upload_images true \
-            --skip_upload_screenshots true
-          if [[ "$PLAY_TRACK" == "internal" ]]; then
-            exit 0
-          fi
-          # A run of its own, as supply skips promoting in a run that uploads. The release carries
-          # its notes along.
-          BUNDLE_GEMFILE="$gemfile" bundle exec fastlane supply \
-            --package_name com.astrovm.crosstune \
-            --json_key "$key" \
-            --track internal \
-            --track_promote_to "$PLAY_TRACK" \
-            --version_code "$code" \
-            --skip_upload_apk true \
-            --skip_upload_aab true \
-            --skip_upload_metadata true \
-            --skip_upload_changelogs true \
-            --skip_upload_images true \
-            --skip_upload_screenshots true
+          .github/play/play.sh release "$TAG"

@@ -27,6 +27,7 @@
     <string name="settings_licenses">Lisanslar</string>
     <string name="license_show">Lisansı göster</string>
     <string name="license_hide">Lisansı gizle</string>
+    <string name="language_tag">tr</string>
     <string name="settings_links_title">Şuradan gelen bağlantıları aç</string>
     <string name="rule_opens_in">%1$s ile açılır</string>
     <string name="rule_default">Varsayılan (%1$s)</string>
@@ -318,7 +319,7 @@
     <string name="report_failed">Gönderilemedi. Bağlantını kontrol edip tekrar dene.</string>
     <string name="reading_wrong">Yanlış okunuş</string>
     <string name="reading_right">Doğru okunuş (isteğe bağlı)</string>
-    <string name="reading_what_goes">Kelimeyi, gösterilen okunuşu, satırını, şarkının adını, uygulama ve Android sürümlerini gönderir. Yalnızca Crosstune\'un geliştiricisi okur.</string>
+    <string name="reading_what_goes">Kelimeyi, gösterilen okunuşu ve nereden geldiğini, satırını ve yazısını, yazdığın okunuşu, şarkının adını ve sanatçısını, sözlerin nereden geldiğini, uygulama ve Android sürümlerini gönderir. Yalnızca Crosstune\'un geliştiricisi okur.</string>
     <string name="auto_report_offer">Bunun gibi sorunlar otomatik bildirilsin mi?</string>
     <string name="auto_report_offer_words_off">Bu şarkının sözleri kaymıştı. Böyle durumlar otomatik bildirilsin mi?</string>
     <string name="auto_report_yes">Evet</string>

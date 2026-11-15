@@ -1,11 +1,20 @@
 package com.astrovm.crosstune.notices
 
+import com.astrovm.crosstune.AppLanguage
 import com.astrovm.crosstune.Notice
 import com.astrovm.crosstune.Notices
+import com.astrovm.crosstune.valuesFolder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+
+/** Each work's `covers:` lines in notices.txt, by its name. Only these tests read them; the app doesn't. */
+internal val coverLines: Map<String, List<String>> by lazy {
+    Notices.blocks(checkNotNull(Notices.open("notices.txt"))).associate { lines ->
+        lines.first() to lines.filter { it.startsWith("covers: ") }.map { it.removePrefix("covers: ") }
+    }
+}
 
 /** What notices.txt's `covers:` lines leave out of [parts] and the licence lines in [marks], and the lines that cover nothing. */
 internal data class Report(val uncovered: List<String>, val unclaimed: List<String>, val stale: List<String>)
@@ -17,7 +26,7 @@ internal data class Report(val uncovered: List<String>, val unclaimed: List<Stri
  * inside projectM, needs its own notice, as a line for the outer one names only its files and words.
  */
 internal fun check(notices: List<Notice>, parts: List<String>, marks: Map<String, List<String>>, own: List<String>, notBuilt: List<String>): Report {
-    val lines = notices.flatMap { it.covers }
+    val lines = notices.flatMap { notice -> coverLines[notice.name].orEmpty() + notice.texts.map { "file $TEXTS$it" } }.distinct()
     val (claims, plain) = (lines + own + notBuilt).partition { " ~ " in it }
     fun claimed(path: String, block: String) = claims.any { it.substringBefore(" ~ ") == "source $path" && it.substringAfter(" ~ ") in block }
     val uncovered = parts.filter { part -> (plain + claims.map { it.substringBefore(" ~ ") }).none { covers(it, part) } }
@@ -26,6 +35,9 @@ internal fun check(notices: List<Notice>, parts: List<String>, marks: Map<String
         claims.filter { claim -> marks[claim.substringBefore(" ~ ").removePrefix("source ")].orEmpty().none { claim.substringAfter(" ~ ") in it } }
     return Report(uncovered, unclaimed, stale)
 }
+
+/** The folder of the licence texts, each one covered by the notices that name it. */
+internal const val TEXTS = "app/src/main/resources/com/astrovm/crosstune/notices/"
 
 /** Whether [line], "kind pattern", covers [part], "kind name": exactly, or for files and sources, * as any part of a name and ** as any path. */
 internal fun covers(line: String, part: String): Boolean {
@@ -53,19 +65,34 @@ class InventoryTest {
     )
     private val marks = inventory.sources.mapValues { (_, file) -> Inventory.marks(file) }.filterValues { it.isNotEmpty() }
 
-    /** Crosstune's own files, which need no notice. */
+    /**
+     * Crosstune's own files, which need no notice. Each is named exactly, so a new file next to them,
+     * from someone else, needs a notice. Each language's strings.xml and its words for the notices,
+     * notices-TAG.txt, are named by the app's languages, so one that isn't an app language needs a notice.
+     * The licence texts are their notices' own, by their text lines.
+     */
     private val own = listOf(
         "file app/src/main/assets/milkdrop-kinds.txt",
         // Widths measured in a browser, numbers rather than the fonts themselves.
         "file app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt",
         "file app/src/main/resources/com/astrovm/crosstune/jtotal-widths-mono.txt",
-        "file app/src/main/resources/com/astrovm/crosstune/notices/*",
-        "file app/src/main/res/values*/*",
-        "file app/src/main/res/xml/*",
-        "file app/src/main/res/layout/*",
-        "file app/src/main/res/mipmap-anydpi/*",
+        "file app/src/main/resources/com/astrovm/crosstune/notices/notices.txt",
+        "file app/src/main/res/values/themes.xml",
+        "file app/src/main/res/values-night/themes.xml",
+        "file app/src/main/res/values-night-v31/themes.xml",
+        "file app/src/main/res/values-v31/themes.xml",
+        "file app/src/main/res/xml/backup_rules.xml",
+        "file app/src/main/res/xml/data_extraction_rules.xml",
+        "file app/src/main/res/xml/shortcuts.xml",
+        "file app/src/main/res/xml/widget_crosstune.xml",
+        "file app/src/main/res/xml/widget_lyrics.xml",
+        "file app/src/main/res/xml/widget_recognize.xml",
+        "file app/src/main/res/layout/widget_preview.xml",
+        "file app/src/main/res/mipmap-anydpi/ic_launcher.xml",
+        "file app/src/main/res/mipmap-anydpi/ic_launcher_round.xml",
         "file app/src/main/res/resources.properties",
-        "file app/src/main/generated/baselineProfiles/*",
+        "file app/src/main/generated/baselineProfiles/baseline-prof.txt",
+        "file app/src/main/generated/baselineProfiles/startup-prof.txt",
         "file app/src/main/res/drawable/ic_launcher_background.xml",
         "file app/src/main/res/drawable/ic_launcher_foreground.xml",
         "file app/src/main/res/drawable/ic_launcher_monochrome.xml",
@@ -76,7 +103,8 @@ class InventoryTest {
         "file app/src/main/res/drawable/widget_background.xml",
         "file app/src/main/res/drawable/widget_preview_row.xml",
         "source app/src/main/cpp/*"
-    )
+    ) + AppLanguage.tags.map { "file app/src/main/res/${valuesFolder(it)}/strings.xml" } +
+        AppLanguage.tags.drop(1).map { "file ${TEXTS}notices-$it.txt" }
 
     /** Licence lines in code that no ABI here compiles. */
     private val notBuilt = listOf(
@@ -132,7 +160,7 @@ class InventoryTest {
 
     @Test
     fun onlyFilesAndSourcesTakeWildcards() {
-        val wide = Notices.all.flatMap { it.covers }.filter { line -> '*' in line && line.substringBefore(' ') !in setOf("file", "source") }
+        val wide = coverLines.values.flatten().filter { line -> '*' in line && line.substringBefore(' ') !in setOf("file", "source") }
         assertEquals(emptyList<String>(), wide)
         // A wildcard over a library's group once let IPADIC's and protobuf's notices go unseen.
         assertTrue(!covers("maven androidx.*:*", "maven androidx.core:core"))
@@ -159,7 +187,8 @@ class InventoryTest {
 
     @Test
     fun withoutIpadicsNoticeItsNoticeFileIsUncovered() {
-        assertEquals(listOf("maven com.atilika.kuromoji:kuromoji-ipadic!META-INF/NOTICE.md"), report(without("IPADIC")).uncovered)
+        // Its licence text too, which no other notice names.
+        assertEquals(listOf("maven com.atilika.kuromoji:kuromoji-ipadic!META-INF/NOTICE.md", "file ${TEXTS}ipadic.txt"), report(without("IPADIC")).uncovered)
     }
 
     @Test
@@ -180,6 +209,31 @@ class InventoryTest {
             "download https://example.com/added.bin"
         )
         assertEquals(added, report(parts = inventory.parts + added).uncovered)
+    }
+
+    @Test
+    fun aStringsFileInAFolderOfNoAppLanguageIsUncovered() {
+        // Strings for a newer Android, for the dark theme, or in a language the app doesn't have: from
+        // someone else until the app has that language.
+        val added = listOf("values-v34", "values-night", "values-b+sr+Latn").map { "file app/src/main/res/$it/strings.xml" }
+        assertEquals(added, report(parts = inventory.parts + added).uncovered)
+    }
+
+    @Test
+    fun aNewFileInAnyFolderOfTheApkIsCoveredByNoneOfCrosstunesOwnLines() {
+        // Each folder that app/src/main packs as it is, and new ones a change could add. A file of
+        // Crosstune's own is named exactly, so a new file from someone else, like a strings file with
+        // their words, needs a notice wherever it goes.
+        val main = File(root, "app/src/main")
+        val folders = main.walkTopDown().onEnter { it == main || it.name !in setOf("java", "cpp") || it.parentFile != main }
+            .filter { it.isDirectory && it != main }.map { it.relativeTo(root).invariantSeparatorsPath }.toList() +
+            listOf("app/src/main/res/values-eo", "app/src/main/res/raw", "app/src/main/res/font", "app/src/main/res/drawable-night")
+        assertTrue(folders.toString(), "app/src/main/res/values" in folders && "app/src/main/res/xml" in folders)
+        val added = folders.flatMap { listOf("file $it/added.xml", "file $it/added.txt") }
+        assertEquals("New files Crosstune's own lines take for its own", emptyList<String>(), added.filter { part -> own.any { covers(it, part) } })
+        // Only the folders a notice takes whole, like the MilkDrop presets', give a new file an owner.
+        val owned = added - report(parts = inventory.parts + added).uncovered.toSet()
+        assertEquals(emptyList<String>(), owned.filterNot { it.startsWith("file app/src/main/assets/milkdrop") })
     }
 
     @Test

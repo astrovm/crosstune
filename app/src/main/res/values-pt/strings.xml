@@ -27,6 +27,7 @@
     <string name="settings_licenses">Licenças</string>
     <string name="license_show">Mostrar licença</string>
     <string name="license_hide">Ocultar licença</string>
+    <string name="language_tag">pt-BR</string>
     <string name="settings_links_title">Abrir links de</string>
     <string name="rule_opens_in">Abre em: %1$s</string>
     <string name="rule_default">Padrão (%1$s)</string>
@@ -318,7 +319,7 @@
     <string name="report_failed">Não foi possível enviar. Verifique sua conexão e tente de novo.</string>
     <string name="reading_wrong">Leitura errada</string>
     <string name="reading_right">Leitura certa (opcional)</string>
-    <string name="reading_what_goes">Envia a palavra, a leitura mostrada, a linha dela, o nome da música e as versões do app e do Android. Só o desenvolvedor do Crosstune lê.</string>
+    <string name="reading_what_goes">Envia a palavra, a leitura mostrada e de onde ela veio, a linha e a escrita dela, a leitura que você digita, o título e o artista da música, de onde veio a letra e as versões do app e do Android. Só o desenvolvedor do Crosstune lê.</string>
     <string name="auto_report_offer">Relatar problemas como este automaticamente?</string>
     <string name="auto_report_offer_words_off">A letra desta música estava fora do tempo. Relatar casos assim automaticamente?</string>
     <string name="auto_report_yes">Sim</string>

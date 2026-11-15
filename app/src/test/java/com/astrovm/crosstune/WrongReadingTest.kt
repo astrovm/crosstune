@@ -89,7 +89,7 @@ class WrongReadingTest {
         compose.onNode(hasText(flagLabel) and hasClickAction().not()).assertExists()
         compose.onNode(hasTestTag(WRONG_READING_TAG) and hasText("花  か  ka")).assertExists()
         compose.onNode(hasSetTextAction() and hasText("Right reading (optional)")).assertExists()
-        compose.onNodeWithText("Sends the word, the reading shown, its line, the song's name and the app and Android versions. Only Crosstune's developer reads it.").assertExists()
+        compose.onNodeWithText("Sends the word, the reading shown and what made it, its line and script, the reading you type, the song's title and artist, where its lyrics came from, and the app and Android versions. Only Crosstune's developer reads it.").assertExists()
         compose.onNode(hasSetTextAction()).performTextInput("はな")
         send.performClick()
         assertEquals("reading 花 0 はな", calls.last())
