@@ -137,25 +137,18 @@ class PlaybackTest {
     }
 
     @Test
-    fun musicMutedForACardIsHeardAgainAndAMuteTheUserMadeIsTheirs() {
+    fun musicAnOlderBuildLeftMutedForACardIsHeardAtTheNextStartOnce() {
         val audio = app.getSystemService(AudioManager::class.java)
-        playback.quiet(true)
-        assertTrue(audio.isStreamMute(AudioManager.STREAM_MUSIC))
-        playback.quiet(false)
-        assertFalse(audio.isStreamMute(AudioManager.STREAM_MUSIC))
-        // Muted by the user, it's left so, both ways.
+        val preferences = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
         audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
-        playback.quiet(true)
-        playback.quiet(false)
-        assertTrue(audio.isStreamMute(AudioManager.STREAM_MUSIC))
-    }
-
-    @Test
-    fun musicLeftMutedWhenCrosstuneStoppedOnTheWayIsHeardAtTheNextStart() {
-        val audio = app.getSystemService(AudioManager::class.java)
-        playback.quiet(true)
+        preferences.edit().putBoolean(QUIETED_KEY, true).commit()
         MediaSessionPlayback(app, now = { NOW })
         assertFalse(audio.isStreamMute(AudioManager.STREAM_MUSIC))
+        assertFalse(preferences.contains(QUIETED_KEY))
+        // A mute the user made afterwards is theirs: the next start leaves it.
+        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+        MediaSessionPlayback(app, now = { NOW })
+        assertTrue(audio.isStreamMute(AudioManager.STREAM_MUSIC))
     }
 
     @Test

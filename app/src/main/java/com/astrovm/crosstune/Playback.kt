@@ -286,12 +286,6 @@ internal interface PlaybackSource {
      */
     fun comesBackByItself(): Boolean
 
-    /**
-     * Mutes the phone's music, [on], while an app is on its way to a card's line, as it may play a moment of
-     * something else before it's paused, or lets it be heard again. Music the user muted is left so.
-     */
-    fun quiet(on: Boolean)
-
     /** Whether the phone is in use, its screen on and unlocked, so an app [openSong] opens comes to the front now. */
     fun unlocked(): Boolean
 
@@ -401,7 +395,11 @@ internal class MediaSessionPlayback(
     private val preferences = context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     init {
-        quiet(false)
+        // Older builds muted the music while an app was opened for a card. One that stopped on the way left it muted: it is heard again.
+        if (preferences.getBoolean(QUIETED_KEY, false)) {
+            audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+            preferences.edit { remove(QUIETED_KEY) }
+        }
     }
 
     override fun hasAccess(): Boolean = context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
@@ -706,13 +704,6 @@ internal class MediaSessionPlayback(
     }
 
     override fun comesBackByItself(): Boolean = Settings.canDrawOverlays(context)
-
-    override fun quiet(on: Boolean) {
-        // Kept, so music muted by Crosstune when it stopped on the way isn't left muted: the next start lets it be heard.
-        if (on == preferences.getBoolean(QUIETED_KEY, false) || on && audio.isStreamMute(AudioManager.STREAM_MUSIC)) return
-        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, if (on) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE, 0)
-        preferences.edit { putBoolean(QUIETED_KEY, on) }
-    }
 
     // What plays first, as [whatPlays] ranks it, so the bar, the sleep timer and practice never disagree.
     override fun nowPlaying(): Heard.Song? = (whatPlays() as? WhatPlays.Named)?.song
@@ -1077,7 +1068,7 @@ private const val SESSIONS_KEPT = 32
 /** How full [KeptReads]' map may get before it grows, as Java's own maps have it. */
 private const val LOAD_FACTOR = 0.75f
 
-/** Whether the phone's music is muted by Crosstune, see [PlaybackSource.quiet]. */
+/** Whether an older build left the phone's music muted for a card, to be heard again at the next start. */
 internal const val QUIETED_KEY = "quieted_music"
 
 /** How long a session that doesn't say where it is can stay quiet before it's taken as left behind. */

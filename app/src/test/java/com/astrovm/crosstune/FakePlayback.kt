@@ -51,11 +51,6 @@ internal class FakePlayback : PlaybackSource {
     val opened: MutableList<Pair<String, String>> = CopyOnWriteArrayList()
     /** How many times Crosstune came back to the front. */
     var cameBack = 0
-    /** Whether the phone's music is muted for a card, see [quiet]. */
-    @Volatile
-    var quiet = false
-    /** Each time the music was muted (true) or let be heard again (false). */
-    val quiets: MutableList<Boolean> = CopyOnWriteArrayList()
     private val songs = MutableStateFlow<Heard.Song?>(null)
 
     /** [onThePhone], as its app names it, which a follow reads apart from [songs], whose watchers a test counts. */
@@ -185,9 +180,6 @@ internal class FakePlayback : PlaybackSource {
     /** Runs when an app is asked to play, for a test to have the app do as it would, e.g. pause itself. */
     var onPlay: (String?, Boolean) -> Unit = { _, _ -> }
 
-    /** Runs when the music is muted or let out, so a test can see the card at that moment. */
-    var onQuiet: (Boolean) -> Unit = {}
-
     /**
      * Whether the app goes where it's sent, and plays or pauses when asked, saying so as it does, as a real one does. Off,
      * it only ever says what a test has it say, as one that ignores what it's asked, or for a test that says it all itself.
@@ -299,13 +291,6 @@ internal class FakePlayback : PlaybackSource {
     var comesBackByItself = true
 
     override fun comesBackByItself() = comesBackByItself
-
-    override fun quiet(on: Boolean) {
-        if (on == quiet) return
-        quiet = on
-        quiets += on
-        onQuiet(on)
-    }
 
     /** The app each control other than play, pause and seek was sent to, null for any: skips, shuffle, repeat, like and a queued song. */
     val controlledApps: MutableList<String?> = CopyOnWriteArrayList()
