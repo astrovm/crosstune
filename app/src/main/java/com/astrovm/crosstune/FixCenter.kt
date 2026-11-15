@@ -739,7 +739,7 @@ internal fun FloatingGuide(need: Need, state: UiState) {
 /** Laid out as tall as it needs, then shrunk, from the top and in the middle, to the height there is. */
 private fun Modifier.fitsHeight() = layout { measurable, constraints ->
     val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
-    val scale = if (constraints.hasBoundedHeight) minOf(1f, constraints.maxHeight.toFloat() / placeable.height) else 1f
+    val scale = if (constraints.hasBoundedHeight && placeable.height > 0) minOf(1f, constraints.maxHeight.toFloat() / placeable.height) else 1f
     val width = placeable.width.coerceIn(constraints.minWidth, constraints.maxWidth)
     val height = (placeable.height * scale).roundToInt().coerceIn(constraints.minHeight, constraints.maxHeight)
     layout(width, height) {

@@ -99,12 +99,14 @@ class ChordsScreenTest {
 
     private fun pausedAt(ms: Long) = Following(PlaybackClock(ms, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
 
-    /** How tall [text]'s first row is, room over it for chords or readings included. */
-    private fun firstRowOf(text: String): Float {
+    /** How [text] is laid out, room over its rows for chords or readings included. */
+    private fun layoutOf(text: String): TextLayoutResult {
         val layouts = mutableListOf<TextLayoutResult>()
         lineOf(text).config[SemanticsActions.GetTextLayoutResult].action!!(layouts)
-        return layouts.single().run { getLineBottom(0) - getLineTop(0) }
+        return layouts.single()
     }
+
+    private fun TextLayoutResult.firstRow() = getLineBottom(0) - getLineTop(0)
 
     @Test
     @Config(fontScale = 2f)
@@ -112,13 +114,15 @@ class ChordsScreenTest {
         var chords by mutableStateOf(ChordsState())
         composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords), ScreenActions()) } }
         composeRule.waitForIdle()
-        val words = firstRowOf(lines[0].text)
+        val words = layoutOf(lines[0].text)
         chords = ChordsState(on = true, sheet = sheet)
         chordsOver(lines[0].text)
-        val room = firstRowOf(lines[0].text) - words
-        // Chords are 0.55 times the words' size. Android grows small text more than big at a big
-        // font, so their room is that much of the row at least; less, and the words run into them.
-        assertTrue("$room px over a row of $words px", room >= words * 0.55f - 1f)
+        val room = layoutOf(lines[0].text).firstRow() - words.firstRow()
+        // Chords are drawn a line 0.55 times the words' tall over each row. Android grows small text
+        // more than big at a big font, so that line is made bigger on its own; less room, and the
+        // words run up into the chords.
+        val chordLine = with(words.layoutInput.density) { (words.layoutInput.style.lineHeight * 0.55f).toPx() }
+        assertTrue("$room px over a row for a $chordLine px line of chords", room >= chordLine - 1f)
     }
 
     @Test
