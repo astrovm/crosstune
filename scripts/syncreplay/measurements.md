@@ -1114,3 +1114,51 @@ pace requirement. Production did not change for that test correction.
 
 The local build on d6b1377f was stopped because these production fixes replace
 it. Current full CI, replay and a fresh review remain pending.
+
+### Actual starts, owned anchor words and replay isolation
+
+The next review measured two more near-fill cases. The parent reproduced both
+in the bounded Kotlin runner before changing production. A one-word fill heard
+at 12450 ms made both middle lines go dark. Its actual start now carries the
+minimum written-letter pace into the next guess, which starts at 12690 ms.
+The same test covers five word positions from 12350 through 12600 ms.
+
+The slow-anchor probe had no independent voice for its first missing line: only
+words already matched to the anchor. Placing that line would violate the zero
+unheard-placement requirement. Matches now retain their exact heard positions.
+A near fill cannot use an anchor's owned pieces as voice evidence. The original
+probe keeps its heard second line at 15429 or 15451 ms and leaves the unheard
+first line dark. A variant with independent voice for both middle lines keeps
+starts at 13720/15460 and 14080/15820 ms. A further test leaves an infeasible
+fill dark rather than moving the next sure anchor. Existing ownership and
+minimum-pace tests still pass.
+
+All 79 focused Kotlin tests pass, including the original synthetic floors. The
+parent compiled this code and rescored all 84 recorded inputs again: two plays
+600 / 57 / 14 / 89; one play 378 / 51 / 22 / 54. Both modes still have zero
+main-right lines placed wrong and zero unheard placements. The fake 60-line
+benchmark measured 552.305 ms median and 658.490 ms maximum over three warm
+calls, in the same bounded JVM container. No phone latency is claimed.
+
+The review also reproduced duplicate mounts when SYNCREPLAY_DIR is unset. The
+container builder now combines identical destinations with their required
+access and refuses conflicting sources. Both the real JUnit runner (79 tests)
+and the fake benchmark run with that variable unset. Timing overrides are
+immutable snapshots under their content hashes. Compiler results are built in
+separate temporary folders and published atomically. New cache identities avoid
+reusing entries made by the old mutable-input path. Deterministic tests cover a
+second caller between hashing and reading, simultaneous builders, failed builds
+and old unverified entries. The replay Python suite passes 124 tests, two skipped.
+
+A focused license test run exposed a separate build-runner collision: two
+containers used different Gradle homes but the same checkout's file-hash cache.
+Queue tickets now name each checkout, including --also, before taking a build
+slot. Overlapping builds wait; distinct checkout builds still run together.
+Repeated --also paths run and mount once. All 54 build-runner tests pass, with
+real fake Git checkouts, whitespace in paths and the existing Mac-tool probes.
+Ruff and ShellCheck pass.
+
+The earlier full local build on 170240ab passed in 14m 5s: 3792 tests, zero
+failures or errors, four skips, and 22104 covered lines with zero missed lines,
+methods or classes. It predates these production fixes. Fresh full checks, the
+focused license test, independent review and final app verification are pending.

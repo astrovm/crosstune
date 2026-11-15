@@ -21,10 +21,10 @@ class SungTimingTest {
     )
 
     /** [text] sung from [startMs], each word heard where the speech model has it: a little late, at an even pace. */
-    private fun sungAt(startMs: Long, text: String): List<Pair<String, Long>> {
+    private fun sungAt(startMs: Long, text: String, letterMs: Long = SungTiming.LETTER_MS): List<Pair<String, Long>> {
         var before = 0
         return text.split(' ').map { word ->
-            (word to startMs + SungTiming.HEARD_LATE_MS + before * SungTiming.LETTER_MS).also { before += SpokenWords.pieces(word).sumOf { SpokenWords.sungLetters(it) } }
+            (word to startMs + SungTiming.HEARD_LATE_MS + before * letterMs).also { before += SpokenWords.pieces(word).sumOf { SpokenWords.sungLetters(it) } }
         }
     }
 
@@ -746,6 +746,48 @@ class SungTimingTest {
             assertEquals(mapOf(0 to 10_000L, 1 to 11_740L, 2 to 13_480L, 3 to 15_220L),
                 SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
         }
+    }
+
+    @Test
+    fun aLateOneWordFillLeavesTheNextFillRoomToBeSung() {
+        val text = listOf("Amber lanterns brighten the night", "Yeah", "Quiet rivers wander through woods", "Copper rivers bend home")
+        for (at in listOf(12_350L, 12_400L, 12_450L, 12_500L, 12_600L)) {
+            val words = sungAt(10_000, text[0]) + listOf("yeah" to at + SungTiming.HEARD_LATE_MS,
+                "la" to 13_000L + SungTiming.HEARD_LATE_MS) + sungAt(15_000, text[3])
+            assertEquals("yeah=$at", mapOf(0 to 10_000L, 1 to at, 2 to maxOf(12_661L, at + 240), 3 to 15_000L),
+                SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+        }
+    }
+
+    @Test
+    fun aSlowAnchorsLastWordLeavesTheLaterFillsRoomToBeSung() {
+        val text = listOf("Amber lanterns brighten the night", "Quiet rivers wander through woods", "Silver morning carries song", "Copper rivers bend home")
+        for (pace in listOf(155L, 170L)) {
+            val words = sungAt(10_000, text[0], pace) + listOf("la" to 10_080L + 24 * pace + SungTiming.HEARD_LATE_MS,
+                "la" to 16_000L + SungTiming.HEARD_LATE_MS) + sungAt(17_500, text[3])
+            val firstFill = 10_000 + 24 * pace
+            assertEquals("pace=$pace", mapOf(0 to 10_000 + 5 * (pace - 70), 1 to firstFill, 2 to firstFill + 1_740, 3 to 17_500L),
+                SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+        }
+    }
+
+    @Test
+    fun aSlowAnchorsWordsCannotStandInForAnUnheardMiddleLine() {
+        val text = listOf("Amber lanterns brighten the night", "Quiet rivers wander through woods", "Silver morning carries song", "Copper rivers bend home")
+        for ((pace, second) in listOf(155L to 15_429L, 170L to 15_451L)) {
+            val words = sungAt(10_000, text[0], pace) + listOf("la" to 16_000L + SungTiming.HEARD_LATE_MS) + sungAt(17_500, text[3])
+            assertEquals(mapOf(0 to 10_000 + 5 * (pace - 70), 2 to second, 3 to 17_500L),
+                SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+        }
+    }
+
+    @Test
+    fun aNearFillCannotMoveItsNextAnchorToMakeRoom() {
+        val text = listOf("Amber lanterns brighten the night", "Quiet rivers wander through woods", "Silver morning carries song", "Copper rivers bend home")
+        val words = sungAt(10_000, text[0], 200) + listOf("la" to 14_880L + SungTiming.HEARD_LATE_MS,
+            "la" to 16_000L + SungTiming.HEARD_LATE_MS) + sungAt(17_500, text[3])
+        assertEquals(mapOf(0 to 10_650L, 2 to 15_495L, 3 to 17_500L),
+            SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
     }
 
     @Test
