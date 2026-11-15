@@ -62,6 +62,21 @@ class LinkInterceptionTest {
     }
 
     @Test
+    @Config(sdk = [26, 30])
+    fun everySetupTestLinkReachesItsEnabledService() {
+        for (service in LinkInterception.HOSTS.keys) {
+            val link = testLink(service)
+            assertEquals(TEST_LINK, Uri.parse(link).fragment)
+            assertEquals(testHost(service), Uri.parse(link).host)
+            assertFalse(link, handledByCrosstune(link))
+            interception.setEnabled(service, true)
+            assertTrue(link, handledByCrosstune(link))
+            interception.setEnabled(service, false)
+            assertFalse(link, handledByCrosstune(link))
+        }
+    }
+
+    @Test
     fun soundCloudBandcampAndAudiomackLinksAreOnlySharedOrPasted() {
         // Much of what's on them is on no other service (#372), so tapped, their links stay in their own apps.
         val links = mapOf(

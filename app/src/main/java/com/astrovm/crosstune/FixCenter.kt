@@ -187,7 +187,15 @@ internal fun UiState.done(need: Need): Boolean? = when (need) {
 }
 
 /** A link of [service]'s, which opens in whatever app takes its links, Crosstune or another, [TEST_LINK] telling it apart. */
-internal fun testLink(service: MusicService): String = "https://${testHost(service)}/#$TEST_LINK"
+internal fun testLink(service: MusicService): String {
+    // The host's home page is outside our item filters, so Android would send the test to a browser.
+    val path = when (service) {
+        MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC -> "/watch?v=$TEST_LINK"
+        MusicService.APPLE_MUSIC -> "/song/$TEST_LINK"
+        else -> "/track/$TEST_LINK"
+    }
+    return "https://${testHost(service)}$path#$TEST_LINK"
+}
 
 /** One of [service]'s sites that Crosstune opens. */
 internal fun testHost(service: MusicService): String = LinkInterception.HOSTS[service].orEmpty().first()
@@ -592,8 +600,13 @@ internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<
         )
     }
     if (need == Need.Follow) {
-        // Samsung and TVs list every app, each with its switch, rather than open Crosstune's own page.
-        val access = stringResource(if (phone == Phone.SAMSUNG || phone == Phone.TV) R.string.app_name else R.string.android_allow_notification_access)
+        // Before Android 11, the list names the listener service. Samsung and TV name its app.
+        val older = Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+        val access = stringResource(when {
+            phone == Phone.SAMSUNG || phone == Phone.TV -> R.string.app_name
+            older -> R.string.lyrics_sync_service
+            else -> R.string.android_allow_notification_access
+        })
         val allow = stringResource(R.string.allow_button)
         if (!state.followRestricted) {
             // Google TV's page, opened straight away, can leave the remote stuck outside its list, as on
@@ -605,6 +618,7 @@ internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<
                     inWords(turnOn, access)
                 )
             }
+            if (older) return listOf(inWords(turnOn, access), inWords(tap, allow))
             return listOf(phone.step(turnOn, access) { AndroidPictures.AccessSwitch(phone) }, phone.step(tap, allow) { AndroidPictures.AllowDialog() })
         }
         // Android turns the first try down for an app installed from a file, and only then offers

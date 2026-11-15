@@ -242,6 +242,19 @@ class FixStepsTest {
     }
 
     @Test
+    @Config(sdk = [26, 29])
+    fun olderAndroidListsEachAppInsteadOfAnAllowNotificationAccessSwitch() {
+        showSteps(Need.Follow)
+        for (phone in Phone.entries.filter { it != Phone.TV }) {
+            steps(Need.Follow, phone)
+            composeRule.waitForIdle()
+            assertShown(turnOn(if (phone == Phone.SAMSUNG) R.string.app_name else R.string.lyrics_sync_service), tap(R.string.allow_button))
+            assertFalse(shown(turnOn(R.string.android_allow_notification_access)))
+            assertEquals(0, pictures())
+        }
+    }
+
+    @Test
     fun floatingIsSwitchedOnInTheListOfAppsOrRightThereOnSamsung() {
         showSteps(Need.Float)
         assertShown(tap(R.string.app_name), turnOn(R.string.android_display_over_apps), string(R.string.floating_permission_title))
@@ -581,7 +594,7 @@ class FixStepsTest {
         assertEquals(true, tested.done(Need.StopApp(spotify)))
         assertEquals(listOf(spotify), old.appsInTheWay)
 
-        assertEquals("https://open.spotify.com/#$TEST_LINK", testLink(MusicService.SPOTIFY))
+        assertEquals("https://open.spotify.com/track/$TEST_LINK#$TEST_LINK", testLink(MusicService.SPOTIFY))
         assertEquals(MusicService.SPOTIFY, old.testService(Need.StopApp(spotify)))
         assertEquals(MusicService.SPOTIFY, old.testService(Need.Links))
         assertNull(UiState().testService(Need.Links))
