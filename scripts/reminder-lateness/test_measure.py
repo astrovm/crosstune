@@ -702,6 +702,24 @@ class NotificationAppOpRestoreTest(unittest.TestCase):
         self.assertEqual(phone.mode, 'ignore')
 
 
+    def test_removes_a_uid_override_when_original_mode_came_from_the_package(self):
+        from measure import Phone
+
+        class FakePhone(Phone):
+            mode = 'ignore'
+            def __init__(self): pass
+            def notification_appop_state(self):
+                return (self.mode, None) if self.mode is not None else (None, 'allow')
+            def shell(self, command, data=None):
+                mode = command.split()[-1]
+                self.mode = None if mode == 'default' else mode
+                return b''
+
+        phone = FakePhone()
+        phone.restore_notification_appop((None, 'allow'))
+        self.assertEqual(phone.notification_appop_state(), (None, 'allow'))
+
+
 class BatteryStateTest(unittest.TestCase):
     def test_rejects_an_unrecognized_battery_dump(self):
         from measure import Phone

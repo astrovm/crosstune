@@ -275,7 +275,8 @@ class Phone:
     def restore_notification_appop(self, original):
         if self.notification_appop_state() == original:
             return
-        mode = original[0] or original[1]
+        # A missing UID override must be removed, so the package mode applies again.
+        mode = original[0] or 'default'
         self.shell(f'appops set --user 0 --uid {self.package} POST_NOTIFICATION {mode}')
         if self.notification_appop_state() != original:
             raise RuntimeError('Could not restore notification app-op')
