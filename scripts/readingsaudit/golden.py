@@ -23,6 +23,7 @@ GOLDEN_FILE = audit.ROOT / GOLDEN_REL
 READING_SOURCES = (
     "app/src/main/java/com/astrovm/crosstune/Readings.kt",
     "app/src/main/java/com/astrovm/crosstune/SungReadings.kt",
+    "app/src/main/java/com/astrovm/crosstune/PageParts.kt",
     "app/src/main/java/com/astrovm/crosstune/Furigana.kt",
     "app/src/main/java/com/astrovm/crosstune/UniDic.kt",
     "app/src/main/java/com/astrovm/crosstune/PhoneRegex.kt",

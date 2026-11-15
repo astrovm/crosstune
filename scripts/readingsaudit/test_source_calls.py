@@ -272,7 +272,7 @@ class Scopes(unittest.TestCase):
 class SelectedMembers(unittest.TestCase):
     """In a SELECT_MEMBERS file, what the harness uses is in, with what starting its class runs."""
 
-    def test_a_companion_brings_its_init_blocks_and_used_properties_not_the_class_s_constructor(self):
+    def test_a_companion_brings_its_eager_properties_and_init_not_the_class_s_constructor(self):
         files = {"Harness.kt": "val result = SungReadings.matched()",
                  MAIN + "SungReadings.kt": '''
                      class SungReadings(val client: Client = Network.client()) {
@@ -288,7 +288,7 @@ class SelectedMembers(unittest.TestCase):
                  MAIN + "Table.kt": 'internal const val RULE = "a"', MAIN + "Setup.kt": "object Setup { fun run() = 1 }",
                  MAIN + "Network.kt": "object Network { fun client() = Client() }", MAIN + "Client.kt": "class Client",
                  MAIN + "Cache.kt": "object Cache { fun load() = 1 }", MAIN + "Pages.kt": "object Pages { fun load() = 1 }"}
-        self.assertEqual({MAIN + "SungReadings.kt", MAIN + "Table.kt", MAIN + "Setup.kt"}, walk(files))
+        self.assertEqual({MAIN + "SungReadings.kt", MAIN + "Table.kt", MAIN + "Setup.kt", MAIN + "Pages.kt"}, walk(files))
 
     def test_a_class_that_is_made_brings_its_constructor_properties_and_init_blocks(self):
         files = {"Harness.kt": "val result = Built()",
@@ -364,6 +364,86 @@ class Reflection(unittest.TestCase):
                  "app/src/main/resources/com/astrovm/crosstune/a.txt": "a", "app/src/test/resources/com/astrovm/crosstune/b.txt": "b",
                  "app/src/main/resources/com/astrovm/crosstune/c.txt": "c"}
         self.assertEqual(set(files) - {"Harness.kt", "app/src/main/resources/com/astrovm/crosstune/c.txt"}, walk(files))
+
+
+class InitializationAndImportedLoads(unittest.TestCase):
+
+    def test_unread_eager_initializers_still_change_the_read_value(self):
+        for declared in ('object SongNames { private val setup = initialize(); fun normalize() = VALUE }',
+                         'private val setup = initialize(); fun normalize() = VALUE'):
+            call = 'SongNames.normalize()' if declared.startswith('object') else 'normalize()'
+            files = {'Harness.kt': f'val result = {call}', MAIN + 'SongNames.kt': declared,
+                     MAIN + 'Initialize.kt': 'fun initialize(): Int { VALUE = "after"; return 1 }',
+                     MAIN + 'State.kt': 'var VALUE = "before"'}
+            with self.subTest(declared=declared):
+                self.assertEqual(set(files) - {'Harness.kt'}, walk(files))
+
+    def test_unread_getters_are_not_eager_initializers(self):
+        files = {'Harness.kt': 'val result = SongNames.normalize()',
+                 MAIN + 'SongNames.kt': 'object SongNames { private val unused get() = fetch(); fun normalize() = "read" }',
+                 MAIN + 'Fetch.kt': 'fun fetch() = "not called"'}
+        self.assertEqual({MAIN + 'SongNames.kt'}, walk(files))
+
+    def test_aliases_for_class_loads_follow_literal_classes(self):
+        for imported, call in (('import java.lang.Class.forName as lookup', 'lookup("app.Adapter")'),
+                               ('import java.lang.Class as Type', 'Type.forName("app.Adapter")')):
+            files = {'Harness.kt': f'{imported}\nval result = {call}', TEST + 'Adapter.kt': 'package app\nclass Adapter'}
+            with self.subTest(imported=imported):
+                self.assertEqual({TEST + 'Adapter.kt'}, walk(files))
+
+    def test_aliased_computed_loads_and_service_loaders_fail(self):
+        for imported, call in (('import java.lang.Class.forName as lookup', 'lookup(name)'),
+                               ('import java.util.ServiceLoader as Services', 'Services.load(Runnable::class.java)'),
+                               ('import java.util.ServiceLoader.load as services', 'services(Runnable::class.java)'),
+                               ('import java.lang.System.loadLibrary as nativeCode', 'nativeCode("fake")'),
+                               ('import java.lang.Runtime as Native', 'Native.getRuntime().load("fake")'),
+                               ('import java.util.ServiceLoader.*', 'load(Runnable::class.java)')):
+            with self.subTest(imported=imported), self.assertRaisesRegex(ValueError, 'reflection|native'):
+                walk({'Harness.kt': f'{imported}\nval result = {call}'})
+
+    def test_static_java_service_loader_imports_fail_too(self):
+        files = {'Harness.kt': 'val result = Adapter.read()', TEST + 'Adapter.java':
+                 'import static java.util.ServiceLoader.load; class Adapter { static Object read() { return load(Runnable.class); } }'}
+        with self.assertRaisesRegex(ValueError, 'reflection'):
+            walk(files)
+        files[TEST + 'Adapter.java'] = files[TEST + 'Adapter.java'].replace('ServiceLoader.load;', 'ServiceLoader.*;')
+        with self.assertRaisesRegex(ValueError, 'reflection'):
+            walk(files)
+
+    def test_java_method_references_to_loaders_fail_closed(self):
+        fields = ('interface Loader { Class<?> load(String name) throws ClassNotFoundException; }\n'
+                  'class Adapter { static Loader value = Class::forName; static Object read() { return value; } }',
+                  'class Adapter { static java.util.function.Function<Class<Runnable>, java.util.ServiceLoader<Runnable>> value = java.util.ServiceLoader::load; static Object read() { return value; } }',
+                  'class Adapter { static java.util.function.Consumer<String> value = System::load; static Object read() { return value; } }',
+                  'class Adapter { static java.util.function.Function<String, java.net.URL> value = ClassLoader::getSystemResource; static Object read() { return value; } }')
+        for code in fields:
+            with self.subTest(code=code), self.assertRaisesRegex(ValueError, 'reflection|native'):
+                walk({'Harness.kt': 'val result = Adapter.read()', TEST + 'Adapter.java': code})
+
+    def test_imported_resource_loads_and_callable_loaders(self):
+        files = {'Harness.kt': 'import java.lang.ClassLoader.getSystemResourceAsStream as readResource\nval result = readResource("app/rules.txt")',
+                 'app/src/main/resources/app/rules.txt': 'used'}
+        self.assertEqual({'app/src/main/resources/app/rules.txt'}, walk(files))
+        for imported, reference in (('import java.lang.Class.forName as lookup', '::lookup'),
+                                    ('import java.util.ServiceLoader as Services', 'Services::load'),
+                                    ('import java.lang.ClassLoader.getSystemResourceAsStream as readResource', '::readResource')):
+            with self.subTest(imported=imported), self.assertRaisesRegex(ValueError, 'reflection'):
+                walk({'Harness.kt': f'{imported}\nval result = {reference}'})
+
+    def test_relative_resource_names_keep_other_receiver_packages(self):
+        for name, code in (('Harness.kt', 'package harness\nval result = app.Reader::class.java.getResourceAsStream("rules.txt")'),
+                           ('Harness.java', 'package harness; class Harness { Object result = app.Reader.class.getResourceAsStream("rules.txt"); }')):
+            files = {name: code, MAIN + 'Reader.kt': 'package app\nclass Reader',
+                     'app/src/main/resources/app/rules.txt': 'used', 'app/src/main/resources/harness/rules.txt': 'possible',
+                     'app/src/main/resources/app/other.txt': 'unused'}
+            with self.subTest(name=name):
+                self.assertEqual(set(files) - {name, 'app/src/main/resources/app/other.txt'}, walk(files, name))
+
+    def test_absolute_resource_names_stay_at_the_resource_root(self):
+        files = {'Harness.kt': 'package harness\nval result = app.Reader::class.java.getResourceAsStream("/app/rules.txt")',
+                 MAIN + 'Reader.kt': 'package app\nclass Reader', 'app/src/main/resources/app/rules.txt': 'used',
+                 'app/src/main/resources/harness/app/rules.txt': 'unused'}
+        self.assertEqual(set(files) - {'Harness.kt', 'app/src/main/resources/harness/app/rules.txt'}, walk(files))
 
 
 class Worker(unittest.TestCase):

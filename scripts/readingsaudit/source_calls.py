@@ -9,13 +9,14 @@ readings test loudly, and a missed one would hide a reading input. A class loade
 service loader, native code and a file the parser can't read fail.
 
 In the SELECT_MEMBERS files only what the harness uses is in: each member it names, what that member names, and what
-starting its class runs, the class's init blocks, constructors and supertypes. A property's initializer is in once code
-that is in uses the property: a value nothing in reads can't change a reading.
+starting its class runs, the class's init blocks, constructors and supertypes. Eager property initializers run with their class or facade too, even when their values are unread:
+an initializer can change state used by a reading.
 """
 import atexit
 import hashlib
 import json
 import os
+import posixpath
 import shutil
 import subprocess
 import sys
@@ -37,8 +38,7 @@ RESOURCE_ROOTS = tuple(f"app/src/{name}/resources" for name in SOURCE_SETS)
 SELECT_MEMBERS = {"SungReadings.kt", "UniDic.kt", "SongNames.kt"}
 CLASSIFIERS = {"class", "interface", "object", "companion"}
 TYPES = CLASSIFIERS | {"typealias"}
-# What starting a class runs for its own sake: init blocks and constructors. A property's initializer only makes its
-# value, so in a SELECT_MEMBERS file it is followed when the code that is in uses the property.
+# Starting a class runs its init blocks, constructors and eager property initializers. Unread getters do not run.
 INITIALIZERS = {"init", "constructor", "enumentry"}
 # Names every class has, or the standard library gives every value. A use of one keeps the whole class.
 EVERY_CLASS = {"javaClass", "toString", "hashCode", "equals", "let", "run", "also", "apply", "with", "takeIf", "takeUnless",
@@ -294,7 +294,7 @@ class Walk:
             child, parent = outer, outer["parent"]
         if row["parent"] == -1 and row["kind"] in ("function", "property"):
             # The file's facade class, and its annotations, start with it.
-            self.headers[path].add(-1)
+            self.initialize(path, -1)
 
     def initialize(self, path, container):
         if container in self.inited[path]:
@@ -303,7 +303,8 @@ class Walk:
         self.headers[path].add(container)
         source = self.sources[path]
         for child in source.children[container]:
-            if source.decls[child]["kind"] in INITIALIZERS:
+            row = source.decls[child]
+            if row["kind"] in INITIALIZERS or "eager" in row["flags"]:
                 self.select(path, child)
 
     def active(self, path, owner):
@@ -475,9 +476,17 @@ class Walk:
             name = self.constant(source, row["ref"])
         if name is None:
             raise ValueError(f"{source.path}:{row['l']}: a resource is loaded by a name the code computes, as reflection would: {row['text']}")
-        package = source.package.replace(".", "/")
+        normalized = posixpath.normpath(name)
+        # Class.getResource resolves against its receiver's package, which need not be the caller's.
+        # The syntax walk has no receiver types. Keep every matching relative resource conservatively.
+        suffix = tuple(part for part in normalized.split("/") if part not in ("", ".", ".."))
         for folder in RESOURCE_ROOTS:
-            for found in (self.root / folder / name.lstrip("/"), self.root / folder / package / name):
+            base = self.root / folder
+            if name.startswith("/"):
+                candidates = [base / normalized.lstrip("/")]
+            else:
+                candidates = [found for found in base.rglob("*") if suffix and found.relative_to(base).parts[-len(suffix):] == suffix]
+            for found in candidates:
                 if found.is_file():
                     self.resources.add(found.relative_to(self.root).as_posix())
 
