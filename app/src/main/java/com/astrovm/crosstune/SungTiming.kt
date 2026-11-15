@@ -104,7 +104,7 @@ internal object SungTiming {
     private fun singleWord(placed: Placed) = placed.heardMs.start.ms == placed.heardMs.endInclusive.ms
 
     /** A piece's place in the singing: its word's time, then its position in that word. No guessed time between letters. */
-    private data class HeardAt(val ms: Long, val within: Int) : Comparable<HeardAt> {
+    internal data class HeardAt(val ms: Long, val within: Int) : Comparable<HeardAt> {
         override fun compareTo(other: HeardAt): Int {
             val time = ms.compareTo(other.ms)
             return if (time != 0) time else within.compareTo(other.within)
@@ -112,7 +112,7 @@ internal object SungTiming {
     }
 
     /** A line put at [ms], by [words] heard alike, over [heardMs]. An empty span for a line filled between two. */
-    private class Placed(val line: Int, val ms: Long, val support: Double, val words: Int, val heardMs: ClosedRange<HeardAt>, writtenBefore: Int) {
+    internal class Placed(val line: Int, val ms: Long, val support: Double, val words: Int, val heardMs: ClosedRange<HeardAt>, writtenBefore: Int) {
         // b.ms - a.ms >= (b.writtenBefore - a.writtenBefore) * FAST_LETTER_MS, rearranged once.
         val orderMs = ms - writtenBefore * FAST_LETTER_MS
     }
@@ -192,7 +192,7 @@ internal object SungTiming {
      * one and end no later than its first heard piece. Lines enter together, so none follows itself.
      * A two-dimensional prefix tree answers each bound without comparing every pair of matches.
      */
-    private class ChainScores(candidates: List<Placed>, private val weights: DoubleArray, reverse: Boolean) {
+    internal class ChainScores(candidates: List<Placed>, private val weights: DoubleArray, reverse: Boolean) {
         private val times = candidates.map { it.orderMs }.distinct().sorted().toLongArray()
         private val places = candidates.flatMap { listOf(it.heardMs.start, it.heardMs.endInclusive) }.distinct().sorted()
         private val xs = IntArray(candidates.size) { k ->
@@ -309,14 +309,14 @@ internal object SungTiming {
             val wordsHeard = heard.flatMap { sung(it.words, it.fromMs) }
             val voice = wordsHeard.map { it.ms }
             val far = b.ms - a.ms > FILL_MS
-            val wordLines = between.flatMap { written.getValue(it) }.groupBy { it.text }
+            val wordLines = (listOf(a.line) + between + b.line).flatMap { written.getValue(it) }.groupBy { it.text }
                 .mapValues { (_, pieces) -> pieces.map { it.line }.distinct().size }
             val fills = put.mapIndexedNotNull { k, placed ->
                 val slotEnd = put.getOrNull(k + 1)?.ms ?: b.ms
                 val pieces = written.getValue(placed.line)
                 val after = maxOf(if (far) a.ms else placed.ms, a.heardMs.endInclusive.ms)
                 val start = if (far) {
-                    // A shared word cannot tell which of these lines was heard, even when the lines are identical.
+                    // A word shared with an anchor or another middle line cannot tell which line was heard.
                     distinctWordStarts(pieces, wordsHeard.filter {
                         val at = HeardAt(it.wordMs, it.within)
                         at > a.heardMs.endInclusive && at < b.heardMs.start
@@ -331,13 +331,13 @@ internal object SungTiming {
                     Placed(placed.line, ms, placed.support, placed.words, placed.heardMs, pieces.first().written)
                 }
             }
-            // Distinct words in the wrong order do not say which line is right. Keep neither conflicting fill.
-            val latestBefore = fills.runningFold(a.ms) { latest, placed -> maxOf(latest, placed.ms) }
-            val earliestAfter = fills.asReversed().runningFold(b.ms) { earliest, placed -> minOf(earliest, placed.ms) }.asReversed()
-            fills.filterIndexed { k, placed -> placed.ms > latestBefore[k] && placed.ms < earliestAfter[k + 1] }
+            // Use the chain's minimum pace too. Conflicting words do not say which fill is right; keep neither.
+            val latestBefore = fills.runningFold(a.orderMs) { latest, placed -> maxOf(latest, placed.orderMs) }
+            val earliestAfter = fills.asReversed().runningFold(b.orderMs) { earliest, placed -> minOf(earliest, placed.orderMs) }.asReversed()
+            fills.filterIndexed { k, placed -> placed.orderMs >= latestBefore[k] && placed.orderMs <= earliestAfter[k + 1] }
         }
 
-    /** One of the line's longest words, unique among the lines between the anchors, heard exactly once. */
+    /** One of the line's longest words, unique among these lines and their anchors, heard exactly once. */
     private fun distinctWordStarts(pieces: List<Written>, heard: List<HeardPiece>, span: LongRange, wordLines: Map<String, Int>): List<Long> {
         val longest = pieces.maxOf { it.text.length }
         return heard.filter { it.ms in span }.flatMap { word ->

@@ -1018,3 +1018,37 @@ main's stored right-line sets. No audio, truth, tolerance or case was changed.
 The 51 focused tests pass, including the original synthetic accuracy floors.
 The full Android checks, timed replay and fresh independent review are pending
 on this final change. Their results must be checked before marking it ready.
+
+### Two-play ownership and minimum pace after the second Mac review
+
+The parent reproduced both new fill findings in Kotlin before changing the code:
+
+1. A second hearing shifted by 50 ms put an extra line at 10750 ms, using the
+   previous anchor's last word. An early partial copy of the next anchor put the
+   same kind of extra line at 24950 ms. Both tests now leave the missing line dark.
+   Word uniqueness includes both anchor lines, not just the intervening lines.
+2. Two long-gap fills went to 14000 and 14100 ms despite a long line between
+   their starts. Filled lines now use the same minimum pace bound as chain lines.
+   Both conflicting fills stay dark.
+3. The index now has a seeded property test: 200 fake point sets, both traversal
+   directions, line groups, equal weights, equal bounds and duplicates. Each query
+   and its weight must equal a pairwise search with the original tie rule. Making
+   the inclusive y query exclusive fails this test on case 0.
+4. The old mutation report exposed two test gaps. A fake pruning case loses two
+   correct following lines when the span comparison is negated. A later exact
+   word must recover its line's start by its preceding letters. Changing that
+   subtraction to addition gives 17420 ms instead of 17000 ms. Both new tests
+   fail those source mutants and pass on the production code.
+
+All 57 focused Kotlin tests pass, including the original synthetic floors. The
+parent reran all 84 recordings through the new Kotlin and scored the original
+truth and main's stored right-line sets:
+
+| Plays | Within 1 s | Off | Over 3 s | Wrong in any round | Main right, now wrong | Unheard placements |
+|---|---:|---:|---:|---:|---:|---:|
+| Two | 600 | 57 | 14 | 89 | 0 | 0 |
+| One | 378 | 51 | 22 | 54 | 0 | 0 |
+
+The targets still pass. The previous local full build was stopped because these
+new production fixes replace its head. Full checks and a fresh review are needed
+on this change. No GitHub run was cancelled by hand.

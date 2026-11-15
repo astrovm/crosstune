@@ -612,6 +612,89 @@ class SungTimingTest {
     }
 
     @Test
+    fun aLaterDistinctWordGivesTheLongGapLinesStart() {
+        val text = listOf("Amber lanterns glow", "The wandering home", "Copper rivers bend")
+        val words = listOf("wandering" to 17_210L + SungTiming.HEARD_LATE_MS)
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, sungAt(10_000, text[0]), words, sungAt(25_000, text[2]))), 40_000)
+        assertEquals(mapOf(0 to 10_000L, 1 to 17_000L, 2 to 25_000L), got)
+    }
+
+    @Test
+    fun pruningANarrowerMatchKeepsTheFollowingHeardLines() {
+        val text = listOf("Light sky river", "River wandering quiet home", "Amber lantern home", "River glitter", "Wandering sky glitter glitter copper")
+        val words = listOf("light" to 10_000L, "river" to 14_000L, "wandering" to 14_350L, "quiet" to 14_980L,
+            "home" to 15_330L, "amber" to 18_000L, "home" to 18_840L, "river" to 22_000L,
+            "wandering" to 26_000L, "glitter" to 26_840L, "glitter" to 27_330L).map { (word, ms) -> word to ms + SungTiming.HEARD_LATE_MS }
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000)
+        assertEquals(mapOf(1 to 14_000L, 2 to 18_000L, 3 to 22_000L, 4 to 26_000L), got)
+    }
+
+    @Test
+    fun aSecondHearingCannotGiveAnAnchorsWordToAnotherLine() {
+        val text = listOf("Amber bells lanterns", "Lanterns glow", "Copper rivers bend")
+        val first = sungAt(10_000, text[0]) + sungAt(25_000, text[2])
+        val second = first.map { (word, ms) -> word to ms + 50 }
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, first), heard(9_050, second)), 40_000)
+        assertEquals(mapOf(0 to 10_000L, 2 to 25_000L), got)
+    }
+
+    @Test
+    fun anEarlyCopyOfTheNextAnchorCannotIdentifyAMissingLine() {
+        val text = listOf("Amber lanterns glow", "Glittering home", "Glittering river returns")
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, sungAt(10_000, text[0]), sungAt(25_000, text[2])),
+            heard(9_050, listOf("Glittering" to 24_950L + SungTiming.HEARD_LATE_MS))), 40_000)
+        assertEquals(mapOf(0 to 10_000L, 2 to 25_000L), got)
+    }
+
+    @Test
+    fun filledLinesNeedEnoughTimeForTheirWordsToo() {
+        val text = listOf("Amber lanterns glow", "Wandering through the darkest woods tonight", "Glittering river", "Copper bells chime")
+        val words = listOf("Wandering" to 14_000L + SungTiming.HEARD_LATE_MS, "Glittering" to 14_100L + SungTiming.HEARD_LATE_MS)
+        val got = SungTiming.linesMs(text, listOf(heard(9_000, sungAt(10_000, text[0]), words, sungAt(25_000, text[3]))), 40_000)
+        assertEquals(mapOf(0 to 10_000L, 3 to 25_000L), got)
+    }
+
+    @Test
+    fun indexedChainBoundsAndTiesMatchAPairwiseSearch() {
+        val random = kotlin.random.Random(21882)
+        repeat(200) { case ->
+            val candidates = List(random.nextInt(0, 40)) {
+                val places = List(2) { SungTiming.HeardAt(random.nextLong(0, 6), random.nextInt(0, 4)) }.sorted()
+                SungTiming.Placed(random.nextInt(0, 6), random.nextLong(-10, 11), random.nextInt(1, 5).toDouble(),
+                    2, places.first()..places.last(), 0)
+            }.sortedBy { it.ms }
+            for (reverse in listOf(false, true)) {
+                val weights = DoubleArray(candidates.size) { candidates[it].support }
+                val scores = SungTiming.ChainScores(candidates, weights, reverse)
+                val active = mutableListOf<Int>()
+                fun checkBest(k: Int): Int {
+                    val query = candidates[k]
+                    val expected = active.filter { i ->
+                        val point = candidates[i]
+                        if (reverse) point.orderMs >= query.orderMs && point.heardMs.start >= query.heardMs.endInclusive
+                        else point.orderMs <= query.orderMs && point.heardMs.endInclusive <= query.heardMs.start
+                    }.maxWithOrNull(compareBy<Int> { weights[it] }.thenBy { -it }) ?: -1
+                    assertEquals("case $case, reverse=$reverse, query=$k", expected, scores.best(k))
+                    assertEquals(if (expected >= 0) weights[expected] else 0.0, scores.weight(k), 0.0)
+                    return expected
+                }
+                val groups = candidates.indices.groupBy { candidates[it].line }.toSortedMap().values.toList()
+                for (group in if (reverse) groups.reversed() else groups) {
+                    for (k in group) {
+                        val best = checkBest(k)
+                        if (best >= 0) weights[k] += weights[best]
+                    }
+                    for (k in group) {
+                        scores.add(k)
+                        active += k
+                    }
+                }
+                candidates.indices.forEach { checkBest(it) }
+            }
+        }
+    }
+
+    @Test
     fun nothingSungHeardTimesNothing() {
         assertEquals(emptyList<LyricLine>(), SungTiming.timed(lines, listOf(heard(0, listOf("[Music]" to 1_000L))), 120_000))
         assertEquals(emptyList<LyricLine>(), SungTiming.timed(lines, emptyList(), 120_000))
