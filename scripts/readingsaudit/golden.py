@@ -18,12 +18,18 @@ import readingsaudit as audit
 GOLDEN_REL = "app/src/test/resources/com/astrovm/crosstune/readings-golden.tsv"
 GOLDEN_FILE = audit.ROOT / GOLDEN_REL
 # What the readings are made of. A pull request that changes one has to change the golden file too, or say so. Every app
-# file the locks' test code calls is here: SungReadings.kt matches UtaTen's readings to the line for the shown layers.
+# file the locks' test code calls is here, with the shared regex code and the JVM writers that shape the measured
+# readings. SungReadings.kt matches UtaTen's readings to the line for the shown layers.
 READING_SOURCES = (
     "app/src/main/java/com/astrovm/crosstune/Readings.kt",
     "app/src/main/java/com/astrovm/crosstune/SungReadings.kt",
     "app/src/main/java/com/astrovm/crosstune/Furigana.kt",
     "app/src/main/java/com/astrovm/crosstune/UniDic.kt",
+    "app/src/main/java/com/astrovm/crosstune/PhoneRegex.kt",
+    "app/src/main/java/com/astrovm/crosstune/PhoneRegexTable.kt",
+    "app/src/main/java/com/astrovm/crosstune/Patterns.kt",
+    "app/src/test/java/com/astrovm/crosstune/IcuPattern.kt",
+    "app/src/test/java/com/astrovm/crosstune/PhoneRegexSets.kt",
     "app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt",
     "app/src/main/resources/com/astrovm/crosstune/old-kana.txt",
 )

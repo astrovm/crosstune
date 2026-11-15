@@ -252,6 +252,30 @@ class FakeDiff(unittest.TestCase):
             commit(repo, "build: bump kuromoji")
             self.assertEqual(1, self.run_check(repo)[0])
 
+    def test_shared_regex_changes_need_a_fresh_whole_line_check(self):
+        paths = (
+            "app/src/main/java/com/astrovm/crosstune/PhoneRegex.kt",
+            "app/src/main/java/com/astrovm/crosstune/PhoneRegexTable.kt",
+            "app/src/main/java/com/astrovm/crosstune/Patterns.kt",
+            "app/src/test/java/com/astrovm/crosstune/IcuPattern.kt",
+            "app/src/test/java/com/astrovm/crosstune/PhoneRegexSets.kt",
+        )
+        for path in paths:
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as folder:
+                repo = self.repo(folder, golden_text(ROW))
+                self.write(repo, path, "first helper\n")
+                self.merge(repo, "test: change a shared regex helper")
+                missing = self.run_check(repo)[0]
+                checked = self.checked(repo)
+                body = "golden: none\n" + checked
+                self.assertEqual((0, ""), self.run_check(repo, body))
+                # A later helper edit must invalidate the earlier whole-line result too.
+                self.write(repo, path, "second helper\n")
+                commit(repo, "test: change the helper again")
+                stale = self.run_check(repo, body)[0]
+                self.assertEqual((1, True, 1), (missing, checked != self.checked(repo), stale))
+                self.assertEqual((0, ""), self.run_check(repo, "golden: none\n" + self.checked(repo)))
+
     def test_a_gitattributes_that_calls_the_build_file_binary_hides_no_kuromoji_bump(self):
         with tempfile.TemporaryDirectory() as folder:
             repo = self.repo(folder)
