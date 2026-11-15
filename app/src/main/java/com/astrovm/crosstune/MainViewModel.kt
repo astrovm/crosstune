@@ -3836,26 +3836,23 @@ internal class MainViewModel(
     }
 
     private var manualReport: ManualReportDraft? = null
-    private var manualReportSending = false
+    private var manualReportJob: Job? = null
 
     /** Sends a report on the words shown, with what the user says is wrong. [UiState.report] says how it goes. */
     fun sendReport(comment: String) {
         val sender = reports ?: return
-        if (manualReportSending) return
+        if (uiState.report == ReportStatus.SENDING) return
         val target = uiState.lyricsFor?.let(RecordingKey::of)
         val draft = (manualReport as? ManualReportDraft.Song)?.takeIf { it.target == target && it.comment == comment }
             ?: ManualReportDraft.Song(target, comment, reportOn(sender, uiState.lyricsFor, comment).copy(id = java.util.UUID.randomUUID().toString()))
         manualReport = draft
-        manualReportSending = true
         uiState = uiState.copy(report = ReportStatus.SENDING)
-        viewModelScope.launch {
-            try {
-                val sent = sender.send(draft.report) == Delivery.SENT
-                if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
-            } finally {
-                manualReportSending = false
-            }
-        }
+        val previous = manualReportJob
+        manualReportJob = viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            previous?.join()
+            val sent = sender.send(draft.report) == Delivery.SENT
+            if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+        }.also { it.start() }
     }
 
     /**
@@ -3864,7 +3861,7 @@ internal class MainViewModel(
      */
     fun reportReading(word: Word, index: Int, right: String) {
         val sender = reports ?: return
-        if (manualReportSending) return
+        if (uiState.report == ReportStatus.SENDING) return
         val song = uiState.lyricsFor ?: return
         val script = uiState.learning.script ?: return
         val line = wordLines().getOrNull(index) ?: return
@@ -3872,16 +3869,13 @@ internal class MainViewModel(
         val draft = (manualReport as? ManualReportDraft.Reading)?.takeIf { it.input == input }
             ?: ManualReportDraft.Reading(input, input.copy(id = java.util.UUID.randomUUID().toString()))
         manualReport = draft
-        manualReportSending = true
         uiState = uiState.copy(report = ReportStatus.SENDING)
-        viewModelScope.launch {
-            try {
-                val sent = sender.send(draft.report) == Delivery.SENT
-                if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
-            } finally {
-                manualReportSending = false
-            }
-        }
+        val previous = manualReportJob
+        manualReportJob = viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            previous?.join()
+            val sent = sender.send(draft.report) == Delivery.SENT
+            if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+        }.also { it.start() }
     }
 
     fun closeReport() {

@@ -384,28 +384,42 @@ class LyricsReportTest {
     @Test
     fun aDismissedReportCannotSetTheNextDialogsStatusOrSendTwice() {
         MainActivity.lookupDispatcher = Dispatchers.IO
-        val held = CountDownLatch(1).also { reportsHeld = it }
-        openLyrics()
+        val firstHeld = CountDownLatch(1)
+        val secondHeld = CountDownLatch(1)
+        report()
+        val otherRequests = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "report.crosstune.cc") {
+                val first = JSONObject(FakeSpotify.bodyOf(request)).getString("comment") == "first"
+                (if (first) firstHeld else secondHeld).await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                FakeSpotify.html(request, "", code = if (first) 503 else 204)
+            } else {
+                otherRequests(request)
+            }
+        }
         try {
-            val before = model().viewModelScope.coroutineContext[Job]?.children?.toSet().orEmpty()
-            composeRule.runOnIdle { model().sendReport("first") }
+            composeRule.onNode(hasSetTextAction()).performTextInput("first")
+            click(string(R.string.report_send))
             waitUntil { ReportSender.URL in fake.requestedUrls }
-            val sending = checkNotNull(model().viewModelScope.coroutineContext[Job]?.children?.firstOrNull { it !in before })
             composeRule.runOnIdle {
                 model().sendReport("first")
                 model().reportReading(Word("花", "か", "ka"), 0, "")
-                model().closeReport()
-                model().sendReport("second")
             }
+            click(string(R.string.cancel_button))
+            click(string(R.string.report_problem))
+            composeRule.onNode(hasSetTextAction()).performTextInput("second")
+            click(string(R.string.report_send))
             assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
-            held.countDown()
-            waitUntil { sending.isCompleted }
-            assertNull(model().uiState.report)
-            composeRule.runOnIdle { model().sendReport("second") }
-            waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.SENT }
+            assertEquals(ReportStatus.SENDING, model().uiState.report)
+            firstHeld.countDown()
+            waitUntil { sentReports().size == 2 }
+            assertEquals(ReportStatus.SENDING, model().uiState.report)
+            secondHeld.countDown()
+            waitUntil { !shown(string(R.string.report_what_goes)) }
             assertFalse(sentReports()[0].getString("id") == sentReports()[1].getString("id"))
         } finally {
-            held.countDown()
+            firstHeld.countDown()
+            secondHeld.countDown()
         }
     }
 
