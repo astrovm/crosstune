@@ -266,12 +266,67 @@ class LyricsReportTest {
         click(string(R.string.report_send))
         waitUntil { !shown(string(R.string.report_what_goes)) }
         assertEquals(2, fake.requestedUrls.count { it == ReportSender.URL })
+        assertEquals(sentReports()[0].getString("id"), sentReports()[1].getString("id"))
         // Opened again, it starts fresh, and closed unsent, nothing goes.
         click(string(R.string.report_problem))
         assertFalse(shown(string(R.string.report_failed)))
         click(string(R.string.cancel_button))
         assertFalse(shown(string(R.string.report_what_goes)))
         assertEquals(2, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun aManualSongReportKeepsItsPayloadOnRetryAndEditsOrAnotherDialogStartANewOne() {
+        reportsDown = true
+        openLyrics()
+        composeRule.runOnIdle { model().sendReport("The chorus is late") }
+        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        val first = sentReport()
+        assertTrue(java.util.UUID.fromString(first.getString("id")).toString().isNotEmpty())
+        // The timing can change while the answer is lost. A retry still sends the same report.
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.runOnIdle { model().sendReport("The chorus is late") }
+        waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.FAILED }
+        assertEquals(first.toString(), sentReport().toString())
+        composeRule.runOnIdle { model().sendReport("The verse is early") }
+        waitUntil { sentReports().size == 3 && model().uiState.report == ReportStatus.FAILED }
+        val edited = sentReport()
+        assertFalse(first.getString("id") == edited.getString("id"))
+        assertEquals("The verse is early", edited.getString("comment"))
+        composeRule.runOnIdle { model().closeReport() }
+        composeRule.runOnIdle { model().sendReport("The verse is early") }
+        waitUntil { sentReports().size == 4 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(edited.getString("id") == sentReport().getString("id"))
+    }
+
+    @Test
+    fun aManualReadingReportKeepsItsIdOnRetryAndAnEditOrAnotherKindStartsANewOne() {
+        reportsDown = true
+        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 花の空"}]""")
+        openLyrics { model().uiState.learning.lines.isNotEmpty() }
+        val word = Word("花", "か", "ka")
+        composeRule.runOnIdle { model().reportReading(word, 0, "はな") }
+        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        val first = sentReport()
+        composeRule.runOnIdle { model().reportReading(word, 0, "はな") }
+        waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.FAILED }
+        assertEquals(first.toString(), sentReport().toString())
+        composeRule.runOnIdle { model().reportReading(word, 0, "ハナ") }
+        waitUntil { sentReports().size == 3 && model().uiState.report == ReportStatus.FAILED }
+        val edited = sentReport()
+        assertFalse(first.getString("id") == edited.getString("id"))
+        assertEquals("ハナ", edited.getJSONObject("reading").getString("right"))
+        composeRule.runOnIdle { model().sendReport("") }
+        waitUntil { sentReports().size == 4 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(edited.getString("id") == sentReport().getString("id"))
+        composeRule.runOnIdle { model().reportReading(word, 0, "ハナ") }
+        waitUntil { sentReports().size == 5 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(edited.getString("id") == sentReport().getString("id"))
+        val reopened = sentReport()
+        composeRule.runOnIdle { model().closeReport() }
+        composeRule.runOnIdle { model().reportReading(word, 0, "ハナ") }
+        waitUntil { sentReports().size == 6 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(reopened.getString("id") == sentReport().getString("id"))
     }
 
     @Test
