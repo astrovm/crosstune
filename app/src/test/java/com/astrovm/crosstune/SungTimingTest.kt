@@ -516,6 +516,35 @@ class SungTimingTest {
     }
 
     @Test
+    fun aOneWordLineUsesItsOwnVoiceWhenInterpolationStartsTooSoon() {
+        val text = listOf("Amber lanterns glow", "Lantern", "Silver rivers bend")
+        val words = sungAt(10_000, text[0]) + listOf("Lantern" to 15_000L + SungTiming.HEARD_LATE_MS) + sungAt(16_000, text[2])
+        assertEquals(mapOf(0 to 10_000L, 1 to 15_000L, 2 to 16_000L), SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+    }
+
+    @Test
+    fun aLineFilledBetweenTwoCannotPrecedeThePreviousLinesLastWord() {
+        val text = listOf("Carry every lantern down", "Quiet river", "Silver rivers bend")
+        val words = sungAt(10_000, text[0]).dropLast(1) + listOf(
+            "down" to 17_000L + SungTiming.HEARD_LATE_MS, "mm" to 17_500L + SungTiming.HEARD_LATE_MS
+        ) + sungAt(18_000, text[2])
+        assertEquals(mapOf(0 to 10_000L, 1 to 17_000L, 2 to 18_000L), SungTiming.linesMs(text, listOf(heard(9_000, words)), 40_000))
+    }
+
+    @Test
+    fun aLaterWordCanConfirmAFirstWordInsideTheOpeningMargin() {
+        val text = listOf("Carry every lantern down")
+        assertEquals(mapOf(0 to 9_500L), SungTiming.linesMs(text, listOf(heard(9_000, sungAt(9_500, text[0]))), 40_000))
+    }
+
+    @Test
+    fun twoUnspacedLinesCanOwnSeparatePartsOfOneHeardWord() {
+        val text = listOf("君の名前を呼んだ", "夜明け空光星夢")
+        val word = text.joinToString("") to 10_000L + SungTiming.HEARD_LATE_MS
+        assertEquals(mapOf(0 to 10_000L, 1 to 12_240L), SungTiming.linesMs(text, listOf(heard(9_000, listOf(word))), 40_000))
+    }
+
+    @Test
     fun nothingSungHeardTimesNothing() {
         assertEquals(emptyList<LyricLine>(), SungTiming.timed(lines, listOf(heard(0, listOf("[Music]" to 1_000L))), 120_000))
         assertEquals(emptyList<LyricLine>(), SungTiming.timed(lines, emptyList(), 120_000))

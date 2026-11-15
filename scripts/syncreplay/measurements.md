@@ -890,10 +890,28 @@ The causes were checked separately:
 6. Heard positions include the letter position within a raw ASR word. An overlapping
    long unspaced word no longer hides overlap behind equal word-start timestamps.
 
-All 40 focused JUnit tests pass, including every original synthetic floor. The
+All 44 focused JUnit tests pass, including every original synthetic floor. The
 measured candidate before the behavior-preserving refactor gave two plays:
 601 within 1 s, 57 off, 14 over 3 s, 0 unheard, 0 main-right lines now wrong.
 The production refactor gave one play: 378 within 1 s, 53 off, 24 over 3 s,
 0 unheard, 0 main-right lines now wrong. Full checks and final replay verification
 are recorded below when complete. Private logs and inputs remain under `build/`
 and the shared cache, outside git.
+
+
+Production replay verification at `e9d9ef91` (timing logic unchanged by the additional tests):
+
+| Plays | Main: within / off / over 3 s / wrong | Starting head | Final | Main-right now wrong | Unheard |
+|---|---|---|---|---:|---:|
+| Two | 594 / 130 / 49 / 173 | 595 / 55 / 14 / 82 | 601 / 57 / 14 / 91 | 0 | 0 |
+| One | 372 / 92 / 43 / 100 | 369 / 50 / 20 / 51 | 378 / 53 / 24 / 56 | 0 | 0 |
+
+Timed replay, `syncreplay.py all --gradle scripts/gradle-box/gradle-box.sh`, with
+`GRADLE_BOX_MEMORY=7`: 312 / 624 / 85 / 407. The baseline is unchanged.
+The final 44-test suite fails on the starting timing code: 7 new regression
+assertions and the original synthetic-floor assertion. It passes on this code.
+The two extra positive tests protect complete short phrases and separate parts
+of one unspaced ASR word. They do not change the original assertions.
+
+The original synthetic floor file remains byte-for-byte as restored in `d62eaa29`
+and as recorded in `3ff563b1`. No new audio or ASR inference was needed.
