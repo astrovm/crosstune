@@ -1416,6 +1416,10 @@ class ListeningTest {
         switchedOn?.let { prefs().edit().putBoolean(it, true).commit() }
         MainActivity.connectionFactory = { FakeConnection() }
         demoCard()
+        // These checks need successful chord-site responses, not the lyrics JSON used by the card.
+        val sites = chordSitesWithNone()
+        val answer = fake.handler
+        fake.handler = { request -> sites(request) ?: answer(request) }
         fake.requestedUrls.clear()
         click(string(R.string.keep_offline))
         waitForDescription(string(R.string.kept_offline))
@@ -1438,6 +1442,34 @@ class ListeningTest {
     @Test
     fun aSongKeptOfflineKeepsItsChordsWhenSwitchedOn() {
         assertTrue(hostsAskedKeepingWith("lyrics_chords").any { "ultimate-guitar" in it })
+    }
+
+    @Test
+    fun aKeptSongWaitsForFailedChordsAndFinishesWhenTheNetworkComesBack() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        val connection = FakeConnection()
+        MainActivity.connectionFactory = { connection }
+        demoCard()
+        val sites = chordSitesWithNone()
+        val answer = fake.handler
+        val up = java.util.concurrent.atomic.AtomicBoolean(false)
+        fake.handler = { request ->
+            if (request.url.host == "www.ultimate-guitar.com" && !up.get()) throw IOException("offline chords")
+            sites(request) ?: answer(request)
+        }
+        fake.requestedUrls.clear()
+        click(string(R.string.keep_offline))
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "ultimate-guitar.com" in it } }
+        val field = MainViewModel::class.java.getDeclaredField("keepingOffline").apply { isAccessible = true }
+        val job = composeRule.runOnIdle { field.get(controllerModel()) as kotlinx.coroutines.Job }
+        waitUntil(TIMEOUT_MS) { job.isCompleted }
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.keptOffline.single().done })
+        assertFalse(described(string(R.string.kept_offline)))
+        up.set(true)
+        connection.unmetered.value = false
+        composeRule.waitForIdle()
+        connection.unmetered.value = true
+        waitForDescription(string(R.string.kept_offline))
     }
 
     @Test
