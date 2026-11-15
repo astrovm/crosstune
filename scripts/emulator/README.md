@@ -9,7 +9,7 @@ Three, declared in [`emulators.json`](emulators.json), so a wiped machine gets t
 | `crosstune-android8` | Android 8 (API 26), Google APIs, the oldest the app runs on | `regextable.py patterns` on Android 8 | Nothing |
 
 ```bash
-python3 scripts/emulator/emulator.py create                         # both, safe to run twice
+python3 scripts/emulator/emulator.py create                         # all three, safe to run twice
 python3 scripts/emulator/emulator.py start crosstune-phone --window # to sign in, then:
 python3 scripts/emulator/emulator.py apps crosstune-phone           # opens each missing app's Play page: tap Install
 python3 scripts/emulator/emulator.py check                          # what's still missing
