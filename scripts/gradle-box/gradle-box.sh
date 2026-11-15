@@ -170,7 +170,16 @@ mkdir -p "$state/queue" "$state/checkouts"
 # Name and publish in one turn. A later build must not overtake an unpublished earlier ticket.
 exec 7>"$state/queue.lock"
 lock 7
-ticket=$state/queue/$(date +%s%N).$$
+stamp=$(date +%s%N)
+# A clock step or an equal timestamp must not put a new build before one already published.
+for queued in "$state"/queue/*; do
+    [[ -f $queued ]] || continue
+    order=${queued##*/}
+    order=${order%.*}
+    [[ $order =~ ^[0-9]+$ ]] || continue
+    if ((10#$order >= 10#$stamp)); then stamp=$((10#$order + 1)); fi
+done
+ticket=$state/queue/$stamp.$$
 checkout_ticket=$state/checkouts/${ticket##*/}
 for recorded in "$state"/checkouts/*; do
     [[ -f $recorded ]] || continue
@@ -349,8 +358,8 @@ if ((lost >= 5)); then
     echo "gradle-box: the machine was out of memory for $lost s of this build. A test that timed out may have waited on that, not on the app (Issue #852)." >&2
 fi
 touch "$home"
-exit "$status"
+return "$status"
 
 }
 
-main "$@"
+main "$@"; exit

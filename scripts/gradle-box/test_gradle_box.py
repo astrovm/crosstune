@@ -1,8 +1,10 @@
 """Runs gradle-box.sh for real, with a stand-in podman that says what it was asked and waits when told."""
 import hashlib
+import gzip
 import os
 import shutil
 import shlex
+import signal
 import stat
 import subprocess
 import sys
@@ -398,6 +400,131 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         output, _ = first.communicate(timeout=20)
         self.assertEqual(0, first.returncode, output)
         self.assertEqual(1, len(self.asked()))
+
+    def test_a_backward_or_unchanged_clock_cannot_overtake_a_running_build(self):
+        self.tool("date", 'if [ "$1" = +%s%N ]; then echo "$FAKE_NOW"; else exec ' +
+                  shlex.quote(shutil.which("date")) + ' "$@"; fi\n')
+        for second_time in ("1000000000000000000", "2000000000000000000"):
+            with self.subTest(second_time=second_time):
+                self.hold("first")
+                first = self.start("first", "help", slots="2", checkout="shared", FAKE_NOW="2000000000000000000")
+                self.wait_for("started.first")
+                second = self.start("second", "help", slots="2", checkout="shared", FAKE_NOW=second_time)
+                try:
+                    time.sleep(0.5)
+                    self.assertFalse((self.dir / "started.second").exists())
+                finally:
+                    self.release("first")
+                first.communicate(timeout=20)
+                output, _ = second.communicate(timeout=20)
+                self.assertEqual(0, second.returncode, output)
+                for name in ("started.first", "started.second"):
+                    (self.dir / name).unlink(missing_ok=True)
+
+    def test_an_also_build_keeps_its_helper_when_the_file_is_edited(self):
+        gradlew = self.box_that_runs()
+        gradlew.write_text('#!/bin/sh\necho "$PWD $*" >> "$FAKE_DIR/ran"\n'
+                           'touch "$FAKE_DIR/started.first"\n'
+                           'while [ -e "$FAKE_DIR/hold.first" ]; do sleep 0.02; done\nexit 0\n')
+        self.hold("first")
+        other = self.checkout("other")
+        box = self.start("first", f"--also={other}", "help", FAKE_GRADLEW=str(gradlew))
+        self.wait_for("started.first")
+        # box_that_runs copies the helper to stand in for the container's mounted file.
+        script = self.dir / "each-checkout.sh"
+        script.write_text("exit 99\n" * 8_192 + script.read_text())
+        self.release("first")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(0, box.returncode, output)
+        self.assertEqual([f"{root} --no-daemon help" for root in (self.checkout("first"), other)],
+                         (self.dir / "ran").read_text().splitlines())
+
+    def start_script(self, script, *args, **extra):
+        process = subprocess.Popen([str(script), *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                   env={**os.environ, "PATH": f"{self.dir / 'bin'}:{os.environ['PATH']}",
+                                        "HOME": str(self.home), "FAKE_DIR": str(self.dir), **extra})
+        self.addCleanup(self.stop, process)
+        return process
+
+    def test_golden_writers_finish_and_remove_their_tree_after_an_in_place_edit(self):
+        writer = self.dir / "writer"
+        writer.write_text('#!/bin/sh\nmkdir -p app/build\nprintf "fake row\\n" > "app/build/$FAKE_TABLE-golden.tsv"\n'
+                          'touch "$FAKE_DIR/started.first"\n'
+                          'while [ -e "$FAKE_DIR/hold.first" ]; do sleep 0.02; done\nexit 0\n')
+        writer.chmod(0o755)
+        self.tool("git", 'case "$4" in\nadd)\n'
+                  'mkdir -p "$6/scripts/gradle-box" "$6/app/src/test/java/com/astrovm/crosstune"\n'
+                  'cp "$FAKE_WRITER" "$6/scripts/gradle-box/gradle-box.sh";;\n'
+                  'remove) rm -rf "$6";;\nesac\n')
+        for table, source, helper in (("names", "NamePairs.kt", "NamesGoldenWriter.kt"),
+                                      ("play", "PlayScenes.kt", "PlayGoldenWriter.kt")):
+            with self.subTest(table=table):
+                root = self.checkout(table)
+                here = root / "scripts" / (table + "check")
+                here.mkdir()
+                script = here / "golden.sh"
+                shutil.copy2(BOX.parent.parent / (table + "check") / "golden.sh", script)
+                (here / helper).touch()
+                tests = root / "app/src/test/java/com/astrovm/crosstune"
+                tests.mkdir(parents=True)
+                (tests / source).touch()
+                resources = root / "app/src/test/resources"
+                resources.mkdir()
+                self.hold("first")
+                job = self.start_script(script, "fake-sha", FAKE_WRITER=str(writer), FAKE_TABLE=table)
+                self.wait_for("started.first")
+                script.write_text("exit 99\n" * 8_192 + script.read_text())
+                self.release("first")
+                output, _ = job.communicate(timeout=20)
+                self.assertEqual(0, job.returncode, output)
+                self.assertEqual("fake row\n", gzip.decompress((resources / (table + "-golden.tsv.gz")).read_bytes()).decode())
+                self.assertFalse((self.home / ".cache/agent-cache" / ("crosstune-" + table + "check-fake-sha")).exists())
+                (self.dir / "started.first").unlink()
+
+    def test_a_recording_finishes_and_restores_animation_after_an_in_place_edit(self):
+        script = self.dir / "record.sh"
+        shutil.copy2(BOX.parent.parent / "record/record.sh", script)
+        self.tool("adb", 'echo "$*" >> "$FAKE_DIR/settings"\n')
+        self.tool("sleep", 'case "$1" in 1|1.5) exit 0;; esac\nexec ' + shlex.quote(shutil.which("sleep")) + ' "$@"\n')
+        self.tool("scrcpy", 'echo "$$" > "$FAKE_DIR/recorder.pid"\ntrap \'exit 0\' TERM\nwhile :; do sleep 0.02; done\n')
+        self.tool("ffprobe", 'echo 1.0\n')
+        self.tool("ffmpeg", 'case "$*" in *mpdecimate*) printf "pts_time:0.00\\npts_time:0.016\\npts_time:0.032\\n" >&2;;\n'
+                  '*) for last in "$@"; do :; done; touch "$last";; esac\n')
+        command = self.dir / "drive"
+        command.write_text('#!/bin/sh\ntouch "$FAKE_DIR/started.first"\n'
+                           'while [ -e "$FAKE_DIR/hold.first" ]; do sleep 0.02; done\n')
+        command.chmod(0o755)
+        self.hold("first")
+        target = self.dir / "take.mp4"
+        job = self.start_script(script, str(target), str(command))
+        self.wait_for("started.first")
+        script.write_text("exit 99\n" * 8_192 + script.read_text())
+        self.release("first")
+        output, _ = job.communicate(timeout=20)
+        self.assertEqual(0, job.returncode, output)
+        self.assertTrue(target.exists())
+        self.assertIn("2 moving frames, 0 late", output)
+        settings = (self.dir / "settings").read_text().splitlines()
+        self.assertEqual([f"shell settings put global {name} 1" for name in
+                          ("window_animation_scale", "transition_animation_scale", "animator_duration_scale")], settings[-3:])
+        # A failed driving command must restore settings and reap its recorder too.
+        shutil.copy2(BOX.parent.parent / "record/record.sh", script)
+        command.write_text('#!/bin/sh\nwhile [ ! -f "$FAKE_DIR/recorder.pid" ]; do sleep 0.02; done\nexit 3\n')
+        (self.dir / "recorder.pid").unlink()
+        job = self.start_script(script, str(target), str(command))
+        output, _ = job.communicate(timeout=20)
+        self.assertEqual(3, job.returncode, output)
+        self.assertEqual(settings[-3:], (self.dir / "settings").read_text().splitlines()[-3:])
+        self.wait_for("recorder.pid")
+        recorder = int((self.dir / "recorder.pid").read_text())
+        try:
+            with self.assertRaises(ProcessLookupError):
+                os.kill(recorder, 0)
+        finally:
+            try:
+                os.kill(recorder, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
 
     def test_memory_tickets_stay_readable_to_older_checkouts(self):
         self.hold("first")

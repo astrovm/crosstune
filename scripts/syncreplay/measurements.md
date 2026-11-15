@@ -1187,3 +1187,27 @@ title request finished, then counted it as work caused by reopening. It now
 waits for the title meaning too and asserts that the meaning is kept. All three
 focused reopen tests pass. No application source changed for these final test
 and runner fixes; the 5b521a18 APK and recorded replay still name the app code.
+
+### Shell helper edits and clock-safe checkout order
+
+The full local Gradle run on 6281a8ec finished in 13m 12s with 3796 tests, zero
+failures or errors, four skips and 22107 covered lines with zero missed lines,
+methods or classes. Its shell was interrupted while the container kept running.
+The parent collected the container's zero exit, then repeated the full command
+with its completed outputs cached: BUILD SUCCESSFUL in 29s, wrapper exit zero.
+
+The final runner review reproduced two more failures. Editing each-checkout.sh
+during an --also build changed Bash's later byte offsets, just as in the main
+runner. The parent reproduced that failure, plus the same failure in both golden
+writers and the recording helper. Each now parses its complete body before work
+starts. An exit on the same parsed line preserves the result when the body returns.
+The golden tests check the output and worktree cleanup; the recording test checks
+conversion and restored settings. Its failure case also found a recorder left
+running when the driving command failed. Cleanup now stops and reaps that child.
+
+A backwards clock, or an equal timestamp with a different PID, could put the next
+ticket before an active one and run two builds in one checkout. Both cases failed
+in the parent's held-build test. While holding the publication lock, the runner
+now chooses a timestamp greater than every queued ticket. All 62 runner tests
+pass. ShellCheck and Ruff pass. No app production or test sources changed in this
+round. Fresh CI and independent review of these shell fixes remain pending.

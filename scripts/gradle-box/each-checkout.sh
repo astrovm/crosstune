@@ -4,6 +4,8 @@
 #   each-checkout.sh COUNT DIR... GRADLE_ARGUMENTS...
 #
 # Every checkout runs whatever fails before it. The exit code is the first failure's.
+# Parse the whole run before starting work, so an edit cannot change an active run.
+main() {
 set -uo pipefail
 
 count=$1
@@ -16,4 +18,8 @@ for dir in "${dirs[@]}"; do
     code=$?
     ((status != 0 || code == 0)) || status=$code
 done
-exit "$status"
+return "$status"
+
+}
+
+main "$@"; exit
