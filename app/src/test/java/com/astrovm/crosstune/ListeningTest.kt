@@ -4995,9 +4995,12 @@ class ListeningTest {
     @Test
     fun aSongUtaTenHasNoPageForIsntAskedForAgainWhenItsWordsShowAgain() {
         prefs().edit().putBoolean("lyrics_readings", true).commit()
+        TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files"))
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }) }
         wordsOf(null, "都会の夜", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
         waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && readingShown("とかい") }
         settle()
+        assertFalse(controllerModel().uiState.learning.readingsUnfinished)
         val asked = utatenRequests()
         closedAndOpenedAgain()
         waitUntil(TIMEOUT_MS) { readingShown("とかい") }
@@ -5040,12 +5043,22 @@ class ListeningTest {
             "saved_lines",
             """[{"text":"都会の夜","reading":"まちのよ","title":"Demo","artist":"Band","ruby":[["都会","まち","utaten"],["の",null],["夜","よ","user"]],"byHand":true,"readWith":${Readings.VERSION}}]"""
         ).commit()
+        val movedWithoutCorrection = java.util.concurrent.atomic.AtomicBoolean(false)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
+            if (key == "saved_lines") {
+                val line = SavedLinesStore(preferences).load().singleOrNull()
+                if (line?.text == "都会の夜に" && line.ruby.orEmpty().none { it.by == Reader.USER }) movedWithoutCorrection.set(true)
+            }
+        }
+        prefs().registerOnSharedPreferenceChangeListener(listener)
         // Found again with a word more, and UtaTen has none for it now.
         wordsOf(null, "都会の夜に", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
         // The marks are laid away from the screen, after the line takes its new words.
         waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && SavedLinesStore(prefs()).load().single().ruby.orEmpty().any { it.by == Reader.USER } }
         settle()
         val line = SavedLinesStore(prefs()).load().single()
+        prefs().unregisterOnSharedPreferenceChangeListener(listener)
+        assertFalse("The moved line was saved without the user's correction", movedWithoutCorrection.get())
         assertEquals("都会の夜に", line.text)
         assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), line.ruby.orEmpty().filter { it.reading != null })
         assertEquals("まちのよに", line.reading)

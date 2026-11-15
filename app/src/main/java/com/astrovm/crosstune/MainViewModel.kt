@@ -4365,10 +4365,24 @@ internal class MainViewModel(
             saved to if (times != null) moved.timedAt(index) else moved
         }
         if (changes.isEmpty()) return
-        uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
-        // What was put right in them goes with them, read away from the screen, as the dictionary may have to read them first.
-        val script = uiState.learning.script ?: return
-        viewModelScope.launch { savedLinesStore.change(systemDispatcher) { kept -> carried(kept, changes, script) }?.let { uiState = uiState.copy(savedLines = it) } }
+        // Move the words and their corrections together. Reading them may need the dictionary, away from the screen.
+        val script = uiState.learning.script
+        viewModelScope.launch {
+            savedLinesStore.change(systemDispatcher) { current ->
+                current.map { saved ->
+                    val moved = changes.firstOrNull { it.first.isSame(saved) }?.second
+                    if (moved == null) saved else if (saved.line != null) saved.copy(line = moved.line) else {
+                        val replacement = saved.copy(
+                            text = moved.text, reading = moved.reading, romanized = moved.romanized, ruby = moved.ruby,
+                            readByHand = false, typed = moved.typed, readWith = moved.readWith, translation = moved.translation,
+                            startMs = moved.startMs, endMs = moved.endMs, nextMs = moved.nextMs, lengthMs = moved.lengthMs,
+                            leadMs = moved.leadMs, app = moved.app, artworkUrl = moved.artworkUrl
+                        )
+                        if (script == null) replacement else replacement.carrying(saved, script)
+                    }
+                }
+            }?.let { uiState = uiState.copy(savedLines = it) }
+        }
     }
 
     /** Lines of [song] kept are translated as its lines are now, e.g. into another language. */
