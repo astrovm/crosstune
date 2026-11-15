@@ -142,7 +142,8 @@ internal class ChordFinder(
     /** ChordWiki, read in the phone's browser. Absent in tests that aren't about it, and for a build with no screen. */
     private val chordWiki: ChordWikiPages? = null,
     /** A pause between ChordWiki's pages, so a lookup goes no faster than a person opening them. */
-    private val chordWikiPauseMs: Long = CHORD_WIKI_PAUSE_MS
+    private val chordWikiPauseMs: Long = CHORD_WIKI_PAUSE_MS,
+    private val debugLogging: Boolean = BuildConfig.DEBUG
 ) {
     /** A song's chords, or why there are none to show. */
     sealed interface Chords {
@@ -303,7 +304,7 @@ internal class ChordFinder(
     }
 
     private fun note(message: String) {
-        if (Log.isLoggable(CHORD_LOG, Log.INFO)) Log.i(CHORD_LOG, message)
+        if (debugLogging && Log.isLoggable(CHORD_LOG, Log.INFO)) Log.i(CHORD_LOG, message)
     }
 
     /** ChordWiki's sheet wins when the others had none; a failure only matters when nobody had a sheet. */
@@ -711,9 +712,9 @@ internal class ChordFinder(
      * so then by the names Japan's Apple Music store has it by: "残酷な天使のテーゼ", by "高橋洋子".
      */
     private suspend fun otherNames(song: MusicMetadata): OtherNames {
-        val netEase = netEaseNames(song)
+        val netEase = try { netEaseNames(song) } catch (e: JSONException) { OtherNames(emptyList(), emptyList()) }
         if (netEase.titles.isNotEmpty()) return netEase
-        val inJapan = namesInJapan(song)
+        val inJapan = try { namesInJapan(song) } catch (e: JSONException) { emptyList() }
         return OtherNames(inJapan.map { it.first }.distinct().take(MAX_NAMES), (netEase.artists + inJapan.map { it.second }).distinct())
     }
 

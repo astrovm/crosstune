@@ -1259,12 +1259,12 @@ Singing to the morning light</div>"""
             listOf("The River Song (Long Version) Taro Yamada", "川の歌 山田太郎", "川の歌 2009 山田太郎", "The River Song (Long Version) 山田太郎", "山田太郎"),
             uFretSearches
         )
-        // Apple not answering may hide the sheet: that's chords unavailable, not none.
+        // An unreadable names answer gives no extra names; the chord sites can still answer.
         fake.handler = uFret(
             emptyMap(),
             mapOf("https://music.163.com/api/search/get" to "{}", "https://itunes.apple.com/search" to "", "https://www.ultimate-guitar.com/search.php" to ugSearch())
         )
-        assertEquals(ChordFinder.Chords.Unavailable, chords(song, japanese))
+        assertEquals(ChordFinder.Chords.None, chords(song, japanese))
     }
 
     @Test
@@ -1524,6 +1524,30 @@ Singing to the morning light</div>"""
                 else -> answer(request, emptyMap())
             }
         }
+    }
+
+    @Test
+    fun malformedOptionalNamesStillReachJapaneseSites() {
+        for ((host, bad) in listOf("music.163.com" to "<html>bad</html>", "music.163.com" to "{broken", "itunes.apple.com" to "<html>bad</html>")) {
+            noOtherChordSites()
+            val previous = fake.handler
+            fake.handler = { request ->
+                if (request.url.host == host) FakeSpotify.html(request, bad) else previous(request)
+            }
+            val urls = mutableListOf<String>()
+            val result = chords(river, japanese, withWiki(ChordWikiPages { url -> urls += url; "" }))
+            assertEquals(bad, 2, urls.size)
+            assertEquals(bad, ChordFinder.Chords.None, result)
+        }
+    }
+
+    @Test
+    fun releaseLookupDoesNotLogSongNamesOrQueries() {
+        noOtherChordSites()
+        logging()
+        val finder = ChordFinder(fake.client(), lookups, chordWiki = ChordWikiPages { "" }, chordWikiPauseMs = 0, debugLogging = false)
+        chords(river, japanese, finder)
+        assertTrue(logged().toString(), logged().isEmpty())
     }
 
     @Test
