@@ -226,10 +226,28 @@ class Phone:
         dump = self.shell(f'appops get --user 0 {self.package} SCHEDULE_EXACT_ALARM').decode()
         return exact_alarm_appop(dump)
 
-    def set_exact_mode(self, mode):
+    def set_exact_mode(self, mode, uid=False):
         if mode not in {'allow', 'ignore', 'deny', 'default'}:
             raise ValueError('Unknown app-op mode')
-        self.shell(f'appops set --user 0 {self.package} SCHEDULE_EXACT_ALARM {mode}')
+        scope = '--uid ' if uid else ''
+        self.shell(f'appops set --user 0 {scope}{self.package} SCHEDULE_EXACT_ALARM {mode}')
+
+    def restore_exact_mode(self, original):
+        # Old journals recorded only the package mode. They contain no UID value to restore.
+        if isinstance(original, str):
+            if self.exact_mode()[1] != original:
+                self.set_exact_mode(original)
+            if self.exact_mode()[1] != original:
+                raise RuntimeError('Could not restore package exact-alarm app-op')
+            return
+        uid, package = original
+        current = self.exact_mode()
+        if current[1] != package:
+            self.set_exact_mode(package or 'default')
+        if self.exact_mode()[0] != uid:
+            self.set_exact_mode(uid or 'default', uid=True)
+        if self.exact_mode() != (uid, package):
+            raise RuntimeError('Could not restore exact-alarm app-op')
 
     def notification_state(self):
         dump = self.shell(f'dumpsys package {self.package}').decode()
@@ -285,13 +303,30 @@ class Phone:
 
 
 def exact_alarm_appop(dump):
-    """Read the app-op mode, including the default reported for no explicit operation."""
-    modes = re.findall(r'^\s*SCHEDULE_EXACT_ALARM:\s*([a-z]+)(?:[;\s]|$)', dump, re.MULTILINE)
-    if not modes and re.search(r'^No operations\.\s*$', dump, re.MULTILINE):
-        modes = re.findall(r'^Default mode:\s*([a-z]+)\s*$', dump, re.MULTILINE)
-    if len(modes) != 1 or modes[0] not in {'allow', 'ignore', 'deny', 'default'}:
-        raise ValueError('Expected one known exact-alarm app-op mode')
-    return modes[0]
+    """Read both scopes, preserving a missing UID or package operation."""
+    uid = re.findall(r'^\s*Uid mode:\s*SCHEDULE_EXACT_ALARM:\s*([a-z]+)(?:[;\s]|$)', dump, re.MULTILINE)
+    package = re.findall(r'^\s*SCHEDULE_EXACT_ALARM:\s*([a-z]+)(?:[;\s]|$)', dump, re.MULTILINE)
+    defaults = re.findall(r'^Default mode:\s*([a-z]+)\s*$', dump, re.MULTILINE)
+    no_operations = bool(re.search(r'^No operations\.\s*$', dump, re.MULTILINE))
+    allowed = {'allow', 'ignore', 'deny', 'default'}
+    if (len(uid) > 1 or len(package) > 1 or len(defaults) > 1 or
+            any(mode not in allowed for mode in uid + package + defaults) or
+            (no_operations and (uid or package or len(defaults) != 1)) or
+            (not no_operations and (defaults or not (uid or package)))):
+        raise ValueError('Expected known exact-alarm app-op modes')
+    return (uid[0] if uid else None, package[0] if package else defaults[0] if defaults else None)
+
+
+@contextmanager
+def temporary_exact_mode(phone, mode):
+    original = phone.exact_mode()
+    try:
+        phone.set_exact_mode(mode, uid=True)
+        if phone.exact_mode()[0] != mode:
+            raise RuntimeError('Exact-alarm UID app-op did not change')
+        yield
+    finally:
+        phone.restore_exact_mode(original)
 
 
 @contextmanager
@@ -394,7 +429,7 @@ def run_measurement(phone, minutes, wait_minutes, force_idle, exact, backup, ala
     requested_permission = (True, permission[1])
     mode = 'allow' if exact else 'ignore'
     with ExitStack() as stack:
-        stack.enter_context(temporary_setting(phone.exact_mode, phone.set_exact_mode, mode))
+        stack.enter_context(temporary_exact_mode(phone, mode))
         original_appop = phone.notification_appop_state()
         stack.callback(phone.restore_notification_appop, original_appop)
         stack.enter_context(temporary_setting(phone.notification_state, phone.set_notification_state, requested_permission))
@@ -636,7 +671,7 @@ def capture_state(phone):
     """Read the settings the run may change, without recording the device address."""
     granted, flags = phone.notification_state()
     state = {
-        'exact': phone.exact_mode(),
+        'exact': list(phone.exact_mode()),
         'notifications': [granted, sorted(flags)],
         'notification_appop': list(phone.notification_appop_state()),
         'battery': phone.battery_override(),
@@ -671,7 +706,7 @@ def recover_state(phone, state, backup):
     notifications = (state['notifications'][0], frozenset(state['notifications'][1]))
     attempt('notification permission', lambda: set_and_check(phone.notification_state, phone.set_notification_state, notifications))
     attempt('notification app-op', lambda: phone.restore_notification_appop(tuple(state['notification_appop'])))
-    attempt('exact-alarm app-op', lambda: set_and_check(phone.exact_mode, phone.set_exact_mode, state['exact']))
+    attempt('exact-alarm app-op', lambda: phone.restore_exact_mode(state['exact']))
 
     def restore_preferences():
         phone.stop()

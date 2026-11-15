@@ -13,7 +13,7 @@ Add `--exact` to allow exact alarms for the run. Add `--force-idle` to force Doz
 
 The script uses a fake due card. It records the alarm window and the notification creation time. It discards a run if the screen wakes or another activity starts during the wait. No notification by the end of the wait is an unobserved delivery, not a lateness value.
 
-The script temporarily changes the dev app's exact-alarm and notification access and simulates an unplugged battery. It restores the original settings and preferences. It also restores forced Doze and the screen state when needed. It never changes media volume or Do Not Disturb. It refuses to run unless media volume is zero.
+The script temporarily changes the dev app's exact-alarm UID app-op and notification access and simulates an unplugged battery. It records and restores both the UID and package exact-alarm modes, then verifies them. It restores the original settings and preferences. It also restores forced Doze and the screen state when needed. It never changes media volume or Do Not Disturb. It refuses to run unless media volume is zero.
 
 A private recovery journal and preference backup go in `/mnt/data/agent-cache/crosstune-773/` and are deleted after successful restoration. If restoration fails, take the Samsung lock again and run:
 
@@ -22,6 +22,7 @@ python3 scripts/reminder-lateness/measure.py --recover
 ```
 
 Do not delete the recovery files until restoration succeeds. The journal does not contain the device address.
+Older journals contain only the exact-alarm package mode. Recovery restores that mode and leaves the UID mode as it is; the original UID mode cannot be recovered from those journals.
 
 Run the fake-data tests in a container:
 

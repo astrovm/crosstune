@@ -251,20 +251,134 @@ class PhoneCommandTest(unittest.TestCase):
 
 
 class AppOpTest(unittest.TestCase):
+    def test_reads_uid_and_package_modes_separately(self):
+        from measure import exact_alarm_appop
+
+        self.assertEqual(exact_alarm_appop(
+            'Uid mode: SCHEDULE_EXACT_ALARM: deny\nSCHEDULE_EXACT_ALARM: allow; time=+1m\n'),
+            ('deny', 'allow'))
+        self.assertEqual(exact_alarm_appop('Uid mode: SCHEDULE_EXACT_ALARM: ignore\n'), ('ignore', None))
+
+    def test_temporary_uid_override_restores_both_modes_after_failure(self):
+        from measure import Phone, temporary_exact_mode
+
+        class FakePhone(Phone):
+            def __init__(self):
+                self.uid, self.package_mode = 'deny', 'allow'
+
+            def shell(self, command, data=None):
+                parts = command.split()
+                if parts[1] == 'get':
+                    return (f'Uid mode: SCHEDULE_EXACT_ALARM: {self.uid}\n'
+                            f'SCHEDULE_EXACT_ALARM: {self.package_mode}\n').encode()
+                if '--uid' in parts:
+                    self.uid = parts[-1]
+                else:
+                    self.package_mode = parts[-1]
+                return b''
+
+        phone = FakePhone()
+        with self.assertRaisesRegex(RuntimeError, 'interrupted'):
+            with temporary_exact_mode(phone, 'allow'):
+                self.assertEqual(phone.exact_mode(), ('allow', 'allow'))
+                phone.package_mode = 'ignore'
+                raise RuntimeError('interrupted')
+        self.assertEqual(phone.exact_mode(), ('deny', 'allow'))
+
     def test_reads_exact_alarm_mode(self):
         from measure import exact_alarm_appop
 
-        self.assertEqual(exact_alarm_appop('No operations.\nDefault mode: default\n'), 'default')
-        self.assertEqual(exact_alarm_appop('SCHEDULE_EXACT_ALARM: allow; time=+1m\n'), 'allow')
-        self.assertEqual(exact_alarm_appop('SCHEDULE_EXACT_ALARM: ignore\n'), 'ignore')
+        self.assertEqual(exact_alarm_appop('No operations.\nDefault mode: default\n'), (None, 'default'))
+        self.assertEqual(exact_alarm_appop('SCHEDULE_EXACT_ALARM: allow; time=+1m\n'), (None, 'allow'))
+        self.assertEqual(exact_alarm_appop('SCHEDULE_EXACT_ALARM: ignore\n'), (None, 'ignore'))
 
     def test_rejects_unknown_or_ambiguous_mode(self):
         from measure import exact_alarm_appop
 
-        for dump in ('', 'SCHEDULE_EXACT_ALARM: weird\n',
+        for dump in ('', 'SCHEDULE_EXACT_ALARM: weird\n', 'Uid mode: SCHEDULE_EXACT_ALARM: weird\n',
+                     'Uid mode: SCHEDULE_EXACT_ALARM: deny\nUid mode: SCHEDULE_EXACT_ALARM: allow\n',
                      'SCHEDULE_EXACT_ALARM: allow\nSCHEDULE_EXACT_ALARM: ignore\n'):
             with self.subTest(dump=dump), self.assertRaises(ValueError):
                 exact_alarm_appop(dump)
+
+    def test_legacy_restore_changes_only_package_and_checks_it(self):
+        from measure import Phone
+
+        class FakePhone(Phone):
+            def __init__(self):
+                self.uid, self.package_mode, self.commands = 'deny', 'ignore', []
+
+            def shell(self, command, data=None):
+                self.commands.append(command)
+                if 'appops get' in command:
+                    return (f'Uid mode: SCHEDULE_EXACT_ALARM: {self.uid}\n'
+                            f'SCHEDULE_EXACT_ALARM: {self.package_mode}\n').encode()
+                self.package_mode = command.split()[-1]
+                return b''
+
+        phone = FakePhone()
+        phone.restore_exact_mode('allow')
+        self.assertEqual(phone.exact_mode(), ('deny', 'allow'))
+        self.assertFalse(any('--uid' in command for command in phone.commands))
+
+    def test_failed_uid_write_does_not_run_fixture(self):
+        from measure import Phone, temporary_exact_mode
+
+        class FakePhone(Phone):
+            def __init__(self): pass
+            def exact_mode(self): return ('deny', 'allow')
+            def set_exact_mode(self, mode, uid=False): pass
+
+        with self.assertRaisesRegex(RuntimeError, 'did not change'):
+            with temporary_exact_mode(FakePhone(), 'allow'):
+                self.fail('The fixture must not run')
+
+    def test_restores_absent_uid_and_package_modes(self):
+        from measure import Phone, temporary_exact_mode
+
+        class FakePhone(Phone):
+            def __init__(self, uid, package):
+                self.uid, self.package_mode = uid, package
+
+            def shell(self, command, data=None):
+                parts = command.split()
+                if parts[1] == 'get':
+                    lines = []
+                    if self.uid:
+                        lines.append(f'Uid mode: SCHEDULE_EXACT_ALARM: {self.uid}')
+                    if self.package_mode:
+                        lines.append(f'SCHEDULE_EXACT_ALARM: {self.package_mode}')
+                    return ('\n'.join(lines) + '\n' if lines else
+                            'No operations.\nDefault mode: default\n').encode()
+                mode = None if parts[-1] == 'default' else parts[-1]
+                if '--uid' in parts:
+                    self.uid = mode
+                else:
+                    self.package_mode = mode
+                return b''
+
+        for uid, package in ((None, None), ('deny', None), (None, 'ignore'), ('deny', 'allow')):
+            for requested in ('allow', 'ignore'):
+                with self.subTest(uid=uid, package=package, requested=requested):
+                    phone = FakePhone(uid, package)
+                    original = phone.exact_mode()
+                    with temporary_exact_mode(phone, requested):
+                        self.assertEqual(phone.exact_mode()[0], requested)
+                        phone.set_exact_mode('allow' if package != 'allow' else 'ignore')
+                    self.assertEqual(phone.exact_mode(), original)
+
+    def test_restore_failure_is_reported(self):
+        from measure import Phone
+
+        class FakePhone(Phone):
+            def __init__(self): pass
+            def exact_mode(self): return ('allow', 'ignore')
+            def set_exact_mode(self, mode, uid=False): pass
+
+        with self.assertRaisesRegex(RuntimeError, 'Could not restore'):
+            FakePhone().restore_exact_mode(('deny', 'allow'))
+        with self.assertRaisesRegex(RuntimeError, 'Could not restore'):
+            FakePhone().restore_exact_mode('allow')
 
 
 class SettingTransactionTest(unittest.TestCase):
@@ -358,7 +472,7 @@ class RunTest(unittest.TestCase):
 
         class FakePhone:
             serial = 'fake-device'
-            exact = 'default'
+            exact = ('deny', 'allow')
             permission = (False, frozenset({'USER_SET'}))
             battery = False
             idle = False
@@ -366,7 +480,8 @@ class RunTest(unittest.TestCase):
             alarm_queries = 0
 
             def exact_mode(self): return self.exact
-            def set_exact_mode(self, value): self.exact = value
+            def set_exact_mode(self, value, uid=False): self.exact = (value, self.exact[1]) if uid else (self.exact[0], value)
+            def restore_exact_mode(self, value): self.exact = value
             def notification_appop_state(self): return ('allow' if self.permission[0] else 'ignore', None)
             def restore_notification_appop(self, value): pass
             def notification_state(self): return self.permission
@@ -382,8 +497,10 @@ class RunTest(unittest.TestCase):
             def command(self, *args): return b''
 
             def shell(self, command):
-                if command == 'date +%s': return str(int(clock[0] + 120)).encode()
-                if command == 'getprop persist.sys.timezone': return b'UTC'
+                if command == 'date +%s':
+                    return str(int(clock[0] + 120)).encode()
+                if command == 'getprop persist.sys.timezone':
+                    return b'UTC'
                 if command == 'dumpsys alarm':
                     self.alarm_queries += 1
                     if self.alarm_queries < 3:
@@ -391,14 +508,17 @@ class RunTest(unittest.TestCase):
                     return (f' RTC_WAKEUP #1: Alarm{{abc type 0 origWhen {target} whenElapsed 5 com.astrovm.crosstune.dev}}\n'
                             '  tag=*walarm*:com.astrovm.crosstune.action.REMIND_PRACTICE\n'
                             '  type=RTC_WAKEUP window=0\n').encode()
-                if command == 'dumpsys deviceidle': return b'  mScreenOn=false\n  mState=IDLE mLightState=OVERRIDE\n'
-                if command == 'dumpsys power': return b'mLastWakeTime=123\n'
+                if command == 'dumpsys deviceidle':
+                    return b'  mScreenOn=false\n  mState=IDLE mLightState=OVERRIDE\n'
+                if command == 'dumpsys power':
+                    return b'mLastWakeTime=123\n'
                 if command == 'dumpsys notification':
                     if (clock[0] + 120) * 1000 < target + 200:
                         return b''
                     return (f'NotificationRecord(0x1: pkg=com.astrovm.crosstune.dev user=0 id=5 tag=null)\n'
                             f' mCreationTimeMs={target + 200}\n').encode()
-                if command == 'input keyevent 223': return b''
+                if command == 'input keyevent 223':
+                    return b''
                 raise AssertionError(command)
 
         def sleep(seconds): clock[0] += seconds
@@ -412,7 +532,7 @@ class RunTest(unittest.TestCase):
             self.assertGreaterEqual(clock[0], target / 1000 + 0.2 - 120 + 5)
             self.assertIn('deep IDLE before it: yes', __import__('measure').idle_summary(result[4], target))
         self.assertGreaterEqual(phone.alarm_queries, 3)
-        self.assertEqual(phone.exact, 'default')
+        self.assertEqual(phone.exact, ('deny', 'allow'))
         self.assertEqual(phone.permission, (False, frozenset({'USER_SET'})))
         self.assertFalse(phone.battery)
         self.assertFalse(phone.idle)
@@ -433,7 +553,7 @@ class RunTest(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'woke'):
                     run_measurement(phone, 1, 1, True, True, Path(directory) / 'backup.xml')
             self.assertFalse((Path(directory) / 'backup.xml').exists())
-        self.assertEqual(phone.exact, 'default')
+        self.assertEqual(phone.exact, ('deny', 'allow'))
         self.assertEqual(phone.permission, (False, frozenset({'USER_SET'})))
         self.assertFalse(phone.battery)
         self.assertFalse(phone.idle)
@@ -615,7 +735,7 @@ class RecoveryTest(unittest.TestCase):
         from measure import recover_state
 
         class FakePhone:
-            exact = 'allow'
+            exact = ('allow', 'ignore')
             permission = (True, frozenset({'USER_SET'}))
             appop = ('allow', None)
             battery = True
@@ -624,7 +744,7 @@ class RecoveryTest(unittest.TestCase):
             prefs = b'<map>temporary</map>'
 
             def exact_mode(self): return self.exact
-            def set_exact_mode(self, value): self.exact = value
+            def restore_exact_mode(self, value): self.exact = tuple(value)
             def notification_state(self): return self.permission
             def set_notification_state(self, value): self.permission = value
             def notification_appop_state(self): return self.appop
@@ -644,7 +764,7 @@ class RecoveryTest(unittest.TestCase):
                     return b''
                 raise AssertionError(command)
 
-        state = {'exact': 'default', 'notifications': [False, ['USER_SET']],
+        state = {'exact': ['deny', 'allow'], 'notifications': [False, ['USER_SET']],
                  'notification_appop': ['ignore', None], 'battery': False,
                  'forced_idle': False, 'screen': False}
         phone = FakePhone()
@@ -654,7 +774,7 @@ class RecoveryTest(unittest.TestCase):
             recover_state(phone, state, backup)
             self.assertFalse(backup.exists())
         self.assertEqual(phone.prefs, b'<map />')
-        self.assertEqual(phone.exact, 'default')
+        self.assertEqual(phone.exact, ('deny', 'allow'))
         self.assertEqual(phone.permission, (False, frozenset({'USER_SET'})))
         self.assertEqual(phone.appop, ('ignore', None))
         self.assertFalse(phone.battery or phone.idle or phone.screen)
