@@ -9,23 +9,20 @@
 #     production. TAGS is the version code of each tag, with commas between. It only reads.
 #     It stops when a version code on Play is one no tag has, at any height: a bundle sent by hand, a draft in
 #     Play Console, or a tag pushed and then deleted.
-#     With a version code above CODE on any track, as for a fix to an older version or an older tag run
-#     again, Play gets nothing: it exits 5 when production has CODE or newer, else 6, for promote.yml to send
-#     to production.
+#     It stops when any track has a version code above CODE: an older tag's release run again. Nothing is sent.
 #     Else it exits 0 when the first TRACK has AAB itself as CODE: a re-run. 4 when Play has AAB as CODE, but
 #     not there: sent in a run whose commit Play refused. 3 when Play has no bundle as CODE. It stops when Play
 #     has another bundle as CODE (sent by hand, or the same tag built or signed again).
-#   ruby play.rb on-track KEY PACKAGE TRACK[,TRACK...] CODE
-#     Exits 0 when the first TRACK has a release with CODE. 3 when it doesn't, but a TRACK has a newer
-#     version: CODE is a fix to an older version, which only production takes. Else it stops. It only reads.
-#   ruby play.rb edit KEY PACKAGE [[--from TRACK] --code CODE --to TRACK[,TRACK...]] [--aab AAB]
+#   ruby play.rb on-track KEY PACKAGE TRACK CODE
+#     Exits 0 when TRACK has a release with CODE. Else it stops. It only reads.
+#   ruby play.rb edit KEY PACKAGE [[--from TRACK] --code CODE --to TRACK[,TRACK...]]
 #                     [--listing DIR] [--notes DIR] [--check-only]
 #     One edit. With --from, the release CODE on that track goes on to each --to track. With no --from, the
-#     bundle as CODE goes on them, and none may have it already: AAB, sent in this edit unless Play has it, or
-#     else the bundle Play has. Either way, it stops when a --to track has a version code above CODE. With the
-#     listing in DIR (folders by language, as play.sh makes them) and the release notes in
-#     DIR/en-US/changelogs/CODE.txt. Then the edit is committed, or with --check-only only checked. supply can
-#     only promote to one track a run, so this drives supply's own client and uploader in one edit.
+#     bundle Play has as CODE goes on them, and none may have it already. Either way, it stops when a --to
+#     track has a version code above CODE. With the listing in DIR (folders by language, as play.sh makes
+#     them) and the release notes in DIR/en-US/changelogs/CODE.txt. Then the edit is committed, or with
+#     --check-only only checked. supply can only promote to one track a run, so this drives supply's own client
+#     and uploader in one edit.
 require "digest"
 require "optparse"
 require_relative "review_guard"
@@ -104,8 +101,8 @@ module Crosstune
         stop_strays(codes, tags + [code.to_i])
         newer = newer(codes, code)
         unless newer.empty?
-          puts("Google Play has a version newer than #{code} on #{newer.join(', ')}")
-          return codes[PRODUCTION].any? { |c| c >= code.to_i } ? 5 : 6
+          Play.stop!("Google Play already has a version newer than #{code} on #{newer.join(', ')}, so nothing was " \
+                     "sent: a release never takes a track back to an older version. Release from a new tag on main.")
         end
         return 3 if held(bundles, code, aab) == :absent
 
@@ -123,16 +120,13 @@ module Crosstune
                    "Console, or push its tag, then re-run this job.")
       end
 
-      # Production's way for CODE: see on-track at the top.
-      def on_track(package, tracks, code)
-        codes = within(package) { version_codes(tracks) }
-        return 0 if codes[tracks.first].include?(code.to_i)
+      # Whether TRACK has CODE, for production: see on-track at the top.
+      def on_track(package, track, code)
+        codes = within(package) { version_codes([track]) }
+        return 0 if codes[track].include?(code.to_i)
 
-        newer = codes.find { |_, on| on.any? { |c| c > code.to_i } }&.first
-        Play.stop!("Track '#{tracks.first}' has no release with version code #{code}. Its tag's release sends it " \
-                   "there: re-run it, then run this again.") unless newer
-        puts("Track '#{newer}' has a newer version than #{code}")
-        3
+        Play.stop!("Track '#{track}' has no release with version code #{code}. Its tag's release sends it " \
+                   "there: re-run it, then run this again.")
       end
 
       def stop_going_back(to, code)
@@ -143,14 +137,16 @@ module Crosstune
                                      "so nothing was sent: a release never takes a track back to an older version")
       end
 
-      # The bundle as code, as the one release on each track, as supply's upload puts it there: aab, sent in
-      # this edit unless Play has it, or else the bundle Play has. Only on tracks with older versions, which
-      # stop_going_back checks first: a fix to an older version goes on production this way, in one edit with
-      # its bundle.
-      def put(code, to, aab)
+      # The bundle Play has as code, as the one release on each track, as supply's upload puts it there: a
+      # bundle Play kept from a run whose commit it refused. Only on tracks with older versions, which
+      # stop_going_back checks first.
+      def put(code, to)
         has = version_codes(to).select { |_, on| on.include?(code.to_i) }.keys
         FastlaneCore::UI.user_error!("#{has.join(', ')} has #{code} already, so nothing was sent") unless has.empty?
-        send_bundle(code, aab)
+        unless bundles.any? { |b| b.version_code.to_s == code }
+          FastlaneCore::UI.user_error!("Google Play has no bundle as #{code}, so nothing was sent. Its tag's " \
+                                       "release sends it")
+        end
 
         release = Google::Apis::AndroidpublisherV3::TrackRelease.new(
           status: Supply::ReleaseStatus::COMPLETED,
@@ -161,22 +157,6 @@ module Crosstune
           track.releases = [release]
           client.update_track(name, track)
         end
-      end
-
-      def send_bundle(code, aab)
-        if aab
-          return if held(bundles, code, aab) == :same
-
-          sent = client.upload_bundle(aab)
-          return if sent.to_s == code
-
-          FastlaneCore::UI.user_error!("Google Play reads #{sent} as the bundle's version code, not #{code}, so " \
-                                       "nothing was sent")
-        end
-        return if bundles.any? { |b| b.version_code.to_s == code }
-
-        FastlaneCore::UI.user_error!("Google Play has no bundle as #{code}, so nothing was sent. Its tag's " \
-                                     "release sends it")
       end
 
       # supply's promote_track, for each track, but one that skips a release with no version codes, such as a
@@ -231,10 +211,10 @@ module Crosstune
     end
 
     def on_track(argv)
-      key, package, tracks, code = argv
-      abort("usage: play.rb on-track KEY PACKAGE TRACK[,TRACK...] CODE") unless code
+      key, package, track, code = argv
+      abort("usage: play.rb on-track KEY PACKAGE TRACK CODE") unless code
       require_supply
-      exit(Edit.new(json_key: key, package_name: package).on_track(package, tracks.split(","), code))
+      exit(Edit.new(json_key: key, package_name: package).on_track(package, track, code))
     end
 
     def parse_edit(argv)
@@ -244,7 +224,6 @@ module Crosstune
         parser.on("--from TRACK") { |value| options[:from] = value }
         parser.on("--code CODE") { |value| options[:code] = value }
         parser.on("--to TRACKS", Array) { |value| options[:to] = value.reject(&:empty?) }
-        parser.on("--aab AAB") { |value| options[:aab] = value }
         parser.on("--listing DIR") { |value| options[:listing] = value }
         parser.on("--notes DIR") { |value| options[:notes] = value }
         parser.on("--check-only") { options[:check_only] = true }
@@ -257,7 +236,6 @@ module Crosstune
       to = options[:to]
       abort("Name --code with --to") if !to.empty? && !options[:code]
       abort("Name --to with --code") if to.empty? && options[:code]
-      abort("An App Bundle goes on tracks with no --from") if options[:aab] && (to.empty? || options[:from])
       abort("Release notes go to one track at a time") if options[:notes] && to.size != 1
       abort("Release notes and the listing go in separate edits") if options[:notes] && options[:listing]
       abort("Nothing to send") if to.empty? && !options[:listing]
@@ -289,7 +267,7 @@ module Crosstune
         edit.promote(options[:from], options[:code], options[:to])
       elsif !options[:to].empty?
         edit.stop_going_back(options[:to], options[:code])
-        edit.put(options[:code], options[:to], options[:aab])
+        edit.put(options[:code], options[:to])
       end
       edit.send_notes(options[:to].first) if options[:notes]
       edit.send_listing(options[:listing]) if options[:listing]
@@ -312,7 +290,7 @@ module Crosstune
       when "edit" then edit(argv)
       else
         abort("usage: play.rb supply ARGS... | plan KEY PACKAGE TRACK[,TRACK...] CODE AAB TAGS | " \
-              "on-track KEY PACKAGE TRACK[,TRACK...] CODE | edit KEY PACKAGE ...")
+              "on-track KEY PACKAGE TRACK CODE | edit KEY PACKAGE ...")
       end
     end
   end

@@ -199,8 +199,8 @@ jobs:
           path: Crosstune-${{ env.TAG }}.apk
           if-no-files-found: error
 
-      # For Google Play. The release keeps it too, so promote.yml can send a fix to an older version to
-      # production, signed once, here, with no keystore where the Play key is.
+      # For Google Play, signed once, here, with no keystore where the Play key is. The GitHub release keeps it
+      # too, for an upload in Play Console by hand.
       - name: Upload signed App Bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -301,28 +301,23 @@ jobs:
           # The releases out as vX.Y.Z: no draft, no pre-release, and no test version from before they were marked.
           out="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[] | [.tag_name, .draft, .prerelease] | @tsv')"
           mine="$(key "$TAG")"
-          start="" start_key="" newer=""
+          start="" start_key=""
           while IFS=$'\t' read -r tag draft prerelease; do
             if [[ "$draft" == false && "$prerelease" == false && "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               version="$(key "$tag")"
-              if [[ "$version" > "$mine" ]]; then
-                newer="$tag"
-              elif [[ "$version" < "$mine" && "$version" > "$start_key" ]]; then
+              if [[ "$version" < "$mine" && "$version" > "$start_key" ]]; then
                 start="$tag" start_key="$version"
               fi
             fi
           done <<< "$out"
-          # The notes list what changed since the version before, by number: a fix to an older version starts at
-          # that version, and a final at the final before it, never at its own test versions.
+          # The notes list what changed since the final release before, never since its own test versions.
           if [[ -n "$start" ]]; then
             args+=(--notes-start-tag "$start")
           fi
           # The app's update check and the site's download button offer the latest release. A pre-release is
-          # never the latest, and neither is a fix to an older version, such as v2.26.1 after v2.27.0.
+          # never the latest.
           if [[ "$PRERELEASE" == "true" ]]; then
             args+=(--prerelease)
-          elif [[ -n "$newer" ]]; then
-            args+=(--latest=false)
           fi
           gh release create "$TAG" "Crosstune-$TAG.apk" "Crosstune-$TAG.aab" "${args[@]}"
 
@@ -331,8 +326,8 @@ jobs:
   # listing, in one edit: one review a release. Production is a step of its own, promote.yml. Skipped until the
   # PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing" in CONTRIBUTING.md. Skipped for a pre-release too:
   # Play takes each version code once, and v2.27.0-rc.1 has the one of 2.27.0, which 2.27.0 itself needs.
-  # A test version never goes to Play. A fix to an older version sends Play nothing: play.sh finds the newer
-  # version on Play first. promote.yml sends it to production from the release's App Bundle.
+  # A test version never goes to Play. When Play has a newer version, as for an older tag's release run again,
+  # play.sh sends nothing and the job fails.
   play:
     needs: [build, sign, publish]
     if: needs.build.outputs.prerelease == 'false'

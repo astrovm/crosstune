@@ -6,9 +6,8 @@
 #                              sends that release on to each track in PLAY_TRACKS, with the listing. So each
 #                              release goes to Google's review once.
 #   play.sh production VERSION The release VERSION (2.26.0) on the first track in PLAY_TRACKS goes on to
-#                              production, with its English release notes, in an edit of its own. A fix to
-#                              an older version, which no testing track gets, goes from its GitHub release's
-#                              App Bundle, in the same edit.
+#                              production, with its English release notes, in an edit of its own. Any other
+#                              version is refused.
 #   play.sh listing            The listing alone. CHECK_ONLY=true only asks Play whether it would take it.
 #   play.sh setup              Bundler and the gems Gemfile.lock pins, in a step before the key is there.
 #
@@ -23,9 +22,8 @@
 # isn't sent to Play.
 #
 # No release takes a track back to an older version. When internal testing, a testing track or production has
-# a newer version, the release is a fix to an older version, or an older tag run again: Play gets nothing, and
-# promote.yml can send it to production while production has an older one. A version code on Play that no tag
-# on origin has stops the job: something sent by hand, or a tag since deleted.
+# a newer version, as for an older tag's release run again, Play gets nothing and the job fails. A version code
+# on Play that no tag on origin has stops the job: something sent by hand, or a tag since deleted.
 set -euo pipefail
 
 # A tag with a suffix, as in v2.27.0-rc.1, has the version code of 2.27.0, and Play takes each version code
@@ -142,8 +140,7 @@ tag_codes() {
 copy_notes() {
   local notes="$1" code="$2" from="$metadata/en-US/changelogs/$2.txt"
   if [[ ! -f "$from" ]]; then
-    echo "::error::$from isn't here, so nothing was sent to Google Play. promote.yml reads the release notes" \
-      "from main, so a fix to an older version adds them to main too"
+    echo "::error::$from isn't here, so nothing was sent to Google Play"
     exit 1
   fi
   mkdir -p "$notes/en-US/changelogs"
@@ -184,7 +181,7 @@ release() {
   # Internal testing first: Google doesn't review it, so testers there get each release in minutes, and the
   # track never sits on an old version. While a review is in progress, Play takes no commit, this one included.
   # A re-run finds the bundle there already. Before anything is sent, Play is asked what internal testing, each
-  # track in PLAY_TRACKS and production have.
+  # track in PLAY_TRACKS and production have, and a newer version on any of them stops the job.
   found=0
   play plan "$key" "$package" "$(IFS=,; echo "internal,${tracks[*]}")" "$code" "Crosstune-$tag.aab" "$known" ||
     found=$?
@@ -208,18 +205,6 @@ release() {
         --skip_upload_images true \
         --skip_upload_screenshots true
       ;;
-    5)
-      echo "::notice::$tag stays on GitHub only: Google Play has a newer version, and production has this one" \
-        "or a newer one"
-      return
-      ;;
-    6)
-      # A fix to an older version: testers keep the newer one, and production can take this one. promote.yml
-      # sends its bundle and puts it on production in one edit.
-      echo "::notice::$tag isn't sent to Google Play, whose testing tracks have a newer version." \
-        "To send it to production, run promote.yml with ${tag#v}"
-      return
-      ;;
     *) exit "$found" ;;
   esac
 
@@ -230,28 +215,11 @@ release() {
 }
 
 production() {
-  local version="${1#v}" code on=0
+  local version="${1#v}" code
   code="$(version_code "$version")"
   copy_notes "$work/notes" "$code"
-  play on-track "$key" "$package" "$(IFS=,; echo "${tracks[*]}")" "$code" || on=$?
-  if [[ "$on" == 0 ]]; then
-    play edit "$key" "$package" --from "${tracks[0]}" --code "$code" --to production --notes "$work/notes"
-  elif [[ "$on" == 3 ]]; then
-    # A fix to an older version, which its release sent nowhere, as testing has a newer one. Its bundle goes
-    # from its GitHub release, where release.yml keeps the signed App Bundle.
-    local tag="v$version" aab
-    aab="$work/Crosstune-$tag.aab"
-    echo "So production gets $tag's App Bundle from its GitHub release"
-    if ! curl --fail --silent --show-error --location --proto '=https,file' --output "$aab" \
-      "${RELEASES_URL:-https://github.com/astrovm/crosstune/releases/download}/$tag/Crosstune-$tag.aab"; then
-      echo "::error::$tag's GitHub release has no Crosstune-$tag.aab, so nothing was sent to Google Play." \
-        "Attach it from the release run's Crosstune-$tag-play artifact (gh release upload), then run this again"
-      exit 1
-    fi
-    play edit "$key" "$package" --code "$code" --to production --aab "$aab" --notes "$work/notes"
-  else
-    exit "$on"
-  fi
+  play on-track "$key" "$package" "${tracks[0]}" "$code"
+  play edit "$key" "$package" --from "${tracks[0]}" --code "$code" --to production --notes "$work/notes"
 }
 
 listing() {
