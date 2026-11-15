@@ -822,7 +822,13 @@ internal class MediaSessionPlayback(
     private fun <T> changes(read: () -> T): Flow<T> = callbackFlow {
         var watched: List<MediaController> = emptyList()
         fun update() { trySend(read()) }
-        val coverChanges = launch { covers.updates.collect { update() } }
+        val refreshCover = Runnable { update() }
+        val coverChanges = launch {
+            covers.updates.collect {
+                handler.removeCallbacks(refreshCover)
+                handler.post(refreshCover)
+            }
+        }
         val callback = object : MediaController.Callback() {
             override fun onMetadataChanged(metadata: MediaMetadata?) = update()
             override fun onPlaybackStateChanged(state: PlaybackState?) = update()
@@ -848,6 +854,7 @@ internal class MediaSessionPlayback(
         if (!watching) update()
         awaitClose {
             coverChanges.cancel()
+            handler.removeCallbacks(refreshCover)
             sessions.removeOnActiveSessionsChangedListener(changed)
             audio.unregisterAudioPlaybackCallback(sounding)
             watched.forEach { it.unregisterCallback(callback) }
