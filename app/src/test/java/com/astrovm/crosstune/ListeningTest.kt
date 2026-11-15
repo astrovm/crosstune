@@ -5084,6 +5084,58 @@ class ListeningTest {
     }
 
     @Test
+    fun aMovedLineKeepsANewerTimingAndTranslation() {
+        aLineMovesWhile { store, old ->
+            store.replaceAll(listOf(old to old.copy(
+                startMs = 7_000, endMs = 9_000, nextMs = 10_000, lengthMs = 200_000,
+                leadMs = 800, app = "demo.player", artworkUrl = "https://example.invalid/cover", translation = "New translation"
+            )))
+        }
+        val moved = SavedLinesStore(prefs()).load().single()
+        assertEquals("Night sky above", moved.text)
+        assertEquals(7_000L, moved.startMs)
+        assertEquals(9_000L, moved.endMs)
+        assertEquals(10_000L, moved.nextMs)
+        assertEquals(200_000L, moved.lengthMs)
+        assertEquals(800L, moved.leadMs)
+        assertEquals("demo.player", moved.app)
+        assertEquals("https://example.invalid/cover", moved.artworkUrl)
+        assertEquals("New translation", moved.translation)
+    }
+
+    @Test
+    fun aLineSavedAtTheDestinationWhileAMoveWaitsIsNotDuplicated() {
+        aLineMovesWhile { store, old ->
+            store.addAll(listOf(old.copy(text = "Night sky above", translation = "Kept separately", interval = 8, due = 123_000)))
+        }
+        val kept = SavedLinesStore(prefs()).load()
+        assertEquals(kept.size, kept.distinctBy { Triple(it.text, it.title, it.artist) }.size)
+        val destination = kept.single { it.text == "Night sky above" }
+        assertEquals("Kept separately", destination.translation)
+        assertEquals(8, destination.interval)
+        assertEquals(123_000L, destination.due)
+        assertTrue(kept.any { it.text == "Night sky" })
+    }
+
+    /** Hold the move's background work while another save changes the current store. */
+    private fun aLineMovesWhile(change: (SavedLinesStore, SavedLine) -> Unit) {
+        prefs().edit().putString(
+            "saved_lines", """[{"text":"Night sky","title":"Demo","artist":"Band","readWith":${Readings.VERSION}}]"""
+        ).commit()
+        val gate = Gate()
+        MainActivity.systemDispatcher = gate
+        wordsOf(null, "Night sky above", translations = 503, before = { gate.held = true })
+        try {
+            waitUntil(TIMEOUT_MS) { gate.queued.isNotEmpty() }
+            val store = SavedLinesStore(prefs())
+            change(store, store.load().single())
+        } finally {
+            gate.letGo()
+        }
+        settle()
+    }
+
+    @Test
     fun aLineKeptWithNothingPutRightFollowsItsWordsWhenTheyChange() {
         prefs().edit().putString(
             "saved_lines",
