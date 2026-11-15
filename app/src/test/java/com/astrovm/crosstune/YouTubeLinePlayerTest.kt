@@ -103,9 +103,40 @@ class YouTubeLinePlayerTest {
 
     @Test
     fun aPlayerThatNeverAnswersFailsWithinTheLineAndFiveSeconds() {
-        player.show("abc", 0, 1_000, null, play = true) { ends += it }
-        shadowOf(android.os.Looper.getMainLooper()).idleFor(6, java.util.concurrent.TimeUnit.SECONDS)
+        player.show("abc", 10_000, 11_000, null, play = true) { ends += it }
+        val main = shadowOf(android.os.Looper.getMainLooper())
+        main.idleFor(5_999, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertTrue(ends.isEmpty())
+        main.idleFor(1, java.util.concurrent.TimeUnit.MILLISECONDS)
         assertEquals(listOf(LineEnd.FAILED), ends)
+    }
+
+    @Test
+    fun thePagesFailureFinishesItsRequestOnlyOnce() {
+        player.show("abc", 10_000, 11_000, null, play = true) { ends += it }
+        answer("failed")
+        answer("failed")
+        answer("ended")
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(listOf(LineEnd.FAILED), ends)
+        assertEquals("pause();", latest())
+    }
+
+    @Test
+    fun stoppedAndReplacedLinesRemoveTheirPendingDeadline() {
+        val main = shadowOf(android.os.Looper.getMainLooper())
+        main.idle()
+        val before = main.nextScheduledTaskTime
+        player.show("abc", 10_000, 110_000, null, play = true) { ends += it }
+        assertTrue(main.nextScheduledTaskTime > before)
+        player.pause()
+        assertEquals(before, main.nextScheduledTaskTime)
+        player.show("abc", 10_000, 110_000, null, play = true) { ends += it }
+        player.show("abc", 10_000, 11_000, null, play = false) { ends += it }
+        assertEquals(before, main.nextScheduledTaskTime)
+        player.show("abc", 10_000, 110_000, null, play = true) { ends += it }
+        player.release()
+        assertEquals(before, main.nextScheduledTaskTime)
     }
 
     @Test

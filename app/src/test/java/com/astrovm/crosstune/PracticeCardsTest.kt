@@ -2630,6 +2630,26 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun releasingPracticeCancelsItsPendingVideoLookup() {
+        val (gate, started) = holdHosts("music.youtube.com")
+        keep(line())
+        playback.access = true
+        val cards = cards()
+        try {
+            cards.start(null, before = null)
+            assertTrue(started.await(5, TimeUnit.SECONDS))
+            cards.release()
+            val stopped = screen.value
+            gate.countDown()
+            waitFor("the cancelled lookup has ended") { scope.coroutineContext[kotlinx.coroutines.Job]?.children?.none() == true }
+            assertTrue(player.shown.isEmpty())
+            assertEquals(stopped, screen.value)
+        } finally {
+            gate.countDown()
+        }
+    }
+
+    @Test
     fun releasingPracticeDoesNotMakeAnUnusedPlayer() {
         val cards = cards()
         cards.release()
