@@ -4369,18 +4369,22 @@ internal class MainViewModel(
         val script = uiState.learning.script
         viewModelScope.launch {
             savedLinesStore.change(systemDispatcher) { current ->
-                // Another save can finish while the readings are worked out. Keep its destination and edits.
-                val occupied = current.filter { it.isOf(song) }.mapTo(mutableSetOf()) { it.text }
-                current.map { saved ->
-                    val change = changes.firstOrNull { it.first.isSame(saved) }
-                    if (change == null) saved else {
-                        val (was, moved) = change
-                        if (saved.line != null) saved.copy(line = if (saved.line == was.line) moved.line else saved.line)
-                        else if (!occupied.add(moved.text)) saved
-                        else movedSavedLine(saved, was, moved, script)
-                    }
-                }
+                followedSavedLines(current, changes, song, script)
             }?.let { uiState = uiState.copy(savedLines = it) }
+        }
+    }
+
+    private fun followedSavedLines(current: List<SavedLine>, changes: List<Pair<SavedLine, SavedLine>>, song: MusicMetadata, script: Script?): List<SavedLine> {
+        // Another save can finish while the readings are worked out. Keep its destination and edits.
+        val occupied = current.filter { it.isOf(song) }.mapTo(mutableSetOf()) { it.text }
+        return current.map { saved ->
+            val change = changes.firstOrNull { it.first.isSame(saved) }
+            if (change == null) saved else {
+                val (was, moved) = change
+                if (saved.line != null) saved.copy(line = if (saved.line == was.line) moved.line else saved.line)
+                else if (!occupied.add(moved.text)) saved
+                else movedSavedLine(saved, was, moved, script)
+            }
         }
     }
 
