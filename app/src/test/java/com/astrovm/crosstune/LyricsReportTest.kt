@@ -345,6 +345,33 @@ class LyricsReportTest {
     }
 
     @Test
+    fun aDismissedReportCannotSetTheNextDialogsStatusOrSendTwice() {
+        MainActivity.lookupDispatcher = Dispatchers.IO
+        val held = CountDownLatch(1).also { reportsHeld = it }
+        openLyrics()
+        try {
+            val before = model().viewModelScope.coroutineContext[Job]?.children?.toSet().orEmpty()
+            composeRule.runOnIdle { model().sendReport("first") }
+            waitUntil { ReportSender.URL in fake.requestedUrls }
+            val sending = checkNotNull(model().viewModelScope.coroutineContext[Job]?.children?.firstOrNull { it !in before })
+            composeRule.runOnIdle {
+                model().sendReport("first")
+                model().closeReport()
+                model().sendReport("second")
+            }
+            assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+            held.countDown()
+            waitUntil { sending.isCompleted }
+            assertNull(model().uiState.report)
+            composeRule.runOnIdle { model().sendReport("second") }
+            waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.SENT }
+            assertFalse(sentReports()[0].getString("id") == sentReports()[1].getString("id"))
+        } finally {
+            held.countDown()
+        }
+    }
+
+    @Test
     fun aSongWithNoWordsOffersToReportProblemsLikeItAndYesSendsThisOne() {
         lyricsAre("[]")
         openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_none))).fetchSemanticsNodes().isNotEmpty() }
