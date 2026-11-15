@@ -87,6 +87,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(os.environ.get("SYNCREPLAY_DIR") or ROOT / "build" / "syncreplay")
+sys.path.insert(0, str(ROOT / "scripts" / "kotlinc"))
+import kotlinc  # noqa: E402  the compiler jars the readings guard parses with too
 HEARD = OUT / "heard"
 HEARD_BUILT = threading.Lock()
 # The app's speech model; others can be tried with `hear --model` and `run --model`.
@@ -525,8 +527,8 @@ def lined_up(ours, theirs):
         other = same.get(start)
         if other is None or first_b.get(b[other][1]) != other:
             continue
-        ours_words = [n for n, (_, l) in enumerate(a) if l == line]
-        theirs_words = {n for n, (_, l) in enumerate(b) if l == b[other][1]}
+        ours_words = [n for n, (_, at) in enumerate(a) if at == line]
+        theirs_words = {n for n, (_, at) in enumerate(b) if at == b[other][1]}
         if sum(same.get(n) in theirs_words for n in ours_words) * 2 > min(len(ours_words), len(theirs_words)):
             pairs[line] = b[other][1]
     return pairs
@@ -1060,52 +1062,31 @@ def hear(args):
 
 
 # Words found with no timing, put in time by the singing heard (SungTiming.kt), held against when each line is sung.
-UNTIMED_SOURCES = ("app/src/main/java/com/astrovm/crosstune/SungTiming.kt", "app/src/main/java/com/astrovm/crosstune/SyncedLyrics.kt", "scripts/syncreplay/UntimedReplay.kt")
-# The jars the Kotlin compiler needs, by the start of their names, from Gradle's caches.
-KOTLIN_JARS = ("kotlin-compiler-embeddable-", "kotlin-stdlib-", "kotlin-script-runtime-", "kotlin-reflect-", "kotlin-daemon-embeddable-",
-               "kotlinx-coroutines-core-jvm-", "annotations-", "fastutil-")
+# Each file the replay reaches: test_untimed_sources.py checks the list with the readings guard's parser.
+UNTIMED_SOURCES = tuple(f"app/src/main/java/com/astrovm/crosstune/{name}.kt" for name in ("SungTiming", "SyncedLyrics", "Patterns", "PhoneRegex", "PhoneRegexTable")) \
+    + tuple(f"app/src/test/java/com/astrovm/crosstune/{name}.kt" for name in ("IcuPattern", "PhoneRegexSets")) + ("scripts/syncreplay/UntimedReplay.kt",)
 JDK_IMAGE = "docker.io/library/eclipse-temurin:25-jdk"
 ON_TIME_UNTIMED_S = 1.0
 
 
-def kotlin_version():
-    return re.search(r'kotlin\.plugin\.compose"\) version "([^"]+)"', (ROOT / "build.gradle.kts").read_text()).group(1)
-
-
 def kotlin_jars():
-    """The Kotlin compiler and what it runs on, copied once from Gradle's caches into the agent cache: the
-    app's own version, so the timing is compiled as the app's build compiles it. The compiler is the one
-    the build downloads; the rest come from a Gradle that runs the same Kotlin, as they work together there."""
-    version = kotlin_version()
-    folder = OUT / "kotlinc" / version
-    if (folder / "done").exists():
-        return sorted(folder.glob("*.jar"))
-    caches = [cache for cache in (Path.home() / ".cache" / "crosstune-gradle-box", Path.home() / ".gradle") if cache.exists()]
-    compiler = next((jar for cache in caches for jar in cache.rglob(f"kotlin-compiler-embeddable-{version}.jar") if "files-2.1" in jar.parts), None)
-    lib = next((jar.parent for cache in caches for jar in cache.rglob(f"kotlin-stdlib-{version}.jar") if "dists" in jar.parts), None)
-    if compiler is None or lib is None:
-        sys.exit(f"No Kotlin {version} compiler in Gradle's caches: build the app once with scripts/gradle-box/gradle-box.sh first.")
-    rest = [jar for start in KOTLIN_JARS[1:] for jar in sorted(lib.glob(f"{start}*.jar"))[:1]]
-    if len(rest) < len(KOTLIN_JARS) - 1:
-        sys.exit(f"Gradle's {lib} lacks some of {KOTLIN_JARS[1:]}")
-    folder.mkdir(parents=True, exist_ok=True)
-    for jar in [compiler, *rest]:
-        shutil.copy(jar, folder / jar.name)
-    (folder / "done").write_text("")
-    return sorted(folder.glob("*.jar"))
+    """The Kotlin compiler at the app's own version, and what it runs with, as scripts/kotlinc/kotlinc.lock holds them:
+    so the timing is compiled as the app's build compiles it."""
+    return kotlinc.fetch(ROOT)
 
 
 def untimed_classes():
     """SungTiming.kt and the replay compiled, in a container, once for each change to them."""
     import hashlib
     sources = [ROOT / name for name in UNTIMED_SOURCES]
-    key = hashlib.sha256(b"".join(path.read_bytes() for path in sources) + kotlin_version().encode()).hexdigest()[:16]
+    key = hashlib.sha256(b"".join(path.read_bytes() for path in sources) + kotlinc.LOCK.read_bytes()).hexdigest()[:16]
     classes = OUT / "untimed-classes" / key
     if not (classes / "done").exists():
         jars = kotlin_jars()
         compiler = ":".join(str(jar) for jar in jars)
         stdlib = next(str(jar) for jar in jars if jar.name.startswith("kotlin-stdlib-"))
-        subprocess.run(["podman", "run", "--rm", "-v", f"{ROOT}:{ROOT}:ro", "-v", f"{OUT}:{OUT}", JDK_IMAGE,
+        folder = jars[0].parent
+        subprocess.run(["podman", "run", "--rm", "-v", f"{ROOT}:{ROOT}:ro", "-v", f"{folder}:{folder}:ro", "-v", f"{OUT}:{OUT}", JDK_IMAGE,
                         "java", "-cp", compiler, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect", "-nowarn",
                         "-cp", stdlib, "-d", str(classes), *map(str, sources)], check=True)
         (classes / "done").write_text("")
@@ -1152,8 +1133,8 @@ def untimed(args):
             list(pool.map(heard_all, songs))
     inputs = {song: untimed_input(song, [s // STEP_MS * STEP_MS for s in wanted[song]] if not args.nearest else wanted[song], lengths[song], args.heard) for song in songs}
     classes = untimed_classes()
-    stdlib = next(str(jar) for jar in kotlin_jars() if jar.name.startswith("kotlin-stdlib-"))
-    subprocess.run(["podman", "run", "--rm", "-v", f"{OUT}:{OUT}:ro", "-v", f"{own()}:{own()}", JDK_IMAGE,
+    stdlib = next(jar for jar in kotlin_jars() if jar.name.startswith("kotlin-stdlib-"))
+    subprocess.run(["podman", "run", "--rm", "-v", f"{OUT}:{OUT}:ro", "-v", f"{stdlib.parent}:{stdlib.parent}:ro", "-v", f"{own()}:{own()}", JDK_IMAGE,
                     "java", "-cp", f"{classes}:{stdlib}", "com.astrovm.crosstune.UntimedReplayKt", *(str(path) for path, _ in inputs.values())], check=True)
     return untimed_score(songs, inputs, args.verbose)
 
