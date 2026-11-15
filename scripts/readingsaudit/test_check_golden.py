@@ -278,6 +278,15 @@ class FakeDiff(unittest.TestCase):
                 self.assertEqual((1, True, 1), (missing, checked != self.checked(repo), stale))
                 self.assertEqual((0, ""), self.run_check(repo, "golden: none\n" + self.checked(repo)))
 
+    def test_the_transitive_source_guard_is_part_of_the_lock(self):
+        for path in ("scripts/readingsaudit/source_calls.py", "scripts/readingsaudit/test_golden.py"):
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as folder:
+                repo = self.repo(folder, golden_text(ROW))
+                self.write(repo, path, "changed guard\n")
+                self.merge(repo, "test: change the dependency guard")
+                self.assertEqual(1, self.run_check(repo)[0])
+                self.assertEqual((0, ""), self.run_check(repo, "golden: lock changed\n"))
+
     def test_a_gitattributes_that_calls_the_build_file_binary_hides_no_kuromoji_bump(self):
         with tempfile.TemporaryDirectory() as folder:
             repo = self.repo(folder)

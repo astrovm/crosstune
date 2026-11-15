@@ -48,6 +48,8 @@ CHECKER = f"{SCRIPTS}/check_golden.py"
 LOCK_FILES = (
     CHECKER,
     f"{SCRIPTS}/golden.py",
+    f"{SCRIPTS}/source_calls.py",
+    f"{SCRIPTS}/test_golden.py",
     "app/src/test/java/com/astrovm/crosstune/GoldenReadings.kt",
     "app/src/test/java/com/astrovm/crosstune/ReadingsGoldenTest.kt",
     "app/src/test/java/com/astrovm/crosstune/songcheck/GoldenContexts.kt",
