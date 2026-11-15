@@ -6,6 +6,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.input.InputModeManager
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -32,7 +41,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -67,6 +75,7 @@ class PracticeReachTest {
         title = "Una canción de prueba con un nombre largo", artist = "Banda inventada", startMs = 1_000, endMs = 4_000
     )
 
+    private lateinit var inputModes: InputModeManager
     private var listed by mutableStateOf(false)
     private var started = false
 
@@ -76,6 +85,7 @@ class PracticeReachTest {
         started = true
         composeRule.setContent {
             view = LocalView.current
+            inputModes = LocalInputModeManager.current
             CrosstuneTheme { if (listed) PracticeList(state, actions, onBack = {}) else PracticeScreen(state, actions) }
         }
     }
@@ -135,9 +145,8 @@ class PracticeReachTest {
         assertTrue("$name isn't drawn: $drawn", drawn.height > 0f && drawn.width > 0f)
         assertTrue("$name is drawn ${drawn.height}px of ${whole}px, in ${sight.height}px", drawn.height >= minOf(whole, sight.height) - 1f)
         assertTrue("$name is drawn ${drawn.width}px of ${semantics.size.width}px", drawn.width >= semantics.size.width - 1f)
-        val info = requireNotNull(view.accessibilityNodeProvider).createAccessibilityNodeInfo(semantics.id)
-        assertNotNull("$name is gone for TalkBack", info)
-        assertTrue("$name isn't visible to TalkBack", info!!.isVisibleToUser)
+        val info = requireNotNull(requireNotNull(view.accessibilityNodeProvider).createAccessibilityNodeInfo(semantics.id)) { "$name is gone for TalkBack" }
+        assertTrue("$name isn't visible to TalkBack", info.isVisibleToUser)
     }
 
     /** Every text, scrolled to, is whole: no line cut short, no letter outside where it's drawn. */
@@ -224,6 +233,21 @@ class PracticeReachTest {
     @Config(qualifiers = "de-w320dp-h640dp-xhdpi", fontScale = 3.2f)
     fun everyPartIsReachedInGermanOnANarrowPhone() = everyPartOfEveryScreen()
 
+    private fun theListWhole() {
+        accessibility()
+        showList()
+        everyTextWhole("list", except = setOf(string(R.string.saved_practice)))
+        everyControlReached("list")
+    }
+
+    @Test
+    @Config(fontScale = 3.2f)
+    fun theListIsWholeAtTheLargestFont() = theListWhole()
+
+    @Test
+    @Config(qualifiers = "es-w320dp-h640dp-xhdpi", fontScale = 3.2f)
+    fun theListIsWholeOnANarrowPhone() = theListWhole()
+
     @Test
     @Config(fontScale = 3.2f)
     fun aSwipeOnTheCardScrollsItAndNeverTurnsIt() {
@@ -239,6 +263,29 @@ class PracticeReachTest {
         // A tap still turns it.
         show.performScrollTo().performClick()
         assertEquals(1, turned.size)
+    }
+
+    @Test
+    @Config(fontScale = 3.2f)
+    fun aRemoteMovesDownToTheGradesBelowTheFoldAndAnswersWithOne() {
+        accessibility()
+        show(Practice(queue = listOf(line.copy(cardType = HEAR_TYPE)), total = 5, turned = true, sound = LineSound.PLAYED, video = "fake-video"))
+        val again = composeRule.onNode(hasText(string(R.string.practice_again)) and hasClickAction())
+        assertTrue("the grades already fit, so this shows nothing", again.fetchSemanticsNode().boundsInRoot.height < again.fetchSemanticsNode().size.height)
+        // A remote, not a finger: Compose only focuses buttons then.
+        composeRule.runOnIdle { inputModes.requestInputMode(InputMode.Keyboard) }
+        composeRule.onNode(hasContentDescription(string(R.string.floating_close)) and hasClickAction()).requestFocus()
+        var presses = 0
+        while (again.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) != true && presses < 20) {
+            composeRule.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+            composeRule.waitForIdle()
+            presses++
+        }
+        again.assertIsFocused()
+        onScreen("focused Again", again)
+        composeRule.onRoot().performKeyInput { pressKey(Key.Enter) }
+        composeRule.waitForIdle()
+        assertEquals(listOf(Grade.AGAIN), graded)
     }
 
     @Test

@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -240,7 +241,7 @@ private fun Card(
  * the two scroll as one, so neither is cut or squeezed out.
  */
 @Composable
-internal fun FillThenScroll(modifier: Modifier = Modifier, top: @Composable () -> Unit, bottom: @Composable () -> Unit) {
+private fun FillThenScroll(modifier: Modifier, top: @Composable () -> Unit, bottom: @Composable () -> Unit) {
     BoxWithConstraints(modifier) {
         val height = constraints.maxHeight
         Layout(contents = listOf(top, bottom), modifier = Modifier.verticalScroll(rememberScrollState())) { (above, below), constraints ->
@@ -321,6 +322,7 @@ private fun Grades(line: SavedLine, practice: Practice, actions: ScreenActions) 
                     onClick = { answer(grade) },
                     modifier = Modifier.heightIn(min = 56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = fill, contentColor = text),
+                    shape = GRADE_SHAPE,
                     contentPadding = GRADE_PADDING
                 ) { GradeLabel(label, waitText(SavedLinesStore.waitFor(line, grade), locale)) }
             }
@@ -330,7 +332,7 @@ private fun Grades(line: SavedLine, practice: Practice, actions: ScreenActions) 
 
 /** Cells of one width and, in a row, one height: as many to a row as there are, half that, or one, the most that keep each one's longest word whole. */
 @Composable
-private fun EvenRows(gap: Dp, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+private fun EvenRows(gap: Dp, modifier: Modifier, content: @Composable () -> Unit) {
     Layout(content, modifier) { cells, constraints ->
         val space = gap.roundToPx()
         val width = constraints.maxWidth
@@ -522,6 +524,9 @@ private fun SongChip(line: SavedLine, actions: ScreenActions, kind: CardType? = 
 }
 
 private val GRADES = listOf(Grade.AGAIN to R.string.practice_again, Grade.HARD to R.string.practice_hard, Grade.GOOD to R.string.practice_good, Grade.EASY to R.string.practice_easy)
+
+/** A pill at a grade's usual height, and a rounded box, not a circle, when its words make it taller. */
+private val GRADE_SHAPE = RoundedCornerShape(28.dp)
 
 /** Little room around a grade's words, so four fit side by side. */
 private val GRADE_PADDING = PaddingValues(horizontal = 4.dp)
