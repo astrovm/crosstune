@@ -386,7 +386,7 @@ class FixStepsTest {
     }
 
     @Test
-    fun theStepsForAddingLinksWaitInCrosstuneWhereAndroidAsksInADialogTheGuideWouldCover() {
+    fun theStepsWaitInCrosstuneWhereAndroidAsksInADialogTheGuideWouldCover() {
         // Android 12 and later add links in a dialog with Add at the bottom right, where the floating window goes.
         val s = Build.VERSION_CODES.S
         assertFalse(broken.copy(phone = Phone.PIXEL).guideFloats(Need.Links, s))
@@ -395,8 +395,11 @@ class FixStepsTest {
         assertTrue(broken.copy(phone = Phone.SAMSUNG).guideFloats(Need.Links, s))
         assertTrue(broken.copy(phone = Phone.XIAOMI).guideFloats(Need.Links, s))
         assertTrue(broken.copy(phone = Phone.PIXEL).guideFloats(Need.Links, Build.VERSION_CODES.R))
+        // Every phone asks whether to allow notification access in a dialog, on Samsung too.
+        listOf(Phone.PIXEL, Phone.SAMSUNG, Phone.XIAOMI, Phone.OTHER).forEach { assertFalse("$it", broken.copy(phone = it).guideFloats(Need.Follow, s)) }
+        assertFalse(broken.copy(phone = Phone.PIXEL).guideFloats(Need.Follow, Build.VERSION_CODES.R))
         // Everything else is a switch or a choice on a page.
-        listOf(Need.StopApp(spotify), Need.Microphone, Need.Follow, Need.Float, Need.Exact).forEach {
+        listOf(Need.StopApp(spotify), Need.Microphone, Need.Float, Need.Exact).forEach {
             assertTrue("$it", broken.copy(phone = Phone.PIXEL).guideFloats(it, s))
         }
     }

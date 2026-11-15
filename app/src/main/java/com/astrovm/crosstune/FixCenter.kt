@@ -711,8 +711,8 @@ internal fun FloatingGuide(need: Need, state: UiState) {
     val steps = fixSteps(need, state, ScreenActions())
     Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxSize()) {
         if (state.done(need) == true) {
-            // Android won't let Crosstune come back from a floating window by itself, but making it
-            // big brings it back.
+            // Crosstune doesn't come back from a floating window by itself, as newer Android blocks
+            // that; making it big brings it back.
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically), modifier = Modifier.padding(12.dp)) {
                 AppIcon(R.drawable.ic_check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(64.dp))
                 Text(stringResource(R.string.practice_back_to, stringResource(R.string.app_name)), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
@@ -753,9 +753,13 @@ private fun Modifier.fitsHeight() = layout { measurable, constraints ->
 
 /**
  * Whether the steps for [need] float over Android's page. Android puts the floating window at the
- * bottom right, and Crosstune can't move it. Android's dialog for adding links, on Android 12 and
- * up, has its Add button right there, so a guide over it would cover the very button it asks for:
- * those steps wait in Crosstune instead. Samsung and Xiaomi tick links on a page with no such dialog.
+ * bottom right, and Crosstune can't move it. Where Android asks in a dialog, its buttons are right
+ * there, so a guide over it would cover the very button it asks for: those steps wait in Crosstune
+ * instead. Every phone asks whether to allow notification access that way, and Android 12 and up
+ * add links in one, but Samsung and Xiaomi, which tick links on a page.
  */
-internal fun UiState.guideFloats(need: Need, sdk: Int = Build.VERSION.SDK_INT): Boolean =
-    need != Need.Links || sdk < Build.VERSION_CODES.S || phone == Phone.SAMSUNG || phone == Phone.XIAOMI
+internal fun UiState.guideFloats(need: Need, sdk: Int = Build.VERSION.SDK_INT): Boolean = when (need) {
+    Need.Follow -> false
+    Need.Links -> sdk < Build.VERSION_CODES.S || phone == Phone.SAMSUNG || phone == Phone.XIAOMI
+    else -> true
+}

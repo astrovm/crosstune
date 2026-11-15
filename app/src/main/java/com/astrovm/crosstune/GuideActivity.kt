@@ -60,8 +60,9 @@ class GuideActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             // Android doesn't say when it's done, so it's asked every second, till the guide says it is.
-            // It doesn't bring Crosstune back by itself: Android never lets a floating window open an
-            // app, as it doesn't count as in sight. Made big, it's in sight, and brings Crosstune back.
+            // It doesn't bring Crosstune back by itself: newer Android blocks that from a floating
+            // window, which doesn't count as in sight. Made big, it's in sight on every version,
+            // and brings Crosstune back.
             while (host.state.done(need) != true) {
                 delay(CHECK_MS)
                 host.refresh()

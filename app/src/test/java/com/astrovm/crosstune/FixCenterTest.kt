@@ -511,7 +511,7 @@ class FixCenterTest {
         assertTrue(page.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertShown(string(R.string.fix_step_pick, string(R.string.android_in_your_browser)))
 
-        // Done, it says so. It doesn't ask Crosstune back: Android blocks a floating window from opening an app.
+        // Done, it says so. It doesn't ask Crosstune back, which newer Android blocks from a floating window.
         appKeepsLinks = false
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
         composeRule.waitForIdle()
@@ -540,6 +540,18 @@ class FixCenterTest {
         assertNull(GuideActivity.host)
         backToCrosstune()
         assertShown(string(R.string.fix_step_tap, string(R.string.android_add_link)))
+    }
+
+    @Test
+    fun theStepsForNotificationAccessWaitInCrosstuneWhereTheGuideWouldCoverAndroidsAllowButton() {
+        shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE, true)
+        launch()
+        openFixes()
+        click(string(R.string.follow_help_title))
+        click(string(R.string.fix_open_settings))
+        // Android asks to allow it in a dialog at the foot of the screen, where the guide would float.
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStarted()!!.action)
+        assertNull(GuideActivity.host)
     }
 
     @Test
