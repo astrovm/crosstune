@@ -516,6 +516,37 @@ class PracticeRemindersTest {
     }
 
     @Test
+    fun aBlockedDeliveryConsumesTheOccurrenceBeforeItsSpareArrives() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        val spare = Intent(shadowOf(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        shadowOf(manager).setNotificationsEnabled(false)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        shadowOf(manager).setNotificationsEnabled(true)
+        reminders.remind(spare)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(3, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
+    fun aDeliveryWithNoDueCardsConsumesTheOccurrenceBeforeItsSpareArrives() {
+        setUpWith(line("One", due = at(4, 20, 5)))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        val spare = Intent(shadowOf(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        saved(line("One"))
+        reminders.remind(spare)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(3, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
     fun practiceOnTheIntendedDayStillCountsAfterMidnightOrRestart() {
         val berlin = ZoneId.of("Europe/Berlin")
         clock = at(3, 7, zone = berlin)

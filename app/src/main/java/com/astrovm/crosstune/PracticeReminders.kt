@@ -229,7 +229,7 @@ internal class PracticeReminders(
         val now = now()
         val zone = zone()
         val pending = pendingOccurrence(minute, armed, now, zone)
-        return if (pending != null && pending.at != preferences.getLong(KEY_POSTED_FOR, 0L)) pending.at else nextReminderAt(minute, now, zone)
+        return if (pending != null && pending.at != preferences.getLong(KEY_CONSUMED_FOR, 0L)) pending.at else nextReminderAt(minute, now, zone)
     }
 
     private fun pendingOccurrence(minute: Int, slot: Long, now: Long, zone: ZoneId): ReminderOccurrence? {
@@ -254,18 +254,20 @@ internal class PracticeReminders(
             return
         }
         val slot = occurrence.at
-        // A valid delivery consumes the slot even with no due cards or blocked notifications.
-        preferences.edit { remove(KEY_ARMED_FOR) }
         // Both alarms can be on their way. Old and current deliveries share the latest due minute.
-        val again = slot != 0L && slot == preferences.getLong(KEY_POSTED_FOR, 0L)
+        val again = slot != 0L && slot == preferences.getLong(KEY_CONSUMED_FOR, 0L)
+        // A valid delivery consumes the slot even with no due cards or blocked notifications.
+        preferences.edit {
+            remove(KEY_ARMED_FOR)
+            // Legacy alarms have no occurrence to record.
+            if (slot != 0L) putLong(KEY_CONSUMED_FOR, slot)
+        }
         val types = loadCardTypes(preferences)
         val due = sessionOf(SavedLinesStore(preferences).load(), at, max = Int.MAX_VALUE, types = types)
         if (!again && due.isNotEmpty() && mayAsk(at, occurrence, zone)) {
             post(due)
             preferences.edit {
                 putInt(KEY_IGNORED, ignored + 1)
-                // No minute on the intent, as when a test asks directly: nothing to tell the next one by.
-                if (slot != 0L) putLong(KEY_POSTED_FOR, slot)
             }
         }
         arm()
@@ -340,7 +342,8 @@ internal class PracticeReminders(
         private const val KEY_IGNORED = "practice_reminder_ignored"
         private const val KEY_TURNED_OFF = "practice_reminder_turned_off"
         private const val KEY_DONE_AT = "practice_reminder_done_at"
-        private const val KEY_POSTED_FOR = "practice_reminder_posted_for"
+        // Keep the old key so upgrades still recognize occurrences that already posted.
+        private const val KEY_CONSUMED_FOR = "practice_reminder_posted_for"
         private const val KEY_ARMED_FOR = "practice_reminder_armed_for"
     }
 }
