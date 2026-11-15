@@ -302,8 +302,8 @@ internal object SungTiming {
                 val slotEnd = put.getOrNull(k + 1)?.ms ?: b.ms
                 val pieces = written.getValue(placed.line)
                 // Sung and written letters have different weights across scripts. Keep a near guess inside the anchors' minimum pace.
-                val guess = if (far) placed.ms else placed.ms + (placed.orderMs.coerceIn(a.orderMs, b.orderMs) - placed.orderMs)
-                val after = maxOf(if (far) a.ms else guess, a.heardMs.endInclusive.ms)
+                val nearGuess = placed.ms + (placed.orderMs.coerceIn(a.orderMs, b.orderMs) - placed.orderMs)
+                val after = maxOf(if (far) a.ms else nearGuess, a.heardMs.endInclusive.ms)
                 val start = if (far) {
                     // A word shared with an anchor or another middle line cannot tell which line was heard.
                     distinctWordStarts(pieces, wordsHeard.filter {
@@ -313,7 +313,7 @@ internal object SungTiming {
                 } else if (voice.any { it in placed.ms until slotEnd }) {
                     // A one-word line can use only its own slot. A later line's word cannot move it past that line.
                     if (pieces.size == 1) wordsHeard.filter { it.ms in after until slotEnd && likeness(it.text, pieces.single().text) >= ALIKE }
-                        .minByOrNull { abs(it.ms - guess) }?.ms ?: after
+                        .minByOrNull { abs(it.ms - nearGuess) }?.ms ?: after
                     else after
                 } else null
                 start?.takeIf { it in after until (if (far) b.ms else slotEnd) }?.let { ms ->
