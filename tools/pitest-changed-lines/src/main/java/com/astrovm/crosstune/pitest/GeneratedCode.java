@@ -55,6 +55,11 @@ final class GeneratedCode {
         this.frames = frames;
     }
 
+    /** Whether [method] is a bridge, which only hands its arguments on to the method it stands for. */
+    static boolean bridge(MethodNode method) {
+        return (method.access & Opcodes.ACC_BRIDGE) != 0;
+    }
+
     /** Whether the instruction at [index] works on what Kotlin or Compose keep rather than on the app's own values. */
     boolean at(int index) {
         return takesGenerated(method.instructions.get(index), new HashSet<>());

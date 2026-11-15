@@ -174,6 +174,8 @@ internal data class UiState(
     val update: Update? = null,
     /** The song a music app on the phone plays, or has paused, while Crosstune is in sight: a bar to open its player from. */
     val playingNow: NowPlaying? = null,
+    /** What an app plays while it names no song, e.g. a radio station, while Crosstune is in sight; see [PlayingUnnamed]. */
+    val playingUnnamed: PlayingUnnamed? = null,
     val history: List<HistoryEntry> = emptyList(),
     /** False until there's an app songs play in: the only music app, or the first one picked on a song. */
     val hasDefault: Boolean = true,
@@ -389,6 +391,13 @@ internal data class ChatGptState(
 internal data class NowPlaying(val song: MusicMetadata, val following: Following? = null)
 
 /**
+ * An app that plays with no song named, as [playing] has it, and the song [heard] in it once one is,
+ * by its sound or the microphone. The app's own name for a song always comes before it. [following]
+ * it in the app, for its buttons and where it is, as for a song.
+ */
+internal data class PlayingUnnamed(val playing: Unnamed, val heard: Heard.Song? = null, val following: Following? = null)
+
+/**
  * The player's [song], asked of the music app [app], by package, with its [link] there for YouTube
  * Music; [following] it once the app plays it, and [played] since. Its [lines], once found, show
  * the one being sung, [linesByEar] when they're timed by the singing heard, not by a service.
@@ -402,8 +411,16 @@ internal data class PlayerState(
     val lines: List<LyricLine> = emptyList(),
     val linesByEar: Boolean = false,
     /** What the app was playing when asked, so only a song it goes on to after is taken for the one asked. */
-    val over: MusicMetadata? = null
-)
+    val over: MusicMetadata? = null,
+    /**
+     * It plays what the app names no song for, e.g. a radio station, as the app names it: its buttons
+     * and where it is, but nothing that takes it for a song, no card, words, link or search.
+     */
+    val songless: Boolean = false
+) {
+    /** Who it's by, as shown under its name: for what names no song, the app that plays it. */
+    val byLine: String get() = if (songless) following?.app.orEmpty() else song.artist
+}
 
 internal data class Practice(
     val queue: List<SavedLine> = emptyList(),
@@ -454,8 +471,11 @@ private fun SavedLine.withReadingFrom(stored: SavedLine) = copy(
 /** How a card's line sounds: not at all, on its way in the music app or the small player, playing, or ready to play (again). */
 internal enum class LineSound { NONE, LOADING, PLAYING, PLAYED }
 
-/** A [song] the music app [app] played, at [positionMs], before practice took it over. */
-internal data class Before(val song: MusicMetadata, val positionMs: Long, val app: String?)
+/**
+ * A [song] the music app [app] played, at [positionMs], before practice took it over; [songless] when it named
+ * no song, e.g. a radio station, as [Unnamed.played], which goes on playing with no place in it to go back to.
+ */
+internal data class Before(val song: MusicMetadata, val positionMs: Long, val app: String?, val songless: Boolean = false)
 
 /** A question about a line, and ChatGPT's [answer] so far, until [done]; or why there's none. */
 internal data class LineQuestion(val question: String, val answer: String = "", val done: Boolean = false, val failed: Boolean = false, val limitReached: Boolean = false) {

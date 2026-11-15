@@ -39,6 +39,8 @@
     <string name="settings_licenses">Licenses</string>
     <string name="license_show">Show license</string>
     <string name="license_hide">Hide license</string>
+    <!-- This language's tag, for words kept outside these files: the licences' notes in notices-TAG.txt. Not shown. -->
+    <string name="language_tag">en</string>
     <string name="settings_links_title">Open links from</string>
     <string name="rule_opens_in">Opens in %1$s</string>
     <string name="rule_default">Default (%1$s)</string>

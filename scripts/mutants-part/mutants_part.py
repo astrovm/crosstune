@@ -20,12 +20,14 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCES = ROOT / "app/src/main/java"
 LINES = ROOT / "app/build/mutants/part-lines.txt"
 REPORT = ROOT / "app/build/reports/pitest/debug/mutations.xml"
+# The app's code: Kotlin, and the few classes in Java that Kotlin would add bridges to which PIT never sees run.
+CODE = (".kt", ".java")
 
 
 def all_lines(sources=SOURCES):
-    """Every line of every Kotlin file, as "com/astrovm/crosstune/File.kt:12", the way PIT names one."""
+    """Every line of every file of code, as "com/astrovm/crosstune/File.kt:12", the way PIT names one."""
     lines = []
-    for file in sorted(sources.rglob("*.kt")):
+    for file in sorted(path for path in sources.rglob("*") if path.suffix in CODE):
         name = file.relative_to(sources).as_posix()
         count = len(file.read_text(encoding="utf-8").splitlines())
         lines += [f"{name}:{n}" for n in range(1, count + 1)]

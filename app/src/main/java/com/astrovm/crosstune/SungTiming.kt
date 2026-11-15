@@ -12,7 +12,7 @@ internal class HeardPiece(val text: String, val ms: Long, val wordMs: Long, val 
 /** Words as they sound, near enough to tell the same word heard and written. */
 internal object SpokenWords {
     /** Match unspaced writing by letters, as the model can split the same phrase anywhere. */
-    fun pieces(text: String): List<String> = text.split(' ').flatMap { word -> writing.findAll(plain(word)).map { it.value }.toList() }
+    fun pieces(text: String): List<String> = text.split(' ').flatMap { word -> writing.matchesIn(plain(word)).map { it.value }.toList() }
 
     /**
      * [text]'s pieces heard from [ms], each with where it starts: a word of unspaced writing is matched a letter
@@ -32,8 +32,8 @@ internal object SpokenWords {
     /** Picked on the songs heard, as scripts/syncreplay/measurements.md has it: a Japanese letter, as whisper hears it, is near 300 ms. */
     private const val UNSPACED_LETTERS = 4
 
-    private val unspaced = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]")
-    private val writing = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]|[^\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]+")
+    private val unspaced = phoneRegex("[\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}\\p{sc=Hangul}]")
+    private val writing = phoneRegex("[\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}\\p{sc=Hangul}]|[^\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}\\p{sc=Hangul}]+")
 
     /** A word as it sounds, near enough: lower case, without accents or anything but letters and digits. */
     private fun plain(word: String): String =

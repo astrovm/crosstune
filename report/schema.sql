@@ -60,8 +60,15 @@ CREATE TABLE IF NOT EXISTS reports (
   -- The script it was read in: "japanese", "chinese", "korean", "cyrillic", and so on.
   language TEXT,
   -- The right reading, when the user typed it.
-  right_reading TEXT
+  right_reading TEXT,
+  -- The report's own id, a random UUID the app made for a report it keeps to send, and nothing about the phone: a
+  -- report sent again, as it got here but the app didn't hear so, is kept once. NULL for those sent without one, as a
+  -- person's own are. Added after, with its index, by migrations/0001_report_id.sql.
+  report_id TEXT
 );
+
+-- One report for each id, and how the Worker finds one it has. Only those with one, so the rest cost no room.
+CREATE UNIQUE INDEX IF NOT EXISTS reports_report_id ON reports (report_id) WHERE report_id IS NOT NULL;
 
 
 -- The counts that keep this table from being filled, and their index, are in limits.sql: run it after this file.

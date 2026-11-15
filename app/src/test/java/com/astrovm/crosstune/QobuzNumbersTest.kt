@@ -183,6 +183,22 @@ class QobuzNumbersTest {
     }
 
     @Test
+    fun aStationPutOnInAnotherAppCancelsTheRetry() {
+        numbers.prepare(song, qobuz, link).started(true)
+        phone.unnamed.value = Unnamed("other.app", "Fake Radio", "Fake FM")
+        passes(QobuzNumbers.WAIT_MS)
+        assertTrue(phone.opened.isEmpty())
+    }
+
+    @Test
+    fun aStationAlreadyPlayingElsewhereDoesntStopTheRetry() {
+        phone.unnamed.value = Unnamed("other.app", "Fake Radio", "Fake FM")
+        numbers.prepare(song, qobuz, link).started(true)
+        passes(QobuzNumbers.WAIT_MS)
+        assertEquals(listOf(qobuz to "https://play.qobuz.com/track/2"), phone.opened.toList())
+    }
+
+    @Test
     fun anotherTitleByTheSameArtistDoesntStopTheRetry() {
         phone.onThePhone = Heard.Song(MusicMetadata("Old song", "Band"), null, app = qobuz)
         numbers.prepare(song, qobuz, link).started(true)

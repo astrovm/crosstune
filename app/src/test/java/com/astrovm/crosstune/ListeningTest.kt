@@ -46,6 +46,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertNotNull
+import android.app.AppOpsManager
+import android.os.Build
 import android.os.Looper
 import android.os.PowerManager
 import android.Manifest
@@ -254,6 +256,119 @@ class ListeningTest {
         assertEquals(0, microphone.opened)
         assertEquals(0, shazamRequests())
         assertEquals(playing, HistoryStore(prefs()).load().first().metadata)
+    }
+
+    @Test
+    fun aRadioStationKeepsItsButtonsAndPlayerAsItIsUntilItsSongIsHeardAndThenATapShowsTheSong() {
+        // VRadio names only the station (#998).
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2")
+            playing.value = Following(PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "VRadio", canSeek = false, appPackage = "com.ilv.vradio", canSkipNext = true)
+        }
+        MainActivity.playbackFactory = { radio }
+        val heard = kotlinx.coroutines.CompletableDeferred<Heard>()
+        MainActivity.hearingFactory = { SongHearing { heard.await() } }
+        // It can be heard, by the microphone, and is being listened to.
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertTrue(shown("RTP Antena 2"))
+        assertTrue(shown("VRadio"))
+        // Its buttons are the app's, as for a song.
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_pause)) and hasClickAction()).performClick()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_next_song)) and hasClickAction()).performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf(false), radio.plays)
+        assertEquals(listOf(true), radio.skips)
+        // A tap opens its player, as the app names it: no song, so no menu with its link, no words, and nothing kept.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        composeRule.waitForIdle()
+        assertTrue(shown("RTP Antena 2"))
+        assertFalse(described(string(R.string.more_button)))
+        assertFalse(described(string(R.string.lyrics_button)))
+        assertTrue(composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isEmpty())
+        closeWords()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertNull(controllerModel().uiState.player)
+        // A swipe up opens the same player.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput { swipe(center, center - Offset(0f, 1500f)) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        closeWords()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        // Its song heard, which has a while left, a tap shows it, as a Shazam result.
+        heard.complete(Heard.Song(MusicMetadata("Fake Song", "Fake Band", lengthMs = 200_000), null, 50_000, SystemClock.elapsedRealtime()))
+        waitForText("Fake Song")
+        assertTrue(shown("Fake Band \u00b7 VRadio"))
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(HistoryStore(prefs()).load().none { it.metadata.title == "RTP Antena 2" })
+    }
+
+    @Test
+    fun aStationIsListenedToOnlyWhileItsBarIsInSightNotUnderItsPlayer() {
+        val radio = FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "Fake FM") }
+        MainActivity.playbackFactory = { radio }
+        var listens = 0
+        var stopped = 0
+        MainActivity.hearingFactory = {
+            SongHearing {
+                listens++
+                try {
+                    kotlinx.coroutines.awaitCancellation()
+                } finally {
+                    stopped++
+                }
+            }
+        }
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        // Its player covers the bar, and the main screen with it: the listen stops.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        composeRule.waitForIdle()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1 to 1, listens to stopped)
+        // Back on the bar, it's listened to again.
+        closeWords()
+        waitUntil(TIMEOUT_MS) { listens == 2 }
+        assertEquals(1, stopped)
+    }
+
+    /**
+     * A station named by ear, with the microphone allowed, that heard no song: Shizuku or root then
+     * shares the phone's own sound, after a second. Returns how many times it was listened to.
+     */
+    private fun listensWhenTheSoundIsShared(): Int {
+        allowMicrophone()
+        val radio = FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "Fake FM") }
+        MainActivity.playbackFactory = { radio }
+        var listens = 0
+        MainActivity.hearingFactory = {
+            SongHearing {
+                listens++
+                Heard.Nothing
+            }
+        }
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        PhoneAppOps.projectMedia = AppOpsManager.MODE_ALLOWED
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        return listens
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.Q])
+    fun fromAndroid10TheStationIsListenedToAgainAtOnceWhenItsSoundIsShared() {
+        assertEquals(2, listensWhenTheSoundIsShared())
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.P])
+    fun beforeAndroid10SharingTheSoundIsNoNewWayToHear() {
+        // Android 9 can't capture what other apps play, shared or not.
+        assertEquals(1, listensWhenTheSoundIsShared())
     }
 
     @Test
@@ -782,6 +897,34 @@ class ListeningTest {
         waitForDescription(string(R.string.keep_offline))
     }
 
+    @Test
+    fun aSongLrclibMarksInstrumentalKeptOfflineKeepsItsWordsAndTheirTranslation() {
+        // Review of PR #919: two of LRCLIB's copies marked instrumental and one with words, kept with Download. On main,
+        // its words, and what goes with them, are kept, and show offline.
+        MainActivity.connectionFactory = { FakeConnection() }
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        val marked = """{"trackName":"Demo","artistName":"Band","instrumental":true}"""
+        fake.handler = { request ->
+            when (request.url.host) {
+                "lrclib.net" -> FakeSpotify.html(request, """[$marked,$marked,{"trackName":"Demo","artistName":"Band","syncedLyrics":"[00:00.00] Night sky\n[00:30.00] Stars"}]""")
+                else -> FakeSpotify.html(request, "{}")
+            }
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        waitUntil(TIMEOUT_MS) { File(app.noBackupFilesDir, "kept/lyrics.json").let { it.isFile && "Night sky" in it.readText() } }
+        assertTrue(fake.requestedUrls.any { it.startsWith(Translator.GOOGLE_URL) })
+        // Offline, with no app on the phone playing it to listen to, they show.
+        fake.handler = { request -> throw java.io.IOException("offline ${request.url.host}") }
+        click(string(R.string.lyrics_button))
+        waitForText("Night sky")
+    }
+
     /** Demo, as Spotify follows it, with its like showing whether it's [liked] there, or not saying. */
     private fun demoFollowed(liked: Boolean?) = Following(
         PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "Spotify", canSeek = true,
@@ -1199,27 +1342,46 @@ class ListeningTest {
     @Test
     fun aNetworkBackWhileTheLastOneStillFailsIsTriedAgainToo() {
         MainActivity.connectionFactory = { FakeConnection() }
-        val keeping = java.util.concurrent.atomic.AtomicBoolean(false)
-        val first = java.util.concurrent.atomic.AtomicReference<String>()
-        val back = java.util.concurrent.atomic.AtomicBoolean(false)
+        val model = java.util.concurrent.atomic.AtomicReference<MainViewModel>()
+        // The time round that keeps it. Told by the round, not by what's asked: the song's card asks the same
+        // services, and its requests can arrive late, after the tap that keeps it (Issue #938).
+        val keeping = java.util.concurrent.atomic.AtomicInteger(Int.MAX_VALUE)
+        val telling = java.util.concurrent.atomic.AtomicBoolean(false)
+        val told = CountDownLatch(1)
         MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
         fake.handler = { request ->
-            val url = request.url.toString()
-            // Kept, the next network comes while it's still giving up on the one that went away; what
-            // it asks first, asked again, is it trying on the new one.
-            if (keeping.get() && !first.compareAndSet(null, url) && url == first.get()) back.set(true)
-            if (keeping.get() && first.get() == url && !back.get()) networkBackNow()
-            if (!back.get()) throw IOException("offline")
-            FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
+            val round = model.get()?.keptOfflineRounds ?: 0
+            when {
+                round < keeping.get() -> throw IOException("offline")
+                round == keeping.get() -> {
+                    // The next network comes while each request of the first time round still fails on the one that
+                    // went away: none fails before it's told, so the fetch is still running when it hears.
+                    if (telling.compareAndSet(false, true)) {
+                        // Told even when the telling fails, so the test ends on that failure and not on a wait.
+                        try {
+                            networkBackNow()
+                        } finally {
+                            told.countDown()
+                        }
+                    }
+                    told.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    throw IOException("offline")
+                }
+                else -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
+            }
         }
         allowMicrophone()
         launch()
+        model.set(controllerModel())
         recognize()
         waitForText("Demo")
         composeRule.waitForIdle()
-        keeping.set(true)
+        keeping.set(model.get().keptOfflineRounds + 1)
         click(string(R.string.keep_offline))
         waitForDescription(string(R.string.kept_offline))
+        // Told while the first time round failed, and kept the next time round, which that started.
+        assertTrue(telling.get())
+        assertEquals(keeping.get() + 1, model.get().keptOfflineRounds)
     }
 
     /**
@@ -2482,6 +2644,22 @@ class ListeningTest {
     }
 
     @Test
+    fun aGapMovedByHandAloneIsReportedAsTheWordsAreLeftWhenReportsAreAllowed() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        val (phone, _) = videoLinedUpByShazam()
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        composeRule.onNodeWithText("Demo two").performClick()
+        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") != null }
+        fun timedByHand() = fake.requestedUrls.indices.count { fake.requestedUrls[it] == ReportSender.URL && "timed_by_hand" in fake.requestBodies[it] }
+        assertEquals(0, timedByHand())
+        // No line was put in time, only Shazam's gap moved: that's words put in time by hand all the same.
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        waitUntil(TIMEOUT_MS) { timedByHand() == 1 }
+    }
+
+    @Test
     fun aGapMovedByTheArrowsOffersToReportByItselfAndTheOfferStaysOnceTheBarGoes() {
         val (phone, _) = videoLinedUpByShazam()
         composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
@@ -2581,6 +2759,66 @@ class ListeningTest {
         waitForText("Demo one")
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
         return phone
+    }
+
+    /** Hears music and no voice in whatever it's given, as an instrumental's: counts how often it's asked. */
+    private class NoVoice : SingingHearing {
+        @Volatile
+        var hears = 0
+
+        override val missesModel = false
+        override val heardNoSound = false
+
+        override suspend fun fetchModel() = true
+
+        override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung {
+            hears++
+            return Sung(0, listOf(HeardWord("[Music]", 0)))
+        }
+    }
+
+    @Test
+    fun wordsAMarkHoldsShowAtOnceForASongNoAppOnThePhonePlays() {
+        // Review of PR #919: named by Shazam as it plays on another device, or in an app Crosstune can't see, with two of
+        // LRCLIB's copies marked instrumental and one with timed words, or a title saying so. On main, the words show at once.
+        val marked = """{"trackName":"Demo","artistName":"Band","instrumental":true}"""
+        val cases = listOf(
+            Triple("another device", "Demo", FakePlayback().apply { access = true }),
+            // Without notification access, Android shows Crosstune no app's session, whatever plays.
+            Triple("app not seen", "Demo", FakePlayback().apply { access = false; playing.value = Following(PlaybackClock(2_000, SystemClock.elapsedRealtime()), "Music", canSeek = true) }),
+            Triple("title", "Demo (Instrumental)", FakePlayback().apply { access = true })
+        )
+        val realSinging = MainActivity.singingFactory
+        try {
+            for ((case, title, phone) in cases) {
+                controller?.destroyAndSettle()
+                File(app.cacheDir, "lyrics.json").delete()
+                File(app.cacheDir, "kept_words.json").delete()
+                val hearing = FakeHearing()
+                listeningAlong(hearing)
+                val copies = if (title == "Demo") "$marked,$marked," else ""
+                fake.handler = { request ->
+                    FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[$copies{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two"}]""" else "{}")
+                }
+                val singing = NoVoice()
+                MainActivity.singingFactory = { _, _ -> singing }
+                MainActivity.playbackFactory = { phone }
+                allowMicrophone()
+                launch()
+                composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
+                waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+                hearing.song(title, 2.0)
+                try {
+                    waitForText("Demo one")
+                } catch (e: Throwable) {
+                    throw AssertionError(case, e)
+                }
+                assertFalse(case, described(string(R.string.lyrics_instrumental)))
+                assertEquals(case, 0, singing.hears)
+            }
+        } finally {
+            MainActivity.singingFactory = realSinging
+        }
     }
 
     /** Heard twice: the first answer opens the words, the second keeps them in time. */
@@ -3673,7 +3911,7 @@ class ListeningTest {
                 // Answering late, as on a slow machine.
                 Thread.sleep(500)
                 // Found untimed at first, shown as they are; a timed copy comes from asking again.
-                val timed = if (++asked == 1) "" else ""","syncedLyrics":"[00:01.00] Night sky\n[00:05.00] Stars""""
+                val timed = if (++asked == 1) "" else ""","syncedLyrics":"[00:01.00] Night sky\n[00:05.00] Stars${'"'}"""
                 FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars"$timed}]""")
             } else {
                 FakeSpotify.html(request, """{"results":[]}""")
@@ -4373,7 +4611,7 @@ class ListeningTest {
                 GOOGLE_TRANSLATE_HOST -> translation(request, translations)
                 "api.mymemory.translated.net" -> myMemoryTranslation(request, translations)
                 else -> {
-                    val timed = synced?.let { ""","syncedLyrics":"$it"""" }.orEmpty()
+                    val timed = synced?.let { ""","syncedLyrics":"$it${'"'}""" }.orEmpty()
                     FakeSpotify.html(request, """[{"trackName":"$title","artistName":"$artist","plainLyrics":"$plain"$timed}]""")
                 }
             }
@@ -6597,41 +6835,59 @@ class ListeningTest {
         val answers = openAi.reply
         val late = java.util.concurrent.CountDownLatch(1)
         val answeredLate = java.util.concurrent.atomic.AtomicInteger()
-        // What it says about Demo comes only once the next song plays; about any other, there's nothing to say.
+        val aboutDemo = { body: org.json.JSONObject ->
+            val instructions = body.getString("instructions")
+            ("covers and samples" in instructions || "explain the song in four parts" in instructions) &&
+                "Demo" in body.getJSONArray("input").getJSONObject(0).getString("content")
+        }
+        // What it says about Demo comes only once the next song plays, however long that takes; about any other, there's nothing to say.
         openAi.reply = { body ->
             val instructions = body.getString("instructions")
-            val about = "covers and samples" in instructions || "explain the song in four parts" in instructions
-            val demo = "Demo" in body.getJSONArray("input").getJSONObject(0).getString("content")
             when {
-                about && demo -> { late.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS); answers(body).also { answeredLate.incrementAndGet() } }
-                about -> 500 to ""
+                aboutDemo(body) -> { late.await(); answers(body).also { answeredLate.incrementAndGet() } }
+                "covers and samples" in instructions || "explain the song in four parts" in instructions -> 500 to ""
                 else -> answers(body)
             }
         }
-        val hearing = FakeHearing()
-        listeningAlong(hearing)
-        val words = fake.handler
-        fake.handler = { request -> openAi.answer(request) ?: words(request) }
-        allowMicrophone()
-        launch()
-        hearing.song("Demo", 2.0)
-        recognize()
-        waitForText("Demo")
-        click(string(R.string.lyrics_button))
-        waitUntil(TIMEOUT_MS) { lit("Demo one") }
-        aboutSong()
-        waitUntil(TIMEOUT_MS) { openAi.asked.count { "Demo" in it.getJSONArray("input").getJSONObject(0).getString("content") && ("covers and samples" in it.getString("instructions") || "explain the song in four parts" in it.getString("instructions")) } == 2 }
-        hearing.song("Other", 1.0)
-        waitUntil(TIMEOUT_MS) { lit("Other one") }
-        late.countDown()
-        waitUntil(TIMEOUT_MS) { answeredLate.get() == 2 }
-        Thread.sleep(300)
-        composeRule.waitForIdle()
-        // Other's words don't say Demo covers First Demo, or what Demo is about.
-        val learning = controllerModel().uiState.learning
-        assertNull(learning.songFacts)
-        assertFalse(learning.songExplanation?.text.orEmpty().contains("under the stars"))
-        assertFalse(shown("Old Band") || shown("A night under the stars."))
+        // The asks about Demo the app let go of.
+        val letGo = java.util.concurrent.atomic.AtomicInteger()
+        MainActivity.httpClientFactory = {
+            fake.client().newBuilder().eventListener(object : okhttp3.EventListener() {
+                override fun canceled(call: okhttp3.Call) {
+                    if (call.request().url.toString() == ChatGpt.RESPONSES_URL && aboutDemo(org.json.JSONObject(FakeSpotify.bodyOf(call.request())))) letGo.incrementAndGet()
+                }
+            }).build()
+        }
+        // Let go of at the end, passing or failing, so no answer waits past the test.
+        try {
+            val hearing = FakeHearing()
+            listeningAlong(hearing)
+            val words = fake.handler
+            fake.handler = { request -> openAi.answer(request) ?: words(request) }
+            allowMicrophone()
+            launch()
+            hearing.song("Demo", 2.0)
+            recognize()
+            waitForText("Demo")
+            click(string(R.string.lyrics_button))
+            waitUntil(TIMEOUT_MS) { lit("Demo one") }
+            aboutSong()
+            waitUntil(TIMEOUT_MS) { openAi.asked.count(aboutDemo) == 2 }
+            hearing.song("Other", 1.0)
+            waitUntil(TIMEOUT_MS) { lit("Other one") }
+            // Both asks about Demo were let go of as Other took over, so their answers have nowhere to go.
+            waitUntil(TIMEOUT_MS) { letGo.get() == 2 }
+            late.countDown()
+            waitUntil(TIMEOUT_MS) { answeredLate.get() == 2 }
+            composeRule.waitForIdle()
+            // Other's words don't say Demo covers First Demo, or what Demo is about.
+            val learning = controllerModel().uiState.learning
+            assertNull(learning.songFacts)
+            assertFalse(learning.songExplanation?.text.orEmpty().contains("under the stars"))
+            assertFalse(shown("Old Band") || shown("A night under the stars."))
+        } finally {
+            late.countDown()
+        }
     }
 
 

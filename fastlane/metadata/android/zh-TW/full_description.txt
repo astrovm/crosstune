@@ -11,7 +11,7 @@
 <li>Apple Music、Deezer、YouTube Music、TIDAL、SoundCloud 和 Audiomack 可直接開啟歌曲、專輯或藝人本身，而不是搜尋結果，Qobuz 可直接開啟歌曲或專輯，Bandcamp 同樣如此，在其應用程式中則開啟搜尋，YouTube 可直接開啟歌曲。</li>
 <li>新增其他帶搜尋頁面的應用程式和網站。</li>
 <li>一鍵貼上，搜尋並重新開啟最近的連結，或透過主畫面小工具、快速設定圖塊或長按應用程式圖示來開啟已複製的連結。</li>
-<li>辨識附近正在播放的歌曲：Crosstune 可以自己聆聽，也可以開啟 Shazam 或 Google 歌曲搜尋。還可開啟 Shazam 連結和從 Pixel 的 Now Playing 分享的歌曲。</li>
+<li>辨識附近正在播放的歌曲，以及不說明是什麼歌的應用程式正在播放的歌曲：Crosstune 可以自己聆聽，也可以開啟 Shazam 或 Google 歌曲搜尋。還可開啟 Shazam 連結和從 Pixel 的 Now Playing 分享的歌曲。</li>
 <li>無法讀取連結？可在連結來源的應用程式中開啟，也可以複製搜尋文字或分享搜尋連結。</li>
 <li>輸入歌名代替連結來查詢歌曲。播放後仍留在 Crosstune：底部的列顯示正在播放的內容，播放器有接下來播放、重複播放、按讚和睡眠定時，播放器和歌詞之間可以滑動切換。</li>
 <li>同步歌詞：跟隨你的音樂應用程式或一起聆聽，可浮在其他應用程式上方，背後播放 MilkDrop 視覺效果。歌詞、時間或讀音不對？在歌詞頁面或詞語上一鍵回報：只會私下傳給開發者。</li>
@@ -22,4 +22,4 @@
 </ul>
 
 <b>隱私</b>
-沒有帳號、資料分析或廣告。歷史記錄只儲存在你的裝置上。為了顯示連結的標題、藝人和封面，Crosstune 只會向連結所屬的服務發出請求。為了直接開啟歌曲，標題和藝人還會傳送到 Apple、Deezer、YouTube Music、YouTube 或 Bandcamp 的搜尋。「全部播放」和「隨機播放」會將歌曲的標題和藝人傳送到 YouTube Music 的搜尋，並將找到的影片傳送到 YouTube。 辨識歌曲時，Crosstune 只在聆聽期間使用麥克風，並且只向 Shazam 傳送聲音的指紋，絕不傳送音訊。 輸入歌名會將其傳送到 Deezer 和 Apple 的歌曲搜尋；請求歌詞或和弦時，歌曲的標題和藝人會傳送到歌詞和和弦網站（LRCLIB、YouTube Music、網易雲音樂、Letras、Genius、Ultimate Guitar、Cifra Club、LaCuerda、U-FRET、J-Total、ChordWiki）。翻譯會傳送到 MyMemory。用 ChatGPT 登入後，AI 功能會把歌曲的標題、藝人、歌詞以及你的提問傳送給 OpenAI。 如果已允許使用麥克風，歌詞可短暫聆聽，以校正並記住該錄音片頭造成的時間偏移。歌詞還會對齊演唱，演唱只在手機上辨識，從不傳送。 找不到歌詞時，也會在手機上聽有沒有人唱，聲音從不傳送。關閉自動回報後，只有曲風讓歌曲看起來沒有詞時才這樣聽。
+沒有帳號、資料分析或廣告。歷史記錄只儲存在你的裝置上。為了顯示連結的標題、藝人和封面，Crosstune 只會向連結所屬的服務發出請求。為了直接開啟歌曲，標題和藝人還會傳送到 Apple、Deezer、YouTube Music、YouTube 或 Bandcamp 的搜尋。「全部播放」和「隨機播放」會將歌曲的標題和藝人傳送到 YouTube Music 的搜尋，並將找到的影片傳送到 YouTube。 辨識歌曲時，Crosstune 只在聆聽期間使用麥克風，並且只向 Shazam 傳送聲音的指紋，絕不傳送音訊。 輸入歌名會將其傳送到 Deezer 和 Apple 的歌曲搜尋；請求歌詞或和弦時，歌曲的標題和藝人會傳送到歌詞和和弦網站（LRCLIB、YouTube Music、網易雲音樂、Letras、Genius、Ultimate Guitar、Cifra Club、LaCuerda、U-FRET、J-Total、ChordWiki）。翻譯會傳送到 MyMemory。用 ChatGPT 登入後，AI 功能會把歌曲的標題、藝人、歌詞以及你的提問傳送給 OpenAI。 如果已允許使用麥克風，歌詞可短暫聆聽，以校正並記住該錄音片頭造成的時間偏移。歌詞還會對齊演唱，演唱只在手機上辨識，從不傳送。 找不到歌詞，或標題或 LRCLIB 說是純音樂時，也會在手機上聽有沒有人唱，聲音從不傳送。關閉自動回報後，只有曲風、標題或 LRCLIB 說是純音樂時才這樣聽。
