@@ -1,14 +1,15 @@
 # Emulators
 
-Two, declared in [`emulators.json`](emulators.json), so a wiped machine gets them back with one command. Nothing else needs an emulator, and a phone one always has the Play Store.
+Three, declared in [`emulators.json`](emulators.json), so a wiped machine gets them back with one command. Nothing else needs an emulator, and a phone one always has the Play Store, but an engine one (`"kind": "engine"`): it only runs what a script pushes over adb, with no apps or sign-in, and Android 8 has no Play image for x86_64 or arm64.
 
 | Emulator | Image | For | By hand |
 |---|---|---|---|
 | `crosstune-phone` | Android 17, Play Store | Music apps, Qobuz tries, sound and mic checks, promo recordings | Google test account, Qobuz and Amazon Music logins; Proton VPN and the Deezer sign-in still to do (Issue #678) |
 | `crosstune-tv` | Google TV, Android 16, the newest TV image there is | TV screens, remote focus, Cast checks | Google test account |
+| `crosstune-android8` | Android 8 (API 26), Google APIs, the oldest the app runs on | `regextable.py patterns` on Android 8 | Nothing |
 
 ```bash
-python3 scripts/emulator/emulator.py create                         # both, safe to run twice
+python3 scripts/emulator/emulator.py create                         # all three, safe to run twice
 python3 scripts/emulator/emulator.py start crosstune-phone --window # to sign in, then:
 python3 scripts/emulator/emulator.py apps crosstune-phone           # opens each missing app's Play page: tap Install
 python3 scripts/emulator/emulator.py check                          # what's still missing

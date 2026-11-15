@@ -27,7 +27,12 @@ internal data class MusicMetadata(
      * How long it lasts where it was heard or opened, when the app playing it says nothing: enough to
      * tell apart timed copies of its takes, but not to say this recording is that one.
      */
-    val heardLengthMs: Long? = null
+    val heardLengthMs: Long? = null,
+    /**
+     * What an app plays with no song named, as [Unnamed.played] asks for it: had only by its app, by what it's
+     * called there, never as a song by its name, whatever it's called. Never kept or sent anywhere.
+     */
+    val unnamed: Boolean = false
 )
 
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */

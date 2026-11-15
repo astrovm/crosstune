@@ -28,6 +28,8 @@ internal class MusicBrainz(
     /** The app's own version, which MusicBrainz asks a caller to give so a problem can be traced back. */
     private val versionName: String,
     private val cache: LookupCache,
+    /** Whose turn it is to ask, shared by every user of MusicBrainz in the app; see [MainActivity.musicBrainzTurn]. */
+    private val turn: Turn,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** How long to leave between two requests, which MusicBrainz limits to one a second; tests pass 0. */
     private val gapMs: Long = ASK_GAP_MS
@@ -158,8 +160,8 @@ internal class MusicBrainz(
 
     private fun yearOf(date: String): Int? = date.take(YEAR_DIGITS).takeIf { it.length == YEAR_DIGITS }?.toIntOrNull()
 
-    private suspend fun get(url: HttpUrl): JSONObject = turn.withLock {
-        delay(maxOf(0, askedAt + gapMs - System.currentTimeMillis()))
+    private suspend fun get(url: HttpUrl): JSONObject = turn.asking.withLock {
+        delay(maxOf(0, turn.askedAt + gapMs - System.currentTimeMillis()))
         // MusicBrainz turns away a request that doesn't say who it is.
         val request = Request.Builder().url(url).header("User-Agent", "Crosstune/$versionName (https://github.com/astrovm/crosstune)").header("Accept", "application/json").get().build()
         try {
@@ -168,15 +170,17 @@ internal class MusicBrainz(
                 JSONObject(response.body.stringAtMost())
             }
         } finally {
-            askedAt = System.currentTimeMillis()
+            turn.askedAt = System.currentTimeMillis()
         }
     }
 
-    companion object {
-        /** Whose turn it is to ask, and when it last was: the app's, and its queue's, which looks songs up on its own. */
-        private val turn = Mutex()
-        private var askedAt = 0L
+    /** Whose turn it is to ask, and when it last was, for one app: its own lookups, and its queue's, which looks songs up on its own. */
+    class Turn {
+        internal val asking = Mutex()
+        internal var askedAt = 0L
+    }
 
+    companion object {
         /** How long to leave between two requests, as MusicBrainz takes one a second. */
         const val ASK_GAP_MS = 1100L
 

@@ -4,7 +4,12 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onStart
@@ -52,9 +57,15 @@ internal class FakePlayback : PlaybackSource {
     /** Each time the music was muted (true) or let be heard again (false). */
     val quiets: MutableList<Boolean> = CopyOnWriteArrayList()
     private val songs = MutableStateFlow<Heard.Song?>(null)
+
+    /** [onThePhone], as its app names it, which a follow reads apart from [songs], whose watchers a test counts. */
+    private val named = MutableStateFlow<Heard.Song?>(null)
     var onThePhone: Heard.Song?
         get() = songs.value
-        set(value) { songs.value = value }
+        set(value) {
+            songs.value = value
+            named.value = value
+        }
 
     override fun hasAccess() = access
 
@@ -76,24 +87,94 @@ internal class FakePlayback : PlaybackSource {
     override fun follow(song: MusicMetadata, app: String?): Flow<Following?> {
         followed += song
         followedApps += app
-        val flow = app?.let(appPlaying::get) ?: playing
+        // Followed over and over with no time gone by is a loop, as a player opening itself again: it ends here, so the
+        // test fails on what was followed, at once. A long test follows many times, but as its time goes on.
+        if (followsNow.loops()) return emptyFlow()
+        val flow = followedAs(song, app, app?.let(appPlaying::get) ?: playing)
         return said?.let { later -> flow { later.await(); emitAll(flow) } } ?: flow
+    }
+
+    /**
+     * What [app] plays, as following [song], matched as the real source does. [unnamed] is what the app it's
+     * asked of plays, [app] or else the one followed, while it's there; any other app plays [song].
+     */
+    private fun followedAs(song: MusicMetadata, app: String?, flow: Flow<Following?>): Flow<Following?> =
+        combine(flow, unnamed, named) { following, now, phone ->
+            following?.takeIf {
+                val asked = app ?: following.appPackage
+                has(now?.takeIf { it.app == asked }?.played, phone?.takeIf { asked != null && it.app == asked }?.metadata, song, app)
+            }
+        }
+
+    /**
+     * Whether an app that plays [there], what names no song, or the song it [names], has [song], as the real source
+     * has it: what names no song, asked for as [Unnamed.played], only of its [app], by just what it's called, or by
+     * its title once the app names who sings it; a song, by its name, as [SongNames.names] has it. With nothing
+     * [there], the app plays [song].
+     */
+    private fun has(there: MusicMetadata?, names: MusicMetadata?, song: MusicMetadata, app: String?): Boolean {
+        if (song.unnamed) return app != null && (there?.let { it.title == song.title && it.artist == song.artist } ?: (names?.title == song.title))
+        return there == null || SongNames.names(there.title, there.artist, song)
     }
 
     /** Whether what started isn't believed yet, as the phone's sound takes a moment to follow what an app says it plays. */
     var quietYet = false
 
-    override fun nowPlaying() = onThePhone.takeUnless { quietYet }
+    override fun nowPlaying() = (whatPlays() as? WhatPlays.Named)?.song
 
     override fun recording(song: MusicMetadata) = onThePhone?.metadata
 
     /** Whether what's on the phone is yet to be said, as by a session slow to answer: [nowPlayingUpdates] says nothing till it's false. */
     val nowPlayingLate = MutableStateFlow(false)
 
-    override fun nowPlayingUpdates(): Flow<Heard.Song?> = songs.onStart { nowPlayingLate.first { !it } }
+    override fun nowPlayingUpdates(): Flow<Heard.Song?> = changes { (ranked(onThePhone) as? WhatPlays.Named)?.song }.onStart { nowPlayingLate.first { !it } }
 
     /** How many are listening for what's on the phone. */
     val nowPlayingWatchers get() = songs.subscriptionCount.value
+
+    /**
+     * What an app has with no song named, e.g. a radio station, playing or paused, as its session says. It counts
+     * as [PlaybackSource.playingUnnamed] only while it plays, as Android has it: while what the app plays, its own
+     * in [appPlaying] or else [playing], isn't paused. A test that doesn't say how it plays has it playing.
+     */
+    val unnamed = MutableStateFlow<Unnamed?>(null)
+
+    private fun playingOnly(unnamed: Unnamed?, following: Following?) = unnamed?.takeIf { following?.clock?.playing != false }
+
+    /** Where [onThePhone] plays: on the phone, cast to a TV by its music app, or on another device, as KDE Connect shows a computer's. */
+    var songWhere = Place.PHONE
+
+    /**
+     * When [onThePhone] and [unnamed] last said where they are, on their app's clock: of two in the same place, the
+     * one that said so last plays first. [unnamed] plays [Unnamed.where] it says, as the real source has it.
+     */
+    var songAt = 0L
+    var unnamedAt = 0L
+
+    override fun playingUnnamed() = (whatPlays() as? WhatPlays.Nameless)?.playing
+
+    override fun whatPlays() = ranked(onThePhone.takeUnless { quietYet })
+
+    // Ranked as the real source ranks them, by [playsFirst]; the song first when they tie.
+    private fun ranked(song: Heard.Song?): WhatPlays? {
+        val named = song?.let { WhatPlays.Named(it) to Rank(true, songWhere, songAt) }
+        val nameless = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value)?.let {
+            WhatPlays.Nameless(it) to Rank(it.said, it.where, unnamedAt)
+        }
+        return listOfNotNull(named, nameless).minWithOrNull(compareBy(playsFirst) { it.second })?.first
+    }
+
+    override fun unnamedUpdates(): Flow<Unnamed?> = changes { (ranked(onThePhone) as? WhatPlays.Nameless)?.playing }
+
+    /** [read] again each time the song, what names none, or how that app plays changes, as Android says any of them did. */
+    private fun <T> changes(read: () -> T): Flow<T> = channelFlow {
+        combine(songs, unnamed) { _, now -> now }.collectLatest { now -> if (now == null) send(read()) else flowOf(now.app).collect { send(read()) } }
+    }.distinctUntilChanged()
+
+    /** Whether the phone's music plays out loud, where the microphone hears it. */
+    var aloud = true
+
+    override fun playsAloud() = aloud
 
     /** The app each seek was sent to, null for any. */
     val seekedApps: MutableList<String?> = CopyOnWriteArrayList()
@@ -142,6 +223,13 @@ internal class FakePlayback : PlaybackSource {
 
     /** Each app paused whatever it played, by package, once per pause: an app a card stopped is paused again while it's kept so. */
     val pausedApps: MutableList<String> = CopyOnWriteArrayList()
+
+    /** Each app asked, by package, to play whatever it has. */
+    val appsPlayed: MutableList<String> = CopyOnWriteArrayList()
+
+    override fun playApp(app: String) {
+        appsPlayed += app
+    }
 
     override fun pauseApp(app: String) {
         pausedApps += app
@@ -219,24 +307,32 @@ internal class FakePlayback : PlaybackSource {
         onQuiet(on)
     }
 
-    override fun skip(song: MusicMetadata, next: Boolean) {
+    /** The app each control other than play, pause and seek was sent to, null for any: skips, shuffle, repeat, like and a queued song. */
+    val controlledApps: MutableList<String?> = CopyOnWriteArrayList()
+
+    override fun skip(song: MusicMetadata, next: Boolean, app: String?) {
         skips += next
+        controlledApps += app
     }
 
-    override fun shuffle(song: MusicMetadata, on: Boolean) {
+    override fun shuffle(song: MusicMetadata, on: Boolean, app: String?) {
         shuffled += on
+        controlledApps += app
     }
 
-    override fun repeat(song: MusicMetadata, how: Repeat) {
+    override fun repeat(song: MusicMetadata, how: Repeat, app: String?) {
         repeated += how
+        controlledApps += app
     }
 
-    override fun like(song: MusicMetadata) {
+    override fun like(song: MusicMetadata, app: String?) {
         liked++
+        controlledApps += app
     }
 
-    override fun playQueued(song: MusicMetadata, id: Long) {
+    override fun playQueued(song: MusicMetadata, id: Long, app: String?) {
         queuedPlayed += id
+        controlledApps += app
     }
 
     private val inApps = mutableMapOf<String, MutableStateFlow<AppPlays?>>()
@@ -254,5 +350,27 @@ internal class FakePlayback : PlaybackSource {
         if (mustStart && !startsInBackground) return false.also { onlyInFront = true }
         listsAsked += app to link
         return true
+    }
+
+    /** Follows with no time gone by: see [Looping]. */
+    private val followsNow = Looping()
+}
+
+/**
+ * Counts calls made with no time gone by on the phone's clock, which only a loop makes [atMost] of: a fake asked
+ * that often answers no more, so a loop fails its test on the count at once, not by running out of memory.
+ */
+internal class Looping(private val atMost: Int = 100) {
+    private var at = -1L
+    private var calls = 0
+
+    /** Counts this call: true once there are more than [atMost] at this moment. */
+    fun loops(): Boolean {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now != at) {
+            at = now
+            calls = 0
+        }
+        return ++calls > atMost
     }
 }

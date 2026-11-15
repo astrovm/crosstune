@@ -6,7 +6,7 @@
   python3 scripts/devicelock.py who [DEVICE]
 
 DEVICE is samsung, or a test emulator in scripts/emulator/emulators.json:
-crosstune-phone or crosstune-tv. The lock is DEVICE.lock in the agent cache:
+crosstune-phone, crosstune-tv or crosstune-android8 (Android 8, for regextable.py patterns). The lock is DEVICE.lock in the agent cache:
 /mnt/data/agent-cache on mr, and ~/.cache/agent-cache elsewhere. take waits in line. An earlier waiter gets
 the device before a later one, including when the holder takes it again:
 that new take goes to the back. flock(2) stays held for the whole turn, so

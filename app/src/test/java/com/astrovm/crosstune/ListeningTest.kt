@@ -46,6 +46,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertNotNull
+import android.app.AppOpsManager
+import android.os.Build
 import android.os.Looper
 import android.os.PowerManager
 import android.Manifest
@@ -257,6 +259,119 @@ class ListeningTest {
         assertEquals(0, microphone.opened)
         assertEquals(0, shazamRequests())
         assertEquals(playing, HistoryStore(prefs()).load().first().metadata)
+    }
+
+    @Test
+    fun aRadioStationKeepsItsButtonsAndPlayerAsItIsUntilItsSongIsHeardAndThenATapShowsTheSong() {
+        // VRadio names only the station (#998).
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2")
+            playing.value = Following(PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "VRadio", canSeek = false, appPackage = "com.ilv.vradio", canSkipNext = true)
+        }
+        MainActivity.playbackFactory = { radio }
+        val heard = kotlinx.coroutines.CompletableDeferred<Heard>()
+        MainActivity.hearingFactory = { SongHearing { heard.await() } }
+        // It can be heard, by the microphone, and is being listened to.
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertTrue(shown("RTP Antena 2"))
+        assertTrue(shown("VRadio"))
+        // Its buttons are the app's, as for a song.
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_pause)) and hasClickAction()).performClick()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_next_song)) and hasClickAction()).performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf(false), radio.plays)
+        assertEquals(listOf(true), radio.skips)
+        // A tap opens its player, as the app names it: no song, so no menu with its link, no words, and nothing kept.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        composeRule.waitForIdle()
+        assertTrue(shown("RTP Antena 2"))
+        assertFalse(described(string(R.string.more_button)))
+        assertFalse(described(string(R.string.lyrics_button)))
+        assertTrue(composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isEmpty())
+        closeWords()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertNull(controllerModel().uiState.player)
+        // A swipe up opens the same player.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput { swipe(center, center - Offset(0f, 1500f)) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        closeWords()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        // Its song heard, which has a while left, a tap shows it, as a Shazam result.
+        heard.complete(Heard.Song(MusicMetadata("Fake Song", "Fake Band", lengthMs = 200_000), null, 50_000, SystemClock.elapsedRealtime()))
+        waitForText("Fake Song")
+        assertTrue(shown("Fake Band \u00b7 VRadio"))
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(HistoryStore(prefs()).load().none { it.metadata.title == "RTP Antena 2" })
+    }
+
+    @Test
+    fun aStationIsListenedToOnlyWhileItsBarIsInSightNotUnderItsPlayer() {
+        val radio = FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "Fake FM") }
+        MainActivity.playbackFactory = { radio }
+        var listens = 0
+        var stopped = 0
+        MainActivity.hearingFactory = {
+            SongHearing {
+                listens++
+                try {
+                    kotlinx.coroutines.awaitCancellation()
+                } finally {
+                    stopped++
+                }
+            }
+        }
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        // Its player covers the bar, and the main screen with it: the listen stops.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        composeRule.waitForIdle()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1 to 1, listens to stopped)
+        // Back on the bar, it's listened to again.
+        closeWords()
+        waitUntil(TIMEOUT_MS) { listens == 2 }
+        assertEquals(1, stopped)
+    }
+
+    /**
+     * A station named by ear, with the microphone allowed, that heard no song: Shizuku or root then
+     * shares the phone's own sound, after a second. Returns how many times it was listened to.
+     */
+    private fun listensWhenTheSoundIsShared(): Int {
+        allowMicrophone()
+        val radio = FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "Fake FM") }
+        MainActivity.playbackFactory = { radio }
+        var listens = 0
+        MainActivity.hearingFactory = {
+            SongHearing {
+                listens++
+                Heard.Nothing
+            }
+        }
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        PhoneAppOps.projectMedia = AppOpsManager.MODE_ALLOWED
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        return listens
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.Q])
+    fun fromAndroid10TheStationIsListenedToAgainAtOnceWhenItsSoundIsShared() {
+        assertEquals(2, listensWhenTheSoundIsShared())
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.P])
+    fun beforeAndroid10SharingTheSoundIsNoNewWayToHear() {
+        // Android 9 can't capture what other apps play, shared or not.
+        assertEquals(1, listensWhenTheSoundIsShared())
     }
 
     @Test
@@ -6741,41 +6856,59 @@ class ListeningTest {
         val answers = openAi.reply
         val late = java.util.concurrent.CountDownLatch(1)
         val answeredLate = java.util.concurrent.atomic.AtomicInteger()
-        // What it says about Demo comes only once the next song plays; about any other, there's nothing to say.
+        val aboutDemo = { body: org.json.JSONObject ->
+            val instructions = body.getString("instructions")
+            ("covers and samples" in instructions || "explain the song in four parts" in instructions) &&
+                "Demo" in body.getJSONArray("input").getJSONObject(0).getString("content")
+        }
+        // What it says about Demo comes only once the next song plays, however long that takes; about any other, there's nothing to say.
         openAi.reply = { body ->
             val instructions = body.getString("instructions")
-            val about = "covers and samples" in instructions || "explain the song in four parts" in instructions
-            val demo = "Demo" in body.getJSONArray("input").getJSONObject(0).getString("content")
             when {
-                about && demo -> { late.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS); answers(body).also { answeredLate.incrementAndGet() } }
-                about -> 500 to ""
+                aboutDemo(body) -> { late.await(); answers(body).also { answeredLate.incrementAndGet() } }
+                "covers and samples" in instructions || "explain the song in four parts" in instructions -> 500 to ""
                 else -> answers(body)
             }
         }
-        val hearing = FakeHearing()
-        listeningAlong(hearing)
-        val words = fake.handler
-        fake.handler = { request -> openAi.answer(request) ?: words(request) }
-        allowMicrophone()
-        launch()
-        hearing.song("Demo", 2.0)
-        recognize()
-        waitForText("Demo")
-        click(string(R.string.lyrics_button))
-        waitUntil(TIMEOUT_MS) { lit("Demo one") }
-        aboutSong()
-        waitUntil(TIMEOUT_MS) { openAi.asked.count { "Demo" in it.getJSONArray("input").getJSONObject(0).getString("content") && ("covers and samples" in it.getString("instructions") || "explain the song in four parts" in it.getString("instructions")) } == 2 }
-        hearing.song("Other", 1.0)
-        waitUntil(TIMEOUT_MS) { lit("Other one") }
-        late.countDown()
-        waitUntil(TIMEOUT_MS) { answeredLate.get() == 2 }
-        Thread.sleep(300)
-        composeRule.waitForIdle()
-        // Other's words don't say Demo covers First Demo, or what Demo is about.
-        val learning = controllerModel().uiState.learning
-        assertNull(learning.songFacts)
-        assertFalse(learning.songExplanation?.text.orEmpty().contains("under the stars"))
-        assertFalse(shown("Old Band") || shown("A night under the stars."))
+        // The asks about Demo the app let go of.
+        val letGo = java.util.concurrent.atomic.AtomicInteger()
+        MainActivity.httpClientFactory = {
+            fake.client().newBuilder().eventListener(object : okhttp3.EventListener() {
+                override fun canceled(call: okhttp3.Call) {
+                    if (call.request().url.toString() == ChatGpt.RESPONSES_URL && aboutDemo(org.json.JSONObject(FakeSpotify.bodyOf(call.request())))) letGo.incrementAndGet()
+                }
+            }).build()
+        }
+        // Let go of at the end, passing or failing, so no answer waits past the test.
+        try {
+            val hearing = FakeHearing()
+            listeningAlong(hearing)
+            val words = fake.handler
+            fake.handler = { request -> openAi.answer(request) ?: words(request) }
+            allowMicrophone()
+            launch()
+            hearing.song("Demo", 2.0)
+            recognize()
+            waitForText("Demo")
+            click(string(R.string.lyrics_button))
+            waitUntil(TIMEOUT_MS) { lit("Demo one") }
+            aboutSong()
+            waitUntil(TIMEOUT_MS) { openAi.asked.count(aboutDemo) == 2 }
+            hearing.song("Other", 1.0)
+            waitUntil(TIMEOUT_MS) { lit("Other one") }
+            // Both asks about Demo were let go of as Other took over, so their answers have nowhere to go.
+            waitUntil(TIMEOUT_MS) { letGo.get() == 2 }
+            late.countDown()
+            waitUntil(TIMEOUT_MS) { answeredLate.get() == 2 }
+            composeRule.waitForIdle()
+            // Other's words don't say Demo covers First Demo, or what Demo is about.
+            val learning = controllerModel().uiState.learning
+            assertNull(learning.songFacts)
+            assertFalse(learning.songExplanation?.text.orEmpty().contains("under the stars"))
+            assertFalse(shown("Old Band") || shown("A night under the stars."))
+        } finally {
+            late.countDown()
+        }
     }
 
 

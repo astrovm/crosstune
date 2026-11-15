@@ -49,5 +49,20 @@
     "optional_apps": {},
     "sign_in": true,
     "by_hand": []
+  },
+  "crosstune-android8": {
+    "kind": "engine",
+    "image": "system-images;android-26;google_apis;{abi}",
+    "device": "pixel",
+    "port": 5584,
+    "config": {
+      "hw.ramSize": "2048",
+      "hw.cpu.ncore": "4",
+      "disk.dataPartition.size": "4G"
+    },
+    "play_apps": {},
+    "optional_apps": {},
+    "sign_in": false,
+    "by_hand": []
   }
 }

@@ -715,11 +715,15 @@ internal class PracticeCards(
         practice.line?.let { setSound(it, LineSound.PLAYED) }
     }
 
-    /** Done, the music app goes back to what it played before, where it was, and practice closes. */
+    /**
+     * Done, the music app goes back to what it played before, where it was, and practice closes. What named no song,
+     * e.g. a radio station, plays on, as there's nowhere in it to go back to.
+     */
     fun backToBefore() {
         val before = uiState.practice?.before ?: return
         val source = playback ?: return
         stop()
+        if (before.songless) return source.playPause(before.song, true, before.app)
         soundJob = scope.launch {
             inApp(source, before.song, before.app) {
                 source.seekTo(before.song, before.positionMs)
