@@ -96,7 +96,7 @@ It needs these repository secrets:
 | `RELEASE_KEYSTORE_PASSWORD` | Keystore password |
 | `RELEASE_KEY_ALIAS` | Key alias |
 | `RELEASE_KEY_PASSWORD` | Key password |
-| `PLAY_SERVICE_ACCOUNT_JSON` | Optional. JSON key of a Google Cloud service account with release access to the app in Play Console. Without it, the Play jobs skip Play with a notice. The jobs hand it to `.github/play/play.sh` as `PLAY_KEY_JSON`. A workflow from before `.github/play` reads the same secret and has no review guard, so tag only commits from main, and make a fix to an older version with `scripts/release/hotfix.py`, which brings main's workflow |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Optional. JSON key of a Google Cloud service account with release access to the app in Play Console. Without it, the Play jobs skip Play with a notice. The jobs hand it to `.github/play/play.sh` as `PLAY_KEY_JSON`. |
 
 > Back up the keystore and never replace it. Android only installs an update if it's signed with the same key.
 
