@@ -111,6 +111,24 @@ class PracticeRemindersTest {
     }
 
     @Test
+    fun theLatestDueMinuteAndNextOneBoundNowAcrossTimeZones() {
+        val instants = listOf("2026-03-29T01:10:00Z", "2026-11-01T06:15:00Z", "2011-12-30T12:00:00Z")
+        for (name in ZoneId.getAvailableZoneIds()) {
+            val local = ZoneId.of(name)
+            for (instant in instants) {
+                val now = java.time.Instant.parse(instant).toEpochMilli()
+                for (minute in listOf(0, 150, 1410)) {
+                    val due = latestReminderAt(minute, now, local)
+                    val context = "$name $instant $minute"
+                    assertTrue(context, due <= now)
+                    assertTrue(context, nextReminderAt(minute, due, local) > now)
+                    assertEquals(context, due, nextReminderAt(minute, due - 1, local))
+                }
+            }
+        }
+    }
+
+    @Test
     fun theMinuteOfTheDayIsWhatTheWallSays() {
         assertEquals(20 * 60 + 5, minuteOfDay(at(2, 20, 5), zone))
         assertEquals(0, minuteOfDay(at(2, 0), zone))
@@ -396,13 +414,13 @@ class PracticeRemindersTest {
     }
 
     @Test
-    fun restartingAfterTheNextOccurrenceDoesNotDeliverAnExpiredSlot() {
+    fun restartingAfterSeveralOccurrencesArmsTheLatestDueMinute() {
         setUpWith(line("One"))
         for (day in listOf(4, 6)) {
             prefs().edit().putLong("practice_reminder_armed_for", at(3, 20, 5)).commit()
             clock = at(day, 21)
             PracticeReminders(app, now = { clock }, zone = { zone }).arm()
-            assertEquals(at(day + 1, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+            assertEquals(at(day, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
         }
     }
 
@@ -459,14 +477,42 @@ class PracticeRemindersTest {
     }
 
     @Test
-    fun aDeliveryPastItsNextOccurrenceDoesNotPost() {
+    fun aDeliveryPastItsNextOccurrencePostsTheLatestDueMinuteOnce() {
         setUpWith(line("One"))
         val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
-        clock = at(4, 20, 5)
+        clock = at(4, 20, 30)
         reminders.remind(delivered)
-        assertTrue(shown.isEmpty())
-        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(1, shown.size)
+        assertEquals(at(4, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
         assertEquals(at(5, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        reminders.remind(delivered)
+        reminders.remind(Intent(delivered).putExtra(PracticeReminders.EXTRA_AT, at(4, 20, 5)))
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        clock = at(6, 20, 30)
+        reminders.remind(delivered)
+        assertEquals(2, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(6, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
+    fun anOlderPendingSlotCannotRearmAnOccurrenceAlreadyPosted() {
+        setUpWith(line("One"))
+        prefs().edit().putLong("practice_reminder_posted_for", at(4, 20, 5)).commit()
+        clock = at(4, 21)
+        reminders.arm()
+        assertEquals(at(5, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aDeliveryForAnotherMinuteCannotConsumeThePendingReminder() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 8)
+        reminders.remind(Intent(delivered).putExtra(PracticeReminders.EXTRA_AT, at(3, 19)))
+        assertTrue(shown.isEmpty())
+        assertEquals(at(3, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
     }
 
     @Test

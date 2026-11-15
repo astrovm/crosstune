@@ -50,6 +50,18 @@ internal fun nextReminderAt(minute: Int, now: Long, zone: ZoneId): Long {
     return (if (at.isAfter(today)) at else today.toLocalDate().plusDays(1).atTime(time).atZone(zone)).toInstant().toEpochMilli()
 }
 
+/** The latest chosen minute that is due, including a day whose clock skips that minute or date. */
+internal fun latestReminderAt(minute: Int, now: Long, zone: ZoneId): Long {
+    val time = LocalTime.of(minute / 60, minute % 60)
+    var date = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    var at = date.atTime(time).atZone(zone).toInstant().toEpochMilli()
+    while (at > now) {
+        date = date.minusDays(1)
+        at = date.atTime(time).atZone(zone).toInstant().toEpochMilli()
+    }
+    return at
+}
+
 /** What the clock on [zone]'s wall says at [at], in minutes from midnight. */
 internal fun minuteOfDay(at: Long, zone: ZoneId): Int = Instant.ofEpochMilli(at).atZone(zone).run { hour * 60 + minute }
 
@@ -196,17 +208,20 @@ internal class PracticeReminders(
         }
     }
 
-    /** Retain an undelivered occurrence until its next chosen minute, including across midnight. */
+    /** Keep the latest due occurrence of an undelivered alarm, rather than skip today's too. */
     private fun nextAt(minute: Int): Long {
         val armed = preferences.getLong(KEY_ARMED_FOR, 0L)
         val now = now()
         val zone = zone()
-        val pending = armed != 0L && currentOccurrence(minute, armed, now, zone)
-        return if (pending && nextReminderAt(minute, armed - 1, zone) == armed) armed else nextReminderAt(minute, now, zone)
+        val pending = pendingOccurrence(minute, armed, now, zone)
+        return if (pending != null && pending != preferences.getLong(KEY_POSTED_FOR, 0L)) pending else nextReminderAt(minute, now, zone)
     }
 
-    private fun currentOccurrence(minute: Int, slot: Long, now: Long, zone: ZoneId): Boolean =
-        slot <= now && now < nextReminderAt(minute, slot, zone)
+    private fun pendingOccurrence(minute: Int, slot: Long, now: Long, zone: ZoneId): Long? {
+        if (slot == 0L || slot > now) return null
+        if (nextReminderAt(minute, slot - 1, zone) != slot) return null
+        return latestReminderAt(minute, now, zone)
+    }
 
     private fun cancelBoth() {
         preferences.edit { remove(KEY_ARMED_FOR) }
@@ -216,16 +231,19 @@ internal class PracticeReminders(
 
     /** The alarm went: says what's due, unless there's no reason to, and sets tomorrow's. */
     fun remind(intent: Intent = Intent()) {
-        // This delivery consumes the old slot even when there is nothing due or notifications are blocked.
-        preferences.edit { remove(KEY_ARMED_FOR) }
-        val slot = intent.getLongExtra(EXTRA_AT, 0L)
-        // The exact alarm and the spare can both be on their way. The second must not ask again.
-        val again = slot != 0L && slot == preferences.getLong(KEY_POSTED_FOR, 0L)
         val at = now()
+        val slot = deliverySlot(intent.getLongExtra(EXTRA_AT, 0L), at)
+        if (slot == null) {
+            arm()
+            return
+        }
+        // A valid delivery consumes the slot even with no due cards or blocked notifications.
+        preferences.edit { remove(KEY_ARMED_FOR) }
+        // Both alarms can be on their way. Old and current deliveries share the latest due minute.
+        val again = slot != 0L && slot == preferences.getLong(KEY_POSTED_FOR, 0L)
         val types = loadCardTypes(preferences)
         val due = sessionOf(SavedLinesStore(preferences).load(), at, max = Int.MAX_VALUE, types = types)
-        val newSlot = !again && deliveryIsCurrent(slot, at)
-        if (newSlot && due.isNotEmpty() && mayAsk(at)) {
+        if (!again && due.isNotEmpty() && mayAsk(at)) {
             post(due)
             preferences.edit {
                 putInt(KEY_IGNORED, ignored + 1)
@@ -236,11 +254,11 @@ internal class PracticeReminders(
         arm()
     }
 
-    /** An inexact evening alarm can cross midnight, but expires at its next occurrence. */
-    private fun deliveryIsCurrent(slot: Long, now: Long): Boolean {
-        if (slot == 0L) return true
-        val minute = minute ?: return false
-        return currentOccurrence(minute, slot, now, zone())
+    /** Advance a held alarm to the latest due minute, so missed days do not hide today's reminder. */
+    private fun deliverySlot(slot: Long, now: Long): Long? {
+        if (slot == 0L) return 0L
+        val minute = minute ?: return null
+        return pendingOccurrence(minute, slot, now, zone())
     }
 
     /** Wanted, shown by Android, and not already answered for today by a session. */

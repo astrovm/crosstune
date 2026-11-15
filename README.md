@@ -85,7 +85,7 @@ Turn the service on in **Settings** → **Open links from**. Then in Android, go
 Crosstune found no confident match. Choose what happens then in **Settings** → **When a song isn't found**.
 
 **Practice reminders arrive late.**
-In **Settings** → **Practice**, use **Allow exact time**. Without that access, Android can hold a reminder. A pending reminder can arrive after midnight or when Crosstune opens again. It expires at the next daily reminder time.
+In **Settings** → **Practice**, use **Allow exact time**. Without that access, Android can hold a reminder. A pending reminder can arrive after midnight or when Crosstune opens again. If several days pass, only the latest due reminder is shown.
 
 ## Privacy
 
