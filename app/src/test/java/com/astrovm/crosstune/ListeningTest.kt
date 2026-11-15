@@ -5533,6 +5533,27 @@ class ListeningTest {
     }
 
     @Test
+    fun aTranslationThatFinishesWhileALineMovesIsKeptWithItsNewWords() {
+        prefs().edit().putString(
+            "saved_lines", """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band"}]"""
+        ).putBoolean("lyrics_translation", true).commit()
+        val gate = Gate()
+        MainActivity.systemDispatcher = gate
+        wordsOf(null, "Night sky", before = { gate.held = true })
+        try {
+            waitUntil(TIMEOUT_MS) { gate.queued.isNotEmpty() }
+            waitUntil(TIMEOUT_MS) {
+                controllerModel().uiState.learning.let { it.translations == listOf("[Night sky]") && !it.translating }
+            }
+            assertEquals("Night  Sky!", SavedLinesStore(prefs()).load().single().text)
+        } finally {
+            gate.letGo()
+        }
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().text == "Night sky" }
+        assertEquals("[Night sky]", SavedLinesStore(prefs()).load().single().translation)
+    }
+
+    @Test
     fun linesKeptFollowTheSongsWordsWhenTheyChangeAndAreTranslatedAsTheyAreNow() {
         // Kept from the words as another site wrote them, and translated then.
         val saved = """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band","box":2,"due":5,"explanation":"Looking up.","start":500,"end":4000},""" +
