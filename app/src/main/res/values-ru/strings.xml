@@ -408,7 +408,12 @@
     <string name="practice_play">Включить строку</string>
     <string name="practice_stop">Остановить строку</string>
     <string name="practice_loading">Открывается в %1$s</string>
-    <string name="practice_done">Повторено: %1$d</string>
+    <plurals name="practice_done">
+        <item quantity="one">Повторено: %1$d</item>
+        <item quantity="few">Повторено: %1$d</item>
+        <item quantity="many">Повторено: %1$d</item>
+        <item quantity="other">Повторено: %1$d</item>
+    </plurals>
     <string name="practice_back_to">Вернуться к %1$s</string>
     <string name="practice_progress">%1$d из %2$d</string>
     <string name="practice_reminders">Напоминания о практике</string>

@@ -202,7 +202,7 @@ class PracticeScreenTest {
         val before = Before(MusicMetadata("Old Song", "Old Band"), 5_000, "com.example.music")
         val backs = mutableListOf<Unit>()
         show(UiState(practice = Practice(total = 3, done = 3, before = before)), ScreenActions(onBackToBefore = { backs += Unit }))
-        composeRule.onNodeWithText(string(R.string.practice_done, 3)).assertExists()
+        composeRule.onNodeWithText(context.resources.getQuantityString(R.plurals.practice_done, 3, 3)).assertExists()
         composeRule.onNodeWithText(string(R.string.practice_back_to, "Old Song")).performClick()
         assertEquals(1, backs.size)
     }

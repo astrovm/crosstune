@@ -431,7 +431,10 @@
     <string name="practice_play">Play the line</string>
     <string name="practice_stop">Stop the line</string>
     <string name="practice_loading">Opening in %1$s</string>
-    <string name="practice_done">%1$d practiced</string>
+    <plurals name="practice_done">
+        <item quantity="one">%1$d practiced</item>
+        <item quantity="other">%1$d practiced</item>
+    </plurals>
     <string name="practice_back_to">Back to %1$s</string>
     <string name="practice_progress">%1$d of %2$d</string>
     <string name="practice_reminders">Practice reminders</string>

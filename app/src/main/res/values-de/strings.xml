@@ -408,7 +408,10 @@
     <string name="practice_play">Zeile abspielen</string>
     <string name="practice_stop">Zeile anhalten</string>
     <string name="practice_loading">Wird in %1$s geöffnet</string>
-    <string name="practice_done">%1$d geübt</string>
+    <plurals name="practice_done">
+        <item quantity="one">%1$d geübt</item>
+        <item quantity="other">%1$d geübt</item>
+    </plurals>
     <string name="practice_back_to">Zurück zu %1$s</string>
     <string name="practice_progress">%1$d von %2$d</string>
     <string name="practice_reminders">Übungserinnerungen</string>

@@ -408,7 +408,9 @@
     <string name="practice_play">Putar baris</string>
     <string name="practice_stop">Hentikan baris</string>
     <string name="practice_loading">Membuka di %1$s</string>
-    <string name="practice_done">%1$d dilatih</string>
+    <plurals name="practice_done">
+        <item quantity="other">%1$d dilatih</item>
+    </plurals>
     <string name="practice_back_to">Kembali ke %1$s</string>
     <string name="practice_progress">%1$d dari %2$d</string>
     <string name="practice_reminders">Pengingat latihan</string>

@@ -408,7 +408,10 @@
     <string name="practice_play">लाइन चलाएं</string>
     <string name="practice_stop">लाइन रोकें</string>
     <string name="practice_loading">%1$s में खुल रहा है</string>
-    <string name="practice_done">%1$d का अभ्यास हुआ</string>
+    <plurals name="practice_done">
+        <item quantity="one">%1$d का अभ्यास हुआ</item>
+        <item quantity="other">%1$d का अभ्यास हुआ</item>
+    </plurals>
     <string name="practice_back_to">%1$s पर वापस जाएं</string>
     <string name="practice_progress">%2$d में से %1$d</string>
     <string name="practice_reminders">अभ्यास के रिमाइंडर</string>

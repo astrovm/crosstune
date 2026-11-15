@@ -408,7 +408,9 @@
     <string name="practice_play">이 줄 재생</string>
     <string name="practice_stop">이 줄 멈추기</string>
     <string name="practice_loading">%1$s에서 여는 중</string>
-    <string name="practice_done">%1$d개 연습함</string>
+    <plurals name="practice_done">
+        <item quantity="other">%1$d개 연습함</item>
+    </plurals>
     <string name="practice_back_to">%1$s(으)로 돌아가기</string>
     <string name="practice_progress">%1$d/%2$d</string>
     <string name="practice_reminders">연습 알림</string>

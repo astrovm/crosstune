@@ -408,7 +408,10 @@
     <string name="practice_play">Regel afspelen</string>
     <string name="practice_stop">Regel stoppen</string>
     <string name="practice_loading">Openen in %1$s</string>
-    <string name="practice_done">%1$d geoefend</string>
+    <plurals name="practice_done">
+        <item quantity="one">%1$d geoefend</item>
+        <item quantity="other">%1$d geoefend</item>
+    </plurals>
     <string name="practice_back_to">Terug naar %1$s</string>
     <string name="practice_progress">%1$d van %2$d</string>
     <string name="practice_reminders">Oefenherinneringen</string>

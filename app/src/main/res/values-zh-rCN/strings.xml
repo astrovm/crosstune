@@ -408,7 +408,9 @@
     <string name="practice_play">播放这一行</string>
     <string name="practice_stop">停止这一行</string>
     <string name="practice_loading">正在 %1$s 中打开</string>
-    <string name="practice_done">已练习 %1$d 条</string>
+    <plurals name="practice_done">
+        <item quantity="other">已练习 %1$d 条</item>
+    </plurals>
     <string name="practice_back_to">回到 %1$s</string>
     <string name="practice_progress">%1$d / %2$d</string>
     <string name="practice_reminders">练习提醒</string>

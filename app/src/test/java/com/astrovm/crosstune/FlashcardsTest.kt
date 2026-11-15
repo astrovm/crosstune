@@ -405,7 +405,7 @@ class FlashcardsTest {
         assertTrue(described(string(R.string.practice_play)))
         // Known, it's done.
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 1)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 1, 1)) }
         assertEquals(1, savedLine("Stars").step)
         // Demo was playing before and still is, so there's nothing to go back to.
         assertFalse(shown(string(R.string.practice_back_to, "Demo")))
@@ -517,7 +517,7 @@ class FlashcardsTest {
         waitUntil { practice().line?.text == "夜の空" && !practice().turned }
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 2)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 2, 2)) }
         // Nothing played before, so there's nothing to go back to; closed, it's back to the main screen.
         assertFalse(shown(string(R.string.practice_back_to, "Demo")))
         click(string(R.string.floating_close))
@@ -728,7 +728,7 @@ class FlashcardsTest {
         assertTrue(onCard(string(R.string.card_type_read)))
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 1)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 1, 1)) }
         assertEquals(0, savedLine("夜の空").reviews.size)
         assertTrue(savedLine("夜の空").interval > 3)
         // Its other card is next, asking for the words from what they mean.
@@ -741,7 +741,7 @@ class FlashcardsTest {
         click(string(R.string.practice_show))
         assertTrue(readingShown("よる"))
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 1)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 1, 1)) }
         assertEquals(setOf(TRANSLATE_TYPE), savedLine("夜の空").reviews.keys)
         assertEquals(1, savedLine("夜の空").reviews.getValue(TRANSLATE_TYPE).step)
     }
@@ -886,7 +886,7 @@ class FlashcardsTest {
         assertTrue(onCard(string(R.string.card_type_translate)))
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 2)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 2, 2)) }
     }
 
     @Test
@@ -1078,7 +1078,7 @@ class FlashcardsTest {
         click(string(R.string.practice_show))
         assertTrue(readingShown("そら") && shown("cielo"))
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 1)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 1, 1)) }
     }
 
     @Test

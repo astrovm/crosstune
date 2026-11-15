@@ -408,7 +408,11 @@
     <string name="practice_play">Ouvir a linha</string>
     <string name="practice_stop">Parar a linha</string>
     <string name="practice_loading">Abrindo no %1$s</string>
-    <string name="practice_done">%1$d praticadas</string>
+    <plurals name="practice_done">
+        <item quantity="one">%1$d praticada</item>
+        <item quantity="many">%1$d praticadas</item>
+        <item quantity="other">%1$d praticadas</item>
+    </plurals>
     <string name="practice_back_to">Voltar para %1$s</string>
     <string name="practice_progress">%1$d de %2$d</string>
     <string name="practice_reminders">Lembretes de prática</string>

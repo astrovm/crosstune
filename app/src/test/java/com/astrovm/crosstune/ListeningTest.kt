@@ -5491,7 +5491,7 @@ class ListeningTest {
         click(string(R.string.practice_good))
         assertEquals(1, SavedLinesStore(prefs()).load().single().step)
         // Nothing else is due: one practised.
-        waitForText(string(R.string.practice_done, 1))
+        waitForText(app.resources.getQuantityString(R.plurals.practice_done, 1, 1))
         // Closed, it's back to the words.
         click(string(R.string.floating_close))
         waitForText("«Night sky»")
@@ -5529,7 +5529,7 @@ class ListeningTest {
         val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
         assertEquals(1, good.step)
         assertTrue(good.due >= before + 10 * 60_000L && good.due <= System.currentTimeMillis() + 10 * 60_000L)
-        waitForText(string(R.string.practice_done, 2))
+        waitForText(app.resources.getQuantityString(R.plurals.practice_done, 2, 2))
     }
 
     @Test
