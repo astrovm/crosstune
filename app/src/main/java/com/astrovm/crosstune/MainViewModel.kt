@@ -4377,25 +4377,27 @@ internal class MainViewModel(
                         val (was, moved) = change
                         if (saved.line != null) saved.copy(line = if (saved.line == was.line) moved.line else saved.line)
                         else if (!occupied.add(moved.text)) saved
-                        else {
-                            // Bounds are one edit: mixing an old end with a newer start can reverse the window.
-                            val timing = if (saved.startMs == was.startMs && saved.endMs == was.endMs && saved.nextMs == was.nextMs) moved else saved
-                            val replacement = saved.copy(
-                                text = moved.text, reading = moved.reading, romanized = moved.romanized, ruby = moved.ruby,
-                                readByHand = false, typed = moved.typed, readWith = moved.readWith,
-                                translation = if (saved.translation == was.translation) moved.translation else saved.translation,
-                                startMs = timing.startMs, endMs = timing.endMs, nextMs = timing.nextMs,
-                                lengthMs = if (saved.lengthMs == was.lengthMs) moved.lengthMs else saved.lengthMs,
-                                leadMs = if (saved.leadMs == was.leadMs) moved.leadMs else saved.leadMs,
-                                app = if (saved.app == was.app) moved.app else saved.app,
-                                artworkUrl = if (saved.artworkUrl == was.artworkUrl) moved.artworkUrl else saved.artworkUrl
-                            )
-                            if (script == null) replacement else replacement.carrying(saved, script)
-                        }
+                        else movedSavedLine(saved, was, moved, script)
                     }
                 }
             }?.let { uiState = uiState.copy(savedLines = it) }
         }
+    }
+
+    private suspend fun movedSavedLine(saved: SavedLine, was: SavedLine, moved: SavedLine, script: Script?): SavedLine {
+        // Bounds are one edit: mixing an old end with a newer start can reverse the window.
+        val timing = if (saved.startMs == was.startMs && saved.endMs == was.endMs && saved.nextMs == was.nextMs) moved else saved
+        val replacement = saved.copy(
+            text = moved.text, reading = moved.reading, romanized = moved.romanized, ruby = moved.ruby,
+            readByHand = false, typed = moved.typed, readWith = moved.readWith,
+            translation = if (saved.translation == was.translation) moved.translation else saved.translation,
+            startMs = timing.startMs, endMs = timing.endMs, nextMs = timing.nextMs,
+            lengthMs = if (saved.lengthMs == was.lengthMs) moved.lengthMs else saved.lengthMs,
+            leadMs = if (saved.leadMs == was.leadMs) moved.leadMs else saved.leadMs,
+            app = if (saved.app == was.app) moved.app else saved.app,
+            artworkUrl = if (saved.artworkUrl == was.artworkUrl) moved.artworkUrl else saved.artworkUrl
+        )
+        return if (script == null) replacement else replacement.carrying(saved, script)
     }
 
     /** Lines of [song] kept are translated as its lines are now, e.g. into another language. */
