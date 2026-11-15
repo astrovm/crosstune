@@ -2558,6 +2558,58 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aCoverSavedLaterReachesAnOpenPlayerForAnUnnamedFile() {
+        val playback = FakePlayback().apply { playing.value = following(app = station.app) }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        playback.unnamed.value = station.copy(artworkUrl = null)
+        idle()
+        model.peekPlayingUnnamed()
+        idle()
+        val opened = requireNotNull(model.uiState.player)
+        val cover = "file:///unnamed-cover.jpg"
+        playback.unnamed.value = station.copy(artworkUrl = cover)
+        idle()
+        assertEquals(opened.copy(song = opened.song.copy(artworkUrl = cover)), model.uiState.player)
+        playback.unnamed.value = station.copy(artworkUrl = null)
+        idle()
+        assertEquals(cover, model.uiState.player?.song?.artworkUrl)
+        playback.unnamed.value = station.copy(app = "com.other", artworkUrl = "file:///wrong-app.jpg")
+        idle()
+        assertEquals(cover, model.uiState.player?.song?.artworkUrl)
+        playback.unnamed.value = station.copy(artworkUrl = cover)
+        playback.playing.value = null
+        idle()
+        val withoutClock = requireNotNull(model.uiState.player)
+        val playerWork = MainViewModel::class.java.getDeclaredField("playerJob").apply { isAccessible = true }
+        val followingWork = playerWork.get(model)
+        val laterCover = "file:///new-station-art.jpg"
+        playback.unnamed.value = station.copy(artworkUrl = laterCover)
+        idle()
+        assertEquals(withoutClock.copy(song = withoutClock.song.copy(artworkUrl = laterCover)), model.uiState.player)
+        org.junit.Assert.assertSame(followingWork, playerWork.get(model))
+        playback.unnamed.value = station.copy(name = "Another Station", artworkUrl = "file:///next-station.jpg")
+        idle()
+        assertEquals("Another Station", model.uiState.player?.song?.title)
+        assertEquals("file:///next-station.jpg", model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
+    fun aCoverArrivesAfterTheOpenPlayerMovesToAnUntaggedFile() {
+        val playback = FakePlayback().apply { playing.value = following() }
+        val model = playingModel(playback)
+        val file = Unnamed("com.spotify", "Player", "ct2-untagged", artist = "Unknown Artist")
+        playback.unnamed.value = file
+        playback.onThePhone = null
+        idle()
+        assertTrue(requireNotNull(model.uiState.player).songless)
+        assertEquals("ct2-untagged", model.uiState.player?.song?.title)
+        val cover = "file:///untagged-art.jpg"
+        playback.unnamed.value = file.copy(artworkUrl = cover)
+        idle()
+        assertEquals(cover, model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
     fun aCoverSavedLaterReachesTheOpenPlayer() {
         val playback = FakePlayback()
         playback.playing.value = following()

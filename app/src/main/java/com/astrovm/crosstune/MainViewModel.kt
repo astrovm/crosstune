@@ -2000,16 +2000,19 @@ internal class MainViewModel(
                 // In the app that plays it, which may not be the one the song before played in.
                 if (next != null) return@collect openPlayer(next.metadata, next.app ?: player.following?.appPackage ?: player.app, played = true)
                 if (tookUpUnnamed(unnamed, playing, following, played, song)) return@collect
-                uiState = uiState.copy(player = player.withCurrentCover(playing, following).copy(following = following, played = played))
+                uiState = uiState.copy(player = player.withCurrentCover(playing, unnamed, following).copy(following = following, played = played))
             }
         }
     }
 
     /** A bitmap cover can be saved after the song has already reached the player. */
-    private fun PlayerState.withCurrentCover(playing: Heard.Song?, following: Following?): PlayerState {
-        val cover = playing?.takeIf {
-            sameSong(it.metadata, song) && sameApp(following?.appPackage ?: app, it.app, interception::isInstalled)
-        }?.metadata?.artworkUrl ?: return this
+    private fun PlayerState.withCurrentCover(playing: Heard.Song?, unnamed: Unnamed?, following: Following?): PlayerState {
+        val current = if (songless) unnamed?.let { it.played to it.app } else playing?.let { it.metadata to it.app }
+        val (metadata, packageName) = current ?: return this
+        val matches = if (songless) metadata.copy(artworkUrl = song.artworkUrl) == song else sameSong(metadata, song)
+        val cover = metadata.artworkUrl?.takeIf {
+            matches && sameApp(following?.appPackage ?: app, packageName, interception::isInstalled)
+        } ?: return this
         return copy(song = song.copy(artworkUrl = cover))
     }
 
@@ -2021,7 +2024,7 @@ internal class MainViewModel(
      */
     private fun tookUpUnnamed(unnamed: Unnamed?, playing: Heard.Song?, following: Following?, played: Boolean, song: MusicMetadata): Boolean {
         val app = uiState.player?.let { it.following?.appPackage ?: it.app }
-        val next = unnamed?.takeIf { playing == null && following == null && played && uiState.practice == null && it.played != song && it.app == app } ?: return false
+        val next = unnamed?.takeIf { playing == null && following == null && played && uiState.practice == null && it.played.copy(artworkUrl = song.artworkUrl) != song && it.app == app } ?: return false
         openPlayer(next.played, next.app, played = true, songless = true)
         return true
     }
