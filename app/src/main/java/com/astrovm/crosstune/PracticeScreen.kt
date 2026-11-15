@@ -451,11 +451,19 @@ private const val BARS = 4
 /** The song a card's from: its cover and title. */
 @Composable
 private fun SongChip(line: SavedLine, actions: ScreenActions, kind: CardType? = null) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        CoverArt(line.artworkUrl, actions.loadArtwork, size = 24.dp)
-        Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        // With more than one kind of card, which this is.
-        kind?.let { Text(it.title(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1) }
+    val song: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            CoverArt(line.artworkUrl, actions.loadArtwork, size = 24.dp)
+            Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        }
+    }
+    if (kind == null) {
+        song()
+    } else {
+        // A custom name can be long. Keep its ending, under the song once they no longer fit beside each other.
+        LabelAndValue(label = song, modifier = Modifier.fillMaxWidth(), gap = 8.dp) {
+            LabelText(kind.title(), style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.primary))
+        }
     }
 }
 

@@ -68,7 +68,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.Role
@@ -159,7 +158,7 @@ private fun KindRow(kind: CardType, line: SavedLine, last: Boolean, onToggle: (B
         ) {
             Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { SideMarks(kind.options.front, script, first = true, size = 24.dp) }
             Column(Modifier.weight(1f).clearAndSetSemantics {}) {
-                Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                LabelText(title, style = MaterialTheme.typography.bodyLarge)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.alpha(0.7f)) {
                     SideMarks(kind.options.front, script, size = 14.dp)
                     AppIcon(R.drawable.ic_chevron_right, contentDescription = null, modifier = Modifier.size(14.dp))
