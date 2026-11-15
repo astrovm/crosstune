@@ -1088,11 +1088,11 @@ def hear(args):
 
 # Words found with no timing, put in time by the singing heard (SungTiming.kt), held against when each line is sung.
 # Its patterns are read as a phone reads them (PhoneRegex.kt): on the JVM, by the tests' writer and the table it writes from.
-UNTIMED_SOURCES = ("app/src/main/java/com/astrovm/crosstune/SungTiming.kt", "app/src/main/java/com/astrovm/crosstune/SyncedLyrics.kt",
-                   "app/src/main/java/com/astrovm/crosstune/Patterns.kt", "app/src/main/java/com/astrovm/crosstune/PhoneRegex.kt",
-                   "app/src/main/java/com/astrovm/crosstune/PhoneRegexTable.kt", "app/src/test/java/com/astrovm/crosstune/IcuPattern.kt",
-                   "app/src/test/java/com/astrovm/crosstune/PhoneRegexSets.kt",
-                   "scripts/syncreplay/UntimedReplay.kt")
+UNTIMED_TIMING = ("app/src/main/java/com/astrovm/crosstune/SungTiming.kt", "app/src/main/java/com/astrovm/crosstune/SyncedLyrics.kt",
+                  "app/src/main/java/com/astrovm/crosstune/Patterns.kt", "app/src/main/java/com/astrovm/crosstune/PhoneRegex.kt",
+                  "app/src/main/java/com/astrovm/crosstune/PhoneRegexTable.kt", "app/src/test/java/com/astrovm/crosstune/IcuPattern.kt",
+                  "app/src/test/java/com/astrovm/crosstune/PhoneRegexSets.kt")
+UNTIMED_SOURCES = (*UNTIMED_TIMING, "scripts/syncreplay/UntimedReplay.kt")
 # The jars the Kotlin compiler needs, by the start of their names, from Gradle's caches.
 KOTLIN_JARS = ("kotlin-compiler-embeddable-", "kotlin-stdlib-", "kotlin-script-runtime-", "kotlin-reflect-", "kotlin-daemon-embeddable-",
                "kotlinx-coroutines-core-jvm-", "annotations-", "fastutil-")
@@ -1286,7 +1286,7 @@ SYNTHETIC_SOURCE = "app/src/test/java/com/astrovm/crosstune/SyntheticSinging.kt"
 def synthetic(args):
     """Made-up lines heard a word at a time, for each writing and pace: within 1 s, off, dark. --timing scores
     another SungTiming.kt, as main's, with the same songs; its folder is mounted read-only."""
-    sources = [ROOT / UNTIMED_SOURCES[0], ROOT / UNTIMED_SOURCES[1], ROOT / SYNTHETIC_SOURCE]
+    sources = [ROOT / name for name in (*UNTIMED_TIMING, SYNTHETIC_SOURCE)]
     classes = untimed_classes(timing_copied(args.timing, sources) if args.timing else sources)
     stdlib = next(str(jar) for jar in kotlin_jars() if jar.name.startswith("kotlin-stdlib-"))
     subprocess.run(["podman", "run", "--rm", "-v", f"{OUT}:{OUT}:ro", JDK_IMAGE,
