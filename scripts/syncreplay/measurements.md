@@ -1236,3 +1236,21 @@ recording setup tests pass. The stand-in device changes at once, so its existing
 setup tests no longer spend five seconds in each fake locale change. ShellCheck
 and Ruff pass. No app source or app test changed. Fresh CI and a new review of
 this final shell-only delta remain pending.
+
+### Final small helper findings
+
+The setup test now keeps its original diagnostic if setup exits before its first
+uv call: missing install logs no longer raise FileNotFoundError in finally, and
+the held-tool wait reports an early exit with its output. The icon helper also
+used one shared /tmp image. The parent reproduced both concurrent runs choosing
+that same file, and a failed conversion leaving it behind. It now uses mktemp
+inside the extension's icon folder and an EXIT trap. The complete short POSIX
+body is parsed before work starts too. No release or publication step changed.
+
+All 66 runner tests pass. New cases hold two writers at their final conversion,
+require separate inputs and check cleanup; a failing conversion preserves exit
+7 and removes its input. Real ImageMagick 7.1.1-43 in a bounded, offline container
+generated all four icons with zero pixel differences from the old script. Two
+real concurrent runs also passed and left no temporary image. ShellCheck and
+Ruff pass. The app and its tests remain unchanged from the successful full checks.
+Fresh GitHub checks and an independent review of these small fixes are pending.

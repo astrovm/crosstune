@@ -147,9 +147,14 @@ class GradleBoxTest(unittest.TestCase):
         path = self.dir / "asked"
         return path.read_text().splitlines() if path.exists() else []
 
-    def wait_for(self, name):
+    def wait_for(self, name, process=None):
         deadline = time.monotonic() + 20
         while not (self.dir / name).exists():
+            if process is not None and process.poll() is not None:
+                if (self.dir / name).exists():
+                    return
+                output, _ = process.communicate(timeout=20)
+                self.fail(f"{name} never showed up: exit {process.returncode}\n{output}")
             self.assertLess(time.monotonic(), deadline, f"{name} never showed up")
             time.sleep(0.02)
 
@@ -470,14 +475,15 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
                 self.hold("first")
                 job = self.start_script(script, REPLAY_CACHE=str(self.dir / ("replay" + rocm)), REPLAY_ROCM=rocm)
                 try:
-                    self.wait_for("started.first")
+                    self.wait_for("started.first", job)
                     script.write_text("exit 99\n" * 8_192 + script.read_text())
                 finally:
                     self.release("first")
                     output, _ = job.communicate(timeout=20)
                     (self.dir / "started.first").unlink(missing_ok=True)
-                    calls = (self.dir / "installs").read_text().splitlines()
-                    (self.dir / "installs").unlink()
+                    installs = self.dir / "installs"
+                    calls = installs.read_text().splitlines() if installs.exists() else []
+                    installs.unlink(missing_ok=True)
                 self.assertEqual(0, job.returncode, output)
                 self.assertEqual(count, len(calls), calls)
                 self.assertIn("openai-whisper" if rocm == "0" else "triton-rocm==3.8.0", calls[-1])
@@ -491,6 +497,66 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
                 self.assertEqual(2, job.returncode, output)
                 self.assertIn(heading, output)
                 self.assertNotIn("Parse the", output)
+
+    def icon_writer(self):
+        folder = self.dir / "extension"
+        (folder / "scripts").mkdir(parents=True)
+        (folder / "icons").mkdir()
+        script = folder / "scripts/icons.sh"
+        shutil.copy2(BOX.parent.parent.parent / "extension/scripts/icons.sh", script)
+        tool = self.dir / "bin/magick"
+        tool.write_text(f'''#!{sys.executable}
+import os, sys, time
+from pathlib import Path
+root = Path(os.environ["FAKE_DIR"])
+run = os.environ["FAKE_RUN"]
+args = sys.argv[1:]
+if "-extent" in args:
+    source = Path(args[0]).resolve()
+    (root / (run + ".input")).write_text(str(source))
+    (root / ("started." + run)).touch()
+    while (root / ("hold." + run)).exists(): time.sleep(0.02)
+    if os.environ.get("FAIL_MAGICK"): sys.exit(7)
+    if source.read_text() != run:
+        print("another run replaced the temporary image", file=sys.stderr)
+        sys.exit(23)
+Path(args[-1].removeprefix("PNG32:")).write_text(run)
+''')
+        tool.chmod(0o755)
+        return script
+
+    def test_icon_writers_keep_separate_images_when_they_run_together(self):
+        script = self.icon_writer()
+        self.hold("a")
+        self.hold("b")
+        first = self.start_script("/bin/sh", str(script), FAKE_RUN="a")
+        self.wait_for("started.a", first)
+        second = self.start_script("/bin/sh", str(script), FAKE_RUN="b")
+        try:
+            self.wait_for("started.b", second)
+            a = Path((self.dir / "a.input").read_text())
+            b = Path((self.dir / "b.input").read_text())
+            self.assertNotEqual(a, b)
+        finally:
+            self.release("a")
+            self.release("b")
+            first_output, _ = first.communicate(timeout=20)
+            second_output, _ = second.communicate(timeout=20)
+        self.assertEqual(0, first.returncode, first_output)
+        self.assertEqual(0, second.returncode, second_output)
+        self.assertFalse(a.exists())
+        self.assertFalse(b.exists())
+
+    def test_an_icon_writer_removes_its_image_when_conversion_fails(self):
+        script = self.icon_writer()
+        job = self.start_script("/bin/sh", str(script), FAKE_RUN="failed", FAIL_MAGICK="1")
+        output, _ = job.communicate(timeout=20)
+        self.assertEqual(7, job.returncode, output)
+        temporary = Path((self.dir / "failed.input").read_text())
+        try:
+            self.assertFalse(temporary.exists())
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def test_golden_writers_finish_and_remove_their_tree_after_an_in_place_edit(self):
         writer = self.dir / "writer"
