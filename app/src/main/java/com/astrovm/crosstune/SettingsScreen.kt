@@ -514,7 +514,7 @@ private fun ChatGptRow(chatGpt: ChatGptState, actions: ScreenActions) {
             Text(
                 email ?: stringResource(R.string.chatgpt_use_plan),
                 style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
+                maxLines = if (email == null) Int.MAX_VALUE else 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
