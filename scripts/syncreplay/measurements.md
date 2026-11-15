@@ -1162,3 +1162,28 @@ The earlier full local build on 170240ab passed in 14m 5s: 3792 tests, zero
 failures or errors, four skips, and 22104 covered lines with zero missed lines,
 methods or classes. It predates these production fixes. Fresh full checks, the
 focused license test, independent review and final app verification are pending.
+
+### Final test barriers and runner publication
+
+The full local Gradle checks on 5b521a18 passed in 15m 34s: 3796 tests, zero
+failures or errors, four skips, and 22107 covered lines with zero missed lines,
+methods or classes. Branch coverage was 23012 covered and 2564 missed. The
+wrapper then exited 127 because its file had been edited in place during that
+run; Bash read a later byte offset from the changed file. A deterministic test
+reproduced the same command-not-found failure. The runner now parses its full
+body as a function before starting work. All 58 runner tests pass, including
+editing the active file, and a fresh full command must confirm a zero exit.
+
+The final static review found no blocking app-code finding. Its small ticket
+publication window was also reproduced: a later build could overtake a ticket
+whose name existed only in its parent's memory. Naming and publication now
+happen under one short lock. Checkout paths are stored beside the memory ticket
+so older scripts still read the exact requested memory. Tests cover a held
+publication and the intermediate multi-line tickets while older builds finish.
+
+GitHub on 87f3cc14 exposed a test boundary race: the title is translated after
+the lyric lines. The reopen test took its request snapshot before that initial
+title request finished, then counted it as work caused by reopening. It now
+waits for the title meaning too and asserts that the meaning is kept. All three
+focused reopen tests pass. No application source changed for these final test
+and runner fixes; the 5b521a18 APK and recorded replay still name the app code.

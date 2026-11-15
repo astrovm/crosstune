@@ -387,6 +387,18 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         output, _ = second.communicate(timeout=20)
         self.assertEqual(0, second.returncode, output)
 
+    def test_a_running_build_keeps_its_script_when_the_file_is_edited(self):
+        self.hold("first")
+        first = self.start("first", "help")
+        self.wait_for("started.first")
+        script = self.checkout("first") / "scripts" / "gradle-box" / BOX.name
+        # Move every later byte offset while the stand-in build is held.
+        script.write_text("exit 99\n" * 8_192 + script.read_text())
+        self.release("first")
+        output, _ = first.communicate(timeout=20)
+        self.assertEqual(0, first.returncode, output)
+        self.assertEqual(1, len(self.asked()))
+
     def test_memory_tickets_stay_readable_to_older_checkouts(self):
         self.hold("first")
         first = self.start("first", "help", GRADLE_BOX_MEMORY="7")

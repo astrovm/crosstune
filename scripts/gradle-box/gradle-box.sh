@@ -46,6 +46,8 @@
 # Running slots and the shared seed stay intact, even if they alone exceed the target.
 # A new seed is made only when the cache and its copy fit; its contents are then read-only.
 # An older seed or a lowered limit can still leave the cache over target.
+# Parse the complete body before running it. Edits to this file cannot change an active build.
+main() {
 set -euo pipefail
 
 also=()
@@ -348,3 +350,7 @@ if ((lost >= 5)); then
 fi
 touch "$home"
 exit "$status"
+
+}
+
+main "$@"
