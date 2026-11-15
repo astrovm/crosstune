@@ -148,7 +148,7 @@ internal fun UiState.checks(apps: List<LinkApp> = appsInTheWay): List<Check> = b
         add(Check(Need.Links, linksAllowed))
     }
     add(Check(Need.Follow, canFollowApps))
-    // On, but only the inexact alarm: it can arrive late, and only the user can allow the exact minute.
+    // On, but only the inexact alarm: it can arrive late, access to the exact minute still needs allowing.
     if (reminder.late) add(Check(Need.Exact, done(Need.Exact)))
 }
 
@@ -572,7 +572,7 @@ private fun bold(@StringRes template: Int, vararg words: String): AnnotatedStrin
  */
 @Composable
 internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<FixStep> {
-    // Only the user can allow the exact minute, on Android's alarms and reminders page.
+    // The manual path allows the exact minute on Android's alarms and reminders page.
     if (need == Need.Exact) return listOf(FixStep(AnnotatedString(stringResource(R.string.practice_reminder_late))))
     val phone = state.phone
     val tap = R.string.fix_step_tap

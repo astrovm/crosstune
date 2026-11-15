@@ -9,7 +9,7 @@ python3 scripts/devicelock.py take samsung --who 'issue 773' --minutes 45
 python3 scripts/reminder-lateness/measure.py --minutes 20 --wait-minutes 15
 ```
 
-Add `--exact` to allow exact alarms for the run. Add `--force-idle` to force Doze. The lead and wait must total at most 38 minutes. The script releases the lock after the run. Take it again for the next run.
+Add `--exact` to allow exact alarms for the run. Add `--force-idle` to force Doze. The lead and wait can total at most 110 minutes. The lock must have at least that total plus 3 minutes left. The 45-minute lock above covers the example; take a longer lock for a longer run. The script releases the lock after the run. Take it again for the next run.
 
 The script uses a fake due card. It records the alarm window and the notification creation time. It discards a run if the screen wakes or another activity starts during the wait. No notification by the end of the wait is an unobserved delivery, not a lateness value.
 

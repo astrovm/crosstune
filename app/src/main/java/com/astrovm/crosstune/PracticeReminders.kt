@@ -44,8 +44,10 @@ internal val UiState.reminderMinute: Int? get() = reminder.minute?.takeIf { phon
 /** The moment after [now] the clock on [zone]'s wall next says [minute], so it stays that hour across time zones and clock changes. */
 internal fun nextReminderAt(minute: Int, now: Long, zone: ZoneId): Long {
     val today = Instant.ofEpochMilli(now).atZone(zone)
-    val at = today.toLocalDate().atTime(LocalTime.of(minute / 60, minute % 60)).atZone(zone)
-    return (if (at.isAfter(today)) at else at.plusDays(1)).toInstant().toEpochMilli()
+    val time = LocalTime.of(minute / 60, minute % 60)
+    val at = today.toLocalDate().atTime(time).atZone(zone)
+    // Build tomorrow from the chosen minute, not from an hour shifted past a clock gap.
+    return (if (at.isAfter(today)) at else today.toLocalDate().plusDays(1).atTime(time).atZone(zone)).toInstant().toEpochMilli()
 }
 
 /** What the clock on [zone]'s wall says at [at], in minutes from midnight. */
@@ -113,7 +115,7 @@ internal class PracticeReminders(
 
     val state get() = Reminder(minute, on, allowed, preferences.getBoolean(KEY_TURNED_OFF, false), exact)
 
-    /** Android's page where alarms and reminders are allowed for the app, which only the user can do. */
+    /** Android's page for allowing alarms and reminders without Shizuku or root. */
     val exactPage: Intent get() = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))
 
     /** Android's page where they're allowed: the channel's, when it's only that that's off. */
@@ -194,13 +196,16 @@ internal class PracticeReminders(
         }
     }
 
-    /** Opening the app must not replace a reminder Android still holds with tomorrow's. */
+    /** Retain today's undelivered occurrence, including a minute shifted past a clock gap. */
     private fun nextAt(minute: Int): Long {
         val armed = preferences.getLong(KEY_ARMED_FOR, 0L)
         val now = now()
         val zone = zone()
-        return if (armed != 0L && armed <= now && minuteOfDay(armed, zone) == minute) armed else nextReminderAt(minute, now, zone)
+        return if (armed != 0L && armed <= now && sameDay(armed, now, zone) && nextReminderAt(minute, armed - 1, zone) == armed) armed else nextReminderAt(minute, now, zone)
     }
+
+    private fun sameDay(first: Long, second: Long, zone: ZoneId): Boolean =
+        Instant.ofEpochMilli(first).atZone(zone).toLocalDate() == Instant.ofEpochMilli(second).atZone(zone).toLocalDate()
 
     private fun cancelBoth() {
         preferences.edit { remove(KEY_ARMED_FOR) }
@@ -218,7 +223,7 @@ internal class PracticeReminders(
         val at = now()
         val types = loadCardTypes(preferences)
         val due = sessionOf(SavedLinesStore(preferences).load(), at, max = Int.MAX_VALUE, types = types)
-        if (!again && due.isNotEmpty() && mayAsk(at)) {
+        if (!again && (slot == 0L || sameDay(slot, at, zone())) && due.isNotEmpty() && mayAsk(at)) {
             post(due)
             preferences.edit {
                 putInt(KEY_IGNORED, ignored + 1)

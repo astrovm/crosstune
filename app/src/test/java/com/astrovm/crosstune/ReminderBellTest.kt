@@ -24,6 +24,7 @@ import androidx.test.core.app.ApplicationProvider
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.ZoneId
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import com.astrovm.crosstune.ui.theme.LightColorScheme
 import com.astrovm.crosstune.ui.theme.Palette
@@ -387,6 +388,26 @@ class ReminderBellTest {
         // What one tap couldn't do is left to do by hand, saying so.
         waitUntil { model().uiState.fixes?.need == Need.Exact }
         assertTrue(requireNotNull(model().uiState.fixes).failed)
+    }
+
+    @Test
+    fun aDifferentFixInProgressStillOpensExactAccessByHand() {
+        exactAllowed(false)
+        val shell = shizuku().apply { answer = CompletableDeferred() }
+        launch()
+        finishASession()
+        composeRule.runOnIdle { assertTrue(model().fixInOneTap(OneTapFix.FOLLOW)) }
+        waitUntil { model().uiState.fixingInOneTap == OneTapFix.FOLLOW }
+        // The same request is already handled. Another request still needs its manual path.
+        composeRule.runOnIdle { assertTrue(model().fixInOneTap(OneTapFix.FOLLOW)) }
+        try {
+            drainStartedActivities()
+            click(remindMe)
+            assertExactPage(shadowOf(activity).nextStartedActivity)
+        } finally {
+            shell.answer.complete(Unit)
+        }
+        waitUntil { model().uiState.fixingInOneTap == null }
     }
 
     @Test

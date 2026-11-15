@@ -24,7 +24,7 @@ class PreferencesTest(unittest.TestCase):
         import xml.etree.ElementTree as ET
         from measure import prepare_preferences
 
-        original = b'<map><string name="unrelated">keep</string><int name="practice_reminder_ignored" value="3" /></map>'
+        original = b'<map><string name="unrelated">keep</string><int name="practice_reminder_ignored" value="3" /><long name="practice_reminder_armed_for" value="1772579100000" /></map>'
         root = ET.fromstring(prepare_preferences(original, 125))
         entries = {item.get('name'): item for item in root}
         self.assertEqual(entries['unrelated'].text, 'keep')
@@ -32,6 +32,7 @@ class PreferencesTest(unittest.TestCase):
         self.assertEqual(entries['practice_reminder_on'].get('value'), 'true')
         self.assertEqual(entries['practice_reminder_ignored'].get('value'), '0')
         self.assertEqual(entries['practice_reminder_done_at'].get('value'), '0')
+        self.assertEqual(entries['practice_reminder_armed_for'].get('value'), '0')
         self.assertEqual(json.loads(entries['card_types'].text), [])
         card = json.loads(entries['saved_lines'].text)[0]
         self.assertTrue(card['translation'])

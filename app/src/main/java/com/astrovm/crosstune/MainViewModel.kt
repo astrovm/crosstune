@@ -424,7 +424,7 @@ internal class MainViewModel(
     fun fixInOneTap(fix: OneTapFix, then: () -> Unit = {}): Boolean {
         val setup = oneTap ?: return false
         if (!uiState.canSetUpInOneTap) return false
-        if (uiState.fixingInOneTap != null) return true
+        uiState.fixingInOneTap?.let { return it == fix }
         uiState = uiState.copy(fixingInOneTap = fix)
         viewModelScope.launch {
             val worked = inOneTap(

@@ -1001,7 +1001,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Turns reminders on, and, once, takes the user to Android's page where exact alarms are allowed
-     * if they aren't yet: only they can, and without it a reminder can come an hour late. Asked after
+     * if they aren't yet and Shizuku or root cannot allow them. Without it a reminder can come late. Asked after
      * notifications, since the time is no use for one that can't show. Turned off and on again, or
      * said no to, it isn't asked again; settings says it and goes there.
      */

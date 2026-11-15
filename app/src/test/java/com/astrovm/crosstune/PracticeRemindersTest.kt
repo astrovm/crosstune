@@ -105,6 +105,12 @@ class PracticeRemindersTest {
     }
 
     @Test
+    fun theDayAfterAGapReturnsToTheChosenMinute() {
+        val berlin = ZoneId.of("Europe/Berlin")
+        assertEquals(at(30, 2, 30, berlin), nextReminderAt(150, at(29, 3, 33, berlin), berlin))
+    }
+
+    @Test
     fun theMinuteOfTheDayIsWhatTheWallSays() {
         assertEquals(20 * 60 + 5, minuteOfDay(at(2, 20, 5), zone))
         assertEquals(0, minuteOfDay(at(2, 0), zone))
@@ -384,6 +390,43 @@ class PracticeRemindersTest {
         assertEquals(2, alarms.scheduledAlarms.size)
         assertTrue(alarms.scheduledAlarms.all { it.triggerAtMs == today })
         assertEquals(1, alarms.scheduledAlarms.count { it.windowLengthMs == 0L })
+    }
+
+    @Test
+    fun restartingOnAnotherDayDoesNotDeliverYesterdaysMinute() {
+        setUpWith(line("One"))
+        for (day in listOf(4, 6)) {
+            prefs().edit().putLong("practice_reminder_armed_for", at(3, 20, 5)).commit()
+            clock = at(day, 7)
+            PracticeReminders(app, now = { clock }, zone = { zone }).arm()
+            assertEquals(at(day, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        }
+    }
+
+    @Test
+    fun aDeliveryHeldUntilAnotherDayDoesNotPostAtBoot() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(4, 7)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(4, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aGapInTheClockKeepsTodaysShiftedOccurrence() {
+        val berlin = ZoneId.of("Europe/Berlin")
+        clock = at(29, 1, zone = berlin)
+        val local = PracticeReminders(app, now = { clock }, zone = { berlin })
+        saved(line("One"))
+        local.at(2 * 60 + 30)
+        local.turn(true)
+        val shifted = at(29, 3, 30, berlin)
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(29, 3, 33, berlin)
+        local.arm()
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
     }
 
     @Test

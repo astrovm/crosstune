@@ -33,6 +33,7 @@ def prepare_preferences(data, minute):
         'practice_reminder_ignored': ('int', '0'),
         'practice_reminder_done_at': ('long', '0'),
         'practice_reminder_posted_for': ('long', '0'),
+        'practice_reminder_armed_for': ('long', '0'),
     }
     for child in list(root):
         if child.get('name') in values or child.get('name') in {'saved_lines', 'card_types'}:
