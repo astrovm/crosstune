@@ -485,7 +485,7 @@ class FixCenterTest {
         click(string(R.string.fix_try_link))
         val test = nextStarted()!!
         assertEquals(Intent.ACTION_VIEW, test.action)
-        assertEquals("https://open.spotify.com/#$TEST_LINK", test.dataString)
+        assertEquals("https://open.spotify.com/track/$TEST_LINK#$TEST_LINK", test.dataString)
 
         // It reached Crosstune, which doesn't look it up: the links work, so Spotify's app doesn't take them.
         controller!!.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse(test.dataString)).setClass(app, MainActivity::class.java))
