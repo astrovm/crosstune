@@ -181,7 +181,8 @@ internal object SungTiming {
                 if (next >= 0) starting[k] += starting[next]
             }
             group.forEach(scores::add)
-            for (k in sorted.indices) if (sorted[k].line < line) {
+            for (k in sorted.indices) {
+                if (sorted[k].line >= line) continue
                 if (group.isEmpty()) {
                     after[k][line] = after[k][line + 1]
                 } else {
