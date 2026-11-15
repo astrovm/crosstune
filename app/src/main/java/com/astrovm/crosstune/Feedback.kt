@@ -85,7 +85,7 @@ internal data class Report(
     /** Where the words came from, and their timing when it was borrowed. */
     val source: String? = null,
     val player: PlayerTiming? = null,
-    /** Its own id, for one Crosstune keeps to send: in what [json] measures, as it goes with it. See [AutoReports.ID]. */
+    /** Its own id, reused on an unchanged retry: included in what [json] measures. See [AutoReports.ID]. */
     private val id: String? = null
 ) {
     val title: String get() = song?.let { "Lyrics of ${it.title} by ${it.artist}" }.orEmpty()
@@ -185,12 +185,14 @@ internal data class ReadingReport(
     private val shown: List<String>,
     private val script: Script,
     private val right: String = "",
-    private val android: String = "${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})"
+    private val android: String = "${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})",
+    private val id: String? = null
 ) {
     /** What [ReportSender] sends, each text cut to what [ReportBox] keeps of it. */
     fun json(): String = JSONObject().apply {
         put("version", ReportBox.cut(version, "version"))
         put("android", ReportBox.cut(android, "android"))
+        id?.let { put(AutoReports.ID, it) }
         put("problem", WRONG_READING)
         put("song", JSONObject().apply {
             put("title", ReportBox.cut(song.title, "title"))

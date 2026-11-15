@@ -98,7 +98,7 @@ test("a report is kept, with only what a report has", async () => {
     "2.12.0", "15 (35)", "Demo", "Band", "YouTube Music", 1, 1, 0, 220937, "letras, timed by lrclib",
     JSON.stringify([{ line: "Take me I'm yours", timedMs: 34210, heardMs: 32900 }]), "The chorus comes late", null,
     // An app from before reports about timing sends none of what they add, nor a recording, and it's no wrong reading.
-    // A person's own report carries no id.
+    // Reports from older apps can have no id.
     null, null, null, null, null, null,
     null, null, null, null, null, null, null,
   ]);
