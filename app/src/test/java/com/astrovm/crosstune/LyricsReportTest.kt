@@ -330,6 +330,43 @@ class LyricsReportTest {
     }
 
     @Test
+    fun changingTheWordStartsAnotherReadingReport() {
+        reportsDown = true
+        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 花の空"}]""")
+        openLyrics { model().uiState.learning.lines.isNotEmpty() }
+        composeRule.runOnIdle { model().reportReading(Word("花", "か", "ka"), 0, "") }
+        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        val first = sentReport()
+        composeRule.runOnIdle { model().reportReading(Word("空", "そら", "sora"), 0, "") }
+        waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(first.getString("id") == sentReport().getString("id"))
+        assertEquals("空", sentReport().getJSONObject("reading").getString("word"))
+    }
+
+    @Test
+    fun leavingTheWordsEndsTheDraftEvenWhenTheSameSongOpensAgain() {
+        reportsDown = true
+        openLyrics()
+        composeRule.runOnIdle { model().sendReport("same") }
+        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        val first = sentReport()
+        composeRule.runOnIdle { model().showLyrics(); model().sendReport("same") }
+        waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.FAILED }
+        assertEquals(first.toString(), sentReport().toString())
+        composeRule.runOnIdle { model().dismissLyrics(); model().sendReport("same") }
+        waitUntil { sentReports().size == 3 && model().uiState.report == ReportStatus.FAILED }
+        val noSong = sentReport()
+        assertFalse(first.getString("id") == noSong.getString("id"))
+        assertFalse(noSong.has("song"))
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricsFor != null && !model().uiState.isLoadingLyrics }
+        composeRule.runOnIdle { model().sendReport("same") }
+        waitUntil { sentReports().size == 4 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(noSong.getString("id") == sentReport().getString("id"))
+        assertFalse(first.getString("id") == sentReport().getString("id"))
+    }
+
+    @Test
     fun aReportOnItsWayShowsItAndCantBeSentTwice() {
         // Off the main thread, as on a phone, so it can be caught on its way.
         MainActivity.lookupDispatcher = Dispatchers.IO
