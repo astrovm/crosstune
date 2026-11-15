@@ -143,7 +143,7 @@ internal class ChordFinder(
     private val chordWiki: ChordWikiPages? = null,
     /** A pause between ChordWiki's pages, so a lookup goes no faster than a person opening them. */
     private val chordWikiPauseMs: Long = CHORD_WIKI_PAUSE_MS,
-    private val debugLogging: Boolean = BuildConfig.DEBUG
+    private val debugLogging: Boolean = false
 ) {
     /** A song's chords, or why there are none to show. */
     sealed interface Chords {

@@ -1510,7 +1510,7 @@ Singing to the morning light</div>"""
     private fun wikiHref(page: String) = "https://ja.chordwiki.org/wiki/" + java.net.URLEncoder.encode(page, "UTF-8")
 
     private fun withWiki(pages: ChordWikiPages, cache: LookupCache? = null, pauseMs: Long = 0) =
-        ChordFinder(fake.client(), lookups, cache, pages, chordWikiPauseMs = pauseMs)
+        ChordFinder(fake.client(), lookups, cache, pages, chordWikiPauseMs = pauseMs, debugLogging = true)
 
     /** The other chord sites have nothing, so only ChordWiki can answer. */
     private fun noOtherChordSites() {
@@ -1545,7 +1545,7 @@ Singing to the morning light</div>"""
     fun releaseLookupDoesNotLogSongNamesOrQueries() {
         noOtherChordSites()
         logging()
-        val finder = ChordFinder(fake.client(), lookups, chordWiki = ChordWikiPages { "" }, chordWikiPauseMs = 0, debugLogging = false)
+        val finder = ChordFinder(fake.client(), lookups, chordWiki = ChordWikiPages { "" }, chordWikiPauseMs = 0)
         chords(river, japanese, finder)
         assertTrue(logged().toString(), logged().isEmpty())
     }

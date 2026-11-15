@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
                     chatGpt = chatGpt,
                     tutor = tutor,
                     // Each song's chords are kept, so a song played again needs no lookup.
-                    chordFinder = ChordFinder(client, cache = cache("chords.json", maxEntries = 300), chordWiki = chordWikiFactory(this@MainActivity)),
+                    chordFinder = ChordFinder(client, cache = cache("chords.json", maxEntries = 300), chordWiki = chordWikiFactory(this@MainActivity), debugLogging = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0),
                     lyricsLanguage = lyricsLanguageFactory?.invoke() ?: AndroidLyricsLanguage(applicationContext),
                     oneTap = OneTapSetup(applicationContext, shellFactory()),
                     // Each song's sung readings are kept, so a song read again needs no lookup.
