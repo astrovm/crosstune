@@ -201,7 +201,8 @@ internal class PracticeReminders(
         val armed = preferences.getLong(KEY_ARMED_FOR, 0L)
         val now = now()
         val zone = zone()
-        return if (armed != 0L && armed <= now && sameDay(armed, now, zone) && nextReminderAt(minute, armed - 1, zone) == armed) armed else nextReminderAt(minute, now, zone)
+        val overdueToday = armed != 0L && armed <= now && sameDay(armed, now, zone)
+        return if (overdueToday && nextReminderAt(minute, armed - 1, zone) == armed) armed else nextReminderAt(minute, now, zone)
     }
 
     private fun sameDay(first: Long, second: Long, zone: ZoneId): Boolean =
@@ -223,7 +224,8 @@ internal class PracticeReminders(
         val at = now()
         val types = loadCardTypes(preferences)
         val due = sessionOf(SavedLinesStore(preferences).load(), at, max = Int.MAX_VALUE, types = types)
-        if (!again && (slot == 0L || sameDay(slot, at, zone())) && due.isNotEmpty() && mayAsk(at)) {
+        val newSlotToday = !again && (slot == 0L || sameDay(slot, at, zone()))
+        if (newSlotToday && due.isNotEmpty() && mayAsk(at)) {
             post(due)
             preferences.edit {
                 putInt(KEY_IGNORED, ignored + 1)

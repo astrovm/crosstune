@@ -251,7 +251,7 @@ class PracticeRemindersTest {
         assertTrue(alarms.scheduledAlarms.isEmpty())
         // One minute on, so the stored minute is the alarm's own, not whatever the clock says now.
         clock = at(3, 20, 6)
-        PracticeReminderReceiver().onReceive(app, delivered)
+        reminders.remind(delivered)
         assertEquals(1, shown.size)
         assertEquals("1 card to practice", shown.single().title())
         assertEquals(delivered.getLongExtra(PracticeReminders.EXTRA_AT, 0L), prefs().getLong("practice_reminder_posted_for", 0L))
@@ -645,8 +645,10 @@ class PracticeRemindersTest {
         assertNotNull(alarms.peekNextScheduledAlarm())
         // A session long ago, as its clock moved on past the same day.
         prefs().edit().remove("practice_reminder_done_at").commit()
-        PracticeReminderReceiver().onReceive(app, Intent(PracticeReminders.ACTION_REMIND))
-        assertEquals(1, shown.size)
+        for (action in listOf(PracticeReminders.ACTION_REMIND, PracticeReminders.ACTION_REMIND_KEEP)) {
+            PracticeReminderReceiver().onReceive(app, Intent(action))
+            assertEquals(1, shown.size)
+        }
     }
 
     @Test
