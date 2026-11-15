@@ -453,6 +453,10 @@ class PracticeRemindersTest {
         setUpWith(line("One"))
         val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
         clock = at(3, 20, 4)
+        // Android removes a delivered alarm. A rejected early delivery must put it back.
+        val manager = app.getSystemService(AlarmManager::class.java)
+        alarms.scheduledAlarms.toList().forEach { manager.cancel(it.operation) }
+        assertTrue(alarms.scheduledAlarms.isEmpty())
         reminders.remind(delivered)
         assertTrue(shown.isEmpty())
         assertEquals(at(3, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
@@ -579,6 +583,34 @@ class PracticeRemindersTest {
         local.remind(delivered)
         assertTrue(shown.isEmpty())
         assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
+    fun practiceAtTheStartOfTheIntendedDaySuppressesItsReminder() {
+        clock = at(3, 0)
+        saved(line("One"))
+        reminders.sessionDone()
+        reminders.at(20 * 60 + 5)
+        reminders.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
+    fun exactlySixHoursOfRestBeforeTheIntendedDayAllowsItsReminder() {
+        clock = at(2, 18)
+        saved(line("One"))
+        reminders.sessionDone()
+        reminders.at(0)
+        reminders.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 0)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
     }
 
     @Test
