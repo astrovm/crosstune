@@ -2,11 +2,8 @@ name: Promote to production
 
 # Sends a release from open testing on to Google Play's production, with its English release notes, in an edit
 # of its own: production never goes to Google's review with a testing track. The release is the one on the
-# first track of the PLAY_TRACKS repository variable (beta when it isn't set). A fix to an older version isn't
-# there, as testing has a newer one, and its release sent Play nothing: the signed App Bundle from its GitHub
-# release goes to Play and on to production in one edit, while production has an older version. Any other
-# version not on that track is refused, and so is one older than production's. See "Releasing" in
-# CONTRIBUTING.md.
+# first track of the PLAY_TRACKS repository variable (beta when it isn't set). A version not on that track is
+# refused with an error, and so is one older than production's. See "Releasing" in CONTRIBUTING.md.
 on:
   workflow_dispatch:
     inputs:
@@ -37,7 +34,7 @@ jobs:
       cancel-in-progress: false
     steps:
       # Only the tools that talk to Google Play and the English release notes, so none of the app's build code
-      # is checked out where the Play key is. Every version's notes are on main, a fix to an older version's too.
+      # is checked out where the Play key is. Every version's notes are on main.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -55,12 +52,12 @@ jobs:
       # sent, and the job says to re-run it when the review ends.
       - name: Send the release to production
         env:
-          PLAY_KEY_JSON: ${{ secrets.PLAY_KEY_JSON }}
+          PLAY_KEY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           PLAY_TRACKS: ${{ vars.PLAY_TRACKS }}
           VERSION: ${{ inputs.version }}
         run: |
           if [[ -z "$PLAY_KEY_JSON" ]]; then
-            echo "::notice::PLAY_KEY_JSON isn't set, so nothing was sent to Google Play"
+            echo "::notice::PLAY_SERVICE_ACCOUNT_JSON isn't set, so nothing was sent to Google Play"
             exit 0
           fi
           .github/play/play.sh production "$VERSION"

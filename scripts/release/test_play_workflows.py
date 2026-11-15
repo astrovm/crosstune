@@ -12,10 +12,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github/workflows"
-PLAY_KEY = "secrets.PLAY_KEY_JSON"
-# The key's name before .github/play. A tag on an older commit runs that commit's workflow, which sends to Play
-# without the review guard. Under a new name, such a run finds no key, and skips Play.
-OLD_KEY = "PLAY_SERVICE_ACCOUNT_JSON"
+# The repository secret. Each Play job hands it to play.sh as PLAY_KEY_JSON.
+PLAY_KEY = "secrets.PLAY_SERVICE_ACCOUNT_JSON"
 
 
 def jobs(text):
@@ -38,20 +36,21 @@ class PlayWorkflowsTest(unittest.TestCase):
         self.assertEqual(
             [("promote.yml", "production"), ("release.yml", "play"), ("store-listing.yml", "listing")], found)
 
-    def test_no_workflow_or_play_tool_reads_the_old_key(self):
-        files = [*WORKFLOWS.glob("*.yml"), *(ROOT / ".github/play").rglob("*.*")]
-        for path in files:
-            with self.subTest(path=path.name):
-                self.assertNotIn(OLD_KEY, path.read_text(encoding="utf-8"))
+    def test_only_the_play_jobs_read_a_play_key(self):
+        for path in WORKFLOWS.glob("*.yml"):
+            for name, job in jobs(path.read_text(encoding="utf-8")).items():
+                if PLAY_KEY not in job:
+                    with self.subTest(workflow=path.name, job=name):
+                        self.assertNotRegex(job, r"secrets\.PLAY_|\$\{?PLAY_KEY_JSON")
 
     def test_every_play_job_skips_play_with_a_notice_when_the_key_isnt_set(self):
         for workflow, name, job in play_jobs():
             with self.subTest(workflow=workflow, job=name):
-                self.assertIn("PLAY_KEY_JSON: ${{ secrets.PLAY_KEY_JSON }}", job)
+                self.assertIn("PLAY_KEY_JSON: ${{ " + PLAY_KEY + " }}", job)
                 script = job.split("run: |", 1)[1] if "PLAY_KEY_JSON" in job.split("run: |", 1)[0] else job
                 skip = re.search(r'if \[\[ -z "\$PLAY_KEY_JSON" \]\]; then\n\s+echo "::notice::([^"]+)"\n\s+exit 0', script)
                 self.assertIsNotNone(skip, "no notice and exit 0 when PLAY_KEY_JSON isn't set")
-                self.assertIn("PLAY_KEY_JSON isn't set", skip.group(1))
+                self.assertIn("PLAY_SERVICE_ACCOUNT_JSON isn't set", skip.group(1))
 
     def test_every_play_job_goes_through_play_sh(self):
         for workflow, name, job in play_jobs():
@@ -204,8 +203,8 @@ class PublishTest(unittest.TestCase):
             return run, sent
 
     def flags(self, sent):
-        """--latest=false, --prerelease and --notes-start-tag with its tag, as sent."""
-        found = [arg for arg in sent if arg in ("--latest=false", "--prerelease")]
+        """--latest and --prerelease in any form, and --notes-start-tag with its tag, as sent."""
+        found = [arg for arg in sent if arg.startswith(("--latest", "--prerelease"))]
         if "--notes-start-tag" in sent:
             found += ["--notes-start-tag", sent[sent.index("--notes-start-tag") + 1]]
         return found
@@ -214,10 +213,6 @@ class PublishTest(unittest.TestCase):
         run, sent = self.publish(tag, out)
         self.assertEqual(0, run.returncode, run.stderr)
         self.assertEqual(expected, self.flags(sent))
-
-    def test_a_backport_never_becomes_the_latest_release_and_its_notes_start_at_its_own_line(self):
-        self.assert_flags("v2.26.1", releases("v2.27.0", "v2.26.0", "v2.25.0"),
-                          ["--latest=false", "--notes-start-tag", "v2.26.0"])
 
     def test_a_newer_version_becomes_the_latest_release_and_its_notes_start_at_the_one_before(self):
         for tag, out, start in (("v2.28.0", releases("v2.26.0", "v2.27.0"), "v2.27.0"),
@@ -241,15 +236,19 @@ class PublishTest(unittest.TestCase):
     def test_a_draft_counts_for_nothing(self):
         self.assert_flags("v2.28.0", releases("v2.30.0", "v2.27.0", draft=("v2.30.0",)), ["--notes-start-tag", "v2.27.0"])
 
-    def test_the_release_keeps_the_signed_app_bundle_that_promote_sends_to_production(self):
-        run, sent = self.publish("v2.26.1", releases("v2.27.0"))
+    def test_the_release_keeps_the_signed_app_bundle_for_play_console(self):
+        run, sent = self.publish("v2.26.0", releases("v2.25.0"))
         self.assertEqual(0, run.returncode, run.stderr)
-        self.assertEqual(["release", "create", "v2.26.1", "Crosstune-v2.26.1.apk", "Crosstune-v2.26.1.aab"], sent[:5])
+        self.assertEqual(["release", "create", "v2.26.0", "Crosstune-v2.26.0.apk", "Crosstune-v2.26.0.aab"], sent[:5])
         publish = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))["publish"]
         self.assertIn("name: Crosstune-${{ env.TAG }}-play", publish)
-        # promote.yml downloads it from the release under that name.
+
+    def test_promote_never_downloads_a_bundle(self):
+        # Production takes only a release already on the first testing track, from Play itself.
         play_sh = (ROOT / ".github/play/play.sh").read_text(encoding="utf-8")
-        self.assertIn('releases/download}/$tag/Crosstune-$tag.aab"', play_sh)
+        self.assertNotIn("curl", play_sh)
+        self.assertNotIn("releases/download", play_sh)
+        self.assertNotIn("--aab", (ROOT / ".github/play/play.rb").read_text(encoding="utf-8"))
 
     def test_no_release_is_made_when_github_cant_list_the_releases(self):
         run, sent = self.publish("v2.26.1", fails=True)
