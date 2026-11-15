@@ -83,6 +83,7 @@ trap 'rm -f "$body"' EXIT
   echo "## Done when"
   echo
   echo "- [ ] CI passes. A readings test that fails means JMdict now reads a word another way: find out which is right, and fix the reading or the word list, never the test to pass."
+  echo "- [ ] The locked readings check passes. The word lists make readings, so it fails until this body says how the locked readings change: run \`readingsaudit.py golden\` on this branch and push the file, or add a line \`golden: none\` here when no reading changes. Then run \`readingsaudit.py lines\`, which reads every audit line whole with main's lists and these, and add the \`golden: lines checked\` line it prints."
   echo "- [ ] The lines taken out of \`jmdict-readings.txt\` make sense: a word goes when JMdict now has two readings for it, or the app reads it right by itself."
   echo "- [ ] Optional: measure on songs with \`readingsaudit.py run\` and \`compare --before\` (see CONTRIBUTING.md)."
 } > "$body"
