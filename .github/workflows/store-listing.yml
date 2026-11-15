@@ -71,12 +71,12 @@ jobs:
       - name: Send the listing to Google Play
         working-directory: listing
         env:
-          PLAY_KEY_JSON: ${{ secrets.PLAY_KEY_JSON }}
+          PLAY_KEY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           PLAY_LANGUAGES: ${{ inputs.languages }}
           CHECK_ONLY: ${{ inputs.check_only }}
         run: |
           if [[ -z "$PLAY_KEY_JSON" ]]; then
-            echo "::notice::PLAY_KEY_JSON isn't set, so the listing wasn't sent to Google Play"
+            echo "::notice::PLAY_SERVICE_ACCOUNT_JSON isn't set, so the listing wasn't sent to Google Play"
             exit 0
           fi
           ../tools/.github/play/play.sh listing

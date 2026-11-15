@@ -329,7 +329,7 @@ jobs:
   # Sends the signed App Bundle and its release notes to Google Play's internal testing, then the same release
   # on to each testing track in the PLAY_TRACKS repository variable (beta when it isn't set), with the store
   # listing, in one edit: one review a release. Production is a step of its own, promote.yml. Skipped until the
-  # PLAY_KEY_JSON secret is set; see "Releasing" in CONTRIBUTING.md. Skipped for a pre-release too:
+  # PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing" in CONTRIBUTING.md. Skipped for a pre-release too:
   # Play takes each version code once, and v2.27.0-rc.1 has the one of 2.27.0, which 2.27.0 itself needs.
   # A test version never goes to Play. A fix to an older version sends Play nothing: play.sh finds the newer
   # version on Play first. promote.yml sends it to production from the release's App Bundle.
@@ -370,7 +370,7 @@ jobs:
       # sent, and the job says to re-run it when the review ends. A re-run doesn't send the bundle twice.
       - name: Upload to Google Play
         env:
-          PLAY_KEY_JSON: ${{ secrets.PLAY_KEY_JSON }}
+          PLAY_KEY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           # The testing tracks, with commas between, e.g. "beta,alpha" to send closed testing the same release.
           PLAY_TRACKS: ${{ vars.PLAY_TRACKS }}
           # The listing's languages: folders of fastlane/metadata/android, with spaces between.
@@ -378,7 +378,7 @@ jobs:
           OLD_PLAY_TRACK: ${{ vars.PLAY_TRACK }}
         run: |
           if [[ -z "$PLAY_KEY_JSON" ]]; then
-            echo "::notice::PLAY_KEY_JSON isn't set, so the App Bundle wasn't sent to Google Play"
+            echo "::notice::PLAY_SERVICE_ACCOUNT_JSON isn't set, so the App Bundle wasn't sent to Google Play"
             exit 0
           fi
           if [[ -n "$OLD_PLAY_TRACK" ]]; then
