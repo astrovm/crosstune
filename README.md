@@ -21,7 +21,7 @@ Pasting or sharing a link to Crosstune works with no setup. Crosstune opens on i
 
 1. **Allow links in Crosstune**, so music links you tap in any app open here.
 2. **Let lyrics follow your music**, so the words of what's playing show in time.
-3. Tap one to see its steps: Android's page for your phone, a small guide floats over it, and it checks itself off once done. Done, the guide says so; make it big to come back to Crosstune. For notification access, the steps stay in Crosstune instead, on every phone, as Android asks in a dialog the guide would float over. So do the steps for adding links on Android 12 or newer, but on Samsung and Xiaomi, which tick links on a page. With [Shizuku](https://shizuku.rikka.app) or root on Android 12 or newer, tap **Fix all** instead. It's one tap.
+3. Tap one to see its steps and open Android's settings. Where a small guide floats over the page, it shows all steps and says when the fix is done. Make the guide big to return to Crosstune. Notification-access steps stay in Crosstune on every phone. On Android 12 or newer, link steps also stay in Crosstune, except on Samsung and Xiaomi. This keeps the guide clear of Android's dialog buttons. With [Shizuku](https://shizuku.rikka.app) or root on Android 12 or newer, tap **Fix all** instead. It's one tap.
 
 Links from Spotify, YouTube Music, Apple Music, Deezer and TIDAL open here from the start. Turn on YouTube in **Settings** → **Open links from**. SoundCloud, Bandcamp, Audiomack, Invidious and Piped links open here when shared or pasted.
 
