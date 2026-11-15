@@ -637,7 +637,7 @@ class FixCenterTest {
         click(string(R.string.fix_all))
         // Android's alarms and reminders switch, as the user would turn it on, and no page opened for it.
         waitUntil { !shown(string(R.string.practice_reminder_exact)) }
-        assertTrue(listOf("appops", "set", "--user", user, app.packageName, "SCHEDULE_EXACT_ALARM", "allow") in shell.ran)
+        assertTrue(listOf("appops", "set", "--user", user, "--uid", app.packageName, "SCHEDULE_EXACT_ALARM", "allow") in shell.ran)
         assertNull(nextStarted())
         click(string(R.string.back_button))
         assertFalse(barShown())
