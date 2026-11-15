@@ -47,6 +47,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -374,26 +375,28 @@ private fun FixRow(check: Check, asks: Boolean, onOpen: (Need) -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        NeedIcon(check.need)
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 12.dp)
-        ) {
-            Text(needTitle(check.need), style = MaterialTheme.typography.bodyLarge)
-            val under = check.need.problem() ?: check.need.gets().takeIf { asks }
-            under?.let {
-                Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        AnimatedContent(targetState = check.done, transitionSpec = { fade() }, label = "check") { shown ->
-            Box(modifier = Modifier.heightIn(min = 24.dp).widthIn(min = 24.dp), contentAlignment = Alignment.Center) {
-                if (shown == true) {
-                    AppIcon(R.drawable.ic_check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                } else if (shown == false && asks && check.need.gets() != null) {
-                    Text(stringResource(R.string.allow_button), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                } else if (shown == false) {
-                    Box(Modifier.size(10.dp).background(MaterialTheme.colorScheme.error, CircleShape))
+        // At a big font or in a long language, the icon goes over the words and Allow under them,
+        // rather than the words squeezed between them a part of a word a line.
+        LeadAndWords(lead = { NeedIcon(check.need) }) {
+            LabelAndValue(label = {
+                Column {
+                    LabelText(needTitle(check.need), style = MaterialTheme.typography.bodyLarge)
+                    val under = check.need.problem() ?: check.need.gets().takeIf { asks }
+                    under?.let {
+                        Text(stringResource(it), style = MaterialTheme.typography.bodyMedium.copy(hyphens = Hyphens.Auto), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }) {
+                AnimatedContent(targetState = check.done, transitionSpec = { fade() }, label = "check") { shown ->
+                    Box(modifier = Modifier.heightIn(min = 24.dp).widthIn(min = 24.dp), contentAlignment = Alignment.Center) {
+                        if (shown == true) {
+                            AppIcon(R.drawable.ic_check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        } else if (shown == false && asks && check.need.gets() != null) {
+                            Text(stringResource(R.string.allow_button), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        } else if (shown == false) {
+                            Box(Modifier.size(10.dp).background(MaterialTheme.colorScheme.error, CircleShape))
+                        }
+                    }
                 }
             }
         }

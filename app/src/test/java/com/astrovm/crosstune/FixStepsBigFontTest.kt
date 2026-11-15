@@ -130,4 +130,4 @@ class FixStepsBigFontTest {
 }
 
 /** The most a picture of Android's page puts around a word: a dialog button's margins, its ring's and its own, on both sides. */
-private val DRAWN_MARGINS = 52.dp
+internal val DRAWN_MARGINS = 52.dp

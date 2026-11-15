@@ -15,7 +15,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.FontScaling
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import kotlinx.coroutines.delay
@@ -130,13 +132,26 @@ class GuideActivity : ComponentActivity() {
             shown?.takeIf { it.opened }?.finish()
         }
 
-        /** Laid out as on a phone and shrunk to the window, which is too small to lay it out in. */
+        /**
+         * Laid out as on a phone and shrunk to the window, which is too small to lay it out in. Laid
+         * out as much wider as the font is made bigger, so at a big font its words fit whole, as they
+         * do at the usual one, and Android's own font curve, which grows big text less than small, is kept.
+         */
         @Composable
-        private fun Shrunk(content: @Composable () -> Unit) {
+        internal fun Shrunk(content: @Composable () -> Unit) {
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val density = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(density.density * (maxWidth / WIDTH), density.fontScale)) { content() }
+                val wide = WIDTH * density.grows()
+                CompositionLocalProvider(LocalDensity provides ShrunkDensity(density, density.density * (maxWidth / wide))) { content() }
             }
         }
     }
 }
+
+/** How many times bigger than at the usual font Android draws body text. */
+internal fun Density.grows(): Float = (BODY.toDp() / BODY.value.dp).coerceAtLeast(1f)
+
+private val BODY = 16.sp
+
+/** [base], drawn [density] px to the dp, with its font curve: sp grow just as they do in [base]. */
+private class ShrunkDensity(base: Density, override val density: Float) : Density, FontScaling by base
