@@ -4351,7 +4351,7 @@ internal class MainViewModel(
         val lines = wordLines()
         val times = uiState.lyricLines.takeIf { it.isNotEmpty() }?.map { it.timeMs }
         val kept = uiState.savedLines.filter { it.isOf(song) }
-        val taken = kept.filter { it.line == null }.mapTo(mutableSetOf()) { it.text }
+        val taken = kept.mapTo(mutableSetOf()) { it.text }
         val changes = kept.mapNotNull { saved ->
             val was = saved.line ?: saved.text
             if (was in lines) return@mapNotNull null
@@ -4365,10 +4365,43 @@ internal class MainViewModel(
             saved to if (times != null) moved.timedAt(index) else moved
         }
         if (changes.isEmpty()) return
-        uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
-        // What was put right in them goes with them, read away from the screen, as the dictionary may have to read them first.
-        val script = uiState.learning.script ?: return
-        viewModelScope.launch { savedLinesStore.change(systemDispatcher) { kept -> carried(kept, changes, script) }?.let { uiState = uiState.copy(savedLines = it) } }
+        // Move the words and their corrections together. Reading them may need the dictionary, away from the screen.
+        val script = uiState.learning.script
+        viewModelScope.launch {
+            savedLinesStore.change(systemDispatcher) { current ->
+                followedSavedLines(current, changes, song, script)
+            }?.let { uiState = uiState.copy(savedLines = it) }
+        }
+    }
+
+    private fun followedSavedLines(current: List<SavedLine>, changes: List<Pair<SavedLine, SavedLine>>, song: MusicMetadata, script: Script?): List<SavedLine> {
+        // Another save can finish while the readings are worked out. Keep its destination and edits.
+        val occupied = current.filter { it.isOf(song) }.mapTo(mutableSetOf()) { it.text }
+        return current.map { saved ->
+            val change = changes.firstOrNull { it.first.isSame(saved) }
+            if (change == null) saved else {
+                val (was, moved) = change
+                if (saved.line != null) saved.copy(line = if (saved.line == was.line) moved.line else saved.line)
+                else if (!occupied.add(moved.text)) saved
+                else movedSavedLine(saved, was, moved, script)
+            }
+        }
+    }
+
+    private fun movedSavedLine(saved: SavedLine, was: SavedLine, moved: SavedLine, script: Script?): SavedLine {
+        // Bounds are one edit: mixing an old end with a newer start can reverse the window.
+        val timing = if (saved.startMs == was.startMs && saved.endMs == was.endMs && saved.nextMs == was.nextMs) moved else saved
+        val replacement = saved.copy(
+            text = moved.text, reading = moved.reading, romanized = moved.romanized, ruby = moved.ruby,
+            readByHand = false, typed = moved.typed, readWith = moved.readWith,
+            translation = if (saved.translation == was.translation) moved.translation else saved.translation,
+            startMs = timing.startMs, endMs = timing.endMs, nextMs = timing.nextMs,
+            lengthMs = if (saved.lengthMs == was.lengthMs) moved.lengthMs else saved.lengthMs,
+            leadMs = if (saved.leadMs == was.leadMs) moved.leadMs else saved.leadMs,
+            app = if (saved.app == was.app) moved.app else saved.app,
+            artworkUrl = if (saved.artworkUrl == was.artworkUrl) moved.artworkUrl else saved.artworkUrl
+        )
+        return if (script == null) replacement else replacement.carrying(saved, script)
     }
 
     /** Lines of [song] kept are translated as its lines are now, e.g. into another language. */

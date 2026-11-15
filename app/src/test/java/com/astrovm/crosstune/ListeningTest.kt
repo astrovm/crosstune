@@ -4995,13 +4995,32 @@ class ListeningTest {
     @Test
     fun aSongUtaTenHasNoPageForIsntAskedForAgainWhenItsWordsShowAgain() {
         prefs().edit().putBoolean("lyrics_readings", true).commit()
+        TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files"))
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }) }
         wordsOf(null, "都会の夜", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
         waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && readingShown("とかい") }
         settle()
+        assertFalse(controllerModel().uiState.learning.readingsUnfinished)
         val asked = utatenRequests()
+        val disk = File(app.cacheDir, "kept_words.json")
+        composeRule.runOnIdle { controllerModel().keep() }
+        waitUntil(TIMEOUT_MS) { disk.exists() && runBlocking { LookupCache(disk, Dispatchers.Unconfined).entries().isNotEmpty() } }
+        val kept = runBlocking { LookupCache(disk, Dispatchers.Unconfined).entries() }.single().second
+        val restored = requireNotNull(KeptWords.from(kept))
+        assertEquals("都会の夜", restored.lyrics)
+        assertFalse(restored.learning.readingsUnfinished)
         closedAndOpenedAgain()
         waitUntil(TIMEOUT_MS) { readingShown("とかい") }
         settle()
+        assertEquals(asked, utatenRequests())
+        controller!!.destroyAndSettle()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { readingShown("とかい") }
+        settle()
+        assertFalse(controllerModel().uiState.learning.readingsUnfinished)
         assertEquals(asked, utatenRequests())
     }
 
@@ -5040,18 +5059,107 @@ class ListeningTest {
             "saved_lines",
             """[{"text":"都会の夜","reading":"まちのよ","title":"Demo","artist":"Band","ruby":[["都会","まち","utaten"],["の",null],["夜","よ","user"]],"byHand":true,"readWith":${Readings.VERSION}}]"""
         ).commit()
+        val movedWithoutCorrection = java.util.concurrent.atomic.AtomicBoolean(false)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
+            if (key == "saved_lines") {
+                val line = SavedLinesStore(preferences).load().singleOrNull()
+                if (line?.text == "都会の夜に" && line.ruby.orEmpty().none { it.by == Reader.USER }) movedWithoutCorrection.set(true)
+            }
+        }
+        prefs().registerOnSharedPreferenceChangeListener(listener)
         // Found again with a word more, and UtaTen has none for it now.
         wordsOf(null, "都会の夜に", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
         // The marks are laid away from the screen, after the line takes its new words.
         waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && SavedLinesStore(prefs()).load().single().ruby.orEmpty().any { it.by == Reader.USER } }
         settle()
         val line = SavedLinesStore(prefs()).load().single()
+        prefs().unregisterOnSharedPreferenceChangeListener(listener)
+        assertFalse("The moved line was saved without the user's correction", movedWithoutCorrection.get())
         assertEquals("都会の夜に", line.text)
         assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), line.ruby.orEmpty().filter { it.reading != null })
         assertEquals("まちのよに", line.reading)
         assertTrue(line.readByHand)
         // Practised as it's kept now.
         assertEquals(listOf(line), controllerModel().uiState.savedLines)
+    }
+
+    @Test
+    fun aMovedLineKeepsANewerTimingAndTranslation() {
+        aLineMovesWhile { store, old ->
+            store.replaceAll(listOf(old to old.copy(
+                startMs = 7_000, endMs = 9_000, nextMs = 10_000, lengthMs = 200_000,
+                leadMs = 800, app = "demo.player", artworkUrl = "https://example.invalid/cover", translation = "New translation"
+            )))
+        }
+        val moved = SavedLinesStore(prefs()).load().single()
+        assertEquals("Night sky above", moved.text)
+        assertEquals(7_000L, moved.startMs)
+        assertEquals(9_000L, moved.endMs)
+        assertEquals(10_000L, moved.nextMs)
+        assertEquals(200_000L, moved.lengthMs)
+        assertEquals(800L, moved.leadMs)
+        assertEquals("demo.player", moved.app)
+        assertEquals("https://example.invalid/cover", moved.artworkUrl)
+        assertEquals("New translation", moved.translation)
+    }
+
+    @Test
+    fun aMovedLineKeepsTheWholeNewTimingWhenOnlyItsStartChanged() {
+        aLineMovesWhile(timed = true) { store, old ->
+            store.replaceAll(listOf(old to old.copy(startMs = 4_000)))
+        }
+        val moved = SavedLinesStore(prefs()).load().single()
+        assertEquals(4_000L, moved.startMs)
+        assertEquals(5_000L, moved.endMs)
+        assertEquals(6_000L, moved.nextMs)
+    }
+
+    @Test
+    fun aLineSavedAtTheDestinationWhileAMoveWaitsIsNotDuplicated() {
+        aLineMovesWhile { store, old ->
+            store.addAll(listOf(old.copy(text = "Night sky above", translation = "Kept separately", interval = 8, due = 123_000)))
+        }
+        val kept = SavedLinesStore(prefs()).load()
+        assertEquals(kept.size, kept.distinctBy { Triple(it.text, it.title, it.artist) }.size)
+        val destination = kept.single { it.text == "Night sky above" }
+        assertEquals("Kept separately", destination.translation)
+        assertEquals(8, destination.interval)
+        assertEquals(123_000L, destination.due)
+        assertTrue(kept.any { it.text == "Night sky" })
+    }
+
+    @Test
+    fun aWordSavedAtTheDestinationWhileAMoveWaitsIsNotDuplicated() {
+        aLineMovesWhile { store, old ->
+            store.addAll(listOf(old.copy(text = "Night sky above", line = "Under the Night sky above", translation = "Kept word", interval = 8)))
+        }
+        val kept = SavedLinesStore(prefs()).load()
+        assertEquals(kept.size, kept.distinctBy { Triple(it.text, it.title, it.artist) }.size)
+        val destination = kept.single { it.text == "Night sky above" }
+        assertEquals("Kept word", destination.translation)
+        assertEquals("Under the Night sky above", destination.line)
+        assertEquals(8, destination.interval)
+        assertTrue(kept.any { it.text == "Night sky" })
+    }
+
+    /** Hold the move's background work while another save changes the current store. */
+    private fun aLineMovesWhile(timed: Boolean = false, change: (SavedLinesStore, SavedLine) -> Unit) {
+        val timing = if (timed) ""","start":1000,"end":5000,"next":6000""" else ""
+        prefs().edit().putString(
+            "saved_lines", """[{"text":"Night sky","title":"Demo","artist":"Band","readWith":${Readings.VERSION}$timing}]"""
+        ).commit()
+        val gate = Gate()
+        MainActivity.systemDispatcher = gate
+        val synced = if (timed) "[00:01.00] Night sky above\\n[00:03.00] Clear dawn" else null
+        wordsOf(synced, "Night sky above", translations = 503, before = { gate.held = true })
+        try {
+            waitUntil(TIMEOUT_MS) { gate.queued.isNotEmpty() }
+            val store = SavedLinesStore(prefs())
+            change(store, store.load().single())
+        } finally {
+            gate.letGo()
+        }
+        settle()
     }
 
     @Test
