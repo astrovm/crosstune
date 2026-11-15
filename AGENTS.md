@@ -23,6 +23,7 @@ python3 scripts/matchcheck/replay.py run OUT LABEL   # the YouTube Music matcher
 scripts/namescheck/golden.sh [SHA]          # what main's SongNames took for each pair NamePairs.kt makes, for NamesGoldenTest; run again after changing NamePairs.kt
 scripts/playcheck/golden.sh [SHA]           # what main's MediaSessionPlayback played first and followed in each scene PlayScenes.kt makes, for PlayGoldenTest; run again after changing PlayScenes.kt
 python3 scripts/notices.py check          # each licence text in Settings → About → Licenses against its source, fetched again
+python3 scripts/kotlinc/kotlinc.py fetch   # the Kotlin compiler's jars, for the readings guard and syncreplay, each checked against kotlinc.lock; `lock` after a Kotlin bump
 node --test report/*.test.mjs             # the report Worker's tests
 BUNDLE_GEMFILE=.github/play/Gemfile BUNDLE_WITHOUT= bundle exec ruby .github/play/test/play_test.rb   # what the workflows send to Google Play, against a fake Play; in a container, after .github/play/play.sh setup
 python3 scripts/reports/reports.py triage --since ID   # the reports in D1, grouped; `pull` first, read-only, and they stay out of git

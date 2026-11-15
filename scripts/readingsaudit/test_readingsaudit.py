@@ -15,7 +15,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import readingsaudit  # noqa: E402
+import readingsaudit
 
 
 def entry(kanji, kana):
@@ -435,6 +435,19 @@ def dated(folder, name, date):
     path = folder / name
     path.write_text("\n".join(readingsaudit.table_header(date, "9.9.9") + ["星空\tほしぞら"]) + "\n")
     return path
+
+
+class TheirReading(unittest.TestCase):
+    def test_the_kanji_takes_the_option_another_kanji_its_shortest_reading_and_kana_stays(self):
+        # 今日は日曜: the option for 日曜 at 3-5, UtaTen's shortest for 今日 at 0-2, and は as written.
+        others = [(0, 2, ["こんにち", "きょう"])]
+        self.assertEqual("きょうはにちよう", readingsaudit.their_reading("今日は日曜", (0, 5), (3, 5), others, "にちよう"))
+
+    def test_the_stretch_starts_and_ends_where_it_says(self):
+        self.assertEqual("はにち", readingsaudit.their_reading("今日は日曜", (2, 4), (3, 4), [], "にち"))
+
+    def test_the_letters_after_the_kanji_follow_it(self):
+        self.assertEqual("にちようは", readingsaudit.their_reading("日曜は", (0, 3), (0, 2), [], "にちよう"))
 
 
 class Age(unittest.TestCase):

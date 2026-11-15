@@ -40,15 +40,16 @@ class ReplayContainerTest(unittest.TestCase):
             source.write_text('fake')
             def compile(command, **_):
                 self.assertEqual(command[:len(r.replay_container()) - 1], r.replay_container()[:-1])
+                self.assertIn('/compiler:/compiler:ro', command)
                 Path(command[command.index('-d') + 1]).mkdir(parents=True)
-            with patch.object(r, 'kotlin_jars', return_value=[Path('kotlin-stdlib-2.jar')]), patch.object(r.subprocess, 'run', side_effect=compile):
+            with patch.object(r, 'kotlin_jars', return_value=[Path('/compiler/kotlin-stdlib-2.jar')]), patch.object(r.subprocess, 'run', side_effect=compile):
                 r.untimed_classes([source])
 
     def test_synthetic_uses_the_bounded_container(self):
         with patch.object(r, 'untimed_classes', return_value=Path('classes')), \
-                patch.object(r, 'kotlin_jars', return_value=[Path('kotlin-stdlib-2.jar')]), patch.object(r.subprocess, 'run') as run:
+                patch.object(r, 'kotlin_jars', return_value=[Path('/compiler/kotlin-stdlib-2.jar')]), patch.object(r.subprocess, 'run') as run:
             r.synthetic(SimpleNamespace(timing=None))
-        self.assertEqual(run.call_args.args[0][:-4], r.replay_container((r.OUT, r.OUT, 'ro')))
+        self.assertEqual(run.call_args.args[0][:-4], r.replay_container((r.OUT, r.OUT, 'ro'), (Path('/compiler'), Path('/compiler'), 'ro')))
 
 
 class ResumeTest(unittest.TestCase):
@@ -151,7 +152,7 @@ class PartTest(unittest.TestCase):
             given = []
             with patch.object(r, 'prepped', return_value=self.songs), patch.object(r, 'heard_file', return_value=heard), \
                     patch.object(r, 'untimed_input', side_effect=lambda song, *_: (given.append(song), (Path(directory) / f'{song}.tsv', []))[1]), \
-                    patch.object(r, 'untimed_classes', return_value=Path('classes')), patch.object(r, 'kotlin_jars', return_value=[Path('kotlin-stdlib-2.jar')]), \
+                    patch.object(r, 'untimed_classes', return_value=Path('classes')), patch.object(r, 'kotlin_jars', return_value=[Path('/compiler/kotlin-stdlib-2.jar')]), \
                     patch.object(r.subprocess, 'run') as run, patch.object(r, 'untimed_score') as score, \
                     patch('sys.argv', ['syncreplay.py', 'untimed', '--nearest', '--part', 'held']):
                 r.main()

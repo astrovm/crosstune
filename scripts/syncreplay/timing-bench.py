@@ -57,7 +57,7 @@ def run(ids, timing=None, fake=False):
     missing = [str(path) for path in paths if not path.is_file()]
     if missing:
         raise SystemExit('Run syncreplay.py untimed first. Missing: ' + ', '.join(missing))
-    subprocess.run(replay.replay_container((replay.OUT, replay.OUT, 'ro'), (replay.own(), replay.own(), 'ro')) + [
+    subprocess.run(replay.replay_container((replay.OUT, replay.OUT, 'ro'), (replay.own(), replay.own(), 'ro'), (stdlib.parent, stdlib.parent, 'ro')) + [
         'java', '-cp', f'{classes}:{stdlib}', 'com.astrovm.crosstune.TimingBenchmarkKt', *map(str, paths)], check=True)
 
 
