@@ -1273,3 +1273,16 @@ in an isolated container (zero audit vulnerabilities), left a stray icon image i
 28 files, with no cache or stray image copied. git check-ignore also recognizes
 the scratch path. The app and its tests are unchanged. ShellCheck and Ruff pass.
 Fresh GitHub checks and review of this final signal fix remain pending.
+
+### Preserve interruption for calling shells
+
+The signal cleanup review confirmed the leak closed, then measured that an
+ordinary exit 130 lets a calling shell continue after Ctrl-C. The parent
+reproduced that behavior with bash calling the real icon helper and a held fake
+conversion. Cleanup now resets the caught signal to its default and sends that
+signal to the helper itself. Direct process callers see signal termination
+(-2, -15 or -1), while shells still report 130, 143 or 129. The calling-shell
+regression now stops before its next command. All six signal/recipient cases
+still remove their temporary image, and all 68 runner tests pass. ShellCheck
+and Ruff pass. App sources and app tests remain unchanged. Final CI and review
+of this small signal propagation correction are pending.

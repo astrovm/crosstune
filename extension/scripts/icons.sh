@@ -8,9 +8,9 @@ cd "$(dirname "$0")/.."
 mkdir -p .cache
 take=$(mktemp .cache/icon-112.XXXXXX)
 trap 'rm -f "$take"' EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'rm -f "$take"; trap - HUP; kill -s HUP "$$"' HUP
+trap 'rm -f "$take"; trap - INT; kill -s INT "$$"' INT
+trap 'rm -f "$take"; trap - TERM; kill -s TERM "$$"' TERM
 source=../fastlane/metadata/android/en-US/images/icon.png
 # The middle of the icon, so the note isn't lost at 16 pixels, with its corners rounded.
 rounded() {

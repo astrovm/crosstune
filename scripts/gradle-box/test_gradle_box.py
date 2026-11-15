@@ -586,7 +586,29 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
                             job.communicate(timeout=20)
                             raise
                     self.assertFalse(temporary.exists())
-                    self.assertEqual(128 + int(sig), job.returncode, output)
+                    self.assertEqual(-int(sig), job.returncode, output)
+
+    def test_interrupting_icon_generation_stops_a_calling_shell(self):
+        script = self.icon_writer()
+        caller = self.dir / "caller.sh"
+        caller.write_text('#!/bin/bash\n/bin/sh "$1"\necho continued > "$FAKE_DIR/continued"\n')
+        self.hold("caller")
+        job = self.start_script("/bin/bash", str(caller), str(script), interruptible=True, FAKE_RUN="caller")
+        try:
+            self.wait_for("started.caller", job)
+            temporary = Path((self.dir / "caller.input").read_text())
+            os.killpg(job.pid, signal.SIGINT)
+        finally:
+            self.release("caller")
+            try:
+                output, _ = job.communicate(timeout=20)
+            except subprocess.TimeoutExpired:
+                os.killpg(job.pid, signal.SIGKILL)
+                job.communicate(timeout=20)
+                raise
+        self.assertFalse((self.dir / "continued").exists(), output)
+        self.assertNotEqual(0, job.returncode, output)
+        self.assertFalse(temporary.exists())
 
     def test_golden_writers_finish_and_remove_their_tree_after_an_in_place_edit(self):
         writer = self.dir / "writer"
