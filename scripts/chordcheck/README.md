@@ -4,7 +4,7 @@ This project test runner supplies fake responses for one invented song, Paper La
 
 Run `scripts/chordcheck/build.sh` to build the dev APK and test APK separately. It records their hashes and commit in `build/chordcheck/`.
 
-Lock the test device first. Back up the dev app's complete private data and device settings. Keep the backup private and out of git. Redact tokens and token hashes from manifests and output. The runner changes setup, chord and report preferences, and replaces Recent with the fake song. Normal app use also changes caches and offline data. Restore all app data after the test.
+Lock the test device first. Back up the dev app's complete private data and device settings. Keep the backup private and out of git. Redact tokens and token hashes from manifests and output. The runner replaces the dev app's preferences, Recent and offline queue with an isolated fixture. It refuses to run against the production app. Normal app use also changes caches and offline data. Restore all app data after the test.
 
 Install both APKs. Run with the Android SDK adb:
 

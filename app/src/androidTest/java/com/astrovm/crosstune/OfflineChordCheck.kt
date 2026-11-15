@@ -25,7 +25,6 @@ class OfflineChordCheck : Instrumentation() {
     private val counts = ConcurrentHashMap<String, AtomicInteger>()
     private val filesLock = Any()
     private var closed = false
-    private var argumentsForRun = Bundle()
     private lateinit var status: File
     private lateinit var control: File
     @Volatile private var recovered = false
@@ -33,7 +32,6 @@ class OfflineChordCheck : Instrumentation() {
 
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
-        argumentsForRun = arguments ?: Bundle()
         start()
     }
 
@@ -43,6 +41,7 @@ class OfflineChordCheck : Instrumentation() {
         val result = Bundle()
         var code = 0
         try {
+            require(targetContext.packageName == "com.astrovm.crosstune.dev") { "This fixture needs the dev app" }
             status = File(targetContext.cacheDir, "chordcheck-status.json")
             control = File(targetContext.cacheDir, "chordcheck-control")
             control.delete()
@@ -54,8 +53,7 @@ class OfflineChordCheck : Instrumentation() {
             }
             seed()
             writeStatus()
-            val duration = argumentsForRun.getLong("durationMs", 180_000).coerceIn(1_000, 180_000)
-            val end = SystemClock.elapsedRealtime() + duration
+            val end = SystemClock.elapsedRealtime() + 180_000
             while (SystemClock.elapsedRealtime() < end && state != "done") {
                 when (control.takeIf(File::isFile)?.readText()?.trim()) {
                     "recover", "drecover" -> if (!recovered) {
@@ -92,7 +90,8 @@ class OfflineChordCheck : Instrumentation() {
 
     private fun seed() {
         val prefs = targetContext.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean("setup_complete", true).putBoolean("lyrics_chords", true).putBoolean("auto_reports", false).commit()
+        prefs.edit().clear().putBoolean("setup_complete", true).putBoolean("lyrics_chords", true).putBoolean("auto_reports", false).commit()
+        File(targetContext.noBackupFilesDir, "$KEPT_OFFLINE_DIR/songs.json").delete()
         HistoryStore(prefs).replace(listOf(HistoryEntry(
             MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "0000000000000000000000", "https://open.spotify.com/track/0000000000000000000000"),
             MusicMetadata(TITLE, ARTIST, lengthMs = 60_000)
