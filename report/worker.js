@@ -31,9 +31,9 @@ const READER = /^[a-z_]+(\+[a-z_]+)*$/;
 const LANGUAGE = /^[a-z_]+$/;
 
 /**
- * A report's own id, as the app makes it for a report it keeps to send: a random UUID, nothing about the phone. A report
+ * A report's own id, as the app makes it: a random UUID, nothing about the phone. A report
  * sent again, as the box got it but the app never heard so, has the same one, and is kept once. A report without
- * one, as a person's own and old apps send, is kept each time it comes.
+ * one, as old apps send, is kept each time it comes.
  */
 const REPORT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 

@@ -167,6 +167,18 @@ class ReportTest {
     }
 
     @Test
+    fun reportIdsAreIncludedOnlyWhenSet() {
+        val id = "0f8fad5b-d9cb-469f-a165-70867728950e"
+        val song = JSONObject(Report("1", android = "test", id = id).json())
+        val reading = JSONObject(marked.copy(id = id).json())
+        assertEquals(setOf("version", "android", "id"), song.keys().asSequence().toSet())
+        assertEquals(setOf("version", "android", "id", "problem", "song", "reading"), reading.keys().asSequence().toSet())
+        assertEquals(id, song.getString("id"))
+        assertEquals(id, reading.getString("id"))
+        assertFalse(JSONObject(marked.json()).has("id"))
+    }
+
+    @Test
     fun aWrongReadingIsSentToTheSameBox() = runBlocking {
         val fake = FakeSpotify()
         var code = 204

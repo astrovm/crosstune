@@ -301,7 +301,7 @@ internal class AutoReports(
         fun processEnded() = synchronized(everyShared) { everyShared.clear() }
 
         /**
-         * What a kept report carries as its own: a random UUID, made for it alone and never again, nothing about the
+         * What a report carries as its own: a random UUID, made for it alone, nothing about the
          * phone. The box keeps one report for each, so one sent again, as it got there but the answer didn't, isn't kept twice.
          */
         const val ID = "id"

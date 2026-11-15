@@ -266,12 +266,111 @@ class LyricsReportTest {
         click(string(R.string.report_send))
         waitUntil { !shown(string(R.string.report_what_goes)) }
         assertEquals(2, fake.requestedUrls.count { it == ReportSender.URL })
+        assertEquals(sentReports()[0].getString("id"), sentReports()[1].getString("id"))
         // Opened again, it starts fresh, and closed unsent, nothing goes.
         click(string(R.string.report_problem))
         assertFalse(shown(string(R.string.report_failed)))
         click(string(R.string.cancel_button))
         assertFalse(shown(string(R.string.report_what_goes)))
         assertEquals(2, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun aManualSongReportKeepsItsPayloadOnRetryAndEditsOrAnotherDialogStartANewOne() {
+        reportsDown = true
+        openLyrics()
+        composeRule.runOnIdle { model().sendReport("The chorus is late") }
+        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        val first = sentReport()
+        assertTrue(java.util.UUID.fromString(first.getString("id")).toString().isNotEmpty())
+        // The timing can change while the answer is lost. A retry still sends the same report.
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.runOnIdle { model().sendReport("The chorus is late") }
+        waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.FAILED }
+        assertEquals(first.toString(), sentReport().toString())
+        composeRule.runOnIdle { model().sendReport("The verse is early") }
+        waitUntil { sentReports().size == 3 && model().uiState.report == ReportStatus.FAILED }
+        val edited = sentReport()
+        assertFalse(first.getString("id") == edited.getString("id"))
+        assertEquals("The verse is early", edited.getString("comment"))
+        composeRule.runOnIdle { model().closeReport() }
+        composeRule.runOnIdle { model().sendReport("The verse is early") }
+        waitUntil { sentReports().size == 4 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(edited.getString("id") == sentReport().getString("id"))
+    }
+
+    @Test
+    fun aManualReadingReportKeepsItsIdOnRetryAndAnEditOrAnotherKindStartsANewOne() {
+        reportsDown = true
+        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 花の空"}]""")
+        openLyrics { model().uiState.learning.lines.isNotEmpty() }
+        val word = Word("花", "か", "ka")
+        composeRule.runOnIdle { model().reportReading(word, 0, "はな") }
+        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        val first = sentReport()
+        composeRule.runOnIdle { model().reportReading(word, 0, "はな") }
+        waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.FAILED }
+        assertEquals(first.toString(), sentReport().toString())
+        composeRule.runOnIdle { model().reportReading(word, 0, "ハナ") }
+        waitUntil { sentReports().size == 3 && model().uiState.report == ReportStatus.FAILED }
+        val edited = sentReport()
+        assertFalse(first.getString("id") == edited.getString("id"))
+        assertEquals("ハナ", edited.getJSONObject("reading").getString("right"))
+        composeRule.runOnIdle { model().sendReport("") }
+        waitUntil { sentReports().size == 4 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(edited.getString("id") == sentReport().getString("id"))
+        composeRule.runOnIdle { model().reportReading(word, 0, "ハナ") }
+        waitUntil { sentReports().size == 5 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(edited.getString("id") == sentReport().getString("id"))
+        val reopened = sentReport()
+        composeRule.runOnIdle { model().closeReport() }
+        composeRule.runOnIdle { model().reportReading(word, 0, "ハナ") }
+        waitUntil { sentReports().size == 6 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(reopened.getString("id") == sentReport().getString("id"))
+    }
+
+    @Test
+    fun changingTheWordStartsAnotherReadingReport() {
+        reportsDown = true
+        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 花の空"}]""")
+        openLyrics { model().uiState.learning.lines.isNotEmpty() }
+        composeRule.runOnIdle { model().reportReading(Word("花", "か", "ka"), 0, "") }
+        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        val first = sentReport()
+        composeRule.runOnIdle { model().reportReading(Word("空", "そら", "sora"), 0, "") }
+        waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(first.getString("id") == sentReport().getString("id"))
+        assertEquals("空", sentReport().getJSONObject("reading").getString("word"))
+    }
+
+    @Test
+    fun leavingTheWordsEndsTheDraftEvenWhenTheSameSongOpensAgain() {
+        reportsDown = true
+        openLyrics()
+        composeRule.runOnIdle { model().sendReport("same") }
+        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        val first = sentReport()
+        composeRule.runOnIdle { model().showLyrics(); model().sendReport("same") }
+        waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.FAILED }
+        assertEquals(first.toString(), sentReport().toString())
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertNull(model().uiState.report)
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricsFor != null && !model().uiState.isLoadingLyrics }
+        composeRule.runOnIdle { model().sendReport("same") }
+        waitUntil { sentReports().size == 3 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(first.getString("id") == sentReport().getString("id"))
+        composeRule.runOnIdle { model().dismissLyrics(); model().sendReport("same") }
+        waitUntil { sentReports().size == 4 && model().uiState.report == ReportStatus.FAILED }
+        val noSong = sentReport()
+        assertFalse(first.getString("id") == noSong.getString("id"))
+        assertFalse(noSong.has("song"))
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricsFor != null && !model().uiState.isLoadingLyrics }
+        composeRule.runOnIdle { model().sendReport("same") }
+        waitUntil { sentReports().size == 5 && model().uiState.report == ReportStatus.FAILED }
+        assertFalse(noSong.getString("id") == sentReport().getString("id"))
+        assertFalse(first.getString("id") == sentReport().getString("id"))
     }
 
     @Test
@@ -287,6 +386,48 @@ class LyricsReportTest {
         checkNotNull(reportsHeld) { "No report is held" }.countDown()
         waitUntil { !shown(string(R.string.report_what_goes)) }
         assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun aDismissedReportCannotSetTheNextDialogsStatusOrSendTwice() {
+        MainActivity.lookupDispatcher = Dispatchers.IO
+        val firstHeld = CountDownLatch(1)
+        val secondHeld = CountDownLatch(1)
+        report()
+        val otherRequests = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "report.crosstune.cc") {
+                val first = JSONObject(FakeSpotify.bodyOf(request)).getString("comment") == "first"
+                (if (first) firstHeld else secondHeld).await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                FakeSpotify.html(request, "", code = if (first) 503 else 204)
+            } else {
+                otherRequests(request)
+            }
+        }
+        try {
+            composeRule.onNode(hasSetTextAction()).performTextInput("first")
+            click(string(R.string.report_send))
+            waitUntil { ReportSender.URL in fake.requestedUrls }
+            composeRule.runOnIdle {
+                model().sendReport("first")
+                model().reportReading(Word("花", "か", "ka"), 0, "")
+            }
+            click(string(R.string.cancel_button))
+            click(string(R.string.report_problem))
+            composeRule.onNode(hasSetTextAction()).performTextInput("second")
+            click(string(R.string.report_send))
+            assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+            assertEquals(ReportStatus.SENDING, model().uiState.report)
+            firstHeld.countDown()
+            waitUntil { sentReports().size == 2 }
+            assertEquals(ReportStatus.SENDING, model().uiState.report)
+            secondHeld.countDown()
+            waitUntil { !shown(string(R.string.report_what_goes)) }
+            assertFalse(sentReports()[0].getString("id") == sentReports()[1].getString("id"))
+        } finally {
+            firstHeld.countDown()
+            secondHeld.countDown()
+        }
     }
 
     @Test
@@ -1460,7 +1601,7 @@ class LyricsReportTest {
         waitUntil { model().uiState.report == null && !shown(string(R.string.reading_what_goes)) }
         assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
         val sent = sentReport()
-        assertEquals(listOf("android", "problem", "reading", "song", "version"), sent.keys().asSequence().sorted().toList())
+        assertEquals(listOf("android", "id", "problem", "reading", "song", "version"), sent.keys().asSequence().sorted().toList())
         assertEquals("wrong_reading", sent.getString("problem"))
         assertEquals("""{"title":"Demo","artist":"Band","source":"lrclib"}""", sent.getJSONObject("song").toString())
         val reading = sent.getJSONObject("reading")

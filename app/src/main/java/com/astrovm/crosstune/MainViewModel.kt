@@ -3853,14 +3853,28 @@ internal class MainViewModel(
     /** The timing log as it was when the words were last put in time by hand. */
     private var timingAtCorrection: Pair<String?, PlayerTiming>? = null
 
+    private sealed interface ManualReportDraft {
+        data class Song(val target: String?, val comment: String, val report: Report) : ManualReportDraft
+        data class Reading(val input: ReadingReport, val report: ReadingReport) : ManualReportDraft
+    }
+
+    private var manualReport: ManualReportDraft? = null
+    private var manualReportJob: Job? = null
+
     /** Sends a report on the words shown, with what the user says is wrong. [UiState.report] says how it goes. */
     fun sendReport(comment: String) {
         val sender = reports ?: return
-        val report = reportOn(sender, uiState.lyricsFor, comment)
+        if (uiState.report == ReportStatus.SENDING) return
+        val target = uiState.lyricsFor?.let(RecordingKey::of)
+        val draft = (manualReport as? ManualReportDraft.Song)?.takeIf { it.target == target && it.comment == comment }
+            ?: ManualReportDraft.Song(target, comment, reportOn(sender, uiState.lyricsFor, comment).copy(id = java.util.UUID.randomUUID().toString()))
+        manualReport = draft
         uiState = uiState.copy(report = ReportStatus.SENDING)
-        viewModelScope.launch {
-            val sent = sender.send(report) == Delivery.SENT
-            uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+        val previous = manualReportJob
+        manualReportJob = viewModelScope.launch {
+            previous?.join()
+            val sent = sender.send(draft.report) == Delivery.SENT
+            if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
         }
     }
 
@@ -3870,18 +3884,25 @@ internal class MainViewModel(
      */
     fun reportReading(word: Word, index: Int, right: String) {
         val sender = reports ?: return
+        if (uiState.report == ReportStatus.SENDING) return
         val song = uiState.lyricsFor ?: return
         val script = uiState.learning.script ?: return
         val line = wordLines().getOrNull(index) ?: return
-        val report = ReadingReport(sender.version, song, found?.source, line, word, word.shown(uiState.learning.romajiTyped), script, right)
+        val input = ReadingReport(sender.version, song, found?.source, line, word, word.shown(uiState.learning.romajiTyped), script, right)
+        val draft = (manualReport as? ManualReportDraft.Reading)?.takeIf { it.input == input }
+            ?: ManualReportDraft.Reading(input, input.copy(id = java.util.UUID.randomUUID().toString()))
+        manualReport = draft
         uiState = uiState.copy(report = ReportStatus.SENDING)
-        viewModelScope.launch {
-            val sent = sender.send(report) == Delivery.SENT
-            uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+        val previous = manualReportJob
+        manualReportJob = viewModelScope.launch {
+            previous?.join()
+            val sent = sender.send(draft.report) == Delivery.SENT
+            if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
         }
     }
 
     fun closeReport() {
+        manualReport = null
         uiState = uiState.copy(report = null)
     }
 
@@ -3954,6 +3975,7 @@ internal class MainViewModel(
      * an offer made for them goes.
      */
     private fun leaveWords() {
+        closeReport()
         if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) {
             uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
         }
