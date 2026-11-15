@@ -11,6 +11,9 @@
 # restore also puts back the language and dark mode setup found.
 # Uses ANDROID_SERIAL, or emulator-5580. Needs no root: made for crosstune-phone (scripts/emulator), and
 # needs Android 17's `cmd locale`.
+
+# Parse the full run before work starts, so an edit cannot change an active run.
+main() {
 set -euo pipefail
 
 serial=${ANDROID_SERIAL:-emulator-5580}
@@ -85,3 +88,7 @@ restore)
     exit 2
     ;;
 esac
+
+}
+
+main "$@"; exit

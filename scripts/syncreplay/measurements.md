@@ -1211,3 +1211,28 @@ in the parent's held-build test. While holding the publication lock, the runner
 now chooses a timestamp greater than every queued ticket. All 62 runner tests
 pass. ShellCheck and Ruff pass. No app production or test sources changed in this
 round. Fresh CI and independent review of these shell fixes remain pending.
+
+### Remaining local setup helpers and deterministic queue regression
+
+The next shell review reproduced the active-edit failure in syncreplay/setup.sh
+and record/emulator.sh. The parent held each real script behind a fake tool,
+edited that script in place and reproduced exit 127. Both now parse their full
+body before work starts. The setup test covers both CPU and ROCm paths and
+checks every install call. The emulator setup test checks the final language,
+mode, notification commands and completion message; every device command is fake.
+
+The review also found that the equal-clock subcase could inherit stale started
+markers from a failed earlier subcase. Cleanup now runs in finally. Each case
+holds both jobs and reads their published tickets. It requires the second stamp
+to exceed the first, independent of PID digit counts or scheduling. Against the
+old runner, the backward case fails with 1e18 not greater than 2e18; the equal
+case fails with 2e18 not greater than 2e18. Both cases pass with the fix. The
+golden-writer cases also clean their held jobs and markers before asserting;
+both still fail independently on the original writers.
+
+A blank line keeps the internal parsing comment out of recording help. Tests
+check both recording helpers' actual usage output. All 64 runner tests and 12
+recording setup tests pass. The stand-in device changes at once, so its existing
+setup tests no longer spend five seconds in each fake locale change. ShellCheck
+and Ruff pass. No app source or app test changed. Fresh CI and a new review of
+this final shell-only delta remain pending.

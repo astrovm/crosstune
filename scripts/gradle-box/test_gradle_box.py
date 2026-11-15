@@ -407,19 +407,27 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         for second_time in ("1000000000000000000", "2000000000000000000"):
             with self.subTest(second_time=second_time):
                 self.hold("first")
+                self.hold("second")
                 first = self.start("first", "help", slots="2", checkout="shared", FAKE_NOW="2000000000000000000")
                 self.wait_for("started.first")
                 second = self.start("second", "help", slots="2", checkout="shared", FAKE_NOW=second_time)
                 try:
-                    time.sleep(0.5)
+                    queue = self.dir / "state/queue"
+                    deadline = time.monotonic() + 20
+                    while len(list(queue.iterdir())) < 2:
+                        self.assertLess(time.monotonic(), deadline, "second ticket was not published")
+                        time.sleep(0.02)
                     self.assertFalse((self.dir / "started.second").exists())
+                    stamps = {int(p.name.rsplit(".", 1)[1]): int(p.name.rsplit(".", 1)[0]) for p in queue.iterdir()}
+                    self.assertGreater(stamps[second.pid], stamps[first.pid])
                 finally:
                     self.release("first")
-                first.communicate(timeout=20)
-                output, _ = second.communicate(timeout=20)
+                    self.release("second")
+                    first.communicate(timeout=20)
+                    output, _ = second.communicate(timeout=20)
+                    for name in ("started.first", "started.second"):
+                        (self.dir / name).unlink(missing_ok=True)
                 self.assertEqual(0, second.returncode, output)
-                for name in ("started.first", "started.second"):
-                    (self.dir / name).unlink(missing_ok=True)
 
     def test_an_also_build_keeps_its_helper_when_the_file_is_edited(self):
         gradlew = self.box_that_runs()
@@ -445,6 +453,44 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
                                         "HOME": str(self.home), "FAKE_DIR": str(self.dir), **extra})
         self.addCleanup(self.stop, process)
         return process
+
+    def test_replay_setup_finishes_all_installs_after_an_in_place_edit(self):
+        self.tool("uv", 'echo "$*" >> "$FAKE_DIR/installs"\n'
+                  'if [ "$1" = venv ]; then\n'
+                  'for folder in "$@"; do :; done; mkdir -p "$folder/bin"; touch "$folder/bin/python"; chmod +x "$folder/bin/python"\n'
+                  'touch "$FAKE_DIR/started.first"\n'
+                  'while [ -e "$FAKE_DIR/hold.first" ]; do /bin/sleep 0.02; done\nfi\n')
+        for tool in ("ffmpeg", "yt-dlp", "cmake"):
+            self.tool(tool, 'exit 0\n')
+        self.tool("uname", 'case "$1" in -s) echo Linux;; -m) echo x86_64;; esac\n')
+        for rocm, count in (("0", 4), ("1", 7)):
+            with self.subTest(rocm=rocm):
+                script = self.dir / "setup.sh"
+                shutil.copy2(BOX.parent.parent / "syncreplay/setup.sh", script)
+                self.hold("first")
+                job = self.start_script(script, REPLAY_CACHE=str(self.dir / ("replay" + rocm)), REPLAY_ROCM=rocm)
+                try:
+                    self.wait_for("started.first")
+                    script.write_text("exit 99\n" * 8_192 + script.read_text())
+                finally:
+                    self.release("first")
+                    output, _ = job.communicate(timeout=20)
+                    (self.dir / "started.first").unlink(missing_ok=True)
+                    calls = (self.dir / "installs").read_text().splitlines()
+                    (self.dir / "installs").unlink()
+                self.assertEqual(0, job.returncode, output)
+                self.assertEqual(count, len(calls), calls)
+                self.assertIn("openai-whisper" if rocm == "0" else "triton-rocm==3.8.0", calls[-1])
+
+    def test_recording_help_keeps_only_the_user_instructions(self):
+        for name, heading in (("record.sh", "Records the emulator"), ("emulator.sh", "Gets an emulator ready")):
+            with self.subTest(name=name):
+                script = BOX.parent.parent / "record" / name
+                job = self.start_script(script)
+                output, _ = job.communicate(timeout=20)
+                self.assertEqual(2, job.returncode, output)
+                self.assertIn(heading, output)
+                self.assertNotIn("Parse the", output)
 
     def test_golden_writers_finish_and_remove_their_tree_after_an_in_place_edit(self):
         writer = self.dir / "writer"
@@ -472,14 +518,16 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
                 resources.mkdir()
                 self.hold("first")
                 job = self.start_script(script, "fake-sha", FAKE_WRITER=str(writer), FAKE_TABLE=table)
-                self.wait_for("started.first")
-                script.write_text("exit 99\n" * 8_192 + script.read_text())
-                self.release("first")
-                output, _ = job.communicate(timeout=20)
+                try:
+                    self.wait_for("started.first")
+                    script.write_text("exit 99\n" * 8_192 + script.read_text())
+                finally:
+                    self.release("first")
+                    output, _ = job.communicate(timeout=20)
+                    (self.dir / "started.first").unlink(missing_ok=True)
                 self.assertEqual(0, job.returncode, output)
                 self.assertEqual("fake row\n", gzip.decompress((resources / (table + "-golden.tsv.gz")).read_bytes()).decode())
                 self.assertFalse((self.home / ".cache/agent-cache" / ("crosstune-" + table + "check-fake-sha")).exists())
-                (self.dir / "started.first").unlink()
 
     def test_a_recording_finishes_and_restores_animation_after_an_in_place_edit(self):
         script = self.dir / "record.sh"

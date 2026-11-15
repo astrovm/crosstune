@@ -18,6 +18,7 @@
 #   python3 scripts/emulator/emulator.py start crosstune-phone
 # Needs scrcpy and ffmpeg. Uses ANDROID_SERIAL, or emulator-5580. MAX_SIZE sets the longer side
 # of the recording (default 1280; bigger records fewer frames).
+
 # Parse the whole run before starting work, so an edit cannot change an active run.
 check() {
     ffprobe -v error -show_entries format=duration -of csv=p=0 "$1" | xargs printf '%.1f s, '
