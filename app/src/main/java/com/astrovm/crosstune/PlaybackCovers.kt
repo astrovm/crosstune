@@ -25,7 +25,10 @@ internal class PlaybackCovers(private val directory: File) {
         val bitmap = WeakReference(bitmap)
     }
     private val entries = WeakHashMap<Bitmap, Entry>()
-    private val sessions = WeakHashMap<MediaSession.Token, SessionEntry>()
+    private val sessions = mutableMapOf<MediaSession.Token, SessionEntry>()
+
+    /** Token wrappers from Binder queries are temporary. Keep aliases only while their sessions are active. */
+    fun retainSessions(active: Set<MediaSession.Token>) = synchronized(entries) { sessions.keys.retainAll(active); Unit }
 
     fun forget(session: MediaSession.Token) = synchronized(entries) { sessions.remove(session); Unit }
     private val work = CoroutineScope(SupervisorJob() + Dispatchers.IO)

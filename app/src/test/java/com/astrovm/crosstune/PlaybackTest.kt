@@ -2199,6 +2199,59 @@ class PlaybackTest {
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(shadows = [CoverBitmap::class])
+    fun collectingATemporaryTokenCannotDiscardAnActiveSessionsCover() {
+        val controller = aBitmapCover()
+        shadowOf(sessions).addController(controller)
+        val binderType = MediaSession.Token::class.java.getDeclaredField("mBinder").type
+        val binder = android.os.Binder()
+        val stable = java.lang.reflect.Proxy.newProxyInstance(binderType.classLoader, arrayOf(binderType)) { _, method, _ ->
+            check(method.name == "asBinder") { "Unexpected token call: ${method.name}" }
+            binder
+        }
+        val token = copyCoverToken(controller.sessionToken, stable)
+        val (cover, bitmap) = saveThroughATemporaryToken(controller, token)
+        val end = System.nanoTime() + 5_000_000_000L
+        while (bitmap.get() != null && System.nanoTime() < end) {
+            System.gc()
+            System.runFinalization()
+            Thread.sleep(10)
+        }
+        assertNull("the temporary bitmap was still retained", bitmap.get())
+        val original = requireNotNull(requireNotNull(controller.metadata).getBitmap(MediaMetadata.METADATA_KEY_ART))
+        val writer = PlaybackCovers.shared(app)
+        val name = listOf("Fake Song", "Fake Artist", "Fake Album", null, null)
+        writer.retainSessions(setOf(token))
+        assertEquals(cover, writer.of(original, token, name))
+        assertEquals(1, CoverBitmap.encodes.get())
+        writer.retainSessions(emptySet())
+        assertNull(writer.of(original, token, name))
+        assertEquals(cover, coverWhenReady { writer.of(original, token, name) })
+        assertEquals(2, CoverBitmap.encodes.get())
+    }
+
+    private fun copyCoverToken(original: MediaSession.Token, binder: Any): MediaSession.Token {
+        val uid = MediaSession.Token::class.java.getDeclaredField("mUid").apply { isAccessible = true }.get(original)
+        val constructor = MediaSession.Token::class.java.declaredConstructors.single { it.parameterCount == 2 }.apply { isAccessible = true }
+        return constructor.newInstance(uid, binder) as MediaSession.Token
+    }
+
+    private fun saveThroughATemporaryToken(controller: MediaController, originalToken: MediaSession.Token): Pair<String, java.lang.ref.WeakReference<Bitmap>> {
+        // Two different token wrappers share the same Binder, as across system queries.
+        val binder = requireNotNull(MediaSession.Token::class.java.getDeclaredField("mBinder").apply { isAccessible = true }.get(originalToken))
+        val token = copyCoverToken(originalToken, binder)
+        org.junit.Assert.assertNotSame(originalToken, token)
+        assertEquals(originalToken, token)
+        val original = requireNotNull(requireNotNull(controller.metadata).getBitmap(MediaMetadata.METADATA_KEY_ART))
+        val bitmap = requireNotNull(original.copy(Bitmap.Config.ARGB_8888, false))
+        val writer = PlaybackCovers.shared(app)
+        val name = listOf("Fake Song", "Fake Artist", "Fake Album", null, null)
+        val cover = coverWhenReady { writer.of(bitmap, token, name) }
+        return cover to java.lang.ref.WeakReference(bitmap)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
     fun aSavedCoverUpdatesTheSongWithoutAnotherPlaybackEvent() {
         val controller = aBitmapCover()
         val seen = offered()

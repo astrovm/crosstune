@@ -460,7 +460,7 @@ internal class MediaSessionPlayback(
         // Without the user's say-so, e.g. taken back meanwhile, Android shows none, and says so by throwing.
         val watching = runCatching {
             sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
-            watch(sessions.getActiveSessions(listener))
+            watch(activeSessions())
         }.isSuccess
         if (!watching) trySend(null)
         awaitClose {
@@ -479,7 +479,7 @@ internal class MediaSessionPlayback(
      * one followed, so it's the one moved, played, paused and skipped too. Only [app]'s, by package, when one is named.
      */
     @VisibleForTesting
-    internal fun appFor(song: MusicMetadata, controllers: List<MediaController> = sessions.getActiveSessions(listener), app: String? = null): MediaController? =
+    internal fun appFor(song: MusicMetadata, controllers: List<MediaController> = activeSessions(), app: String? = null): MediaController? =
         controllers.filter { (app == null || it.packageName == app) && it.has(song, app) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
 
     /**
@@ -532,12 +532,12 @@ internal class MediaSessionPlayback(
     override fun pauseApp(app: String) {
         // Taken back meanwhile, it plays on.
         runCatching {
-            sessions.getActiveSessions(listener).filter { it.packageName == app && it.playbackState?.state == PlaybackState.STATE_PLAYING }.forEach { it.transportControls.pause() }
+            activeSessions().filter { it.packageName == app && it.playbackState?.state == PlaybackState.STATE_PLAYING }.forEach { it.transportControls.pause() }
         }
     }
 
     override fun playApp(app: String) {
-        runCatching { sessions.getActiveSessions(listener).filter { it.packageName == app }.sortedWith(nearestFirst).firstOrNull()?.transportControls?.play() }
+        runCatching { activeSessions().filter { it.packageName == app }.sortedWith(nearestFirst).firstOrNull()?.transportControls?.play() }
     }
 
     override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
@@ -613,7 +613,7 @@ internal class MediaSessionPlayback(
 
     override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean): Boolean {
         // Without the user's say-so Android shows none, and says so by throwing; an app can still be woken.
-        val apps = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).filter { it.packageName != context.packageName }
+        val apps = runCatching { activeSessions() }.getOrDefault(emptyList()).filter { it.packageName != context.packageName }
         // Not running, the app's woken, as Android Auto wakes one; another app wouldn't have its link.
         val asked = apps.firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: app?.let { waker.wake(MusicService.appsFor(it)) }
@@ -729,6 +729,10 @@ internal class MediaSessionPlayback(
         !audio.isStreamMute(AudioManager.STREAM_MUSIC) && audio.getStreamVolume(AudioManager.STREAM_MUSIC) > 0 &&
             audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).all { it.type in ROOM_OUTPUTS }
 
+    private fun activeSessions(): List<MediaController> = sessions.getActiveSessions(listener).also { controllers ->
+        covers.retainSessions(controllers.map { it.sessionToken }.toSet())
+    }
+
     /**
      * The apps playing now, in no order: [whatPlays] ranks them, by [playsFirst] alone. Without the user's say-so Android shows none, and says so by
      * throwing. An app may still say it plays long after it stopped, e.g. a browser tab left behind, so one
@@ -737,7 +741,7 @@ internal class MediaSessionPlayback(
      */
     private fun playingApps(): List<MediaController> {
         val sounding = audio.isMusicActive
-        val all = if (hasAccess()) runCatching { sessions.getActiveSessions(listener) }.getOrNull() else null
+        val all = if (hasAccess()) runCatching { activeSessions() }.getOrNull() else null
         return all.orEmpty()
             .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() && (sounding || it.remote()) }
     }
@@ -749,7 +753,7 @@ internal class MediaSessionPlayback(
 
     override fun recording(song: MusicMetadata): MusicMetadata? {
         if (!hasAccess()) return null
-        return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
+        return runCatching { activeSessions() }.getOrNull().orEmpty()
             .filter { it.packageName != context.packageName && it.plays(song) }
             .sortedWith(nearestFirst)
             // plays() already checked the session's title and artist. YouTube's video-title
@@ -760,7 +764,7 @@ internal class MediaSessionPlayback(
     override fun nowPlayingUpdates(): Flow<Heard.Song?> = changes(::nowPlaying)
 
     override fun plays(app: String): Flow<AppPlays?> = changes {
-        runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
+        runCatching { activeSessions() }.getOrNull().orEmpty()
             .filter { sameApp(app, it.packageName, context::hasApp) }
             .firstNotNullOfOrNull { controller ->
                 val ended = controller.ended()
@@ -813,7 +817,7 @@ internal class MediaSessionPlayback(
     }
 
     override suspend fun playList(app: String, link: String, mustStart: Boolean): Boolean {
-        val asked = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName, context::hasApp) }
+        val asked = runCatching { activeSessions() }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: waker.wake(MusicService.appsFor(app))
             ?: return false
         return watchStart(asked, mustStart) { asked.transportControls.playFromUri(Uri.parse(link), Bundle()) }
@@ -857,7 +861,7 @@ internal class MediaSessionPlayback(
         val watching = runCatching {
             sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
             audio.registerAudioPlaybackCallback(sounding, handler)
-            watch(sessions.getActiveSessions(listener))
+            watch(activeSessions())
         }.isSuccess
         if (!watching) update()
         awaitClose {
