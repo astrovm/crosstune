@@ -21,6 +21,36 @@ spec = importlib.util.spec_from_file_location('replay', Path(__file__).with_name
 r = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(r)
 
+class ReplayContainerTest(unittest.TestCase):
+    def test_replay_containers_have_cpu_and_memory_limits_and_no_host_access(self):
+        command = r.replay_container((Path('/repo'), Path('/repo'), 'ro'))
+        self.assertEqual(command, [
+            'nice', '-n', '10', 'podman', 'run', '--rm', '--network', 'none',
+            '--memory', '2g', '--memory-swap', '2g', '--cpus', '2',
+            '-v', '/repo:/repo:ro', r.JDK_IMAGE,
+        ])
+
+    def test_replay_mounts_are_explicit(self):
+        command = r.replay_container((Path('/repo'), Path('/repo'), 'ro'), (Path('/output'), Path('/output'), 'rw'))
+        self.assertEqual(command[-5:], ['-v', '/repo:/repo:ro', '-v', '/output:/output:rw', r.JDK_IMAGE])
+
+    def test_the_compiler_uses_the_bounded_container(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            source = Path(directory) / 'Source.kt'
+            source.write_text('fake')
+            def compile(command, **_):
+                self.assertEqual(command[:len(r.replay_container()) - 1], r.replay_container()[:-1])
+                Path(command[command.index('-d') + 1]).mkdir(parents=True)
+            with patch.object(r, 'kotlin_jars', return_value=[Path('kotlin-stdlib-2.jar')]), patch.object(r.subprocess, 'run', side_effect=compile):
+                r.untimed_classes([source])
+
+    def test_synthetic_uses_the_bounded_container(self):
+        with patch.object(r, 'untimed_classes', return_value=Path('classes')), \
+                patch.object(r, 'kotlin_jars', return_value=[Path('kotlin-stdlib-2.jar')]), patch.object(r.subprocess, 'run') as run:
+            r.synthetic(SimpleNamespace(timing=None))
+        self.assertEqual(run.call_args.args[0][:-4], r.replay_container((r.OUT, r.OUT, 'ro')))
+
+
 class ResumeTest(unittest.TestCase):
     def test_truth_without_hearing_is_resumed(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
@@ -128,6 +158,7 @@ class PartTest(unittest.TestCase):
         self.assertEqual(given, ['g', 'h'])
         self.assertEqual(score.call_args.args[0], ['g', 'h'])
         self.assertEqual(run.call_args.args[0][-2:], [f'{directory}/g.tsv', f'{directory}/h.tsv'])
+        self.assertEqual(run.call_args.args[0][:len(r.replay_container()) - 1], r.replay_container()[:-1])
 
 
 class UntimedScoreTest(unittest.TestCase):

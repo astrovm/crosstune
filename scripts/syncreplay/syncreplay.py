@@ -1129,6 +1129,15 @@ def kotlin_jars():
     return sorted(folder.glob("*.jar"))
 
 
+def replay_container(*mounts):
+    """Bound the Kotlin compiler and replay JVM; mount only their explicit inputs and outputs."""
+    command = ["nice", "-n", "10", "podman", "run", "--rm", "--network", "none",
+               "--memory", "2g", "--memory-swap", "2g", "--cpus", "2"]
+    for source, target, mode in mounts:
+        command += ["-v", f"{source}:{target}:{mode}"]
+    return command + [JDK_IMAGE]
+
+
 def untimed_classes(sources=None):
     """SungTiming.kt and the replay compiled, in a container, once for each change to them."""
     import hashlib
@@ -1139,7 +1148,7 @@ def untimed_classes(sources=None):
         jars = kotlin_jars()
         compiler = ":".join(str(jar) for jar in jars)
         stdlib = next(str(jar) for jar in jars if jar.name.startswith("kotlin-stdlib-"))
-        subprocess.run(["podman", "run", "--rm", "-v", f"{ROOT}:{ROOT}:ro", "-v", f"{OUT}:{OUT}", JDK_IMAGE,
+        subprocess.run(replay_container((ROOT, ROOT, "ro"), (OUT, OUT, "rw")) + [
                         "java", "-cp", compiler, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect", "-nowarn",
                         "-cp", stdlib, "-d", str(classes), *map(str, sources)], check=True)
         (classes / "done").write_text("")
@@ -1220,7 +1229,7 @@ def untimed(args):
     sources = [ROOT / name for name in UNTIMED_SOURCES]
     classes = untimed_classes(timing_copied(args.timing, sources) if args.timing else None)
     stdlib = next(str(jar) for jar in kotlin_jars() if jar.name.startswith("kotlin-stdlib-"))
-    subprocess.run(["podman", "run", "--rm", "-v", f"{OUT}:{OUT}:ro", "-v", f"{own()}:{own()}", JDK_IMAGE,
+    subprocess.run(replay_container((OUT, OUT, "ro"), (own(), own(), "rw")) + [
                     "java", "-cp", f"{classes}:{stdlib}", "com.astrovm.crosstune.UntimedReplayKt", *(str(path) for path, _ in inputs.values())], check=True)
     rows = untimed_score(songs, inputs, args.verbose)
     held_to_main(args, rows)
@@ -1289,7 +1298,7 @@ def synthetic(args):
     sources = [ROOT / name for name in (*UNTIMED_TIMING, SYNTHETIC_SOURCE)]
     classes = untimed_classes(timing_copied(args.timing, sources) if args.timing else sources)
     stdlib = next(str(jar) for jar in kotlin_jars() if jar.name.startswith("kotlin-stdlib-"))
-    subprocess.run(["podman", "run", "--rm", "-v", f"{OUT}:{OUT}:ro", JDK_IMAGE,
+    subprocess.run(replay_container((OUT, OUT, "ro")) + [
                     "java", "-cp", f"{classes}:{stdlib}", "com.astrovm.crosstune.SyntheticSingingKt"], check=True)
 
 
