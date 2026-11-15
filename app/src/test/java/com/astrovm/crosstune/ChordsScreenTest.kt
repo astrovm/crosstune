@@ -10,6 +10,7 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
@@ -21,6 +22,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import kotlinx.coroutines.runBlocking
@@ -96,6 +98,28 @@ class ChordsScreenTest {
     }
 
     private fun pausedAt(ms: Long) = Following(PlaybackClock(ms, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+
+    /** How tall [text]'s first row is, room over it for chords or readings included. */
+    private fun firstRowOf(text: String): Float {
+        val layouts = mutableListOf<TextLayoutResult>()
+        lineOf(text).config[SemanticsActions.GetTextLayoutResult].action!!(layouts)
+        return layouts.single().run { getLineBottom(0) - getLineTop(0) }
+    }
+
+    @Test
+    @Config(fontScale = 2f)
+    fun atTheLargestFontARowStillHasRoomForItsChordsOverIt() {
+        var chords by mutableStateOf(ChordsState())
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords), ScreenActions()) } }
+        composeRule.waitForIdle()
+        val words = firstRowOf(lines[0].text)
+        chords = ChordsState(on = true, sheet = sheet)
+        chordsOver(lines[0].text)
+        val room = firstRowOf(lines[0].text) - words
+        // Chords are 0.55 times the words' size. Android grows small text more than big at a big
+        // font, so their room is that much of the row at least; less, and the words run into them.
+        assertTrue("$room px over a row of $words px", room >= words * 0.55f - 1f)
+    }
 
     @Test
     fun theChordPlayedAndTheWordsSungLightAsALineWithChordsIsSung() {

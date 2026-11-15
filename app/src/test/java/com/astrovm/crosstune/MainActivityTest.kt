@@ -5028,6 +5028,8 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         val follow = composeRule.onNodeWithText(string(R.string.setting_lyrics_follow)).performScrollTo()
         follow.assertIsOff()
+        // Off, it says what it needs.
+        assertTextShown(string(R.string.setting_lyrics_follow_description))
         // Switched on: the steps to Android's page, which stay till it's allowed there.
         follow.performClick()
         waitForText(string(R.string.follow_help_title))
@@ -5041,6 +5043,8 @@ class MainActivityTest {
         controller!!.pause().resume()
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.follow_help_title)).fetchSemanticsNodes().isEmpty() }
         follow.assertIsOn()
+        // Allowed, it no longer says it needs the access it has.
+        assertTextAbsent(string(R.string.setting_lyrics_follow_description))
         // Switched off: Android's page again, where it's turned off.
         follow.performClick()
         assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)

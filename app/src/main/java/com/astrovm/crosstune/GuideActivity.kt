@@ -37,10 +37,10 @@ internal interface GuideHost {
 }
 
 /**
- * The step being taken, small, floating over Android's settings in picture-in-picture while the
- * user is there, in a task of its own, so closing it leaves Crosstune as it was. Crosstune comes
- * back once Android says it's done, and the guide closes as it does. Where Android won't float it,
- * Android's page just opens, and the steps wait in Crosstune.
+ * The steps, small, floating over Android's settings in picture-in-picture while the user is there,
+ * in a task of its own, so closing it leaves Crosstune as it was. Once Android says it's done, it
+ * says so, and made big it brings Crosstune back. Where Android won't float it, Android's page just
+ * opens, and the steps wait in Crosstune.
  */
 class GuideActivity : ComponentActivity() {
     /** Set once Android's page is open under the guide, so Crosstune coming back closes it. */
@@ -59,14 +59,13 @@ class GuideActivity : ComponentActivity() {
             CrosstuneTheme(darkTheme = host.dark, palette = state.palette, pureBlack = state.pureBlack) { Shrunk { FloatingGuide(need, state) } }
         }
         lifecycleScope.launch {
-            // Android doesn't say when it's done, so it's asked every second.
+            // Android doesn't say when it's done, so it's asked every second, till the guide says it is.
+            // It doesn't bring Crosstune back by itself: Android never lets a floating window open an
+            // app, as it doesn't count as in sight. Made big, it's in sight, and brings Crosstune back.
             while (host.state.done(need) != true) {
                 delay(CHECK_MS)
                 host.refresh()
             }
-            // Crosstune coming back closes the guide. Where Android won't let it, the guide says
-            // done, and stays till the user goes back.
-            host.back(this@GuideActivity)
         }
     }
 

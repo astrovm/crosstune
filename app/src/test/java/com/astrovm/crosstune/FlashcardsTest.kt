@@ -7,6 +7,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertCountEquals
@@ -690,6 +691,26 @@ class FlashcardsTest {
     }
 
     @Test
+    fun everyButtonOnThePracticeListAndCardSaysWhatItDoes() {
+        saved("""{"text":"夜の空","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1}""")
+        launch()
+        click(practiceDue(1))
+        assertEquals(emptyList<String>(), unlabelledButtons())
+        click(string(R.string.practice_all_songs))
+        waitUntil { model().uiState.practice != null }
+        assertEquals(emptyList<String>(), unlabelledButtons())
+        click(string(R.string.practice_show))
+        assertEquals(emptyList<String>(), unlabelledButtons())
+    }
+
+    /** What a screen reader would call only "button": something to tap, with no words or description of its own. */
+    private fun unlabelledButtons() = composeRule.onAllNodes(hasClickAction()).fetchSemanticsNodes().filter { node ->
+        val config = node.config
+        config.getOrNull(SemanticsProperties.ContentDescription).isNullOrEmpty() && config.getOrNull(SemanticsProperties.Text).isNullOrEmpty() &&
+            config.getOrNull(SemanticsProperties.StateDescription).isNullOrEmpty()
+    }.map { "${it.config.getOrNull(SemanticsProperties.TestTag)} at ${it.boundsInRoot}: ${it.config}" }
+
+    @Test
     fun linesMakeACardOfEachKindThatIsOnAndTheCardSaysWhichItIs() {
         saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1,""" +
                 """"ruby":[["夜","よる"],["の",null],["空","そら"]]}""")
@@ -1027,6 +1048,8 @@ class FlashcardsTest {
         assertEquals(0, phone.cameBack)
         // And the card says, plainly, what the music app needs, with the way to allow it.
         waitUntil { shown(string(R.string.practice_float_allow)) }
+        // Allow, and the small player under it, each say what they are, or keep out of a screen reader's way.
+        assertEquals(emptyList<String>(), unlabelledButtons())
         assertTrue(composeRule.onAllNodes(hasTestTag(PRACTICE_COME_BACK_TAG) and hasAnyAncestor(hasTestTag(PRACTICE_CARD_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         composeRule.onAllNodes(hasText(string(R.string.allow_button)) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG)), useUnmergedTree = true).onFirst().performClick()
         composeRule.waitForIdle()

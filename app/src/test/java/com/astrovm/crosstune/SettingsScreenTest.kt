@@ -2,17 +2,25 @@ package com.astrovm.crosstune
 
 import android.content.Context
 import android.text.format.Formatter
+import androidx.compose.material3.DividerDefaults
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.getBoundsInRoot
-import androidx.compose.material3.DividerDefaults
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.DpRect
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
@@ -49,18 +57,67 @@ class SettingsScreenTest {
     @Config(qualifiers = "de-w411dp-h891dp-xxhdpi")
     fun theSignedOutChatGptHintStaysWholeWithLargeGermanText() {
         composeRule.setContent {
-            val density = androidx.compose.ui.platform.LocalDensity.current
-            androidx.compose.runtime.CompositionLocalProvider(
-                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 2f)
+            val density = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density, 2f)
             ) {
                 CrosstuneTheme { SettingsScreen(UiState(), ScreenActions(), onBack = {}) }
             }
         }
         val hint = composeRule.onNodeWithText(string(R.string.chatgpt_use_plan)).performScrollTo()
-        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-        hint.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layouts = mutableListOf<TextLayoutResult>()
+        hint.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertTrue(layouts.single().lineCount > 1)
         assertFalse(layouts.single().hasVisualOverflow)
+    }
+
+    @Test
+    @Config(qualifiers = "es-w411dp-h891dp-xxhdpi")
+    fun aSettingsNameKeepsItsWordsWholeBesideWhatItIsSetToInSpanishAtTheLargestFont() = namesWholeAtTheLargestFont()
+
+    @Test
+    @Config(qualifiers = "de-w320dp-h891dp-xxhdpi")
+    fun aSettingsNameKeepsItsWordsWholeBesideWhatItIsSetToInGermanOnANarrowPhone() = namesWholeAtTheLargestFont()
+
+    @Test
+    fun aShortValueStaysBesideItsSettingAtTheUsualFont() {
+        show(UiState())
+        val name = composeRule.onNodeWithText(string(R.string.setting_language), useUnmergedTree = true).performScrollTo().getBoundsInRoot()
+        val density = composeRule.density
+        val values = composeRule.onAllNodesWithText(string(R.string.language_system_default), useUnmergedTree = true).fetchSemanticsNodes()
+            .map { node -> with(density) { node.boundsInRoot.let { DpRect(it.left.toDp(), it.top.toDp(), it.right.toDp(), it.bottom.toDp()) } } }
+        // On the same line, at the right.
+        assertTrue("$name, $values", values.any { value -> value.top < name.bottom && value.bottom > name.top && value.left >= name.right })
+    }
+
+    /** Every setting with what it's set to beside it: its name a line a word at most, never broken inside one. */
+    private fun namesWholeAtTheLargestFont() {
+        composeRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density, 2f)
+            ) {
+                CrosstuneTheme { SettingsScreen(UiState(), ScreenActions(), onBack = {}) }
+            }
+        }
+        val names = listOf(
+            R.string.setting_language, R.string.setting_theme, R.string.setting_color, R.string.settings_links_title, R.string.setting_translate_into,
+            R.string.setting_untranslated, R.string.setting_lines_early, R.string.setting_next_line_first, R.string.setting_visuals_list, R.string.setting_visuals_change
+        )
+        for (id in names) {
+            val name = string(id)
+            val node = composeRule.onAllNodesWithText(name, useUnmergedTree = true).onFirst().performScrollTo()
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            val words = name.split(' ')
+            // A line ends only where a word does.
+            val ends = (0 until layout.lineCount - 1).map { line -> name.substring(0, layout.getLineEnd(line, visibleEnd = true)).trimEnd() }
+            assertTrue("\"$name\" breaks as ${ends.map { it.substringAfterLast(' ') }}", ends.all { end -> end.isEmpty() || words.any { end.endsWith(it) } } && layout.lineCount <= words.size)
+            // And every line is inside the name's room, none cut off at its edge.
+            val widest = (0 until layout.lineCount).maxOf { layout.getLineRight(it) }
+            assertTrue("\"$name\" is $widest px wide in ${layout.size.width} px", widest <= layout.size.width + 0.5f && !layout.didOverflowHeight)
+        }
     }
 
     @Test

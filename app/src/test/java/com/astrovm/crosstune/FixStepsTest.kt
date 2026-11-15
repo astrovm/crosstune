@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.app.Application
+import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -11,7 +12,9 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
@@ -356,20 +359,46 @@ class FixStepsTest {
     }
 
     @Test
-    fun theFloatingGuideShowsEachStepInTurnThenThatItsDone() {
-        composeRule.mainClock.autoAdvance = false
-        state = broken.copy(phone = Phone.PIXEL)
+    fun theFloatingGuideShowsEveryStepAtOnceThenThatItsDone() {
+        // Android doesn't say which step the user is on, so none is shown as the one, nor counted.
+        state = broken.copy(phone = Phone.SAMSUNG)
         composeRule.setContent { CrosstuneTheme { FloatingGuide(Need.Links, state) } }
-        composeRule.mainClock.advanceTimeByFrame()
-        assertShown("1/2", tap(R.string.android_add_link))
-        composeRule.mainClock.advanceTimeBy(GUIDE_STEP_MS)
-        assertShown("2/2", string(R.string.fix_step_tick_then, string(R.string.android_add)))
+        composeRule.waitForIdle()
+        assertShown("1", tap(R.string.android_supported_web_addresses), "2", string(R.string.fix_step_switches))
+        assertFalse(shown("1/2"))
 
         state = state.copy(unapprovedHosts = emptyMap())
         composeRule.waitForIdle()
-        composeRule.mainClock.advanceTimeByFrame()
         assertShown(string(R.string.practice_back_to, string(R.string.app_name)))
-        assertFalse(shown("2/2"))
+        assertFalse(shown(string(R.string.fix_step_switches)))
+    }
+
+    @Test
+    @Config(qualifiers = "w240dp-h135dp")
+    fun theFloatingGuideShrinksItsStepsToFitTheSmallWindow() {
+        state = broken.copy(phone = Phone.SAMSUNG)
+        composeRule.setContent { CrosstuneTheme { FloatingGuide(Need.Links, state) } }
+        val window = composeRule.onRoot().getBoundsInRoot()
+        val last = composeRule.onNodeWithText(string(R.string.fix_step_switches)).getBoundsInRoot()
+        assertTrue("the last step ends at ${last.bottom}, below the window's ${window.bottom}", last.bottom <= window.bottom)
+        assertTrue("the last step starts at ${last.left}, left of the window", last.left >= window.left)
+        assertTrue("the last step ends at ${last.right}, right of the window's ${window.right}", last.right <= window.right)
+    }
+
+    @Test
+    fun theStepsForAddingLinksWaitInCrosstuneWhereAndroidAsksInADialogTheGuideWouldCover() {
+        // Android 12 and later add links in a dialog with Add at the bottom right, where the floating window goes.
+        val s = Build.VERSION_CODES.S
+        assertFalse(broken.copy(phone = Phone.PIXEL).guideFloats(Need.Links, s))
+        assertFalse(broken.copy(phone = Phone.OTHER).guideFloats(Need.Links, s))
+        // Samsung and Xiaomi tick links on a page, and before Android 12 it's one choice: nothing to cover.
+        assertTrue(broken.copy(phone = Phone.SAMSUNG).guideFloats(Need.Links, s))
+        assertTrue(broken.copy(phone = Phone.XIAOMI).guideFloats(Need.Links, s))
+        assertTrue(broken.copy(phone = Phone.PIXEL).guideFloats(Need.Links, Build.VERSION_CODES.R))
+        // Everything else is a switch or a choice on a page.
+        listOf(Need.StopApp(spotify), Need.Microphone, Need.Follow, Need.Float, Need.Exact).forEach {
+            assertTrue("$it", broken.copy(phone = Phone.PIXEL).guideFloats(it, s))
+        }
     }
 
     @Test

@@ -32,11 +32,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
@@ -46,17 +46,16 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 internal const val FIX_BAR_TAG = "fix_bar"
 
 /** How long a thing just fixed shows checked off before the next one. */
 internal const val FIX_DONE_PAUSE_MS = 700L
-
-/** How long the floating guide shows each step before the next. */
-internal const val GUIDE_STEP_MS = 4_000L
 
 /** What a test link carries, so Crosstune knows it's the one it sent rather than a song to look up. */
 internal const val TEST_LINK = "crosstune-test"
@@ -703,40 +702,60 @@ internal fun NumberedStep(number: Int, text: AnnotatedString) {
 }
 
 /**
- * How [need] is done, small, floating over Android's page while the user is there: each of its
- * steps in turn, with its picture.
+ * How [need] is done, small, floating over Android's page while the user is there: all of its steps
+ * at once, each with its picture, shrunk to fit. Android doesn't say which of them the user is on, so
+ * none is picked out as the one; it says only when it's all done.
  */
 @Composable
 internal fun FloatingGuide(need: Need, state: UiState) {
     val steps = fixSteps(need, state, ScreenActions())
-    var shown by remember(need) { mutableIntStateOf(0) }
-    LaunchedEffect(need, steps.size) {
-        while (steps.size > 1) {
-            delay(GUIDE_STEP_MS)
-            shown = (shown + 1) % steps.size
-        }
-    }
-    val step = steps[shown % steps.size]
     Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxSize()) {
         if (state.done(need) == true) {
-            // Newer Android won't let Crosstune come back from a floating window by itself, but
-            // making it big brings it back.
+            // Android won't let Crosstune come back from a floating window by itself, but making it
+            // big brings it back.
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically), modifier = Modifier.padding(12.dp)) {
                 AppIcon(R.drawable.ic_check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(64.dp))
                 Text(stringResource(R.string.practice_back_to, stringResource(R.string.app_name)), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
             }
             return@Surface
         }
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AppLogo(size = 18.dp)
-                Spacer(Modifier.weight(1f))
-                if (steps.size > 1) {
-                    Text("${shown + 1}/${steps.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(modifier = Modifier.fitsHeight().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AppLogo(size = 18.dp)
+            steps.forEachIndexed { index, step ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (steps.size > 1) {
+                        Text("${index + 1}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(step.text, style = MaterialTheme.typography.titleMedium)
+                        step.picture?.invoke()
+                    }
                 }
             }
-            Text(step.text, style = MaterialTheme.typography.titleMedium)
-            step.picture?.invoke()
         }
     }
 }
+
+/** Laid out as tall as it needs, then shrunk, from the top and in the middle, to the height there is. */
+private fun Modifier.fitsHeight() = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+    val scale = if (constraints.hasBoundedHeight) minOf(1f, constraints.maxHeight.toFloat() / placeable.height) else 1f
+    val width = placeable.width.coerceIn(constraints.minWidth, constraints.maxWidth)
+    val height = (placeable.height * scale).roundToInt().coerceIn(constraints.minHeight, constraints.maxHeight)
+    layout(width, height) {
+        placeable.placeWithLayer(((width - placeable.width * scale) / 2).roundToInt(), 0) {
+            scaleX = scale
+            scaleY = scale
+            transformOrigin = TransformOrigin(0f, 0f)
+        }
+    }
+}
+
+/**
+ * Whether the steps for [need] float over Android's page. Android puts the floating window at the
+ * bottom right, and Crosstune can't move it. Android's dialog for adding links, on Android 12 and
+ * up, has its Add button right there, so a guide over it would cover the very button it asks for:
+ * those steps wait in Crosstune instead. Samsung and Xiaomi tick links on a page with no such dialog.
+ */
+internal fun UiState.guideFloats(need: Need, sdk: Int = Build.VERSION.SDK_INT): Boolean =
+    need != Need.Links || sdk < Build.VERSION_CODES.S || phone == Phone.SAMSUNG || phone == Phone.XIAOMI

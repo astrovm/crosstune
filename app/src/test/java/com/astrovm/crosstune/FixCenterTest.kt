@@ -495,7 +495,7 @@ class FixCenterTest {
     }
 
     @Test
-    fun theGuideFloatsOverAndroidsPageAndBringsCrosstuneBackOnceDone() {
+    fun theGuideFloatsOverAndroidsPageAndOnceDoneMadeBigBringsCrosstuneBack() {
         installSpotify()
         shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE, true)
         launch()
@@ -511,19 +511,35 @@ class FixCenterTest {
         assertTrue(page.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertShown(string(R.string.fix_step_pick, string(R.string.android_in_your_browser)))
 
-        // Done, Crosstune is asked back, and says so while Android doesn't let it.
+        // Done, it says so. It doesn't ask Crosstune back: Android blocks a floating window from opening an app.
         appKeepsLinks = false
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        composeRule.waitForIdle()
+        assertShown(string(R.string.practice_back_to, string(R.string.app_name)))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+        assertNull(nextStarted())
+        assertFalse(floating.get().isFinishing)
+
+        // Made big, it's in sight, so Android lets it bring Crosstune back, and the guide is done with.
+        floating.get().onPictureInPictureModeChanged(false, Configuration())
         val back = nextStarted()!!
         assertEquals(MainActivity::class.java.name, back.component!!.className)
         assertTrue(back.flags and Intent.FLAG_ACTIVITY_REORDER_TO_FRONT != 0)
-        composeRule.waitForIdle()
-        assertShown(string(R.string.practice_back_to, string(R.string.app_name)))
-        assertFalse(floating.get().isFinishing)
-
-        // Back, the guide is done with.
-        backToCrosstune()
         assertTrue(floating.get().isFinishing)
+    }
+
+    @Test
+    fun theStepsForAddingLinksWaitInCrosstuneWhereTheGuideWouldCoverAndroidsAddButton() {
+        shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE, true)
+        launch()
+        openFixes()
+        click(string(R.string.setup_check_allow))
+        click(string(R.string.fix_open_settings))
+        // Android's page opens at once, with no guide floating over its dialog.
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStarted()!!.action)
+        assertNull(GuideActivity.host)
+        backToCrosstune()
+        assertShown(string(R.string.fix_step_tap, string(R.string.android_add_link)))
     }
 
     @Test

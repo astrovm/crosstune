@@ -926,8 +926,8 @@ class MainActivity : ComponentActivity() {
         if (need == Need.Links) viewModel.dismissLinkSettingsHelper()
         if (need == Need.Float) floatOnceAllowed = true
         val open = pageFor(need)
-        // Without picture-in-picture, the steps wait here in Crosstune.
-        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return open()
+        // Without picture-in-picture, or where the guide would cover what it asks for, the steps wait here in Crosstune.
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) || !viewModel.uiState.guideFloats(need)) return open()
         GuideActivity.host = guideHost
         guideOpens = open
         startActivity(Intent(this, GuideActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

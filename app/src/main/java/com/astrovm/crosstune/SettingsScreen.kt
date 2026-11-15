@@ -278,9 +278,10 @@ private fun SettingsList(
                 TranslationSourceRow(state.learning.chatGptTranslation, actions.onChatGptTranslationChange)
             }
             // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
+            // What it needs is said only while it's missing, never once it's allowed.
             SettingSwitch(
                 label = stringResource(R.string.setting_lyrics_follow),
-                description = stringResource(R.string.setting_lyrics_follow_description),
+                description = if (state.canFollowApps) null else stringResource(R.string.setting_lyrics_follow_description),
                 checked = state.canFollowApps,
                 onCheckedChange = { on -> if (on) actions.onAllowFollowing() else actions.onOpenFollowAccess() }
             )
@@ -597,11 +598,10 @@ private const val VISUALS_PAGE = "visuals"
 @Composable
 private fun VisualsListRow(settings: VisualsSettings, modifier: Modifier, onOpen: () -> Unit) {
     val names = presetNames()
-    Row(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+    LabelAndValue(
+        label = { Text(stringResource(R.string.setting_visuals_list), style = MaterialTheme.typography.bodyLarge) },
+        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.setting_visuals_list), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Text(
             stringResource(R.string.visuals_list_summary, names.count(settings::shows), names.size),
             style = MaterialTheme.typography.bodyMedium,
@@ -666,8 +666,9 @@ private fun StepsRow(
     Column(modifier = modifier.fillMaxWidth().padding(start = inset, end = inset, top = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
-            Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            LabelAndValue(label = { Text(label, style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+                Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            }
         }
         AppSlider(
             value = steps.indexOf(value).coerceAtLeast(0).toFloat(),
@@ -701,23 +702,24 @@ private const val SOURCES_PAGE = "sources"
 @Composable
 private fun SourcesRow(sources: List<SourceSettings>, modifier: Modifier, onOpen: () -> Unit) {
     val trouble = sources.firstNotNullOfOrNull { it.trouble() }
-    Row(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+    LabelAndValue(
+        label = { Text(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge) },
+        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        if (trouble != null) {
-            AppIcon(
-                R.drawable.ic_error, contentDescription = trouble,
-                tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 8.dp).size(18.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (trouble != null) {
+                AppIcon(
+                    R.drawable.ic_error, contentDescription = trouble,
+                    tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 8.dp).size(18.dp)
+                )
+            }
+            Text(
+                // Web frontends' sites have no switch, so they're not counted as off.
+                sources.filter { it.onToggle != null }.let { switches -> stringResource(R.string.visuals_list_summary, switches.count { it.on }, switches.size) },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
             )
         }
-        Text(
-            // Web frontends' sites have no switch, so they're not counted as off.
-            sources.filter { it.onToggle != null }.let { switches -> stringResource(R.string.visuals_list_summary, switches.count { it.on }, switches.size) },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
     }
 }
 
@@ -1466,14 +1468,13 @@ private fun PickedMark(picked: Boolean) {
 @Composable
 private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, icon: ((T) -> Int)? = null) {
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { Text(text = label, style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 icon?.let { AppIcon(it(selected), contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp)) }
@@ -1513,8 +1514,7 @@ private fun PaletteRow(selected: Palette, onSelect: (Palette) -> Unit) {
     val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
         // The picked one by name, as the other rows say theirs, since a swatch alone doesn't say it.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = stringResource(R.string.setting_color), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        LabelAndValue(label = { Text(text = stringResource(R.string.setting_color), style = MaterialTheme.typography.bodyLarge) }) {
             Text(text = stringResource(selected.labelRes), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }
         // All in sight, spread across the row, onto another only on a screen too narrow for them.
@@ -1578,14 +1578,13 @@ private val Palette.labelRes: Int
 private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
     val appLanguage = stringResource(R.string.translate_into_app_language)
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { Text(stringResource(R.string.setting_translate_into), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.setting_translate_into), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LanguageMark(into, modifier = Modifier.padding(end = 6.dp))
@@ -1618,14 +1617,13 @@ private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
 @Composable
 private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { Text(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         val none = stringResource(R.string.untranslated_none)
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1662,18 +1660,13 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
     val current = remember { AppLanguage.current(context) }
     val systemDefault = stringResource(R.string.language_system_default)
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { Text(text = stringResource(R.string.setting_language), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(
-            text = stringResource(R.string.setting_language),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f)
-        )
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LanguageMark(current, modifier = Modifier.padding(end = 6.dp))

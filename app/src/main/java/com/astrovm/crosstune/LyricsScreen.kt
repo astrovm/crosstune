@@ -190,6 +190,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -1581,13 +1582,16 @@ private fun MenuAction(@DrawableRes icon: Int, @StringRes label: Int, trailing: 
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onClick)
     ) {
         AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
-        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        if (trailing != null) {
-            Text(
-                trailing,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        if (trailing == null) {
+            Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        } else {
+            LabelAndValue(label = { Text(stringResource(label), style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+                Text(
+                    trailing,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -2122,7 +2126,7 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
     Text(
         shown,
         // Room over each row of the words for the chords played on it, and the readings.
-        style = style.copy(lineHeight = (style.lineHeight.value + chordStyle.lineHeight.value + if (ruby != null) over.lineHeight.value else 0f).sp, lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Bottom, LineHeightStyle.Trim.None)),
+        style = style.copy(lineHeight = LocalDensity.current.stacked(listOfNotNull(style.lineHeight, chordStyle.lineHeight, over.lineHeight.takeIf { ruby != null })), lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Bottom, LineHeightStyle.Trim.None)),
         color = MaterialTheme.colorScheme.onSurface,
         onTextLayout = { layout = it },
         modifier = Modifier
@@ -2282,6 +2286,13 @@ internal fun rowShifts(parts: List<Ruby>, words: TextLayoutResult, room: Float):
  * at their spaces, rather than inside a word, and draws with Japan's shapes of kanji.
  */
 internal fun TextStyle.writing(text: String): TextStyle = if (text.any(Readings::isKana)) copy(localeList = LocaleList("ja"), lineBreak = LineBreak.Heading) else this
+
+/**
+ * As tall as [heights] one over another. Each is made bigger for a big font on its own: Android
+ * grows big text less than small, so their sum made bigger at once would leave less room than they
+ * take, and the words would run up into the chords and readings over them.
+ */
+internal fun Density.stacked(heights: List<TextUnit>): TextUnit = heights.sumOf { it.toPx().toDouble() }.toFloat().toSp()
 
 /** The small type of readings over words in [style], [scale] times as big. */
 private fun readingStyle(style: TextStyle, scale: Float) =

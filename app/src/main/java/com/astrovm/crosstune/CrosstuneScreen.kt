@@ -143,8 +143,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import com.astrovm.crosstune.ui.theme.Palette
 
@@ -153,6 +153,9 @@ internal const val PRACTICE_BADGE_TAG = "practice-badge"
 internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
 internal const val NOW_PLAYING_TAG = "now_playing"
+
+/** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
+internal const val CARD_TOOLS_TAG = "card_tools"
 
 /** Past this font scale, Play and Open stack: a long word like German's "Abspielen" no longer fits half the width. */
 private const val STACK_BUTTONS_FROM = 1.3f
@@ -1564,8 +1567,9 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 Text(stringResource(R.string.make_default_named, destination.label()))
             }
         }
-        // Flat: the song is the point, these are only within reach.
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        // Flat: the song is the point, these are only within reach. Spread across the row, and onto
+        // another where a big font or a long language leaves them no room, each word whole.
+        FlowRow(modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag(CARD_TOOLS_TAG), horizontalArrangement = Arrangement.SpaceEvenly) {
             // With its songs listed, the songs are what's worth copying or sharing, e.g. to move
             // the list to another service, rather than a search for its name. The songs listed
             // right below say what's copied, so the label is short; screen readers hear it all.
@@ -2042,6 +2046,13 @@ private fun MoreChoice(onClick: () -> Unit) {
 }
 
 /**
+ * Text as big as [this], at any font: a letter that stands in for an icon is as big as the icons
+ * beside it, which don't grow with the font, and stays inside the tile it's on.
+ */
+@Composable
+internal fun Dp.asIconText(): TextUnit = with(LocalDensity.current) { toSp() }
+
+/**
  * A destination's icon: an installed app's own, the bundled logo of a service, or, for sites
  * with no logo of their own (Invidious, Piped, custom ones), their first letter on a colored tile.
  */
@@ -2070,7 +2081,7 @@ internal fun DestinationIcon(destination: Destination, installed: Set<MusicServi
     }
     Surface(modifier = tag.size(size), shape = MaterialTheme.shapes.small, color = background, contentColor = Color.White) {
         Box(contentAlignment = Alignment.Center) {
-            Text(letter.uppercase(), style = MaterialTheme.typography.titleMedium, fontSize = (size.value * 0.5f).sp)
+            Text(letter.uppercase(), style = MaterialTheme.typography.titleMedium, fontSize = (size * 0.5f).asIconText(), lineHeight = (size * 0.5f).asIconText())
         }
     }
 }
