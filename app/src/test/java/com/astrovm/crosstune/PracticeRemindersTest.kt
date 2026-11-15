@@ -516,6 +516,55 @@ class PracticeRemindersTest {
     }
 
     @Test
+    fun practiceOnTheIntendedDayStillCountsAfterMidnightOrRestart() {
+        val berlin = ZoneId.of("Europe/Berlin")
+        clock = at(3, 7, zone = berlin)
+        val local = PracticeReminders(app, now = { clock }, zone = { berlin })
+        saved(line("One"))
+        local.sessionDone()
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        for (hour in listOf(0, 7)) {
+            clock = at(4, hour, 10, berlin)
+            PracticeReminders(app, now = { clock }, zone = { berlin }).arm()
+            local.remind(delivered)
+            assertTrue(shown.isEmpty())
+            assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+        }
+    }
+
+    @Test
+    fun practiceOnTheGapDayCountsForTheShiftedMidnightOccurrence() {
+        val nuuk = ZoneId.of("America/Nuuk")
+        clock = java.time.Instant.parse("2026-03-28T14:00:00Z").toEpochMilli()
+        val local = PracticeReminders(app, now = { clock }, zone = { nuuk })
+        saved(line("One"))
+        local.sessionDone()
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = java.time.Instant.parse("2026-03-29T01:30:00Z").toEpochMilli()
+        local.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
+    fun restBeforeTheOccurrenceStillCountsWhenDeliveryIsHeld() {
+        clock = at(3, 19)
+        saved(line("One"))
+        reminders.sessionDone()
+        reminders.at(30)
+        reminders.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(4, 8)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
     fun aMidnightGapKeepsItsShiftedAlarmBeforeItFires() {
         val nuuk = ZoneId.of("America/Nuuk")
         clock = java.time.Instant.parse("2026-03-28T22:00:00Z").toEpochMilli()
