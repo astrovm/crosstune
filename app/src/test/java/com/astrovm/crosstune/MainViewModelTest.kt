@@ -2585,6 +2585,21 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aCoverFromAPatchedAppReplacesItsMissingOfficialAppOnly() {
+        val official = MusicService.YOUTUBE_MUSIC.packageName
+        val patched = "app.morphe.android.apps.youtube.music"
+        val playback = FakePlayback().apply { playing.value = following(app = official) }
+        val model = playingModel(playback)
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///patched.jpg"), null, app = patched)
+        idle()
+        assertEquals("file:///patched.jpg", model.uiState.player?.song?.artworkUrl)
+        shadowOf(app.packageManager).installPackage(android.content.pm.PackageInfo().apply { packageName = official })
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///other-app.jpg"), null, app = patched)
+        idle()
+        assertEquals("file:///patched.jpg", model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
     fun aCoverArrivingWhileThePlayersWordsLoadDoesNotDropThem() {
         val arrived = CountDownLatch(1)
         val release = CountDownLatch(1)

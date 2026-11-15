@@ -24,13 +24,13 @@ class CoverEncodingCheck : Instrumentation() {
             bitmap.setPixels(pixels, 0, 1_024, 0, 0, 1_024, 1_024)
             val metadata = MediaMetadata.Builder().putBitmap(MediaMetadata.METADATA_KEY_ART, bitmap).build()
             val playback = MediaSessionPlayback(targetContext)
-            val method = MediaSessionPlayback::class.java.getDeclaredMethod("ownCover", MediaMetadata::class.java).apply { isAccessible = true }
+            val method = MediaSessionPlayback::class.java.declaredMethods.single { it.name == "ownCover" }.apply { isAccessible = true }
             var cover: String? = null
             fun read(): Long {
                 var took = 0L
                 runOnMainSync {
                     val start = System.nanoTime()
-                    cover = method.invoke(playback, metadata) as? String
+                    cover = method.invoke(playback, *if (method.parameterCount == 1) arrayOf(metadata) else arrayOf(metadata, null)) as? String
                     took = System.nanoTime() - start
                 }
                 return took

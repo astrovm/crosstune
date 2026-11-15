@@ -509,7 +509,7 @@ internal class MediaSessionPlayback(
     /** What it plays, as what names no song is shown. */
     private fun MediaController.unnamed(): Unnamed {
         val (title, artist) = calls()
-        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let(::coverOf), artist, where = place(), said = said(this) != null)
+        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let { coverOf(it, sessionToken) }, artist, where = place(), said = said(this) != null)
     }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
@@ -821,7 +821,7 @@ internal class MediaSessionPlayback(
 
     /** What [read] says, again whenever an app starts, pauses, stops, changes songs or its queue. */
     private fun <T> changes(read: () -> T): Flow<T> = callbackFlow {
-        var watched: List<MediaController> = emptyList()
+        var watched: List<Pair<MediaController, MediaController.Callback>> = emptyList()
         fun update() { trySend(read()) }
         val refreshCover = Runnable { if (isActive) update() }
         val coverChanges = launch {
@@ -830,16 +830,23 @@ internal class MediaSessionPlayback(
                 handler.post(refreshCover)
             }
         }
-        val callback = object : MediaController.Callback() {
-            override fun onMetadataChanged(metadata: MediaMetadata?) = update()
-            override fun onPlaybackStateChanged(state: PlaybackState?) = update()
-            override fun onSessionDestroyed() = update()
-            override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) = update()
-        }
         fun watch(controllers: List<MediaController>) {
-            watched.forEach { it.unregisterCallback(callback) }
-            watched = controllers
-            watched.forEach { it.registerCallback(callback, handler) }
+            watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
+            watched = controllers.map { controller ->
+                // Metadata can change while no screen was watching this session.
+                covers.forget(controller.sessionToken)
+                val callback = object : MediaController.Callback() {
+                    override fun onMetadataChanged(metadata: MediaMetadata?) {
+                        covers.forget(controller.sessionToken)
+                        update()
+                    }
+                    override fun onPlaybackStateChanged(state: PlaybackState?) = update()
+                    override fun onSessionDestroyed() { covers.forget(controller.sessionToken); update() }
+                    override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) = update()
+                }
+                controller.registerCallback(callback, handler)
+                controller to callback
+            }
             update()
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
@@ -858,7 +865,7 @@ internal class MediaSessionPlayback(
             handler.removeCallbacks(refreshCover)
             sessions.removeOnActiveSessionsChangedListener(changed)
             audio.unregisterAudioPlaybackCallback(sounding)
-            watched.forEach { it.unregisterCallback(callback) }
+            watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
         }
     }.distinctUntilChanged()
 
@@ -869,7 +876,7 @@ internal class MediaSessionPlayback(
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
         if (Songless.namesNoSong(title, artist, songsRead.of(title to artist))) return null
         val named = said(controller, asked) ?: return null
-        val artwork = coverOf(metadata)
+        val artwork = coverOf(metadata, controller.sessionToken)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         // Nor where a song waiting for an ad to end is, as it isn't playing yet.
         val clock = following(controller, asked)?.takeIf { !it.video }?.clock?.takeIf { it.playing }
@@ -907,16 +914,19 @@ internal class MediaSessionPlayback(
     }
 
     /** The cover the app shows: its link on the web, or the picture itself; see [ownCover]. */
-    private fun coverOf(metadata: MediaMetadata): String? =
+    private fun coverOf(metadata: MediaMetadata, session: MediaSession.Token): String? =
         listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
-            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata)
+            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata, session)
 
     /**
      * The cover the app shows, when it gives no link to one, e.g. YouTube Music for a song no other
      * store has: kept as a file with the covers downloaded, once a song, so it shows like those.
      */
-    private fun ownCover(metadata: MediaMetadata): String? =
-        COVERS.firstNotNullOfOrNull(metadata::getBitmap)?.let(covers::of)
+    private fun ownCover(metadata: MediaMetadata, session: MediaSession.Token?): String? =
+        COVERS.firstNotNullOfOrNull(metadata::getBitmap)?.let { bitmap ->
+            covers.of(bitmap, session, listOf(MediaMetadata.METADATA_KEY_TITLE, MediaMetadata.METADATA_KEY_ARTIST,
+                MediaMetadata.METADATA_KEY_ALBUM, MediaMetadata.METADATA_KEY_MEDIA_ID, MediaMetadata.METADATA_KEY_MEDIA_URI).map(metadata::getString))
+        }
 
     private fun following(controller: MediaController, asked: Long?): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.

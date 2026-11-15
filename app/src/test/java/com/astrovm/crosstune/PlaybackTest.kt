@@ -2126,6 +2126,79 @@ class PlaybackTest {
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(shadows = [CoverBitmap::class])
+    fun parcelledBitmapCopiesReuseTheSessionsSavedCover() {
+        val controller = aBitmapCover()
+        shadowOf(sessions).addController(controller)
+        val first = coverWhenReady { playback.nowPlaying()?.metadata?.artworkUrl }
+        repeat(10) {
+            val metadata = requireNotNull(controller.metadata)
+            val bitmap = requireNotNull(metadata.getBitmap(MediaMetadata.METADATA_KEY_ART))
+            val copy = requireNotNull(bitmap.copy(Bitmap.Config.ARGB_8888, false))
+            shadowOf(controller).setMetadata(MediaMetadata.Builder(metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, copy).build())
+            assertEquals(first, playback.nowPlaying()?.metadata?.artworkUrl)
+        }
+        assertEquals(1, CoverBitmap.encodes.get())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
+    fun aFailedSessionCoverCanSaveOnTheNextRead() {
+        val controller = aBitmapCover()
+        shadowOf(sessions).addController(controller)
+        val directory = File(app.cacheDir, ARTWORK_DIR)
+        directory.deleteRecursively()
+        directory.writeText("not a directory")
+        val failed = java.util.concurrent.CountDownLatch(1)
+        CoverBitmap.before = Runnable { failed.countDown() }
+        try {
+            assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
+            assertTrue(failed.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            // Wait for the writer to finish its failed attempt, not only enter compress().
+            val writer = PlaybackCovers.shared(app)
+            val lock = PlaybackCovers::class.java.getDeclaredField("writing").apply { isAccessible = true }
+                .get(writer) as kotlinx.coroutines.sync.Mutex
+            runBlocking { lock.lock(); lock.unlock() }
+            assertTrue(directory.delete())
+            assertNotNull(coverWhenReady { playback.nowPlaying()?.metadata?.artworkUrl })
+        } finally {
+            CoverBitmap.before = Runnable { }
+            if (directory.isFile) directory.delete()
+        }
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
+    fun newArtForTheSameSessionAndSongReplacesTheSavedCover() {
+        val controller = aBitmapCover()
+        val seen = offered()
+        shadowOf(sessions).addController(controller)
+        val first = coverWhenReady { shadowOf(Looper.getMainLooper()).idle(); seen.lastOrNull()?.metadata?.artworkUrl }
+        val blue = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLUE) }
+        val metadata = MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, blue).build()
+        shadowOf(controller).setMetadata(metadata)
+        shadowOf(controller).executeOnMetadataChanged(metadata)
+        val second = coverWhenReady {
+            shadowOf(Looper.getMainLooper()).idle()
+            seen.lastOrNull()?.metadata?.artworkUrl?.takeIf { it != first }
+        }
+        assertNotEquals(first, second)
+        assertEquals(second, playback.nowPlaying()?.metadata?.artworkUrl)
+        collecting.forEach(Job::cancel)
+        shadowOf(Looper.getMainLooper()).idle()
+        val green = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.GREEN) }
+        shadowOf(controller).setMetadata(MediaMetadata.Builder(metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, green).build())
+        val reopened = offered()
+        assertNotEquals(second, coverWhenReady {
+            shadowOf(Looper.getMainLooper()).idle()
+            reopened.lastOrNull()?.metadata?.artworkUrl?.takeIf { it != second }
+        })
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(shadows = [CoverBitmap::class])
     fun aSavedCoverUpdatesTheSongWithoutAnotherPlaybackEvent() {
         val controller = aBitmapCover()
         val seen = offered()
