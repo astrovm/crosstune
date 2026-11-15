@@ -11,6 +11,8 @@ import android.os.Looper
 import android.provider.Settings
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasContentDescription
@@ -425,8 +427,37 @@ class ReminderBellTest {
         shell.changed!!()
         openSettings()
         composeRule.onNodeWithTextScrolled(app.getString(R.string.practice_reminders))
-        click(exactTime)
+        click(app.getString(R.string.allow_button))
         waitUntil { !shown(exactTime) }
+        assertEquals(exactCommand, shell.ran.last())
+        assertNull(shadowOf(activity).nextStartedActivity)
+    }
+
+    @Test
+    fun exactAccessInSettingsShowsItsOneTapActionAndWorkingState() {
+        exactAllowed(false)
+        val shell = shizuku().apply { ready = false }
+        launch()
+        finishASession()
+        click(remindMe)
+        drainStartedActivities()
+        backToTheList()
+        click(app.getString(R.string.back_button))
+        shell.ready = true
+        shell.changed?.invoke()
+        openSettings()
+        composeRule.onNodeWithTextScrolled(app.getString(R.string.practice_reminders))
+        val allow = composeRule.onNode(hasText(app.getString(R.string.allow_button)))
+        allow.assertIsEnabled()
+        shell.answer = CompletableDeferred()
+        try {
+            allow.performClick()
+            waitUntil { model().uiState.fixingInOneTap == OneTapFix.EXACT }
+            allow.assertIsNotEnabled()
+        } finally {
+            shell.answer.complete(Unit)
+        }
+        waitUntil { !model().uiState.reminder.late }
         assertEquals(exactCommand, shell.ran.last())
         assertNull(shadowOf(activity).nextStartedActivity)
     }

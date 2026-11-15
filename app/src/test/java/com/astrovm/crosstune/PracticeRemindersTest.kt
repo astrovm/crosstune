@@ -377,6 +377,9 @@ class PracticeRemindersTest {
         setUpWith(line("One"))
         val today = at(3, 20, 5)
         assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = today
+        reminders.arm()
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
         clock = at(3, 20, 8)
         reminders.arm()
         assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
@@ -404,14 +407,55 @@ class PracticeRemindersTest {
     }
 
     @Test
-    fun aDeliveryHeldUntilAnotherDayDoesNotPostAtBoot() {
+    fun aLateEveningDeliveryCanCrossMidnightBeforeItsNextOccurrence() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        clock = at(2, 23, 30)
         setUpWith(line("One"))
         val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
-        clock = at(4, 7)
+        clock = at(4, 0, 10)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(4, 23, 30), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aDeliveryBeforeItsSlotDoesNotPost() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 4)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(at(3, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aDeliveryAtItsSlotPosts() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+    }
+
+    @Test
+    fun aDeliveryWithoutAChosenMinuteDoesNotPost() {
+        saved(line("One"))
+        reminders.turn(true)
+        reminders.remind(Intent().putExtra(PracticeReminders.EXTRA_AT, clock))
+        assertTrue(shown.isEmpty())
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+    }
+
+    @Test
+    fun aDeliveryPastItsNextOccurrenceDoesNotPost() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(4, 20, 5)
         reminders.remind(delivered)
         assertTrue(shown.isEmpty())
         assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
-        assertEquals(at(4, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        assertEquals(at(5, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
     }
 
     @Test

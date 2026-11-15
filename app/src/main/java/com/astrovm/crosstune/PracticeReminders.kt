@@ -25,7 +25,7 @@ internal data class Reminder(
     val allowed: Boolean = true,
     /** Turned off by hand, so the end of a session stops offering it. */
     val turnedOff: Boolean = false,
-    /** Whether Android lets the alarm go at the exact minute: from Android 12 the user allows that in its settings. */
+    /** Whether Android lets the alarm go at the exact minute: from Android 12 it needs alarms and reminders access. */
     val exact: Boolean = true
 ) {
     /** On, but Android won't show it, which needs saying. */
@@ -110,7 +110,7 @@ internal class PracticeReminders(
 
     private val allowed get() = notifications.areNotificationsEnabled() && notifications.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
 
-    /** Before Android 12 exact alarms need nothing asked; from it, the user allows them. */
+    /** Before Android 12 exact alarms need no access grant. */
     private val exact get() = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
 
     val state get() = Reminder(minute, on, allowed, preferences.getBoolean(KEY_TURNED_OFF, false), exact)
@@ -224,8 +224,8 @@ internal class PracticeReminders(
         val at = now()
         val types = loadCardTypes(preferences)
         val due = sessionOf(SavedLinesStore(preferences).load(), at, max = Int.MAX_VALUE, types = types)
-        val newSlotToday = !again && (slot == 0L || sameDay(slot, at, zone()))
-        if (newSlotToday && due.isNotEmpty() && mayAsk(at)) {
+        val newSlot = !again && deliveryIsCurrent(slot, at)
+        if (newSlot && due.isNotEmpty() && mayAsk(at)) {
             post(due)
             preferences.edit {
                 putInt(KEY_IGNORED, ignored + 1)
@@ -234,6 +234,13 @@ internal class PracticeReminders(
             }
         }
         arm()
+    }
+
+    /** An inexact evening alarm can cross midnight, but expires at its next occurrence. */
+    private fun deliveryIsCurrent(slot: Long, now: Long): Boolean {
+        if (slot == 0L) return true
+        val minute = minute ?: return false
+        return slot <= now && now < nextReminderAt(minute, slot, zone())
     }
 
     /** Wanted, shown by Android, and not already answered for today by a session. */
