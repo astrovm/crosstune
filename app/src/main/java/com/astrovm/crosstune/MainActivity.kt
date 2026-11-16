@@ -795,7 +795,6 @@ class MainActivity : ComponentActivity() {
         onStopListeningAlong = viewModel::stopListeningAlong,
         // With Shizuku or root, in one tap, as in setup; otherwise, or once it couldn't, the steps.
         onAllowFollowing = { if (!viewModel.fixInOneTap(OneTapFix.FOLLOW)) viewModel.fixSteps(listOf(Need.Follow)) },
-        onAllowFloat = viewModel::allowFloat,
         onOpenFollowAccess = { openNotificationAccess(viewModel.uiState.phone == Phone.TV) },
         onOpenAppInfo = { openAppInfo() },
         onThemeChange = ::selectTheme,

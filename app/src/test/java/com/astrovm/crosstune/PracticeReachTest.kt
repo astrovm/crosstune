@@ -150,9 +150,8 @@ class PracticeReachTest {
     }
 
     /** Every text, scrolled to, is whole: no line cut short, no letter outside where it's drawn. */
-    private fun everyTextWhole(where: String, except: Set<String> = emptySet()) {
+    private fun everyTextWhole(where: String) {
         val texts = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true).fetchSemanticsNodes()
-            .filterNot { it.config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString() in except }
         assertTrue("$where has no text", texts.isNotEmpty())
         for (text in texts) {
             val words = text.config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString()
@@ -205,8 +204,7 @@ class PracticeReachTest {
         assertEquals(listOf(Grade.AGAIN, Grade.HARD, Grade.GOOD, Grade.EASY), graded)
         // The list of songs to practise.
         showList()
-        // The page's title is the shared top bar's, one line by design there, and held to that elsewhere.
-        everyTextWhole("list", except = setOf(string(R.string.saved_practice)))
+        everyTextWhole("list")
         everyControlReached("list")
     }
 
@@ -236,7 +234,7 @@ class PracticeReachTest {
     private fun theListWhole() {
         accessibility()
         showList()
-        everyTextWhole("list", except = setOf(string(R.string.saved_practice)))
+        everyTextWhole("list")
         everyControlReached("list")
     }
 
