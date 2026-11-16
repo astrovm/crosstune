@@ -29,8 +29,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // For X.Y.Z use X*1000000 + Y*10000 + Z*100. Update both values for each release.
-        versionCode = 2270000
-        versionName = "2.27.0"
+        versionCode = 2270100
+        versionName = "2.27.1"
 
         testInstrumentationRunner = providers.gradleProperty("crosstuneTestRunner").orElse("androidx.test.runner.AndroidJUnitRunner").get()
 
