@@ -186,6 +186,21 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun aPlayersTrailingSeparatorIsNotPartOfTheSong() {
+        for (dash in listOf("-", "–", "—")) for (space in listOf(" ", "\t", "\u00a0")) {
+            for (end in listOf("", " ", "\t", "\n")) {
+                val title = "Fake Song$space$dash$end"
+                assertEquals(title, MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong(title, "Fake Artist"))
+            }
+            assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Song$space$dash $dash", "Fake Artist"))
+        }
+        for (title in listOf("Fake-Song", "Fake Song-", "Fake Song–", "Fake Song—", "Fake Song - Live", "Fake Song – Remastered", "Fake Song — Explicit", "Fake Song HD")) {
+            assertEquals(title, MusicMetadata(title, "Fake Artist"), MetadataParsers.playerSong(title, "Fake Artist"))
+        }
+        assertNull(MetadataParsers.playerSong(" - ", "Fake Artist"))
+    }
+
+    @Test
     fun onlyAVideoThatSaysItsMusicIsASong() {
         assertNull(MetadataParsers.musicVideo("A New Approach To An Ancient Linux Terminal Problem", "Brodie Robertson"))
         assertNull(MetadataParsers.musicVideo("My Morning Routine (4K)", "Someone"))

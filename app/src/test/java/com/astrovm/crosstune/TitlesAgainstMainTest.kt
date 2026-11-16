@@ -170,6 +170,13 @@ class TitlesAgainstMainTest {
         private val BLANK_PAIR = Regex("""[「『][\s\p{Zs}\x{1C}-\x{1F}\x{2028}\x{2029}]*[」』]""")
 
         val BETTER = listOf(
+            Better("a player's empty trailing field", setOf("playerSong")) { reading ->
+                val expected = reading.main.whole("playerSong")?.let { was ->
+                    val title = was.substringBefore(TitleFuzz.PART).replace(EMPTY_PLAYER_FIELD, "")
+                    title.takeIf { it.isNotBlank() }?.let { "$it${TitleFuzz.PART}${was.substringAfter(TitleFuzz.PART)}" }
+                }
+                reading.here() == expected
+            },
             Better("lines after the song's 」", setOf("musicVideo", "youtubeVideo", "playerSong", "bracketedSong")) { readAsOn(it, it.main) },
             // "A「 」『x』" names "x", as main named it with no blank 「 」; main named a song with no name.
             // Main may have reached it past the tags it cut first, as in "（,）\u0085[Letra] 「 」 - 「？」".
@@ -204,6 +211,8 @@ class TitlesAgainstMainTest {
                 TitleFuzz.depth(it.title, "([【") >= 0 && listOf(it.main(), flat).any { main -> main != null && it.here() == byToABracket(main) }
             },
         )
+
+        private val EMPTY_PLAYER_FIELD = phoneRegex("""(?:\s+[-–—])+\s*$""")
 
         /** [main]'s reading of a cover, its artist to the first bracket or [TitleFuzz.MARK]. */
         private fun byToABracket(main: String): String {

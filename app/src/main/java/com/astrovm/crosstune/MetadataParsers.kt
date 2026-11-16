@@ -445,11 +445,20 @@ internal object MetadataParsers {
     fun playerSong(said: String, artist: String): MusicMetadata? {
         val title = withoutBlankSong(said)
         return (spotifyPageSplitAtItsDash(songLine(title), artist) ?: if (noArtist(artist)) youtubeVideo(title.replace(audioExtension, ""), "") else MusicMetadata(title, artist))
-            ?.let { if (noArtist(it.artist)) it.copy(artist = "") else it }
+            ?.let { it.copy(title = withoutPlayerSeparators(it.title), artist = if (noArtist(it.artist)) "" else it.artist) }
             ?.takeIf { it.title.isNotBlank() && !namesAFile(it) }
     }
 
     fun noArtist(artist: String) = artist.isBlank() || noOneArtist.matches(artist.trim())
+
+    /** A radio app can leave the separator of its next empty field on the title, "Song - ". */
+    private fun withoutPlayerSeparators(title: String): String {
+        var kept = Kept(title, title.length, "")
+        while (true) {
+            val dash = danglingDash(kept, "-–—") ?: return kept.toString()
+            kept = kept.without(dash)
+        }
+    }
 
     private val audioExtension = phoneRegex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
 
@@ -534,9 +543,9 @@ internal object MetadataParsers {
      * Where a dash [text] ends on starts, with the spaces before it, "Song -", as `(?<!\s)\s++[-–]\s*+$` finds it: a
      * space, the dash, and only spaces after it to the end, or to a line break that ends the text.
      */
-    private fun danglingDash(text: CharSequence): IntRange? {
+    private fun danglingDash(text: CharSequence, dashes: String = DASHES): IntRange? {
         val dash = spacesStart(text, lineEnd(text)) - 1
-        if (text.getOrNull(dash)?.let { it in DASHES } != true) return null
+        if (text.getOrNull(dash)?.let { it in dashes } != true) return null
         val start = spacesStart(text, dash)
         return if (start < dash) start until spacesEnd(text, dash + 1) else null
     }
