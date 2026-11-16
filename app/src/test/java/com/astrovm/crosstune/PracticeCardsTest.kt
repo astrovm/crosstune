@@ -469,6 +469,58 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun nativeSoundPendingReplayCannotStartAfterBackgrounding() {
+        keep(line())
+        appPlays(ytMusic)
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the silent front is prepared") { practice?.sound == LineSound.PLAYED }
+        val waiting = kotlinx.coroutines.CompletableDeferred<Unit>()
+        playback.said = waiting
+        val followed = playback.followed.size
+        val played = playback.plays.count { it }
+        cards.replay()
+        waitFor("the replay is waiting for its session") { playback.followed.size > followed }
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        val pending = scope.coroutineContext[Job]!!.children.toList()
+        cards.background()
+        waiting.complete(Unit)
+        waitFor("the background replay ends") { pending.all { it.isCompleted } }
+        assertEquals("a pending replay started hidden sound", played, playback.plays.count { it })
+        assertTrue("a pending replay was not cancelled", pending.all { it.isCancelled })
+    }
+
+    @Test
+    fun nativeSoundFullRecordingWinsOverAPlayingPreviewTooShortForTheLine() {
+        keep(line(start = 60_000), types = hearIt)
+        appPlays(spotify)
+        playback.playing.value = playback.playing.value!!.copy(durationMs = 30_000)
+        playback.appPlaying[ytMusic] = MutableStateFlow(Following(PlaybackClock(0, System.currentTimeMillis(), 20f, playing = false), "Music", canSeek = true, appPackage = ytMusic, durationMs = 200_000))
+        cards().start(null, before = null)
+        waitFor("the chosen sound settles") { practice?.sound == LineSound.PLAYED || practice?.sound == LineSound.NONE }
+        assertEquals(listOf(ytMusic), playback.seekedApps.toList())
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun nativeSoundTriesRemainingMatchingSessionsAfterAControlFails() {
+        keep(line())
+        appPlays(spotify)
+        playback.obeys = false
+        val full = MutableStateFlow<Following?>(Following(PlaybackClock(0, System.currentTimeMillis(), playing = false), "Music", canSeek = true, appPackage = ytMusic))
+        playback.appPlaying[ytMusic] = full
+        playback.onPlay = { app, play ->
+            if (app == ytMusic) full.value = full.value?.copy(clock = PlaybackClock(10_000, System.currentTimeMillis(), playing = play))
+        }
+        cards().start(null, before = null)
+        waitFor("the fallback session settles") { practice?.sound == LineSound.PLAYED || practice?.sound == LineSound.NONE }
+        assertEquals(listOf(spotify, ytMusic), playback.seekedApps.toList().distinct())
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
     fun nativeSoundUsesAnotherMatchingSeekableSession() {
         keep(line(), types = hearIt)
         appPlays(spotify, canSeek = false)

@@ -222,31 +222,38 @@ internal class PracticeCards(
     private suspend fun inOpenApp(line: SavedLine, explicit: Boolean): Boolean {
         val source = playback?.takeIf { it.hasAccess() } ?: return false
         val song = MusicMetadata(line.title, line.artist)
-        var played = false
-        var seen = false
-        val chosen = matchingApp(source, song, line)
-        val there = inApp(source, song, chosen, onStuck = { following ->
-            seen = following != null
-            following?.let { if (usable(it, line)) stuck(source, song, it) else leftOut(source, song, it) }
-        }) { following ->
-            val app = following() ?: return@inApp
-            if (!usable(app, line)) return@inApp leftOut(source, song, app)
-            val packageName = app.appPackage
-            step("trying ${packageName ?: "the app"}")
-            // What it follows may be an app a card stopped a moment ago: it's let play.
-            packageName?.let(::letGo)
-            played = playLine(source, song, line, packageName, explicit, following)
+        for (chosen in matchingApps(source, song, line)) {
+            var played = false
+            var seen = false
+            val there = inApp(source, song, chosen, onStuck = { following ->
+                seen = following != null
+                following?.let { if (usable(it, line)) stuck(source, song, it) else leftOut(source, song, it) }
+            }) { following ->
+                val app = following() ?: return@inApp
+                if (!usable(app, line)) return@inApp leftOut(source, song, app)
+                val packageName = app.appPackage
+                step("trying ${packageName ?: "the app"}")
+                // What it follows may be an app a card stopped a moment ago: it's let play.
+                packageName?.let(::letGo)
+                played = playLine(source, song, line, packageName, explicit, following)
+            }
+            if (played) return true
+            if (!there && !seen) step("no app has the song open")
         }
-        if (!there && !seen) step("no app has the song open")
-        return played
+        return false
     }
 
-    /** Selects an existing suitable session, and pauses competing audio of the same song. */
-    private fun matchingApp(source: PlaybackSource, song: MusicMetadata, line: SavedLine): String? {
+    /** Tries existing sessions that hold the clip, with playing sessions first. Pauses competing audio. */
+    private fun matchingApps(source: PlaybackSource, song: MusicMetadata, line: SavedLine): List<String?> {
         val matches = source.matching(song)
-        val chosen = matches.filter { usable(it, line) && it.canSeek && !it.ad }.maxByOrNull { if (it.clock.playing) 1 else 0 }
+        val candidates = matches.filter {
+            usable(it, line) && it.canSeek && !it.ad &&
+                LineWindow.of(line, lead = if (it.video) line.leadMs else 0L).within(it.durationMs) != null
+        }.sortedByDescending { if (it.clock.playing) 1 else 0 }
+        val chosen = candidates.firstOrNull()
         matches.filter { chosen != null && it.appPackage != chosen.appPackage && (it.clock.playing || it.ad) }.forEach { leftOut(source, song, it) }
-        return chosen?.appPackage
+        // Without a ready candidate, the followed session can still report its capabilities a moment later.
+        return candidates.map { it.appPackage }.ifEmpty { listOf(null) }
     }
 
     /** Pauses a matching session that will not play this card, before another player starts. */
@@ -631,9 +638,12 @@ internal class PracticeCards(
     fun background() {
         val practice = uiState.practice ?: return
         letGo(null)
-        if (practice.sound != LineSound.LOADING && practice.sound != LineSound.PLAYING) return
+        // Replay can still be preparing while the card displays its previous PLAYED state.
+        if (soundJob?.isActive != true && practice.sound != LineSound.LOADING && practice.sound != LineSound.PLAYING) return
         stopAudio()
-        practice.line?.let { setSound(it, LineSound.PLAYED) }
+        if (practice.sound == LineSound.LOADING || practice.sound == LineSound.PLAYING) {
+            practice.line?.let { setSound(it, LineSound.PLAYED) }
+        }
     }
 
     /**
