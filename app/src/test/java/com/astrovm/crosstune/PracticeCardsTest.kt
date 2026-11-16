@@ -21,6 +21,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -56,8 +58,8 @@ class PracticeCardsTest {
 
     private fun cards(
         source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS, player: FakeLinePlayer? = this.player,
-        now: () -> Long = { System.currentTimeMillis() }, matcher: ExactMatcher = ExactMatcher(sites.client(), "AR"), traitStore: AppTraitsStore = traits
-    ) = PracticeCards(screen, scope, source, matcher, store, traitStore, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
+        now: () -> Long = { System.currentTimeMillis() }, matcher: ExactMatcher = ExactMatcher(sites.client(), "AR"), traitStore: AppTraitsStore = traits, cardScope: CoroutineScope = scope
+    ) = PracticeCards(screen, cardScope, source, matcher, store, traitStore, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
 
     /** YouTube Music having the demo song, 3:20 long, as its video "demo0000000". */
     private fun youTubeHasTheSong() {
@@ -365,29 +367,34 @@ class PracticeCardsTest {
     }
 
     @Test
-    fun gradingGoesOnAndAMissedCardComesBack() {
+    fun gradingGoesOnAndAMissedCardComesBack() = runTest {
         keep(line("One"), line("Two"))
-        val cards = cards(source = null)
+        // UI actions and sound callbacks share one thread in the app. This test checks grades, not audio.
+        val cards = cards(source = null, player = null, cardScope = this)
         cards.start(null, before = null)
-        val first = practice!!.line!!.text
+        yield()
+        val first = checkNotNull(checkNotNull(practice).line).text
         // A card not turned can't be graded.
         cards.grade(Grade.GOOD)
-        assertEquals(0, practice!!.done)
+        assertEquals(0, checkNotNull(practice).done)
         cards.turn()
         cards.grade(Grade.AGAIN)
-        assertEquals(1, practice!!.missed)
-        assertEquals(2, practice!!.queue.size)
-        assertFalse(practice!!.turned)
+        yield()
+        assertEquals(1, checkNotNull(practice).missed)
+        assertEquals(2, checkNotNull(practice).queue.size)
+        assertFalse(checkNotNull(practice).turned)
         cards.turn()
         cards.grade(Grade.GOOD)
-        assertEquals(1, practice!!.done)
-        assertEquals(first, practice!!.line!!.text)
+        yield()
+        assertEquals(1, checkNotNull(practice).done)
+        assertEquals(first, checkNotNull(checkNotNull(practice).line).text)
         cards.turn()
         cards.grade(Grade.EASY)
-        // The last one graded, no card is left.
-        assertNull(practice!!.line)
-        assertEquals(2, practice!!.done)
-        assertEquals(first, practice!!.lastSong!!.text)
+        yield()
+        // The last one graded, no card is left, even after the queued sound work has run.
+        assertNull(checkNotNull(practice).line)
+        assertEquals(2, checkNotNull(practice).done)
+        assertEquals(first, checkNotNull(checkNotNull(practice).lastSong).text)
     }
 
     @Test
@@ -1495,6 +1502,31 @@ class PracticeCardsTest {
         cards(traitStore = freshTraits()).start(null, before = null)
         waitFor("the next card seeks the matching session") { playback.seeks.size > sent }
         assertEquals(20_000L, playback.seeks.last())
+        assertNoAppBroughtUp()
+    }
+
+    @Test
+    fun youTubeIsLeftOutWhenItIsNotTheSavedLinesApp() {
+        youTubeHasTheSong()
+        val youtube = MusicService.YOUTUBE.packageName
+        keep(line().copy(app = spotify), types = hearIt)
+        appPlays(youtube)
+        cards().start(null, before = null)
+        waitFor("the sound path is selected") { player.shown.isNotEmpty() || playback.seeks.isNotEmpty() || practice?.sound == LineSound.NONE }
+        assertTrue(player.shown.isNotEmpty())
+        assertTrue(playback.seeks.isEmpty())
+        assertNoAppBroughtUp()
+    }
+
+    @Test
+    fun youTubeCanPrepareALineSavedFromItsOwnApp() {
+        val youtube = MusicService.YOUTUBE.packageName
+        keep(line().copy(app = youtube))
+        appPlays(youtube)
+        cards().start(null, before = null)
+        waitFor("the saved source prepares the line") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(10_000L), playback.seeks)
+        assertTrue(player.shown.isEmpty())
         assertNoAppBroughtUp()
     }
 
