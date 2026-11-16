@@ -462,12 +462,11 @@ internal object MetadataParsers {
 
     private val audioExtension = phoneRegex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
 
-    /** Compare the song's title, without a video's captions or a local file's track number and extension. No artist is guessed. */
-    internal fun comparisonTitle(title: String): String = withoutFileNumber(
-        withoutTrailingNoise(withoutVideoNoise(withoutSubtitlesTag(title))).replace(audioExtension, "")
-    )
+    /** Keep title words when reading a file's name. Recording captions are classified separately. */
+    internal fun comparisonTitle(title: String): String = title.replace(audioExtension, "")
 
-    private fun withoutFileNumber(title: String): String {
+    /** Read the track prefix after captions, so a song named "01 (Audio)" keeps its numeric title. */
+    internal fun withoutFileNumber(title: String): String {
         var at = 0
         var digits = 0
         while (at < title.length && Character.isDigit(title.codePointAt(at))) {

@@ -829,8 +829,8 @@ internal object SongNames {
 
     /** A recording note cannot provide the second word that makes a partial title specific enough. */
     private fun titleWordsMatch(one: String, other: String): Boolean {
-        val first = titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(one)))
-        val second = titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(other)))
+        val first = MetadataParsers.withoutFileNumber(titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(one))))
+        val second = MetadataParsers.withoutFileNumber(titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(other))))
         if (normalize(first).isNotEmpty() && normalize(first) == normalize(second)) return true
         val ours = words(first)
         val theirs = words(second)
@@ -919,8 +919,8 @@ internal object SongNames {
         private val marks = BooleanArray(tokens.size) { !numeric[it] && noteWord(tokens[it].letters) }
         private val qualifiers = BooleanArray(tokens.size) { tokens[it].letters in NOTE_QUALIFIERS }
         private val places = BooleanArray(tokens.size) { tokens[it].letters in NOTE_PLACES }
-        private val endings = BooleanArray(tokens.size) { marks[it] || tokens[it].letters in NOTE_ENDS }
         private val versionLabels = BooleanArray(tokens.size) { tokens[it].letters in VERSION_LABELS }
+        private val lastWord = IntArray(tokens.size + 1) { -1 }
         private val languages by lazy { BooleanArray(tokens.size) { tokens[it].letters in noteLanguages } }
         private val unknown = IntArray(tokens.size + 1)
         private val languageUnknown by lazy {
@@ -943,7 +943,10 @@ internal object SongNames {
                     if (text[at] == '\'' || text[at] == '"') quoted++
                 }
             }
-            for (i in tokens.indices) unknown[i + 1] = unknown[i] + if (known(i)) 0 else 1
+            for (i in tokens.indices) {
+                unknown[i + 1] = unknown[i] + if (known(i)) 0 else 1
+                lastWord[i + 1] = if (numeric[i]) lastWord[i] else i
+            }
         }
 
         private fun known(at: Int) = marks[at] || numeric[at] || qualifiers[at]
@@ -969,6 +972,7 @@ internal object SongNames {
                 "en", "ao" -> next == "vivo"
                 "a" -> next in setOf("cappella", "capella")
                 "re" -> next == "recorded"
+                "music" -> next == "video"
                 else -> false
             }
             return (first + 1).takeIf { (year || paired) && marks[it] }
@@ -979,13 +983,13 @@ internal object SongNames {
         private fun descriptor(first: Int, end: Int, from: Int, until: Int): Boolean {
             if (tokens[first].letters == "from" && quotes[until] > quotes[from]) return true
             if (NOTE_CREDITS.any { prefix -> prefix.size < end - first && prefix.indices.all { tokens[first + it].letters == prefix[it] } }) return true
-            val last = nonspace[until]
-            if (last < from || text[last] in NAME_TAG_CLOSES) return false
-            return endings[end - 1]
+            return false
         }
 
-        private fun language(first: Int, end: Int): Boolean = end - first >= 2 && versionLabels[end - 1] &&
-            languages[first] && languageUnknown[end] == languageUnknown[first]
+        private fun language(first: Int, end: Int): Boolean {
+            val version = lastWord[end]
+            return version > first && versionLabels[version] && languages[first] && languageUnknown[end] == languageUnknown[first]
+        }
     }
 
     /** A mark can join scripts, as カバーLive, without lending its Latin part to the song title. */
@@ -1010,7 +1014,7 @@ internal object SongNames {
 
     private val noteLeads = VERSION_WORDS + setOf(
         "part", "pt", "reprise", "interlude", "extended", "explicit", "clean", "original", "album", "single", "radio", "mono", "stereo",
-        "remaster", "remastered", "recorded", "stripped", "vip", "mv", "version", "ver", "audio", "video", "visualizer", "visualiser", "official", "lyric", "lyrics", "music", "animated", "hd", "hq", "4k"
+        "remaster", "remastered", "recorded", "stripped", "vip", "mv", "version", "ver", "audio", "video", "visualizer", "visualiser", "official", "lyric", "lyrics", "animated", "hd", "hq", "4k"
     )
     private val noteMarks = noteLeads.map(::normalize).toSet() + VERSION_MARKS
     private val noteMarkStarts = noteMarks.groupBy { it.first() }
@@ -1020,9 +1024,8 @@ internal object SongNames {
             listOf(language.getDisplayLanguage(Locale.ENGLISH), language.getDisplayLanguage(language)).flatMap { noteTokens(it).map(NoteToken::letters) }
         }.toSet()
     }
-    private val NOTE_QUALIFIERS = setOf("a", "en", "ao", "re", "at", "in", "of", "by", "from", "the", "and", "to", "with", "version", "ver", "edit", "record", "original", "album", "single", "short", "radio", "recorded", "stripped", "alternate", "extended", "take", "s", "up", "off", "vocal", "full", "acustica", "akustik")
+    private val NOTE_QUALIFIERS = setOf("a", "en", "ao", "re", "at", "in", "of", "by", "from", "the", "and", "to", "with", "version", "ver", "edit", "record", "original", "album", "single", "short", "radio", "recorded", "stripped", "alternate", "extended", "take", "s", "up", "off", "vocal", "full", "music", "acustica", "akustik")
     private val NOTE_PLACES = setOf("at", "in", "from", "by", "of")
-    private val NOTE_ENDS = setOf("version", "ver", "take", "recorded", "edit")
     private val VERSION_LABELS = setOf("version", "ver")
     private val NOTE_CREDITS = listOf(listOf("in", "the", "style", "of"), listOf("made", "famous", "by"), listOf("originally", "performed", "by"), listOf("originally", "by"), listOf("made", "popular", "by"), listOf("cover", "of"))
 

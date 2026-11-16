@@ -13,6 +13,20 @@ import org.robolectric.annotation.Config
 class SongNamesEdgesTest {
 
     @Test
+    fun descriptorYearsAndNaturalCaptionWordsKeepTheirMeaning() {
+        val wrong = mutableListOf<String>()
+        for ((one, other, expected) in listOf(
+            Triple("Hello (English Version 2024)", "Hello World (English Version 2024)", false),
+            Triple("Sweet (Video Games) Tonight", "Sweet Video Games", true),
+            Triple("Pop Music", "The Pop Music", true)
+        )) for ((title, asked) in listOf(one to other, other to one)) {
+            if (SongNames.wordsMatch(title, asked) != expected) wrong += "words: $title / $asked"
+            if (SongNames.names(title, "Fake Band", MusicMetadata(asked, "Fake Band")) != expected) wrong += "names: $title / $asked"
+        }
+        assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
     fun descriptorNotesCannotSupplyNameWords() {
         val tags = listOf("- English Version", "– English Version", "— English Version", "(English Version", "[English Version]", "English Version", "Español Version", "Русский Version", "(EnglishVersion)")
         for (tag in tags) {
@@ -59,6 +73,16 @@ class SongNamesEdgesTest {
             if (SongNames.names(title, "Fake Band", MusicMetadata(asked, "Fake Band")) != wanted) wrong += "names: $title / $asked, wanted $wanted"
         }
         assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun anArtistPrefixCannotBecomeARecordingDescriptor() {
+        for (tag in listOf("- Explicit", "- Live", "– Live", "— Live", "Live", "カバー", "커버")) {
+            val title = "Fake Band - Fake Song $tag"
+            assertTrue(title, SongNames.wordsMatch(title, "Fake Song"))
+            assertTrue(title, SongNames.wordsMatch("Fake Song", title))
+            assertTrue(title, SongNames.names(title, "", MusicMetadata("Fake Song", "Fake Band")))
+        }
     }
 
     @Test
