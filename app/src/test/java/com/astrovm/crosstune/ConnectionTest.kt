@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CoroutineScope
@@ -14,6 +15,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowNetworkCapabilities
+import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
 class ConnectionTest {
@@ -37,8 +39,10 @@ class ConnectionTest {
         // Online once it is, though Android hasn't checked it yet, and saying it again changes nothing.
         changed(capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET))
         changed(capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_VALIDATED))
+        val next = ReflectionHelpers.callConstructor(Network::class.java, ReflectionHelpers.ClassParameter.from(Int::class.javaPrimitiveType, 987))
+        shadowOf(connectivity).networkCallbacks.single().onCapabilitiesChanged(next, capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET))
         // Gone, e.g. in airplane mode, it's offline.
-        shadowOf(connectivity).networkCallbacks.toList().forEach { it.onLost(network) }
+        shadowOf(connectivity).networkCallbacks.toList().forEach { it.onLost(next) }
         assertEquals(listOf(false, true, false), seen)
 
         // No longer watched, Android isn't asked to say.
@@ -61,11 +65,42 @@ class ConnectionTest {
     }
 
     @Test
+    fun eachNewUnmeteredDefaultNetworkIsReportedOnce() {
+        val first = connectivity.activeNetwork!!
+        val second = ReflectionHelpers.callConstructor(Network::class.java, ReflectionHelpers.ClassParameter.from(Int::class.javaPrimitiveType, 987))
+        val free = capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        val seen = mutableListOf<Boolean>()
+        val watching = CoroutineScope(Dispatchers.Unconfined).launch { AndroidConnection(app).unmetered().collect { seen += it } }
+        val callback = shadowOf(connectivity).networkCallbacks.single()
+        callback.onCapabilitiesChanged(first, free)
+        callback.onCapabilitiesChanged(first, free)
+        callback.onCapabilitiesChanged(second, free)
+        callback.onCapabilitiesChanged(second, free)
+        assertEquals(listOf(true, true), seen)
+        // A late loss of the old default cannot take the new one away.
+        callback.onLost(first)
+        callback.onCapabilitiesChanged(second, capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET))
+        callback.onCapabilitiesChanged(second, capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET))
+        callback.onCapabilitiesChanged(first, capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET))
+        callback.onCapabilitiesChanged(first, free)
+        callback.onLost(first)
+        callback.onLost(first)
+        assertEquals(listOf(true, true, false, true, false), seen)
+        watching.cancel()
+    }
+
+    @Test
     fun withNoNetworkAtAllItsOfflineFromTheStart() {
         shadowOf(connectivity).setDefaultNetworkActive(false)
         shadowOf(connectivity).setActiveNetworkInfo(null)
         val seen = mutableListOf<Boolean>()
         CoroutineScope(Dispatchers.Unconfined).launch { AndroidConnection(app).online().collect { seen += it } }.cancel()
         assertEquals(listOf(false), seen)
+        val free = mutableListOf<Boolean>()
+        val watching = CoroutineScope(Dispatchers.Unconfined).launch { AndroidConnection(app).unmetered().collect { free += it } }
+        val network = ReflectionHelpers.callConstructor(Network::class.java, ReflectionHelpers.ClassParameter.from(Int::class.javaPrimitiveType, 987))
+        shadowOf(connectivity).networkCallbacks.single().onLost(network)
+        assertEquals(listOf(false), free)
+        watching.cancel()
     }
 }

@@ -8,6 +8,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /** Whether the phone can reach the internet, as it changes. */
 internal interface Connection {
@@ -25,25 +26,31 @@ internal interface Connection {
 internal class AndroidConnection(context: Context) : Connection {
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
-    override fun online(): Flow<Boolean> = watch(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    override fun online(): Flow<Boolean> = watch(false, NetworkCapabilities.NET_CAPABILITY_INTERNET)
 
-    override fun unmetered(): Flow<Boolean> = watch(NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    override fun unmetered(): Flow<Boolean> = watch(true, NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
 
     /** Whether the network the phone uses has all of [capabilities], as it changes. */
-    private fun watch(vararg capabilities: Int): Flow<Boolean> = callbackFlow {
+    private fun watch(trackNetwork: Boolean = false, vararg capabilities: Int): Flow<Boolean> = callbackFlow {
+        var current: Network? = null
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onCapabilitiesChanged(network: Network, has: NetworkCapabilities) {
-                trySend(capabilities.all(has::hasCapability))
+                current = network
+                val usable = capabilities.all(has::hasCapability)
+                trySend(usable to network.takeIf { usable && trackNetwork })
             }
 
             override fun onLost(network: Network) {
-                trySend(false)
+                if (current == null || current == network) {
+                    current = null
+                    trySend(false to null)
+                }
             }
         }
         // With a network, Android tells the callback about it as soon as it's registered; with none,
         // it says nothing at all, so that's said here.
-        if (connectivity.activeNetwork == null) trySend(false)
+        if (connectivity.activeNetwork == null) trySend(false to null)
         connectivity.registerDefaultNetworkCallback(callback)
         awaitClose { connectivity.unregisterNetworkCallback(callback) }
-    }.distinctUntilChanged()
+    }.distinctUntilChanged().map { it.first }
 }
