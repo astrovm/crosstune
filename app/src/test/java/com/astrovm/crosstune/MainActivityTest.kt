@@ -3062,7 +3062,7 @@ class MainActivityTest {
     fun madeByLinkOpensRepository() {
         launch()
         click(string(R.string.settings_button))
-        composeRule.onNodeWithText(string(R.string.made_with_love, HEART).substringAfter(HEART).trim()).performScrollTo().performClick()
+        composeRule.onNodeWithText(string(R.string.made_with_love, HEART)).performScrollTo().performClick()
 
         val started = nextStartedActivity()
         assertEquals(Intent.ACTION_VIEW, started!!.action)
