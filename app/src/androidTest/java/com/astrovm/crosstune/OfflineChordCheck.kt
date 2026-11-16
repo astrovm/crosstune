@@ -9,6 +9,8 @@ import android.net.NetworkCapabilities
 import androidx.lifecycle.ViewModelProvider
 import kotlinx.coroutines.Job
 import android.content.Context
+import android.content.ComponentName
+import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import java.io.File
@@ -74,6 +76,7 @@ class OfflineChordCheck : Instrumentation() {
     override fun onStart() {
         val oldHttp = MainActivity.httpClientFactory
         val oldConnection = MainActivity.connectionFactory
+        val oldWiki = MainActivity.chordWikiFactory
         val result = Bundle()
         val application = targetContext.applicationContext as Application
         val connectivity = targetContext.getSystemService(ConnectivityManager::class.java)
@@ -84,6 +87,7 @@ class OfflineChordCheck : Instrumentation() {
             override fun onLost(network: Network) = event("lost $network")
         }
         var watchingNetwork = false
+        var usingVpn = false
         var code = 0
         try {
             require(targetContext.packageName == "com.astrovm.crosstune.dev") { "This fixture needs the dev app" }
@@ -104,6 +108,7 @@ class OfflineChordCheck : Instrumentation() {
             runOnMainSync {
                 MainActivity.httpClientFactory = { client }
                 MainActivity.connectionFactory = { connection }
+                MainActivity.chordWikiFactory = { ChordWikiPages { "" } }
             }
             seed()
             if (realNetwork) {
@@ -123,6 +128,12 @@ class OfflineChordCheck : Instrumentation() {
                         if (!realNetwork) runBlocking { network.recover() }
                         writeStatus()
                     }
+                    "vpn" -> {
+                        check(realNetwork && recovered) { "Recover the backend before switching the real network" }
+                        control.delete()
+                        vpn(true)
+                        usingVpn = true
+                    }
                     "done" -> state = "done"
                 }
                 Thread.sleep(100)
@@ -134,11 +145,13 @@ class OfflineChordCheck : Instrumentation() {
             result.putString("error", error.toString())
         } finally {
             if (watchingNetwork) connectivity.unregisterNetworkCallback(callback)
+            if (usingVpn) vpn(false)
             runOnMainSync {
                 application.unregisterActivityLifecycleCallbacks(activityEvents)
                 resetObservation()
                 MainActivity.httpClientFactory = oldHttp
                 MainActivity.connectionFactory = oldConnection
+                MainActivity.chordWikiFactory = oldWiki
             }
             synchronized(filesLock) {
                 closed = true
@@ -154,6 +167,11 @@ class OfflineChordCheck : Instrumentation() {
 
     private fun event(what: String) {
         networkEvents += "${SystemClock.elapsedRealtime()} $what"
+    }
+
+    private fun vpn(start: Boolean) {
+        targetContext.sendBroadcast(Intent(if (start) FixtureVpnControl.START else FixtureVpnControl.STOP)
+            .setComponent(ComponentName("${targetContext.packageName}.test", FixtureVpnControl::class.java.name)))
     }
 
     private fun seed() {
