@@ -817,8 +817,58 @@ internal object SongNames {
         val ours = words(withoutEditionTag(one))
         val theirs = words(withoutEditionTag(other))
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
+        return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter) && titleWordsMatch(one, other)
+    }
+
+    /** A recording note cannot provide the second word that makes a partial title specific enough. */
+    private fun titleWordsMatch(one: String, other: String): Boolean {
+        val first = titleWithoutNotes(withoutEditionTag(one))
+        val second = titleWithoutNotes(withoutEditionTag(other))
+        if (first == one && second == other) return true
+        if (normalize(first).isNotEmpty() && normalize(first) == normalize(second)) return true
+        val ours = words(first)
+        val theirs = words(second)
+        val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
     }
+
+    /** Read brackets and recording marks together, without turning another script's marks into title words. */
+    private fun titleWithoutNotes(title: String): String {
+        val text = StringBuilder()
+        val opens = ArrayDeque<Int>()
+        var from = 0
+        for (at in title.indices) {
+            when {
+                title[at] in NAME_TAG_OPENS -> opens.addLast(at)
+                opens.isNotEmpty() && NAME_TAG_CLOSES[NAME_TAG_OPENS.indexOf(title[opens.last()])] == title[at] -> {
+                    val open = opens.removeLast()
+                    if (opens.isEmpty()) {
+                        text.append(title, from, open).append(' ')
+                        from = at + 1
+                    }
+                }
+            }
+        }
+        text.append(title, from, title.length)
+        val named = text.toString().trim()
+        val start = named.indices.firstOrNull { at ->
+            at > 0 && named[at - 1].isWhitespace() && named[at].isLetterOrDigit() && recordingNote(named, at)
+        } ?: named.length
+        return if (start < named.length) named.substring(0, start).trim().trimEnd { it in NAME_TAG_DASHES }.trim() else named
+    }
+
+    private fun recordingNote(text: String, at: Int): Boolean {
+        // The next word or script mark is bounded. Copying the whole suffix at each space would take quadratic work.
+        val prefix = text.substring(at, minOf(text.length, at + longestNameNote + 1))
+        return words(prefix).firstOrNull() in nameNoteWords || VERSION_MARKS.any { normalize(prefix).startsWith(it) }
+    }
+
+    private val nameNoteWords = VERSION_WORDS + setOf("part", "pt", "reprise", "interlude", "version", "explicit", "clean", "official", "lyrics", "extended")
+    private val longestNameNote = maxOf(nameNoteWords.maxOf(String::length), VERSION_MARKS.maxOf(String::length))
+
+    private const val NAME_TAG_OPENS = "([【「〔（［"
+    private const val NAME_TAG_CLOSES = ")]】」〕）］"
+    private const val NAME_TAG_DASHES = "-–—"
 
     /**
      * The same title but for its small words, as sites write them down either way: "Vahos de ayer"

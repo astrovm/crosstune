@@ -13,6 +13,22 @@ import org.robolectric.annotation.Config
 class SongNamesEdgesTest {
 
     @Test
+    fun recordingMarksNeverMakeDifferentSingleWordTitlesSpecificEnough() {
+        val brackets = listOf("(" to ")", "[" to "]", "【" to "】", "「" to "」", "〔" to "〕", "（" to "）", "［" to "］")
+        val notes = listOf("Live", "Cover", "Part 2", "カバー", "커버")
+        val suffixes = brackets.flatMap { (open, close) -> notes.map { "$open$it$close" } } +
+            listOf("-", "–", "—").flatMap { dash -> notes.map { "$dash $it" } } + notes
+        for (tag in suffixes) {
+            assertFalse(tag, SongNames.wordsMatch("Hello $tag", "Hello World $tag"))
+            assertFalse(tag, SongNames.wordsMatch("Hello World $tag", "Hello $tag"))
+            assertFalse(tag, SongNames.wordsMatch("愛 $tag", "恋 $tag"))
+            assertTrue(tag, SongNames.wordsMatch("Hello $tag", "Hello $tag"))
+            // Two words in the title itself still permit the established partial-title rule.
+            assertTrue(tag, SongNames.wordsMatch("Fake Song $tag", "Fake Song Two $tag"))
+        }
+    }
+
+    @Test
     fun recordingTagsCannotSupplyTheNamesMissingWords() {
         val rows = listOf(
             Triple("愛 カバー", "恋 カバー", false), Triple("愛【カバー】", "恋【カバー】", false),

@@ -41,7 +41,9 @@ internal object NamePairs {
         "", "[Explicit]", "- Explicit", "(Live)", "(Acoustic)", "(Cover)", "(Instrumental)", "- Live", "(Part 2)", "(ライブ)", "(カバー)", "(伴奏)", "(커버)",
         "– Live", "— Live", "- Live - Explicit", "(Live) (Acoustic)", "(Live at Wembley)", "- Live at Wembley", "(Remastered 2011)",
         "- 2011 Remaster", "(ピアノ弾いてみた)", "(Piano Cover)", "[MV]", "(Official Video)"
-    )
+    ) + listOf("(" to ")", "[" to "]", "【" to "】", "「" to "」", "〔" to "〕", "（" to "）", "［" to "］").flatMap { (open, close) ->
+        listOf("Live", "Cover", "Part 2", "カバー").map { "$open$it$close" }
+    } + listOf("-", "–", "—").flatMap { dash -> listOf("Live", "Part 2", "カバー").map { "$dash $it" } } + listOf("Live", "カバー", "커버")
 
     /**
      * One name on both sides, in several scripts: a one-word title, two words, one with no Latin letters, one that says "ライブ" itself.
@@ -92,7 +94,7 @@ internal object NamePairs {
         val scripts = scriptBases.flatMap { base ->
             someTags.flatMap { theirs ->
                 // A tag before a name is in brackets, "[MV] Fake Song"; a dash before one is no tag, and a remaster is said after it.
-                val sides = if (theirs.firstOrNull() in listOf('(', '[') && "Remaster" !in theirs) listOf(false, true) else listOf(false)
+                val sides = if (theirs.firstOrNull() in "([【「〔（［".toList() && "Remaster" !in theirs) listOf(false, true) else listOf(false)
                 someTags.flatMap { ours -> sides.map { before -> NamePair(base, theirs, false, base, ours, before) } }
             }
         }
