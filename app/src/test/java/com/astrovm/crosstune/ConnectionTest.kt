@@ -79,6 +79,7 @@ class ConnectionTest {
         assertEquals(listOf(true, true), seen)
         // A late loss of the old default cannot take the new one away.
         callback.onLost(first)
+        assertEquals(listOf(true, true), seen)
         callback.onCapabilitiesChanged(second, capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET))
         callback.onCapabilitiesChanged(second, capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET))
         callback.onCapabilitiesChanged(first, capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET))
