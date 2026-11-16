@@ -62,7 +62,7 @@
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 18 novembre 2026",
+  "updated": "Dernière mise à jour : 19 novembre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
@@ -113,6 +113,10 @@
     [
       "p",
       "Quand vous saisissez le nom d'un morceau au lieu d'un lien, Crosstune envoie ce nom aux recherches publiques de chansons de Deezer et d'Apple et affiche les morceaux trouvés, pour que vous puissiez ouvrir le morceau voulu sans son lien. Quand vous demandez les paroles ou les accords d'un morceau, l'application envoie le titre et l'artiste à des services qui ne demandent ni compte ni clé : LRCLIB, YouTube Music, NetEase Cloud Music, Letras et Genius pour les paroles, Ultimate Guitar, Cifra Club, LaCuerda, U-FRET, J-Total et ChordWiki pour les accords, et la recherche et les pages de morceaux d'Apple pour trouver le nom d'origine du morceau, ou qui a chanté en premier et écrit le morceau d'une reprise. Quand vous activez la traduction dans les paroles, l'app envoie leurs lignes à Google Translate, ou à MyMemory quand Google Translate ne peut pas les traduire, des services de traduction sans compte, sauf si ChatGPT les traduit, comme décrit plus bas. Android reconnaît la langue d'une chanson sur votre téléphone, et les paroles déjà dans la langue vers laquelle vous traduisez, ou dans une langue que vous avez choisi de ne pas traduire, ne sont pas envoyées. Les lectures, comme les kana au-dessus des kanji, sont calculées sur votre téléphone et envoyées nulle part, sauf si vous en signalez une comme erronée, comme décrit plus bas. Pour un morceau japonais avec les lectures ou les lettres latines activées, ou avec les mots en kana seulement ou en lettres latines seulement, l'application envoie aussi le titre et l'artiste à UtaTen, un site de paroles qui écrit les kana au-dessus des kanji comme ils sont chantés. Un mot que vous touchez pour son sens est envoyé de la même façon. Si l'appli est en anglais, un mot anglais est cherché dans le dictionnaire de Wiktionary. Les lignes que vous enregistrez restent sur votre téléphone. Pour le japonais, un dictionnaire plus complet, UniDic, est téléchargé une fois depuis Maven Central, uniquement en Wi-Fi ou sur un autre réseau non limité, ce qui, comme toute requête, expose votre adresse IP à Maven Central."
+    ],
+    [
+      "p",
+      "Pour un morceau japonais, Crosstune cherche aussi les accords sur ChordWiki. Le site ne répond pas aux requêtes simples : l'appli ouvre donc ses pages dans une page de navigateur cachée sur votre téléphone, et le titre et l'artiste du morceau y sont envoyés. La page exécute du JavaScript, et ChordWiki peut y déposer des cookies et garder des données de site dans le stockage de navigateur partagé de votre téléphone, que les autres pages web de l'appli utilisent aussi, comme le lecteur YouTube d'une carte d'entraînement. La page ne charge pas d'images. Les pages s'ouvrent une à la fois. Quand ChordWiki n'a pas les accords d'un morceau, l'appli s'en souvient 24 heures sur votre téléphone et ne redemande pas. Une recherche échouée ou une vérification inachevée n'est pas retenue : elle est retentée, et des paroles modifiées sont cherchées à part."
     ],
     [
       "p",
