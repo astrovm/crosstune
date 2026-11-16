@@ -27,7 +27,7 @@ class ConnectionTest {
 
     @Test
     fun onlineWhileTheNetworkUsedIsMeantToReachTheInternet() {
-        val network = connectivity.activeNetwork!!
+        val network = checkNotNull(connectivity.activeNetwork)
         val seen = mutableListOf<Boolean>()
         val watching = CoroutineScope(Dispatchers.Unconfined).launch { AndroidConnection(app).online().collect { seen += it } }
         fun changed(to: NetworkCapabilities) = shadowOf(connectivity).networkCallbacks.toList().forEach { it.onCapabilitiesChanged(network, to) }
@@ -52,7 +52,7 @@ class ConnectionTest {
 
     @Test
     fun unmeteredWhileTheInternetCostsNoData() {
-        val network = connectivity.activeNetwork!!
+        val network = checkNotNull(connectivity.activeNetwork)
         val seen = mutableListOf<Boolean>()
         val watching = CoroutineScope(Dispatchers.Unconfined).launch { AndroidConnection(app).unmetered().collect { seen += it } }
         fun changed(to: NetworkCapabilities) = shadowOf(connectivity).networkCallbacks.toList().forEach { it.onCapabilitiesChanged(network, to) }
@@ -66,7 +66,7 @@ class ConnectionTest {
 
     @Test
     fun eachNewUnmeteredDefaultNetworkIsReportedOnce() {
-        val first = connectivity.activeNetwork!!
+        val first = checkNotNull(connectivity.activeNetwork)
         val second = ReflectionHelpers.callConstructor(Network::class.java, ReflectionHelpers.ClassParameter.from(Int::class.javaPrimitiveType, 987))
         val free = capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
         val seen = mutableListOf<Boolean>()

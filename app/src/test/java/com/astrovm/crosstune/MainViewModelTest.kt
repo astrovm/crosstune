@@ -245,7 +245,7 @@ class MainViewModelTest {
         val kept = OfflineSongs(File(dir, "songs.json"), emptyList(), null, Dispatchers.Unconfined)
         kept.keep(MusicMetadata("Hush", "Band", lengthMs = 60_000))
         val connectivity = app.getSystemService(ConnectivityManager::class.java)
-        val first = connectivity.activeNetwork!!
+        val first = checkNotNull(connectivity.activeNetwork)
         val second = ReflectionHelpers.callConstructor(Network::class.java, ReflectionHelpers.ClassParameter.from(Int::class.javaPrimitiveType, 987))
         val free = ShadowNetworkCapabilities.newInstance().also {
             shadowOf(it).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)

@@ -31,7 +31,7 @@ internal class AndroidConnection(context: Context) : Connection {
     override fun unmetered(): Flow<Boolean> = watch(true, NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
 
     /** Whether the network the phone uses has all of [capabilities], as it changes. */
-    private fun watch(trackNetwork: Boolean = false, vararg capabilities: Int): Flow<Boolean> = callbackFlow {
+    private fun watch(trackNetwork: Boolean, vararg capabilities: Int): Flow<Boolean> = callbackFlow {
         var current: Network? = null
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onCapabilitiesChanged(network: Network, has: NetworkCapabilities) {
