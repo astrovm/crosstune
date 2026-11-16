@@ -66,7 +66,8 @@ class RecordingNameCheck : Instrumentation() {
         const val OBSERVE_MS = 3_000L
         val FIXTURE_TITLES = setOf(
             "Paperkite (Live)", "Paperkite Meadow (Live)", "Paperkite【Live】", "Paperkite Meadow【Live】",
-            "愛【Cover】", "恋【Cover】", "01 Live Forever", "Live Forever"
+            "愛【Cover】", "恋【Cover】", "01 Live Forever", "Live Forever",
+            "Paperkite - English Version", "Paperkite Meadow - English Version", "Piano Paperkite", "The Piano Paperkite"
         )
     }
 }

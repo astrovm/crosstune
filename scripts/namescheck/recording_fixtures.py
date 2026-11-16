@@ -13,7 +13,7 @@ def main():
     if not shutil.which('ffmpeg'):
         parser.error('ffmpeg is required')
     args.out.mkdir(parents=True, exist_ok=True)
-    titles = ['Paperkite (Live)', 'Paperkite Meadow (Live)', 'Paperkite【Live】', 'Paperkite Meadow【Live】', '愛【Cover】', '恋【Cover】', None]
+    titles = ['Paperkite (Live)', 'Paperkite Meadow (Live)', 'Paperkite【Live】', 'Paperkite Meadow【Live】', '愛【Cover】', '恋【Cover】', 'Paperkite - English Version', 'Paperkite Meadow - English Version', 'Piano Paperkite', 'The Piano Paperkite', None]
     files = []
     for index, title in enumerate(titles):
         file = '01 Live Forever.mp3' if title is None else f'name-{index}.mp3'

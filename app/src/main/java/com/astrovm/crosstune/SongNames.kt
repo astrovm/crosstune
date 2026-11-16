@@ -829,8 +829,8 @@ internal object SongNames {
 
     /** A recording note cannot provide the second word that makes a partial title specific enough. */
     private fun titleWordsMatch(one: String, other: String): Boolean {
-        val first = titleWithoutNotes(withoutEditionTag(MetadataParsers.withoutFileDecoration(one)))
-        val second = titleWithoutNotes(withoutEditionTag(MetadataParsers.withoutFileDecoration(other)))
+        val first = titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(one)))
+        val second = titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(other)))
         if (normalize(first).isNotEmpty() && normalize(first) == normalize(second)) return true
         val ours = words(first)
         val theirs = words(second)
@@ -838,17 +838,19 @@ internal object SongNames {
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
     }
 
-    /** Read brackets and recording marks together, without turning another script's marks into title words. */
+    /** The same note grammar reads brackets, dashes, bare suffixes and unfinished notes. */
     private fun titleWithoutNotes(title: String): String {
         val named = withoutBracketNotes(title).trim()
-        val start = named.indices.firstOrNull { at ->
-            at > 0 && isPatternSpace(named[at - 1]) && named[at].isLetterOrDigit() && recordingNote(named, at)
-        } ?: named.length
+        val notes = RecordingNotes(named)
+        val start = notes.tokens.firstOrNull { token ->
+            token.start > 0 && isPatternSpace(named[token.start - 1]) && notes.isNote(token.start, named.length, notes.afterDash(token.start))
+        }?.start ?: named.length
         return if (start < named.length) named.substring(0, start).trim().trimEnd { it in NAME_TAG_DASHES }.trim() else named
     }
 
-    /** Keep ordinary parenthesized title words. Nested recording notes are removed without rereading their parents. */
+    /** Keep ordinary title words. Intervals merge once, so nested notes never copy their parents repeatedly. */
     private fun withoutBracketNotes(title: String): String {
+        val grammar = RecordingNotes(title)
         val opens = ArrayDeque<Int>()
         val notes = ArrayDeque<IntRange>()
         for (at in title.indices) {
@@ -856,12 +858,11 @@ internal object SongNames {
                 title[at] in NAME_TAG_OPENS -> opens.addLast(at)
                 opens.isNotEmpty() && NAME_TAG_CLOSES[NAME_TAG_OPENS.indexOf(title[opens.last()])] == title[at] -> {
                     val open = opens.removeLast()
-                    if (bracketNote(title, open + 1, at)) addNote(notes, open, at + 1)
+                    if (grammar.isNote(open + 1, at, true)) addNote(notes, open, at + 1)
                 }
             }
         }
-        // A truncated or mismatched closing bracket does not turn a known recording note into title words.
-        opens.firstOrNull { recordingNote(title, it + 1) }?.let { addNote(notes, it, title.length) }
+        opens.firstOrNull { grammar.isNote(it + 1, title.length, true) }?.let { addNote(notes, it, title.length) }
         val text = StringBuilder()
         var from = 0
         for (note in notes) {
@@ -876,31 +877,154 @@ internal object SongNames {
         notes.addLast(from until until)
     }
 
-    private fun bracketNote(text: String, from: Int, until: Int): Boolean {
-        val start = (from until until).firstOrNull { !isPatternSpace(text[it]) } ?: return false
-        if (recordingNote(text, start, until)) return true
-        // Descriptor-first tags include "English Version", "En Vivo" and an artist's "Version".
-        var end = until
-        while (isPatternSpace(text[end - 1])) end--
-        if (text[end - 1] in NAME_TAG_CLOSES) return false
-        val tail = text.substring(maxOf(start, end - longestNameNote - 1), end)
-        val last = wordList(tail).lastOrNull()
-        return last in noteEndWords || last in VERSION_WORDS
+    private data class NoteToken(val start: Int, val end: Int, val letters: String)
+
+    /** Unicode words retain the title's script; a later Latin word cannot stand in for the word inspected. */
+    private fun noteTokens(text: String): List<NoteToken> {
+        val words = mutableListOf<NoteToken>()
+        var at = 0
+        while (at < text.length) {
+            val code = text.codePointAt(at)
+            if (!nameLetter(code)) {
+                at += Character.charCount(code)
+                continue
+            }
+            val start = at
+            do {
+                at += Character.charCount(text.codePointAt(at))
+            } while (at < text.length && (nameLetter(text.codePointAt(at)) || nameMark(text.codePointAt(at))))
+            words += NoteToken(start, at, normalize(text.substring(start, at)))
+        }
+        return words
     }
 
-    private fun recordingNote(text: String, at: Int, until: Int = text.length): Boolean {
-        // Both ends are bounded. Reading each nested bracket's whole contents would take quadratic work.
-        val prefix = text.substring(at, minOf(until, at + longestNameNote + YEAR_DIGITS + 2))
-        val letters = normalize(prefix)
-        val startsInLatin = letters.firstOrNull()?.let { it in 'a'..'z' || it in '0'..'9' } == true
-        val words = wordList(prefix)
-        val year = words.firstOrNull()?.let { it.length == YEAR_DIGITS && it.all(Char::isDigit) } == true && words.getOrNull(1) in VERSION_WORDS
-        return startsInLatin && (words.firstOrNull() in nameNoteWords || year) || VERSION_MARKS.any(letters::startsWith)
+    private fun nameLetter(code: Int): Boolean = Character.isLetterOrDigit(code) || when (Character.getType(code)) {
+        Character.LETTER_NUMBER.toInt(), Character.OTHER_NUMBER.toInt() -> true
+        else -> false
     }
 
-    private val noteEndWords = setOf("version", "ver", "take", "mix", "vivo", "cappella", "capella", "recorded")
-    private val nameNoteWords = VERSION_WORDS + setOf("part", "pt", "reprise", "interlude", "version", "explicit", "clean", "official", "lyric", "lyrics", "extended", "from", "stripped", "vip", "mv")
-    private val longestNameNote = maxOf(nameNoteWords.maxOf(String::length), VERSION_MARKS.maxOf(String::length))
+    private fun nameMark(code: Int): Boolean = when (Character.getType(code)) {
+        Character.NON_SPACING_MARK.toInt(), Character.COMBINING_SPACING_MARK.toInt(), Character.ENCLOSING_MARK.toInt() -> true
+        else -> false
+    }
+
+    /** Prefix counts make each nested bracket and suffix a constant-time grammar query. */
+    private class RecordingNotes(private val text: String) {
+        val tokens = noteTokens(text)
+        private val before = IntArray(text.length + 1)
+        private val nonspace = IntArray(text.length + 1)
+        private val quotes = IntArray(text.length + 1)
+        private val numeric = BooleanArray(tokens.size) { tokens[it].letters.codePoints().allMatch(Character::isDigit) }
+        private val years = BooleanArray(tokens.size) { numeric[it] && tokens[it].letters.codePointCount(0, tokens[it].letters.length) == YEAR_DIGITS }
+        private val marks = BooleanArray(tokens.size) { !numeric[it] && noteWord(tokens[it].letters) }
+        private val qualifiers = BooleanArray(tokens.size) { tokens[it].letters in NOTE_QUALIFIERS }
+        private val places = BooleanArray(tokens.size) { tokens[it].letters in NOTE_PLACES }
+        private val endings = BooleanArray(tokens.size) { marks[it] || tokens[it].letters in NOTE_ENDS }
+        private val versionLabels = BooleanArray(tokens.size) { tokens[it].letters in VERSION_LABELS }
+        private val languages by lazy { BooleanArray(tokens.size) { tokens[it].letters in noteLanguages } }
+        private val unknown = IntArray(tokens.size + 1)
+        private val languageUnknown by lazy {
+            IntArray(tokens.size + 1).also { counts ->
+                for (i in tokens.indices) counts[i + 1] = counts[i] + if (known(i) || languages[i]) 0 else 1
+            }
+        }
+
+        init {
+            var word = 0
+            var last = -1
+            var quoted = 0
+            for (at in 0..text.length) {
+                while (word < tokens.size && tokens[word].start < at) word++
+                before[at] = word
+                nonspace[at] = last
+                quotes[at] = quoted
+                if (at < text.length) {
+                    if (!isPatternSpace(text[at])) last = at
+                    if (text[at] == '\'' || text[at] == '"') quoted++
+                }
+            }
+            for (i in tokens.indices) unknown[i + 1] = unknown[i] + if (known(i)) 0 else 1
+        }
+
+        private fun known(at: Int) = marks[at] || numeric[at] || qualifiers[at]
+
+        fun afterDash(at: Int): Boolean = nonspace[at].let { it >= 0 && text[it] in NAME_TAG_DASHES }
+
+        fun isNote(from: Int, until: Int, explicit: Boolean): Boolean {
+            val first = before[from]
+            val end = before[until]
+            if (first == end) return false
+            val lead = lead(first, end)
+            if (lead != null && (unknown[end] == unknown[first] || location(lead, end))) return true
+            if (explicit && descriptor(first, end, from, until)) return true
+            return language(first, end)
+        }
+
+        private fun lead(first: Int, end: Int): Int? {
+            if (marks[first]) return first
+            if (first + 1 == end) return null
+            val next = tokens[first + 1].letters
+            val year = years[first]
+            val paired = when (tokens[first].letters) {
+                "en", "ao" -> next == "vivo"
+                "a" -> next in setOf("cappella", "capella")
+                "re" -> next == "recorded"
+                else -> false
+            }
+            return (first + 1).takeIf { (year || paired) && marks[it] }
+        }
+
+        private fun location(lead: Int, end: Int) = lead + 2 < end && places[lead + 1]
+
+        private fun descriptor(first: Int, end: Int, from: Int, until: Int): Boolean {
+            if (tokens[first].letters == "from" && quotes[until] > quotes[from]) return true
+            if (NOTE_CREDITS.any { prefix -> prefix.size < end - first && prefix.indices.all { tokens[first + it].letters == prefix[it] } }) return true
+            val last = nonspace[until]
+            if (last < from || text[last] in NAME_TAG_CLOSES) return false
+            return endings[end - 1]
+        }
+
+        private fun language(first: Int, end: Int): Boolean = end - first >= 2 && versionLabels[end - 1] &&
+            languages[first] && languageUnknown[end] == languageUnknown[first]
+    }
+
+    /** A mark can join scripts, as カバーLive, without lending its Latin part to the song title. */
+    private fun noteWord(word: String): Boolean {
+        if (word in noteMarks) return true
+        if (word.isEmpty()) return false
+        if (word[0] !in noteMarkStarts) return languageVersion(word)
+        val reached = BooleanArray(word.length + 1)
+        reached[0] = true
+        for (at in word.indices) if (reached[at]) {
+            val code = word.codePointAt(at)
+            if (Character.isDigit(code)) reached[at + Character.charCount(code)] = true
+            for (mark in noteMarkStarts[word[at]].orEmpty()) if (word.startsWith(mark, at)) reached[at + mark.length] = true
+        }
+        return reached.last() || languageVersion(word)
+    }
+
+    private fun languageVersion(word: String): Boolean {
+        val language = word.removeSuffix("version")
+        return language != word && language.isNotEmpty() && language in noteLanguages
+    }
+
+    private val noteLeads = VERSION_WORDS + setOf(
+        "part", "pt", "reprise", "interlude", "extended", "explicit", "clean", "original", "album", "single", "radio", "mono", "stereo",
+        "remaster", "remastered", "recorded", "stripped", "vip", "mv", "version", "ver", "audio", "video", "visualizer", "visualiser", "official", "lyric", "lyrics", "music", "animated", "hd", "hq", "4k"
+    )
+    private val noteMarks = noteLeads.map(::normalize).toSet() + VERSION_MARKS
+    private val noteMarkStarts = noteMarks.groupBy { it.first() }
+    private val noteLanguages by lazy {
+        Locale.getISOLanguages().flatMap { code ->
+            val language = Locale.forLanguageTag(code)
+            listOf(language.getDisplayLanguage(Locale.ENGLISH), language.getDisplayLanguage(language)).flatMap { noteTokens(it).map(NoteToken::letters) }
+        }.toSet()
+    }
+    private val NOTE_QUALIFIERS = setOf("a", "en", "ao", "re", "at", "in", "of", "by", "from", "the", "and", "to", "with", "version", "ver", "edit", "record", "original", "album", "single", "short", "radio", "recorded", "stripped", "alternate", "extended", "take", "s", "up", "off", "vocal", "full", "acustica", "akustik")
+    private val NOTE_PLACES = setOf("at", "in", "from", "by", "of")
+    private val NOTE_ENDS = setOf("version", "ver", "take", "recorded", "edit")
+    private val VERSION_LABELS = setOf("version", "ver")
+    private val NOTE_CREDITS = listOf(listOf("in", "the", "style", "of"), listOf("made", "famous", "by"), listOf("originally", "performed", "by"), listOf("originally", "by"), listOf("made", "popular", "by"), listOf("cover", "of"))
 
     private const val NAME_TAG_OPENS = "([【「〔（［"
     private const val NAME_TAG_CLOSES = ")]】」〕）］"

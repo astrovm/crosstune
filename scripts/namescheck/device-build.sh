@@ -23,7 +23,7 @@ main() {
     )
     cp "$tree/app/build/outputs/apk/debug/app-debug.apk" "$out/"
     cp "$tree/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "$out/"
-    python3 - "$out" "$sha" "$here" <<'PY'
+    python3 - "$out" "$sha" "$tree" <<'PY'
 from pathlib import Path
 from hashlib import sha256
 import json,sys

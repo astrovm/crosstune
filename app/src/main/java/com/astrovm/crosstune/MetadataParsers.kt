@@ -461,11 +461,30 @@ internal object MetadataParsers {
     }
 
     private val audioExtension = phoneRegex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
-    private val fileTrackNumber = phoneRegex("""^\d{1,3}[.)]\s+""")
 
-    /** Players can omit a file's extension. Its track number still does not move a title word into a recording note. */
-    internal fun withoutFileDecoration(title: String): String =
-        title.replace(audioExtension, "").replace(paddedTrackRegex, "").replace(fileTrackNumber, "")
+    /** Compare the song's title, without a video's captions or a local file's track number and extension. No artist is guessed. */
+    internal fun comparisonTitle(title: String): String = withoutFileNumber(
+        withoutTrailingNoise(withoutVideoNoise(withoutSubtitlesTag(title))).replace(audioExtension, "")
+    )
+
+    private fun withoutFileNumber(title: String): String {
+        var at = 0
+        var digits = 0
+        while (at < title.length && Character.isDigit(title.codePointAt(at))) {
+            digits++
+            at += Character.charCount(title.codePointAt(at))
+        }
+        if (digits !in 1..MAX_FILE_TRACK_DIGITS) return title
+        val punctuation = title.getOrNull(at) in listOf('.', ')', '-')
+        val padded = digits > 1 && Character.digit(title.codePointAt(0), 10) == 0
+        val after = if (punctuation) at + 1 else at
+        if ((!punctuation && !padded) || title.getOrNull(after)?.let(::isPatternSpace) != true) return title
+        var start = spacesEnd(title, after)
+        if (padded && title.getOrNull(start) == '-' && title.getOrNull(start + 1)?.let(::isPatternSpace) == true) start = spacesEnd(title, start + 1)
+        return title.substring(start)
+    }
+
+    private const val MAX_FILE_TRACK_DIGITS = 3
 
     /** A browser playing a bare file names it by its address, under its site, e.g. "example.com/song.mp3" by "example.com". */
     private fun namesAFile(song: MusicMetadata) = '.' in song.artist && song.title.startsWith("${song.artist}/")

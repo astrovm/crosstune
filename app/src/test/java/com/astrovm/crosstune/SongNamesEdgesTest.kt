@@ -13,6 +13,27 @@ import org.robolectric.annotation.Config
 class SongNamesEdgesTest {
 
     @Test
+    fun descriptorNotesCannotSupplyNameWords() {
+        val tags = listOf("- English Version", "– English Version", "— English Version", "(English Version", "[English Version]", "English Version", "Español Version", "Русский Version", "(EnglishVersion)")
+        for (tag in tags) {
+            assertFalse(tag, SongNames.wordsMatch("Hello $tag", "Hello World $tag"))
+            assertFalse(tag, SongNames.wordsMatch("Hello World $tag", "Hello $tag"))
+            assertFalse(tag, SongNames.names("Hello $tag", "Fake Band", MusicMetadata("Hello World $tag", "Fake Band")))
+        }
+        assertFalse(SongNames.wordsMatch("愛【カバーLive】", "恋【カバーLive】"))
+        assertFalse(SongNames.wordsMatch("Hello (Live2024)", "Hello World (Live2024)"))
+    }
+
+    @Test
+    fun naturalRecordingWordsRemainPartOfTheTitle() {
+        for ((one, other) in listOf("Piano Man" to "The Piano Man", "Guitar Girl" to "The Guitar Girl", "Cover Me" to "Cover Me Up", "Cafe\u0301 Man" to "The Café Man")) {
+            assertTrue(one, SongNames.wordsMatch(one, other))
+            assertTrue(one, SongNames.wordsMatch(other, one))
+            assertTrue(one, SongNames.names(one, "Fake Band", MusicMetadata(other, "Fake Band")))
+        }
+    }
+
+    @Test
     fun titleWordsAndIncompleteRecordingNotesKeepTheirMeaning() {
         val rows = listOf(
             Triple("01 Live Forever.mp3", "Live Forever", true),
@@ -55,11 +76,13 @@ class SongNamesEdgesTest {
 
     @Test
     fun aVideoCaptionStillNamesTheSameSingleWordSong() {
-        for (tag in listOf("(Official Audio)", "(Official Video)", "(Lyric Video)", "(Lyrics)")) {
-            assertTrue(tag, SongNames.names("Hello $tag", "", MusicMetadata("Hello", "")))
-            assertTrue(tag, SongNames.names("Hello $tag", "", MusicMetadata("Hello", "Fake Band")))
-            assertTrue(tag, SongNames.names("Hello $tag", "<unknown>", MusicMetadata("Hello", "")))
+        val wrong = mutableListOf<String>()
+        for (tag in listOf("(Official Audio)", "(Official Video)", "(Lyric Video)", "(Lyrics)", "(Audio)", "(Visualizer)", "(Visualiser)", "Music Video")) for (name in listOf("Hello", "99", "1999", "01")) {
+            if (!SongNames.names("$name $tag", "", MusicMetadata(name, ""))) wrong += "$name $tag: both unnamed"
+            if (!SongNames.names("$name $tag", "", MusicMetadata(name, "Fake Band"))) wrong += "$name $tag: requested artist known"
+            if (!SongNames.names("$name $tag", "<unknown>", MusicMetadata(name, ""))) wrong += "$name $tag: unknown player artist"
         }
+        assertEquals(emptyList<String>(), wrong)
     }
 
     @Test
