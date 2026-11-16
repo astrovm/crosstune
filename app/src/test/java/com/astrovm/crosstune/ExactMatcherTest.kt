@@ -973,6 +973,35 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun applesUsSearchRunsAfterAMissingOrFailedRegionalSearch() {
+        val song = MusicMetadata("Paper Lantern Sky", "The Fixture Owls")
+        for (regional in listOf("missing", "timeout", "bad JSON", "server error", "match")) {
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow("灯りの空", "The Fixture Owls • Lanterns • 3:04", videoId = "fixture0000")),
+                apple = mapOf("US" to appleSong(song.title, song.artist, 184_000)),
+                elsewhere = mapOf("JP" to appleSong("灯りの空", song.artist, 184_000))
+            )
+            val otherwise = fake.handler
+            fake.handler = { request ->
+                if (request.url.host == "itunes.apple.com" && request.url.encodedPath == "/search" && request.url.queryParameter("country") == "AR") {
+                    when (regional) {
+                        "timeout" -> throw java.net.SocketTimeoutException("Invented regional timeout")
+                        "bad JSON" -> FakeSpotify.html(request, "not JSON")
+                        "server error" -> FakeSpotify.html(request, """{"results":[${appleSong(song.title, song.artist, 184_000)}]}""", code = 503)
+                        "match" -> FakeSpotify.html(request, """{"results":[${appleSong(song.title, song.artist, 184_000)}]}""")
+                        else -> otherwise(request)
+                    }
+                } else otherwise(request)
+            }
+            fake.requestedUrls.clear()
+            assertEquals(regional, "https://music.youtube.com/watch?v=fixture0000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+            val stores = fake.requestedUrls.map { it.toHttpUrl() }.filter { it.host == "itunes.apple.com" && it.encodedPath == "/search" }
+                .map { it.queryParameter("country") }
+            assertEquals(regional, if (regional == "match") listOf("AR") else listOf("AR", "US"), stores)
+        }
+    }
+
+    @Test
     fun aThirdPartyVideoNeedsKnownMatchingLengths() {
         val song = MusicMetadata("A Cruel Angel's Thesis", "高橋洋子")
         // Recorded search row for the piano upload, with a fake channel and video ID.

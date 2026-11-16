@@ -752,7 +752,7 @@ internal class ExactMatcher(
     /**
      * The song on Apple Music, by its name, or one of the same name and artist with a tag, as "(with
      * Delon)". A store may only have it in another script, as Argentina's has 夜に駆ける, so the US
-     * store, which names it in Latin letters too, is asked when this one doesn't have it; and last,
+     * store, which names it in Latin letters too, is asked when this one has no match or its search fails; and last,
      * at once, for a song named in Chinese, Japanese or Korean, the stores that name it as its own
      * country does, as only Taiwan's credits 光年之外 to 鄧紫棋, where the rest say G.E.M.
      */
