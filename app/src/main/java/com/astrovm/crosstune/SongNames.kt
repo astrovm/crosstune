@@ -860,7 +860,9 @@ internal object SongNames {
     private fun recordingNote(text: String, at: Int): Boolean {
         // The next word or script mark is bounded. Copying the whole suffix at each space would take quadratic work.
         val prefix = text.substring(at, minOf(text.length, at + longestNameNote + 1))
-        return words(prefix).firstOrNull() in nameNoteWords || VERSION_MARKS.any { normalize(prefix).startsWith(it) }
+        val letters = normalize(prefix)
+        val startsInLatin = letters.firstOrNull()?.let { it in 'a'..'z' || it in '0'..'9' } == true
+        return startsInLatin && words(prefix).firstOrNull() in nameNoteWords || VERSION_MARKS.any(letters::startsWith)
     }
 
     private val nameNoteWords = VERSION_WORDS + setOf("part", "pt", "reprise", "interlude", "version", "explicit", "clean", "official", "lyrics", "extended")

@@ -13,6 +13,15 @@ import org.robolectric.annotation.Config
 class SongNamesEdgesTest {
 
     @Test
+    fun aRecordingNoteStartsAtItsOwnWordNotAtALaterLatinWord() {
+        val names = listOf("Любовь" to "Любовь моя", "Αγάπη" to "Αγάπη μου", "愛" to "愛 の歌", "사랑" to "사랑 노래")
+        for ((one, other) in names) for (tag in listOf("Live", "- Live", "– Live", "— Live", "- Part 2")) {
+            assertFalse("$one / $other / $tag", SongNames.wordsMatch("$one $tag", "$other $tag"))
+            assertFalse("$other / $one / $tag", SongNames.wordsMatch("$other $tag", "$one $tag"))
+        }
+    }
+
+    @Test
     fun recordingMarksNeverMakeDifferentSingleWordTitlesSpecificEnough() {
         val brackets = listOf("(" to ")", "[" to "]", "【" to "】", "「" to "」", "〔" to "〕", "（" to "）", "［" to "］")
         val notes = listOf("Live", "Cover", "Part 2", "カバー", "커버")
