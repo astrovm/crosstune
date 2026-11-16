@@ -25,3 +25,11 @@ adb shell 'run-as com.astrovm.crosstune.dev sh -c "echo recover > cache/chordche
 Recovery makes the chord service answer and emits a new unmetered network event. Check that the actual UI reaches Kept offline. Take before and after screenshots. Then write `done` to the same control file. The runner removes its control and status files and restores factory lambdas before it exits. It stops with a failure after three minutes if no done command arrives.
 
 After the run, stop the app through the device UI or a project reinstall, restore its complete private data, and compare redacted manifests. Remove the test APK and fixture files. Restore settings, release the lock and close the Device panel. Remove private backups after verification. No fixture belongs in production app data.
+
+## Real default-network handover
+
+Use `am instrument -w -e network real` with the same runner to observe Android's real connection flow. Start with device networks disconnected, as above. This mode still intercepts every main-activity HTTP request and uses the same invented offline song. After the status file is ready, connect one unmetered network through the pinned device UI. Open the app and keep the fixture song offline.
+
+Wait for `offline_failed_complete=true`. Write `recover` to make the fake backend answer. In this mode, that command does not emit a network event. Switch the default to another unmetered network through the device UI. Keep the app in front, so an activity restart cannot create the retry. Check that the song becomes kept and that its offline round increases once.
+
+The status JSON includes timestamped `network_events`: real default callbacks, network IDs, internet and unmetered flags, and values emitted by the app's connection flow. It omits network names and addresses. Confirm both networks are unmetered. If a `false` event occurs between them, the run checks recovery but does not reproduce the dropped `true`-after-`true` case. Real-network mode has a fifteen-minute manual-run deadline. Write `done`, then restore the complete device baseline.
