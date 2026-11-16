@@ -126,7 +126,7 @@ class PracticeTriesTest {
             val broughtUp = playback.opened.map { "opened ${it.first}" } + playback.songsAsked.map { "asked ${it.second}" } +
                 playback.broughtToFront.map { "brought ${it.title} to the front" } + playback.appsPlayed.map { "woke $it" } +
                 List(playback.cameBack) { "came back" } + List(playback.woken) { "woke the screen" }
-            return Outcome(played, broughtUp, askedSpotify, screen.value.practice?.cantComeBack == true)
+            return Outcome(played, broughtUp, askedSpotify, false)
         } finally {
             scope.cancel()
             dispatcher.close()

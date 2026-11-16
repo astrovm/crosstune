@@ -189,8 +189,8 @@ class PracticeReachTest {
 
     private fun everyPartOfEveryScreen() {
         accessibility()
-        // The front, with the offer to show over other apps under it.
-        show(Practice(queue = listOf(line), total = 5, cantComeBack = true))
+        // The front, with the small player at its foot.
+        show(Practice(queue = listOf(line), total = 5, sound = LineSound.PLAYED, video = "fake-video"))
         everyTextWhole("front")
         everyControlReached("front")
         // Turned, with the small player and the line's sound.
@@ -251,10 +251,10 @@ class PracticeReachTest {
     @Test
     @Config(fontScale = 3.2f)
     fun aSwipeOnTheCardScrollsItAndNeverTurnsIt() {
-        show(Practice(queue = listOf(line), total = 5, cantComeBack = true))
+        show(Practice(queue = listOf(line), total = 5, sound = LineSound.PLAYED, video = "fake-video"))
         val show = composeRule.onNode(hasText(string(R.string.practice_show)) and hasClickAction())
         val before = show.fetchSemanticsNode().positionInRoot.y
-        // Up the middle of the screen, on the card, where the offer to show over other apps is.
+        // Up the middle of the screen, on the card.
         repeat(3) { composeRule.onRoot().performTouchInput { swipeUp(startY = height * 0.7f, endY = height * 0.3f) } }
         composeRule.waitForIdle()
         assertEquals("a swipe turned the card", 0, turned.size)

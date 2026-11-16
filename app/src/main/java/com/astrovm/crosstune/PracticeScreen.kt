@@ -96,9 +96,6 @@ import kotlin.math.roundToLong
 
 internal const val PRACTICE_CARD_TAG = "practice-card"
 
-/** What a card says is missing for it to come back over a music app. */
-internal const val PRACTICE_COME_BACK_TAG = "practice-come-back"
-
 /**
  * Saved lines practised as cards, over the color of the song they're from. Every card asks the same:
  * the line as written; turned, it plays in the music app, and shows how it reads and what it means.
@@ -142,8 +139,6 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                         if (kind.id != editing?.type?.id) kind else kind.copy(options = if (editing.back) kind.options.copy(back = side) else kind.options.copy(front = side))
                     }, true)
                 }
-                // A music app was left out as it would have covered the card for good: what's missing, until it's allowed.
-                val comeBack = ComeBack(fixing = state.fixingInOneTap == OneTapFix.FLOAT).takeIf { practice.cantComeBack && !state.canFloatOverApps }
                 AnimatedContent(targetState = practice, contentKey = ::shownAs, transitionSpec = { slide(forward = true) }, label = "card", modifier = Modifier.weight(1f)) { shown ->
                     val line = shown.line
                     // Caught up, a side being set shows on the line kept, in place of the check.
@@ -151,7 +146,7 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                         if (editing != null && optionLine != null) Card(optionLine, shown, state.cardTypes, state.learning, actions, editing, onSide) else CaughtUp()
                     }
                     else if (line == null) Done(shown, state, actions)
-                    else Card(line, shown, state.cardTypes, state.learning, actions, editing, onSide, comeBack = comeBack)
+                    else Card(line, shown, state.cardTypes, state.learning, actions, editing, onSide)
                 }
             }
         }
@@ -199,7 +194,7 @@ private fun CaughtUp() {
 @Composable
 private fun Card(
     line: SavedLine, practice: Practice, types: List<CardType>, learning: Learning, actions: ScreenActions, preview: CardPreview? = null,
-    onSide: (CardSide) -> Unit = {}, comeBack: ComeBack? = null
+    onSide: (CardSide) -> Unit = {}
 ) {
     val type = preview?.type ?: types.firstOrNull { it.id == line.cardType } ?: READ_IT
     // One scroll for the card and its buttons, not one inside the card: at a big font no part gets squeezed to nothing, and a drag anywhere on the card scrolls it rather than turning it.
@@ -224,7 +219,6 @@ private fun Card(
                 }
                 // What's under the words stays at the card's foot while there's room, and follows them once there isn't.
                 Spacer(Modifier.weight(1f))
-                if (preview == null && comeBack != null) ComeBackOffer(comeBack, actions)
                 // At the foot, under the words rather than over them, in line with them, once the song's sound comes from here.
                 if (preview == null && practice.video != null && practice.sound != LineSound.NONE) {
                     LinePlayerView(actions.linePlayerView, Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp))
@@ -283,21 +277,6 @@ private fun CardFace(line: SavedLine, practice: Practice, cards: CardOptions, le
         HorizontalDivider()
         if (cards.back.sound) LineSound(line, practice.sound, practice.video != null, actions.onReplayLine)
         CardSideContent(line, cards.back, lyrics, back = true)
-    }
-}
-
-/** The card can't come back over a music app it would open, as Crosstune may not show over other apps; [fixing] while that's allowed in one tap. */
-private data class ComeBack(val fixing: Boolean)
-
-/** At the card's foot, on its text inset: the music app that might play the line needs Crosstune to show over other apps, and how to allow it. */
-@Composable
-private fun ComeBackOffer(comeBack: ComeBack, actions: ScreenActions) {
-    // Allow under the words where a word of theirs wouldn't fit beside it.
-    LabelAndValue(
-        label = { LabelText(stringResource(R.string.practice_float_allow), style = MaterialTheme.typography.bodyMedium) },
-        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 12.dp).testTag(PRACTICE_COME_BACK_TAG)
-    ) {
-        OneTapButton(stringResource(R.string.allow_button), actions.onAllowFloat, fixing = comeBack.fixing)
     }
 }
 
