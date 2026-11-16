@@ -15,11 +15,14 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.Layout
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -36,6 +39,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -67,33 +71,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.graphics.drawable.toBitmap
 import java.util.Locale
 import kotlin.math.roundToLong
 
 internal const val PRACTICE_CARD_TAG = "practice-card"
-
-/** What a card says is missing for it to come back over a music app. */
-internal const val PRACTICE_COME_BACK_TAG = "practice-come-back"
 
 /**
  * Saved lines practised as cards, over the color of the song they're from. Every card asks the same:
@@ -138,8 +138,6 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                         if (kind.id != editing?.type?.id) kind else kind.copy(options = if (editing.back) kind.options.copy(back = side) else kind.options.copy(front = side))
                     }, true)
                 }
-                // A music app was left out as it would have covered the card for good: what's missing, until it's allowed.
-                val comeBack = ComeBack(fixing = state.fixingInOneTap == OneTapFix.FLOAT).takeIf { practice.cantComeBack && !state.canFloatOverApps }
                 AnimatedContent(targetState = practice, contentKey = ::shownAs, transitionSpec = { slide(forward = true) }, label = "card", modifier = Modifier.weight(1f)) { shown ->
                     val line = shown.line
                     // Caught up, a side being set shows on the line kept, in place of the check.
@@ -147,7 +145,7 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                         if (editing != null && optionLine != null) Card(optionLine, shown, state.cardTypes, state.learning, actions, editing, onSide) else CaughtUp()
                     }
                     else if (line == null) Done(shown, state, actions)
-                    else Card(line, shown, state.cardTypes, state.learning, actions, editing, onSide, comeBack = comeBack)
+                    else Card(line, shown, state.cardTypes, state.learning, actions, editing, onSide)
                 }
             }
         }
@@ -195,15 +193,15 @@ private fun CaughtUp() {
 @Composable
 private fun Card(
     line: SavedLine, practice: Practice, types: List<CardType>, learning: Learning, actions: ScreenActions, preview: CardPreview? = null,
-    onSide: (CardSide) -> Unit = {}, comeBack: ComeBack? = null
+    onSide: (CardSide) -> Unit = {}
 ) {
     val type = preview?.type ?: types.firstOrNull { it.id == line.cardType } ?: READ_IT
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+    // One scroll for the card and its buttons, not one inside the card: at a big font no part gets squeezed to nothing, and a drag anywhere on the card scrolls it rather than turning it.
+    FillThenScroll(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp), top = {
         Surface(
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
             modifier = Modifier
-                .weight(1f)
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
                 .testTag(PRACTICE_CARD_TAG)
@@ -213,19 +211,45 @@ private fun Card(
                     else Modifier.clip(MaterialTheme.shapes.extraLarge).clickable(onClickLabel = stringResource(R.string.practice_show), onClick = actions.onTurnPractice)
                 )
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxWidth().padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                     SongChip(line, actions, kind = type.takeIf { types.count { it.on } > 1 })
                     CardFace(line, practice, type.options, learning, actions, preview, onSide)
                 }
-                if (preview == null && comeBack != null) ComeBackOffer(comeBack, actions)
+                // What's under the words stays at the card's foot while there's room, and follows them once there isn't.
+                Spacer(Modifier.weight(1f))
                 // At the foot, under the words rather than over them, in line with them, once the song's sound comes from here.
                 if (preview == null && practice.video != null && practice.sound != LineSound.NONE) {
                     LinePlayerView(actions.linePlayerView, Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp))
                 }
             }
         }
+    }) {
         if (preview == null) Grades(line, practice, actions)
+    }
+}
+
+/**
+ * [top] over [bottom], filling the height they're given, [top] taking what [bottom] leaves; once they need more,
+ * the two scroll as one, so neither is cut or squeezed out.
+ */
+@Composable
+private fun FillThenScroll(modifier: Modifier, top: @Composable () -> Unit, bottom: @Composable () -> Unit) {
+    BoxWithConstraints(modifier) {
+        val height = constraints.maxHeight
+        Layout(contents = listOf(top, bottom), modifier = Modifier.verticalScroll(rememberScrollState())) { (above, below), constraints ->
+            val width = constraints.maxWidth
+            val foot = below.map { it.measure(Constraints(minWidth = width, maxWidth = width)) }
+            val left = (height - foot.sumOf { it.height }).coerceAtLeast(0)
+            val body = above.map { it.measure(Constraints(minWidth = width, maxWidth = width, minHeight = left)) }
+            layout(width, (body + foot).sumOf { it.height }) {
+                var y = 0
+                (body + foot).forEach { placed ->
+                    placed.place(0, y)
+                    y += placed.height
+                }
+            }
+        }
     }
 }
 
@@ -244,26 +268,14 @@ private fun CardFace(line: SavedLine, practice: Practice, cards: CardOptions, le
     }
     val front = cards.front
     val plays = front.sound && practice.sound != LineSound.NONE
-    if (plays) LineSound(line, practice.sound, practice.video != null, actions.onReplayLine)
+    if (plays) LineSound(line, practice.sound, actions.onReplayLine)
     if (!front.bare) CardSideContent(line, front, lyrics, back = false)
     else if (!plays) CardSideContent(line, CardSide(), lyrics, back = false)
     // Turned, the other side comes in below the front, which stays.
     if (practice.turned) {
         HorizontalDivider()
-        if (cards.back.sound) LineSound(line, practice.sound, practice.video != null, actions.onReplayLine)
+        if (cards.back.sound) LineSound(line, practice.sound, actions.onReplayLine)
         CardSideContent(line, cards.back, lyrics, back = true)
-    }
-}
-
-/** The card can't come back over a music app it would open, as Crosstune may not show over other apps; [fixing] while that's allowed in one tap. */
-private data class ComeBack(val fixing: Boolean)
-
-/** At the card's foot, on its text inset: the music app that might play the line needs Crosstune to show over other apps, and how to allow it. */
-@Composable
-private fun ComeBackOffer(comeBack: ComeBack, actions: ScreenActions) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 12.dp).testTag(PRACTICE_COME_BACK_TAG)) {
-        Text(stringResource(R.string.practice_float_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        OneTapButton(stringResource(R.string.allow_button), actions.onAllowFloat, fixing = comeBack.fixing)
     }
 }
 
@@ -275,10 +287,10 @@ private fun Grades(line: SavedLine, practice: Practice, actions: ScreenActions) 
         haptics.performHapticFeedback(if (grade == Grade.AGAIN) HapticFeedbackType.Reject else HapticFeedbackType.Confirm)
         actions.onGradePractice(grade)
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-        if (!practice.turned) {
-            Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.practice_show)) }
-        } else {
+    if (!practice.turned) {
+        Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp).heightIn(min = 56.dp)) { Text(stringResource(R.string.practice_show)) }
+    } else {
+        EvenRows(gap = 8.dp, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
             val locale = LocalConfiguration.current.locales[0]
             // Four, in Anki's colors, each saying when the line's back.
             val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
@@ -286,10 +298,35 @@ private fun Grades(line: SavedLine, practice: Practice, actions: ScreenActions) 
                 val (fill, text) = gradeColors(grade, dark)
                 Button(
                     onClick = { answer(grade) },
-                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                    modifier = Modifier.heightIn(min = 56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = fill, contentColor = text),
+                    shape = GRADE_SHAPE,
                     contentPadding = GRADE_PADDING
                 ) { GradeLabel(label, waitText(SavedLinesStore.waitFor(line, grade), locale)) }
+            }
+        }
+    }
+}
+
+/** Cells of one width and, in a row, one height: as many to a row as there are, half that, or one, the most that keep each one's longest word whole. */
+@Composable
+private fun EvenRows(gap: Dp, modifier: Modifier, content: @Composable () -> Unit) {
+    Layout(content, modifier) { cells, constraints ->
+        val space = gap.roundToPx()
+        val width = constraints.maxWidth
+        val cellOf = { columns: Int -> (width - space * (columns - 1)) / columns }
+        val needs = cells.maxOf { it.minIntrinsicWidth(Constraints.Infinity) }
+        val columns = generateSequence(cells.size) { it / 2 }.first { it == 1 || needs <= cellOf(it) }
+        val cell = cellOf(columns)
+        val rows = cells.chunked(columns).map { row ->
+            val tall = row.maxOf { it.maxIntrinsicHeight(cell) }
+            row.map { it.measure(Constraints.fixed(cell, tall)) }
+        }
+        layout(width, rows.sumOf { it.first().height } + space * (rows.size - 1)) {
+            var y = 0
+            rows.forEach { row ->
+                row.forEachIndexed { index, placed -> placed.placeRelative(index * (cell + space), y) }
+                y += row.first().height + space
             }
         }
     }
@@ -348,7 +385,7 @@ internal fun ReadingFields(line: SavedLine, onSave: (List<String>) -> Unit, onCa
     }
 }
 
-/** The small YouTube player, shown as YouTube asks of a player that's heard: 16:9 and at least 200 px tall, at any density. */
+/** At least 200 px in each direction, as YouTube requires; 16:9 where the card has room for that width. */
 @Composable
 @NonRestartableComposable
 private fun LinePlayerView(view: () -> View?, modifier: Modifier = Modifier) {
@@ -376,38 +413,13 @@ private const val LINE_PLAYER_PX = 200
 internal const val LINE_PLAYER_TAG = "line-player"
 
 /**
- * How the line sounds: the music app's name while it gets there; then a button that fills as the
- * line plays, to play it again once it has. Nothing when it can't be played.
+ * How the line sounds: its play button, waiting in a turning ring while the sound is found, then a ring that fills
+ * as the line plays, to play it again once it has. Nothing when it can't be played. No app is named while it's found,
+ * as the one that plays it may not be the one it was saved from.
  */
 @Composable
-private fun LineSound(line: SavedLine, sound: LineSound, inPlayer: Boolean, onPlay: () -> Unit) {
-    if (sound == LineSound.LOADING) {
-        // The player has its own picture; the music app is named only while it is the one that gets there.
-        AppLoading(line.app.takeUnless { inPlayer })
-    } else if (sound != LineSound.NONE) {
-        SoundButton(line, sound, onPlay)
-    }
-}
-
-/** The music app getting to the song: its icon and "Opening in" its name, when it's known, or only that it's on its way. */
-@Composable
-private fun AppLoading(app: String?) {
-    val context = LocalContext.current
-    val known = remember(app) {
-        app?.let { name ->
-            runCatching {
-                val info = context.packageManager.getApplicationInfo(name, 0)
-                context.packageManager.getApplicationLabel(info).toString() to context.packageManager.getApplicationIcon(info).toBitmap(72, 72).asImageBitmap()
-            }.getOrNull()
-        }
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.heightIn(min = 56.dp)) {
-        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-        known?.let { (label, icon) ->
-            Image(icon, contentDescription = null, modifier = Modifier.size(20.dp).clip(CircleShape))
-            Text(stringResource(R.string.practice_loading, label), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
+private fun LineSound(line: SavedLine, sound: LineSound, onPlay: () -> Unit) {
+    if (sound != LineSound.NONE) SoundButton(line, sound, onPlay)
 }
 
 /** The line's sound: a ring that fills as it plays, with bars that move while it does, which stop it when tapped, and a play button once it's played. */
@@ -420,7 +432,10 @@ private fun SoundButton(line: SavedLine, sound: LineSound, onPlay: () -> Unit) {
     val stop = stringResource(R.string.practice_stop)
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(SOUND_SIZE + 8.dp)) {
         if (sound == LineSound.PLAYING) CircularProgressIndicator(progress = { played.value }, strokeWidth = 3.dp, modifier = Modifier.size(SOUND_SIZE + 8.dp))
-        Surface(onClick = onPlay, enabled = sound == LineSound.PLAYED || sound == LineSound.PLAYING, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(SOUND_SIZE)) {
+        else if (sound == LineSound.LOADING) CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(SOUND_SIZE + 8.dp).clearAndSetSemantics {})
+        Surface(onClick = onPlay, enabled = sound == LineSound.PLAYED || sound == LineSound.PLAYING, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(SOUND_SIZE).then(
+            if (sound == LineSound.LOADING) Modifier.semantics { progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate } else Modifier
+        )) {
             Box(contentAlignment = Alignment.Center) {
                 if (sound == LineSound.PLAYING) Bars(SOUND_SIZE / 3, Modifier.semantics { contentDescription = stop })
                 else Icon(painterResource(R.drawable.ic_play), contentDescription = stringResource(R.string.practice_play), modifier = Modifier.size(SOUND_SIZE / 2))
@@ -448,15 +463,26 @@ private const val BARS = 4
 /** The song a card's from: its cover and title. */
 @Composable
 private fun SongChip(line: SavedLine, actions: ScreenActions, kind: CardType? = null) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        CoverArt(line.artworkUrl, actions.loadArtwork, size = 24.dp)
-        Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        // With more than one kind of card, which this is.
-        kind?.let { Text(it.title(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1) }
+    val song: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            CoverArt(line.artworkUrl, actions.loadArtwork, size = 24.dp)
+            LabelText(line.title, style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant), modifier = Modifier.weight(1f))
+        }
+    }
+    if (kind == null) {
+        song()
+    } else {
+        // A custom name can be long. Keep its ending, under the song once they no longer fit beside each other.
+        LabelAndValue(label = song, modifier = Modifier.fillMaxWidth(), gap = 8.dp) {
+            LabelText(kind.title(), style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.primary))
+        }
     }
 }
 
 private val GRADES = listOf(Grade.AGAIN to R.string.practice_again, Grade.HARD to R.string.practice_hard, Grade.GOOD to R.string.practice_good, Grade.EASY to R.string.practice_easy)
+
+/** A pill at a grade's usual height, and a rounded box, not a circle, when its words make it taller. */
+private val GRADE_SHAPE = RoundedCornerShape(28.dp)
 
 /** Little room around a grade's words, so four fit side by side. */
 private val GRADE_PADDING = PaddingValues(horizontal = 4.dp)
@@ -472,9 +498,11 @@ private fun gradeColors(grade: Grade, dark: Boolean): Pair<Color, Color> = when 
 /** A grade button's words: when the line's back, small, over how well it was known, as in Anki. */
 @Composable
 private fun GradeLabel(label: Int, wait: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(wait, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
-        Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    // As wide as the button, so the words center in it on as many lines as they take.
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(wait, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        // Whole, on more than one line if it must, as a cut word can't be told from another.
+        Text(stringResource(label), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -497,26 +525,32 @@ internal fun waitText(ms: Long, locale: Locale): String {
 /** All done: how many were practised, whether they'll be asked back, and the music played before, a tap away. */
 @Composable
 private fun Done(practice: Practice, state: UiState, actions: ScreenActions) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Spacer(Modifier.weight(1f))
-        Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(56.dp))
-        Text(
-            stringResource(R.string.practice_done, practice.done),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 16.dp)
-        )
-        // Turned off by hand, it's not offered again here, only on the list and in settings.
-        if (state.reminder.on || !state.reminder.turnedOff) ReminderBell(state, actions, labelled = true)
-        Spacer(Modifier.weight(1f))
+    FillThenScroll(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp), top = {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)) {
+            Spacer(Modifier.weight(1f))
+            Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(56.dp))
+            Text(
+                pluralStringResource(R.plurals.practice_done, practice.done, practice.done),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            // Turned off by hand, it's not offered again here, only on the list and in settings.
+            if (state.reminder.on || !state.reminder.turnedOff) ReminderBell(state, actions, labelled = true)
+            Spacer(Modifier.weight(1f))
+        }
+    }) {
         // What played before, unless that's where practice left off.
         practice.before?.takeIf { before -> practice.lastSong?.let { it.title == before.song.title && it.artist == before.song.artist } != true }?.let { before ->
-            Surface(onClick = actions.onBackToBefore, shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
-                    CoverArt(before.song.artworkUrl, actions.loadArtwork, size = 32.dp)
-                    Text(stringResource(R.string.practice_back_to, before.song.title), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                    AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(20.dp))
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+                Surface(onClick = actions.onBackToBefore, shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
+                        CoverArt(before.song.artworkUrl, actions.loadArtwork, size = 32.dp)
+                        // The whole name, on more lines if it must: it's the song the tap goes back to.
+                        Text(stringResource(R.string.practice_back_to, before.song.title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f, fill = false))
+                        AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(20.dp))
+                    }
                 }
             }
         }

@@ -290,23 +290,6 @@ class MainViewModelTest {
     }
 
     @Test
-    fun showingOverOtherAppsIsAllowedInOneTapWhereItCanBeAndOtherwiseByItsSteps() {
-        // Without Shizuku or root, the steps show how.
-        val byHand = model()
-        byHand.allowFloat()
-        assertEquals(Fixes(steps = listOf(Need.Float)), byHand.uiState.fixes)
-        // With them, it's done, and known at once, for the card that asked.
-        val shell = FakeShell()
-        val model = model(oneTap = OneTapSetup(app, listOf(shell)))
-        assertFalse(model.uiState.canFloatOverApps)
-        model.allowFloat()
-        idle()
-        pass(2_000)
-        assertTrue(model.uiState.canFloatOverApps)
-        assertNull(model.uiState.fixes)
-    }
-
-    @Test
     fun aFixAskedWhileOneRunsIsTheSameFixAndRunsOnce() {
         val shell = FakeShell()
         shell.answer = kotlinx.coroutines.CompletableDeferred()
@@ -1828,6 +1811,22 @@ class MainViewModelTest {
     }
 
     @Test
+    fun practiceOutsideLyricsKeepsTheAppThatPlayedBefore() {
+        val packageName = MusicService.SPOTIFY.packageName
+        val playback = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(song, null, 4_000, SystemClock.elapsedRealtime(), app = packageName)
+        }
+        val model = model(playback = playback)
+        idle()
+        assertNull(model.uiState.lyricsFor)
+        model.startPractice()
+        idle()
+        assertEquals(song, model.uiState.practice?.before?.song)
+        assertEquals(packageName, model.uiState.practice?.before?.app)
+    }
+
+    @Test
     fun practiceOverAStationKeepsItToPlayOnAfter() {
         val playback = FakePlayback().apply { playing.value = following(app = station.app) }
         val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
@@ -2622,6 +2621,160 @@ class MainViewModelTest {
         until("the next song in the player") { model.uiState.player?.song == next }
         idle()
         assertEquals(before, playback.playing.subscriptionCount.value)
+    }
+
+    @Test
+    fun aCoverSavedLaterReachesAnOpenPlayerForAnUnnamedFile() {
+        val playback = FakePlayback().apply { playing.value = following(app = station.app) }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        playback.unnamed.value = station.copy(artworkUrl = null)
+        idle()
+        model.peekPlayingUnnamed()
+        idle()
+        val opened = requireNotNull(model.uiState.player)
+        val cover = "file:///unnamed-cover.jpg"
+        playback.unnamed.value = station.copy(artworkUrl = cover)
+        idle()
+        assertEquals(opened.copy(song = opened.song.copy(artworkUrl = cover)), model.uiState.player)
+        playback.unnamed.value = station.copy(artworkUrl = null)
+        idle()
+        assertEquals(cover, model.uiState.player?.song?.artworkUrl)
+        playback.unnamed.value = station.copy(app = "com.other", artworkUrl = "file:///wrong-app.jpg")
+        idle()
+        assertEquals(cover, model.uiState.player?.song?.artworkUrl)
+        playback.unnamed.value = station.copy(artworkUrl = cover)
+        playback.playing.value = null
+        idle()
+        val withoutClock = requireNotNull(model.uiState.player)
+        val playerWork = MainViewModel::class.java.getDeclaredField("playerJob").apply { isAccessible = true }
+        val followingWork = playerWork.get(model)
+        val laterCover = "file:///new-station-art.jpg"
+        playback.unnamed.value = station.copy(artworkUrl = laterCover)
+        idle()
+        assertEquals(withoutClock.copy(song = withoutClock.song.copy(artworkUrl = laterCover)), model.uiState.player)
+        org.junit.Assert.assertSame(followingWork, playerWork.get(model))
+        playback.unnamed.value = station.copy(name = "Another Station", artworkUrl = "file:///next-station.jpg")
+        idle()
+        assertEquals("Another Station", model.uiState.player?.song?.title)
+        assertEquals("file:///next-station.jpg", model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
+    fun aCoverArrivesAfterTheOpenPlayerMovesToAnUntaggedFile() {
+        val playback = FakePlayback().apply { playing.value = following() }
+        val model = playingModel(playback)
+        val file = Unnamed("com.spotify", "Player", "ct2-untagged", artist = "Unknown Artist")
+        playback.unnamed.value = file
+        playback.onThePhone = null
+        idle()
+        assertTrue(requireNotNull(model.uiState.player).songless)
+        assertEquals("ct2-untagged", model.uiState.player?.song?.title)
+        val cover = "file:///untagged-art.jpg"
+        playback.unnamed.value = file.copy(artworkUrl = cover)
+        idle()
+        assertEquals(cover, model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
+    fun aCoverSavedLaterReachesTheOpenPlayer() {
+        val playback = FakePlayback()
+        playback.playing.value = following()
+        val model = playingModel(playback)
+        val cover = "file:///fake-cover.jpg"
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = cover), null, app = "com.spotify")
+        idle()
+        assertEquals(cover, model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
+    fun aNamedSongsLateCoverDoesNotNeedIdenticalServiceMetadata() {
+        val playback = FakePlayback().apply { playing.value = following() }
+        val model = playingModel(playback)
+        playback.onThePhone = Heard.Song(song.copy(url = "https://example.com/song", lengthMs = 180_000, artworkUrl = "file:///service-cover.jpg"), null, app = "com.spotify")
+        idle()
+        assertEquals(song.copy(artworkUrl = "file:///service-cover.jpg"), model.uiState.player?.song)
+    }
+
+    @Test
+    fun aDifferentSongsCoverCannotReplaceTheSongStillFollowed() {
+        val playback = FakePlayback().apply { playing.value = following() }
+        val model = playingModel(playback)
+        playback.onThePhone = Heard.Song(song.copy(title = "Another Song", artworkUrl = "file:///other-song.jpg"), null, app = "com.spotify")
+        idle()
+        assertEquals(song, model.uiState.player?.song)
+    }
+
+    @Test
+    fun aLateCoverUsesTheFollowingSessionsAppBeforeTheRequestedApp() {
+        val playback = FakePlayback().apply { playing.value = following() }
+        val model = playingModel(playback)
+        playback.playing.value = following(app = "com.other")
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///following-app.jpg"), null, app = "com.other")
+        idle()
+        assertEquals("file:///following-app.jpg", model.uiState.player?.song?.artworkUrl)
+        playback.playing.value = following().copy(appPackage = null)
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///requested-app.jpg"), null, app = "com.spotify")
+        idle()
+        assertEquals("file:///requested-app.jpg", model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
+    fun aCoverFromAnotherAppDoesNotReplaceThePlayersCover() {
+        val playback = FakePlayback()
+        playback.playing.value = following()
+        val model = playingModel(playback)
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///another-app.jpg"), null, app = "com.other")
+        idle()
+        assertNull(model.uiState.player?.song?.artworkUrl)
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///current.jpg"), null, app = "com.spotify")
+        idle()
+        assertEquals("file:///current.jpg", model.uiState.player?.song?.artworkUrl)
+        playback.onThePhone = Heard.Song(song, null, app = "com.spotify")
+        idle()
+        assertEquals("file:///current.jpg", model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
+    fun aCoverFromAPatchedAppReplacesItsMissingOfficialAppOnly() {
+        val official = MusicService.YOUTUBE_MUSIC.packageName
+        val patched = "app.morphe.android.apps.youtube.music"
+        val playback = FakePlayback().apply { playing.value = following(app = official) }
+        val model = playingModel(playback)
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///patched.jpg"), null, app = patched)
+        idle()
+        assertEquals("file:///patched.jpg", model.uiState.player?.song?.artworkUrl)
+        shadowOf(app.packageManager).installPackage(android.content.pm.PackageInfo().apply { packageName = official })
+        playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///other-app.jpg"), null, app = patched)
+        idle()
+        assertEquals("file:///patched.jpg", model.uiState.player?.song?.artworkUrl)
+    }
+
+    @Test
+    fun aCoverArrivingWhileThePlayersWordsLoadDoesNotDropThem() {
+        val arrived = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") {
+                arrived.countDown()
+                release.await()
+                FakeSpotify.html(request, timed)
+            } else FakeSpotify.html(request, "")
+        }
+        val playback = FakePlayback().apply { playing.value = following() }
+        val finder = LyricsFinder(fake.client(), "test", Dispatchers.IO, busyPauseMs = 0)
+        val model = playingModel(playback, lyricsFinder = finder)
+        try {
+            assertTrue(arrived.await(5, TimeUnit.SECONDS))
+            val field = MainViewModel::class.java.getDeclaredField("peekJob").apply { isAccessible = true }
+            val peek = field.get(model) as Job
+            playback.onThePhone = Heard.Song(song.copy(artworkUrl = "file:///late-cover.jpg"), null, app = "com.spotify")
+            idle()
+            release.countDown()
+            until("the player's words finished loading") { peek.isCompleted }
+            assertEquals(listOf("One", "Two", "Three"), model.uiState.player?.lines?.map { it.text })
+        } finally {
+            release.countDown()
+        }
     }
 
     @Test

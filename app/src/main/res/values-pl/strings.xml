@@ -404,11 +404,14 @@
     <string name="practice_fix_reading">Popraw czytanie</string>
     <string name="learn_song_times">Śpiewany %1$d razy</string>
     <string name="learn_song_new_words">Ma słowa do nauki</string>
-    <string name="practice_float_allow">Twoja aplikacja muzyczna może odtwarzać wiersze, gdy Crosstune będzie mógł wyświetlać się nad innymi aplikacjami</string>
     <string name="practice_play">Odtwórz wiersz</string>
     <string name="practice_stop">Zatrzymaj wiersz</string>
-    <string name="practice_loading">Otwieranie w %1$s</string>
-    <string name="practice_done">Przećwiczono %1$d</string>
+    <plurals name="practice_done">
+        <item quantity="one">Przećwiczono %1$d</item>
+        <item quantity="few">Przećwiczono %1$d</item>
+        <item quantity="many">Przećwiczono %1$d</item>
+        <item quantity="other">Przećwiczono %1$d</item>
+    </plurals>
     <string name="practice_back_to">Wróć do %1$s</string>
     <string name="practice_progress">%1$d z %2$d</string>
     <string name="practice_reminders">Przypomnienia o ćwiczeniach</string>

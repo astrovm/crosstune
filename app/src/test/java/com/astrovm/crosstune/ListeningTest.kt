@@ -5491,7 +5491,7 @@ class ListeningTest {
         click(string(R.string.practice_good))
         assertEquals(1, SavedLinesStore(prefs()).load().single().step)
         // Nothing else is due: one practised.
-        waitForText(string(R.string.practice_done, 1))
+        waitForText(app.resources.getQuantityString(R.plurals.practice_done, 1, 1))
         // Closed, it's back to the words.
         click(string(R.string.floating_close))
         waitForText("«Night sky»")
@@ -5529,7 +5529,34 @@ class ListeningTest {
         val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
         assertEquals(1, good.step)
         assertTrue(good.due >= before + 10 * 60_000L && good.due <= System.currentTimeMillis() + 10 * 60_000L)
-        waitForText(string(R.string.practice_done, 2))
+        waitForText(app.resources.getQuantityString(R.plurals.practice_done, 2, 2))
+    }
+
+    @Test
+    fun aTranslationThatFinishesWhileALineMovesIsKeptWithItsNewWords() = aTranslationFinishesWhileALineMoves(close = false)
+
+    @Test
+    fun closingTheWordsDoesNotLoseATranslationThatFinishedWhileALineMoves() = aTranslationFinishesWhileALineMoves(close = true)
+
+    private fun aTranslationFinishesWhileALineMoves(close: Boolean) {
+        prefs().edit().putString(
+            "saved_lines", """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band"}]"""
+        ).putBoolean("lyrics_translation", true).commit()
+        val gate = Gate()
+        MainActivity.systemDispatcher = gate
+        wordsOf(null, "Night sky", before = { gate.held = true })
+        try {
+            waitUntil(TIMEOUT_MS) { gate.queued.isNotEmpty() }
+            waitUntil(TIMEOUT_MS) {
+                controllerModel().uiState.learning.let { it.translations == listOf("[Night sky]") && !it.translating }
+            }
+            assertEquals("Night  Sky!", SavedLinesStore(prefs()).load().single().text)
+            if (close) closeWords()
+        } finally {
+            gate.letGo()
+        }
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().text == "Night sky" }
+        assertEquals("[Night sky]", SavedLinesStore(prefs()).load().single().translation)
     }
 
     @Test

@@ -56,6 +56,18 @@ class AppTraitsStoreTest {
     }
 
     @Test
+    fun ambiguousSessionsDiscardOnlyTheirAppsCapabilityRecord() {
+        store.seeks("a", false)
+        store.keeps("a", true)
+        store.seeks("b", true)
+        store.forget("a")
+        assertEquals(AppTraits(), store.of("a"))
+        assertEquals(AppTraits(seeks = true), store.of("b"))
+        store.forget("a")
+        assertEquals(AppTraits(seeks = true), store.of("b"))
+    }
+
+    @Test
     fun whatCantBeReadIsNothingKnown() {
         preferences.edit().putString("app_traits", "not json").commit()
         assertEquals(AppTraits(), store.of("a"))

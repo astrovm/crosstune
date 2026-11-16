@@ -7,6 +7,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertCountEquals
@@ -16,8 +17,8 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.isNotEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.geometry.Offset
@@ -44,13 +45,11 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeLeft
-import androidx.compose.ui.test.isNotEnabled
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.time.Duration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -407,7 +406,7 @@ class FlashcardsTest {
         assertTrue(described(string(R.string.practice_play)))
         // Known, it's done.
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 1)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 1, 1)) }
         assertEquals(1, savedLine("Stars").step)
         // Demo was playing before and still is, so there's nothing to go back to.
         assertFalse(shown(string(R.string.practice_back_to, "Demo")))
@@ -485,28 +484,31 @@ class FlashcardsTest {
                 """"ruby":[["夜","よる"],["の",null],["空","そら"]]}""",
             """{"text":"星","translation":"Estrella","title":"Other","artist":"Band","box":2,"start":15000,"end":20000,"app":"${app.packageName}"}"""
         )
+        // The app has the song open, but plays an ad first, so the card waits for it there.
+        appHas("Other", atMs = 0, playing = false)
+        phone.playing.value = phone.playing.value!!.copy(ad = true)
         launch()
         // Due, practice is a tap away from the main screen, saying how many.
         practiseAll(2)
-        // The app's asked for the song by name.
-        waitUntil { phone.songsAsked.isNotEmpty() }
-        assertEquals(MusicMetadata("Other", "Band") to app.packageName, phone.songsAsked.single())
+        waitUntil { phone.followed.any { it.title == "Other" } }
         assertEquals(LineSound.LOADING, practice().sound)
         // Only the kanji: how it reads, heard or written, and what it means, are the answer.
-        val loading = string(R.string.practice_loading, app.packageManager.getApplicationLabel(app.applicationInfo).toString())
+        // While the app gets there, the line's play button waits, and the app isn't named.
+        val waiting = { composeRule.onAllNodes(hasContentDescription(string(R.string.practice_play)) and isNotEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        val named = { shown(app.packageManager.getApplicationLabel(app.applicationInfo).toString()) }
         assertTrue(shown("夜の空"))
-        assertFalse(shown(loading) || readingShown("よる") || shown("yoru no sora") || shown("Cielo nocturno"))
+        assertFalse(waiting() || named() || readingShown("よる") || shown("yoru no sora") || shown("Cielo nocturno"))
         // Turned while the app gets there, it says so, and plays once there.
         click(string(R.string.practice_show))
         assertTrue(readingShown("よる") && readingShown("そら") && shown("yoru no sora") && shown("Cielo nocturno"))
-        assertTrue(shown(loading))
-        pass(1_000)
+        assertTrue(waiting() && !named())
         appHas("Other", atMs = 0)
         waitUntil { practice().sound == LineSound.PLAYING }
         assertEquals(5_000L, phone.seeks.last())
         assertEquals(true, phone.plays.last())
-        // Asked for once: turned, it waited for the app instead of asking again.
-        assertEquals(1, phone.songsAsked.size)
+        // No app was asked for the song, nor opened on it.
+        assertTrue(phone.songsAsked.isEmpty())
+        assertTrue(phone.opened.isEmpty())
         // Missed, it comes back after the rest of its song.
         click(string(R.string.practice_again))
         waitUntil { practice().line?.text == "星" }
@@ -518,7 +520,7 @@ class FlashcardsTest {
         waitUntil { practice().line?.text == "夜の空" && !practice().turned }
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 2)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 2, 2)) }
         // Nothing played before, so there's nothing to go back to; closed, it's back to the main screen.
         assertFalse(shown(string(R.string.practice_back_to, "Demo")))
         click(string(R.string.floating_close))
@@ -690,6 +692,26 @@ class FlashcardsTest {
     }
 
     @Test
+    fun everyButtonOnThePracticeListAndCardSaysWhatItDoes() {
+        saved("""{"text":"夜の空","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1}""")
+        launch()
+        click(practiceDue(1))
+        assertEquals(emptyList<String>(), unlabelledButtons())
+        click(string(R.string.practice_all_songs))
+        waitUntil { model().uiState.practice != null }
+        assertEquals(emptyList<String>(), unlabelledButtons())
+        click(string(R.string.practice_show))
+        assertEquals(emptyList<String>(), unlabelledButtons())
+    }
+
+    /** What a screen reader would call only "button": something to tap, with no words or description of its own. */
+    private fun unlabelledButtons() = composeRule.onAllNodes(hasClickAction()).fetchSemanticsNodes().filter { node ->
+        val config = node.config
+        config.getOrNull(SemanticsProperties.ContentDescription).isNullOrEmpty() && config.getOrNull(SemanticsProperties.Text).isNullOrEmpty() &&
+            config.getOrNull(SemanticsProperties.StateDescription).isNullOrEmpty()
+    }.map { "${it.config.getOrNull(SemanticsProperties.TestTag)} at ${it.boundsInRoot}: ${it.config}" }
+
+    @Test
     fun linesMakeACardOfEachKindThatIsOnAndTheCardSaysWhichItIs() {
         saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1,""" +
                 """"ruby":[["夜","よる"],["の",null],["空","そら"]]}""")
@@ -709,7 +731,7 @@ class FlashcardsTest {
         assertTrue(onCard(string(R.string.card_type_read)))
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 1)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 1, 1)) }
         assertEquals(0, savedLine("夜の空").reviews.size)
         assertTrue(savedLine("夜の空").interval > 3)
         // Its other card is next, asking for the words from what they mean.
@@ -722,7 +744,7 @@ class FlashcardsTest {
         click(string(R.string.practice_show))
         assertTrue(readingShown("よる"))
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 1)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 1, 1)) }
         assertEquals(setOf(TRANSLATE_TYPE), savedLine("夜の空").reviews.keys)
         assertEquals(1, savedLine("夜の空").reviews.getValue(TRANSLATE_TYPE).step)
     }
@@ -801,6 +823,8 @@ class FlashcardsTest {
         phone.access = false
         launch()
         practiseAll(1)
+        // The line's video is looked for off the main thread, so the card waits on it a moment before it knows there's none.
+        waitUntil { practice().sound != LineSound.LOADING }
         assertEquals(LineSound.NONE, practice().sound)
         assertTrue(onCard("One"))
     }
@@ -867,11 +891,11 @@ class FlashcardsTest {
         assertTrue(onCard(string(R.string.card_type_translate)))
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 2)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 2, 2)) }
     }
 
     @Test
-    fun aSongTheAppLostIsAskedForAgainOnTheCardWhileItLoads() {
+    fun aSongTheAppLetGoOfIsNotAskedForAgainForTheNextCard() {
         saved(
             """{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000,"app":"${app.packageName}"}""",
             """{"text":"Two","title":"Other","artist":"Band","box":1,"start":15000,"end":20000,"app":"${app.packageName}"}"""
@@ -888,190 +912,12 @@ class FlashcardsTest {
         // Four grades, as Anki has them.
         listOf(R.string.practice_again, R.string.practice_hard, R.string.practice_good, R.string.practice_easy).forEach { assertTrue(shown(string(it))) }
         click(string(R.string.practice_good))
-        waitUntil { practice().line?.text == "Two" && phone.songsAsked.isNotEmpty() }
-        assertEquals(LineSound.LOADING, practice().sound)
-        appHas("Other", atMs = 0)
-        waitUntil { practice().sound == LineSound.PLAYED }
-        assertEquals(15_000L, phone.seeks.last())
-    }
-
-    @Test
-    fun youTubeMusicIsAskedForTheSongByItsLinkThereAndOtherAppsByName() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
-        saved(
-            // Kept before the app it was in was, so YouTube Music, which has it, is asked.
-            """{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000}""",
-            """{"text":"Two","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""",
-            """{"text":"Three","title":"Gone","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""",
-            """{"text":"Four","title":"Elsewhere","artist":"Band","box":1,"start":5000,"end":9000,"app":"com.aspiro.tidal"}""",
-            """{"text":"Five","title":"Fifth","artist":"Band","box":1,"start":5000,"end":9000,"app":"com.spotify.music"}"""
-        )
-        // YouTube Music has every song but Gone.
-        fake.handler = { request ->
-            val title = listOf("Another", "Other", "Elsewhere", "Fifth").firstOrNull { it in FakeSpotify.bodyOf(request) }
-            if (request.url.host == "music.youtube.com" && title != null) FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
-                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$title"}]}}},
-                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
-                "playlistItemData":{"videoId":"${title.lowercase().padEnd(11, '0')}"}}}]}""")
-            else FakeSpotify.html(request, "{}")
-        }
-        launch()
-        practiseAll(5)
-        // YouTube Music ignores being asked by name, so it's given the song's link there, at the line: 5 s in.
-        for ((title, link) in listOf("Other" to "https://music.youtube.com/watch?v=other000000&t=5", "Another" to "https://music.youtube.com/watch?v=another0000&t=5")) {
-            waitUntil { phone.songsAsked.lastOrNull()?.first?.title == title }
-            assertEquals(link, phone.linksAsked.last())
-            appHas(title, atMs = 0, app = youTubeMusic)
-            waitUntil { practice().sound == LineSound.PLAYED }
-            click(string(R.string.practice_show))
-            click(string(R.string.practice_good))
-            phone.playing.value = null
-        }
-        // A song it doesn't have is asked for by name; another app always is.
-        waitUntil { phone.songsAsked.size == 3 }
-        pass(MainViewModel.LOAD_SONG_MS + 1_000)
-        waitUntil { practice().sound == LineSound.NONE }
-        click(string(R.string.practice_show))
-        click(string(R.string.practice_good))
-        waitUntil { phone.songsAsked.size == 4 }
-        assertEquals(listOf("Gone", "Elsewhere"), phone.songsAsked.drop(2).map { it.first.title })
-        assertEquals(listOf(null, null), phone.linksAsked.drop(2))
-        // No app played it, so YouTube plays its line in the player.
-        pass(MainViewModel.LOAD_SONG_MS + 1_000)
-        waitUntil { practice().video == "elsewhere00" }
-        assertEquals(LineSound.PLAYED, practice().sound)
-        // Spotify plays nothing asked of it, so YouTube Music is, as for a song kept from no app.
-        click(string(R.string.practice_show))
-        click(string(R.string.practice_good))
-        waitUntil { phone.songsAsked.size == 5 }
-        assertEquals(MusicMetadata("Fifth", "Band") to youTubeMusic, phone.songsAsked.last())
-        assertEquals("https://music.youtube.com/watch?v=fifth000000&t=5", phone.linksAsked.last())
-    }
-
-    @Test
-    fun aSongKeptFromNoAppInParticularIsAskedOfYouTubeMusicWhenItHasIt() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
-        saved("""{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000}""")
-        fake.handler = { request ->
-            if (request.url.host == "music.youtube.com" && "Other" in FakeSpotify.bodyOf(request)) FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
-                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Other"}]}}},
-                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
-                "playlistItemData":{"videoId":"other000000"}}}]}""")
-            else FakeSpotify.html(request, "{}")
-        }
-        // YouTube Music can be asked, and a video plays in YouTube, which wouldn't play the song if asked.
-        phone.running = setOf(youTubeMusic, "com.google.android.youtube")
-        launch()
-        practiseAll(1)
-        waitUntil { phone.songsAsked.isNotEmpty() }
-        assertEquals(MusicMetadata("Other", "Band") to youTubeMusic, phone.songsAsked.single())
-        assertEquals("https://music.youtube.com/watch?v=other000000&t=5", phone.linksAsked.single())
-        appHas("Other", atMs = 0, app = youTubeMusic)
-        waitUntil { practice().sound == LineSound.PLAYED }
-    }
-
-    @Test
-    fun youTubeMusicThatCantBeWokenIsOpenedOnTheSongAndLeftOnceItHasIt() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
-        saved(
-            """{"text":"One","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""",
-            // Kept before the app it was in was, with no app at all to ask.
-            """{"text":"Two","title":"Other","artist":"Band","box":2,"start":5000,"end":9000}"""
-        )
-        fake.handler = { request ->
-            val title = listOf("Another", "Other").firstOrNull { it in FakeSpotify.bodyOf(request) }
-            if (request.url.host == "music.youtube.com" && title != null) FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
-                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$title"}]}}},
-                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
-                "playlistItemData":{"videoId":"${title.lowercase().padEnd(11, '0')}"}}}]}""")
-            else FakeSpotify.html(request, "{}")
-        }
-        // YouTube Music doesn't let Crosstune wake it, and another app isn't asked for a song kept from it.
-        phone.running = setOf("com.spotify.music")
-        launch()
-        practiseAll(2)
-        waitUntil { phone.opened.isNotEmpty() }
-        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=another0000&t=5", phone.opened.single())
+        // No app has it open now, and YouTube has no video of it: the card has no sound, and nothing is asked for it.
+        waitUntil { practice().line?.text == "Two" && practice().sound == LineSound.NONE }
         assertTrue(phone.songsAsked.isEmpty())
-        appHas("Another", atMs = 0, app = youTubeMusic)
-        // Once it has the song, Crosstune's back in front, with the line ready.
-        waitUntil { practice().sound == LineSound.PLAYED }
-        assertEquals(1, phone.cameBack)
-        click(string(R.string.practice_show))
-        click(string(R.string.practice_good))
-        phone.playing.value = null
-        // With no app to ask at all, it's opened too.
-        phone.canPlaySongs = false
-        phone.running = emptySet()
-        waitUntil { phone.opened.size == 2 }
-        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=other000000&t=5", phone.opened.last())
-        // Never getting there, Crosstune still comes back, and YouTube plays the line in the player.
-        pass(MainViewModel.LOAD_SONG_MS + 1_000)
-        waitUntil { practice().video == "other000000" }
-        assertEquals(2, phone.cameBack)
-    }
-
-    @Test
-    fun withoutShowingOverOtherAppsACardPlaysItsLineHereAndSaysWhatTheMusicAppNeeds() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
-        saved("""{"text":"One","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""")
-        youTubeMusicHasAnother()
-        // YouTube Music can't be woken, so it would have to be opened, over the card, which Crosstune couldn't come back from.
-        phone.running = setOf("com.spotify.music")
-        phone.comesBackByItself = false
-        launch()
-        practiseAll(1)
-        // The line plays here, at once, rather than after the 12 s the app opened behind would have waited.
-        waitUntil { practice().video == "another0000" }
         assertTrue(phone.opened.isEmpty())
-        assertEquals(0, phone.cameBack)
-        // And the card says, plainly, what the music app needs, with the way to allow it.
-        waitUntil { shown(string(R.string.practice_float_allow)) }
-        assertTrue(composeRule.onAllNodes(hasTestTag(PRACTICE_COME_BACK_TAG) and hasAnyAncestor(hasTestTag(PRACTICE_CARD_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
-        composeRule.onAllNodes(hasText(string(R.string.allow_button)) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG)), useUnmergedTree = true).onFirst().performClick()
-        composeRule.waitForIdle()
-        assertEquals(listOf(Need.Float), model().uiState.fixes?.steps)
-        // Back from the steps, it's still asked until it's allowed, then gone.
-        model().closeFixes()
-        composeRule.waitForIdle()
-        assertTrue(shown(string(R.string.practice_float_allow)))
-        model().setCanFloatOverApps(true)
-        composeRule.waitForIdle()
-        assertFalse(shown(string(R.string.practice_float_allow)))
-    }
-
-    @Test
-    fun theCardsAllowOfferWaitsWhileShizukuAllowsIt() {
-        // Shizuku asks the user first, and they haven't answered yet.
-        val shell = FakeShell().apply { answer = CompletableDeferred() }
-        MainActivity.shellFactory = { listOf(shell) }
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
-        saved("""{"text":"One","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""")
-        youTubeMusicHasAnother()
-        phone.running = setOf("com.spotify.music")
-        phone.comesBackByItself = false
-        launch()
-        practiseAll(1)
-        waitUntil { shown(string(R.string.practice_float_allow)) }
-        val allow = hasText(string(R.string.allow_button)) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG))
-        composeRule.onAllNodes(allow, useUnmergedTree = true).onFirst().performClick()
-        composeRule.waitForIdle()
-        assertEquals(OneTapFix.FLOAT, model().uiState.fixingInOneTap)
-        // Tapped once, it can't be again while it's being allowed.
-        val waiting = isNotEnabled() and hasAnyDescendant(hasText(string(R.string.allow_button))) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG))
-        waitUntil { composeRule.onAllNodes(waiting, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        shell.answer.complete(Unit)
-    }
-
-    /** YouTube Music has "Another" by Band, as the video another0000. */
-    private fun youTubeMusicHasAnother() {
-        fake.handler = { request ->
-            if (request.url.host == "music.youtube.com" && "Another" in FakeSpotify.bodyOf(request)) FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
-                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Another"}]}}},
-                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
-                "playlistItemData":{"videoId":"another0000"}}}]}""")
-            else FakeSpotify.html(request, "{}")
-        }
+        // Card One's line is got to on the front and again to play on the back. Card Two's is never sought.
+        assertEquals(setOf(5_000L), phone.seeks.toSet())
     }
 
     /** One saved line from Spotify, and YouTube Music having a video of its song. */
@@ -1166,33 +1012,29 @@ class FlashcardsTest {
             """{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000}""",
             """{"text":"Lost","title":"Gone","artist":"Band","box":1,"start":5000,"end":9000}"""
         )
-        phone.canPlaySongs = false
         launch()
         practiseAll(2)
-        // No app to ask: it's read, with nothing to play.
+        // No app has it open, and YouTube has no video of it: it's read, with nothing to play.
         waitUntil { practice().line?.text == "One" && practice().sound == LineSound.NONE }
         assertTrue(shown("One"))
         click(string(R.string.practice_show))
         assertFalse(described(string(R.string.practice_play)))
-        // Asked, but never found: after a while it's read too.
+        // The same for the next, which no app is asked for either.
         click(string(R.string.practice_good))
-        phone.canPlaySongs = true
-        waitUntil { phone.songsAsked.isNotEmpty() }
-        pass(MainViewModel.LOAD_SONG_MS + 1_000)
-        waitUntil { practice().sound == LineSound.NONE }
-        // Already this song, and it won't move, and YouTube has no video of it. It isn't asked for again, and the card has no sound.
-        val asked = phone.songsAsked.size
+        waitUntil { practice().line?.text == "Lost" && practice().sound == LineSound.NONE }
+        assertTrue(phone.songsAsked.isEmpty())
+        // Already this song, and it won't move, and YouTube has no video of it. It isn't asked for, and the card has no sound.
         appHas(practice().line!!.title, canSeek = false)
         click(string(R.string.floating_close))
         waitUntil { model().uiState.practice == null }
         practiseAll(1)
         waitUntil { model().uiState.practice?.sound == LineSound.NONE }
-        assertEquals(asked, phone.songsAsked.size)
+        assertTrue(phone.songsAsked.isEmpty())
         assertNull(model().uiState.practice?.video)
         assertFalse(described(string(R.string.practice_play)))
-        // Stopped while a line plays, the app pauses it.
+        // Stopped while a line plays, the app pauses it. The app that wouldn't move is skipped for a week, so another one has it.
         val playing = practice().line!!
-        appHas(playing.title, atMs = 0)
+        appHas(playing.title, atMs = 0, app = "com.example.player")
         click(string(R.string.floating_close))
         waitUntil { model().uiState.practice == null }
         practiseAll(1)
@@ -1241,7 +1083,7 @@ class FlashcardsTest {
         click(string(R.string.practice_show))
         assertTrue(readingShown("そら") && shown("cielo"))
         click(string(R.string.practice_good))
-        waitUntil { shown(string(R.string.practice_done, 1)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 1, 1)) }
     }
 
     @Test

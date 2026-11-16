@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,7 +36,6 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
@@ -137,11 +137,21 @@ private fun PracticeRow(
             .padding(vertical = 4.dp)
     ) {
         leading()
-        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            below?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        val name: @Composable () -> Unit = {
+            Column {
+                LabelText(title, style = MaterialTheme.typography.bodyLarge)
+                below?.let { LabelText(it, style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)) }
+            }
         }
-        if (due > 0) Text(stringResource(R.string.practice_due, due), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp))
+        val words = Modifier.weight(1f).padding(start = 12.dp)
+        // The name whole, and how many are due beside it, or under it once both don't fit, as at the biggest font.
+        if (due > 0) {
+            LabelAndValue(label = name, modifier = words, gap = 8.dp) {
+                Text(stringResource(R.string.practice_due, due), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
+        } else {
+            Box(words) { name() }
+        }
         edit?.let {
             IconButton(onClick = it) {
                 AppIcon(R.drawable.ic_edit, contentDescription = stringResource(R.string.choose_lines))

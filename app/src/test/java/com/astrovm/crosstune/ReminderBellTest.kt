@@ -162,7 +162,7 @@ class ReminderBellTest {
         waitUntil { shown(app.getString(R.string.practice_show)) }
         click(app.getString(R.string.practice_show))
         click(app.getString(R.string.practice_easy))
-        waitUntil { shown(app.getString(R.string.practice_done, 1)) }
+        waitUntil { shown(app.resources.getQuantityString(R.plurals.practice_done, 1, 1)) }
     }
 
     /** Back from the session's end, to the list, whose bell is the same. */

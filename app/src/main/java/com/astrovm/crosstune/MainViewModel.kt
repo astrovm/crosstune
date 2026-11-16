@@ -46,6 +46,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
 
 internal sealed interface Effect {
     /**
@@ -194,6 +195,8 @@ internal class MainViewModel(
 
     private val historyStore = HistoryStore(preferences)
     private val savedLinesStore = SavedLinesStore(preferences)
+    /** Keep a translation behind a pending move, so it finds the line under its new words. */
+    private val savedLineUpdates = Mutex()
     private val syncStore = LyricsSyncStore(preferences)
     private val leadStore = LeadStore(preferences)
     private val gapStore = ShazamGapStore(preferences)
@@ -1972,7 +1975,8 @@ internal class MainViewModel(
 
     /** [lines] under [song]'s player, while it shows it, timed [byEar] or not; words that aren't timed show their first line. */
     private fun showPeek(song: MusicMetadata, lines: List<LyricLine>, words: String, byEar: Boolean) {
-        val player = uiState.player?.takeIf { it.song == song } ?: return
+        // The cover can arrive while these words load; it does not change which song they belong to.
+        val player = uiState.player?.takeIf { it.song.copy(artworkUrl = null) == song.copy(artworkUrl = null) } ?: return
         val shown = lines.ifEmpty { words.lines().filter { it.isNotBlank() }.take(1).map { LyricLine(0, it) } }
         uiState = uiState.copy(player = player.copy(lines = shown, linesByEar = byEar))
     }
@@ -1999,9 +2003,20 @@ internal class MainViewModel(
                 // In the app that plays it, which may not be the one the song before played in.
                 if (next != null) return@collect openPlayer(next.metadata, next.app ?: player.following?.appPackage ?: player.app, played = true)
                 if (tookUpUnnamed(unnamed, playing, following, played, song)) return@collect
-                uiState = uiState.copy(player = player.copy(following = following, played = played))
+                uiState = uiState.copy(player = player.withCurrentCover(playing, unnamed, following).copy(following = following, played = played))
             }
         }
+    }
+
+    /** A bitmap cover can be saved after the song has already reached the player. */
+    private fun PlayerState.withCurrentCover(playing: Heard.Song?, unnamed: Unnamed?, following: Following?): PlayerState {
+        val current = if (songless) unnamed?.let { it.played to it.app } else playing?.let { it.metadata to it.app }
+        val (metadata, packageName) = current ?: return this
+        val matches = if (songless) metadata.copy(artworkUrl = song.artworkUrl) == song else sameSong(metadata, song)
+        val cover = metadata.artworkUrl?.takeIf {
+            matches && sameApp(following?.appPackage ?: app, packageName, interception::isInstalled)
+        } ?: return this
+        return copy(song = song.copy(artworkUrl = cover))
     }
 
     /**
@@ -2012,7 +2027,7 @@ internal class MainViewModel(
      */
     private fun tookUpUnnamed(unnamed: Unnamed?, playing: Heard.Song?, following: Following?, played: Boolean, song: MusicMetadata): Boolean {
         val app = uiState.player?.let { it.following?.appPackage ?: it.app }
-        val next = unnamed?.takeIf { playing == null && following == null && played && uiState.practice == null && it.played != song && it.app == app } ?: return false
+        val next = unnamed?.takeIf { playing == null && following == null && played && uiState.practice == null && it.played.copy(artworkUrl = song.artworkUrl) != song && it.app == app } ?: return false
         openPlayer(next.played, next.app, played = true, songless = true)
         return true
     }
@@ -3646,14 +3661,6 @@ internal class MainViewModel(
         uiState = uiState.copy(fixes = Fixes(list = true), oneTapFailed = false)
     }
 
-    /**
-     * Lets Crosstune show over other apps, so a card comes back over the music app it opens: in one tap with Shizuku or
-     * root, which only the activity would look up again as it resumes, so it's known now; otherwise the steps show how.
-     */
-    fun allowFloat() {
-        if (!fixInOneTap(OneTapFix.FLOAT) { setCanFloatOverApps(true) }) fixSteps(listOf(Need.Float))
-    }
-
     /** The steps of [needs], one at a time, from the list or wherever they're needed. */
     fun fixSteps(needs: List<Need>) {
         uiState = uiState.copy(fixes = Fixes(list = uiState.fixes?.list == true, steps = needs))
@@ -4369,9 +4376,11 @@ internal class MainViewModel(
         // Move the words and their corrections together. Reading them may need the dictionary, away from the screen.
         val script = uiState.learning.script
         viewModelScope.launch {
-            savedLinesStore.change(systemDispatcher) { current ->
-                followedSavedLines(current, changes, song, script)
-            }?.let { uiState = uiState.copy(savedLines = it) }
+            savedLineUpdates.withLock {
+                savedLinesStore.change(systemDispatcher) { current ->
+                    followedSavedLines(current, changes, song, script)
+                }?.let { uiState = uiState.copy(savedLines = it) }
+            }
         }
     }
 
@@ -4409,11 +4418,16 @@ internal class MainViewModel(
     private fun retranslateSavedLines(song: MusicMetadata) {
         val lines = wordLines()
         val translations = uiState.learning.translations
-        val changes = uiState.savedLines.filter { it.isOf(song) && it.line == null }.mapNotNull { saved ->
-            val now = translations.getOrNull(lines.indexOf(saved.text))?.takeIf { it != saved.translation } ?: return@mapNotNull null
-            saved to saved.copy(translation = now)
+        // Keep this result even if the user closes the words while a move finishes.
+        viewModelScope.launch {
+            savedLineUpdates.withLock {
+                val changes = savedLinesStore.load().filter { it.isOf(song) && it.line == null }.mapNotNull { saved ->
+                    val now = translations.getOrNull(lines.indexOf(saved.text))?.takeIf { it != saved.translation } ?: return@mapNotNull null
+                    saved to saved.copy(translation = now)
+                }
+                if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
+            }
         }
-        if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
     }
 
     /**
@@ -4448,7 +4462,7 @@ internal class MainViewModel(
         val playing = uiState.following?.takeIf { it.clock.playing && it.appPackage != null }
         val before = uiState.lyricsFor?.let { shown -> playing?.let { Before(shown, inApp(it.clock.positionAt(now())), it.appPackage) } }
             ?: when (val first = playback?.whatPlays()) {
-                is WhatPlays.Named -> first.song.clock?.let { Before(first.song.metadata, it.positionAt(now()), app = null) }
+                is WhatPlays.Named -> first.song.clock?.let { Before(first.song.metadata, it.positionAt(now()), app = first.song.app) }
                 is WhatPlays.Nameless -> Before(first.playing.played, 0, first.playing.app, songless = true)
                 null -> null
             }

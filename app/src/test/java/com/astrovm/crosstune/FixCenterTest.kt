@@ -485,7 +485,7 @@ class FixCenterTest {
         click(string(R.string.fix_try_link))
         val test = nextStarted()!!
         assertEquals(Intent.ACTION_VIEW, test.action)
-        assertEquals("https://open.spotify.com/#$TEST_LINK", test.dataString)
+        assertEquals("https://open.spotify.com/track/$TEST_LINK#$TEST_LINK", test.dataString)
 
         // It reached Crosstune, which doesn't look it up: the links work, so Spotify's app doesn't take them.
         controller!!.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse(test.dataString)).setClass(app, MainActivity::class.java))
@@ -495,7 +495,7 @@ class FixCenterTest {
     }
 
     @Test
-    fun theGuideFloatsOverAndroidsPageAndBringsCrosstuneBackOnceDone() {
+    fun theGuideFloatsOverAndroidsPageAndOnceDoneMadeBigBringsCrosstuneBack() {
         installSpotify()
         shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE, true)
         launch()
@@ -511,19 +511,47 @@ class FixCenterTest {
         assertTrue(page.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertShown(string(R.string.fix_step_pick, string(R.string.android_in_your_browser)))
 
-        // Done, Crosstune is asked back, and says so while Android doesn't let it.
+        // Done, it says so. It doesn't ask Crosstune back, which newer Android blocks from a floating window.
         appKeepsLinks = false
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        composeRule.waitForIdle()
+        assertShown(string(R.string.practice_back_to, string(R.string.app_name)))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+        assertNull(nextStarted())
+        assertFalse(floating.get().isFinishing)
+
+        // Made big, it's in sight, so Android lets it bring Crosstune back, and the guide is done with.
+        floating.get().onPictureInPictureModeChanged(false, Configuration())
         val back = nextStarted()!!
         assertEquals(MainActivity::class.java.name, back.component!!.className)
         assertTrue(back.flags and Intent.FLAG_ACTIVITY_REORDER_TO_FRONT != 0)
-        composeRule.waitForIdle()
-        assertShown(string(R.string.practice_back_to, string(R.string.app_name)))
-        assertFalse(floating.get().isFinishing)
-
-        // Back, the guide is done with.
-        backToCrosstune()
         assertTrue(floating.get().isFinishing)
+    }
+
+    @Test
+    fun theStepsForAddingLinksWaitInCrosstuneWhereTheGuideWouldCoverAndroidsAddButton() {
+        shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE, true)
+        launch()
+        openFixes()
+        click(string(R.string.setup_check_allow))
+        click(string(R.string.fix_open_settings))
+        // Android's page opens at once, with no guide floating over its dialog.
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStarted()!!.action)
+        assertNull(GuideActivity.host)
+        backToCrosstune()
+        assertShown(string(R.string.fix_step_tap, string(R.string.android_add_link)))
+    }
+
+    @Test
+    fun theStepsForNotificationAccessWaitInCrosstuneWhereTheGuideWouldCoverAndroidsAllowButton() {
+        shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE, true)
+        launch()
+        openFixes()
+        click(string(R.string.follow_help_title))
+        click(string(R.string.fix_open_settings))
+        // Android asks to allow it in a dialog at the foot of the screen, where the guide would float.
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStarted()!!.action)
+        assertNull(GuideActivity.host)
     }
 
     @Test

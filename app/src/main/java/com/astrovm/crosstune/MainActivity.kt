@@ -795,7 +795,6 @@ class MainActivity : ComponentActivity() {
         onStopListeningAlong = viewModel::stopListeningAlong,
         // With Shizuku or root, in one tap, as in setup; otherwise, or once it couldn't, the steps.
         onAllowFollowing = { if (!viewModel.fixInOneTap(OneTapFix.FOLLOW)) viewModel.fixSteps(listOf(Need.Follow)) },
-        onAllowFloat = viewModel::allowFloat,
         onOpenFollowAccess = { openNotificationAccess(viewModel.uiState.phone == Phone.TV) },
         onOpenAppInfo = { openAppInfo() },
         onThemeChange = ::selectTheme,
@@ -926,8 +925,8 @@ class MainActivity : ComponentActivity() {
         if (need == Need.Links) viewModel.dismissLinkSettingsHelper()
         if (need == Need.Float) floatOnceAllowed = true
         val open = pageFor(need)
-        // Without picture-in-picture, the steps wait here in Crosstune.
-        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return open()
+        // Without picture-in-picture, or where the guide would cover what it asks for, the steps wait here in Crosstune.
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) || !viewModel.uiState.guideFloats(need)) return open()
         GuideActivity.host = guideHost
         guideOpens = open
         startActivity(Intent(this, GuideActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

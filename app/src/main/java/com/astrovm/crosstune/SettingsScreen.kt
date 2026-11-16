@@ -114,6 +114,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.unit.em
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 
 @Composable
@@ -193,19 +200,26 @@ private fun ExactReminderRow(state: UiState, onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth().then(if (oneTap) Modifier else Modifier.clickable(onClick = onClick)).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(stringResource(R.string.practice_reminder_exact), style = MaterialTheme.typography.bodyLarge)
-            Text(
-                stringResource(R.string.practice_reminder_late),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp)
-            )
-        }
-        if (oneTap) {
-            OneTapButton(stringResource(R.string.allow_button), onClick, fixing = state.fixingInOneTap == OneTapFix.EXACT)
-        } else {
-            AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(18.dp))
+        // At a big font, Allow goes under the words rather than squeezing them a part of a word a line.
+        LabelAndValue(
+            label = {
+                Column {
+                    LabelText(stringResource(R.string.practice_reminder_exact), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(R.string.practice_reminder_late),
+                        style = MaterialTheme.typography.bodySmall.copy(hyphens = Hyphens.Auto),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            },
+            modifier = Modifier.weight(1f)
+        ) {
+            if (oneTap) {
+                OneTapButton(stringResource(R.string.allow_button), onClick, fixing = state.fixingInOneTap == OneTapFix.EXACT)
+            } else {
+                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
         }
     }
 }
@@ -247,7 +261,7 @@ private fun SettingsList(
                 onSelect = actions.onTargetChange,
                 installed = state.installed,
                 label = stringResource(R.string.settings_default_label),
-                modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
             )
             SettingSwitch(
                 label = stringResource(R.string.setting_show_in_crosstune_first),
@@ -278,9 +292,10 @@ private fun SettingsList(
                 TranslationSourceRow(state.learning.chatGptTranslation, actions.onChatGptTranslationChange)
             }
             // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
+            // What it needs is said only while it's missing, never once it's allowed.
             SettingSwitch(
                 label = stringResource(R.string.setting_lyrics_follow),
-                description = stringResource(R.string.setting_lyrics_follow_description),
+                description = if (state.canFollowApps) null else stringResource(R.string.setting_lyrics_follow_description),
                 checked = state.canFollowApps,
                 onCheckedChange = { on -> if (on) actions.onAllowFollowing() else actions.onOpenFollowAccess() }
             )
@@ -348,16 +363,9 @@ private fun SettingsList(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = stringResource(R.string.settings_version),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = appVersion(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                LabelAndValue(label = { LabelText(stringResource(R.string.settings_version), style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+                    Text(text = appVersion(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             var reporting by rememberSaveable { mutableStateOf(false) }
             val reportRow = remember { FocusRequester() }
@@ -369,7 +377,7 @@ private fun SettingsList(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = stringResource(R.string.report_problem), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                LabelText(stringResource(R.string.report_problem), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(20.dp))
             }
             if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false }, opener = reportRow)
@@ -387,11 +395,7 @@ private fun SettingsList(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = stringResource(R.string.privacy_policy),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f)
-                )
+                LabelText(stringResource(R.string.privacy_policy), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
             }
             PageRow(stringResource(R.string.settings_licenses), opener(LICENSES_PAGE), onOpen = { onOpenSource(LICENSES_PAGE) })
@@ -402,14 +406,7 @@ private fun SettingsList(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val (before, after) = stringResource(R.string.made_with_love, HEART).split(HEART).map { it.trim() }
-                if (before.isNotEmpty()) Text(before, style = MaterialTheme.typography.bodyLarge)
-                Image(
-                    painterResource(R.drawable.ic_heart),
-                    contentDescription = null,
-                    modifier = Modifier.padding(horizontal = 4.dp).size(16.dp)
-                )
-                Text(after, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                MadeWithLove(Modifier.weight(1f))
                 AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
             }
         }
@@ -552,9 +549,10 @@ internal fun ContinueWithChatGpt(chatGpt: ChatGptState, actions: ScreenActions, 
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.padding(top = 4.dp)
             ) {
-                // OpenAI's logo starts its button.
-                AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = null, modifier = Modifier.size(20.dp))
-                Text(stringResource(R.string.chatgpt_continue), modifier = Modifier.padding(start = 10.dp))
+                // OpenAI's logo starts its button, or goes over its words where a word wouldn't fit beside it.
+                LeadAndWords(lead = { AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = null, modifier = Modifier.size(20.dp)) }, gap = 10.dp) {
+                    Text(stringResource(R.string.chatgpt_continue))
+                }
             }
         }
     }
@@ -597,11 +595,10 @@ private const val VISUALS_PAGE = "visuals"
 @Composable
 private fun VisualsListRow(settings: VisualsSettings, modifier: Modifier, onOpen: () -> Unit) {
     val names = presetNames()
-    Row(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+    LabelAndValue(
+        label = { LabelText(stringResource(R.string.setting_visuals_list), style = MaterialTheme.typography.bodyLarge) },
+        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.setting_visuals_list), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Text(
             stringResource(R.string.visuals_list_summary, names.count(settings::shows), names.size),
             style = MaterialTheme.typography.bodyMedium,
@@ -666,8 +663,9 @@ private fun StepsRow(
     Column(modifier = modifier.fillMaxWidth().padding(start = inset, end = inset, top = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
-            Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            LabelAndValue(label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+                Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            }
         }
         AppSlider(
             value = steps.indexOf(value).coerceAtLeast(0).toFloat(),
@@ -701,23 +699,24 @@ private const val SOURCES_PAGE = "sources"
 @Composable
 private fun SourcesRow(sources: List<SourceSettings>, modifier: Modifier, onOpen: () -> Unit) {
     val trouble = sources.firstNotNullOfOrNull { it.trouble() }
-    Row(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+    LabelAndValue(
+        label = { LabelText(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge) },
+        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        if (trouble != null) {
-            AppIcon(
-                R.drawable.ic_error, contentDescription = trouble,
-                tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 8.dp).size(18.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (trouble != null) {
+                AppIcon(
+                    R.drawable.ic_error, contentDescription = trouble,
+                    tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 8.dp).size(18.dp)
+                )
+            }
+            Text(
+                // Web frontends' sites have no switch, so they're not counted as off.
+                sources.filter { it.onToggle != null }.let { switches -> stringResource(R.string.visuals_list_summary, switches.count { it.on }, switches.size) },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
             )
         }
-        Text(
-            // Web frontends' sites have no switch, so they're not counted as off.
-            sources.filter { it.onToggle != null }.let { switches -> stringResource(R.string.visuals_list_summary, switches.count { it.on }, switches.size) },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
     }
 }
 
@@ -1276,7 +1275,7 @@ private fun VisualsList(
 
 /** A visual's still, name and switch; tapped anywhere but the switch, it plays. */
 @Composable
-private fun VisualRow(name: String, settings: VisualsSettings, canTurnOff: Boolean, actions: ScreenActions, onSee: () -> Unit) {
+internal fun VisualRow(name: String, settings: VisualsSettings, canTurnOff: Boolean, actions: ScreenActions, onSee: () -> Unit) {
     val assets = LocalContext.current.assets
     val shows = settings.shows(name)
     Row(
@@ -1288,17 +1287,25 @@ private fun VisualRow(name: String, settings: VisualsSettings, canTurnOff: Boole
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         CoverArt(name, load = { withContext(Dispatchers.IO) { milkdropThumb(assets, it) } }, size = 56.dp)
-        Column(modifier = Modifier.weight(1f)) {
-            // Some names run long: two lines keep the list quick to scan.
-            Text(text = name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (name in settings.heavy) HeavyNote()
+        // At a big font, the switch goes under the name rather than squeezing it.
+        LabelAndValue(
+            label = {
+                Column {
+                    // Similar preset names can differ only at their ends.
+                    LabelText(name, style = MaterialTheme.typography.bodyLarge)
+                    if (name in settings.heavy) HeavyNote()
+                }
+            },
+            modifier = Modifier.weight(1f),
+            gap = 16.dp
+        ) {
+            Switch(
+                checked = shows,
+                onCheckedChange = { actions.onVisualOnChange(name, it) },
+                enabled = canTurnOff,
+                modifier = Modifier.semantics { contentDescription = name }
+            )
         }
-        Switch(
-            checked = shows,
-            onCheckedChange = { actions.onVisualOnChange(name, it) },
-            enabled = canTurnOff,
-            modifier = Modifier.semantics { contentDescription = name }
-        )
     }
 }
 
@@ -1466,14 +1473,13 @@ private fun PickedMark(picked: Boolean) {
 @Composable
 private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, icon: ((T) -> Int)? = null) {
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 icon?.let { AppIcon(it(selected), contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp)) }
@@ -1513,8 +1519,7 @@ private fun PaletteRow(selected: Palette, onSelect: (Palette) -> Unit) {
     val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
         // The picked one by name, as the other rows say theirs, since a swatch alone doesn't say it.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = stringResource(R.string.setting_color), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        LabelAndValue(label = { LabelText(stringResource(R.string.setting_color), style = MaterialTheme.typography.bodyLarge) }) {
             Text(text = stringResource(selected.labelRes), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }
         // All in sight, spread across the row, onto another only on a screen too narrow for them.
@@ -1578,14 +1583,13 @@ private val Palette.labelRes: Int
 private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
     val appLanguage = stringResource(R.string.translate_into_app_language)
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { LabelText(stringResource(R.string.setting_translate_into), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.setting_translate_into), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LanguageMark(into, modifier = Modifier.padding(end = 6.dp))
@@ -1618,14 +1622,13 @@ private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
 @Composable
 private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { LabelText(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         val none = stringResource(R.string.untranslated_none)
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1633,9 +1636,10 @@ private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -
                     text = AppLanguage.untranslatedTags.filter { it in untranslated }.joinToString { AppLanguage.displayName(it) }.ifEmpty { none },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
+                    // A long list moves under the name and runs out at the row's end, never one word cut short.
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 160.dp)
+                    modifier = Modifier.weight(1f, fill = false)
                 )
                 AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
             }
@@ -1662,18 +1666,13 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
     val current = remember { AppLanguage.current(context) }
     val systemDefault = stringResource(R.string.language_system_default)
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { LabelText(stringResource(R.string.setting_language), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(
-            text = stringResource(R.string.setting_language),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f)
-        )
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LanguageMark(current, modifier = Modifier.padding(end = 6.dp))
@@ -1932,13 +1931,12 @@ private fun SourcePage(
 @Composable
 private fun NotAllowedRow(fixing: Boolean, actions: ScreenActions) {
     Row(modifier = Modifier.padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = stringResource(R.string.setup_not_allowed),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error,
+        LabelAndValue(
+            label = { LabelText(stringResource(R.string.setup_not_allowed), style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.error)) },
             modifier = Modifier.weight(1f)
-        )
-        OneTapButton(stringResource(R.string.allow_button), actions.onAllowLinks, fixing = fixing)
+        ) {
+            OneTapButton(stringResource(R.string.allow_button), actions.onAllowLinks, fixing = fixing)
+        }
     }
 }
 
@@ -2039,3 +2037,26 @@ internal fun SettingsScreenPreview() {
         )
     }
 }
+
+/**
+ * "Made with ♥ by astro", the heart drawn in the words where the translation puts it, so the words
+ * wrap as one line of text at a big font rather than each piece squeezed beside the others.
+ * Screen readers read the words without it.
+ */
+@Composable
+private fun MadeWithLove(modifier: Modifier = Modifier) {
+    val (before, after) = stringResource(R.string.made_with_love, HEART).split(HEART)
+    val text = buildAnnotatedString {
+        append(before)
+        appendInlineContent(HEART_ID, HEART)
+        append(after)
+    }
+    val heart = mapOf(
+        HEART_ID to InlineTextContent(Placeholder(1.2.em, 1.em, PlaceholderVerticalAlign.TextCenter)) {
+            Image(painterResource(R.drawable.ic_heart), contentDescription = null, modifier = Modifier.padding(horizontal = 1.dp).fillMaxSize())
+        }
+    )
+    Text(text, style = MaterialTheme.typography.bodyLarge.copy(hyphens = Hyphens.Auto), inlineContent = heart, modifier = modifier.semantics { contentDescription = (before + after).replace(Regex("\\s+"), " ").trim() })
+}
+
+private const val HEART_ID = "heart"

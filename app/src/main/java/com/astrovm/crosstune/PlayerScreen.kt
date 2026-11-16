@@ -933,8 +933,8 @@ private fun PlayerWaiting(app: String) {
 /** Without access to follow music apps, the player can't see or move the song: how to allow it. */
 @Composable
 private fun PlayerFollowOffer(actions: ScreenActions, fixing: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.player_follow_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    // The button under the words where a word of theirs wouldn't fit beside it.
+    LabelAndValue(label = { LabelText(stringResource(R.string.player_follow_allow), style = MaterialTheme.typography.bodyMedium) }, modifier = Modifier.fillMaxWidth()) {
         OneTapButton(stringResource(R.string.follow_turn_on), actions.onAllowFollowing, fixing = fixing)
     }
 }

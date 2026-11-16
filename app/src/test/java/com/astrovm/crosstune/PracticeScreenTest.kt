@@ -1,6 +1,9 @@
 package com.astrovm.crosstune
 
 import android.content.Context
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -33,13 +36,14 @@ class PracticeScreenTest {
     val composeRule = createComposeRule()
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
+    private lateinit var rootView: android.view.View
 
     private fun string(id: Int, vararg args: Any) = context.getString(id, *args)
 
     private val line = SavedLine("夜空を見上げて", reading = "よぞらをみあげて", romanized = "yozora o miagete", translation = "Looking up at the night sky", title = "Night Song", artist = "The Band", startMs = 1_000, endMs = 4_000)
 
     private fun show(state: UiState, actions: ScreenActions = ScreenActions(), dark: Boolean = false) {
-        composeRule.setContent { CrosstuneTheme(darkTheme = dark) { PracticeScreen(state, actions) } }
+        composeRule.setContent { rootView = androidx.compose.ui.platform.LocalView.current; CrosstuneTheme(darkTheme = dark) { PracticeScreen(state, actions) } }
         composeRule.waitForIdle()
     }
 
@@ -114,7 +118,7 @@ class PracticeScreenTest {
         player.assertExists()
         val bounds = player.getBoundsInRoot()
         val density = context.resources.displayMetrics.density
-        // YouTube asks for a player of at least 200 px tall, and 16:9.
+        // The viewport meets the 200 px minimum and keeps 16:9 where that width fits.
         val height = bounds.bottom.value - bounds.top.value
         assertTrue(height * density >= 200f - 0.5f)
         assertEquals(height * 16 / 9, bounds.right.value - bounds.left.value, 0.5f)
@@ -127,6 +131,54 @@ class PracticeScreenTest {
         assertTrue(view.parent != null)
         // Its play button stays the card's one control of the sound.
         composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertIsEnabled()
+    }
+
+    @Test
+    @Config(qualifiers = "w320dp-h640dp-mdpi")
+    fun aNarrowPlayerKeepsYouTubesMinimumViewportInsideTheCard() {
+        withPlayer()
+        val player = composeRule.onNodeWithTag(LINE_PLAYER_TAG).getBoundsInRoot()
+        val card = composeRule.onNodeWithTag(PRACTICE_CARD_TAG).getBoundsInRoot()
+        val density = context.resources.displayMetrics.density
+        assertTrue("player $player is too narrow", (player.right.value - player.left.value) * density >= 199.5f)
+        assertTrue("player $player is too short", (player.bottom.value - player.top.value) * density >= 199.5f)
+        assertTrue("player $player leaves card $card", player.left >= card.left && player.right <= card.right)
+    }
+
+    private fun gradesFollowRtl(wrapped: Boolean) {
+        composeRule.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) {
+                CrosstuneTheme { PracticeScreen(UiState(practice = practice(turned = true), cardTypes = DEFAULT_CARD_TYPES), ScreenActions()) }
+            }
+        }
+        composeRule.waitForIdle()
+        val grades = listOf(R.string.practice_again, R.string.practice_hard, R.string.practice_good, R.string.practice_easy).map {
+            composeRule.onNodeWithText(string(it)).fetchSemanticsNode().positionInRoot
+        }
+        assertEquals("unexpected rows: $grades", if (wrapped) 2 else 1, grades.map { it.y }.distinct().size)
+        assertTrue("first grade is not on the right: $grades", grades[0].x > grades[1].x)
+        assertTrue("last grade is not on the left: $grades", grades[2].x > grades[3].x)
+    }
+
+    @Test
+    fun oneRowOfGradesFollowsRtl() = gradesFollowRtl(wrapped = false)
+
+    @Test
+    @Config(qualifiers = "de-w320dp-h640dp-xhdpi", fontScale = 2f)
+    fun wrappedGradesFollowRtl() = gradesFollowRtl(wrapped = true)
+
+    @Test
+    fun theWaitingPlayControlHasAnAccessibleProgressState() {
+        withPlayer(Practice(queue = listOf(heard), total = 2, sound = LineSound.LOADING, video = "abc"))
+        val play = composeRule.onNodeWithContentDescription(string(R.string.practice_play))
+        play.assertIsNotEnabled()
+        assertEquals(ProgressBarRangeInfo.Indeterminate, play.fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo])
+        val manager = context.getSystemService(android.view.accessibility.AccessibilityManager::class.java)
+        org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
+        org.robolectric.Shadows.shadowOf(manager).setTouchExplorationEnabled(true)
+        composeRule.waitForIdle()
+        val spoken = requireNotNull(requireNotNull(rootView.accessibilityNodeProvider).createAccessibilityNodeInfo(play.fetchSemanticsNode().id))
+        assertTrue("the waiting control has no spoken state", !androidx.core.view.accessibility.AccessibilityNodeInfoCompat.wrap(spoken).stateDescription.isNullOrBlank())
     }
 
     @Test
@@ -159,21 +211,23 @@ class PracticeScreenTest {
         assertEquals(0, old.childCount)
     }
 
-    @Test
-    fun aCardWhoseSoundIsGoingThroughThePlayerDoesNotNameTheMusicApp() {
+    /** While the line's sound is found, its play button waits in a turning ring, and no app is named: none may be the one that plays it. */
+    private fun waitsWithoutNamingAnApp(practice: Practice, player: Boolean) {
         installMusicApp()
-        val loading = line.copy(cardType = HEAR_TYPE, app = "com.example.music")
-        withPlayer(Practice(queue = listOf(loading), total = 2, sound = LineSound.LOADING, video = "abc"))
-        composeRule.onNodeWithText(string(R.string.practice_loading, "Example Music")).assertDoesNotExist()
+        if (player) withPlayer(practice) else show(UiState(practice = practice, cardTypes = hearing))
+        composeRule.onNodeWithText("Example Music", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("com.example.music", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertIsNotEnabled()
+        composeRule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate)).assertExists()
     }
 
     @Test
-    fun whileTheMusicAppGetsThereItIsNamedWithItsIcon() {
-        installMusicApp()
-        val loading = line.copy(cardType = HEAR_TYPE, app = "com.example.music")
-        show(UiState(practice = Practice(queue = listOf(loading), total = 2, sound = LineSound.LOADING), cardTypes = hearing))
-        composeRule.onNodeWithText(string(R.string.practice_loading, "Example Music")).assertExists()
-    }
+    fun whileTheLineIsFoundNoMusicAppIsNamed() =
+        waitsWithoutNamingAnApp(Practice(queue = listOf(line.copy(cardType = HEAR_TYPE, app = "com.example.music")), total = 2, sound = LineSound.LOADING), player = false)
+
+    @Test
+    fun whileTheSmallPlayerGetsThereNoMusicAppIsNamed() =
+        waitsWithoutNamingAnApp(Practice(queue = listOf(line.copy(cardType = HEAR_TYPE, app = "com.example.music")), total = 2, sound = LineSound.LOADING, video = "abc"), player = true)
 
     /** A music app on the phone, so a card can name it. */
     private fun installMusicApp() {
@@ -191,18 +245,11 @@ class PracticeScreenTest {
     }
 
     @Test
-    fun whileTheMusicAppGetsThereItsNameIsOnlySaidWhenItIsKnown() {
-        val heard = line.copy(cardType = HEAR_TYPE, app = "com.example.nothing")
-        show(UiState(practice = Practice(queue = listOf(heard), total = 2, sound = LineSound.LOADING), cardTypes = listOf(READ_IT, HEAR_IT.copy(on = true))))
-        composeRule.onNodeWithText(string(R.string.practice_loading, "com.example.nothing")).assertDoesNotExist()
-    }
-
-    @Test
     fun whenDoneItOffersTheMusicThatPlayedBeforeUnlessPracticeLeftOffThere() {
         val before = Before(MusicMetadata("Old Song", "Old Band"), 5_000, "com.example.music")
         val backs = mutableListOf<Unit>()
         show(UiState(practice = Practice(total = 3, done = 3, before = before)), ScreenActions(onBackToBefore = { backs += Unit }))
-        composeRule.onNodeWithText(string(R.string.practice_done, 3)).assertExists()
+        composeRule.onNodeWithText(context.resources.getQuantityString(R.plurals.practice_done, 3, 3)).assertExists()
         composeRule.onNodeWithText(string(R.string.practice_back_to, "Old Song")).performClick()
         assertEquals(1, backs.size)
     }

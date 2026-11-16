@@ -16,6 +16,12 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
@@ -78,6 +84,30 @@ class CardTypesPanelTest {
     }
 
     private val read get() = state.cardTypes.first { it.id == READ_TYPE }
+
+    @Test
+    @Config(fontScale = 2f)
+    fun eachKindShowsAMarkForEverythingOnASideTheSizeOfTheIconsBesideItAtTheLargestFont() {
+        // A Japanese line, one kind: its words in front; behind, how they read, in Latin letters, what they mean and the sound.
+        show(japanese)
+        state = state.copy(cardTypes = listOf(CardType("marks", "Marks", true, CardOptions())))
+        openOptions()
+        val root = composeRule.onRoot().getBoundsInRoot()
+        val density = composeRule.density
+        for (mark in listOf(Script.JAPANESE.glyph, "あ", "a")) {
+            val nodes = composeRule.onAllNodesWithText(mark, useUnmergedTree = true)
+            assertTrue("no $mark drawn", nodes.fetchSemanticsNodes().isNotEmpty())
+            for (index in nodes.fetchSemanticsNodes().indices) {
+                val drawn = nodes[index].getBoundsInRoot()
+                assertTrue("$mark at $drawn", drawn.right > drawn.left && drawn.bottom > drawn.top && drawn.left >= root.left && drawn.right <= root.right)
+                val layouts = mutableListOf<TextLayoutResult>()
+                nodes[index].performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                // A letter as big as the 14 or 24 dp icons it stands with, not grown with the font as words are.
+                val letter = with(density) { layouts.single().layoutInput.style.fontSize.toPx().toDp() }
+                assertTrue("$mark is $letter", listOf(14.dp * 0.85f, 24.dp * 0.85f).any { (it - letter).value in -0.5f..0.5f })
+            }
+        }
+    }
 
     @Test
     fun theLastKindOnStaysOnAndAnotherCanBeTurnedOnAndThenAnyOff() {

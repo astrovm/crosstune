@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -79,6 +80,7 @@ import androidx.compose.material3.FabPosition
 import androidx.compose.material3.Icon
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.material3.Scaffold
@@ -91,7 +93,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -143,8 +144,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import com.astrovm.crosstune.ui.theme.Palette
 
@@ -153,6 +154,9 @@ internal const val PRACTICE_BADGE_TAG = "practice-badge"
 internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
 internal const val NOW_PLAYING_TAG = "now_playing"
+
+/** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
+internal const val CARD_TOOLS_TAG = "card_tools"
 
 /** Past this font scale, Play and Open stack: a long word like German's "Abspielen" no longer fits half the width. */
 private const val STACK_BUTTONS_FROM = 1.3f
@@ -375,7 +379,6 @@ internal data class ScreenActions(
     /** Lets the words follow music apps: in one tap with Shizuku or root, otherwise the steps show how. */
     val onAllowFollowing: () -> Unit = {},
     /** Lets Crosstune show over other apps, so it comes back over a music app it opens: in one tap with Shizuku or root, otherwise the steps show how. */
-    val onAllowFloat: () -> Unit = {},
     /** Opens Android's page for Crosstune seeing what music apps play, where it's turned off too. */
     val onOpenFollowAccess: () -> Unit = {},
     /** Opens Crosstune's App info, where restricted settings are allowed. */
@@ -656,20 +659,26 @@ private fun PageFrame(
         snackbarHost = snackbarHost,
         topBar = {
             if (title != null) {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(color = MaterialTheme.colorScheme.surface) {
+                    // A large title can use another row without covering the page or losing its ending.
+                    LeadAndWords(
+                        lead = { Box { navigationIcon() } },
+                        modifier = Modifier.fillMaxWidth()
+                            .windowInsetsPadding(TopAppBarDefaults.windowInsets)
+                            .heightIn(min = 64.dp)
+                            .padding(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        LabelAndValue(label = {
                             if (titleLeading != null) {
-                                titleLeading()
-                                Spacer(Modifier.width(12.dp))
+                                LeadAndWords(lead = { Box { titleLeading() } }) {
+                                    LabelText(title, style = MaterialTheme.typography.titleLarge)
+                                }
+                            } else {
+                                LabelText(title, style = MaterialTheme.typography.titleLarge)
                             }
-                            Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    },
-                    navigationIcon = navigationIcon,
-                    actions = { actions() },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-                )
+                        }) { Row { actions() } }
+                    }
+                }
             }
         },
         bottomBar = bottomBar,
@@ -1158,7 +1167,11 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     }
 }
 
-/** "Music app   Spotify ▾": the app songs open and play in, in settings. */
+/**
+ * "Music app   Spotify ▾": the app songs open and play in, in settings. The whole row is the button,
+ * so a screen reader says what's set with what it's for, and the name keeps its words whole beside
+ * the app, or over it at a big font.
+ */
 @Composable
 internal fun DefaultDestinationMenu(
     destinations: List<Destination>,
@@ -1169,13 +1182,15 @@ internal fun DefaultDestinationMenu(
     installed: Set<MusicService>
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+    LabelAndValue(
+        label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) },
+        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { expanded = true }.testTag(DEFAULT_MENU_TAG).then(modifier)
+    ) {
         Box {
-            TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 DestinationIcon(selected, installed, size = 20.dp)
                 Spacer(Modifier.size(8.dp))
-                Text(selected.label())
+                Text(selected.label(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 AppIcon(
                     R.drawable.ic_expand_more,
                     contentDescription = null,
@@ -1564,8 +1579,9 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 Text(stringResource(R.string.make_default_named, destination.label()))
             }
         }
-        // Flat: the song is the point, these are only within reach.
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        // Flat: the song is the point, these are only within reach. Spread across the row, and onto
+        // another where a big font or a long language leaves them no room, each word whole.
+        FlowRow(modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag(CARD_TOOLS_TAG), horizontalArrangement = Arrangement.SpaceEvenly) {
             // With its songs listed, the songs are what's worth copying or sharing, e.g. to move
             // the list to another service, rather than a search for its name. The songs listed
             // right below say what's copied, so the label is short; screen readers hear it all.
@@ -2042,6 +2058,13 @@ private fun MoreChoice(onClick: () -> Unit) {
 }
 
 /**
+ * Text as big as [this], at any font: a letter that stands in for an icon is as big as the icons
+ * beside it, which don't grow with the font, and stays inside the tile it's on.
+ */
+@Composable
+internal fun Dp.asIconText(): TextUnit = with(LocalDensity.current) { toSp() }
+
+/**
  * A destination's icon: an installed app's own, the bundled logo of a service, or, for sites
  * with no logo of their own (Invidious, Piped, custom ones), their first letter on a colored tile.
  */
@@ -2070,7 +2093,7 @@ internal fun DestinationIcon(destination: Destination, installed: Set<MusicServi
     }
     Surface(modifier = tag.size(size), shape = MaterialTheme.shapes.small, color = background, contentColor = Color.White) {
         Box(contentAlignment = Alignment.Center) {
-            Text(letter.uppercase(), style = MaterialTheme.typography.titleMedium, fontSize = (size.value * 0.5f).sp)
+            Text(letter.uppercase(), style = MaterialTheme.typography.titleMedium, fontSize = (size * 0.5f).asIconText(), lineHeight = (size * 0.5f).asIconText())
         }
     }
 }

@@ -190,6 +190,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -1055,8 +1056,10 @@ private fun ReadingSwitch(@StringRes label: Int, on: Boolean, onChange: (Boolean
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(on, role = Role.Switch, onValueChange = onChange)
     ) {
-        Text(stringResource(label), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 12.dp))
-        Switch(checked = on, onCheckedChange = null)
+        // Under its words where a word of theirs wouldn't fit beside it.
+        LabelAndValue(label = { LabelText(stringResource(label), style = MaterialTheme.typography.bodyMedium) }, modifier = Modifier.weight(1f)) {
+            Switch(checked = on, onCheckedChange = null)
+        }
     }
 }
 
@@ -1080,8 +1083,9 @@ internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloati
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp))
-            Text(size, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text(NumberFormat.getPercentInstance().format(sizeShare(scale, range)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            LabelAndValue(label = { LabelText(size, style = MaterialTheme.typography.bodyMedium) }, modifier = Modifier.weight(1f)) {
+                Text(NumberFormat.getPercentInstance().format(sizeShare(scale, range)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            }
         }
         var latest by remember { mutableFloatStateOf(scale) }
         AppSlider(
@@ -1516,12 +1520,13 @@ private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, o
         Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AppIcon(R.drawable.ic_shade, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
-                Text(brightness, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                Text(
-                    NumberFormat.getPercentInstance().format(sizeShare(MAX_VISUALS_SHADE - state.visualsShade, 0f..MAX_VISUALS_SHADE)),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                LabelAndValue(label = { LabelText(brightness, style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+                    Text(
+                        NumberFormat.getPercentInstance().format(sizeShare(MAX_VISUALS_SHADE - state.visualsShade, 0f..MAX_VISUALS_SHADE)),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
             // Where it was let go is kept, even before the menu has caught up with it.
             var latest by remember { mutableFloatStateOf(state.visualsShade) }
@@ -1581,13 +1586,16 @@ private fun MenuAction(@DrawableRes icon: Int, @StringRes label: Int, trailing: 
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onClick)
     ) {
         AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
-        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        if (trailing != null) {
-            Text(
-                trailing,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        if (trailing == null) {
+            Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        } else {
+            LabelAndValue(label = { LabelText(stringResource(label), style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+                Text(
+                    trailing,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -1600,8 +1608,10 @@ internal fun MenuSwitch(@StringRes label: Int, on: Boolean, @DrawableRes icon: I
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(on, role = Role.Switch, onValueChange = onChange)
     ) {
         if (icon != null) AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
-        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
-        Switch(checked = on, onCheckedChange = null)
+        // Under its words where a word of theirs wouldn't fit beside it.
+        LabelAndValue(label = { LabelText(stringResource(label), style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+            Switch(checked = on, onCheckedChange = null)
+        }
     }
 }
 
@@ -2096,7 +2106,7 @@ internal val ChordLit = SemanticsPropertyKey<Int>("ChordLit")
  * words as they're sung, and the chord being played.
  */
 @Composable
-private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, coming: Boolean, style: TextStyle, ruby: List<Ruby>?, readingScale: Float) {
+internal fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, coming: Boolean, style: TextStyle, ruby: List<Ruby>?, readingScale: Float) {
     val chordStyle = style.copy(fontSize = style.fontSize * CHORD_SCALE, lineHeight = style.lineHeight * CHORD_SCALE, color = MaterialTheme.colorScheme.primary)
     if (chords.before.isNotEmpty()) Text(chords.before.joinToString("   "), style = chordStyle)
     val text = line.text.ifBlank { "♪" }
@@ -2122,7 +2132,7 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
     Text(
         shown,
         // Room over each row of the words for the chords played on it, and the readings.
-        style = style.copy(lineHeight = (style.lineHeight.value + chordStyle.lineHeight.value + if (ruby != null) over.lineHeight.value else 0f).sp, lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Bottom, LineHeightStyle.Trim.None)),
+        style = style.copy(lineHeight = LocalDensity.current.stacked(style, listOfNotNull(chordStyle, over.takeIf { ruby != null })), lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Bottom, LineHeightStyle.Trim.None)),
         color = MaterialTheme.colorScheme.onSurface,
         onTextLayout = { layout = it },
         modifier = Modifier
@@ -2139,7 +2149,7 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
                 val readings = if (ruby != null) layout?.let { readingPlaces(ruby, it) }.orEmpty() else emptyList()
                 val readingLabels = readings.map { measurer.measure(it.reading, over) }
                 // The readings sit just over the words, under the chords.
-                val below = chordStyle.lineHeight.toPx()
+                val below = rowHeight(chordStyle)
                 onDrawBehind {
                     val now = playing.intValue
                     places.forEachIndexed { index, place -> drawText(labels[index], color = if (now >= 0 && index != now) dim else chordStyle.color, topLeft = place) }
@@ -2229,7 +2239,7 @@ internal fun RubyLine(
     val over = readingStyle(style, scale).copy(color = readingColor)
     val text = remember(parts, scale) { rubyText(parts, scale) }
     val measurer = rememberTextMeasurer()
-    val room = with(LocalDensity.current) { over.lineHeight.toPx() }
+    val room = LocalDensity.current.rowHeight(over)
     var words by remember { mutableStateOf<TextLayoutResult?>(null) }
     val shifts = words?.let { rowShifts(parts, it, room) }
     Text(
@@ -2282,6 +2292,21 @@ internal fun rowShifts(parts: List<Ruby>, words: TextLayoutResult, room: Float):
  * at their spaces, rather than inside a word, and draws with Japan's shapes of kanji.
  */
 internal fun TextStyle.writing(text: String): TextStyle = if (text.any(Readings::isKana)) copy(localeList = LocaleList("ja"), lineBreak = LineBreak.Heading) else this
+
+/**
+ * A line height for [words] that's as tall as a row of them with a row of each of [over] on top, as
+ * drawn. At a big font, Android grows big text less than small, so each row's height is taken as
+ * drawn on its own, and the sum is said as a part of the words' size: given in sp, Compose would grow
+ * it with the words' size again, and the words would sit far under their chords and readings.
+ */
+internal fun Density.stacked(words: TextStyle, over: List<TextStyle>): TextUnit =
+    ((over + words).sumOf { rowHeight(it).toDouble() } / words.fontSize.toPx()).toFloat().em
+
+/**
+ * How tall Compose draws a row of [style], in px. At a big font it grows a line height in sp as much
+ * as the font size, which is less than the line height alone would grow by.
+ */
+internal fun Density.rowHeight(style: TextStyle): Float = style.lineHeight.value / style.fontSize.value * style.fontSize.toPx()
 
 /** The small type of readings over words in [style], [scale] times as big. */
 private fun readingStyle(style: TextStyle, scale: Float) =
@@ -2857,8 +2882,10 @@ private fun SheetView(sheet: Sheet) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 sheet.facts.forEach { (label, value) ->
                     Row {
-                        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(110.dp))
-                        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                        // A fact's name in a column of its own, or over its value at a big font, never broken to fit 110 dp.
+                        LeadAndWords(lead = { LabelText(label, style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant), modifier = Modifier.widthIn(min = 110.dp)) }, gap = 0.dp, top = true) {
+                            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        }
                     }
                 }
             }
@@ -2886,8 +2913,9 @@ private fun SheetView(sheet: Sheet) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 sheet.known.forEach { (name, year) ->
                     Row(modifier = Modifier.fillMaxWidth()) {
-                        Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        Text(year, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        LabelAndValue(label = { LabelText(name, style = MaterialTheme.typography.bodyMedium) }, modifier = Modifier.weight(1f)) {
+                            Text(year, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }

@@ -5,7 +5,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -69,7 +68,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.Role
@@ -160,7 +158,7 @@ private fun KindRow(kind: CardType, line: SavedLine, last: Boolean, onToggle: (B
         ) {
             Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { SideMarks(kind.options.front, script, first = true, size = 24.dp) }
             Column(Modifier.weight(1f).clearAndSetSemantics {}) {
-                Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                LabelText(title, style = MaterialTheme.typography.bodyLarge)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.alpha(0.7f)) {
                     SideMarks(kind.options.front, script, size = 14.dp)
                     AppIcon(R.drawable.ic_chevron_right, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -190,9 +188,9 @@ private fun KindFrame(on: Boolean, modifier: Modifier = Modifier, content: @Comp
 private fun SideMarks(side: CardSide, script: Script?, size: Dp, first: Boolean = false) {
     val marks = buildList<@Composable () -> Unit> {
         if (side.sound) add { AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(size)) }
-        if (side.words) add { Text(script?.glyph ?: "文", fontSize = (size.value * 0.85f).sp) }
-        if (side.readings) add { Text("あ", fontSize = (size.value * 0.85f).sp) }
-        if (side.latin) add { Text("a", fontSize = (size.value * 0.85f).sp) }
+        if (side.words) add { Text(script?.glyph ?: "文", fontSize = (size * 0.85f).asIconText()) }
+        if (side.readings) add { Text("あ", fontSize = (size * 0.85f).asIconText()) }
+        if (side.latin) add { Text("a", fontSize = (size * 0.85f).asIconText()) }
         if (side.translation) add { AppIcon(R.drawable.ic_translate, contentDescription = null, modifier = Modifier.size(size)) }
     }
     (if (first) marks.take(1) else marks).forEach { it() }

@@ -15,7 +15,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.FontScaling
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import kotlinx.coroutines.delay
@@ -37,10 +39,10 @@ internal interface GuideHost {
 }
 
 /**
- * The step being taken, small, floating over Android's settings in picture-in-picture while the
- * user is there, in a task of its own, so closing it leaves Crosstune as it was. Crosstune comes
- * back once Android says it's done, and the guide closes as it does. Where Android won't float it,
- * Android's page just opens, and the steps wait in Crosstune.
+ * The steps, small, floating over Android's settings in picture-in-picture while the user is there,
+ * in a task of its own, so closing it leaves Crosstune as it was. Once Android says it's done, it
+ * says so, and made big it brings Crosstune back. Where Android won't float it, Android's page just
+ * opens, and the steps wait in Crosstune.
  */
 class GuideActivity : ComponentActivity() {
     /** Set once Android's page is open under the guide, so Crosstune coming back closes it. */
@@ -59,14 +61,14 @@ class GuideActivity : ComponentActivity() {
             CrosstuneTheme(darkTheme = host.dark, palette = state.palette, pureBlack = state.pureBlack) { Shrunk { FloatingGuide(need, state) } }
         }
         lifecycleScope.launch {
-            // Android doesn't say when it's done, so it's asked every second.
+            // Android doesn't say when it's done, so it's asked every second, till the guide says it is.
+            // It doesn't bring Crosstune back by itself: newer Android blocks that from a floating
+            // window, which doesn't count as in sight. Made big, it's in sight on every version,
+            // and brings Crosstune back.
             while (host.state.done(need) != true) {
                 delay(CHECK_MS)
                 host.refresh()
             }
-            // Crosstune coming back closes the guide. Where Android won't let it, the guide says
-            // done, and stays till the user goes back.
-            host.back(this@GuideActivity)
         }
     }
 
@@ -130,13 +132,26 @@ class GuideActivity : ComponentActivity() {
             shown?.takeIf { it.opened }?.finish()
         }
 
-        /** Laid out as on a phone and shrunk to the window, which is too small to lay it out in. */
+        /**
+         * Laid out as on a phone and shrunk to the window, which is too small to lay it out in. Laid
+         * out as much wider as the font is made bigger, so at a big font its words fit whole, as they
+         * do at the usual one, and Android's own font curve, which grows big text less than small, is kept.
+         */
         @Composable
-        private fun Shrunk(content: @Composable () -> Unit) {
+        internal fun Shrunk(content: @Composable () -> Unit) {
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val density = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(density.density * (maxWidth / WIDTH), density.fontScale)) { content() }
+                val wide = WIDTH * density.grows()
+                CompositionLocalProvider(LocalDensity provides ShrunkDensity(density, density.density * (maxWidth / wide))) { content() }
             }
         }
     }
 }
+
+/** How many times bigger than at the usual font Android draws body text. */
+internal fun Density.grows(): Float = (BODY.toDp() / BODY.value.dp).coerceAtLeast(1f)
+
+private val BODY = 16.sp
+
+/** [base], drawn [density] px to the dp, with its font curve: sp grow just as they do in [base]. */
+private class ShrunkDensity(base: Density, override val density: Float) : Density, FontScaling by base

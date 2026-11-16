@@ -38,6 +38,14 @@ internal class AppTraitsStore(private val preferences: SharedPreferences, privat
     /** Remembers that [app] goes on playing with Crosstune in front, or doesn't. */
     fun keeps(app: String, goesOn: Boolean) = remember(app, KEEPS, goesOn)
 
+    /** Different active sessions have different capabilities, so an app-wide mark cannot identify one. */
+    fun forget(app: String) {
+        val all = load()
+        if (!all.has(app)) return
+        all.remove(app)
+        preferences.edit { putString(KEY, all.toString()) }
+    }
+
     private fun remember(app: String, key: String, value: Boolean) {
         val all = load()
         // A mark made now is as new as the app's others, so a "can't" ages from the last time it was seen.
