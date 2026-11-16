@@ -369,6 +369,7 @@ internal fun chordWikiCheck(title: String, text: String): ChordWikiCheck {
 }
 
 internal fun chordWikiCheck(seen: ChordWikiSeen): ChordWikiCheck {
+    if (seen.hasEditor) return ChordWikiCheck.NONE
     val text = chordWikiCheck(seen.title, seen.text)
     return when {
         seen.interactive || text == ChordWikiCheck.INTERACTIVE -> ChordWikiCheck.INTERACTIVE

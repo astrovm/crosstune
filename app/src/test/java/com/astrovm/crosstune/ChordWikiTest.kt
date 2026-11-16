@@ -283,6 +283,34 @@ class ChordWikiTest {
     }
 
     @Test
+    fun theBrowserUpdatesTheLookupCheckAndClearsItForAReadyEditor() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val observation = WikiObservation().apply { check = ChordWikiCheck.AUTOMATIC }
+        val done = CompletableDeferred<Result<String>>()
+        val job = CoroutineScope(Dispatchers.Main + observation).launch {
+            done.complete(runCatching { ChordWikiBrowser(activity, gapMs = 60_000).page("https://ja.chordwiki.org/") })
+        }
+        try {
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(ChordWikiCheck.NONE, observation.check)
+            val web = findWeb(activity.window.decorView)
+            answer(web, page(title = "Just a moment..."))
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(ChordWikiCheck.AUTOMATIC, observation.check)
+            // Cloudflare may also inject its script into an ordinary editor page.
+            val editor = JSONObject().put("href", "https://ja.chordwiki.org/wiki.cgi?c=edit")
+                .put("hasEditor", true).put("source", "[C]架空の歌").put("automatic", true)
+            answer(web, JSONObject.quote(editor.toString()))
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals("[C]架空の歌", done.within().getOrThrow())
+            assertEquals(ChordWikiCheck.NONE, observation.check)
+        } finally {
+            job.cancel()
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+    }
+
+    @Test
     fun pagesWaitForThePreviousPageToClose() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val root = activity.window.decorView as ViewGroup
@@ -322,10 +350,13 @@ class ChordWikiTest {
         assertFalse(client.shouldOverrideUrlLoading(web, resource("https://ja.chordwiki.org/wiki/test", "text/html")))
         assertTrue(client.shouldInterceptRequest(web, resource("https://ja.chordwiki.org.evil.example/app.js", "*/*")) != null)
         assertTrue(client.shouldInterceptRequest(web, resource("http://ja.chordwiki.org/app.js", "*/*")) != null)
+        assertNull(client.shouldInterceptRequest(web, resource("https://ja.chordwiki.org:443/app.js", "*/*")))
+        assertTrue(client.shouldInterceptRequest(web, resource("https://ja.chordwiki.org:8443/app.js", "*/*")) != null)
         job.cancel()
     }
 
     @Test
+    @Config(shadows = [ImagesInitiallyEnabledWebView::class])
     fun aMeasurementLeavesPicturesAndFontsUnloaded() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val asked = mutableListOf<String>()
@@ -702,5 +733,21 @@ class FlushCountingCookies {
         fun reset() {
             flushes = 0
         }
+    }
+}
+
+/** Android enables image loading initially; Robolectric's settings start with it disabled. */
+@Implements(WebView::class)
+class ImagesInitiallyEnabledWebView : ShadowWebView() {
+    private var initialized = false
+
+    @Implementation
+    override fun getSettings(): android.webkit.WebSettings {
+        val settings = super.getSettings()
+        if (!initialized) {
+            initialized = true
+            settings.loadsImagesAutomatically = true
+        }
+        return settings
     }
 }

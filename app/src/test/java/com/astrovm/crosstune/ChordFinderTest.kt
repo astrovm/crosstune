@@ -1848,6 +1848,48 @@ Singing to the morning light</div>"""
         assertEquals(first * 3, calls)
     }
 
+    @Test
+    fun wikiMissKeysKeepDigitAndNullBoundariesSeparate() {
+        noOtherChordSites()
+        val pairs = listOf(
+            listOf("a\u0000b", "c") to listOf("a", "b\u0000c"),
+            listOf("2", "abcdefghij1z") to listOf("12abcdefghij", "z")
+        )
+        for ((firstWords, secondWords) in pairs) {
+            val file = File.createTempFile("wiki-framing", ".json").apply { delete(); deleteOnExit() }
+            var calls = 0
+            val pages = ChordWikiPages { calls++; "" }
+            val finder = ChordFinder(fake.client(), lookups, LookupCache(file, Dispatchers.Unconfined), pages, chordWikiPauseMs = 0, now = { 1_000L })
+            chords(kawa, firstWords, finder)
+            val first = calls
+            assertTrue(first > 0)
+            chords(kawa, secondWords, finder)
+            assertEquals(first * 2, calls)
+            chords(kawa, firstWords, finder)
+            assertEquals(first * 2, calls)
+        }
+    }
+
+    @Test
+    fun aDefaultClockMissIsSavedAtTheCurrentTimeAndReusedAfterReload() {
+        noOtherChordSites()
+        val file = File.createTempFile("wiki-clock", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        var calls = 0
+        val pages = ChordWikiPages { calls++; "" }
+        val before = System.currentTimeMillis()
+        assertTrue("The wall clock must distinguish the zero-time mutant", before > 0L)
+        chords(kawa, japanese, ChordFinder(fake.client(), lookups, cache, pages, chordWikiPauseMs = 0))
+        val after = System.currentTimeMillis()
+        val timestamp = runBlocking { cache.entries().single { it.first.startsWith("wiki-miss:") }.second.toLong() }
+        assertTrue("Saved miss time $timestamp must be between $before and $after", timestamp in minOf(before, after)..maxOf(before, after))
+        val first = calls
+        assertTrue(first > 0)
+        val reopened = ChordFinder(fake.client(), lookups, LookupCache(file, Dispatchers.Unconfined), pages, chordWikiPauseMs = 0)
+        chords(kawa, japanese, reopened)
+        assertEquals(first, calls)
+    }
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
     fun aLateAutomaticCheckSurvivesTheTotalDeadline() = kotlinx.coroutines.test.runTest {
