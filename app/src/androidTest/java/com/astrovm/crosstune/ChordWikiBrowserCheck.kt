@@ -21,6 +21,7 @@ class ChordWikiBrowserCheck : Instrumentation() {
     private val hosts = ConcurrentHashMap<String, AtomicInteger>()
     private val creations = AtomicInteger()
     private var pages: ChordWikiPages? = null
+    private var readId = 0
     private val events = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityResumed(activity: Activity) {
             if (activity is MainActivity) current = activity
@@ -63,6 +64,8 @@ class ChordWikiBrowserCheck : Instrumentation() {
                 when (control.takeIf(File::exists)?.readText()?.trim()) {
                     "read" -> {
                         control.delete()
+                        readId++
+                        status.writeText(JSONObject().put("state", "reading").put("request_id", readId).toString())
                         val activity = checkNotNull(current) { "Open MainActivity first" }
                         if (pages == null) runOnMainSync { pages = wikiPages(activity) }
                         requests.clear(); hosts.clear()
@@ -79,7 +82,7 @@ class ChordWikiBrowserCheck : Instrumentation() {
                         }
                         val body = result.getOrNull()
                         val live = System.identityHashCode(current)
-                        status.writeText(JSONObject().put("state", "read")
+                        status.writeText(JSONObject().put("state", "read").put("request_id", readId)
                             .put("elapsed_ms", android.os.SystemClock.elapsedRealtime() - started)
                             .put("activity_creations", creations.get())
                             .put("live_requests", requests[live]?.get() ?: 0)

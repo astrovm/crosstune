@@ -12,7 +12,7 @@ The runner reads ChordWiki's public practice editor. It submits no form and does
    ```
 
 5. Wait for `cache/wikicheck-status.json` in the dev app to say `ready`. Open `com.astrovm.crosstune.dev/com.astrovm.crosstune.MainActivity` through the pinned agent-device command from `device_open`. Do not use `--relaunch`, which would stop the runner.
-6. Send `read` through `run-as` and the `cache/wikicheck-control` file. Read the status after it says `read`. A successful editor has `editor_chars > 0` and no error. A stopped challenge is a failed editor check, even when instrumentation itself exits zero.
+6. Send `read` through `run-as` and the `cache/wikicheck-control` file. Wait for a new `request_id` and `state: read`. While that request runs, its state is `reading`. Do not reuse the previous request ID. A successful editor has `editor_chars > 0` and no error. A stopped challenge is a failed editor check, even when instrumentation itself exits zero.
 7. Change appearance through the pinned device command to recreate MainActivity. Send `read` again. `activity_creations` must increase, `live_requests` must be positive, and `old_requests` must stay zero. The runner retains the first view model's page source.
 8. Send `done`. Remove the test APK. Close the Device panel, stop the emulator, restore and verify the complete AVD, delete the private backup and release the lock.
 
