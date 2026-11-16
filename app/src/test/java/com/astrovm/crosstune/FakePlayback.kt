@@ -83,20 +83,27 @@ internal class FakePlayback : PlaybackSource {
     /** Additional sessions, including another session from an app already in [appPlaying]. */
     val extraSessions = mutableListOf<MutableStateFlow<Following?>>()
     val ignoredSeeks = mutableSetOf<Int>()
+    val sessionSongs = mutableMapOf<Int, MusicMetadata>()
     val seekedSessions: MutableList<Int> = CopyOnWriteArrayList()
     private val sessionNumbers = mutableMapOf<MutableStateFlow<Following?>, Int>()
     private fun number(flow: MutableStateFlow<Following?>) = sessionNumbers.getOrPut(flow) { sessionNumbers.size }
 
-    override fun matching(song: MusicMetadata): List<PlaybackMatch> =
-        (listOf(playing) + appPlaying.values + extraSessions).distinct().mapNotNull { flow ->
+    override fun matching(song: MusicMetadata): List<PlaybackMatch> {
+        val all = (listOf(playing) + appPlaying.values + extraSessions).distinct()
+        val counts = all.mapNotNull { it.value?.appPackage }.groupingBy { it }.eachCount()
+        return all.mapNotNull { flow ->
             val state = flow.value ?: return@mapNotNull null
             val app = state.appPackage
-            if (!has(unnamed.value?.takeIf { it.app == app }?.played, onThePhone?.takeIf { it.app == app }?.metadata, song, null)) return@mapNotNull null
-            PlaybackMatch(state.copy(session = number(flow)), forSession(flow))
+            val ownSong = sessionSongs[number(flow)]
+            val matches = if (ownSong == null) has(unnamed.value?.takeIf { it.app == app }?.played, onThePhone?.takeIf { it.app == app }?.metadata, song, null)
+                else SongNames.names(ownSong.title, ownSong.artist, song)
+            if (!matches) return@mapNotNull null
+            PlaybackMatch(state.copy(session = number(flow)), forSession(flow), appSessions = counts[app] ?: 1)
         }
+    }
 
     private fun forSession(flow: MutableStateFlow<Following?>): PlaybackSource = object : PlaybackSource by this {
-        override fun follow(song: MusicMetadata, app: String?) = followed(song, app, flow.map { it?.copy(session = number(flow)) })
+        override fun follow(song: MusicMetadata, app: String?) = followed(song, app, flow.map { it?.copy(session = number(flow)) }, sessionSongs[number(flow)])
         override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
             seeks += positionMs
             seekedApps += app
@@ -118,11 +125,11 @@ internal class FakePlayback : PlaybackSource {
 
     override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = followed(song, app, app?.let(appPlaying::get) ?: playing)
 
-    private fun followed(song: MusicMetadata, app: String?, from: Flow<Following?>): Flow<Following?> {
+    private fun followed(song: MusicMetadata, app: String?, from: Flow<Following?>, ownSong: MusicMetadata? = null): Flow<Following?> {
         followed += song
         followedApps += app
         if (followsNow.loops()) return emptyFlow()
-        val flow = followedAs(song, app, from)
+        val flow = if (ownSong == null) followedAs(song, app, from) else from.map { state -> state?.takeIf { SongNames.names(ownSong.title, ownSong.artist, song) } }
         return said?.let { later -> flow { later.await(); emitAll(flow) } } ?: flow
     }
 

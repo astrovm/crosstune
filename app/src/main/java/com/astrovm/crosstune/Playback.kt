@@ -215,7 +215,7 @@ internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val en
 internal data class PlaybackMatch(
     val following: Following?, val source: PlaybackSource,
     val app: String? = following?.appPackage, val session: Int = following?.session ?: 0,
-    val playing: Boolean = following?.clock?.playing == true
+    val playing: Boolean = following?.clock?.playing == true, val appSessions: Int = 1
 )
 
 /** What's playing on the phone, as far as Android lets Crosstune see. */
@@ -419,9 +419,12 @@ internal class MediaSessionPlayback(
             runCatching { context.packageManager.getInstallSourceInfo(context.packageName).packageSource }.getOrNull() in fromAFile
 
     override fun matching(song: MusicMetadata): List<PlaybackMatch> = runCatching {
-        activeSessions().filter { it.has(song, null) }.map { controller ->
+        val active = activeSessions()
+        val counts = active.groupingBy { it.packageName }.eachCount()
+        active.filter { it.has(song, null) }.map { controller ->
             val number = sessionNumbers.of(controller.sessionToken)
-            PlaybackMatch(following(controller, song.lengthMs)?.copy(session = number), forSession(controller.sessionToken), controller.packageName, number, controller.playbackState?.state == PlaybackState.STATE_PLAYING)
+            PlaybackMatch(following(controller, song.lengthMs)?.copy(session = number), forSession(controller.sessionToken), controller.packageName, number,
+                controller.playbackState?.state == PlaybackState.STATE_PLAYING, counts.getValue(controller.packageName))
         }
     }.getOrDefault(emptyList())
 

@@ -230,16 +230,20 @@ internal class PracticeCards(
         val song = MusicMetadata(line.title, line.artist)
         for (target in matchingTargets(source, song, line)) {
             var played = false
+            var sawState = false
             inApp(target.source, song, target.app, onStuck = { following ->
+                sawState = following != null
                 following?.let { if (usable(it.appPackage, line, target.key, target.remember)) stuck(target.source, song, it) else leftOut(target.source, song, it) }
             }) { following ->
                 val app = following() ?: return@inApp
+                sawState = true
                 if (!usable(app.appPackage, line, target.key, target.remember)) return@inApp leftOut(target.source, song, app)
                 step("trying ${target.app ?: "the app"}")
                 letGoTarget(target.key)
                 played = playLine(target, song, line, explicit, following)
             }
             if (played) return true
+            if (!sawState) stopIn(target, song)
         }
         return false
     }
@@ -254,7 +258,7 @@ internal class PracticeCards(
             }
         }
         if (matches.isEmpty()) step("no app has the song open")
-        val counts = matches.groupingBy { it.app }.eachCount()
+        val counts = matches.groupBy { it.app }.mapValues { (_, sessions) -> maxOf(sessions.size, sessions.maxOf { it.appSessions }) }
         // Different sessions can have different capabilities. An app-wide failure cannot identify one of them.
         counts.filterValues { it > 1 }.keys.filterNotNull().forEach(traits::forget)
         val targets = matches.map { NativeTarget(it, counts[it.app] == 1) }

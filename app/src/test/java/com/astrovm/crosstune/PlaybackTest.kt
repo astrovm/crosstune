@@ -2574,6 +2574,17 @@ class PlaybackTest {
     }
 
     @Test
+    fun matchingSessionCountsIncludeItsAppsOtherSongs() {
+        allow()
+        shadowOf(sessions).addController(player("com.example.player", "Player", song.title, song.artist))
+        shadowOf(sessions).addController(player("com.example.player", "Player", "Another fake song", "Fake artist"))
+        val match = playback.matching(song).single()
+        assertEquals("com.example.player", match.app)
+        assertEquals(2, match.appSessions)
+        assertEquals(2, playback.matching(MusicMetadata("Another fake song", "Fake artist")).single().appSessions)
+    }
+
+    @Test
     fun matchingSessionsIncludeASeekablePausedAppBehindAnUnseekablePlayingApp() {
         allow()
         val free = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", actions = 0)

@@ -606,6 +606,69 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun nativeSoundPausesAnUnchosenSessionEvenBeforeItsClockArrives() {
+        keep(line(start = 60_000))
+        appPlays(spotify, positionMs = 0)
+        val full = MutableStateFlow<Following?>(Following(PlaybackClock(0, System.currentTimeMillis(), playing = false), "Music", canSeek = true, appPackage = spotify, durationMs = 200_000))
+        playback.extraSessions += full
+        val source = object : PlaybackSource by playback {
+            override fun matching(song: MusicMetadata): List<PlaybackMatch> = playback.matching(song).map {
+                if (it.session == 0) it.copy(following = null, playing = true) else it
+            }
+        }
+        cards(source = source).start(null, before = null)
+        waitFor("the ready recording is prepared") { practice?.sound == LineSound.PLAYED || practice?.sound == LineSound.NONE }
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        assertFalse("the unknown-clock session was left playing", playback.playing.value!!.clock.playing)
+        assertEquals(listOf(1), playback.seekedSessions.toList())
+        assertEquals(60_000L, full.value?.clock?.positionMs)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun nativeSoundSelectedSessionWithoutAClockStopsBeforeEmbeddedFallback() {
+        keep(line(), types = hearIt)
+        youTubeHasTheSong()
+        appPlays(spotify)
+        val source = object : PlaybackSource by playback {
+            override fun matching(song: MusicMetadata): List<PlaybackMatch> = playback.matching(song).map { match ->
+                val waiting = object : PlaybackSource by match.source {
+                    override fun follow(song: MusicMetadata, app: String?) = kotlinx.coroutines.flow.flowOf<Following?>(null)
+                }
+                match.copy(following = null, playing = true, source = waiting)
+            }
+        }
+        cards(source = source).start(null, before = null)
+        waitForThePlayer()
+        assertTrue(player.shown.single().play)
+        assertFalse("the selected clockless session plays over the embedded player", playback.playing.value!!.clock.playing)
+    }
+
+    @Test
+    fun nativeSoundFailureDoesNotExcludeTheSameAppsSessionWithAnotherSong() {
+        val first = line("First").copy(title = "First demo")
+        val second = line("Second").copy(title = "Second demo")
+        keep(first, second)
+        appPlays(spotify, positionMs = 0)
+        val other = MutableStateFlow<Following?>(Following(PlaybackClock(0, System.currentTimeMillis(), playing = false), "Music", canSeek = true, appPackage = spotify, durationMs = 200_000))
+        playback.extraSessions += other
+        playback.sessionSongs[0] = MusicMetadata(first.title, first.artist)
+        playback.sessionSongs[1] = MusicMetadata(second.title, second.artist)
+        playback.ignoredSeeks += 0
+        val cards = cards()
+        cards.start(MusicMetadata(first.title, first.artist), before = null)
+        waitFor("the first session fails") { practice?.sound == LineSound.NONE }
+        assertEquals("a session failure was stored for its whole app", AppTraits(), traits.of(spotify))
+        cards.stop()
+        cards.start(MusicMetadata(second.title, second.artist), before = null)
+        waitFor("the other song settles") { practice?.sound == LineSound.PLAYED || practice?.sound == LineSound.NONE }
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        assertEquals(listOf(0, 1), playback.seekedSessions.toList().distinct())
+        assertEquals(10_000L, other.value?.clock?.positionMs)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
     fun nativeSoundUsesAnotherMatchingSeekableSession() {
         keep(line(), types = hearIt)
         appPlays(spotify, canSeek = false)
