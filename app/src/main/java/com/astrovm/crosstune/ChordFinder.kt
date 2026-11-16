@@ -259,17 +259,8 @@ internal class ChordFinder(
         chordWiki != null && (texts.any(::japanese) || japanese(song.title) || japanese(song.artist))
 
     private suspend fun wikiTried(song: MusicMetadata, texts: List<String>, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean, timeoutMs: Long): Tried {
-        val digest = MessageDigest.getInstance("SHA-256")
-        (listOf(song.title, song.artist) + texts).forEach {
-            val bytes = it.toByteArray(Charsets.UTF_8)
-            digest.update(bytes.size.toString().toByteArray(Charsets.US_ASCII))
-            digest.update(0)
-            digest.update(bytes)
-        }
-        val key = "wiki-miss:$CACHE_VERSION:" + digest.digest().joinToString("") { "%02x".format(it) }
-        val saved = cache?.get(key)?.toLongOrNull()
-        val time = now()
-        if (saved != null && time >= saved && time - saved < LookupCache.DAY_MS) return Tried(null, false)
+        val key = wikiMissKey(song, texts)
+        if (hasWikiMiss(key)) return Tried(null, false)
         val observation = WikiObservation()
         val looked = withTimeoutOrNull(timeoutMs) {
             try {
@@ -299,6 +290,24 @@ internal class ChordFinder(
             cache?.save()
         }
         return Tried(found, false)
+    }
+
+    private suspend fun hasWikiMiss(key: String): Boolean {
+        val saved = cache?.get(key)?.toLongOrNull() ?: return false
+        val time = now()
+        return time >= saved && time - saved < LookupCache.DAY_MS
+    }
+
+    /** A changed lyric text needs its own sheet match, even when the song name stays the same. */
+    private fun wikiMissKey(song: MusicMetadata, texts: List<String>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        (listOf(song.title, song.artist) + texts).forEach {
+            val bytes = it.toByteArray(Charsets.UTF_8)
+            digest.update(bytes.size.toString().toByteArray(Charsets.US_ASCII))
+            digest.update(0)
+            digest.update(bytes)
+        }
+        return "wiki-miss:$CACHE_VERSION:" + digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     /** One line for logcat: the letter match, and the chord names [align] did not draw. No lyric text. */

@@ -106,11 +106,11 @@ class ChordWikiTest {
         assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(href = ""), timedOut = false))
         assertThrows { chordWikiLook(seen(href = "about:blank"), timedOut = true) }
         assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(title = "Just a moment...", text = "Checking your browser"), timedOut = false))
-        assertEquals(ChordWikiCheck.INTERACTIVE, stopped { chordWikiLook(seen(title = "Verify you are human", text = "I'm not a robot"), timedOut = false) })
-        assertThrows("click") { chordWikiLook(seen(title = "Verify you are human"), timedOut = true) }
+        assertEquals(ChordWikiCheck.INTERACTIVE, stopped { chordWikiLook(seen(title = "Click the checkbox to verify you are human", text = "I'm not a robot"), timedOut = false) })
+        assertThrows("click") { chordWikiLook(seen(title = "Click the checkbox to verify you are human"), timedOut = true) }
         assertThrows("didn't finish") { chordWikiLook(seen(text = "しばらくお待ちください"), timedOut = true) }
         // Which check it was goes with the error, so the screen can say it.
-        assertEquals(ChordWikiCheck.INTERACTIVE, stopped { chordWikiLook(seen(title = "Verify you are human"), timedOut = true) })
+        assertEquals(ChordWikiCheck.INTERACTIVE, stopped { chordWikiLook(seen(title = "Click the checkbox to verify you are human"), timedOut = true) })
         assertEquals(ChordWikiCheck.AUTOMATIC, stopped { chordWikiLook(seen(text = "しばらくお待ちください"), timedOut = true) })
         val links = "川の道 - 歩く人\thttps://ja.chordwiki.org/wiki/kawa"
         assertEquals(links, (chordWikiLook(seen(links = links), timedOut = false) as ChordWikiLook.Ready).body)
@@ -126,7 +126,7 @@ class ChordWikiTest {
         assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(text = "short"), timedOut = false))
         assertThrows("empty") { chordWikiLook(seen(text = "short"), timedOut = true) }
         assertEquals(ChordWikiCheck.NONE, chordWikiCheck("川の道", "川の道を歩いていく"))
-        assertEquals(ChordWikiCheck.INTERACTIVE, chordWikiCheck("", "人間であることを確認"))
+        assertEquals(ChordWikiCheck.AUTOMATIC, chordWikiCheck("", "人間であることを確認"))
         assertEquals(ChordWikiCheck.AUTOMATIC, chordWikiCheck("", "Enable JavaScript"))
     }
 
@@ -259,6 +259,30 @@ class ChordWikiTest {
     }
 
     @Test
+    fun genericVerificationTextDoesNotProveThatAClickIsNeeded() {
+        for (words in listOf("The site needs to verify you are human before proceeding. Please enable JavaScript and cookies", "人間であることを確認しています")) {
+            val seen = chordWikiSeen(org.json.JSONObject().put("href", "https://ja.chordwiki.org/").put("text", words).put("automatic", true).toString())
+            assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen, false))
+            assertEquals(ChordWikiCheck.AUTOMATIC, stopped { chordWikiLook(seen, true) })
+        }
+    }
+
+    @Test
+    fun theSitesChallengeProviderCanLoadItsScriptAndFrame() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val job = CoroutineScope(Dispatchers.Main).launch {
+            ChordWikiBrowser(activity, gapMs = 60_000).page("https://ja.chordwiki.org/")
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+        val web = findWeb(activity.window.decorView)
+        val client = shadowOf(web).webViewClient
+        assertNull(client.shouldInterceptRequest(web, resource("https://challenges.cloudflare.com/turnstile/v0/api.js", "*/*")))
+        assertFalse(client.shouldOverrideUrlLoading(web, resource("https://challenges.cloudflare.com/turnstile/", "text/html")))
+        assertTrue(client.shouldInterceptRequest(web, resource("https://challenges.cloudflare.com.evil.example/api.js", "*/*")) != null)
+        job.cancel()
+    }
+
+    @Test
     fun pagesWaitForThePreviousPageToClose() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val root = activity.window.decorView as ViewGroup
@@ -279,7 +303,7 @@ class ChordWikiTest {
     @Test
     fun interactiveCheckStopsBeforeThePageDeadline() {
         assertEquals(ChordWikiCheck.INTERACTIVE, stopped {
-            chordWikiLook(seen(title = "Verify you are human"), timedOut = false)
+            chordWikiLook(seen(title = "Click the checkbox to verify you are human"), timedOut = false)
         })
     }
 
@@ -363,7 +387,7 @@ class ChordWikiTest {
         clock = 0
         val clicked = open(activity, now = { clock }, gapMs = 60_000, waitMs = 10)
         clock = 20
-        answer(findWeb(root), page(title = "Verify you are human", text = "cf-turnstile"))
+        answer(findWeb(root), page(title = "Click the checkbox to verify you are human", text = "cf-turnstile"))
         shadowOf(Looper.getMainLooper()).idle()
         val click = clicked.within().exceptionOrNull()
         assertTrue(click is IOException && checkNotNull(click.message) { "Expected click.message to be non-null" }.contains("click"))

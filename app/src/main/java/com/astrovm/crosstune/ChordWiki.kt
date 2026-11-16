@@ -267,7 +267,7 @@ internal class ChordWikiBrowser(
 
     private companion object {
         val pageGate = Mutex()
-        fun allowed(uri: Uri): Boolean = uri.scheme == "https" && uri.host == "ja.chordwiki.org" && (uri.port == -1 || uri.port == 443)
+        fun allowed(uri: Uri): Boolean = uri.scheme == "https" && uri.host in setOf("ja.chordwiki.org", "challenges.cloudflare.com") && (uri.port == -1 || uri.port == 443)
         const val GAP_MS = 750L
         const val WAIT_MS = 18_000L
 
@@ -288,6 +288,27 @@ internal class ChordWikiBrowser(
                 links.push((as[j].innerText||'').replace(/\s+/g,' ').trim()+'\t'+href);
               }
               var body=document.body;
+              var automatic=false,interactive=false;
+              var scopes=[{root:document,challenge:false}];
+              for(var n=0;n<scopes.length;n++){
+                var scope=scopes[n],root=scope.root;
+                var marker='#challenge-running, #challenge-stage, form#challenge-form';
+                automatic=automatic||!!root.querySelector(marker+', script[src*="/cdn-cgi/challenge-platform/"], iframe[src^="https://challenges.cloudflare.com/"]');
+                interactive=interactive||!!root.querySelector('#challenge-stage input[type="checkbox"], #challenge-stage [role="checkbox"], form#challenge-form input[type="checkbox"], form#challenge-form [role="checkbox"]');
+                if(scope.challenge) interactive=interactive||!!root.querySelector('input[type="checkbox"], [role="checkbox"]');
+                var elements=root.querySelectorAll('*');
+                for(var k=0;k<elements.length;k++){
+                  var element=elements[k];
+                  var challenge=scope.challenge||!!element.closest(marker);
+                  if(element.shadowRoot) scopes.push({root:element.shadowRoot,challenge:challenge});
+                  if(element.tagName==='IFRAME'){
+                    try{
+                      var framed=element.contentDocument;
+                      if(framed&&framed.documentElement) scopes.push({root:framed,challenge:challenge});
+                    }catch(ignored){}
+                  }
+                }
+              }
               return JSON.stringify({
                 href:location.href,
                 title:document.title||'',
@@ -295,8 +316,8 @@ internal class ChordWikiBrowser(
                 source:source,
                 hasEditor:areas.length>0,
                 links:links.join('\n'),
-                automatic:!!document.querySelector('#challenge-running, #challenge-stage, form#challenge-form, script[src*="/cdn-cgi/challenge-platform/"]'),
-                interactive:!!document.querySelector('#challenge-stage input[type="checkbox"], #challenge-stage [role="checkbox"], form#challenge-form input[type="checkbox"], form#challenge-form [role="checkbox"]')
+                automatic:automatic,
+                interactive:interactive
               });
             })()
         """.trimIndent()
@@ -527,14 +548,19 @@ internal class ChordWikiStopped(val check: ChordWikiCheck) : IOException(
 )
 
 private val INTERACTIVE = listOf(
+    "click the checkbox",
+    "select the checkbox",
+    "check the box",
+    "チェックボックスをクリック",
+    "チェックボックスを選択"
+)
+
+private val AUTOMATIC = listOf(
     "verify you are human",
     "i'm not a robot",
     "i’m not a robot",
     "私はロボットではありません",
-    "人間であることを確認"
-)
-
-private val AUTOMATIC = listOf(
+    "人間であることを確認",
     "just a moment",
     "checking your browser",
     "enable javascript",

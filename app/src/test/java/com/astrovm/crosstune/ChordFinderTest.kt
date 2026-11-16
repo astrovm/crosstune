@@ -1826,6 +1826,28 @@ Singing to the morning light</div>"""
         }
     }
 
+    @Test
+    fun aWikiMissSurvivesReloadButNotChangedLyricsOrAClockRollback() {
+        noOtherChordSites()
+        val file = File.createTempFile("wiki-miss", ".json").apply { delete(); deleteOnExit() }
+        var clock = 1_000L
+        var calls = 0
+        val pages = ChordWikiPages { calls++; "" }
+        fun fresh() = ChordFinder(fake.client(), lookups, LookupCache(file, Dispatchers.Unconfined), pages, chordWikiPauseMs = 0, now = { clock })
+        val words = listOf("川AB", "C")
+        chords(kawa, words, fresh())
+        val first = calls
+        assertTrue(first > 0)
+        chords(kawa, words, fresh())
+        assertEquals(first, calls)
+        // The concatenated letters are the same, but these are different lines.
+        chords(kawa, listOf("川A", "BC"), fresh())
+        assertEquals(first * 2, calls)
+        clock = 0
+        chords(kawa, words, fresh())
+        assertEquals(first * 3, calls)
+    }
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
     fun aLateAutomaticCheckSurvivesTheTotalDeadline() = kotlinx.coroutines.test.runTest {
