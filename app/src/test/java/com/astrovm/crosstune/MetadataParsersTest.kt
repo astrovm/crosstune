@@ -198,6 +198,9 @@ class MetadataParsersTest {
             assertEquals(title, MusicMetadata(title, "Fake Artist"), MetadataParsers.playerSong(title, "Fake Artist"))
         }
         assertNull(MetadataParsers.playerSong(" - ", "Fake Artist"))
+        // Earlier title fixes can expose the same empty last field.
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Artist『Fake Song - 』", "Unknown"))
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("「\u202f」Fake Song -", "Fake Artist"))
     }
 
     @Test

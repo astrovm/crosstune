@@ -136,8 +136,10 @@ class TitlesAgainstMainTest {
          */
         fun readAsOn(reading: Reading, main: Readings, field: String = reading.field): Boolean {
             val here = reading.here(field)
-            if (here == main.whole(field)) return true
-            if (field in TitleFuzz.SONG_FIELDS && here in main.cut(field)) return onACut(field, here)
+            // The older title fixes can expose a player's empty last field too.
+            fun expected(value: String?) = if (field == "playerSong") withoutEmptyPlayerField(value) else value
+            if (here == expected(main.whole(field))) return true
+            if (field in TitleFuzz.SONG_FIELDS && here in main.cut(field).map(::expected)) return onACut(field, here)
             // As music only where a line follows the song, which main read as music on the title or a cut one.
             if (field != "musicVideo" || main.cuts.isEmpty()) return false
             val song = reading.here("youtubeVideo")
@@ -171,11 +173,7 @@ class TitlesAgainstMainTest {
 
         val BETTER = listOf(
             Better("a player's empty trailing field", setOf("playerSong")) { reading ->
-                val expected = reading.main.whole("playerSong")?.let { was ->
-                    val title = was.substringBefore(TitleFuzz.PART).replace(EMPTY_PLAYER_FIELD, "")
-                    title.takeIf { it.isNotBlank() }?.let { "$it${TitleFuzz.PART}${was.substringAfter(TitleFuzz.PART)}" }
-                }
-                reading.here() == expected
+                reading.here() == withoutEmptyPlayerField(reading.main.whole("playerSong"))
             },
             Better("lines after the song's 」", setOf("musicVideo", "youtubeVideo", "playerSong", "bracketedSong")) { readAsOn(it, it.main) },
             // "A「 」『x』" names "x", as main named it with no blank 「 」; main named a song with no name.
@@ -213,6 +211,11 @@ class TitlesAgainstMainTest {
         )
 
         private val EMPTY_PLAYER_FIELD = phoneRegex("""(?:\s+[-–—])+\s*$""")
+
+        private fun withoutEmptyPlayerField(was: String?): String? = was?.let {
+            val title = it.substringBefore(TitleFuzz.PART).replace(EMPTY_PLAYER_FIELD, "")
+            title.takeIf(String::isNotBlank)?.let { clean -> "$clean${TitleFuzz.PART}${it.substringAfter(TitleFuzz.PART)}" }
+        }
 
         /** [main]'s reading of a cover, its artist to the first bracket or [TitleFuzz.MARK]. */
         private fun byToABracket(main: String): String {
