@@ -726,16 +726,18 @@ internal object SongNames {
         if (title.isBlank()) return false
         // Read as the song it names the way the song playing is named, e.g. "YOASOBI「アイドル」 Official Music Video".
         val named = MetadataParsers.youtubeVideo(title, artist)
-        val inferred = named?.let { same(it.title, song.title) && (titleWordsMatch(title, song.title) || namesWithArtist(it, song, artist)) } == true
+        val inferred = named?.let { same(it.title, song.title) && (titleWordsMatch(title, song.title) || namesWithArtist(title, song, artist)) } == true
         if (!(same(title, song.title) || wordsMatch(title, song.title) || inferred)) return false
         return artist.isBlank() || artistInside(artist, song.artist) || sameArtist(song.artist, artist) ||
             artistNames(song.artist).map(::words).any { it.isNotEmpty() && words(title).containsAll(it) }
     }
 
     /** A guessed artist/title split needs the artist too: "Live Forever - Live" may be a song with a live tag. */
-    private fun namesWithArtist(named: MusicMetadata, song: MusicMetadata, artist: String): Boolean {
+    private fun namesWithArtist(title: String, song: MusicMetadata, artist: String): Boolean {
+        val named = MetadataParsers.videoName(titleEvidence(title), artist)
         val by = song.artist.ifBlank { artist.takeUnless(MetadataParsers::noArtist).orEmpty() }
-        return named.artist.isNotBlank() && by.isNotBlank() && (artistInside(named.artist, by) || sameArtist(by, named.artist))
+        return named.artist.isNotBlank() && by.isNotBlank() && (artistInside(named.artist, by) || sameArtist(by, named.artist)) &&
+            titleWordsMatch(named.title, song.title)
     }
 
     /**
@@ -829,14 +831,17 @@ internal object SongNames {
 
     /** A recording note cannot provide the second word that makes a partial title specific enough. */
     private fun titleWordsMatch(one: String, other: String): Boolean {
-        val first = MetadataParsers.withoutFileNumber(titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(one))))
-        val second = MetadataParsers.withoutFileNumber(titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(other))))
+        val first = titleEvidence(one)
+        val second = titleEvidence(other)
         if (normalize(first).isNotEmpty() && normalize(first) == normalize(second)) return true
         val ours = words(first)
         val theirs = words(second)
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
     }
+
+    private fun titleEvidence(title: String): String =
+        MetadataParsers.withoutFileNumber(titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(title))))
 
     /** The same note grammar reads brackets, dashes, bare suffixes and unfinished notes. */
     private fun titleWithoutNotes(title: String): String {
@@ -921,6 +926,7 @@ internal object SongNames {
         private val places = BooleanArray(tokens.size) { tokens[it].letters in NOTE_PLACES }
         private val versionLabels = BooleanArray(tokens.size) { tokens[it].letters in VERSION_LABELS }
         private val lastWord = IntArray(tokens.size + 1) { -1 }
+        private val possessive = IntArray(tokens.size + 1) { -1 }
         private val languages by lazy { BooleanArray(tokens.size) { tokens[it].letters in noteLanguages } }
         private val unknown = IntArray(tokens.size + 1)
         private val languageUnknown by lazy {
@@ -946,6 +952,8 @@ internal object SongNames {
             for (i in tokens.indices) {
                 unknown[i + 1] = unknown[i] + if (known(i)) 0 else 1
                 lastWord[i + 1] = if (numeric[i]) lastWord[i] else i
+                val start = tokens[i].start
+                possessive[i + 1] = if (tokens[i].letters == "s" && start > 0 && text[start - 1] in "'’") i else possessive[i]
             }
         }
 
@@ -959,7 +967,7 @@ internal object SongNames {
             if (first == end) return false
             val lead = lead(first, end)
             if (lead != null && (unknown[end] == unknown[first] || location(lead, end))) return true
-            if (explicit && descriptor(first, end, from, until)) return true
+            if (descriptor(first, end, from, until, explicit)) return true
             return language(first, end)
         }
 
@@ -980,10 +988,15 @@ internal object SongNames {
 
         private fun location(lead: Int, end: Int) = lead + 2 < end && places[lead + 1]
 
-        private fun descriptor(first: Int, end: Int, from: Int, until: Int): Boolean {
-            if (tokens[first].letters == "from" && quotes[until] > quotes[from]) return true
-            if (NOTE_CREDITS.any { prefix -> prefix.size < end - first && prefix.indices.all { tokens[first + it].letters == prefix[it] } }) return true
-            return false
+        private fun descriptor(first: Int, end: Int, from: Int, until: Int, explicit: Boolean): Boolean {
+            if (explicit && tokens[first].letters == "from" && quotes[until] > quotes[from]) return true
+            if (explicit && NOTE_CREDITS.any { prefix -> prefix.size < end - first && prefix.indices.all { tokens[first + it].letters == prefix[it] } }) return true
+            val ending = lastWord[end]
+            if (ending <= first || tokens[ending].letters !in NOTE_ENDS) return false
+            if (tokens[first].letters in NOTE_DESCRIPTORS && unknown[end] == unknown[first]) return true
+            val owner = possessive[ending]
+            val bracketed = from > 0 && text[from - 1] in NAME_TAG_OPENS
+            return owner > first && (owner == first + 1 || bracketed) && unknown[end] == unknown[owner + 1]
         }
 
         private fun language(first: Int, end: Int): Boolean {
@@ -1008,8 +1021,11 @@ internal object SongNames {
     }
 
     private fun languageVersion(word: String): Boolean {
-        val language = word.removeSuffix("version")
-        return language != word && language.isNotEmpty() && language in noteLanguages
+        var end = word.length
+        while (end > 0 && Character.isDigit(word.codePointBefore(end))) end -= Character.charCount(word.codePointBefore(end))
+        val label = word.substring(0, end)
+        val language = label.removeSuffix("version")
+        return language != label && language.isNotEmpty() && language in noteLanguages
     }
 
     private val noteLeads = VERSION_WORDS + setOf(
@@ -1024,9 +1040,11 @@ internal object SongNames {
             listOf(language.getDisplayLanguage(Locale.ENGLISH), language.getDisplayLanguage(language)).flatMap { noteTokens(it).map(NoteToken::letters) }
         }.toSet()
     }
-    private val NOTE_QUALIFIERS = setOf("a", "en", "ao", "re", "at", "in", "of", "by", "from", "the", "and", "to", "with", "version", "ver", "edit", "record", "original", "album", "single", "short", "radio", "recorded", "stripped", "alternate", "extended", "take", "s", "up", "off", "vocal", "full", "music", "acustica", "akustik")
+    private val NOTE_QUALIFIERS = setOf("a", "en", "ao", "re", "at", "in", "of", "by", "from", "the", "and", "to", "with", "version", "ver", "edit", "record", "original", "album", "single", "short", "radio", "recorded", "stripped", "alternate", "extended", "take", "s", "up", "off", "vocal", "full", "music", "club", "studio", "acustica", "akustik")
     private val NOTE_PLACES = setOf("at", "in", "from", "by", "of")
     private val VERSION_LABELS = setOf("version", "ver")
+    private val NOTE_ENDS = setOf("version", "ver", "mix", "take", "edit", "recorded")
+    private val NOTE_DESCRIPTORS = setOf("alternate", "akustik", "acustica", "club", "studio")
     private val NOTE_CREDITS = listOf(listOf("in", "the", "style", "of"), listOf("made", "famous", "by"), listOf("originally", "performed", "by"), listOf("originally", "by"), listOf("made", "popular", "by"), listOf("cover", "of"))
 
     private const val NAME_TAG_OPENS = "([【「〔（［"

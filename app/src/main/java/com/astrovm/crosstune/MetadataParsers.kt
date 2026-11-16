@@ -463,7 +463,7 @@ internal object MetadataParsers {
     private val audioExtension = phoneRegex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
 
     /** Keep title words when reading a file's name. Recording captions are classified separately. */
-    internal fun comparisonTitle(title: String): String = title.replace(audioExtension, "")
+    internal fun comparisonTitle(title: String): String = withoutSubtitlesTag(title).replace(audioExtension, "")
 
     /** Read the track prefix after captions, so a song named "01 (Audio)" keeps its numeric title. */
     internal fun withoutFileNumber(title: String): String {
@@ -582,6 +582,11 @@ internal object MetadataParsers {
         // noise, which can leave a song's brackets blank, "Band - Song 『[HD] 』".
         var rawTitle = withoutBlankSong(withoutTrailingNoise(withoutVideoNoise(withoutSubtitlesTag(withoutBlankSong(title))).trim())).trim()
         rawTitle = rawTitle.replace(trackNumberRegex, "").ifEmpty { return null }
+        return videoName(rawTitle, channel)
+    }
+
+    /** Split an artist credit without first discarding the title's bracketed words. */
+    internal fun videoName(rawTitle: String, channel: String): MusicMetadata {
         val author = channel.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
         // Japanese videos name the song in brackets after the artist, whatever follows them:
         // "YOASOBI「アイドル」 Official Music Video".

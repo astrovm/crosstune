@@ -13,6 +13,17 @@ import org.robolectric.annotation.Config
 class SongNamesEdgesTest {
 
     @Test
+    fun captionsCannotHideTitleWordsOrBlockTranslatedSubtitles() {
+        val wrong = mutableListOf<String>()
+        if (SongNames.names("Hello (Video Games)", "Fake Band", MusicMetadata("Hello", "Fake Band"))) wrong += "Video Games lost"
+        if (!SongNames.names("Hello // Sub Español + Lyrics // Video Oficial", "", MusicMetadata("Hello", ""))) wrong += "subtitles blocked"
+        for (tag in listOf("Akustik Version", "Taylor's Version", "Alternate Take", "Club Mix")) {
+            if (!SongNames.wordsMatch("Hello ($tag) [Explicit]", "Hello [Explicit]")) wrong += tag
+        }
+        assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
     fun descriptorYearsAndNaturalCaptionWordsKeepTheirMeaning() {
         val wrong = mutableListOf<String>()
         for ((one, other, expected) in listOf(
@@ -28,7 +39,7 @@ class SongNamesEdgesTest {
 
     @Test
     fun descriptorNotesCannotSupplyNameWords() {
-        val tags = listOf("- English Version", "– English Version", "— English Version", "(English Version", "[English Version]", "English Version", "Español Version", "Русский Version", "(EnglishVersion)")
+        val tags = listOf("- English Version", "– English Version", "— English Version", "(English Version", "[English Version]", "English Version", "Español Version", "Русский Version", "(EnglishVersion)", "(EnglishVersion2024)")
         for (tag in tags) {
             assertFalse(tag, SongNames.wordsMatch("Hello $tag", "Hello World $tag"))
             assertFalse(tag, SongNames.wordsMatch("Hello World $tag", "Hello $tag"))
@@ -77,7 +88,7 @@ class SongNamesEdgesTest {
 
     @Test
     fun anArtistPrefixCannotBecomeARecordingDescriptor() {
-        for (tag in listOf("- Explicit", "- Live", "– Live", "— Live", "Live", "カバー", "커버")) {
+        for (tag in listOf("- Explicit", "- Live", "– Live", "— Live", "Live", "カバー", "커버", "Taylor's Version", "Club Mix")) {
             val title = "Fake Band - Fake Song $tag"
             assertTrue(title, SongNames.wordsMatch(title, "Fake Song"))
             assertTrue(title, SongNames.wordsMatch("Fake Song", title))
