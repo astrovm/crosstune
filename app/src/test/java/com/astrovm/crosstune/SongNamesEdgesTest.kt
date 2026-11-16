@@ -13,6 +13,36 @@ import org.robolectric.annotation.Config
 class SongNamesEdgesTest {
 
     @Test
+    fun recordingTagsCannotSupplyTheNamesMissingWords() {
+        val rows = listOf(
+            Triple("愛 カバー", "恋 カバー", false), Triple("愛【カバー】", "恋【カバー】", false),
+            Triple("愛（カバー）", "恋（カバー）", false), Triple("愛【歌ってみた】", "恋【歌ってみた】", false),
+            Triple("愛 (歌ってみた)", "恋 (歌ってみた)", false), Triple("사랑 커버", "이별 커버", false),
+            Triple("사랑 (커버)", "이별 (커버)", false), Triple("愛 ライブ", "恋 ライブ", false),
+            Triple("愛【Cover】", "恋【Cover】", false), Triple("Hello【Live】", "Hello World【Live】", false),
+            Triple("Hello（Live）", "Hello World（Live）", false), Triple("Hello (Live)", "Hello World (Live)", false),
+            Triple("Hello World (Part 2)", "Hello (Part 2)", false), Triple("愛 (カバー)", "恋 (カバー)", false),
+            Triple("ライブ", "Live", false), Triple("アイドル", "アイドル (ライブ)", true),
+            Triple("Fake Song", "Fake Song (Live)", true), Triple("Fake Song", "Fake Song【Live】", true),
+            Triple("愛「カバー」", "恋「カバー」", false), Triple("愛〔カバー〕", "恋〔カバー〕", false),
+            Triple("愛［カバー］", "恋［カバー］", false), Triple("愛 - カバー", "恋 - カバー", false),
+            Triple("Hello – Live", "Hello World – Live", false), Triple("Hello — Live", "Hello World — Live", false),
+            Triple("Hello (Live)", "Hello", false), Triple("Fake Song (Live)", "Fake Song Two (Live)", true)
+        )
+        val wrong = mutableListOf<String>()
+        for ((one, other, wanted) in rows) for ((title, asked) in listOf(one to other, other to one)) {
+            val answers = listOf(
+                "words" to SongNames.wordsMatch(title, asked),
+                "named" to SongNames.names(title, "Fake Utaite", MusicMetadata(asked, "Fake Utaite")),
+                "unnamed" to SongNames.names(title, "", MusicMetadata(asked, "Fake Utaite")),
+                "both unnamed" to SongNames.names(title, "", MusicMetadata(asked, ""))
+            )
+            answers.filter { (_, actual) -> actual != wanted }.forEach { (way, actual) -> wrong += "$way: $title / $asked: $actual, wanted $wanted" }
+        }
+        assertEquals("${wrong.size} wrong title comparisons", emptyList<String>(), wrong)
+    }
+
+    @Test
     fun aNameWrittenBothWaysApartByAWideSpaceGoesByEachWay() {
         // As YouTube Music names Anri's song: both ways, then its romaji and English.
         val anri = "悲しみがとまらない　I CAN'T STOP THE LONELINESS - Kanashimi ga Tomaranai I CAN'T STOP THE LONELINESS"
