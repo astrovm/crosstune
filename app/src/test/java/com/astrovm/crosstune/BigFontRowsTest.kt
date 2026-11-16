@@ -72,7 +72,7 @@ class BigFontRowsTest {
         made.assertIsDisplayed()
         // The page's margins and a row's, 20, on each side.
         val page = composeRule.onRoot().fetchSemanticsNode().size.width - with(composeRule.density) { 72.dp.toPx() }
-        // The page's title is cut short at the biggest font by the bar every page shares, left for its own fix.
+        // PageTitleFitTest checks the header against its own width; these assertions use the rows' margins.
         composeRule.assertWordsWhole("about", skip = setOf(string(R.string.settings_title))) { page }
         val privacy = composeRule.onNodeWithText(string(R.string.privacy_policy), useUnmergedTree = true).performScrollTo()
         // The heart is in the words, at the start of the row like every other row's words, not a piece squeezed beside it.

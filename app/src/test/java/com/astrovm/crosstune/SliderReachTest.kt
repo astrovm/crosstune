@@ -63,7 +63,8 @@ class SliderReachTest {
                 }
             }
         }
-        for (off in listOf(0f, -22f, 22f)) assertEquals("tapped $off dp from the track", 0.75f, tapped(off), 0.05f)
+        // Just inside both edges of the 48 dp target, rather than only its central 44 dp.
+        for (off in listOf(0f, -23.9f, 23.9f)) assertEquals("tapped $off dp from the track", 0.75f, tapped(off), 0.05f)
         // Further out, the tap is the page's.
         assertEquals(0f, tapped(40f), 0f)
     }

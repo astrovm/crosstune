@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -92,7 +93,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -660,20 +660,26 @@ private fun PageFrame(
         snackbarHost = snackbarHost,
         topBar = {
             if (title != null) {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(color = MaterialTheme.colorScheme.surface) {
+                    // A large title can use another row without covering the page or losing its ending.
+                    LeadAndWords(
+                        lead = { Box { navigationIcon() } },
+                        modifier = Modifier.fillMaxWidth()
+                            .windowInsetsPadding(TopAppBarDefaults.windowInsets)
+                            .heightIn(min = 64.dp)
+                            .padding(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        LabelAndValue(label = {
                             if (titleLeading != null) {
-                                titleLeading()
-                                Spacer(Modifier.width(12.dp))
+                                LeadAndWords(lead = { Box { titleLeading() } }) {
+                                    LabelText(title, style = MaterialTheme.typography.titleLarge)
+                                }
+                            } else {
+                                LabelText(title, style = MaterialTheme.typography.titleLarge)
                             }
-                            Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    },
-                    navigationIcon = navigationIcon,
-                    actions = { actions() },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-                )
+                        }) { Row { actions() } }
+                    }
+                }
             }
         },
         bottomBar = bottomBar,

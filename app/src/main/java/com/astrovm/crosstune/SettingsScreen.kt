@@ -1275,7 +1275,7 @@ private fun VisualsList(
 
 /** A visual's still, name and switch; tapped anywhere but the switch, it plays. */
 @Composable
-private fun VisualRow(name: String, settings: VisualsSettings, canTurnOff: Boolean, actions: ScreenActions, onSee: () -> Unit) {
+internal fun VisualRow(name: String, settings: VisualsSettings, canTurnOff: Boolean, actions: ScreenActions, onSee: () -> Unit) {
     val assets = LocalContext.current.assets
     val shows = settings.shows(name)
     Row(
@@ -1291,8 +1291,8 @@ private fun VisualRow(name: String, settings: VisualsSettings, canTurnOff: Boole
         LabelAndValue(
             label = {
                 Column {
-                    // Some names run long: two lines keep the list quick to scan.
-                    Text(text = name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    // Similar preset names can differ only at their ends.
+                    LabelText(name, style = MaterialTheme.typography.bodyLarge)
                     if (name in settings.heavy) HeavyNote()
                 }
             },
