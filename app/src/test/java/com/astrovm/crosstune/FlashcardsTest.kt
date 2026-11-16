@@ -18,6 +18,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.isNotEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.geometry.Offset
@@ -492,13 +493,15 @@ class FlashcardsTest {
         waitUntil { phone.followed.any { it.title == "Other" } }
         assertEquals(LineSound.LOADING, practice().sound)
         // Only the kanji: how it reads, heard or written, and what it means, are the answer.
-        val loading = string(R.string.practice_loading, app.packageManager.getApplicationLabel(app.applicationInfo).toString())
+        // While the app gets there, the line's play button waits, and the app isn't named.
+        val waiting = { composeRule.onAllNodes(hasContentDescription(string(R.string.practice_play)) and isNotEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        val named = { shown(app.packageManager.getApplicationLabel(app.applicationInfo).toString()) }
         assertTrue(shown("夜の空"))
-        assertFalse(shown(loading) || readingShown("よる") || shown("yoru no sora") || shown("Cielo nocturno"))
+        assertFalse(waiting() || named() || readingShown("よる") || shown("yoru no sora") || shown("Cielo nocturno"))
         // Turned while the app gets there, it says so, and plays once there.
         click(string(R.string.practice_show))
         assertTrue(readingShown("よる") && readingShown("そら") && shown("yoru no sora") && shown("Cielo nocturno"))
-        assertTrue(shown(loading))
+        assertTrue(waiting() && !named())
         appHas("Other", atMs = 0)
         waitUntil { practice().sound == LineSound.PLAYING }
         assertEquals(5_000L, phone.seeks.last())

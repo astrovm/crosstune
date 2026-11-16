@@ -406,7 +406,6 @@
     <string name="learn_song_new_words">Tiene palabras para saber</string>
     <string name="practice_play">Escuchar la línea</string>
     <string name="practice_stop">Parar la línea</string>
-    <string name="practice_loading">Abriendo en %1$s</string>
     <plurals name="practice_done">
         <item quantity="one">%1$d practicada</item>
         <item quantity="many">%1$d practicadas</item>

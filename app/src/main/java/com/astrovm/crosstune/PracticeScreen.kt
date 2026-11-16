@@ -15,7 +15,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -72,11 +71,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -90,7 +87,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.graphics.drawable.toBitmap
 import java.util.Locale
 import kotlin.math.roundToLong
 
@@ -269,13 +265,13 @@ private fun CardFace(line: SavedLine, practice: Practice, cards: CardOptions, le
     }
     val front = cards.front
     val plays = front.sound && practice.sound != LineSound.NONE
-    if (plays) LineSound(line, practice.sound, practice.video != null, actions.onReplayLine)
+    if (plays) LineSound(line, practice.sound, actions.onReplayLine)
     if (!front.bare) CardSideContent(line, front, lyrics, back = false)
     else if (!plays) CardSideContent(line, CardSide(), lyrics, back = false)
     // Turned, the other side comes in below the front, which stays.
     if (practice.turned) {
         HorizontalDivider()
-        if (cards.back.sound) LineSound(line, practice.sound, practice.video != null, actions.onReplayLine)
+        if (cards.back.sound) LineSound(line, practice.sound, actions.onReplayLine)
         CardSideContent(line, cards.back, lyrics, back = true)
     }
 }
@@ -414,38 +410,13 @@ private const val LINE_PLAYER_PX = 200
 internal const val LINE_PLAYER_TAG = "line-player"
 
 /**
- * How the line sounds: the music app's name while it gets there; then a button that fills as the
- * line plays, to play it again once it has. Nothing when it can't be played.
+ * How the line sounds: its play button, waiting in a turning ring while the sound is found, then a ring that fills
+ * as the line plays, to play it again once it has. Nothing when it can't be played. No app is named while it's found,
+ * as the one that plays it may not be the one it was saved from.
  */
 @Composable
-private fun LineSound(line: SavedLine, sound: LineSound, inPlayer: Boolean, onPlay: () -> Unit) {
-    if (sound == LineSound.LOADING) {
-        // The player has its own picture; the music app is named only while it is the one that gets there.
-        AppLoading(line.app.takeUnless { inPlayer })
-    } else if (sound != LineSound.NONE) {
-        SoundButton(line, sound, onPlay)
-    }
-}
-
-/** The music app getting to the song: its icon and "Opening in" its name, when it's known, or only that it's on its way. */
-@Composable
-private fun AppLoading(app: String?) {
-    val context = LocalContext.current
-    val known = remember(app) {
-        app?.let { name ->
-            runCatching {
-                val info = context.packageManager.getApplicationInfo(name, 0)
-                context.packageManager.getApplicationLabel(info).toString() to context.packageManager.getApplicationIcon(info).toBitmap(72, 72).asImageBitmap()
-            }.getOrNull()
-        }
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.heightIn(min = 56.dp)) {
-        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-        known?.let { (label, icon) ->
-            Image(icon, contentDescription = null, modifier = Modifier.size(20.dp).clip(CircleShape))
-            Text(stringResource(R.string.practice_loading, label), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
+private fun LineSound(line: SavedLine, sound: LineSound, onPlay: () -> Unit) {
+    if (sound != LineSound.NONE) SoundButton(line, sound, onPlay)
 }
 
 /** The line's sound: a ring that fills as it plays, with bars that move while it does, which stop it when tapped, and a play button once it's played. */
@@ -458,6 +429,7 @@ private fun SoundButton(line: SavedLine, sound: LineSound, onPlay: () -> Unit) {
     val stop = stringResource(R.string.practice_stop)
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(SOUND_SIZE + 8.dp)) {
         if (sound == LineSound.PLAYING) CircularProgressIndicator(progress = { played.value }, strokeWidth = 3.dp, modifier = Modifier.size(SOUND_SIZE + 8.dp))
+        else if (sound == LineSound.LOADING) CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(SOUND_SIZE + 8.dp))
         Surface(onClick = onPlay, enabled = sound == LineSound.PLAYED || sound == LineSound.PLAYING, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(SOUND_SIZE)) {
             Box(contentAlignment = Alignment.Center) {
                 if (sound == LineSound.PLAYING) Bars(SOUND_SIZE / 3, Modifier.semantics { contentDescription = stop })

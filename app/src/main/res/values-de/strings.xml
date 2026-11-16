@@ -406,7 +406,6 @@
     <string name="learn_song_new_words">Hat Wörter zum Lernen</string>
     <string name="practice_play">Zeile abspielen</string>
     <string name="practice_stop">Zeile anhalten</string>
-    <string name="practice_loading">Wird in %1$s geöffnet</string>
     <plurals name="practice_done">
         <item quantity="one">%1$d geübt</item>
         <item quantity="other">%1$d geübt</item>

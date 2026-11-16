@@ -406,7 +406,6 @@
     <string name="learn_song_new_words">Есть слова для изучения</string>
     <string name="practice_play">Включить строку</string>
     <string name="practice_stop">Остановить строку</string>
-    <string name="practice_loading">Открывается в %1$s</string>
     <plurals name="practice_done">
         <item quantity="one">Повторено: %1$d</item>
         <item quantity="few">Повторено: %1$d</item>

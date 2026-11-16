@@ -406,7 +406,6 @@
     <string name="learn_song_new_words">Contient des mots à connaître</string>
     <string name="practice_play">Écouter la ligne</string>
     <string name="practice_stop">Arrêter la ligne</string>
-    <string name="practice_loading">Ouverture dans %1$s</string>
     <plurals name="practice_done">
         <item quantity="one">%1$d révisée</item>
         <item quantity="many">%1$d révisées</item>

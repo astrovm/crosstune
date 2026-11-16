@@ -429,7 +429,6 @@
     <string name="learn_song_new_words">Has words to know</string>
     <string name="practice_play">Play the line</string>
     <string name="practice_stop">Stop the line</string>
-    <string name="practice_loading">Opening in %1$s</string>
     <plurals name="practice_done">
         <item quantity="one">%1$d practiced</item>
         <item quantity="other">%1$d practiced</item>

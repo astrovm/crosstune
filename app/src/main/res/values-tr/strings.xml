@@ -406,7 +406,6 @@
     <string name="learn_song_new_words">Öğrenilecek kelimeler var</string>
     <string name="practice_play">Satırı çal</string>
     <string name="practice_stop">Satırı durdur</string>
-    <string name="practice_loading">%1$s içinde açılıyor</string>
     <plurals name="practice_done">
         <item quantity="one">%1$d pratik yapıldı</item>
         <item quantity="other">%1$d pratik yapıldı</item>

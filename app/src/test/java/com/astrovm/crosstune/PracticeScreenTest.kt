@@ -1,6 +1,9 @@
 package com.astrovm.crosstune
 
 import android.content.Context
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -159,21 +162,23 @@ class PracticeScreenTest {
         assertEquals(0, old.childCount)
     }
 
-    @Test
-    fun aCardWhoseSoundIsGoingThroughThePlayerDoesNotNameTheMusicApp() {
+    /** While the line's sound is found, its play button waits in a turning ring, and no app is named: none may be the one that plays it. */
+    private fun waitsWithoutNamingAnApp(practice: Practice, player: Boolean) {
         installMusicApp()
-        val loading = line.copy(cardType = HEAR_TYPE, app = "com.example.music")
-        withPlayer(Practice(queue = listOf(loading), total = 2, sound = LineSound.LOADING, video = "abc"))
-        composeRule.onNodeWithText(string(R.string.practice_loading, "Example Music")).assertDoesNotExist()
+        if (player) withPlayer(practice) else show(UiState(practice = practice, cardTypes = hearing))
+        composeRule.onNodeWithText("Example Music", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("com.example.music", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertIsNotEnabled()
+        composeRule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate)).assertExists()
     }
 
     @Test
-    fun whileTheMusicAppGetsThereItIsNamedWithItsIcon() {
-        installMusicApp()
-        val loading = line.copy(cardType = HEAR_TYPE, app = "com.example.music")
-        show(UiState(practice = Practice(queue = listOf(loading), total = 2, sound = LineSound.LOADING), cardTypes = hearing))
-        composeRule.onNodeWithText(string(R.string.practice_loading, "Example Music")).assertExists()
-    }
+    fun whileTheLineIsFoundNoMusicAppIsNamed() =
+        waitsWithoutNamingAnApp(Practice(queue = listOf(line.copy(cardType = HEAR_TYPE, app = "com.example.music")), total = 2, sound = LineSound.LOADING), player = false)
+
+    @Test
+    fun whileTheSmallPlayerGetsThereNoMusicAppIsNamed() =
+        waitsWithoutNamingAnApp(Practice(queue = listOf(line.copy(cardType = HEAR_TYPE, app = "com.example.music")), total = 2, sound = LineSound.LOADING, video = "abc"), player = true)
 
     /** A music app on the phone, so a card can name it. */
     private fun installMusicApp() {
@@ -188,13 +193,6 @@ class PracticeScreenTest {
         val box = view.parent as android.view.ViewGroup
         assertEquals(android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS, box.descendantFocusability)
         assertEquals(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS, box.importantForAccessibility)
-    }
-
-    @Test
-    fun whileTheMusicAppGetsThereItsNameIsOnlySaidWhenItIsKnown() {
-        val heard = line.copy(cardType = HEAR_TYPE, app = "com.example.nothing")
-        show(UiState(practice = Practice(queue = listOf(heard), total = 2, sound = LineSound.LOADING), cardTypes = listOf(READ_IT, HEAR_IT.copy(on = true))))
-        composeRule.onNodeWithText(string(R.string.practice_loading, "com.example.nothing")).assertDoesNotExist()
     }
 
     @Test

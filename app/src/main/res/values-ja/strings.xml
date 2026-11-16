@@ -407,7 +407,6 @@
     <string name="learn_song_new_words">覚えたい単語あり</string>
     <string name="practice_play">この行を再生</string>
     <string name="practice_stop">この行を止める</string>
-    <string name="practice_loading">%1$sで開いています</string>
     <plurals name="practice_done">
         <item quantity="other">%1$d件練習</item>
     </plurals>

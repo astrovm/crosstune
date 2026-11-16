@@ -406,7 +406,6 @@
     <string name="learn_song_new_words">알아둘 단어 있음</string>
     <string name="practice_play">이 줄 재생</string>
     <string name="practice_stop">이 줄 멈추기</string>
-    <string name="practice_loading">%1$s에서 여는 중</string>
     <plurals name="practice_done">
         <item quantity="other">%1$d개 연습함</item>
     </plurals>
