@@ -1460,10 +1460,10 @@ class PracticeCardsTest {
         val cards = cards()
         cards.start(null, before = null)
         waitFor("the line plays in the app") { practice?.sound == LineSound.PLAYING && traits.of(morphe).seeks == true }
-        flow.value = flow.value!!.copy(clock = PlaybackClock(10_200, System.currentTimeMillis(), 1f, playing = false))
+        flow.value = checkNotNull(flow.value).copy(clock = PlaybackClock(10_200, System.currentTimeMillis(), 1f, playing = false))
         waitForThePlayer("the player takes over after the pause")
         assertEquals(AppTraits(seeks = true, keeps = true), freshTraits().of(morphe))
-        flow.value = flow.value!!.copy(clock = PlaybackClock(10_200, System.currentTimeMillis(), 5f))
+        flow.value = checkNotNull(flow.value).copy(clock = PlaybackClock(10_200, System.currentTimeMillis(), 5f))
         val sent = playback.seeks.size
         cards.turn()
         cards.grade(Grade.GOOD)
