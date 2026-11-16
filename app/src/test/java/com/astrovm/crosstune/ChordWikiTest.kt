@@ -106,7 +106,7 @@ class ChordWikiTest {
         assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(href = ""), timedOut = false))
         assertThrows { chordWikiLook(seen(href = "about:blank"), timedOut = true) }
         assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(title = "Just a moment...", text = "Checking your browser"), timedOut = false))
-        assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(title = "Verify you are human", text = "I'm not a robot"), timedOut = false))
+        assertEquals(ChordWikiCheck.INTERACTIVE, stopped { chordWikiLook(seen(title = "Verify you are human", text = "I'm not a robot"), timedOut = false) })
         assertThrows("click") { chordWikiLook(seen(title = "Verify you are human"), timedOut = true) }
         assertThrows("didn't finish") { chordWikiLook(seen(text = "しばらくお待ちください"), timedOut = true) }
         // Which check it was goes with the error, so the screen can say it.
@@ -236,9 +236,9 @@ class ChordWikiTest {
         assertTrue(CookieManager.getInstance().acceptCookie())
         assertTrue(web.settings.javaScriptEnabled)
         assertTrue(web.settings.domStorageEnabled)
-        assertTrue(web.settings.loadsImagesAutomatically)
-        assertFalse(web.settings.blockNetworkImage)
-        assertTrue(shadowOf(web).webViewClient.shouldInterceptRequest(web, resource("https://ja.chordwiki.org/icon.png", "image/png")) == null)
+        assertFalse(web.settings.loadsImagesAutomatically)
+        assertTrue(web.settings.blockNetworkImage)
+        assertTrue(shadowOf(web).webViewClient.shouldInterceptRequest(web, resource("https://ja.chordwiki.org/icon.png", "image/png")) != null)
         assertFalse(web.settings.userAgentString.orEmpty().contains("Macintosh"))
         assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_NO, web.importantForAccessibility)
         assertEquals("https://ja.chordwiki.org/wiki.cgi?c=edit", shadowOf(web).lastLoadedUrl)
@@ -249,13 +249,66 @@ class ChordWikiTest {
     }
 
     @Test
+    fun structureSeparatesAutomaticChecksFromCheckboxes() {
+        val automatic = chordWikiSeen("""{"href":"https://ja.chordwiki.org/","automatic":true}""")
+        val interactive = chordWikiSeen("""{"href":"https://ja.chordwiki.org/","automatic":true,"interactive":true}""")
+        assertEquals(ChordWikiLook.Waiting, chordWikiLook(automatic, false))
+        assertEquals(ChordWikiCheck.AUTOMATIC, stopped { chordWikiLook(automatic, true) })
+        assertEquals(ChordWikiCheck.INTERACTIVE, stopped { chordWikiLook(interactive, false) })
+        assertEquals(ChordWikiCheck.NONE, chordWikiCheck("", "cf-turnstile"))
+    }
+
+    @Test
+    fun pagesWaitForThePreviousPageToClose() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val root = activity.window.decorView as ViewGroup
+        val browser = ChordWikiBrowser(activity, gapMs = 60_000)
+        val first = CoroutineScope(Dispatchers.Main).launch { browser.page("https://ja.chordwiki.org/first") }
+        shadowOf(Looper.getMainLooper()).idle()
+        val web = findWeb(root)
+        val second = CoroutineScope(Dispatchers.Main).launch { browser.page("https://ja.chordwiki.org/second") }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("https://ja.chordwiki.org/first", shadowOf(findWeb(root)).lastLoadedUrl)
+        first.cancel()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(web.parent)
+        assertEquals("https://ja.chordwiki.org/second", shadowOf(findWeb(root)).lastLoadedUrl)
+        second.cancel()
+    }
+
+    @Test
+    fun interactiveCheckStopsBeforeThePageDeadline() {
+        assertEquals(ChordWikiCheck.INTERACTIVE, stopped {
+            chordWikiLook(seen(title = "Verify you are human"), timedOut = false)
+        })
+    }
+
+    @Test
+    fun hiddenPageBlocksThirdPartyRequestsByDefault() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val job = CoroutineScope(Dispatchers.Main).launch {
+            ChordWikiBrowser(activity, gapMs = 60_000).page("https://ja.chordwiki.org/")
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+        val web = findWeb(activity.window.decorView)
+        val client = shadowOf(web).webViewClient
+        assertTrue(client.shouldInterceptRequest(web, resource("https://tracker.example/script.js", "*/*")) != null)
+        assertTrue(client.shouldInterceptRequest(web, resource("https://ja.chordwiki.org/icon.png", "image/png")) != null)
+        assertTrue(client.shouldOverrideUrlLoading(web, resource("https://tracker.example/", "text/html")))
+        assertFalse(client.shouldOverrideUrlLoading(web, resource("https://ja.chordwiki.org/wiki/test", "text/html")))
+        assertTrue(client.shouldInterceptRequest(web, resource("https://ja.chordwiki.org.evil.example/app.js", "*/*")) != null)
+        assertTrue(client.shouldInterceptRequest(web, resource("http://ja.chordwiki.org/app.js", "*/*")) != null)
+        job.cancel()
+    }
+
+    @Test
     fun aMeasurementLeavesPicturesAndFontsUnloaded() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val asked = mutableListOf<String>()
         val done = CompletableDeferred<Result<String>>()
         CoroutineScope(Dispatchers.Main).launch {
             done.complete(runCatching {
-                ChordWikiBrowser(activity, gapMs = 20, waitMs = 10_000, loadPictures = false, onRequest = { asked += it })
+                ChordWikiBrowser(activity, gapMs = 20, waitMs = 10_000, onRequest = { asked += it })
                     .page("https://ja.chordwiki.org/wiki.cgi?c=edit")
             })
         }
@@ -429,8 +482,8 @@ class ChordWikiTest {
     @Test
     fun aPictureIsToldByWhatTheRequestAsksForAndNotOnlyByItsAddress() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
-        CoroutineScope(Dispatchers.Main).launch {
-            ChordWikiBrowser(activity, gapMs = 20, waitMs = 10_000, loadPictures = false).page("https://ja.chordwiki.org/wiki.cgi?c=edit")
+        val job = CoroutineScope(Dispatchers.Main).launch {
+            ChordWikiBrowser(activity, gapMs = 20, waitMs = 10_000).page("https://ja.chordwiki.org/wiki.cgi?c=edit")
         }
         shadowOf(Looper.getMainLooper()).idle()
         val web = findWeb(activity.window.decorView)
@@ -446,6 +499,7 @@ class ChordWikiTest {
         assertFalse(skipped("https://ja.chordwiki.org/wiki.cgi?c=edit", "text/html,application/xhtml+xml,image/avif,image/webp,*/*;q=0.8"))
         assertFalse(skipped("https://ja.chordwiki.org/site.css", null))
         assertFalse(skipped("https://ja.chordwiki.org/app.js", "*/*"))
+        job.cancel()
     }
 
     /**

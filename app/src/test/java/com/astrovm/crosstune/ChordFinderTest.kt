@@ -1794,6 +1794,60 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun aDefiniteWikiMissExpiresAfterOneDayAndErrorsAreRetried() {
+        noOtherChordSites()
+        val file = File.createTempFile("chords", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        var clock = 1_000L
+        var calls = 0
+        val pages = ChordWikiPages { calls++; "" }
+        val finder = ChordFinder(fake.client(), lookups, cache, pages, chordWikiPauseMs = 0, now = { clock })
+        chords(kawa, japanese, finder)
+        val first = calls
+        assertTrue(first > 0)
+        clock += LookupCache.DAY_MS - 1
+        chords(kawa, japanese, finder)
+        assertEquals(first, calls)
+        clock++
+        chords(kawa, japanese, finder)
+        assertEquals(first * 2, calls)
+        val other = MusicMetadata("別の歌", "歩く人")
+        var errors = 0
+        val failing = ChordFinder(fake.client(), lookups, cache, ChordWikiPages { errors++; throw IOException("offline") }, chordWikiPauseMs = 0, now = { clock })
+        chords(other, japanese, failing)
+        chords(other, japanese, failing)
+        assertEquals(2, errors)
+        for (check in listOf(ChordWikiCheck.AUTOMATIC, ChordWikiCheck.INTERACTIVE)) {
+            var checks = 0
+            val checked = ChordFinder(fake.client(), lookups, cache, ChordWikiPages { checks++; throw ChordWikiStopped(check) }, chordWikiPauseMs = 0, now = { clock })
+            chords(other, japanese, checked)
+            chords(other, japanese, checked)
+            assertEquals(2, checks)
+        }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun aLateAutomaticCheckSurvivesTheTotalDeadline() = kotlinx.coroutines.test.runTest {
+        noOtherChordSites()
+        var calls = 0
+        var observedAt = 0L
+        val pages = ChordWikiPages {
+            calls++
+            if (calls == 1) { delay(19_000); "" } else {
+                observedAt = testScheduler.currentTime
+                kotlinx.coroutines.currentCoroutineContext()[WikiObservation]?.check = ChordWikiCheck.AUTOMATIC
+                delay(18_000)
+                ""
+            }
+        }
+        val finder = ChordFinder(fake.client(), kotlinx.coroutines.test.StandardTestDispatcher(testScheduler), chordWiki = pages, chordWikiPauseMs = 0)
+        assertEquals(ChordFinder.Chords.WikiTimedOut, finder.chordsOf(kawa, japanese, timeoutMs = 20_000))
+        assertEquals(19_000L, observedAt)
+        assertEquals(2, calls)
+    }
+
+    @Test
     fun aChordWikiSheetIsKeptSoThePageIsntOpenedAgain() {
         noOtherChordSites()
         val file = File.createTempFile("chords", ".json").apply { delete(); deleteOnExit() }

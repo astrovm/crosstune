@@ -20,6 +20,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.nio.charset.Charset
+import java.security.MessageDigest
 import java.net.URLEncoder
 
 /** Where a song starts in U-FRET's results: whether it's the easier version, and its number. */
@@ -143,7 +144,8 @@ internal class ChordFinder(
     private val chordWiki: ChordWikiPages? = null,
     /** A pause between ChordWiki's pages, so a lookup goes no faster than a person opening them. */
     private val chordWikiPauseMs: Long = CHORD_WIKI_PAUSE_MS,
-    private val debugLogging: Boolean = false
+    private val debugLogging: Boolean = false,
+    private val now: () -> Long = System::currentTimeMillis
 ) {
     /** A song's chords, or why there are none to show. */
     sealed interface Chords {
@@ -189,7 +191,7 @@ internal class ChordFinder(
         // ChordWiki only for a song in Japanese, and alongside the others: their sheet wins, and it doesn't go first.
         if (!wantsChordWiki(song, texts)) return@withContext answered(key, readSites(sites, timeoutMs, fits))
         coroutineScope {
-            val wiki = async { wikiTried(song, otherNames, fits, timeoutMs) }
+            val wiki = async { wikiTried(song, texts, otherNames, fits, timeoutMs) }
             yield()
             val earlier = readSites(sites, timeoutMs, fits)
             if (earlier.sheet != null) {
@@ -256,10 +258,22 @@ internal class ChordFinder(
     private fun wantsChordWiki(song: MusicMetadata, texts: List<String>): Boolean =
         chordWiki != null && (texts.any(::japanese) || japanese(song.title) || japanese(song.artist))
 
-    private suspend fun wikiTried(song: MusicMetadata, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean, timeoutMs: Long): Tried {
+    private suspend fun wikiTried(song: MusicMetadata, texts: List<String>, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean, timeoutMs: Long): Tried {
+        val digest = MessageDigest.getInstance("SHA-256")
+        (listOf(song.title, song.artist) + texts).forEach {
+            val bytes = it.toByteArray(Charsets.UTF_8)
+            digest.update(bytes.size.toString().toByteArray(Charsets.US_ASCII))
+            digest.update(0)
+            digest.update(bytes)
+        }
+        val key = "wiki-miss:$CACHE_VERSION:" + digest.digest().joinToString("") { "%02x".format(it) }
+        val saved = cache?.get(key)?.toLongOrNull()
+        val time = now()
+        if (saved != null && time >= saved && time - saved < LookupCache.DAY_MS) return Tried(null, false)
+        val observation = WikiObservation()
         val looked = withTimeoutOrNull(timeoutMs) {
             try {
-                Result.success(readChordWiki(song, otherNames, fits))
+                Result.success(withContext(observation) { readChordWiki(song, otherNames, fits) })
             } catch (e: IOException) {
                 Result.failure(e)
             } catch (e: JSONException) {
@@ -270,7 +284,8 @@ internal class ChordFinder(
             val error = looked?.exceptionOrNull()
             note("wiki ${if (looked == null) "timeout" else "error: ${error?.message}"}")
             // Only a check the browser saw is said as one. A lookup that just ran out of time may not have met one.
-            val wiki = when ((error as? ChordWikiStopped)?.check) {
+            val check = (error as? ChordWikiStopped)?.check ?: if (looked == null) observation.check else ChordWikiCheck.NONE
+            val wiki = when (check) {
                 ChordWikiCheck.INTERACTIVE -> WikiMiss.CHECK
                 ChordWikiCheck.AUTOMATIC -> WikiMiss.TIMED_OUT
                 else -> null
@@ -278,7 +293,11 @@ internal class ChordFinder(
             return Tried(null, true, wiki)
         }
         val found = looked.getOrNull()
-        if (found == null) note("wiki none")
+        if (found == null) {
+            note("wiki none")
+            cache?.put(key, now().toString())
+            cache?.save()
+        }
         return Tried(found, false)
     }
 

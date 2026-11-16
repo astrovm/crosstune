@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.app.Activity
+import android.net.Uri
 import android.os.Looper
 import android.os.SystemClock
 import android.view.View
@@ -21,6 +22,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONException
@@ -28,6 +31,8 @@ import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.net.URLEncoder
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -35,6 +40,12 @@ import kotlin.coroutines.resumeWithException
 internal fun interface ChordWikiPages {
     /** The page at [url], once it has loaded: its ChordPro text, or the search hits when it has no editor. */
     suspend fun page(url: String): String
+}
+
+/** The last observation of the page currently being read, scoped to one lookup. */
+internal class WikiObservation : AbstractCoroutineContextElement(WikiObservation) {
+    @Volatile var check = ChordWikiCheck.NONE
+    companion object Key : CoroutineContext.Key<WikiObservation>
 }
 
 /** The retained lookup uses the current screen, and releases its pages with that screen. */
@@ -102,7 +113,9 @@ internal data class ChordWikiSeen(
     val text: String,
     val source: String,
     val hasEditor: Boolean,
-    val links: String
+    val links: String,
+    val automatic: Boolean = false,
+    val interactive: Boolean = false
 )
 
 /** Whether the page is the sheet, or Cloudflare still checking, or a check a person has to click. */
@@ -126,16 +139,18 @@ internal class ChordWikiBrowser(
     private val gapMs: Long = GAP_MS,
     private val waitMs: Long = WAIT_MS,
     private val screen: () -> ViewGroup? = { host.window?.decorView as? ViewGroup },
-    /** Pictures and fonts. Off only while a lookup is measured without them. */
-    private val loadPictures: Boolean = true,
     /** Each address the page asks for, so a measurement can see images and fonts. */
     private val onRequest: ((String) -> Unit)? = null,
 ) : ChordWikiPages {
     override suspend fun page(url: String): String = withContext(Dispatchers.Main.immediate) {
-        suspendCancellableCoroutine { cont -> open(url, cont) }
+        pageGate.withLock {
+            val observation = currentCoroutineContext()[WikiObservation]
+            observation?.check = ChordWikiCheck.NONE
+            suspendCancellableCoroutine { cont -> open(url, cont, observation) }
+        }
     }
 
-    private fun open(url: String, cont: CancellableContinuation<String>) {
+    private fun open(url: String, cont: CancellableContinuation<String>, observation: WikiObservation?) {
         val root = screen()
         if (root == null) {
             cont.resumeWithException(IOException("ChordWiki has nowhere to show"))
@@ -145,9 +160,8 @@ internal class ChordWikiBrowser(
         val settings = web.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        // Pictures stay for a real lookup. A measurement can turn them off and see whether the editor still arrives.
-        settings.loadsImagesAutomatically = loadPictures
-        settings.blockNetworkImage = !loadPictures
+        settings.loadsImagesAutomatically = false
+        settings.blockNetworkImage = true
         web.alpha = 0f
         web.isClickable = false
         // Not focusable at all, which takes touch mode with it: a view can't be focusable in touch mode and not otherwise.
@@ -173,24 +187,29 @@ internal class ChordWikiBrowser(
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 onRequest?.invoke(request.url.toString())
-                if (loadPictures || !skipsPicture(request)) return null
+                if (allowed(request.url) && !skipsPicture(request)) return null
                 return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
             }
 
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !allowed(request.url)
+
+            @Deprecated("Called on older Android versions")
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = !allowed(Uri.parse(url))
+
             override fun onPageFinished(view: WebView, loaded: String) {
-                ask(view, started, ::finish)
+                ask(view, started, observation, ::finish)
             }
         }
         web.loadUrl(url)
-        web.postDelayed({ if (!settled) ask(web, started, ::finish) }, gapMs)
+        web.postDelayed({ if (!settled) ask(web, started, observation, ::finish) }, gapMs)
     }
 
-    private fun ask(web: WebView, started: Long, finish: (Result<String>) -> Unit) {
+    private fun ask(web: WebView, started: Long, observation: WikiObservation?, finish: (Result<String>) -> Unit) {
         if (web.parent == null) return
-        web.evaluateJavascript(readPage()) { value -> read(web, started, value, finish) }
+        web.evaluateJavascript(readPage()) { value -> read(web, started, value, observation, finish) }
     }
 
-    private fun read(web: WebView, started: Long, value: String?, finish: (Result<String>) -> Unit) {
+    private fun read(web: WebView, started: Long, value: String?, observation: WikiObservation?, finish: (Result<String>) -> Unit) {
         if (web.parent == null) return
         val seen = jsResult(value)?.let {
             try {
@@ -201,29 +220,30 @@ internal class ChordWikiBrowser(
         }
         val timedOut = now() - started >= waitMs
         if (seen == null) {
-            again(web, started, timedOut, finish)
+            again(web, started, timedOut, observation, finish)
             return
         }
+        observation?.check = chordWikiCheck(seen)
         try {
             when (val look = chordWikiLook(seen, timedOut)) {
                 is ChordWikiLook.Ready -> finish(Result.success(look.body))
-                ChordWikiLook.Waiting -> again(web, started, timedOut, finish)
+                ChordWikiLook.Waiting -> again(web, started, timedOut, observation, finish)
             }
         } catch (e: IOException) {
             finish(Result.failure(e))
         }
     }
 
-    private fun again(web: WebView, started: Long, timedOut: Boolean, finish: (Result<String>) -> Unit) {
+    private fun again(web: WebView, started: Long, timedOut: Boolean, observation: WikiObservation?, finish: (Result<String>) -> Unit) {
         if (web.parent == null) return
         if (timedOut) {
             finish(Result.failure(IOException("ChordWiki didn't finish loading")))
             return
         }
-        web.postDelayed({ ask(web, started, finish) }, gapMs)
+        web.postDelayed({ ask(web, started, observation, finish) }, gapMs)
     }
 
-    /** An image or a font. The editor's text doesn't need either, and a measurement can leave them out. */
+    /** An image or a font. The editor's text does not need either. */
     private fun skipsPicture(request: WebResourceRequest): Boolean {
         val url = request.url.toString().substringBefore('?').lowercase()
         val accept = request.requestHeaders["Accept"].orEmpty().lowercase()
@@ -246,6 +266,8 @@ internal class ChordWikiBrowser(
     }
 
     private companion object {
+        val pageGate = Mutex()
+        fun allowed(uri: Uri): Boolean = uri.scheme == "https" && uri.host == "ja.chordwiki.org" && (uri.port == -1 || uri.port == 443)
         const val GAP_MS = 750L
         const val WAIT_MS = 18_000L
 
@@ -272,7 +294,9 @@ internal class ChordWikiBrowser(
                 text:body?(body.innerText||''):'',
                 source:source,
                 hasEditor:areas.length>0,
-                links:links.join('\n')
+                links:links.join('\n'),
+                automatic:!!document.querySelector('#challenge-running, #challenge-stage, form#challenge-form, script[src*="/cdn-cgi/challenge-platform/"]'),
+                interactive:!!document.querySelector('#challenge-stage input[type="checkbox"], #challenge-stage [role="checkbox"], form#challenge-form input[type="checkbox"], form#challenge-form [role="checkbox"]')
               });
             })()
         """.trimIndent()
@@ -309,7 +333,9 @@ internal fun chordWikiSeen(json: String): ChordWikiSeen {
         text = page.optString("text"),
         source = page.optString("source"),
         hasEditor = page.optBoolean("hasEditor"),
-        links = page.optString("links")
+        links = page.optString("links"),
+        automatic = page.optBoolean("automatic"),
+        interactive = page.optBoolean("interactive")
     )
 }
 
@@ -324,9 +350,18 @@ internal fun chordWikiCheck(title: String, text: String): ChordWikiCheck {
     return ChordWikiCheck.NONE
 }
 
+internal fun chordWikiCheck(seen: ChordWikiSeen): ChordWikiCheck {
+    val text = chordWikiCheck(seen.title, seen.text)
+    return when {
+        seen.interactive || text == ChordWikiCheck.INTERACTIVE -> ChordWikiCheck.INTERACTIVE
+        seen.automatic || text == ChordWikiCheck.AUTOMATIC -> ChordWikiCheck.AUTOMATIC
+        else -> ChordWikiCheck.NONE
+    }
+}
+
 /**
  * What to do with [seen]. An editor is the sheet, even an empty one. A check keeps being waited on
- * until [timedOut], and one a person has to click is then given up, not answered for them.
+ * until [timedOut]. A check a person has to click is given up at once.
  */
 internal fun chordWikiLook(seen: ChordWikiSeen, timedOut: Boolean): ChordWikiLook {
     if (seen.href.isBlank() || seen.href.startsWith("about:")) {
@@ -334,10 +369,10 @@ internal fun chordWikiLook(seen: ChordWikiSeen, timedOut: Boolean): ChordWikiLoo
         return ChordWikiLook.Waiting
     }
     if (seen.hasEditor) return ChordWikiLook.Ready(seen.source)
-    val check = chordWikiCheck(seen.title, seen.text)
+    val check = chordWikiCheck(seen)
     if (check != ChordWikiCheck.NONE) {
-        if (!timedOut) return ChordWikiLook.Waiting
-        throw ChordWikiStopped(check)
+        if (check == ChordWikiCheck.INTERACTIVE || timedOut) throw ChordWikiStopped(check)
+        return ChordWikiLook.Waiting
     }
     // The menu's links are there before the search has answered, and its words are too. Only a song's
     // link, or the search saying nothing matched, is the answer.
@@ -495,8 +530,6 @@ private val INTERACTIVE = listOf(
     "verify you are human",
     "i'm not a robot",
     "i’m not a robot",
-    "cf-turnstile",
-    "hcaptcha",
     "私はロボットではありません",
     "人間であることを確認"
 )
