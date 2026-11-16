@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -340,14 +341,14 @@ class PracticeCardsTest {
     }
 
     @Test
-    fun stoppingWhileTheLineLoadsPausesTheSong() {
+    fun stoppingWhileNoSessionHasAnsweredPausesNothing() {
         keep(line())
         playback.access = true
         val cards = cards()
         cards.start(null, before = null)
         cards.stop()
         assertNull(practice)
-        assertEquals(listOf(false), playback.plays)
+        assertTrue(playback.plays.isEmpty())
         // Stopped, a card that's no longer shown isn't touched by the sound it was after.
         Thread.sleep(600)
         assertNull(practice)
@@ -420,16 +421,329 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun nativeSoundPendingRequestIsStoppedInTheAppItControlled() {
+        keep(line(), types = hearIt)
+        appPlays(ytMusic, speed = 1f)
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        playback.onPlay = { _, play ->
+            if (play) {
+                entered.countDown()
+                check(release.await(60, TimeUnit.SECONDS))
+            }
+        }
+        val cards = cards()
+        cards.start(null, before = null)
+        try {
+            assertTrue(entered.await(60, TimeUnit.SECONDS))
+            cards.stop()
+            assertEquals(ytMusic, playback.playedApps.last())
+            assertFalse(playback.playing.value!!.clock.playing)
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun nativeSoundBackgroundCancelsAHeldLookupAndReplayStillWorks() {
+        keep(line(), types = hearIt)
+        youTubeHasTheSong()
+        val (release, entered) = holdHosts("music.youtube.com")
+        val cards = cards(source = null)
+        cards.start(null, before = null)
+        try {
+            assertTrue(entered.await(60, TimeUnit.SECONDS))
+            val pending = scope.coroutineContext[Job]!!.children.toList()
+            cards.background()
+            assertEquals(LineSound.PLAYED, practice?.sound)
+            release.countDown()
+            waitFor("the cancelled lookup completes") { pending.all { it.isCompleted } }
+            assertTrue("the late answer started hidden audio", player.shown.isEmpty())
+        } finally {
+            release.countDown()
+        }
+        cards.replay()
+        waitForThePlayer()
+        assertEquals(1, player.shown.size)
+        assertTrue(player.shown.single().play)
+    }
+
+    @Test
+    fun nativeSoundUsesAnotherMatchingSeekableSession() {
+        keep(line(), types = hearIt)
+        appPlays(spotify, canSeek = false)
+        playback.appPlaying[ytMusic] = MutableStateFlow(Following(PlaybackClock(0, System.currentTimeMillis(), 20f, playing = false), "Music", canSeek = true, appPackage = ytMusic))
+        cards().start(null, before = null)
+        waitFor("the second session plays the line") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(ytMusic), playback.seekedApps.toList())
+        assertFalse(playback.playing.value!!.clock.playing)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun nativeSoundUsesAnotherMatchingSessionWhenTheFirstHasFailed() {
+        keep(line())
+        appPlays(spotify)
+        playback.playing.value = playback.playing.value!!.copy(ad = true, clock = PlaybackClock(0, System.currentTimeMillis(), playing = false))
+        traits.keeps(spotify, false)
+        playback.appPlaying[ytMusic] = MutableStateFlow(Following(PlaybackClock(0, System.currentTimeMillis(), playing = false), "Music", canSeek = true, appPackage = ytMusic))
+        cards().start(null, before = null)
+        waitFor("the suitable session is ready") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(spotify, ytMusic), playback.playedApps.toList())
+        assertEquals(listOf(ytMusic), playback.seekedApps.toList())
+        assertFalse(playback.playing.value!!.clock.playing)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun nativeSoundKnownFailedSessionIsPausedEvenOnAReadingFront() {
+        keep(line())
+        youTubeHasTheSong()
+        appPlays(spotify)
+        traits.keeps(spotify, false)
+        cards().start(null, before = null)
+        waitForThePlayer()
+        assertFalse(playback.playing.value!!.clock.playing)
+        assertFalse(player.shown.single().play)
+        assertTrue(playback.seeks.isEmpty())
+    }
+
+    @Test
+    fun nativeSoundKnownFailedAdIsPausedBeforeTheEmbeddedPlayer() {
+        keep(line(), types = hearIt)
+        youTubeHasTheSong()
+        appPlays(spotify)
+        // A native ad reports the song clock as paused, although the ad itself is audible.
+        playback.playing.value = playback.playing.value!!.copy(ad = true, clock = PlaybackClock(0, System.currentTimeMillis(), playing = false))
+        traits.keeps(spotify, false)
+        cards().start(null, before = null)
+        waitForThePlayer()
+        assertEquals(listOf(spotify), playback.playedApps.toList())
+        assertEquals(listOf(false), playback.plays.toList())
+    }
+
+    @Test
+    fun nativeSoundAnonymousSessionStopsOnBackgroundReplaysAndStopsOnRelease() {
+        keep(line(), types = hearIt)
+        playback.access = true
+        playback.playing.value = Following(PlaybackClock(10_000, System.currentTimeMillis(), playing = false), "Music", canSeek = true)
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the anonymous session plays") { true in playback.plays && practice?.sound == LineSound.PLAYING }
+        cards.background()
+        assertFalse(playback.playing.value!!.clock.playing)
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        cards.replay()
+        waitFor("the anonymous session replays") { playback.plays.count { it } == 2 && practice?.sound == LineSound.PLAYING }
+        cards.release()
+        assertFalse(playback.playing.value!!.clock.playing)
+        assertEquals(listOf(true, false, true, false), playback.plays.toList())
+        assertTrue(playback.playedApps.all { it == null })
+    }
+
+    @Test
+    fun nativeSoundAnonymousSessionCanFinishTheClip() {
+        keep(line(), types = hearIt)
+        playback.access = true
+        playback.playing.value = Following(PlaybackClock(10_000, System.currentTimeMillis(), 20f), "Music", canSeek = true)
+        cards().start(null, before = null)
+        waitFor("the anonymous session finishes") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(true, false), playback.plays.toList())
+        assertTrue(playback.playedApps.all { it == null })
+        assertFalse(playback.playing.value!!.clock.playing)
+    }
+
+    @Test
+    fun nativeSoundClosingAFallbackCancelsItsRepeatedNativePauses() {
+        for (leave in listOf<(PracticeCards) -> Unit>({ it.stop() }, { it.background() }, { it.release() })) {
+            keep(line())
+            youTubeHasTheSong()
+            appPlays(spotify)
+            playback.playing.value = playback.playing.value!!.copy(durationMs = 8_000)
+            val (release, entered) = holdHosts("music.youtube.com")
+            val cards = cards()
+            cards.start(null, before = null)
+            try {
+                assertTrue(entered.await(60, TimeUnit.SECONDS))
+                val pending = scope.coroutineContext[Job]!!.children.filter { it.isActive }.toList()
+                assertTrue("the failed app has no repeated stop to test", pending.size >= 2)
+                leave(cards)
+                assertTrue("a closed card can still pause the music app", pending.none { it.isActive })
+            } finally {
+                release.countDown()
+            }
+        }
+    }
+
+    @Test
+    fun nativeSoundBackgroundAlsoCancelsRepeatedPausesOnAPreparedSilentFront() {
+        keep(line())
+        youTubeHasTheSong()
+        appPlays(spotify)
+        playback.playing.value = playback.playing.value!!.copy(durationMs = 8_000)
+        val cards = cards()
+        cards.start(null, before = null)
+        waitForThePlayer()
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        val pending = scope.coroutineContext[Job]!!.children.filter { it.isActive }.toList()
+        assertTrue("the repeated stop must still be active", pending.isNotEmpty())
+        cards.background()
+        assertTrue("a background card can still pause the music app", pending.none { it.isActive })
+    }
+
+    @Test
+    fun nativeSoundSlowCapabilityDoesNotPersistAFailure() {
+        keep(line())
+        youTubeHasTheSong()
+        appPlays(spotify, canSeek = false)
+        val cards = cards()
+        cards.start(null, before = null)
+        waitForThePlayer()
+        assertEquals(AppTraits(), traits.of(spotify))
+        appPlays(spotify)
+        cards.stop()
+        player.shown.clear()
+        cards.start(null, before = null)
+        waitFor("the later seekable session is ready") { playback.seeks.isNotEmpty() && practice?.sound == LineSound.PLAYED }
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun nativeSoundLongAdDoesNotPersistAFailureBeforeAnyControl() {
+        keep(line())
+        youTubeHasTheSong()
+        appPlays(ytMusic)
+        playback.playing.value = playback.playing.value!!.copy(ad = true)
+        val cards = cards()
+        cards.start(null, before = null)
+        waitForThePlayer()
+        assertTrue(playback.seeks.isEmpty())
+        assertEquals(AppTraits(), traits.of(ytMusic))
+        playback.playing.value = playback.playing.value!!.copy(ad = false)
+        cards.stop()
+        player.shown.clear()
+        cards.start(null, before = null)
+        waitFor("the session after its ad is ready") { playback.seeks.isNotEmpty() && practice?.sound == LineSound.PLAYED }
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun nativeSoundPreviewLengthIsNotTheEmbeddedRecordingLength() {
+        keep(line())
+        youTubeHasTheSong()
+        appPlays(spotify)
+        playback.playing.value = playback.playing.value!!.copy(durationMs = 8_000)
+        cards().start(null, before = null)
+        waitForThePlayer()
+        assertNull(player.shown.single().expectedMs)
+    }
+
+    @Test
+    fun nativeSoundSavedRecordingLengthIsSentToTheEmbeddedPlayer() {
+        keep(line().copy(lengthMs = 200_000))
+        youTubeHasTheSong()
+        appPlays(spotify)
+        playback.playing.value = playback.playing.value!!.copy(durationMs = 8_000)
+        cards().start(null, before = null)
+        waitForThePlayer()
+        assertEquals(200_000L, player.shown.single().expectedMs)
+    }
+
+    @Test
+    fun nativeSoundDelayedPreparationUsesTheVisibleSidesSound() {
+        for (preset in listOf(READ_IT, HEAR_IT.copy(on = true), READ_IT.copy(id = "custom", name = "Custom")))
+            for (native in listOf(false, true)) for (front in listOf(false, true)) for (back in listOf(false, true)) {
+            val type = preset.copy(options = CardOptions(CardSide(words = true, sound = front), CardSide(words = true, sound = back)))
+            keep(line(), types = listOf(type))
+            youTubeHasTheSong()
+            val (release, entered) = holdHosts("music.youtube.com")
+            val said = kotlinx.coroutines.CompletableDeferred<Unit>()
+            if (native) {
+                appPlays(spotify, speed = 20f)
+                playback.said = said
+            }
+            val cards = cards(source = if (native) playback else null)
+            cards.start(null, before = null)
+            try {
+                if (native) waitFor("the held native preparation") { playback.followed.isNotEmpty() }
+                else assertTrue(entered.await(60, TimeUnit.SECONDS))
+                cards.turn()
+            } finally {
+                release.countDown()
+                said.complete(Unit)
+            }
+            if (native) {
+                waitFor("native preparation completes") { practice?.sound == LineSound.PLAYED }
+                assertEquals("front=$front back=$back", back, true in playback.plays)
+            } else {
+                waitForThePlayer()
+                assertEquals("front=$front back=$back", back, player.shown.last().play)
+            }
+            cards.stop()
+            playback.said = null
+            playback.plays.clear()
+            playback.followed.clear()
+            player.shown.clear()
+        }
+    }
+
+    @Test
+    fun nativeSoundTurningToASilentBackStopsActiveSoundButReplayIsExplicit() {
+        for (native in listOf(false, true)) {
+            keep(line(), types = listOf(READ_IT.copy(options = CardOptions(CardSide(words = true, sound = true), CardSide(words = true, sound = false)))))
+            youTubeHasTheSong()
+            if (native) appPlays(spotify, speed = 1f)
+            val cards = cards(source = if (native) playback else null)
+            cards.start(null, before = null)
+            waitFor("front is playing") { if (native) true in playback.plays && practice?.sound == LineSound.PLAYING else player.shown.isNotEmpty() }
+            val pauses = player.pauses
+            cards.turn()
+            assertEquals(LineSound.PLAYED, practice?.sound)
+            if (native) assertFalse(playback.playing.value!!.clock.playing) else assertTrue(player.pauses > pauses)
+            cards.replay()
+            waitFor("explicit replay on the silent side") { if (native) playback.plays.count { it } == 2 else player.shown.size == 2 }
+            cards.release()
+            if (native) assertFalse(playback.playing.value!!.clock.playing)
+            playback.plays.clear()
+            player.shown.clear()
+        }
+    }
+
+    @Test
     fun nativeSoundStopsWhenGradingTheLastCard() {
-        keep(line("One"), types = listOf(HEAR_IT.copy(on = true)))
+        val audible = HEAR_IT.copy(on = true, options = CardOptions(CardSide(sound = true), CardSide(sound = true)))
+        keep(line("One"), types = listOf(audible))
         appPlays(ytMusic, speed = 1f)
         val cards = cards()
         cards.start(null, before = null)
         waitFor("the native line plays") { practice?.sound == LineSound.PLAYING && playback.plays.contains(true) }
         cards.turn()
+        assertTrue("the back must still be audible before grading", playback.playing.value!!.clock.playing)
         cards.grade(Grade.GOOD)
         assertNull(practice?.line)
         assertFalse("the previous line keeps playing", playback.playing.value?.clock?.playing == true)
+    }
+
+    @Test
+    fun nativeSoundGradingToADifferentSongStopsThePreviousSongsTarget() {
+        val audible = HEAR_IT.copy(on = true, options = CardOptions(CardSide(sound = true), CardSide(sound = true)))
+        keep(line("One"), line("Two", start = null).copy(title = "Other"), types = listOf(audible))
+        appPlays(ytMusic, speed = 1f)
+        val controlled = java.util.concurrent.CopyOnWriteArrayList<Pair<MusicMetadata, Boolean>>()
+        val source = object : PlaybackSource by playback {
+            override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
+                controlled += song to play
+                playback.playPause(song, play, app)
+            }
+        }
+        val cards = cards(source = source)
+        cards.start(null, before = null)
+        waitFor("the previous song is audible") { true in playback.plays && practice?.sound == LineSound.PLAYING }
+        cards.turn()
+        cards.grade(Grade.GOOD)
+        assertEquals("Other", practice?.line?.title)
+        assertEquals(MusicMetadata("Demo", "Band") to false, controlled.last())
+        assertFalse(playback.playing.value!!.clock.playing)
     }
 
     @Test
@@ -682,7 +996,7 @@ class PracticeCardsTest {
         val cards = cards()
         cards.start(null, before = null)
         waitForThePlayer("the player is on the line")
-        assertEquals(Shown("demo0000000", 10_000, 15_000 + MainViewModel.LINE_TAIL_MS, 200_000, play = false), player.shown.single())
+        assertEquals(Shown("demo0000000", 10_000, 15_000 + MainViewModel.LINE_TAIL_MS, null, play = false), player.shown.single())
         assertEquals("demo0000000", practice?.video)
         assertEquals(listOf(false), playback.plays)
         assertTrue(playback.seeks.isEmpty())
@@ -830,6 +1144,10 @@ class PracticeCardsTest {
         cards.background()
         assertEquals(LineSound.PLAYED, practice?.sound)
         assertEquals(paused + 1, player.pauses)
+        // The stopped player's late failure must not erase replay on the same card.
+        player.end(LineEnd.FAILED)
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        assertEquals("demo0000000", practice?.video)
         // Nothing playing, nothing to stop.
         cards.background()
         assertEquals(paused + 1, player.pauses)
@@ -1092,14 +1410,14 @@ class PracticeCardsTest {
     }
 
     @Test
-    fun anAppThatPlaysAndWontMoveIsRememberedUnderThePackageItSaysItIs() {
+    fun anAppThatHasNoSeekCapabilityHasNoFailedControlToRemember() {
         youTubeHasTheSong()
         keep(line(), types = hearIt)
         // No app is asked for, so the one that plays is the one that's marked.
         playing(canSeek = false)
         cards().start(null, before = null)
         waitForThePlayer("the player takes over")
-        assertEquals(AppTraits(seeks = false), traits.of(spotify))
+        assertEquals(AppTraits(), traits.of(spotify))
     }
 
     @Test
@@ -1347,7 +1665,7 @@ class PracticeCardsTest {
         assertTrue(playback.seeks.isEmpty())
         assertFalse(playback.plays.contains(true))
         assertEquals(listOf("trying $tidal", "$tidal did not play the line", "the YouTube player"), steps())
-        assertEquals(AppTraits(keeps = false), traits.of(tidal))
+        assertEquals(AppTraits(), traits.of(tidal))
     }
 
     /**
@@ -1605,7 +1923,7 @@ class PracticeCardsTest {
         cards().start(null, before = null)
         waitForThePlayer("the player is on the line")
         assertEquals(listOf("trying $tidal", "$tidal did not get to the line", "the YouTube player"), steps())
-        assertEquals(AppTraits(seeks = false), traits.of(tidal))
+        assertEquals(AppTraits(), traits.of(tidal))
     }
 
     @Test
@@ -1625,7 +1943,7 @@ class PracticeCardsTest {
         flow.value = preview
         waitForThePlayer("the player is on the line")
         assertEquals(listOf("trying $tidal", "$tidal did not play the line", "the YouTube player"), steps())
-        assertEquals(AppTraits(keeps = false), traits.of(tidal))
+        assertEquals(AppTraits(), traits.of(tidal))
     }
 
     @Test

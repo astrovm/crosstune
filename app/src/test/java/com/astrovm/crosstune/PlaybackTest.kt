@@ -2510,6 +2510,47 @@ class PlaybackTest {
     }
 
     @Test
+    fun matchingSessionsIncludeASeekablePausedAppBehindAnUnseekablePlayingApp() {
+        allow()
+        val free = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", actions = 0)
+        val seekable = player("com.example.player", "Player", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(free)
+        shadowOf(sessions).addController(seekable)
+        shadowOf(sessions).addController(player("com.example.other", "Other", "Another Song", "The Weeknd"))
+        val matches = playback.matching(song).associateBy { it.appPackage }
+        assertEquals(setOf("com.spotify.music", "com.example.player"), matches.keys)
+        assertFalse(matches.getValue("com.spotify.music").canSeek)
+        assertTrue(matches.getValue("com.spotify.music").clock.playing)
+        assertTrue(matches.getValue("com.example.player").canSeek)
+        assertFalse(matches.getValue("com.example.player").clock.playing)
+        assertTrue(woken.isEmpty())
+        assertTrue(AppAsked.calls.isEmpty())
+        assertTrue(playback.matching(MusicMetadata("Absent", "Band")).isEmpty())
+    }
+
+    @Test
+    @Config(shadows = [DeniedMatchingSessions::class])
+    fun matchingSessionsAreEmptyWhenAccessWasRevoked() {
+        assertTrue(playback.matching(song).isEmpty())
+    }
+
+    @Implements(MediaSessionManager::class)
+    class DeniedMatchingSessions : ShadowMediaSessionManager() {
+        @Implementation
+        override fun getActiveSessions(component: ComponentName?): List<MediaController> {
+            throw SecurityException("Notification access was revoked")
+        }
+    }
+
+    @Test
+    fun matchingSessionsWithNoUsableClockAreLeftOut() {
+        allow()
+        shadowOf(sessions).addController(player("com.example.stopped", "Stopped", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_STOPPED))
+        shadowOf(sessions).addController(player("com.example.unknown", "Unknown", "Blinding Lights", "The Weeknd", position = -1))
+        assertTrue(playback.matching(song).isEmpty())
+    }
+
+    @Test
     fun anAppAskedForIsTheOnlyOneControlledEvenWhenAnotherPlaysTheSong() {
         allow()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED))

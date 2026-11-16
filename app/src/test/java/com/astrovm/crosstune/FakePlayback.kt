@@ -79,6 +79,12 @@ internal class FakePlayback : PlaybackSource {
     @Volatile
     var said: CompletableDeferred<Unit>? = null
 
+    override fun matching(song: MusicMetadata): List<Following> =
+        (listOfNotNull(playing.value) + appPlaying.values.mapNotNull { it.value }).distinctBy { it.appPackage }.filter { following ->
+            val app = following.appPackage
+            has(unnamed.value?.takeIf { it.app == app }?.played, onThePhone?.takeIf { it.app == app }?.metadata, song, null)
+        }
+
     override fun follow(song: MusicMetadata, app: String?): Flow<Following?> {
         followed += song
         followedApps += app

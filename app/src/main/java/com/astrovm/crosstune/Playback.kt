@@ -223,6 +223,9 @@ internal interface PlaybackSource {
      */
     fun follow(song: MusicMetadata, app: String? = null): Flow<Following?>
 
+    /** Existing sessions that have [song], including paused sessions. No app is started. */
+    fun matching(song: MusicMetadata): List<Following>
+
     /** Moves the app playing [song], [app] when named, to [positionMs]. */
     fun seekTo(song: MusicMetadata, positionMs: Long, app: String? = null)
 
@@ -407,6 +410,9 @@ internal class MediaSessionPlayback(
     override fun restricted(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             runCatching { context.packageManager.getInstallSourceInfo(context.packageName).packageSource }.getOrNull() in fromAFile
+
+    override fun matching(song: MusicMetadata): List<Following> =
+        runCatching { activeSessions().filter { it.has(song, null) }.mapNotNull { following(it, song.lengthMs) } }.getOrDefault(emptyList())
 
     override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = callbackFlow {
         var followed: MediaController? = null

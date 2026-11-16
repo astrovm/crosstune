@@ -38,9 +38,9 @@ class PracticeTriesTest {
 
     /**
      * What a card did: where the line played, an app or the player; every app it opened, woke, asked for the song or brought to the
-     * front; whether it asked anything about the song for Spotify; and whether it offered Allow.
+     * front; whether it asked anything about the song for Spotify.
      */
-    private data class Outcome(val played: String, val broughtUp: List<String> = emptyList(), val askedSpotify: Boolean = false, val allow: Boolean = false)
+    private data class Outcome(val played: String, val broughtUp: List<String> = emptyList(), val askedSpotify: Boolean = false)
 
     /** No app: songs open in a browser. */
     private val web = Destination.Custom("web", "Web", "https://example.com/search?q={query}")
@@ -57,7 +57,7 @@ class PracticeTriesTest {
     /**
      * The rule. Crosstune stays in front: a card never opens an app, wakes one, asks one for the song or brings one to the front,
      * and asks nothing about the song for Spotify. The line plays in the app that already has the song open and moves in it,
-     * whichever that is, and otherwise in the small player. So there's never anything to Allow.
+     * whichever that is, and otherwise in the small player.
      */
     private fun expected(case: Case): Outcome = Outcome(
         when (case.plays) {
@@ -126,7 +126,7 @@ class PracticeTriesTest {
             val broughtUp = playback.opened.map { "opened ${it.first}" } + playback.songsAsked.map { "asked ${it.second}" } +
                 playback.broughtToFront.map { "brought ${it.title} to the front" } + playback.appsPlayed.map { "woke $it" } +
                 List(playback.cameBack) { "came back" } + List(playback.woken) { "woke the screen" }
-            return Outcome(played, broughtUp, askedSpotify, false)
+            return Outcome(played, broughtUp, askedSpotify)
         } finally {
             scope.cancel()
             dispatcher.close()
