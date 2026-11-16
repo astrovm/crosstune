@@ -4470,7 +4470,7 @@ internal class MainViewModel(
         val playing = uiState.following?.takeIf { it.clock.playing && it.appPackage != null }
         val before = uiState.lyricsFor?.let { shown -> playing?.let { Before(shown, inApp(it.clock.positionAt(now())), it.appPackage) } }
             ?: when (val first = playback?.whatPlays()) {
-                is WhatPlays.Named -> first.song.clock?.let { Before(first.song.metadata, it.positionAt(now()), app = null) }
+                is WhatPlays.Named -> first.song.clock?.let { Before(first.song.metadata, it.positionAt(now()), app = first.song.app) }
                 is WhatPlays.Nameless -> Before(first.playing.played, 0, first.playing.app, songless = true)
                 null -> null
             }

@@ -1828,6 +1828,22 @@ class MainViewModelTest {
     }
 
     @Test
+    fun practiceOutsideLyricsKeepsTheAppThatPlayedBefore() {
+        val packageName = MusicService.SPOTIFY.packageName
+        val playback = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(song, null, 4_000, SystemClock.elapsedRealtime(), app = packageName)
+        }
+        val model = model(playback = playback)
+        idle()
+        assertNull(model.uiState.lyricsFor)
+        model.startPractice()
+        idle()
+        assertEquals(song, model.uiState.practice?.before?.song)
+        assertEquals(packageName, model.uiState.practice?.before?.app)
+    }
+
+    @Test
     fun practiceOverAStationKeepsItToPlayOnAfter() {
         val playback = FakePlayback().apply { playing.value = following(app = station.app) }
         val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
