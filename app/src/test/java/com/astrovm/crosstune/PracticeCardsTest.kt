@@ -504,6 +504,41 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun nativeSoundFullRecordingCanBecomeSeekableAfterSelection() {
+        keep(line(start = 60_000))
+        appPlays(spotify)
+        playback.playing.value = playback.playing.value!!.copy(durationMs = 30_000)
+        val full = MutableStateFlow<Following?>(Following(PlaybackClock(0, System.currentTimeMillis(), playing = false), "Music", canSeek = false, appPackage = ytMusic, durationMs = 200_000))
+        playback.appPlaying[ytMusic] = full
+        cards().start(null, before = null)
+        waitFor("a session is being followed") { playback.followed.isNotEmpty() }
+        full.value = full.value?.copy(canSeek = true)
+        waitFor("the late-ready recording settles") { practice?.sound == LineSound.PLAYED || practice?.sound == LineSound.NONE }
+        assertEquals(listOf(ytMusic), playback.seekedApps.toList())
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun nativeSoundRemainingSessionCanBecomeReadyWhileTheFirstFails() {
+        keep(line())
+        appPlays(spotify)
+        playback.obeys = false
+        val full = MutableStateFlow<Following?>(Following(PlaybackClock(0, System.currentTimeMillis(), playing = false), "Music", canSeek = false, appPackage = ytMusic))
+        playback.appPlaying[ytMusic] = full
+        playback.onPlay = { app, play ->
+            if (app == ytMusic) full.value = full.value?.copy(clock = PlaybackClock(10_000, System.currentTimeMillis(), playing = play))
+        }
+        cards().start(null, before = null)
+        waitFor("the first control is pending") { playback.seeks.isNotEmpty() }
+        full.value = full.value?.copy(canSeek = true)
+        waitFor("the later candidate settles") { practice?.sound == LineSound.PLAYED || practice?.sound == LineSound.NONE }
+        assertEquals(listOf(spotify, ytMusic), playback.seekedApps.toList().distinct())
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
     fun nativeSoundTriesRemainingMatchingSessionsAfterAControlFails() {
         keep(line())
         appPlays(spotify)

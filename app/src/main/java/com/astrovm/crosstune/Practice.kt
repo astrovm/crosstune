@@ -243,13 +243,13 @@ internal class PracticeCards(
         return false
     }
 
-    /** Tries existing sessions that hold the clip, with playing sessions first. Pauses competing audio. */
+    /** Tries existing sessions that hold the clip: ready sessions first, then playing sessions. Pauses competing audio. */
     private fun matchingApps(source: PlaybackSource, song: MusicMetadata, line: SavedLine): List<String?> {
         val matches = source.matching(song)
+        // Readiness sets the order, not eligibility: a later candidate can become ready while another is tried.
         val candidates = matches.filter {
-            usable(it, line) && it.canSeek && !it.ad &&
-                LineWindow.of(line, lead = if (it.video) line.leadMs else 0L).within(it.durationMs) != null
-        }.sortedByDescending { if (it.clock.playing) 1 else 0 }
+            usable(it, line) && LineWindow.of(line, lead = if (it.video) line.leadMs else 0L).within(it.durationMs) != null
+        }.sortedWith(compareByDescending<Following> { it.canSeek && !it.ad }.thenByDescending { it.clock.playing })
         val chosen = candidates.firstOrNull()
         matches.filter { chosen != null && it.appPackage != chosen.appPackage && (it.clock.playing || it.ad) }.forEach { leftOut(source, song, it) }
         // Without a ready candidate, the followed session can still report its capabilities a moment later.
