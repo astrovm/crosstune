@@ -420,15 +420,15 @@ class PracticeCardsTest {
     }
 
     @Test
-    fun nativeSoundStopsWhenGradingToAnUntimedCard() {
-        keep(line("One"), line("Two", start = null), types = listOf(HEAR_IT.copy(on = true)))
+    fun nativeSoundStopsWhenGradingTheLastCard() {
+        keep(line("One"), types = listOf(HEAR_IT.copy(on = true)))
         appPlays(ytMusic, speed = 1f)
         val cards = cards()
         cards.start(null, before = null)
         waitFor("the native line plays") { practice?.sound == LineSound.PLAYING && playback.plays.contains(true) }
         cards.turn()
         cards.grade(Grade.GOOD)
-        assertEquals("Two", practice?.line?.text)
+        assertNull(practice?.line)
         assertFalse("the previous line keeps playing", playback.playing.value?.clock?.playing == true)
     }
 
