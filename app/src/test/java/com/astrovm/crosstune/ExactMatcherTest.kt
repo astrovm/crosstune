@@ -987,7 +987,7 @@ class ExactMatcherTest {
                     when (regional) {
                         "timeout" -> throw java.net.SocketTimeoutException("Invented regional timeout")
                         "bad JSON" -> FakeSpotify.html(request, "not JSON")
-                        "server error" -> FakeSpotify.html(request, "unavailable", code = 503)
+                        "server error" -> FakeSpotify.html(request, """{"results":[${appleSong(song.title, song.artist, 184_000)}]}""", code = 503)
                         "match" -> FakeSpotify.html(request, """{"results":[${appleSong(song.title, song.artist, 184_000)}]}""")
                         else -> otherwise(request)
                     }
