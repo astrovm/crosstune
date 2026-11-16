@@ -13,6 +13,56 @@ import org.robolectric.annotation.Config
 class SongNamesEdgesTest {
 
     @Test
+    fun titleWordsAndIncompleteRecordingNotesKeepTheirMeaning() {
+        val rows = listOf(
+            Triple("01 Live Forever.mp3", "Live Forever", true),
+            Triple("01 Live Forever", "Live Forever", true),
+            Triple("01. Live Forever.mp3", "Live Forever", true),
+            Triple("01. Live Forever", "Live Forever", true),
+            Triple("01 The Live Forever.mp3", "The Live Forever", true),
+            Triple("Sweet (Dreams) Tonight", "Sweet Dreams", true),
+            Triple("Sweet (Dreams) Tonight (Live)", "Sweet Dreams", true),
+            Triple("Sweet (Dreams (Live)) Tonight", "Sweet Dreams", true),
+            Triple("Hello (Live", "Hello World (Live", false),
+            Triple("Hello (Live]", "Hello World (Live]", false),
+            Triple("Hello (Live [Cover])", "Hello World (Live [Cover])", false),
+            Triple("Hello () (Live)", "Hello World () (Live)", false),
+            Triple("Hello (2024 Live)", "Hello World (2024 Live)", false),
+            Triple("Hello 2024 Live", "Hello World 2024 Live", false),
+            Triple("01 Hello (Live).mp3", "01 Hello World (Live).mp3", false),
+            Triple("Hello\u0085Live", "Hello World\u0085Live", false)
+        )
+        val wrong = mutableListOf<String>()
+        for ((one, other, wanted) in rows) for ((title, asked) in listOf(one to other, other to one)) {
+            if (SongNames.wordsMatch(title, asked) != wanted) wrong += "words: $title / $asked, wanted $wanted"
+            if (SongNames.names(title, "Fake Band", MusicMetadata(asked, "Fake Band")) != wanted) wrong += "names: $title / $asked, wanted $wanted"
+        }
+        assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun aRecordingTagCannotBecomeTheSongThroughAGuessedArtistSplit() {
+        for (artist in listOf("", "<unknown>", "Fake Band")) for (askedArtist in listOf("", "Fake Band")) {
+            assertFalse(SongNames.names("Live Forever - Live", artist, MusicMetadata("Live", askedArtist)))
+            assertFalse(SongNames.names("Live Forever 「Live」", artist, MusicMetadata("Live", askedArtist)))
+        }
+        // A real artist/title credit still names a one-word song when the artist is known.
+        assertTrue(SongNames.names("Fake Band - Hello", "", MusicMetadata("Hello", "Fake Band")))
+        assertTrue(SongNames.names("Fake Band - Hello", "Fake Band", MusicMetadata("Hello", "Fake Band")))
+        assertTrue(SongNames.names("Fake Band - Hello", "Fake Band", MusicMetadata("Hello", "")))
+        assertFalse(SongNames.names("Other Band - Hello", "Fake Band", MusicMetadata("Hello", "Fake Band")))
+    }
+
+    @Test
+    fun aVideoCaptionStillNamesTheSameSingleWordSong() {
+        for (tag in listOf("(Official Audio)", "(Official Video)", "(Lyric Video)", "(Lyrics)")) {
+            assertTrue(tag, SongNames.names("Hello $tag", "", MusicMetadata("Hello", "")))
+            assertTrue(tag, SongNames.names("Hello $tag", "", MusicMetadata("Hello", "Fake Band")))
+            assertTrue(tag, SongNames.names("Hello $tag", "<unknown>", MusicMetadata("Hello", "")))
+        }
+    }
+
+    @Test
     fun aRecordingNoteStartsAtItsOwnWordNotAtALaterLatinWord() {
         val names = listOf("Любовь" to "Любовь моя", "Αγάπη" to "Αγάπη μου", "愛" to "愛 の歌", "사랑" to "사랑 노래")
         for ((one, other) in names) for (tag in listOf("Live", "- Live", "– Live", "— Live", "- Part 2")) {
@@ -25,7 +75,7 @@ class SongNamesEdgesTest {
     fun recordingMarksNeverMakeDifferentSingleWordTitlesSpecificEnough() {
         val brackets = listOf("(" to ")", "[" to "]", "【" to "】", "「" to "」", "〔" to "〕", "（" to "）", "［" to "］")
         val notes = listOf("Live", "Cover", "Part 2", "カバー", "커버")
-        val suffixes = brackets.flatMap { (open, close) -> notes.map { "$open$it$close" } } +
+        val suffixes = brackets.flatMap { (open, close) -> notes.flatMap { listOf("$open$it$close", "$open$it", "$open$it]") } } +
             listOf("-", "–", "—").flatMap { dash -> notes.map { "$dash $it" } } + notes
         for (tag in suffixes) {
             assertFalse(tag, SongNames.wordsMatch("Hello $tag", "Hello World $tag"))

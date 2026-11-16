@@ -461,6 +461,11 @@ internal object MetadataParsers {
     }
 
     private val audioExtension = phoneRegex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
+    private val fileTrackNumber = phoneRegex("""^\d{1,3}[.)]\s+""")
+
+    /** Players can omit a file's extension. Its track number still does not move a title word into a recording note. */
+    internal fun withoutFileDecoration(title: String): String =
+        title.replace(audioExtension, "").replace(paddedTrackRegex, "").replace(fileTrackNumber, "")
 
     /** A browser playing a bare file names it by its address, under its site, e.g. "example.com/song.mp3" by "example.com". */
     private fun namesAFile(song: MusicMetadata) = '.' in song.artist && song.title.startsWith("${song.artist}/")

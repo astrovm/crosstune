@@ -725,10 +725,17 @@ internal object SongNames {
     fun names(title: String, artist: String, song: MusicMetadata): Boolean {
         if (title.isBlank()) return false
         // Read as the song it names the way the song playing is named, e.g. "YOASOBI「アイドル」 Official Music Video".
-        val named = MetadataParsers.youtubeVideo(title, artist)?.title
-        if (!(same(title, song.title) || wordsMatch(title, song.title) || named?.let { same(it, song.title) } == true)) return false
+        val named = MetadataParsers.youtubeVideo(title, artist)
+        val inferred = named?.let { same(it.title, song.title) && (titleWordsMatch(title, song.title) || namesWithArtist(it, song, artist)) } == true
+        if (!(same(title, song.title) || wordsMatch(title, song.title) || inferred)) return false
         return artist.isBlank() || artistInside(artist, song.artist) || sameArtist(song.artist, artist) ||
             artistNames(song.artist).map(::words).any { it.isNotEmpty() && words(title).containsAll(it) }
+    }
+
+    /** A guessed artist/title split needs the artist too: "Live Forever - Live" may be a song with a live tag. */
+    private fun namesWithArtist(named: MusicMetadata, song: MusicMetadata, artist: String): Boolean {
+        val by = song.artist.ifBlank { artist.takeUnless(MetadataParsers::noArtist).orEmpty() }
+        return named.artist.isNotBlank() && by.isNotBlank() && (artistInside(named.artist, by) || sameArtist(by, named.artist))
     }
 
     /**
@@ -822,9 +829,8 @@ internal object SongNames {
 
     /** A recording note cannot provide the second word that makes a partial title specific enough. */
     private fun titleWordsMatch(one: String, other: String): Boolean {
-        val first = titleWithoutNotes(withoutEditionTag(one))
-        val second = titleWithoutNotes(withoutEditionTag(other))
-        if (first == one && second == other) return true
+        val first = titleWithoutNotes(withoutEditionTag(MetadataParsers.withoutFileDecoration(one)))
+        val second = titleWithoutNotes(withoutEditionTag(MetadataParsers.withoutFileDecoration(other)))
         if (normalize(first).isNotEmpty() && normalize(first) == normalize(second)) return true
         val ours = words(first)
         val theirs = words(second)
@@ -834,43 +840,72 @@ internal object SongNames {
 
     /** Read brackets and recording marks together, without turning another script's marks into title words. */
     private fun titleWithoutNotes(title: String): String {
-        val text = StringBuilder()
+        val named = withoutBracketNotes(title).trim()
+        val start = named.indices.firstOrNull { at ->
+            at > 0 && isPatternSpace(named[at - 1]) && named[at].isLetterOrDigit() && recordingNote(named, at)
+        } ?: named.length
+        return if (start < named.length) named.substring(0, start).trim().trimEnd { it in NAME_TAG_DASHES }.trim() else named
+    }
+
+    /** Keep ordinary parenthesized title words. Nested recording notes are removed without rereading their parents. */
+    private fun withoutBracketNotes(title: String): String {
         val opens = ArrayDeque<Int>()
-        var from = 0
+        val notes = ArrayDeque<IntRange>()
         for (at in title.indices) {
             when {
                 title[at] in NAME_TAG_OPENS -> opens.addLast(at)
                 opens.isNotEmpty() && NAME_TAG_CLOSES[NAME_TAG_OPENS.indexOf(title[opens.last()])] == title[at] -> {
                     val open = opens.removeLast()
-                    if (opens.isEmpty()) {
-                        text.append(title, from, open).append(' ')
-                        from = at + 1
-                    }
+                    if (bracketNote(title, open + 1, at)) addNote(notes, open, at + 1)
                 }
             }
         }
-        text.append(title, from, title.length)
-        val named = text.toString().trim()
-        val start = named.indices.firstOrNull { at ->
-            at > 0 && named[at - 1].isWhitespace() && named[at].isLetterOrDigit() && recordingNote(named, at)
-        } ?: named.length
-        return if (start < named.length) named.substring(0, start).trim().trimEnd { it in NAME_TAG_DASHES }.trim() else named
+        // A truncated or mismatched closing bracket does not turn a known recording note into title words.
+        opens.firstOrNull { recordingNote(title, it + 1) }?.let { addNote(notes, it, title.length) }
+        val text = StringBuilder()
+        var from = 0
+        for (note in notes) {
+            text.append(title, from, note.first).append(' ')
+            from = note.last + 1
+        }
+        return text.append(title, from, title.length).toString()
     }
 
-    private fun recordingNote(text: String, at: Int): Boolean {
-        // The next word or script mark is bounded. Copying the whole suffix at each space would take quadratic work.
-        val prefix = text.substring(at, minOf(text.length, at + longestNameNote + 1))
+    private fun addNote(notes: ArrayDeque<IntRange>, from: Int, until: Int) {
+        while (notes.isNotEmpty() && notes.last().first >= from) notes.removeLast()
+        notes.addLast(from until until)
+    }
+
+    private fun bracketNote(text: String, from: Int, until: Int): Boolean {
+        val start = (from until until).firstOrNull { !isPatternSpace(text[it]) } ?: return false
+        if (recordingNote(text, start, until)) return true
+        // Descriptor-first tags include "English Version", "En Vivo" and an artist's "Version".
+        var end = until
+        while (isPatternSpace(text[end - 1])) end--
+        if (text[end - 1] in NAME_TAG_CLOSES) return false
+        val tail = text.substring(maxOf(start, end - longestNameNote - 1), end)
+        val last = wordList(tail).lastOrNull()
+        return last in noteEndWords || last in VERSION_WORDS
+    }
+
+    private fun recordingNote(text: String, at: Int, until: Int = text.length): Boolean {
+        // Both ends are bounded. Reading each nested bracket's whole contents would take quadratic work.
+        val prefix = text.substring(at, minOf(until, at + longestNameNote + YEAR_DIGITS + 2))
         val letters = normalize(prefix)
         val startsInLatin = letters.firstOrNull()?.let { it in 'a'..'z' || it in '0'..'9' } == true
-        return startsInLatin && words(prefix).firstOrNull() in nameNoteWords || VERSION_MARKS.any(letters::startsWith)
+        val words = wordList(prefix)
+        val year = words.firstOrNull()?.let { it.length == YEAR_DIGITS && it.all(Char::isDigit) } == true && words.getOrNull(1) in VERSION_WORDS
+        return startsInLatin && (words.firstOrNull() in nameNoteWords || year) || VERSION_MARKS.any(letters::startsWith)
     }
 
-    private val nameNoteWords = VERSION_WORDS + setOf("part", "pt", "reprise", "interlude", "version", "explicit", "clean", "official", "lyrics", "extended")
+    private val noteEndWords = setOf("version", "ver", "take", "mix", "vivo", "cappella", "capella", "recorded")
+    private val nameNoteWords = VERSION_WORDS + setOf("part", "pt", "reprise", "interlude", "version", "explicit", "clean", "official", "lyric", "lyrics", "extended", "from", "stripped", "vip", "mv")
     private val longestNameNote = maxOf(nameNoteWords.maxOf(String::length), VERSION_MARKS.maxOf(String::length))
 
     private const val NAME_TAG_OPENS = "([【「〔（［"
     private const val NAME_TAG_CLOSES = ")]】」〕）］"
     private const val NAME_TAG_DASHES = "-–—"
+    private const val YEAR_DIGITS = 4
 
     /**
      * The same title but for its small words, as sites write them down either way: "Vahos de ayer"
