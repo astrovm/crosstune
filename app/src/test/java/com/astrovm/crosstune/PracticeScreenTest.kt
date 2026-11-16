@@ -36,13 +36,14 @@ class PracticeScreenTest {
     val composeRule = createComposeRule()
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
+    private lateinit var rootView: android.view.View
 
     private fun string(id: Int, vararg args: Any) = context.getString(id, *args)
 
     private val line = SavedLine("夜空を見上げて", reading = "よぞらをみあげて", romanized = "yozora o miagete", translation = "Looking up at the night sky", title = "Night Song", artist = "The Band", startMs = 1_000, endMs = 4_000)
 
     private fun show(state: UiState, actions: ScreenActions = ScreenActions(), dark: Boolean = false) {
-        composeRule.setContent { CrosstuneTheme(darkTheme = dark) { PracticeScreen(state, actions) } }
+        composeRule.setContent { rootView = androidx.compose.ui.platform.LocalView.current; CrosstuneTheme(darkTheme = dark) { PracticeScreen(state, actions) } }
         composeRule.waitForIdle()
     }
 
@@ -117,7 +118,7 @@ class PracticeScreenTest {
         player.assertExists()
         val bounds = player.getBoundsInRoot()
         val density = context.resources.displayMetrics.density
-        // YouTube asks for a player of at least 200 px tall, and 16:9.
+        // The viewport meets the 200 px minimum and keeps 16:9 where that width fits.
         val height = bounds.bottom.value - bounds.top.value
         assertTrue(height * density >= 200f - 0.5f)
         assertEquals(height * 16 / 9, bounds.right.value - bounds.left.value, 0.5f)
@@ -130,6 +131,54 @@ class PracticeScreenTest {
         assertTrue(view.parent != null)
         // Its play button stays the card's one control of the sound.
         composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertIsEnabled()
+    }
+
+    @Test
+    @Config(qualifiers = "w320dp-h640dp-mdpi")
+    fun aNarrowPlayerKeepsYouTubesMinimumViewportInsideTheCard() {
+        withPlayer()
+        val player = composeRule.onNodeWithTag(LINE_PLAYER_TAG).getBoundsInRoot()
+        val card = composeRule.onNodeWithTag(PRACTICE_CARD_TAG).getBoundsInRoot()
+        val density = context.resources.displayMetrics.density
+        assertTrue("player $player is too narrow", (player.right.value - player.left.value) * density >= 199.5f)
+        assertTrue("player $player is too short", (player.bottom.value - player.top.value) * density >= 199.5f)
+        assertTrue("player $player leaves card $card", player.left >= card.left && player.right <= card.right)
+    }
+
+    private fun gradesFollowRtl(wrapped: Boolean) {
+        composeRule.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) {
+                CrosstuneTheme { PracticeScreen(UiState(practice = practice(turned = true), cardTypes = DEFAULT_CARD_TYPES), ScreenActions()) }
+            }
+        }
+        composeRule.waitForIdle()
+        val grades = listOf(R.string.practice_again, R.string.practice_hard, R.string.practice_good, R.string.practice_easy).map {
+            composeRule.onNodeWithText(string(it)).fetchSemanticsNode().positionInRoot
+        }
+        assertEquals("unexpected rows: $grades", if (wrapped) 2 else 1, grades.map { it.y }.distinct().size)
+        assertTrue("first grade is not on the right: $grades", grades[0].x > grades[1].x)
+        assertTrue("last grade is not on the left: $grades", grades[2].x > grades[3].x)
+    }
+
+    @Test
+    fun oneRowOfGradesFollowsRtl() = gradesFollowRtl(wrapped = false)
+
+    @Test
+    @Config(qualifiers = "de-w320dp-h640dp-xhdpi", fontScale = 2f)
+    fun wrappedGradesFollowRtl() = gradesFollowRtl(wrapped = true)
+
+    @Test
+    fun theWaitingPlayControlHasAnAccessibleProgressState() {
+        withPlayer(Practice(queue = listOf(heard), total = 2, sound = LineSound.LOADING, video = "abc"))
+        val play = composeRule.onNodeWithContentDescription(string(R.string.practice_play))
+        play.assertIsNotEnabled()
+        assertEquals(ProgressBarRangeInfo.Indeterminate, play.fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo])
+        val manager = context.getSystemService(android.view.accessibility.AccessibilityManager::class.java)
+        org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
+        org.robolectric.Shadows.shadowOf(manager).setTouchExplorationEnabled(true)
+        composeRule.waitForIdle()
+        val spoken = requireNotNull(requireNotNull(rootView.accessibilityNodeProvider).createAccessibilityNodeInfo(play.fetchSemanticsNode().id))
+        assertTrue("the waiting control has no spoken state", !androidx.core.view.accessibility.AccessibilityNodeInfoCompat.wrap(spoken).stateDescription.isNullOrBlank())
     }
 
     @Test

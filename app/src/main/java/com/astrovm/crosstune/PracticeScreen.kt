@@ -79,6 +79,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -322,7 +325,7 @@ private fun EvenRows(gap: Dp, modifier: Modifier, content: @Composable () -> Uni
         layout(width, rows.sumOf { it.first().height } + space * (rows.size - 1)) {
             var y = 0
             rows.forEach { row ->
-                row.forEachIndexed { index, placed -> placed.place(index * (cell + space), y) }
+                row.forEachIndexed { index, placed -> placed.placeRelative(index * (cell + space), y) }
                 y += row.first().height + space
             }
         }
@@ -382,7 +385,7 @@ internal fun ReadingFields(line: SavedLine, onSave: (List<String>) -> Unit, onCa
     }
 }
 
-/** The small YouTube player, shown as YouTube asks of a player that's heard: 16:9 and at least 200 px tall, at any density. */
+/** At least 200 px in each direction, as YouTube requires; 16:9 where the card has room for that width. */
 @Composable
 @NonRestartableComposable
 private fun LinePlayerView(view: () -> View?, modifier: Modifier = Modifier) {
@@ -429,8 +432,10 @@ private fun SoundButton(line: SavedLine, sound: LineSound, onPlay: () -> Unit) {
     val stop = stringResource(R.string.practice_stop)
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(SOUND_SIZE + 8.dp)) {
         if (sound == LineSound.PLAYING) CircularProgressIndicator(progress = { played.value }, strokeWidth = 3.dp, modifier = Modifier.size(SOUND_SIZE + 8.dp))
-        else if (sound == LineSound.LOADING) CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(SOUND_SIZE + 8.dp))
-        Surface(onClick = onPlay, enabled = sound == LineSound.PLAYED || sound == LineSound.PLAYING, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(SOUND_SIZE)) {
+        else if (sound == LineSound.LOADING) CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(SOUND_SIZE + 8.dp).clearAndSetSemantics {})
+        Surface(onClick = onPlay, enabled = sound == LineSound.PLAYED || sound == LineSound.PLAYING, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(SOUND_SIZE).then(
+            if (sound == LineSound.LOADING) Modifier.semantics { progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate } else Modifier
+        )) {
             Box(contentAlignment = Alignment.Center) {
                 if (sound == LineSound.PLAYING) Bars(SOUND_SIZE / 3, Modifier.semantics { contentDescription = stop })
                 else Icon(painterResource(R.drawable.ic_play), contentDescription = stringResource(R.string.practice_play), modifier = Modifier.size(SOUND_SIZE / 2))
