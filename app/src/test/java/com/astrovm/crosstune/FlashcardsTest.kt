@@ -823,6 +823,8 @@ class FlashcardsTest {
         phone.access = false
         launch()
         practiseAll(1)
+        // The line's video is looked for off the main thread, so the card waits on it a moment before it knows there's none.
+        waitUntil { practice().sound != LineSound.LOADING }
         assertEquals(LineSound.NONE, practice().sound)
         assertTrue(onCard("One"))
     }
