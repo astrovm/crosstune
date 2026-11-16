@@ -2510,6 +2510,70 @@ class PlaybackTest {
     }
 
     @Test
+    fun aSelectedFullSessionIsFollowedInsteadOfItsAppsPlayingPreview() {
+        allow()
+        val preview = player("com.example.player", "Player", song.title, song.artist, duration = 30_000)
+        val full = player("com.example.player", "Player", song.title, song.artist, state = PlaybackState.STATE_PAUSED, duration = 200_000)
+        shadowOf(sessions).addController(preview)
+        shadowOf(sessions).addController(full)
+        val chosen = playback.matching(song).single { it.following?.durationMs == 200_000L }
+        val source = chosen.source
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { source.follow(song).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(200_000L, seen.last()?.durationMs)
+    }
+
+    @Test
+    fun aSelectedSessionsControlsCannotReachAnotherSessionInTheSameApp() {
+        allow()
+        val preview = player("com.example.player", "Player", song.title, song.artist, duration = 30_000)
+        val full = player("com.example.player", "Player", song.title, song.artist, state = PlaybackState.STATE_PAUSED, duration = 200_000)
+        shadowOf(sessions).addController(preview)
+        shadowOf(sessions).addController(full)
+        val chosen = playback.matching(song).single { it.following?.durationMs == 200_000L }
+        val source = chosen.source
+        source.seekTo(song, 60_000)
+        assertEquals(60_000L, shadowOf(full.transportControls).seekToPositionMs)
+        source.playPause(song, true, chosen.app)
+        assertEquals(PlaybackState.ACTION_PLAY, shadowOf(full.transportControls).lastPerformedAction)
+        source.playPause(song, false, chosen.app)
+        assertEquals(PlaybackState.ACTION_PAUSE, shadowOf(full.transportControls).lastPerformedAction)
+        source.playPause(song, false)
+        source.pauseApp("com.example.player")
+        assertEquals(PlaybackState.ACTION_PAUSE, shadowOf(full.transportControls).lastPerformedAction)
+        assertEquals(0L, shadowOf(preview.transportControls).lastPerformedAction)
+    }
+
+    @Test
+    fun aBoundSessionWaitsForItsClockAndNeverFollowsItsAppsOtherSession() {
+        allow()
+        val preview = player("com.example.player", "Player", song.title, song.artist, duration = 30_000)
+        val full = player("com.example.player", "Player", song.title, song.artist, state = PlaybackState.STATE_PAUSED, position = -1, duration = 200_000)
+        shadowOf(sessions).addController(preview)
+        shadowOf(sessions).addController(full)
+        val chosen = playback.matching(song).single { it.following == null }
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { chosen.source.follow(song, chosen.app).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+        shadowOf(full).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 60_000, 1f, NOW).setActions(PlaybackState.ACTION_SEEK_TO).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(200_000L, seen.last()?.durationMs)
+        assertEquals(60_000L, seen.last()?.clock?.positionMs)
+        shadowOf(full).executeOnMetadataChanged(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Other fake song").putString(MediaMetadata.METADATA_KEY_ARTIST, "Fake artist").build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+        chosen.source.seekTo(song, 60_000, chosen.app)
+        chosen.source.playPause(song, true, chosen.app)
+        assertEquals(0L, shadowOf(preview.transportControls).lastPerformedAction)
+        // Cleanup still reaches the owned session after its metadata changed.
+        chosen.source.pauseApp("com.example.player")
+        assertEquals(PlaybackState.ACTION_PAUSE, shadowOf(full.transportControls).lastPerformedAction)
+        assertEquals(0L, shadowOf(preview.transportControls).lastPerformedAction)
+    }
+
+    @Test
     fun matchingSessionsIncludeASeekablePausedAppBehindAnUnseekablePlayingApp() {
         allow()
         val free = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", actions = 0)
@@ -2517,7 +2581,7 @@ class PlaybackTest {
         shadowOf(sessions).addController(free)
         shadowOf(sessions).addController(seekable)
         shadowOf(sessions).addController(player("com.example.other", "Other", "Another Song", "The Weeknd"))
-        val matches = playback.matching(song).associateBy { it.appPackage }
+        val matches = playback.matching(song).map { requireNotNull(it.following) }.associateBy { it.appPackage }
         assertEquals(setOf("com.spotify.music", "com.example.player"), matches.keys)
         assertFalse(matches.getValue("com.spotify.music").canSeek)
         assertTrue(matches.getValue("com.spotify.music").clock.playing)
@@ -2543,11 +2607,13 @@ class PlaybackTest {
     }
 
     @Test
-    fun matchingSessionsWithNoUsableClockAreLeftOut() {
+    fun matchingSessionsWithNoClockKeepTheirHandlesForLaterReports() {
         allow()
         shadowOf(sessions).addController(player("com.example.stopped", "Stopped", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_STOPPED))
         shadowOf(sessions).addController(player("com.example.unknown", "Unknown", "Blinding Lights", "The Weeknd", position = -1))
-        assertTrue(playback.matching(song).isEmpty())
+        val matches = playback.matching(song)
+        assertEquals(setOf("com.example.stopped", "com.example.unknown"), matches.map { it.app }.toSet())
+        assertTrue(matches.all { it.following == null })
     }
 
     @Test

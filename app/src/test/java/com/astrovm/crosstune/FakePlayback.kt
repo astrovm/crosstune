@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 
 /**
@@ -79,19 +80,49 @@ internal class FakePlayback : PlaybackSource {
     @Volatile
     var said: CompletableDeferred<Unit>? = null
 
-    override fun matching(song: MusicMetadata): List<Following> =
-        (listOfNotNull(playing.value) + appPlaying.values.mapNotNull { it.value }).distinctBy { it.appPackage }.filter { following ->
-            val app = following.appPackage
-            has(unnamed.value?.takeIf { it.app == app }?.played, onThePhone?.takeIf { it.app == app }?.metadata, song, null)
+    /** Additional sessions, including another session from an app already in [appPlaying]. */
+    val extraSessions = mutableListOf<MutableStateFlow<Following?>>()
+    val ignoredSeeks = mutableSetOf<Int>()
+    val seekedSessions: MutableList<Int> = CopyOnWriteArrayList()
+    private val sessionNumbers = mutableMapOf<MutableStateFlow<Following?>, Int>()
+    private fun number(flow: MutableStateFlow<Following?>) = sessionNumbers.getOrPut(flow) { sessionNumbers.size }
+
+    override fun matching(song: MusicMetadata): List<PlaybackMatch> =
+        (listOf(playing) + appPlaying.values + extraSessions).distinct().mapNotNull { flow ->
+            val state = flow.value ?: return@mapNotNull null
+            val app = state.appPackage
+            if (!has(unnamed.value?.takeIf { it.app == app }?.played, onThePhone?.takeIf { it.app == app }?.metadata, song, null)) return@mapNotNull null
+            PlaybackMatch(state.copy(session = number(flow)), forSession(flow))
         }
 
-    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> {
+    private fun forSession(flow: MutableStateFlow<Following?>): PlaybackSource = object : PlaybackSource by this {
+        override fun follow(song: MusicMetadata, app: String?) = followed(song, app, flow.map { it?.copy(session = number(flow)) })
+        override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
+            seeks += positionMs
+            seekedApps += app
+            seekedSessions += number(flow)
+            if (number(flow) !in ignoredSeeks) moved(flow, { _, _ -> positionMs }, { it.playing })
+        }
+        override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
+            plays += play
+            playedApps += app
+            playedSongs += song
+            moved(flow, { clock, at -> clock.positionAt(at) }, { play })
+            onPlay(app, play)
+        }
+        override fun pauseApp(app: String) {
+            pausedApps += app
+            moved(flow, { clock, at -> clock.positionAt(at) }, { false })
+        }
+    }
+
+    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = followed(song, app, app?.let(appPlaying::get) ?: playing)
+
+    private fun followed(song: MusicMetadata, app: String?, from: Flow<Following?>): Flow<Following?> {
         followed += song
         followedApps += app
-        // Followed over and over with no time gone by is a loop, as a player opening itself again: it ends here, so the
-        // test fails on what was followed, at once. A long test follows many times, but as its time goes on.
         if (followsNow.loops()) return emptyFlow()
-        val flow = followedAs(song, app, app?.let(appPlaying::get) ?: playing)
+        val flow = followedAs(song, app, from)
         return said?.let { later -> flow { later.await(); emitAll(flow) } } ?: flow
     }
 
@@ -182,6 +213,7 @@ internal class FakePlayback : PlaybackSource {
 
     /** The app each ask to play or pause was sent to, null for any. */
     val playedApps: MutableList<String?> = CopyOnWriteArrayList()
+    val playedSongs: MutableList<MusicMetadata> = CopyOnWriteArrayList()
 
     /** Runs when an app is asked to play, for a test to have the app do as it would, e.g. pause itself. */
     var onPlay: (String?, Boolean) -> Unit = { _, _ -> }
@@ -200,7 +232,10 @@ internal class FakePlayback : PlaybackSource {
 
     /** Has what [app] plays say it's at [positionMs], playing or not, from now, as an app does once it's done what it was asked. */
     private fun moved(app: String?, positionMs: (PlaybackClock, Long) -> Long, playing: (PlaybackClock) -> Boolean) {
-        val flow = flowOf(app)
+        moved(flowOf(app), positionMs, playing)
+    }
+
+    private fun moved(flow: MutableStateFlow<Following?>, positionMs: (PlaybackClock, Long) -> Long, playing: (PlaybackClock) -> Boolean) {
         val now = flow.value ?: return
         val at = clock()
         if (obeys) flow.value = now.copy(clock = PlaybackClock(positionMs(now.clock, at), at, now.clock.speed, playing(now.clock)))
@@ -215,6 +250,7 @@ internal class FakePlayback : PlaybackSource {
     override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
         plays += play
         playedApps += app
+        playedSongs += song
         moved(app, { clock, at -> clock.positionAt(at) }, { play })
         onPlay(app, play)
     }

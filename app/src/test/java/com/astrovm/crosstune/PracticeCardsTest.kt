@@ -556,6 +556,56 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun nativeSoundBindsTheFullSessionAndStopsOnlyThatSessionInTheSameApp() {
+        keep(line(start = 60_000))
+        appPlays(spotify, speed = 1f, positionMs = 0)
+        playback.playing.value = playback.playing.value!!.copy(durationMs = 30_000)
+        val full = MutableStateFlow<Following?>(Following(PlaybackClock(0, System.currentTimeMillis(), 1f, playing = false), "Music", canSeek = true, appPackage = spotify, durationMs = 200_000))
+        playback.extraSessions += full
+        traits.keeps(spotify, false)
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the full recording is prepared") { practice?.sound == LineSound.PLAYED || practice?.sound == LineSound.NONE }
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        assertEquals(listOf(1), playback.seekedSessions.toList())
+        assertEquals(60_000L, full.value?.clock?.positionMs)
+        assertFalse(playback.playing.value!!.clock.playing)
+        assertEquals(AppTraits(), traits.of(spotify))
+        cards.replay()
+        waitFor("the bound full recording plays") { practice?.sound == LineSound.PLAYING }
+        playback.playing.value = playback.playing.value!!.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 1f, playing = true))
+        cards.stop()
+        assertFalse("the owned recording kept playing", full.value!!.clock.playing)
+        assertTrue("stop paused an unowned session in the same app", playback.playing.value!!.clock.playing)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun nativeSoundFailedSessionDoesNotHideOrPauseAnotherSessionInTheSameApp() {
+        keep(line())
+        appPlays(spotify, speed = 1f, positionMs = 0)
+        val full = MutableStateFlow<Following?>(Following(PlaybackClock(0, System.currentTimeMillis(), 1f, playing = false), "Music", canSeek = false, appPackage = spotify, durationMs = 200_000))
+        playback.extraSessions += full
+        playback.ignoredSeeks += 0
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the first session received a seek") { playback.seekedSessions.isNotEmpty() }
+        full.value = full.value?.copy(canSeek = true)
+        waitFor("the second session is prepared") { practice?.sound == LineSound.PLAYED || practice?.sound == LineSound.NONE }
+        assertEquals(LineSound.PLAYED, practice?.sound)
+        assertEquals(listOf(0, 1), playback.seekedSessions.toList().distinct())
+        assertEquals(AppTraits(), traits.of(spotify))
+        cards.replay()
+        waitFor("the full session plays while the failed one stays paused") { practice?.sound == LineSound.PLAYING }
+        Thread.sleep(150)
+        assertTrue("failed-session cleanup paused the full recording", full.value!!.clock.playing)
+        assertFalse(playback.playing.value!!.clock.playing)
+        cards.stop()
+        assertFalse(full.value!!.clock.playing)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
     fun nativeSoundUsesAnotherMatchingSeekableSession() {
         keep(line(), types = hearIt)
         appPlays(spotify, canSeek = false)
@@ -816,20 +866,13 @@ class PracticeCardsTest {
         val audible = HEAR_IT.copy(on = true, options = CardOptions(CardSide(sound = true), CardSide(sound = true)))
         keep(line("One"), line("Two", start = null).copy(title = "Other"), types = listOf(audible))
         appPlays(ytMusic, speed = 1f)
-        val controlled = java.util.concurrent.CopyOnWriteArrayList<Pair<MusicMetadata, Boolean>>()
-        val source = object : PlaybackSource by playback {
-            override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
-                controlled += song to play
-                playback.playPause(song, play, app)
-            }
-        }
-        val cards = cards(source = source)
+        val cards = cards()
         cards.start(null, before = null)
         waitFor("the previous song is audible") { true in playback.plays && practice?.sound == LineSound.PLAYING }
         cards.turn()
         cards.grade(Grade.GOOD)
         assertEquals("Other", practice?.line?.title)
-        assertEquals(MusicMetadata("Demo", "Band") to false, controlled.last())
+        assertEquals(MusicMetadata("Demo", "Band") to false, playback.playedSongs.last() to playback.plays.last())
         assertFalse(playback.playing.value!!.clock.playing)
     }
 
@@ -1751,7 +1794,7 @@ class PracticeCardsTest {
         // Never sent there, nor played to its end and on into the next song.
         assertTrue(playback.seeks.isEmpty())
         assertFalse(playback.plays.contains(true))
-        assertEquals(listOf("trying $tidal", "$tidal did not play the line", "the YouTube player"), steps())
+        assertEquals(listOf("$tidal is left out", "the YouTube player"), steps())
         assertEquals(AppTraits(), traits.of(tidal))
     }
 
@@ -2009,7 +2052,7 @@ class PracticeCardsTest {
         playback.appPlaying.getValue(tidal).value = playback.appPlaying.getValue(tidal).value!!.copy(durationMs = 8_000)
         cards().start(null, before = null)
         waitForThePlayer("the player is on the line")
-        assertEquals(listOf("trying $tidal", "$tidal did not get to the line", "the YouTube player"), steps())
+        assertEquals(listOf("$tidal is left out", "the YouTube player"), steps())
         assertEquals(AppTraits(), traits.of(tidal))
     }
 

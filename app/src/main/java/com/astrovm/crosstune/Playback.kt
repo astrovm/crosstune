@@ -211,6 +211,13 @@ internal data class Queued(val title: String, val artist: String, val id: Long? 
  */
 internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false, val previousId: Long? = null)
 
+/** A matching session and controls bound to its token, even when its app has other sessions. */
+internal data class PlaybackMatch(
+    val following: Following?, val source: PlaybackSource,
+    val app: String? = following?.appPackage, val session: Int = following?.session ?: 0,
+    val playing: Boolean = following?.clock?.playing == true
+)
+
 /** What's playing on the phone, as far as Android lets Crosstune see. */
 internal interface PlaybackSource {
     /** Whether Android lets Crosstune see what plays, which the user allows in its settings. */
@@ -224,7 +231,7 @@ internal interface PlaybackSource {
     fun follow(song: MusicMetadata, app: String? = null): Flow<Following?>
 
     /** Existing sessions that have [song], including paused sessions. No app is started. */
-    fun matching(song: MusicMetadata): List<Following>
+    fun matching(song: MusicMetadata): List<PlaybackMatch>
 
     /** Moves the app playing [song], [app] when named, to [positionMs]. */
     fun seekTo(song: MusicMetadata, positionMs: Long, app: String? = null)
@@ -411,10 +418,29 @@ internal class MediaSessionPlayback(
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             runCatching { context.packageManager.getInstallSourceInfo(context.packageName).packageSource }.getOrNull() in fromAFile
 
-    override fun matching(song: MusicMetadata): List<Following> =
-        runCatching { activeSessions().filter { it.has(song, null) }.mapNotNull { following(it, song.lengthMs) } }.getOrDefault(emptyList())
+    override fun matching(song: MusicMetadata): List<PlaybackMatch> = runCatching {
+        activeSessions().filter { it.has(song, null) }.map { controller ->
+            val number = sessionNumbers.of(controller.sessionToken)
+            PlaybackMatch(following(controller, song.lengthMs)?.copy(session = number), forSession(controller.sessionToken), controller.packageName, number, controller.playbackState?.state == PlaybackState.STATE_PLAYING)
+        }
+    }.getOrDefault(emptyList())
 
-    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = callbackFlow {
+    private fun forSession(token: MediaSession.Token): PlaybackSource = object : PlaybackSource by this {
+        override fun follow(song: MusicMetadata, app: String?) = followSession(song, app, token)
+        override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) = seekIn(song, positionMs, app, token)
+        override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
+            if (play) playIn(song, app, token) else pauseSession(token, app)
+        }
+        override fun pauseApp(app: String) = pauseSession(token, app)
+    }
+
+    private fun pauseSession(token: MediaSession.Token, app: String?) {
+        runCatching { activeSessions().filter { it.sessionToken == token && (app == null || it.packageName == app) }.forEach { it.transportControls.pause() } }
+    }
+
+    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = followSession(song, app, null)
+
+    private fun followSession(song: MusicMetadata, app: String?, token: MediaSession.Token?): Flow<Following?> = callbackFlow {
         var followed: MediaController? = null
         var modesWatched: () -> Unit = {}
         var watched: List<MediaController> = emptyList()
@@ -438,7 +464,7 @@ internal class MediaSessionPlayback(
             }
         }
         fun pick(controllers: List<MediaController>) {
-            val playing = appFor(song, controllers, app)
+            val playing = appFor(song, controllers, app, token)
             if (playing?.sessionToken != followed?.sessionToken) {
                 followed?.unregisterCallback(callback)
                 modesWatched()
@@ -483,8 +509,8 @@ internal class MediaSessionPlayback(
      * one followed, so it's the one moved, played, paused and skipped too. Only [app]'s, by package, when one is named.
      */
     @VisibleForTesting
-    internal fun appFor(song: MusicMetadata, controllers: List<MediaController> = activeSessions(), app: String? = null): MediaController? =
-        controllers.filter { (app == null || it.packageName == app) && it.has(song, app) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
+    internal fun appFor(song: MusicMetadata, controllers: List<MediaController> = activeSessions(), app: String? = null, token: MediaSession.Token? = null): MediaController? =
+        controllers.filter { (app == null || it.packageName == app) && (token == null || it.sessionToken == token) && it.has(song, app) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
 
     /**
      * Whether it has [song], by its name. What names no song, asked for as [Unnamed.played], e.g. a station or a
@@ -516,11 +542,13 @@ internal class MediaSessionPlayback(
         return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let { coverOf(it, sessionToken) }, artist, where = place(), said = said(this) != null)
     }
 
-    override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
+    override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) = seekIn(song, positionMs, app, null)
+
+    private fun seekIn(song: MusicMetadata, positionMs: Long, app: String?, token: MediaSession.Token?) {
         // Taken back meanwhile, the words just stay where they are. An app that doesn't offer a seek,
         // as Spotify's free plan, errors its player if one is sent, so it isn't.
         runCatching {
-            val controller = appFor(song, app = app) ?: return
+            val controller = appFor(song, app = app, token = token) ?: return
             val actions = controller.playbackState?.actions ?: 0L
             if (actions and PlaybackState.ACTION_SEEK_TO == 0L) return
             moves = Any()
@@ -529,8 +557,12 @@ internal class MediaSessionPlayback(
     }
 
     override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
+        if (play) playIn(song, app, null) else runCatching { appFor(song, app = app)?.transportControls?.pause() }
+    }
+
+    private fun playIn(song: MusicMetadata, app: String?, token: MediaSession.Token?) {
         // Taken back meanwhile, the song just keeps on as it was.
-        runCatching { appFor(song, app = app)?.transportControls?.run { if (play) play() else pause() } }
+        runCatching { appFor(song, app = app, token = token)?.transportControls?.play() }
     }
 
     override fun pauseApp(app: String) {
