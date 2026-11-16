@@ -193,9 +193,6 @@ internal class ChordWikiBrowser(
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !allowed(request.url)
 
-            @Deprecated("Called on older Android versions")
-            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = !allowed(Uri.parse(url))
-
             override fun onPageFinished(view: WebView, loaded: String) {
                 ask(view, started, observation, ::finish)
             }
