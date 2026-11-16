@@ -56,8 +56,8 @@ class PracticeCardsTest {
 
     private fun cards(
         source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS, player: FakeLinePlayer? = this.player,
-        now: () -> Long = { System.currentTimeMillis() }, matcher: ExactMatcher = ExactMatcher(sites.client(), "AR")
-    ) = PracticeCards(screen, scope, source, matcher, store, traits, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
+        now: () -> Long = { System.currentTimeMillis() }, matcher: ExactMatcher = ExactMatcher(sites.client(), "AR"), traitStore: AppTraitsStore = traits
+    ) = PracticeCards(screen, scope, source, matcher, store, traitStore, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
 
     /** YouTube Music having the demo song, 3:20 long, as its video "demo0000000". */
     private fun youTubeHasTheSong() {
@@ -696,16 +696,15 @@ class PracticeCardsTest {
     }
 
     @Test
-    fun nativeSoundKnownFailedSessionIsPausedEvenOnAReadingFront() {
+    fun nativeSoundTriesAReadySessionWithOldNegativeHistory() {
         keep(line())
-        youTubeHasTheSong()
         appPlays(spotify)
         traits.keeps(spotify, false)
-        cards().start(null, before = null)
-        waitForThePlayer()
+        cards(traitStore = freshTraits()).start(null, before = null)
+        waitFor("the matching session is ready") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(10_000L), playback.seeks.toList())
         assertFalse(playback.playing.value!!.clock.playing)
-        assertFalse(player.shown.single().play)
-        assertTrue(playback.seeks.isEmpty())
+        assertTrue(player.shown.isEmpty())
     }
 
     @Test
@@ -718,8 +717,8 @@ class PracticeCardsTest {
         traits.keeps(spotify, false)
         cards().start(null, before = null)
         waitForThePlayer()
-        assertEquals(listOf(spotify), playback.playedApps.toList())
-        assertEquals(listOf(false), playback.plays.toList())
+        assertEquals(listOf(spotify), playback.pausedApps.distinct())
+        assertTrue(playback.seeks.isEmpty())
     }
 
     @Test
@@ -970,14 +969,15 @@ class PracticeCardsTest {
     }
 
     @Test
-    fun nativeSoundFromAKnownFailedAppDoesNotPlayOverTheEmbeddedPlayer() {
+    fun nativeSoundTriesAPlayingSessionWithOldNegativeHistory() {
         keep(line(), types = listOf(HEAR_IT.copy(on = true)))
-        youTubeHasTheSong()
         traits.seeks(spotify, false)
-        appPlays(spotify, speed = 1f)
-        cards().start(null, before = null)
-        waitForThePlayer()
-        assertFalse("both players are playing", playback.playing.value?.clock?.playing == true)
+        appPlays(spotify, speed = 5f)
+        cards(traitStore = freshTraits()).start(null, before = null)
+        waitFor("the matching session plays") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(10_000L), playback.seeks.toList())
+        assertEquals(AppTraits(seeks = true, keeps = true), freshTraits().of(spotify))
+        assertTrue(player.shown.isEmpty())
     }
 
     @Test
@@ -1448,27 +1448,54 @@ class PracticeCardsTest {
         playback.appPlaying[app] = playback.playing
     }
 
+    private fun freshTraits() = AppTraitsStore(ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("practice-traits", Context.MODE_PRIVATE)) { wall }
+
     @Test
-    fun anAppThatPausesItselfBehindCrosstuneIsRememberedAndTheLineGoesOn() {
+    fun outsidePauseDoesNotExcludeTheAppFromTheNextCard() {
         youTubeHasTheSong()
-        keep(line("One"), line("Two"), types = hearIt)
+        keep(line("One"), line("Two", start = 20_000), types = hearIt)
         appPlays(morphe, speed = 1f)
+        traits.keeps(morphe, true)
         val flow = playback.appPlaying.getValue(morphe)
         val cards = cards()
         cards.start(null, before = null)
-        waitFor("the line plays in the app") { playback.playedApps.zip(playback.plays).contains(morphe to true) }
-        // It plays a moment, and then, behind Crosstune, stops itself.
-        Thread.sleep(200)
-        flow.value = Following(PlaybackClock(10_200, System.currentTimeMillis(), 1f, playing = false), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
-        waitForThePlayer("the player takes over")
-        assertEquals(AppTraits(seeks = true, keeps = false), traits.of(morphe))
-        assertEquals("demo0000000", practice?.video)
-        // The next card doesn't go through the app again, though it still has the song open.
+        waitFor("the line plays in the app") { practice?.sound == LineSound.PLAYING && traits.of(morphe).seeks == true }
+        flow.value = flow.value!!.copy(clock = PlaybackClock(10_200, System.currentTimeMillis(), 1f, playing = false))
+        waitForThePlayer("the player takes over after the pause")
+        assertEquals(AppTraits(seeks = true, keeps = true), freshTraits().of(morphe))
+        flow.value = flow.value!!.copy(clock = PlaybackClock(10_200, System.currentTimeMillis(), 5f))
         val sent = playback.seeks.size
         cards.turn()
         cards.grade(Grade.GOOD)
-        waitFor("the next line is in the player") { player.shown.size >= 2 }
-        assertEquals(sent, playback.seeks.size)
+        waitFor("the next card seeks the matching session") { playback.seeks.size > sent }
+        assertEquals(20_000L, playback.seeks.last())
+        cards.stop()
+        val afterNext = playback.seeks.size
+        screen.value = screen.value.copy(savedLines = listOf(line("Two", start = 20_000)))
+        cards(traitStore = freshTraits()).start(null, before = null)
+        waitFor("a fresh controller seeks the matching session") { playback.seeks.size > afterNext }
+        assertEquals(20_000L, playback.seeks.last())
+        assertNoAppBroughtUp()
+    }
+
+    @Test
+    fun slowSeekDoesNotExcludeTheAppFromTheNextCard() {
+        youTubeHasTheSong()
+        keep(line("One"), line("Two", start = 20_000), types = hearIt)
+        appPlays(ytMusic, positionMs = 0)
+        playback.obeys = false
+        val cards = cards()
+        cards.start(null, before = null)
+        waitForThePlayer("the player takes over after the seek times out")
+        assertEquals(AppTraits(), freshTraits().of(ytMusic))
+        cards.stop()
+        playback.obeys = true
+        val sent = playback.seeks.size
+        screen.value = screen.value.copy(savedLines = listOf(line("Two", start = 20_000)))
+        cards(traitStore = freshTraits()).start(null, before = null)
+        waitFor("the next card seeks the matching session") { playback.seeks.size > sent }
+        assertEquals(20_000L, playback.seeks.last())
+        assertNoAppBroughtUp()
     }
 
     @Test
@@ -1685,7 +1712,7 @@ class PracticeCardsTest {
         assertEquals("demo0000000", practice?.video)
         assertEquals(emptyList<String>(), playedSteps())
         assertEquals(listOf("trying $ytMusic", "$ytMusic did not play the line", "the YouTube player"), steps())
-        assertEquals(AppTraits(keeps = false), traits.of(ytMusic))
+        assertEquals(AppTraits(), traits.of(ytMusic))
         // What it may still play is paused.
         assertEquals(listOf(ytMusic), playback.pausedApps.distinct())
     }
@@ -1704,7 +1731,7 @@ class PracticeCardsTest {
         cards().start(null, before = null)
         waitForThePlayer("the player takes over")
         assertEquals(emptyList<String>(), playedSteps())
-        assertEquals(AppTraits(keeps = false), traits.of(ytMusic))
+        assertEquals(AppTraits(), traits.of(ytMusic))
         assertEquals(listOf(ytMusic), playback.pausedApps.distinct())
     }
 
@@ -1723,7 +1750,7 @@ class PracticeCardsTest {
         assertEquals(listOf("trying $tidal", "$tidal did not play the line", "the YouTube player"), steps())
         // The other song TIDAL went on to isn't left playing.
         assertEquals(listOf(tidal), playback.pausedApps.distinct())
-        assertEquals(AppTraits(keeps = false), traits.of(tidal))
+        assertEquals(AppTraits(), traits.of(tidal))
         assertNoAppBroughtUp()
     }
 
@@ -1773,7 +1800,7 @@ class PracticeCardsTest {
         cards().start(null, before = null)
         waitFor("the player has the line") { practice?.video == "demo0000000" }
         assertEquals(LineSound.PLAYED, practice?.sound)
-        assertEquals(AppTraits(seeks = false), traits.of(ytMusic))
+        assertEquals(AppTraits(), traits.of(ytMusic))
         assertEquals(listOf(ytMusic), playback.pausedApps.distinct())
     }
 
@@ -1797,7 +1824,7 @@ class PracticeCardsTest {
         cards().start(null, before = null)
         waitForThePlayer("the player takes over")
         assertEquals(listOf(10_000L, 10_000L), playback.seeks.toList())
-        assertEquals(AppTraits(keeps = false), traits.of(ytMusic))
+        assertEquals(AppTraits(), traits.of(ytMusic))
     }
 
     @Test
@@ -1929,25 +1956,28 @@ class PracticeCardsTest {
         waitForThePlayer("the player takes over")
     }
 
-    // TIDAL given up on at once is left out till Crosstune starts again: then it's tried first again, as preferred.
     @Test
-    fun anAppThatStoppedShortIsTriedAgainNextTime() {
-        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+    fun stopShortDoesNotExcludeEarlierLinesOrOtherSongs() {
         val tidal = MusicService.TIDAL.packageName
         replays(tidal, start = 43_270, from = 65, fromPlaying = true, Said(117, 29_952), Said(168, 29_952))
         val cards = cards()
         cards.start(null, before = null)
-        waitForThePlayer("the player takes over")
-        // Not again this time: practised again, the card goes straight to the player.
-        val tried = steps().count { it == "trying $tidal" }
+        waitForThePlayer("the first line falls back")
+        assertEquals(AppTraits(), freshTraits().of(tidal))
         cards.stop()
+        playback.obeys = true
+        playback.onPlay = { _, _ -> }
+        screen.value = screen.value.copy(savedLines = listOf(line("Earlier", start = 12_000)))
         cards.start(null, before = null)
-        waitFor("the player plays it again") { player.shown.size > 1 }
-        assertEquals(tried, steps().count { it == "trying $tidal" })
+        waitFor("the earlier line is prepared") { playback.seeks.contains(12_000L) && practice?.sound == LineSound.PLAYED }
         cards.stop()
-        // Next time Crosstune starts, it is.
-        cards().start(null, before = null)
-        waitFor("$tidal is tried again") { steps().count { it == "trying $tidal" } > tried }
+        val other = line("Other", start = 13_000).copy(title = "Other song")
+        playback.sessionSongs[0] = MusicMetadata(other.title, other.artist)
+        screen.value = screen.value.copy(savedLines = listOf(other))
+        cards.start(null, before = null)
+        waitFor("the other song is prepared") { playback.seeks.contains(13_000L) && practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(43_270L, 12_000L, 13_000L), playback.seeks.toList())
+        assertNoAppBroughtUp()
     }
 
     // TIDAL's answer may say it was made the very moment it was sent, as both clocks count in milliseconds: that's an answer too.
@@ -1972,7 +2002,7 @@ class PracticeCardsTest {
         val said = replays(tidal, start = 43_270, from = 29_952, fromPlaying = false, Said(131, 29_952))
         cards().start(null, before = null)
         assertTrue(givenUpAfterMs(tidal, said) >= LineWindow.SEEK_WAIT_MS - 500)
-        assertEquals(false, traits.of(tidal).seeks)
+        assertEquals(null, traits.of(tidal).seeks)
     }
 
     /** That [app] got to the line, after it said all it did, and no other app or player was needed. */
@@ -2252,6 +2282,23 @@ class PracticeCardsTest {
         } finally {
             gate.countDown()
         }
+    }
+
+    @Test
+    fun nonPreferredNonSourceSessionPlaysWithoutAnyLookupOrOpen() {
+        val tidal = MusicService.TIDAL.packageName
+        installed(spotify, ytMusic, tidal, preferred = Destination.Service(MusicService.SPOTIFY))
+        keep(line("Invented line").copy(title = "Invented song", artist = "Invented artist", app = ytMusic), types = hearIt)
+        appPlays(tidal, speed = 5f)
+        playback.sessionSongs[0] = MusicMetadata("Invented song", "Invented artist")
+        cards().start(null, before = null)
+        waitFor("the matching session plays the line") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(tidal), playback.seekedApps.toList())
+        assertTrue(playback.playedApps.zip(playback.plays).contains(tidal to true))
+        assertEquals(0, sites.requestedUrls.size)
+        assertEquals(0, playback.opened.size)
+        assertNoAppBroughtUp()
+        assertTrue(player.shown.isEmpty())
     }
 
     @Test
