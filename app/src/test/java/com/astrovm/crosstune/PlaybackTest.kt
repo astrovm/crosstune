@@ -1001,6 +1001,20 @@ class PlaybackTest {
     }
 
     @Test
+    fun aRadioSongsTrailingSeparatorDoesNotReachItsLookups() {
+        allow()
+        sounding()
+        val expected = MusicMetadata("Fake Song", "Fake Artist")
+        for (dash in listOf("-", "–", "—")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.example.radio", "Fake Radio", "Fake Song $dash ", "Fake Artist", album = "Fake Radio Stream"))
+            assertEquals(dash, expected, playback.nowPlaying()?.metadata)
+            assertEquals(dash, "com.example.radio", playback.appFor(expected)?.packageName)
+            assertEquals(dash, "com.example.radio", followed(expected).last()?.appPackage)
+        }
+    }
+
+    @Test
     fun anAppThatStillSaysItPlaysLongAfterItStoppedIsNotBelieved() {
         allow()
         // A browser tab left saying it plays, and the app really playing, which said where it is since.

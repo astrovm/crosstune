@@ -2734,11 +2734,17 @@ class ListeningTest {
         // The second line is tapped as it's sung, so Shazam's recording is less ahead than learnt.
         click(string(R.string.lyrics_sync))
         waitForText(string(R.string.lyrics_sync_hint))
+        // The song can play on while the words load and the timing controls open.
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(4))
+        val original = composeRule.runOnIdle { checkNotNull(controllerModel().uiState.following).clock }
+        val beforeTap = SystemClock.elapsedRealtime()
         composeRule.onNodeWithText("Ten").performClick()
+        val afterTap = SystemClock.elapsedRealtime()
         waitUntil(TIMEOUT_MS) { lit("Ten") }
-        assertTrue(gap().toString(), gap()!! in -3_500..-1_500)
-        // Nudged half a second later, the gap moves along.
+        // Gap = original gap - (song position at the tap - line time).
         val tapped = gap()!!
+        assertTrue(tapped.toString(), tapped in (-original.positionAt(afterTap))..(-original.positionAt(beforeTap)))
+        // Nudged half a second later, the gap moves along.
         click(string(R.string.lyrics_sync_later))
         waitUntil(TIMEOUT_MS) { gap() == tapped - 500 }
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
@@ -2751,7 +2757,10 @@ class ListeningTest {
         assertEquals(-10_000L - gap()!!, moved.getLong("heardMs") - moved.getLong("timedMs"))
         // Reset puts back the gap learnt before, and the words with it, at once.
         click(string(R.string.lyrics_sync_reset))
-        composeRule.runOnIdle { assertTrue(controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()) < 6_000) }
+        composeRule.runOnIdle {
+            val now = SystemClock.elapsedRealtime()
+            assertEquals(original.positionAt(now), checkNotNull(controllerModel().uiState.following).clock.positionAt(now))
+        }
         assertEquals(-10_000L, gap())
         // A line tapped too far from Shazam's place to be its gap is kept for these words alone.
         composeRule.onNodeWithText("Late").performClick()

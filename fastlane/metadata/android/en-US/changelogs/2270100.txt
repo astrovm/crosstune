@@ -1,1 +1,2 @@
+Radio song titles no longer keep an empty trailing separator.
 Songs kept for offline retry when the phone switches between unmetered networks.
