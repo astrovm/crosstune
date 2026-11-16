@@ -42,6 +42,40 @@ import java.time.Duration
 @RunWith(RobolectricTestRunner::class)
 class ChordWikiTest {
     @Test
+    fun replacingTheHostCancelsItsPageAndAnOldDetachCannotClearTheNewHost() {
+        val first = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val second = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val host = ChordWikiHost()
+        host.attach(first) { ChordWikiBrowser(it, gapMs = 60_000, waitMs = 60_000) }
+        var firstResult: Result<String>? = null
+        CoroutineScope(Dispatchers.Main).launch { firstResult = runCatching { host.page("https://ja.chordwiki.org/") } }
+        shadowOf(Looper.getMainLooper()).idle()
+        val firstPage = findWeb(first.window.decorView)
+        host.attach(second) { ChordWikiBrowser(it, gapMs = 60_000, waitMs = 60_000) }
+        assertNull(firstPage.parent)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(firstResult?.exceptionOrNull() is IOException)
+        host.detach(first)
+        val done = CompletableDeferred<String>()
+        CoroutineScope(Dispatchers.Main).launch { done.complete(host.page("https://ja.chordwiki.org/")) }
+        shadowOf(Looper.getMainLooper()).idle()
+        val ready = findWeb(second.window.decorView)
+        answer(ready, page(source = "[C]川", hasEditor = true))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("[C]川", done.within())
+        assertNull(ready.parent)
+        var secondResult: Result<String>? = null
+        CoroutineScope(Dispatchers.Main).launch { secondResult = runCatching { host.page("https://ja.chordwiki.org/") } }
+        shadowOf(Looper.getMainLooper()).idle()
+        val secondPage = findWeb(second.window.decorView)
+        assertNull(findWebOrNull(first.window.decorView))
+        host.detach(second)
+        assertNull(secondPage.parent)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(secondResult?.exceptionOrNull() is IOException)
+    }
+
+    @Test
     fun addressesUseTheSheetTheEditorAndTheSearch() {
         assertEquals("https://ja.chordwiki.org/wiki.cgi?c=edit&t=Human+System", chordWikiEditUrl("Human System"))
         assertEquals("https://ja.chordwiki.org/search.html?q=Human+System+TM", chordWikiSearchUrl("Human System TM"))

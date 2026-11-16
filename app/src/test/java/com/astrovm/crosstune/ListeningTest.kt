@@ -93,6 +93,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performFirstLinkClick
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -119,6 +120,89 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h2000dp")
 class ListeningTest {
+    private fun wikiPages(activity: MainActivity): ChordWikiPages {
+        fun field(owner: Any, name: String): Any? = owner.javaClass.getDeclaredField(name).let {
+            it.isAccessible = true
+            it.get(owner)
+        }
+        val finder = requireNotNull(field(ViewModelProvider(activity)[MainViewModel::class.java], "chordFinder"))
+        return field(finder, "chordWiki") as ChordWikiPages
+    }
+
+    private fun wikiWeb(view: android.view.View): android.webkit.WebView? = when (view) {
+        is android.webkit.WebView -> view
+        is android.view.ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { wikiWeb(view.getChildAt(it)) }
+        else -> null
+    }
+
+    @Test
+    fun chordWikiPagesFollowTheRecreatedActivity() {
+        val first = launch()
+        val model = ViewModelProvider(first)[MainViewModel::class.java]
+        val pages = wikiPages(first)
+        val oldRoot = first.window.decorView
+        val normal = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { pages.page("https://ja.chordwiki.org/") }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNotNull(wikiWeb(oldRoot))
+        normal.cancel()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(normal.isCancelled)
+        assertNull(wikiWeb(oldRoot))
+        controller = requireNotNull(controller).recreate()
+        val current = requireNotNull(controller).get()
+        assertSame(model, ViewModelProvider(current)[MainViewModel::class.java])
+        var result: Result<String>? = null
+        kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { result = runCatching { pages.page("https://ja.chordwiki.org/") } }
+        shadowOf(Looper.getMainLooper()).idle()
+        val old = wikiWeb(oldRoot)
+        val live = wikiWeb(current.window.decorView)
+        assertTrue("old decor has page=${old != null}; live decor has page=${live != null}", old == null && live != null)
+        prefs().edit().putString("theme", "DARK").commit()
+        controller = requireNotNull(controller).recreate()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(result?.exceptionOrNull() is IOException)
+        assertNull(live?.parent)
+        val themed = requireNotNull(controller).get()
+        assertSame(model, ViewModelProvider(themed)[MainViewModel::class.java])
+        val themedJob = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { pages.page("https://ja.chordwiki.org/") }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(wikiWeb(current.window.decorView))
+        assertNotNull(wikiWeb(themed.window.decorView))
+        themedJob.cancel()
+    }
+
+    @Test
+    fun destroyingTheActivityRemovesItsPendingWikiPage() {
+        val activity = launch()
+        val pages = wikiPages(activity)
+        val root = activity.window.decorView
+        var result: Result<String>? = null
+        val job = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { result = runCatching { pages.page("https://ja.chordwiki.org/") } }
+        shadowOf(Looper.getMainLooper()).idle()
+        val page = wikiWeb(root)
+        assertNotNull(page)
+        requireNotNull(controller).pause().stop().destroy()
+        shadowOf(Looper.getMainLooper()).idle()
+        val removed = page?.parent == null
+        val failed = result?.exceptionOrNull() is IOException
+        job.cancel()
+        assertTrue("page removed=$removed; request failed=$failed", removed && failed)
+    }
+
+    @Test
+    fun wikiRequestWithoutAnActivityFailsWithoutOpeningAPage() {
+        val activity = launch()
+        val pages = wikiPages(activity)
+        val root = activity.window.decorView
+        requireNotNull(controller).pause().stop().destroy()
+        var result: Result<String>? = null
+        val job = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { result = runCatching { pages.page("https://ja.chordwiki.org/") } }
+        shadowOf(Looper.getMainLooper()).idle()
+        val failure = result?.exceptionOrNull()
+        val old = wikiWeb(root)
+        job.cancel()
+        assertTrue("failure=$failure; destroyed decor has page=${old != null}", failure is IOException && old == null)
+    }
 
     @get:Rule
     val composeRule = createEmptyComposeRule()

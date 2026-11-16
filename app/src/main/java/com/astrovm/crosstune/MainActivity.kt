@@ -64,6 +64,8 @@ import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
+    private val chordWikiHost: ChordWikiHost by viewModels()
+
     /** Apps that name a song playing nearby, looked up again whenever the app comes back. */
     private var recognizers by mutableStateOf(emptyList<SongRecognizer>())
 
@@ -136,7 +138,7 @@ class MainActivity : ComponentActivity() {
                     chatGpt = chatGpt,
                     tutor = tutor,
                     // Each song's chords are kept, so a song played again needs no lookup.
-                    chordFinder = ChordFinder(client, cache = cache("chords.json", maxEntries = 300), chordWiki = chordWikiFactory(this@MainActivity), debugLogging = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0),
+                    chordFinder = ChordFinder(client, cache = cache("chords.json", maxEntries = 300), chordWiki = chordWikiHost, debugLogging = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0),
                     lyricsLanguage = lyricsLanguageFactory?.invoke() ?: AndroidLyricsLanguage(applicationContext),
                     oneTap = OneTapSetup(applicationContext, shellFactory()),
                     // Each song's sung readings are kept, so a song read again needs no lookup.
@@ -591,6 +593,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        chordWikiHost.attach(this, chordWikiFactory)
         enableEdgeToEdge()
         pendingClipboardRead = savedInstanceState?.getBoolean(STATE_PENDING_CLIPBOARD_READ) == true
         savedInstanceState?.getString(STATE_MICROPHONE_FOR)?.let { kept -> MicrophoneFor.entries.firstOrNull { it.name == kept } }?.let { afterMicrophone = it }
@@ -1099,6 +1102,7 @@ class MainActivity : ComponentActivity() {
 
     /** Closed for good, nothing's left for the words to float out of. */
     override fun onDestroy() {
+        chordWikiHost.detach(this)
         super.onDestroy()
         if (!isChangingConfigurations && FloatingLyricsService.host === floatingHost) FloatingLyricsService.stop(this)
         // The guide's host is this screen, which mustn't outlive it.

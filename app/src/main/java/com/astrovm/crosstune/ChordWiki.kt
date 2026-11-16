@@ -10,8 +10,16 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -27,6 +35,42 @@ import kotlin.coroutines.resumeWithException
 internal fun interface ChordWikiPages {
     /** The page at [url], once it has loaded: its ChordPro text, or the search hits when it has no editor. */
     suspend fun page(url: String): String
+}
+
+/** The retained lookup uses the current screen, and releases its pages with that screen. */
+internal class ChordWikiHost : ViewModel(), ChordWikiPages {
+    private var activity: Activity? = null
+    private var pages: ChordWikiPages? = null
+    private val requests = mutableSetOf<Job>()
+
+    fun attach(host: Activity, factory: (Activity) -> ChordWikiPages) {
+        activity?.let(::detach)
+        activity = host
+        pages = factory(host)
+    }
+
+    fun detach(host: Activity) {
+        if (activity !== host) return
+        activity = null
+        pages = null
+        requests.toList().forEach { it.cancel() }
+    }
+
+    override suspend fun page(url: String): String = withContext(Dispatchers.Main.immediate) {
+        val current = pages ?: throw IOException("ChordWiki has nowhere to show")
+        coroutineScope {
+            val request = async(start = CoroutineStart.UNDISPATCHED) { current.page(url) }
+            requests.add(request)
+            try {
+                request.await()
+            } catch (e: CancellationException) {
+                currentCoroutineContext().ensureActive()
+                throw IOException("ChordWiki has nowhere to show", e)
+            } finally {
+                requests.remove(request)
+            }
+        }
+    }
 }
 
 /** One song a ChordWiki search lists: its title, its singer, and the page that names them. */
