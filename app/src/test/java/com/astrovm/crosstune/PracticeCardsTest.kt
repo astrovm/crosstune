@@ -420,6 +420,75 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun nativeSoundStopsWhenGradingToAnUntimedCard() {
+        keep(line("One"), line("Two", start = null), types = listOf(HEAR_IT.copy(on = true)))
+        appPlays(ytMusic, speed = 1f)
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the native line plays") { practice?.sound == LineSound.PLAYING && playback.plays.contains(true) }
+        cards.turn()
+        cards.grade(Grade.GOOD)
+        assertEquals("Two", practice?.line?.text)
+        assertFalse("the previous line keeps playing", playback.playing.value?.clock?.playing == true)
+    }
+
+    @Test
+    fun nativeSoundClosingALookupDoesNotPauseAnAppTheCardDidNotControl() {
+        keep(line())
+        youTubeHasTheSong()
+        playback.access = true
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val answer = sites.handler
+        sites.handler = { request ->
+            if (request.url.host == "music.youtube.com") {
+                entered.countDown()
+                check(release.await(60, TimeUnit.SECONDS)) { "The held lookup was not released" }
+            }
+            answer(request)
+        }
+        val cards = cards()
+        cards.start(null, before = null)
+        try {
+            assertTrue(entered.await(60, TimeUnit.SECONDS))
+            // The user starts the same song elsewhere while the embedded player's lookup waits.
+            appPlays(spotify, speed = 1f)
+            playback.plays.clear()
+            cards.stop()
+            assertTrue("closing the lookup paused an unowned app", playback.plays.isEmpty())
+            assertTrue(playback.playing.value?.clock?.playing == true)
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun nativeSoundFromAKnownFailedAppDoesNotPlayOverTheEmbeddedPlayer() {
+        keep(line(), types = listOf(HEAR_IT.copy(on = true)))
+        youTubeHasTheSong()
+        traits.seeks(spotify, false)
+        appPlays(spotify, speed = 1f)
+        cards().start(null, before = null)
+        waitForThePlayer()
+        assertFalse("both players are playing", playback.playing.value?.clock?.playing == true)
+    }
+
+    @Test
+    fun nativeSoundBackToBeforeControlsOnlyTheNamedApp() {
+        keep(line(start = null))
+        val prior = MusicService.TIDAL.packageName
+        appPlays(spotify, speed = 1f, positionMs = 20_000)
+        playback.appPlaying[prior] = MutableStateFlow(Following(PlaybackClock(0, System.currentTimeMillis(), playing = false), "TIDAL", canSeek = true, appPackage = prior))
+        val cards = cards()
+        cards.start(null, before = Before(MusicMetadata("Demo", "Band"), 4_000, prior))
+        cards.backToBefore()
+        waitFor("the previous song is restored") { playback.seeks.isNotEmpty() && playback.plays.contains(true) }
+        assertEquals(listOf(prior), playback.seekedApps.toList())
+        assertEquals(listOf(prior), playback.playedApps.toList())
+        assertEquals(20_000L, playback.playing.value?.clock?.positionMs)
+    }
+
+    @Test
     fun backToBeforeMovesTheMusicAppBackToWhereItWasAndClosesPractice() {
         keep(line())
         playing()
