@@ -2002,6 +2002,17 @@ class PlaybackTest {
     }
 
     @Test
+    fun aMissingArtistDoesNotEraseAOneWordTitlesRecording() {
+        allow()
+        sounding()
+        for ((title, asked) in listOf("Hello (Live)" to "Hello", "Hello" to "Hello (Live)")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.example.player", "Fake Player", title, ""))
+            assertNull("$title is not $asked", playback.appFor(MusicMetadata(asked, "Fake Band")))
+        }
+    }
+
+    @Test
     fun anUnknownArtistStillNeedsTheWholeTitleBeforeItsSessionIsSelected() {
         allow()
         sounding()
