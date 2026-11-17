@@ -46,6 +46,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.assertIsDisplayed
 import org.robolectric.RuntimeEnvironment
 import androidx.compose.ui.text.AnnotatedString
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import kotlinx.coroutines.CompletableDeferred
@@ -551,7 +552,7 @@ class TvTest {
         val reading = focused().fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
 
         // What was split is gone with the app; the page's state comes back, and the text is split again.
-        LicenseSplits.clear()
+        ViewModelProvider(checkNotNull(controller).get())[LicenseCacheOwner::class.java].leave()
         controller = checkNotNull(controller).recreate()
         composeRule.waitForIdle()
 

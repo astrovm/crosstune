@@ -112,11 +112,10 @@ class NoticesTest {
         val before = Notices.all.takeWhile { it.name != "projectM" }
         val jmdict = units.getValue("JMdict")
         assertEquals(before.size + 1 + jmdict.size, licenseWorkIndex("projectM", open, units))
-        LicenseSplits.clear()
+        val cache = LicenseCache()
         val notice = Notices.all.first { it.name == "JMdict" }
-        LicenseSplits.make(notice)
-        assertEquals(licenseUnits(Notices.text(notice)), LicenseSplits.of("JMdict"))
-        LicenseSplits.clear()
+        cache.make(notice)
+        assertEquals(licenseUnits(Notices.text(notice)), cache.pieces("JMdict"))
     }
 
     @Test

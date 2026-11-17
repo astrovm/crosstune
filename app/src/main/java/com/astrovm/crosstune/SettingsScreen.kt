@@ -1,11 +1,9 @@
 package com.astrovm.crosstune
 
 import androidx.annotation.DrawableRes
-import androidx.annotation.VisibleForTesting
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.ComponentActivity
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
@@ -761,14 +759,7 @@ private const val LICENSES_PAGE = "licenses"
  */
 @Composable
 private fun LicensesPage(onBack: () -> Unit) {
-    val activity = LocalActivity.current
-    val cacheOwner = remember(activity) {
-        (activity as? ComponentActivity)?.let { ViewModelProvider(it)[LicenseCacheOwner::class.java] } ?: LicenseCacheOwner()
-    }
-    DisposableEffect(cacheOwner) {
-        cacheOwner.enter()
-        onDispose { if (activity !is ComponentActivity || !activity.isChangingConfigurations) cacheOwner.leave() }
-    }
+    val cache = rememberLicenseCache()
     val openWebPage = rememberWebOpener()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -779,17 +770,12 @@ private fun LicensesPage(onBack: () -> Unit) {
     // stays off this pass: the longest text is hundreds of thousands of characters.
     var splitDone by remember { mutableStateOf(Any()) }
     val requesters = remember { mutableMapOf<String, FocusRequester>() }
+    val units = remember(cache, open, splitDone) { open.mapNotNull { name -> cache?.pieces(name)?.let { name to it } }.toMap() }
     // Made again with a licence open after Android stopped the app, its pieces are gone. The list stays
     // empty until they are split again, below: with fewer rows it would lose where it was scrolled to.
     // Turned, the pieces are kept, so the page draws at once.
-    var restoring by remember { mutableStateOf(open.any { LicenseSplits.of(it) == null }) }
-    val units = remember(open, splitDone) { open.mapNotNull { name -> LicenseSplits.of(name)?.let { name to it } }.toMap() }
-    // Crosstune's own words in the notices, in the app's language, which picks the file; licence texts stay as published.
-    // The first time, they're read off the main thread and the list waits for them. Turned, they're read already.
-    val tag = stringResource(R.string.language_tag)
-    val words by produceState(Notices.wordsRead(tag), tag) {
-        value = Notices.wordsRead(tag) ?: withContext(MainActivity.systemDispatcher) { Notices.words(tag) }
-    }
+    var restoring by remember { mutableStateOf(units.size != open.size) }
+    val words = licenseWords(cache)
     val look = LicenseLook(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), MaterialTheme.shapes.large)
     // One path for a press and for a remote. The page's own Back still leaves once nothing is open, and
     // while the words are read: nothing is shown to close yet, and the main thread doesn't wait for the notices.
@@ -798,7 +784,7 @@ private fun LicensesPage(onBack: () -> Unit) {
         val next = open - closing
         open = next
         focusedKey = "work:$closing"
-        scope.launch { returnToLicenceRow(closing, next, listState, requesters) }
+        scope.launch { returnToLicenceRow(closing, next, cache, listState, requesters) }
     }
     LazyPage(
         title = stringResource(R.string.settings_licenses),
@@ -816,10 +802,12 @@ private fun LicensesPage(onBack: () -> Unit) {
             }) { name -> open = if (name in open) open - name else open + name }
         }
     }
-    LaunchedEffect(open) {
+    val opened = open
+    LaunchedEffect(cache, opened) {
+        if (cache == null) return@LaunchedEffect
         // Already split ones are kept. Only a work that is not split yet is split, and not while drawing.
-        if (open.any { LicenseSplits.of(it) == null }) {
-            withContext(MainActivity.systemDispatcher) { Notices.all.filter { it.name in open }.forEach { LicenseSplits.make(it) } }
+        if (opened.any { cache.pieces(it) == null }) {
+            withContext(MainActivity.systemDispatcher) { Notices.all.filter { it.name in opened }.forEach(cache::make) }
             splitDone = Any()
         }
         restoring = false
@@ -835,11 +823,40 @@ private fun LicensesPage(onBack: () -> Unit) {
     }
 }
 
+@Composable
+private fun rememberLicenseCache(): LicenseCache? {
+    val activity = LocalActivity.current
+    val cacheOwner = remember(activity) {
+        (activity as? ComponentActivity)?.let { ViewModelProvider(it)[LicenseCacheOwner::class.java] } ?: LicenseCacheOwner()
+    }
+    DisposableEffect(cacheOwner) {
+        cacheOwner.enter()
+        onDispose { if (activity !is ComponentActivity || !activity.isChangingConfigurations) cacheOwner.leave() }
+    }
+    return cacheOwner.cache
+}
+
+/** Reads the notices in the app's language. A page that turns can use the words it already has. */
+@Composable
+private fun licenseWords(cache: LicenseCache?): Map<String, NoticeWords>? {
+    val tag = stringResource(R.string.language_tag)
+    val words by produceState(cache?.wordsRead(tag), cache, tag) {
+        value = cache?.let { it.wordsRead(tag) ?: withContext(MainActivity.systemDispatcher) { it.words(tag) } }
+    }
+    return words
+}
+
 /** Scrolls to [name]'s row, once the licence under it has gone, and puts the remote there. */
-private suspend fun returnToLicenceRow(name: String, open: List<String>, listState: LazyListState, requesters: Map<String, FocusRequester>) {
+private suspend fun returnToLicenceRow(
+    name: String,
+    open: List<String>,
+    cache: LicenseCache?,
+    listState: LazyListState,
+    requesters: Map<String, FocusRequester>
+) {
     // The list still has the pieces until the next frame. The row's place is the one after they go.
     withFrameNanos { }
-    val units = open.associateWith { LicenseSplits.of(it).orEmpty() }
+    val units = open.associateWith { cache?.pieces(it).orEmpty() }
     listState.scrollToItem(licenseWorkIndex(name, open, units))
     val key = "work:$name"
     snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
@@ -962,67 +979,6 @@ private fun LicensePiece(unit: LicenseUnit, endsTheText: Boolean, modifier: Modi
 
 /** A piece of a licence's paragraph, and whether it [starts] or [ends] the paragraph, which is spaced from the next. */
 internal data class LicenseUnit(val text: String, val starts: Boolean, val ends: Boolean)
-
-/** Holds one activity's claim on the shared texts across a configuration change. */
-internal class LicenseCacheOwner : ViewModel() {
-    fun enter() {
-        synchronized(owners) { owners.add(this) }
-    }
-
-    fun leave() {
-        synchronized(owners) {
-            if (owners.remove(this) && owners.isEmpty()) {
-                LicenseSplits.clear()
-                Notices.letGoOfWords()
-            }
-        }
-    }
-
-    override fun onCleared() = leave()
-
-    private companion object {
-        val owners = mutableSetOf<LicenseCacheOwner>()
-    }
-}
-
-/**
- * Each work's licence, split once and kept. Opening another work must not split this one again, and
- * the split stays off the pass that draws the page: one text is about half a million characters.
- */
-internal object LicenseSplits {
-    private val pieces = HashMap<String, List<LicenseUnit>>()
-
-    /** A new one at each [clear], so a split that ends after the page was left isn't kept. */
-    private var kept = Any()
-
-    fun of(name: String): List<LicenseUnit>? = synchronized(pieces) { pieces[name] }
-
-    /** Reads [Notice]'s texts and splits them. Tests count the reads and see which thread does them. */
-    @VisibleForTesting
-    var split: (Notice) -> List<LicenseUnit> = { licenseUnits(Notices.text(it)) }
-
-    /**
-     * A lock for each work, by its name, so two passes that ask for the same one at once read it once.
-     * Kept for as long as the app runs: one small object for each of the about 40 works.
-     */
-    private val locks = HashMap<String, Any>()
-
-    /** Splits [notice]'s licence and keeps it, unless it's kept already. */
-    fun make(notice: Notice) {
-        synchronized(synchronized(locks) { locks.getOrPut(notice.name) { Any() } }) {
-            val asked = synchronized(pieces) { if (notice.name in pieces) return; kept }
-            val made = split(notice)
-            synchronized(pieces) { if (kept === asked) pieces[notice.name] = made }
-        }
-    }
-
-    fun clear() {
-        synchronized(pieces) {
-            pieces.clear()
-            kept = Any()
-        }
-    }
-}
 
 /** The open licence Back closes: the one the remote is in, or the last one opened when it is in none. */
 internal fun licenceToClose(focusedKey: String?, open: List<String>): String {

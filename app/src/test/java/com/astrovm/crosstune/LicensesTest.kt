@@ -24,6 +24,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import android.os.Looper
 import androidx.compose.ui.test.assertIsDisplayed
@@ -33,10 +34,13 @@ import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -71,15 +75,14 @@ class LicensesTest {
 
     /** Each licence read and split, by its work, with the thread that did it. */
     private val splits = Collections.synchronizedList(mutableListOf<Pair<String, Thread>>())
-    private val split = LicenseSplits.split
+    private val split = LicenseCache.split
     private val open = Notices.open
     private val background = Executors.newSingleThreadExecutor { Thread(it, "licence-split") }
 
     /** Splits on a thread of their own, as on a phone, and counts each read and split. */
     private fun splitsCounted() {
         MainActivity.systemDispatcher = background.asCoroutineDispatcher()
-        LicenseSplits.clear()
-        LicenseSplits.split = { notice -> splits += notice.name to Thread.currentThread(); split(notice) }
+        LicenseCache.split = { notice -> splits += notice.name to Thread.currentThread(); split(notice) }
     }
 
     /** Waits for [words], drawn once a licence's split comes back from its thread. */
@@ -95,19 +98,22 @@ class LicensesTest {
 
     @After
     fun tearDown() {
-        LicenseSplits.split = split
+        LicenseCache.split = split
         Notices.open = open
         controller?.destroyAndSettle()
         // A read a test held, then let go, may not have woken yet: it ends on its own. Interrupted, it would
         // throw into the page's coroutine, and Compose would fail the test with it.
         background.shutdown()
         assertTrue("A licence read still runs after the test", background.awaitTermination(10, TimeUnit.SECONDS))
-        Notices.letGoOfWords()
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.checksForUpdates = ::looksForUpdates
     }
+
+    private fun cacheOwner() = ViewModelProvider(checkNotNull(controller).get())[LicenseCacheOwner::class.java]
+
+    private fun pageCache() = checkNotNull(cacheOwner().cache)
 
     private fun string(id: Int): String = app.getString(id)
 
@@ -119,6 +125,10 @@ class LicensesTest {
         composeRule.waitForIdle()
         composeRule.onNode(hasContentDescription(string(R.string.settings_button))).performClick()
         composeRule.waitForIdle()
+        showLicenses()
+    }
+
+    private fun showLicenses() {
         composeRule.onNode(hasText(string(R.string.settings_licenses)) and hasClickAction()).performScrollTo().performClick()
         composeRule.waitForIdle()
     }
@@ -186,7 +196,6 @@ class LicensesTest {
     fun aLanguagesWordsForTheNoticesAreReadOffTheMainThread() {
         val reads = Collections.synchronizedList(mutableListOf<Pair<String, Thread>>())
         MainActivity.systemDispatcher = background.asCoroutineDispatcher()
-        Notices.letGoOfWords()
         Notices.open = { name -> reads += name to Thread.currentThread(); open(name) }
         openLicenses()
         waitForText("Presets de MilkDrop")
@@ -199,7 +208,6 @@ class LicensesTest {
     @Config(qualifiers = "+es")
     fun aLanguagesWordsAreKeptWhileThePageShowsAndLetGoOnceItIsLeft() {
         val reads = Collections.synchronizedList(mutableListOf<String>())
-        Notices.letGoOfWords()
         Notices.open = { name -> reads += name; open(name) }
         openLicenses()
         controller = checkNotNull(controller).recreate()
@@ -216,12 +224,55 @@ class LicensesTest {
     }
 
     @Test
+    @Config(qualifiers = "+es")
+    fun aHeldTranslationDoesNotReplaceTheWordsOnAReopenedPage() {
+        val reads = AtomicInteger()
+        val reading = CountDownLatch(1)
+        val letGo = CountDownLatch(1)
+        MainActivity.systemDispatcher = background.asCoroutineDispatcher()
+        Notices.open = { name ->
+            if (name == "notices-es.txt" && reads.incrementAndGet() == 1) {
+                reading.countDown()
+                assertTrue(letGo.await(10, TimeUnit.SECONDS))
+                "MilkDrop presets\nname: Palabras de la visita anterior"
+            } else {
+                open(name)
+            }
+        }
+        try {
+            openLicenses()
+            val closed = pageCache()
+            assertTrue("The first translation never started", reading.await(5, TimeUnit.SECONDS))
+            composeRule.onNode(hasContentDescription(string(R.string.back_button))).performClick()
+            composeRule.waitForIdle()
+            assertNull(cacheOwner().cache)
+
+            MainActivity.systemDispatcher = Dispatchers.Unconfined
+            showLicenses()
+            work("Presets de MilkDrop").assertExists()
+            val reopened = pageCache()
+            assertNotSame(closed, reopened)
+            val words = checkNotNull(reopened.wordsRead("es"))
+
+            letGo.countDown()
+            background.submit {}.get(5, TimeUnit.SECONDS)
+            assertNull(closed.wordsRead("es"))
+            assertSame(words, reopened.wordsRead("es"))
+            work("Presets de MilkDrop").assertExists()
+            assertEquals(2, reads.get())
+        } finally {
+            letGo.countDown()
+        }
+    }
+
+    @Test
     fun backWhileTheWordsAreReadAgainAfterAndroidStoppedTheAppLeavesThePage() {
         splitsCounted()
         openLicenses()
         work("projectM").performClick()
         waitForText("END OF TERMS AND CONDITIONS")
         // Android stops the app behind another: what was read is gone, the page's state is not. The words come back slowly.
+        cacheOwner().leave()
         val reading = CountDownLatch(1)
         val letGo = CountDownLatch(1)
         Notices.open = { name ->
@@ -231,8 +282,6 @@ class LicensesTest {
             }
             open(name)
         }
-        LicenseSplits.clear()
-        Notices.letGoOfWords()
         try {
             controller = checkNotNull(controller).recreate()
             composeRule.waitForIdle()
@@ -290,8 +339,7 @@ class LicensesTest {
 
     @Test
     fun openingAnotherWorkDoesNotSplitAnOpenOneAgain() {
-        LicenseSplits.clear()
-        LicenseSplits.split = { notice -> splits += notice.name to Thread.currentThread(); split(notice) }
+        LicenseCache.split = { notice -> splits += notice.name to Thread.currentThread(); split(notice) }
         openLicenses()
         work("projectM").performClick()
         composeRule.waitForIdle()
@@ -341,7 +389,7 @@ class LicensesTest {
         val piece = composeRule.onAllNodesWithText("END OF TERMS AND CONDITIONS", substring = true).onFirst().fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
 
         // Android stops the app behind another and starts it again: what was split is gone, the page's state is not.
-        LicenseSplits.clear()
+        cacheOwner().leave()
         controller = checkNotNull(controller).recreate()
         val shownAgain = SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString(piece)))
         composeRule.waitUntil(10_000) { composeRule.onAllNodes(shownAgain).fetchSemanticsNodes().isNotEmpty() }
@@ -353,51 +401,92 @@ class LicensesTest {
 
     @Test
     fun aLicenceSplitForThePageIsLetGoOnceThePageIsLeft() {
-        LicenseSplits.clear()
         openLicenses()
         work("projectM").performClick()
         composeRule.waitForIdle()
-        assertNotNull(LicenseSplits.of("projectM"))
+        val cache = pageCache()
+        assertNotNull(cache.pieces("projectM"))
         // Once to close the licence, once to leave the page.
         repeat(2) {
             checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
             composeRule.waitForIdle()
         }
         assertTrue(shown(string(R.string.settings_about_title)))
-        assertNull(LicenseSplits.of("projectM"))
+        assertNull(cache.pieces("projectM"))
+    }
+
+    @Test
+    fun leavingTheLastPageDropsTheHeldSplitAndSkipsTheNextWorkInItsBatch() {
+        openLicenses()
+        work("projectM").performClick()
+        work("JMdict").performClick()
+        composeRule.waitForIdle()
+
+        // Restore both open works without their cached pieces. Hold the first split in the batch.
+        cacheOwner().leave()
+        splitsCounted()
+        val reading = CountDownLatch(1)
+        val letGo = CountDownLatch(1)
+        val first = Notices.all.first { it.name == "projectM" || it.name == "JMdict" }.name
+        val countedSplit = LicenseCache.split
+        LicenseCache.split = { notice ->
+            if (notice.name == first) {
+                reading.countDown()
+                assertTrue(letGo.await(10, TimeUnit.SECONDS))
+            }
+            countedSplit(notice)
+        }
+        val cache: LicenseCache
+        try {
+            controller = checkNotNull(controller).recreate()
+            composeRule.waitForIdle()
+            cache = pageCache()
+            assertTrue("The first split never started", reading.await(5, TimeUnit.SECONDS))
+            composeRule.onNode(hasContentDescription(string(R.string.back_button))).performClick()
+            composeRule.waitForIdle()
+            assertTrue(shown(string(R.string.settings_about_title)))
+        } finally {
+            letGo.countDown()
+        }
+        background.submit {}.get(5, TimeUnit.SECONDS)
+        assertNull(cache.pieces("projectM"))
+        assertNull(cache.pieces("JMdict"))
+        assertEquals(listOf(first), splitWorks())
     }
 
     @Test
     fun anotherActivityLeavingKeepsTheOpenPagesCachesUntilItsOwnerFinishes() {
         splitsCounted()
-        Notices.letGoOfWords()
         openLicenses()
         work("JMdict").performClick()
         waitForText("Attribution-ShareAlike 4.0 International")
         val first = checkNotNull(controller)
-        val pieces = checkNotNull(LicenseSplits.of("JMdict"))
-        val words = checkNotNull(Notices.wordsRead("en"))
+        val cache = pageCache()
+        val pieces = checkNotNull(cache.pieces("JMdict"))
+        val words = checkNotNull(cache.wordsRead("en"))
         first.pause().stop()
         controller = null
         try {
             openLicenses()
+            assertSame(cache, pageCache())
             checkNotNull(controller).destroyAndSettle()
             controller = null
-            assertTrue(pieces === LicenseSplits.of("JMdict"))
-            assertTrue(words === Notices.wordsRead("en"))
+            assertTrue(pieces === cache.pieces("JMdict"))
+            assertTrue(words === cache.wordsRead("en"))
             first.start().resume()
             controller = first.recreate()
             composeRule.waitForIdle()
-            assertTrue(pieces === LicenseSplits.of("JMdict"))
-            assertTrue(words === Notices.wordsRead("en"))
+            assertSame(cache, pageCache())
+            assertTrue(pieces === cache.pieces("JMdict"))
+            assertTrue(words === cache.wordsRead("en"))
             work("JMdict").performClick()
             work("JMdict").performClick()
             waitForText("Attribution-ShareAlike 4.0 International")
             assertEquals(listOf("JMdict"), splitWorks())
             checkNotNull(controller).destroyAndSettle()
             controller = null
-            assertNull(LicenseSplits.of("JMdict"))
-            assertNull(Notices.wordsRead("en"))
+            assertNull(cache.pieces("JMdict"))
+            assertNull(cache.wordsRead("en"))
         } finally {
             runCatching { first.destroyAndSettle() }
         }
