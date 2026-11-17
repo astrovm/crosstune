@@ -241,8 +241,8 @@
   fetch("https://api.github.com/repos/astrovm/crosstune/releases/latest")
     .then(r => r.ok ? r.json() : null)
     .then(release => {
-      const file = release && release.assets.find(a => a.name.endsWith(".apk"));
-      if (file) apk.href = file.browser_download_url;
+      const file = release && release.tag_name && release.assets?.find(a => a.name === `Crosstune-${release.tag_name}.apk`);
+      if (file && file.browser_download_url) apk.href = file.browser_download_url;
     })
     .catch(() => {});
   update();

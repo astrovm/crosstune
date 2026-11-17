@@ -23,7 +23,8 @@ internal class UpdateChecker(
     private val client: OkHttpClient,
     private val preferences: SharedPreferences,
     private val installed: String,
-    private val now: () -> Long = System::currentTimeMillis
+    private val now: () -> Long = System::currentTimeMillis,
+    private val flavor: String = BuildConfig.FLAVOR
 ) {
     suspend fun newer(): Update? {
         val latest = if (now() - preferences.getLong(KEY_CHECKED, 0L) in 0 until DAY_MS) saved() else latest()?.also(::save)
@@ -36,9 +37,13 @@ internal class UpdateChecker(
         client.newCall(request).answer(Dispatchers.IO) { response ->
             if (!response.isSuccessful) return@answer null
             val release = JSONObject(response.body.stringAtMost())
-            val version = release.optString("tag_name").removePrefix("v").ifEmpty { return@answer null }
-            val apk = release.optJSONArray("assets").objects().firstOrNull { it.optString("name").endsWith(".apk") } ?: return@answer null
-            Update(version, apk.optString("browser_download_url").ifEmpty { return@answer null })
+            val tag = release.optString("tag_name").ifEmpty { return@answer null }
+            val version = tag.removePrefix("v").ifEmpty { return@answer null }
+            val name = apkName(tag)
+            val apk = release.optJSONArray("assets").objects().firstOrNull { it.optString("name") == name } ?: return@answer null
+            val url = apk.optString("browser_download_url")
+            if (url != apkUrl(tag)) return@answer null
+            Update(version, url)
         }
     } catch (_: IOException) {
         null
@@ -48,8 +53,14 @@ internal class UpdateChecker(
 
     private fun saved(): Update? {
         val version = preferences.getString(KEY_VERSION, null) ?: return null
-        return Update(version, preferences.getString(KEY_APK, null) ?: return null)
+        val url = preferences.getString(KEY_APK, null) ?: return null
+        if (url != apkUrl("v$version") && url != apkUrl(version)) return null
+        return Update(version, url)
     }
+
+    private fun apkName(tag: String) = "Crosstune-$tag${if (flavor == "foss") "-foss" else ""}.apk"
+
+    private fun apkUrl(tag: String) = "https://github.com/astrovm/crosstune/releases/download/$tag/${apkName(tag)}"
 
     private fun save(update: Update) = preferences.edit {
         putLong(KEY_CHECKED, now()).putString(KEY_VERSION, update.version).putString(KEY_APK, update.apkUrl)
