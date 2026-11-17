@@ -5,9 +5,9 @@ import http.client
 import importlib.util
 import io
 import socketserver
-import threading
 import tarfile
 import tempfile
+import threading
 import unittest
 import urllib.error
 import zipfile

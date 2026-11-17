@@ -221,7 +221,7 @@ def fetch_texts(manifest, selected):
     texts = {}
     for name, _, source in selected:
         if manifest == JMDICT_MANIFEST:
-            def validate(data):
+            def validate(data, name=name):
                 try:
                     check_jmdict_page(name, data)
                     if len(data) < (TEXTS / name).stat().st_size:
