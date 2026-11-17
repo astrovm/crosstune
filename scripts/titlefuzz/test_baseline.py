@@ -1,11 +1,11 @@
 import argparse
 import gzip
 import shutil
+import subprocess
 import tempfile
 import unittest
-from unittest import mock
-import subprocess
 from pathlib import Path
+from unittest import mock
 
 import baseline
 
