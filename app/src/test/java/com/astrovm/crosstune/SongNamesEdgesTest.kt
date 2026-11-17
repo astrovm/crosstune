@@ -13,6 +13,21 @@ import org.robolectric.annotation.Config
 class SongNamesEdgesTest {
 
     @Test
+    fun namedRecordingsAndCaptionsCannotSubstituteForTheTitle() {
+        val wrong = mutableListOf<String>()
+        for (note in listOf("Cyberpunk Shamisen Cover", "Tiësto Remix", "English Version2024")) {
+            if (SongNames.wordsMatch("Hello ($note)", "Hello World ($note)")) wrong += note
+        }
+        for (caption in listOf("Video Oficial", "Video Clip")) {
+            if (!SongNames.names("Hello ($caption)", "", MusicMetadata("Hello", ""))) wrong += caption
+        }
+        for (title in listOf("Fake Band - Live", "Fake Band「Live」")) {
+            if (!SongNames.names(title, "", MusicMetadata("Live", "Fake Band"))) wrong += title
+        }
+        assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
     fun captionsCannotHideTitleWordsOrBlockTranslatedSubtitles() {
         val wrong = mutableListOf<String>()
         if (SongNames.names("Hello (Video Games)", "Fake Band", MusicMetadata("Hello", "Fake Band"))) wrong += "Video Games lost"

@@ -150,6 +150,10 @@ internal object MetadataParsers {
     private val musicTagWords = phoneRegex("""(?:$MUSIC_TAG_WORDS)""", RegexOption.IGNORE_CASE)
     private val videoNoiseWords = phoneRegex("""$MUSIC_TAG_WORDS|\b(?:video|subtitulado|sub\.?\s*esp\w*|sub\.?\s+español|hd|hq|4k)\b""", RegexOption.IGNORE_CASE)
 
+    /** Reuse the supported caption words without treating arbitrary words beside them as captions. */
+    internal fun videoCaptionWord(word: String): Boolean =
+        musicTagWords.containsMatchIn(word) || trailingVideoNoiseRegex.containsMatchIn("x $word")
+
     /** The brackets of a tag, "(Official Video [4K])", which [bracketTags] reads. Its words are looked for in it after. */
     private const val TAG_OPENS = "(["
     private const val TAG_CLOSES = ")]"
