@@ -48,6 +48,20 @@ class ReadAsMainReadTest {
     }
 
     @Test
+    fun aSpotifyWordingKeepsTheLastValidSeparatorAndNeedsANonemptySongAndArtist() {
+        val wording = MetadataParsers.SpotifyWording("by %s")
+        assertEquals("A: by B" to "C", wording.songAndArtist("A: by B - by C | Spotify"))
+        assertEquals("A - by B" to "C", wording.songAndArtist("A - by B: by C | Spotify"))
+        assertEquals("A" to "B", wording.songAndArtist("A - by B | Spotify"))
+        assertEquals(null, wording.songAndArtist(" - by B | Spotify"))
+        assertEquals(null, wording.songAndArtist("A - by  | Spotify"))
+        assertEquals(null, wording.songAndArtist("by  | Spotify"))
+        val noPrefix = MetadataParsers.SpotifyWording("%s ending")
+        assertEquals("A - B" to "C", noPrefix.songAndArtist("A - B: C ending | Spotify"))
+        assertEquals(null, noPrefix.songAndArtist(": C ending | Spotify"))
+    }
+
+    @Test
     fun aSharedSongIsSplitAsMainSplitIt() {
         for (pattern in listOf("%1\$s by %2\$s", "%2\$s - %1\$s", "Listen to %1\$s, by %2\$s!", "%1\$s%2\$s", "♪ %1\$s / %2\$s")) {
             val words = pattern.split("%1\$s", "%2\$s")

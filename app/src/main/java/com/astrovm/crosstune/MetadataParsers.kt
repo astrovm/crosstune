@@ -372,21 +372,21 @@ internal object MetadataParsers {
         fun songAndArtist(title: String): Pair<String, String>? {
             val line = line(title) ?: return null
             val artistEnd = line.length - afterLength
-            // One look finds where the wording starts: on a phone each new look copies the line first, and a look at each
-            // dash took time squared on a long one.
+            if (beforeLength >= artistEnd) return null
+            // One look finds the wording starts. Only those places can have the separator before them.
             val starts = BitSet()
             val look = before.toPattern().matcher(line)
             while (look.find()) starts.set(look.start())
-            for (songEnd in artistEnd downTo 1) {
-                val separator = when {
-                    line[songEnd] == ':' && line[songEnd + 1] == ' ' -> 2
-                    line[songEnd] == ' ' && line[songEnd + 1] in "-–‑" && line[songEnd + 2] == ' ' -> 3
-                    else -> continue
+            var start = starts.previousSetBit(artistEnd - beforeLength - 1)
+            while (start >= 3) {
+                val songEnd = when {
+                    line[start - 2] == ':' && line[start - 1] == ' ' -> start - 2
+                    start >= 4 && line[start - 3] == ' ' && line[start - 2] in "-–‑" && line[start - 1] == ' ' -> start - 3
+                    else -> 0
                 }
-                val artistStart = songEnd + separator + beforeLength
-                if (artistStart < artistEnd && starts[songEnd + separator]) {
-                    return line.substring(0, songEnd) to line.substring(artistStart, artistEnd)
-                }
+                if (songEnd > 0) return line.substring(0, songEnd) to line.substring(start + beforeLength, artistEnd)
+                // Descending starts retain the last separator's priority, including when the wording starts empty.
+                start = starts.previousSetBit(start - 1)
             }
             return null
         }
