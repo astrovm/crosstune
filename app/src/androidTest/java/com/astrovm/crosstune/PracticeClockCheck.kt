@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
 import android.media.MediaMetadata
+import android.media.VolumeProvider
 import android.media.session.MediaController
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
@@ -31,13 +32,17 @@ import org.json.JSONObject
 /** Real framework callbacks and controls, with invented metadata and no audio or network. */
 @RequiresApi(31)
 class PracticeClockCheck : Instrumentation() {
+    private var output = "local"
+
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
+        output = arguments?.getString("output") ?: "local"
         start()
     }
 
     override fun onStart() {
         try {
+            check(output == "local" || output == "remote") { "Use output=local or output=remote" }
             check(Build.VERSION.SDK_INT >= 31) { "This test-only shell adapter needs API 31" }
             check(targetContext.packageName == "com.astrovm.crosstune.dev")
             check(targetContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
@@ -93,7 +98,13 @@ class PracticeClockCheck : Instrumentation() {
             override fun onPlaybackStateChanged(state: PlaybackState?) { reports.trySend(Unit) }
         }
         try {
+            if (output == "remote") {
+                session.setPlaybackToRemote(object : VolumeProvider(VolumeProvider.VOLUME_CONTROL_ABSOLUTE, 100, 25) {})
+            }
             val observed = MediaController(context, session.sessionToken).also { controller = it }
+            val expectedOutput = if (output == "remote") MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE
+                else MediaController.PlaybackInfo.PLAYBACK_TYPE_LOCAL
+            check(observed.playbackInfo.playbackType == expectedOutput) { "The framework did not select $output output" }
             session.setCallback(object : MediaSession.Callback() {
                 override fun onSeekTo(pos: Long) { commands.trySend("seek:$pos") }
                 override fun onPlay() { commands.trySend("play") }
@@ -106,11 +117,19 @@ class PracticeClockCheck : Instrumentation() {
             session.setPlaybackState(state(started, PlaybackState.ACTION_SEEK_TO))
             session.isActive = true
             val source = MediaSessionPlayback(context)
-            val ready = CompletableDeferred<Unit>()
+            val ready = CompletableDeferred<Following>()
+            val cannotSeek = CompletableDeferred<Unit>()
+            val canSeekAgain = CompletableDeferred<Unit>()
             following = launch(Dispatchers.Main) {
-                source.follow(fixture, context.packageName).collect { if (it != null) ready.complete(Unit) }
+                source.follow(fixture, context.packageName).collect { state ->
+                    if (state != null) {
+                        ready.complete(state)
+                        if (!state.canSeek) cannotSeek.complete(Unit)
+                        else if (cannotSeek.isCompleted) canSeekAgain.complete(Unit)
+                    }
+                }
             }
-            ready.await()
+            check(ready.await().canSeek) { "$output output lost the advertised seek action" }
             observed.registerCallback(callback, Handler(Looper.getMainLooper()))
             val at = SystemClock.elapsedRealtime()
             repeat(2) {
@@ -119,6 +138,7 @@ class PracticeClockCheck : Instrumentation() {
             }
             session.setPlaybackState(state(at + 1, 0))
             reports.receive()
+            cannotSeek.await()
             session.setPlaybackState(null)
             reports.receive()
             val raw = awaitClockRecords(4) { records(started).filter { it.getString("event") == "media_report" } }
@@ -131,6 +151,7 @@ class PracticeClockCheck : Instrumentation() {
             session.setPlaybackState(state(SystemClock.elapsedRealtime(),
                 PlaybackState.ACTION_SEEK_TO or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE))
             reports.receive()
+            canSeekAgain.await()
             val target = source.matching(fixture).single { it.app == context.packageName }.source
             target.seekTo(fixture, 43_270, context.packageName)
             check(commands.receive() == "seek:43270")
@@ -144,6 +165,8 @@ class PracticeClockCheck : Instrumentation() {
             check(controls.all { it.getInt("session") == raw.first().getInt("session") })
             Bundle().apply {
                 putString("result", "pass")
+                putString("output", output)
+                putString("seek_capabilities", "true,false,true")
                 putInt("raw_callbacks", raw.size)
                 putInt("transport_commands", controls.size)
                 putLong("seek_target_ms", 43_270)
