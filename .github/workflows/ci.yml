@@ -60,7 +60,7 @@ jobs:
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
           fi
-          if grep -qE '^extension/' <<< "$files"; then
+          if grep -qE '^(extension/|\.github/workflows/ci\.yml$)' <<< "$files"; then
             echo "extension=true" >> "$GITHUB_OUTPUT"
           else
             echo "extension=false" >> "$GITHUB_OUTPUT"
@@ -193,7 +193,7 @@ jobs:
           .github/play/play.sh setup
           bundle exec ruby .github/play/test/play_test.rb
 
-  # The browser extension in extension/, built and tested only when its files change. Its lyrics panel's browser test answers everything itself; the two that follow real links need the network, so they run by hand (see CONTRIBUTING.md).
+  # The panel test uses a local fixture. The tests that follow real links run by hand (see CONTRIBUTING.md).
   extension:
     needs: changes
     if: needs.changes.outputs.extension == 'true'
@@ -219,10 +219,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run package
       - run: npm test
-      # The browser comes from Playwright's own host. What it needs from apt is mostly on the runner
-      # already, so apt gets two minutes and the test then says whether anything was missing.
+      # The runner supplies Chromium's libraries. Playwright reports a missing library before the test.
       - run: npx playwright install chromium
-      - run: timeout 120 npx playwright install-deps chromium || echo "::notice::Playwright's apt packages were not installed"
       - run: npm run e2e:panel
 
   # Unit tests with the 100% line coverage gate. They draw no visuals, so projectM isn't built.
