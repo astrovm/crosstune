@@ -160,8 +160,9 @@ internal class ChordWikiBrowser(
         val settings = web.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.loadsImagesAutomatically = false
-        settings.blockNetworkImage = true
+        // Verification pages can need images and fonts before they expose the editor.
+        settings.loadsImagesAutomatically = true
+        settings.blockNetworkImage = false
         web.alpha = 0f
         web.isClickable = false
         // Not focusable at all, which takes touch mode with it: a view can't be focusable in touch mode and not otherwise.
@@ -187,7 +188,7 @@ internal class ChordWikiBrowser(
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 onRequest?.invoke(request.url.toString())
-                if (allowed(request.url) && !skipsPicture(request)) return null
+                if (allowed(request.url)) return null
                 return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
             }
 
@@ -239,16 +240,6 @@ internal class ChordWikiBrowser(
         }
         web.postDelayed({ ask(web, started, observation, finish) }, gapMs)
     }
-
-    /** An image or a font. The editor's text does not need either. */
-    private fun skipsPicture(request: WebResourceRequest): Boolean {
-        val url = request.url.toString().substringBefore('?').lowercase()
-        val accept = request.requestHeaders["Accept"].orEmpty().lowercase()
-        return pictureFile(url) || accept.startsWith("image/") || "font/" in accept
-    }
-
-    private fun pictureFile(url: String): Boolean =
-        listOf(".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".avif", ".bmp", ".woff", ".woff2", ".ttf", ".otf", ".eot").any(url::endsWith)
 
     /** The view belongs to the main thread. Cancelling a lookup runs on whatever thread the other sites finished on. */
     private fun detach(web: WebView) {
