@@ -144,6 +144,42 @@ class AppPatternsValuesTest {
     }
 
     @Test
+    fun anEscapedDollarInAConstantIsNotExpandedAgain() {
+        val source = "private const val WORD = \"other\"\nprivate const val ESCAPED = \"\\${'$'}WORD\"\nprivate val pattern = Regex(\"${'$'}ESCAPED\")"
+        val app = AppPatterns(listOf("Reader.kt" to source))
+        assertEquals(emptyList<String>(), app.unread)
+        assertEquals("${'$'}WORD", app.found.single().pattern.pattern())
+    }
+
+    @Test
+    fun innerPropertiesBlockOuterPropertiesEvenWithoutAnInitializerOrVisibility() {
+        for (inner in listOf("var word = \"other\"", "val word = \"other\"", "val word: String get() = runtime()")) {
+            val source = "private val word = \"kept\"\nobject Reader { $inner\n private val pattern = Regex(\"${'$'}word\") }"
+            val app = AppPatterns(listOf("Reader.kt" to source))
+            if (inner.startsWith("val word =")) {
+                assertEquals(emptyList<String>(), app.unread)
+                assertEquals("other", app.found.single().pattern.pattern())
+            } else assertEquals(inner, 1, app.unread.size)
+        }
+    }
+
+    @Test
+    fun commentsOnLaterLinesDoNotHideAContinuationOrGetter() {
+        for (comment in listOf("// Comment", "/* Comment */", "// First\n // Second")) {
+            for (next in listOf(".repeat(2)", "get() = field.repeat(2)")) {
+                val source = "private val word = \"x\"\n $comment\n $next\nprivate val pattern = Regex(\"${'$'}word\")"
+                assertEquals("$comment $next", 1, AppPatterns(listOf("Reader.kt" to source)).unread.size)
+            }
+        }
+    }
+
+    @Test
+    fun aCustomGetterDoesNotResolveToItsInitializer() {
+        val source = "private val word = \"x\"\n get() = field.repeat(2)\nprivate val pattern = Regex(\"${'$'}word\")"
+        assertEquals(1, AppPatterns(listOf("Reader.kt" to source)).unread.size)
+    }
+
+    @Test
     fun everyRecordingPatternHasItsDerivedValues() {
         val app = AppPatterns.ofApp()
         assertEquals(emptyList<String>(), app.unread.filter { it.startsWith("SongNames.kt:") })

@@ -3,9 +3,8 @@ package com.astrovm.crosstune
 /** Reads constant strings and immutable fields in plain singleton objects or at the top level. Other values stay unknown. */
 internal class PatternValues(
     files: List<Pair<String, String>>,
-    private val literalText: (String) -> String,
+    private val readLiteral: (String, (String) -> String?) -> String?,
     private val literals: Regex,
-    private val template: Regex,
 ) {
     private data class Key(val file: String, val owner: String, val name: String)
     private data class Binding(val key: Key, val expression: String?, val constant: Boolean)
@@ -14,9 +13,13 @@ internal class PatternValues(
     private val bindings = files.flatMap { (file, source) ->
         declaration.findAll(source).mapNotNull { match ->
             val scope = scopes.getValue(file).at(match.range.first)
-            val constant = "const" in match.value.substringBefore("val")
+            val constant = match.groupValues[1].isNotEmpty()
             if (!scope.code || !scope.properties && !constant) null
-            else Binding(Key(file, scope.owner, match.groupValues[1]), expressionAt(source, match.range.last + 1), constant)
+            else {
+                val start = match.range.last + 1
+                val expression = if (match.groupValues[2] == "val" && source.getOrNull(start) == '=') expressionAt(source, start + 1) else null
+                Binding(Key(file, scope.owner, match.groupValues[3]), expression, constant)
+            }
         }.toList()
     }
     private val local = bindings.groupBy { it.key }
@@ -72,16 +75,7 @@ internal class PatternValues(
             if (values.any { it == null }) return null
             return values.joinToString("")
         }
-        if (literals.matches(text)) {
-            var complete = true
-            val expanded = template.replace(literalText(text)) { part ->
-                part.groupValues[1].ifEmpty {
-                    val name = part.groupValues[2].ifEmpty { part.groupValues[3] }
-                    lookup(file, owner, name, derived) ?: run { complete = false; part.value }
-                }
-            }
-            return expanded.takeIf { complete }
-        }
+        if (literals.matches(text)) return readLiteral(text) { lookup(file, owner, it, derived) }
         take.matchEntire(text)?.let { match ->
             val count = match.groupValues[2].toIntOrNull() ?: return null
             return value(file, owner, match.groupValues[1], derived)?.take(count)
@@ -103,7 +97,8 @@ internal class PatternValues(
             if (source.startsWith("//", at)) {
                 val end = source.indexOf('\n', at).takeIf { it >= 0 } ?: source.length
                 val before = source.substring(start, at).trimEnd()
-                return before.takeUnless { continued(it, source.substring(end).trimStart()) }
+                val after = following(source, end)
+                return before.takeUnless { continued(it, after) || getter.containsMatchIn(after) }
             }
             when (source[at]) {
                 '(' -> depth++
@@ -111,7 +106,8 @@ internal class PatternValues(
                 ';', '}' -> if (depth == 0) return source.substring(start, at)
                 '\n' -> if (depth == 0) {
                     val before = source.substring(start, at).trimEnd()
-                    val after = source.substring(at + 1).trimStart()
+                    val after = following(source, at + 1)
+                    if (getter.containsMatchIn(after)) return null
                     if (!continued(before, after)) return before
                 }
             }
@@ -121,6 +117,26 @@ internal class PatternValues(
     }
 
     private fun continued(before: String, after: String) = before.endsWith('+') || after.firstOrNull() in listOf('+', '.', '?', '[', '!')
+
+    private fun following(source: String, start: Int): String {
+        var at = start
+        while (at < source.length) {
+            if (source[at].isWhitespace()) at++
+            else if (source.startsWith("//", at)) at = source.indexOf('\n', at).takeIf { it >= 0 } ?: source.length
+            else if (source.startsWith("/*", at)) {
+                var depth = 1
+                at += 2
+                while (at < source.length && depth > 0) {
+                    when {
+                        source.startsWith("/*", at) -> { depth++; at += 2 }
+                        source.startsWith("*/", at) -> { depth--; at += 2 }
+                        else -> at++
+                    }
+                }
+            } else break
+        }
+        return source.substring(at)
+    }
 
     private fun pieces(text: String): List<String> {
         val result = mutableListOf<String>()
@@ -142,8 +158,9 @@ internal class PatternValues(
     }
 
     private companion object {
-        // Local vals cannot have visibility modifiers. They must not replace a field with the same name.
-        val declaration = Regex("""\b(?:(?:private|internal|public|protected)\s+(?:const\s+)?val|const\s+val)\s+(\w+)(?:\s*:\s*String)?\s*=\s*""")
+        // Keep unknown and mutable fields too. They block a field with the same name in an outer scope.
+        val declaration = Regex("""\b(?:(const)\s+)?(val|var)\s+(\w+)(?:\s*:\s*String)?\s*""")
+        val getter = Regex("""^get\s*\(""")
         val reference = Regex("""(?:\w+\.)*\w+""")
         val take = Regex("""(.+)\.take\((\d+)\)""", RegexOption.DOT_MATCHES_ALL)
         const val CLASS_CALL = "TitleDelimiters.regexClass("

@@ -19,7 +19,7 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
      */
     val unread = mutableListOf<String>()
 
-    val found: List<Found> = PatternValues(files, ::literalText, literals, template).let { known ->
+    val found: List<Found> = PatternValues(files, ::expandedLiteral, literals).let { known ->
         files.flatMap { (name, source) -> patternsIn(name, source, known) }
     }
 
@@ -43,11 +43,10 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
             val where = where(found.range.first)
             val prefix = source.substring(maxOf(0, found.range.first - HOLDER_REACH), found.range.first)
             val property = propertyHolder.containsMatchIn(prefix)
-            val text = literals.findAll(found.groupValues[1]).joinToString("") { literalText(it.value) }
-            val built = template.replace(text) { part ->
-                val key = part.groupValues[2].ifEmpty { part.groupValues[3] }
-                // A letter in a template, as ${'"'} ends a raw string in a quote, is that letter.
-                part.groupValues[1].ifEmpty { known.get(name, key, found.range.first, property) ?: run { unread += "$where \$$key"; part.value } }
+            val built = literals.findAll(found.groupValues[1]).joinToString("") { literal ->
+                expandedLiteral(literal.value) { key ->
+                    known.get(name, key, found.range.first, property) ?: run { unread += "$where \$$key"; "\$$key" }
+                }.orEmpty()
             }
             val options = found.groupValues[2]
             // Kotlin's Regex reads every pattern with UNICODE_CASE.
@@ -73,6 +72,26 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
                 else -> escaped
             }
         }
+
+    /** Expand each template once, before decoding escapes. A value's dollars and backslashes stay values. */
+    private fun expandedLiteral(literal: String, value: (String) -> String?): String? {
+        val raw = literal.startsWith("\"\"\"")
+        val quote = if (raw) "\"\"\"" else "\""
+        val text = literal.removeSurrounding(quote)
+        val result = StringBuilder()
+        var start = 0
+        for (part in template.findAll(text)) {
+            val slashes = text.take(part.range.first).takeLastWhile { it == '\\' }.length
+            if (!raw && slashes % 2 == 1) continue
+            result.append(literalText(quote + text.substring(start, part.range.first) + quote))
+            val replacement = part.groupValues[1].ifEmpty {
+                value(part.groupValues[2].ifEmpty { part.groupValues[3] }) ?: return null
+            }
+            result.append(replacement)
+            start = part.range.last + 1
+        }
+        return result.append(literalText(quote + text.substring(start) + quote)).toString()
+    }
 
     companion object {
         /** The app's own patterns, from its code. */
