@@ -8,6 +8,11 @@ package com.astrovm.crosstune
 object LongTitlesProbe {
     @JvmStatic
     fun main(args: Array<String>) {
+        println("engine=${System.getProperty("java.vm.name")} phoneRegex=$ICU")
+        if (args.firstOrNull() == "matcher-input") {
+            matcherInputs()
+            return
+        }
         val readers = listOf<Pair<String, (String) -> Any?>>(
             "musicVideo" to { t -> TitleProbes.musicVideo(t, "Channel") },
             "youtubeVideo" to { t -> TitleProbes.youtubeVideo(t, "Channel") },
@@ -18,6 +23,7 @@ object LongTitlesProbe {
             "withoutEditionTag" to { t -> TitleProbes.withoutEditionTag(t) },
             "withoutFeaturing" to { t -> TitleProbes.withoutFeaturing(t) },
             "chordWikiTitles" to { t -> TitleProbes.chordWikiTitles(t) },
+            "outsideBrackets" to { t -> outsideBrackets(t) },
         )
         if (args.firstOrNull() == "instrumental") {
             // Whether a title of tags says it's an instrumental, by an artist named first and by one named in each tag.
@@ -33,18 +39,13 @@ object LongTitlesProbe {
             }
             return
         }
+        if (args.firstOrNull() == "warm") {
+            warmTitles(readers)
+            return
+        }
         if (args.firstOrNull() == "all") {
-            // Each of LongTitlesTest's shapes once, at 10,000 letters: only the readers slower than 50 ms are named.
-            for (title in SHAPES + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(LONG / piece.length) + ending } }) {
-                readers.forEach { (_, read) -> read(title.take(500)) }
-                val slow = readers.mapNotNull { (name, read) ->
-                    val began = System.nanoTime()
-                    read(title)
-                    ((System.nanoTime() - began) / 1_000_000).takeIf { it > SLOW_MS }?.let { "$name=$it" }
-                }
-                if (slow.isNotEmpty()) println("'${title.take(16).replace("\n", "\\n")}'…'${title.takeLast(10).replace("\n", "\\n")}' ${slow.joinToString(" ")}")
-            }
-            println("done")
+            allInputs(readers)
+            matcherInputs()
             return
         }
         for ((piece, end) in listOf(" - " to " | Spotify", " - Live" to " | Spotify", " HD" to "", " Lyrics" to "", "(" to ")")) {
@@ -58,18 +59,39 @@ object LongTitlesProbe {
         }
     }
 
+    /** The original whole-title budget: warm every title, then repeat a slow case once before counting it. */
+    private fun warmTitles(readers: List<Pair<String, (String) -> Any?>>) {
+        for (title in LongTitleInputs.titles(2_000)) for ((_, read) in readers) read(title)
+        var longest = 0L
+        var longestCpu = 0L
+        var slow = 0
+        val titles = LongTitleInputs.titles(20_000)
+        for ((index, title) in titles.withIndex()) {
+            var best = Long.MAX_VALUE
+            var bestCpu = Long.MAX_VALUE
+            for (round in 0..1) {
+                val beforeCpu = android.os.Debug.threadCpuTimeNanos()
+                val start = System.nanoTime()
+                for ((_, read) in readers) read(title)
+                val wall = System.nanoTime() - start
+                val cpu = android.os.Debug.threadCpuTimeNanos() - beforeCpu
+                best = minOf(best, wall)
+                bestCpu = minOf(bestCpu, cpu)
+                if (wall > WHOLE_TITLE_NS) println("case=$index round=$round wall_ns=$wall cpu_ns=$cpu")
+                if (wall <= WHOLE_TITLE_NS) break
+            }
+            if (best > WHOLE_TITLE_NS) slow++
+            longest = maxOf(longest, best)
+            longestCpu = maxOf(longestCpu, bestCpu)
+        }
+        println("summary title_cases=${titles.size} readers=${readers.size} length=20000 over_300ms_twice=$slow " +
+            "max_best_wall_ns=$longest max_best_cpu_ns=$longestCpu")
+    }
+
+    private const val WHOLE_TITLE_NS = 300_000_000L
+
     private const val LONG = 10_000
     private const val SLOW_MS = 50
-
-    /** LongTitlesTest's titles, at [LONG] letters. */
-    private val SHAPES = listOf(
-        "Artist - Song " + "\n".repeat(LONG) + ")", " - ".repeat(LONG / 3), " - Cover".repeat(LONG / 16) + "\n" + " - Cover".repeat(LONG / 16),
-        "Song " + "cover ".repeat(LONG / 6), "Song - " + "cover ".repeat(LONG / 6), "Song " + "(".repeat(LONG), "Song " + "((Lyrics)".repeat(LONG / 9),
-        "Song " + " (Live)".repeat(LONG / 7), "Song " + " (feat. A".repeat(LONG / 9), "Song " + " ft. A".repeat(LONG / 6) + ")",
-        "Song " + "(((Live)))".repeat(LONG / 10), " ft. a  ".repeat(LONG / 8) + ")", "(feat. a".repeat(LONG / 9) + ")".repeat(LONG / 9),
-        "(M/V".repeat(LONG / 5) + ")".repeat(LONG / 5), "Song ft. a" + " - Remaster)".repeat(LONG / 12),
-        "Song" + "|lyrics".repeat(LONG / 7), "Song" + " - ".repeat(LONG / 3) + "song and lyrics by Artist | Spotify",
-    )
 
     /** LongTitlesTest's titles of an instrumental's tags: what starts them, what's repeated, and what ends them. */
     private val INSTRUMENTAL = listOf(
@@ -77,14 +99,75 @@ object LongTitlesProbe {
         Triple("Song", " (Instrumental)", " ft. a"), Triple("Song", " ~Instrumental", " ft. a"), Triple("", " - ", ""),
     )
 
-    /** LongTitlesTest's pieces and endings. */
-    private val PIECES = listOf(
-        " ", "\n", "\r\n", "\t", "-", " - ", " – ", "|", " | ", "//", ":", "(", ")", "[", "]", "（", "）", "【", "】", "「", "」",
-        "『", "』", "( ", "[ ", "( )", "x ", "a by ", " ft. a ", " ft. a  ", " feat. ", "(feat. a", "2  ft. a", " M/V",
-        " (M/V", " Cover", " - Cover", "\nCover", " cover of a", " in the style of a (", " Lyrics", " HD", " Official Video",
-        " Video", " (Live)", "(Live) ", " - Live", " Remastered", " - Remastered 2012", " (Remastered", "Remix ", "「a」",
-        "a「", "（歌：", "（歌：a）", "(歌", " sub esp", "|| sub español ", " - Song, Lyrics, and Music Video by ", "song by ",
-        " | Spotify", " by ", "\u3000", "\u0085", " ft. a - Remaster)", " ft. a - Remaster", "x[[4K]2 ", " cover", "cover ",
-    )
-    private val ENDINGS = listOf("", ")", "]", "」", "\n", "\r\n", "\u0085", " x", " - Topic", " | Spotify")
+    /** Uses the guard's inputs, including the readers and shapes the old copied list missed. */
+    private fun allInputs(readers: List<Pair<String, (String) -> Any?>>) {
+        var cases = 0
+        var calls = 0
+        var longest = 0L
+        var longestTotal = 0L
+        var longestCpu = 0L
+        var longestTotalCpu = 0L
+        fun read(group: String, title: String, operations: List<Pair<String, (String) -> Any?>>) {
+            var total = 0L
+            var totalCpu = 0L
+            for ((name, operation) in operations) {
+                operation(title.take(500))
+                val beforeCpu = android.os.Debug.threadCpuTimeNanos()
+                val start = System.nanoTime()
+                operation(title)
+                val took = System.nanoTime() - start
+                val cpu = android.os.Debug.threadCpuTimeNanos() - beforeCpu
+                check(cpu >= 0) { "Thread CPU time is unavailable" }
+                totalCpu += cpu
+                longestCpu = maxOf(longestCpu, cpu)
+                total += took
+                longest = maxOf(longest, took)
+                calls++
+                if (took > SLOW_MS * 1_000_000L) println("$group case=$cases reader=$name length=${title.length} ns=$took cpu_ns=$cpu")
+            }
+            longestTotal = maxOf(longestTotal, total)
+            longestTotalCpu = maxOf(longestTotalCpu, totalCpu)
+            cases++
+        }
+        LongTitleInputs.titles(LONG).forEach { read("title", it, readers) }
+        val says = listOf("Channel", "a").map { artist ->
+            "instrumental:$artist" to { title: String -> TitleProbes.saysInstrumental(title, artist) }
+        }
+        LongTitleInputs.instrumentals(LONG).forEach { read("instrumental", it, says) }
+        LongTitleInputs.comparisons(LONG).forEach { title ->
+            read("comparison", title, listOf("wordsMatch" to { text -> SongNames.wordsMatch(text, text.replaceFirst("Hello", "Hello World")) }))
+        }
+        LongTitleInputs.shares(LONG).forEach { read("share", it, listOf("parse" to MusicLinks::parse)) }
+        println("summary cases=$cases calls=$calls length=$LONG max_reader_ns=$longest max_case_total_ns=$longestTotal max_reader_cpu_ns=$longestCpu max_case_cpu_ns=$longestTotalCpu")
+    }
+
+    /** Reproduces native input-copy work that the JDK's matcher preparation omits. No input leaves the device. */
+    private fun matcherInputs() {
+        val pattern = java.util.regex.Pattern.compile("^a")
+        for (mode in listOf("new", "reset", "pattern", "region", "reuse")) {
+            for (length in listOf(2_500, 10_000)) {
+                val text = "a".repeat(length)
+                fun read() {
+                    val matcher = pattern.matcher(text)
+                    repeat(text.length) {
+                        val prepared = when (mode) {
+                            "new" -> pattern.matcher(text)
+                            "reset" -> matcher.reset(text)
+                            "pattern" -> matcher.usePattern(pattern)
+                            "region" -> matcher.region(0, text.length)
+                            else -> matcher
+                        }
+                        check(prepared.lookingAt())
+                    }
+                }
+                repeat(3) { read() }
+                val times = List(3) {
+                    val start = System.nanoTime()
+                    read()
+                    System.nanoTime() - start
+                }.sorted()
+                println("mode=$mode length=$length median_ns=${times[1]}")
+            }
+        }
+    }
 }

@@ -52,6 +52,11 @@ public final class Work {
         if (count > 0 && Thread.currentThread() == counted) steps += count;
     }
 
+    /** The full input Android gives its native regex engine on reset, which the JDK does not copy. */
+    public static void regexInput(CharSequence input) {
+        if (input != null && Thread.currentThread() == counted) elements(input.length());
+    }
+
     /** As {@link #elements(long)}, for each new array of arrays, with the length of each level: as many as all levels hold. */
     public static void elements(int[] lengths) {
         if (lengths == null) return;

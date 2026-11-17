@@ -2,9 +2,15 @@ package com.astrovm.crosstune
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.test.core.app.ApplicationProvider
+import java.util.concurrent.Callable
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -19,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -41,11 +48,54 @@ class PracticeCardsTest {
     private val playback = FakePlayback().apply { obeys = true }
     /** The first error a card's work threw, which the scope would otherwise swallow, leaving a wait to run out. */
     private val crashed = AtomicReference<Throwable?>()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error -> crashed.compareAndSet(null, error) })
+    /**
+     * The cards' own thread, as the app's main thread is theirs: their work and every ask of them take turns on it, see [onCards].
+     * On a pool, a card's work could read the card, and write it back over a grade made meanwhile, which the app never does.
+     */
+    @Volatile private var cardsThread: Thread? = null
+    private val cardsExecutor = Executors.newSingleThreadExecutor { Thread(it, "practice-cards").also { made -> cardsThread = made } }
+    private val scope = CoroutineScope(SupervisorJob() + cardsExecutor.asCoroutineDispatcher() + CoroutineExceptionHandler { _, error -> crashed.compareAndSet(null, error) })
     private val store = SavedLinesStore(ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("practice-cards", Context.MODE_PRIVATE))
 
     @After
-    fun stop() = scope.cancel()
+    fun stop() {
+        scope.cancel()
+        cardsExecutor.shutdownNow()
+    }
+
+    /** Has [ask] run on the cards' thread, after the work already there, as a tap runs after the work on the app's main thread. */
+    private fun <T> later(ask: () -> T): Future<T> =
+        if (Thread.currentThread() === cardsThread) CompletableFuture.completedFuture(ask()) else cardsExecutor.submit(Callable(ask))
+
+    /** Runs [ask] on the cards' thread, see [later], and waits for it. */
+    private fun <T> onCards(ask: () -> T): T = try {
+        later(ask).get(60, TimeUnit.SECONDS)
+    } catch (failed: ExecutionException) {
+        throw failed.cause ?: failed
+    }
+
+    /** The app changing what's shown, on the cards' thread, as the view model does on its own. */
+    private fun shows(change: (UiState) -> UiState) = onCards { screen.value = change(screen.value) }
+
+    /** The small player saying how its line went, on the cards' thread, as the real one posts it to the main thread. */
+    private fun playerSays(how: LineEnd) = onCards { player.end(how) }
+
+    /** [PracticeCards] asked as the app asks it, on the thread its work runs on; or on the test's own thread, when the test runs that work itself. */
+    private inner class Cards(private val cards: PracticeCards, private val onItsThread: Boolean = true) {
+        private fun <T> ask(what: () -> T): T = if (onItsThread) onCards(what) else what()
+        fun start(song: MusicMetadata?, before: Before?) = ask { cards.start(song, before) }
+        fun replay() = ask { cards.replay() }
+        fun turn() = ask { cards.turn() }
+        fun readAs(readings: List<String>) = ask { cards.readAs(readings) }
+        fun grade(grade: Grade) = ask { cards.grade(grade) }
+        fun stop() = ask { cards.stop() }
+        fun background() = ask { cards.background() }
+        fun backToBefore() = ask { cards.backToBefore() }
+        fun release() = ask { cards.release() }
+        fun playerView() = ask { cards.playerView() }
+        /** [ask]s made at once, the way taps queue behind the work on the app's main thread, for the test to wait on later. */
+        fun later(vararg asks: PracticeCards.() -> Unit): Future<Unit> = this@PracticeCardsTest.later { asks.forEach { cards.it() } }
+    }
 
     private val sites = FakeSpotify()
 
@@ -58,8 +108,9 @@ class PracticeCardsTest {
 
     private fun cards(
         source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS, player: FakeLinePlayer? = this.player,
-        now: () -> Long = { System.currentTimeMillis() }, matcher: ExactMatcher = ExactMatcher(sites.client(), "AR"), traitStore: AppTraitsStore = traits, cardScope: CoroutineScope = scope
-    ) = PracticeCards(screen, cardScope, source, matcher, store, traitStore, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
+        now: () -> Long = { System.currentTimeMillis() }, matcher: ExactMatcher = ExactMatcher(sites.client(), "AR"), traitStore: AppTraitsStore = traits, cardScope: CoroutineScope = scope,
+        state: MutableState<UiState> = screen
+    ) = Cards(PracticeCards(state, cardScope, source, matcher, store, traitStore, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } }), onItsThread = cardScope === scope)
 
     /** YouTube Music having the demo song, 3:20 long, as its video "demo0000000". */
     private fun youTubeHasTheSong() {
@@ -90,7 +141,7 @@ class PracticeCardsTest {
         SavedLine(text, translation = "Cielo", title = "Demo", artist = "Band", startMs = start, endMs = start?.plus(5_000), leadMs = lead, cardType = type)
 
     private fun keep(vararg lines: SavedLine, types: List<CardType> = DEFAULT_CARD_TYPES) {
-        screen.value = screen.value.copy(savedLines = store.addAll(lines.toList()), cardTypes = types)
+        shows { it.copy(savedLines = store.addAll(lines.toList()), cardTypes = types) }
     }
 
     private val practice get() = screen.value.practice
@@ -154,7 +205,7 @@ class PracticeCardsTest {
                 held += block
             }
         }
-        val cards = PracticeCards(screen, scope, null, ExactMatcher(sites.client(), "AR"), store, traits, { 1_000_000L }, { System.currentTimeMillis() }, readDispatcher = reading)
+        val cards = Cards(PracticeCards(screen, scope, null, ExactMatcher(sites.client(), "AR"), store, traits, { 1_000_000L }, { System.currentTimeMillis() }, readDispatcher = reading))
         cards.start(null, before = null)
         cards.readAs(listOf("よ", "そら"))
         // Asked, it's read on the dispatcher given, the dictionary loading there the first time, and not before it runs.
@@ -179,14 +230,14 @@ class PracticeCardsTest {
                 held += block
             }
         }
-        val cards = PracticeCards(screen, scope, null, ExactMatcher(sites.client(), "AR"), store, traits, { 1_000_000L }, { System.currentTimeMillis() }, readDispatcher = reading)
+        val cards = Cards(PracticeCards(screen, scope, null, ExactMatcher(sites.client(), "AR"), store, traits, { 1_000_000L }, { System.currentTimeMillis() }, readDispatcher = reading))
         cards.start(null, before = null)
         // The first edit puts 夜 right, the second, made on the card as shown before the first is read, 空.
         cards.readAs(listOf("よ", "そら", "うみ"))
         val first = checkNotNull(held.poll(60, TimeUnit.SECONDS))
         cards.readAs(listOf("よる", "から", "うみ"))
         // Meanwhile UtaTen puts 海 right, as it's sung.
-        screen.value = screen.value.copy(savedLines = store.reread(listOf(kept.copy(reading = "よるのそらとわだつみ", ruby = listOf(Ruby("夜", "よる"), Ruby("の"), Ruby("空", "そら"), Ruby("と"), Ruby("海", "わだつみ", Reader.SUNG))))))
+        shows { it.copy(savedLines = store.reread(listOf(kept.copy(reading = "よるのそらとわだつみ", ruby = listOf(Ruby("夜", "よる"), Ruby("の"), Ruby("空", "そら"), Ruby("と"), Ruby("海", "わだつみ", Reader.SUNG)))))) }
         // Whatever the dispatcher runs first, the later edit's or the earlier's, all three stay.
         held.poll(2, TimeUnit.SECONDS)?.run()
         first.run()
@@ -400,7 +451,7 @@ class PracticeCardsTest {
     @Test
     fun aSongIsPractisedWhenNothingIsDue() {
         keep(line("Due"), line("Not due").copy(title = "Other"))
-        screen.value = screen.value.copy(savedLines = store.practised(store.load().first { it.text == "Due" }, Grade.EASY, 1_000_000L))
+        shows { it.copy(savedLines = store.practised(store.load().first { it.text == "Due" }, Grade.EASY, 1_000_000L)) }
         val cards = cards(source = null)
         cards.start(MusicMetadata("Demo", "Band"), before = null)
         assertEquals(listOf("Due"), practice!!.queue.map { it.text })
@@ -432,23 +483,21 @@ class PracticeCardsTest {
         keep(line(), types = hearIt)
         appPlays(ytMusic, speed = 1f)
         val entered = CountDownLatch(1)
-        val release = CountDownLatch(1)
+        val flow = playback.appPlaying.getValue(ytMusic)
+        // Asked to play, the app hasn't yet: the request is pending.
         playback.onPlay = { _, play ->
             if (play) {
+                flow.value = flow.value?.let { it.copy(clock = it.clock.copy(playing = false)) }
                 entered.countDown()
-                check(release.await(60, TimeUnit.SECONDS))
             }
         }
         val cards = cards()
         cards.start(null, before = null)
-        try {
-            assertTrue(entered.await(60, TimeUnit.SECONDS))
-            cards.stop()
-            assertEquals(ytMusic, playback.playedApps.last())
-            assertFalse(playback.playing.value!!.clock.playing)
-        } finally {
-            release.countDown()
-        }
+        assertTrue(entered.await(60, TimeUnit.SECONDS))
+        cards.stop()
+        assertEquals(ytMusic, playback.playedApps.last())
+        assertEquals(false, playback.plays.last())
+        assertFalse(playback.playing.value!!.clock.playing)
     }
 
     @Test
@@ -761,7 +810,7 @@ class PracticeCardsTest {
 
     @Test
     fun nativeSoundClosingAFallbackCancelsItsRepeatedNativePauses() {
-        for (leave in listOf<(PracticeCards) -> Unit>({ it.stop() }, { it.background() }, { it.release() })) {
+        for (leave in listOf<(Cards) -> Unit>({ it.stop() }, { it.background() }, { it.release() })) {
             keep(line())
             youTubeHasTheSong()
             appPlays(spotify)
@@ -943,6 +992,26 @@ class PracticeCardsTest {
         assertEquals("Other", practice?.line?.title)
         assertEquals(MusicMetadata("Demo", "Band") to false, playback.playedSongs.last() to playback.plays.last())
         assertFalse(playback.playing.value!!.clock.playing)
+    }
+
+    @Test
+    fun nativeSoundGradedWhileTheCardSaysItPlaysGoesOnToTheOtherSong() {
+        val audible = HEAR_IT.copy(on = true, options = CardOptions(CardSide(sound = true), CardSide(sound = true)))
+        keep(line("One"), line("Two", start = null).copy(title = "Other"), types = listOf(audible))
+        appPlays(ytMusic, speed = 1f)
+        // The card's work says its line plays a second time as it starts watching it play out, and is held there, the card already read.
+        val held = HeldWrite(screen) { was, next -> was.practice?.sound == LineSound.PLAYING && next.practice?.sound == LineSound.PLAYING && !next.practice.turned }
+        val cards = cards(state = held)
+        cards.start(null, before = null)
+        assertTrue(held.holding.await(60, TimeUnit.SECONDS))
+        // The user turns the card and grades it meanwhile: the taps wait their turn, as on the app's main thread.
+        val taps = cards.later({ turn() }, { grade(Grade.GOOD) })
+        held.go.countDown()
+        taps.get(60, TimeUnit.SECONDS)
+        assertTrue(held.written.await(60, TimeUnit.SECONDS))
+        assertEquals("Other", practice?.line?.title)
+        assertEquals(MusicMetadata("Demo", "Band") to false, playback.playedSongs.last() to playback.plays.last())
+        assertFalse(requireNotNull(playback.playing.value).clock.playing)
     }
 
     @Test
@@ -1162,7 +1231,7 @@ class PracticeCardsTest {
         val cards = cards()
         cards.start(null, before = null)
         waitFor("the line is ready") { practice?.sound == LineSound.PLAYED }
-        screen.value = screen.value.copy(cardTypes = emptyList())
+        shows { it.copy(cardTypes = emptyList()) }
         playing()
         cards.turn()
         waitFor("it plays on the back") { playback.plays == listOf(false, true, false) && practice?.sound == LineSound.PLAYED }
@@ -1171,7 +1240,7 @@ class PracticeCardsTest {
     @Test
     fun aSongWithCardsDueIsPractisedWithOnlyThose() {
         keep(line("Due"), line("Not due"))
-        screen.value = screen.value.copy(savedLines = store.practised(store.load().first { it.text == "Not due" }, Grade.EASY, 1_000_000L))
+        shows { it.copy(savedLines = store.practised(store.load().first { it.text == "Not due" }, Grade.EASY, 1_000_000L)) }
         cards(source = null).start(MusicMetadata("Demo", "Band"), before = null)
         assertEquals(listOf("Due"), practice!!.queue.map { it.text })
     }
@@ -1208,7 +1277,7 @@ class PracticeCardsTest {
         waitFor("the player plays it") { player.shown.size == 2 }
         assertTrue(player.shown.last().play)
         assertEquals(LineSound.PLAYING, practice?.sound)
-        player.end(LineEnd.ENDED)
+        playerSays(LineEnd.ENDED)
         assertEquals(LineSound.PLAYED, practice?.sound)
         // Asked again, it is played again; asked while it plays, it stops.
         cards.replay()
@@ -1268,7 +1337,7 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitForThePlayer("the player is on the line")
         // The player finds the video isn't as long as the song, or can't load it.
-        player.end(LineEnd.FAILED)
+        playerSays(LineEnd.FAILED)
         assertEquals(LineSound.NONE, practice?.sound)
         assertNull(practice?.video)
         cards.replay()
@@ -1345,7 +1414,7 @@ class PracticeCardsTest {
         assertEquals(LineSound.PLAYED, practice?.sound)
         assertEquals(paused + 1, player.pauses)
         // The stopped player's late failure must not erase replay on the same card.
-        player.end(LineEnd.FAILED)
+        playerSays(LineEnd.FAILED)
         assertEquals(LineSound.PLAYED, practice?.sound)
         assertEquals("demo0000000", practice?.video)
         // Nothing playing, nothing to stop.
@@ -1445,7 +1514,7 @@ class PracticeCardsTest {
 
     /** The music apps the phone has, and the one songs open in when none is asked for. */
     private fun installed(vararg apps: String, preferred: Destination = Destination.Service(MusicService.SPOTIFY)) {
-        screen.value = screen.value.copy(musicApps = apps.toList(), defaultDestination = preferred)
+        shows { it.copy(musicApps = apps.toList(), defaultDestination = preferred) }
     }
 
     /** [app] playing the demo song, moving in it or not, on a clock [speed] times as fast: what Crosstune sees play, followed by name or not. */
@@ -1478,7 +1547,7 @@ class PracticeCardsTest {
         assertEquals(20_000L, playback.seeks.last())
         cards.stop()
         val afterNext = playback.seeks.size
-        screen.value = screen.value.copy(savedLines = listOf(line("Two", start = 20_000)))
+        shows { it.copy(savedLines = listOf(line("Two", start = 20_000))) }
         cards(traitStore = freshTraits()).start(null, before = null)
         waitFor("a fresh controller seeks the matching session") { playback.seeks.size > afterNext }
         assertEquals(20_000L, playback.seeks.last())
@@ -1498,7 +1567,7 @@ class PracticeCardsTest {
         cards.stop()
         playback.obeys = true
         val sent = playback.seeks.size
-        screen.value = screen.value.copy(savedLines = listOf(line("Two", start = 20_000)))
+        shows { it.copy(savedLines = listOf(line("Two", start = 20_000))) }
         cards(traitStore = freshTraits()).start(null, before = null)
         waitFor("the next card seeks the matching session") { playback.seeks.size > sent }
         assertEquals(20_000L, playback.seeks.last())
@@ -1999,13 +2068,13 @@ class PracticeCardsTest {
         cards.stop()
         playback.obeys = true
         playback.onPlay = { _, _ -> }
-        screen.value = screen.value.copy(savedLines = listOf(line("Earlier", start = 12_000)))
+        shows { it.copy(savedLines = listOf(line("Earlier", start = 12_000))) }
         cards.start(null, before = null)
         waitFor("the earlier line is prepared") { playback.seeks.contains(12_000L) && practice?.sound == LineSound.PLAYED }
         cards.stop()
         val other = line("Other", start = 13_000).copy(title = "Other song")
         playback.sessionSongs[0] = MusicMetadata(other.title, other.artist)
-        screen.value = screen.value.copy(savedLines = listOf(other))
+        shows { it.copy(savedLines = listOf(other)) }
         cards.start(null, before = null)
         waitFor("the other song is prepared") { playback.seeks.contains(13_000L) && practice?.sound == LineSound.PLAYED }
         assertEquals(listOf(43_270L, 12_000L, 13_000L), playback.seeks.toList())
@@ -2161,7 +2230,7 @@ class PracticeCardsTest {
         cards.stop()
         // The next, practised at once, sends it on while the card still has it where it was, paused.
         answers(ytMusic, from = 5_000, fromPlaying = false, Said(150, 20_000), Said(400, 43_270))
-        screen.value = screen.value.copy(savedLines = listOf(line(start = 43_270)))
+        shows { it.copy(savedLines = listOf(line(start = 43_270))) }
         cards.start(null, before = null)
         reached(ytMusic)
         assertEquals(listOf(20_000L, 43_270L), playback.seeks)
@@ -2343,7 +2412,7 @@ class PracticeCardsTest {
         assertEquals(true, flow.value?.clock?.playing)
     }
 
-    private lateinit var tidalCards: PracticeCards
+    private lateinit var tidalCards: Cards
 
     /** TIDAL, asked to play a card's line, goes on to its next song instead, and is stopped: its package and what it plays. */
     private fun tidalGoesOnToItsNextSong(): Pair<String, MutableStateFlow<Following?>> {
@@ -2426,10 +2495,10 @@ class PracticeCardsTest {
 
     @Test
     fun aDeviceWithoutWebViewSupportLeavesPracticeWithoutASmallPlayer() {
-        val cards = PracticeCards(
+        val cards = Cards(PracticeCards(
             screen, scope, playback, ExactMatcher(sites.client(), "AR"), store, traits,
             { wall }, { System.currentTimeMillis() }, newPlayer = { throw UnsupportedOperationException("WebView unsupported") }
-        )
+        ))
         assertNull(cards.playerView())
     }
 
@@ -2442,25 +2511,25 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitForThePlayer()
         val first = requireNotNull(practice)
-        screen.value = screen.value.copy(practice = first.copy(
+        shows { it.copy(practice = first.copy(
             queue = listOf(requireNotNull(first.line).copy(cardType = HEAR_TYPE)), sound = LineSound.PLAYING
-        ))
-        player.end(LineEnd.ENDED)
+        )) }
+        playerSays(LineEnd.ENDED)
         assertEquals(LineSound.PLAYING, practice?.sound)
-        player.end(LineEnd.FAILED)
+        playerSays(LineEnd.FAILED)
         assertEquals(first.video, practice?.video)
     }
 
     @Test
     fun aMissingWebViewProviderLeavesPracticeWithoutASmallPlayer() {
         var attempts = 0
-        val cards = PracticeCards(
+        val cards = Cards(PracticeCards(
             screen, scope, playback, ExactMatcher(sites.client(), "AR"), store, traits,
             { wall }, { System.currentTimeMillis() }, newPlayer = {
                 attempts++
                 throw android.util.AndroidRuntimeException("No WebView provider")
             }
-        )
+        ))
         assertNull(cards.playerView())
         assertEquals(1, attempts)
     }
@@ -2660,3 +2729,27 @@ private val PLAYED_FROM = Regex("played the line from ([+-]?\\d+) ms")
 
 /** The log tag a card's steps go to when it's asked for, which `adb shell setprop` names. */
 private const val CHAIN_LOG = "CrosstuneChain"
+
+/** [screen], but the first write that [holds] picks, from the state it replaces to the one it sets, waits there until [go], already worked out. */
+private class HeldWrite(private val screen: MutableState<UiState>, private val holds: (UiState, UiState) -> Boolean) : MutableState<UiState> {
+    val holding = CountDownLatch(1)
+    val go = CountDownLatch(1)
+    val written = CountDownLatch(1)
+    private val armed = AtomicBoolean(true)
+
+    override var value: UiState
+        get() = screen.value
+        set(next) {
+            val hold = holds(screen.value, next) && armed.compareAndSet(true, false)
+            if (hold) {
+                holding.countDown()
+                check(go.await(60, TimeUnit.SECONDS)) { "The held write was never let go" }
+            }
+            screen.value = next
+            if (hold) written.countDown()
+        }
+
+    override fun component1() = value
+
+    override fun component2(): (UiState) -> Unit = { value = it }
+}

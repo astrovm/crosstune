@@ -7,7 +7,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import jtotal_widths as w  # noqa: E402
+import jtotal_widths as w
 
 
 class RunsTest(unittest.TestCase):

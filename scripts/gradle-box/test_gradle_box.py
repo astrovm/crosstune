@@ -1,9 +1,10 @@
 """Runs gradle-box.sh for real, with a stand-in podman that says what it was asked and waits when told."""
-import hashlib
+import contextlib
 import gzip
+import hashlib
 import os
-import shutil
 import shlex
+import shutil
 import signal
 import stat
 import subprocess
@@ -14,6 +15,25 @@ import unittest
 from pathlib import Path
 
 BOX = Path(__file__).with_name("gradle-box.sh")
+RESET_SIGNALS_AND_RUN = (
+    "import os, signal, sys\n"
+    "for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):\n"
+    "    signal.signal(sig, signal.SIG_DFL)\n"
+    "os.execv(sys.argv[1], sys.argv[1:])"
+)
+
+
+def launch(command, **options):
+    """Starts a script with INT, TERM and HUP at their defaults, whatever this test run ignores.
+
+    A job that a shell starts in the background, or a run under `nohup` or `trap "" TERM`, ignores signals, and every
+    process under it inherits that: a stand-in that traps TERM never hears it, and `terminate()` stops nothing. The
+    launcher resets them and then becomes the script, so each test starts the same way. `preexec_fn` would do it
+    between fork and exec, where a lock another thread of the test holds stays held for good.
+    """
+    return subprocess.Popen([sys.executable, "-c", RESET_SIGNALS_AND_RUN, *map(str, command)], **options)
+
+
 FAKE_PODMAN = """#!/bin/sh
 if [ "$1" = "info" ]; then
     echo "$*" >> "$FAKE_DIR/info"
@@ -81,8 +101,8 @@ class GradleBoxTest(unittest.TestCase):
 
     def start(self, run, *args, slots="1", checkout=None, **env):
         root = self.checkout(checkout or run)
-        process = subprocess.Popen(
-            [str(root / "scripts" / "gradle-box" / BOX.name), *args],
+        process = launch(
+            [root / "scripts" / "gradle-box" / BOX.name, *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -453,13 +473,10 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
                          (self.dir / "ran").read_text().splitlines())
 
     def start_script(self, script, *args, interruptible=False, **extra):
-        def reset_signals():
-            for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
-                signal.signal(sig, signal.SIG_DFL)
-        process = subprocess.Popen([str(script), *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                   start_new_session=interruptible, preexec_fn=reset_signals if interruptible else None,
-                                   env={**os.environ, "PATH": f"{self.dir / 'bin'}:{os.environ['PATH']}",
-                                        "HOME": str(self.home), "FAKE_DIR": str(self.dir), **extra})
+        process = launch([script, *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                         start_new_session=interruptible,
+                         env={**os.environ, "PATH": f"{self.dir / 'bin'}:{os.environ['PATH']}",
+                              "HOME": str(self.home), "FAKE_DIR": str(self.dir), **extra})
         self.addCleanup(self.stop, process)
         return process
 
@@ -687,10 +704,8 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
             with self.assertRaises(ProcessLookupError):
                 os.kill(recorder, 0)
         finally:
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 os.kill(recorder, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
 
     def test_memory_tickets_stay_readable_to_older_checkouts(self):
         self.hold("first")

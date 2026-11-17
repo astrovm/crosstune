@@ -15,7 +15,9 @@ import java.lang.invoke.MethodType
  * failed at random. Where the letters a pattern looks at can be counted, they are ([outOfStepCounting]). Elsewhere, the
  * work-count agent (`tools/work-count`) counts the reading thread's steps: each call and each time a loop goes round,
  * each element of an array made, cloned or copied, and each byte a checksum or zlib reads or writes, in the app, its
- * libraries and the JDK, its patterns too, but in what runs the JVM and the agent. The growthTests task runs it.
+ * libraries and the JDK, its patterns too, but in what runs the JVM and the agent. A matcher reset or pattern change
+ * also counts one full input length: Android copies it into its native engine, while the JDK keeps a reference.
+ * The growthTests task runs it.
  * Work on other threads isn't counted, and isn't wanted: it's another test's. Each reader here reads on the thread that
  * asks, and a reading that leaves work to another thread fails, however it hands it over, when it waits for it: the agent measures the
  * processor time the other threads take as it reads ([BESIDE_NANOS]). So no other thread may be busy then.

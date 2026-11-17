@@ -2,10 +2,10 @@
 import contextlib
 import importlib.util
 import io
-from pathlib import Path
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 spec = importlib.util.spec_from_file_location('milkdrop_textures', Path(__file__).with_name('textures.py'))
 textures = importlib.util.module_from_spec(spec)
@@ -14,8 +14,8 @@ spec.loader.exec_module(textures)
 
 class TexturesTest(unittest.TestCase):
     def test_used_is_each_image_without_its_mode_and_not_projectms_own(self):
-        preset = 'ret = tex2D(sampler_fw_Worms, uv) + tex2D(sampler_main, uv) + tex2D(sampler_pc_blur2, uv)\n' \
-                 'ret += tex2D(sampler_noise_lq, uv) + tex2D(sampler_rand03_smalltiled, uv) + tex2D(sampler_cells, uv);'
+        preset = ('ret = tex2D(sampler_fw_Worms, uv) + tex2D(sampler_main, uv) + tex2D(sampler_pc_blur2, uv)\n'
+                  'ret += tex2D(sampler_noise_lq, uv) + tex2D(sampler_rand03_smalltiled, uv) + tex2D(sampler_cells, uv);')
         self.assertEqual({'worms', 'rand03_smalltiled', 'cells'}, textures.used(preset))
 
     def test_it_copies_the_used_ones_drops_the_rest_and_names_whats_missing(self):

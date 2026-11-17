@@ -2,6 +2,7 @@
 
 Nothing here opens the shared device locks under the agent cache.
 """
+import contextlib
 import fcntl
 import json
 import os
@@ -82,7 +83,7 @@ class DeviceLockTest(unittest.TestCase):
     def invoke(self, *args, env=None, timeout=15):
         return subprocess.run(
             [sys.executable, str(SCRIPT), *args],
-            capture_output=True, text=True, env=env or self.env(), timeout=timeout,
+            capture_output=True, text=True, env=env or self.env(), timeout=timeout, check=False,
         )
 
     def invoke_ok(self, *args, timeout=15):
@@ -152,19 +153,15 @@ class DeviceLockTest(unittest.TestCase):
         for pid in list(pids):
             pids.update(descendants(pid))
         for pid in pids:
-            try:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
                 os.kill(pid, signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                pass
         deadline = time.monotonic() + 3
         for pid in pids:
             while pid_alive(pid) and time.monotonic() < deadline:
                 time.sleep(0.02)
             if pid_alive(pid):
-                try:
+                with contextlib.suppress(ProcessLookupError, PermissionError):
                     os.kill(pid, signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    pass
         for proc in self.procs:
             if proc.poll() is None:
                 proc.kill()
@@ -338,7 +335,7 @@ class DeviceLockTest(unittest.TestCase):
         env["PYTHONUNBUFFERED"] = "1"
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "who"],
-            capture_output=True, text=True, env=env, timeout=15,
+            capture_output=True, text=True, env=env, timeout=15, check=False,
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(str(home / ".cache" / "agent-cache"), result.stderr)

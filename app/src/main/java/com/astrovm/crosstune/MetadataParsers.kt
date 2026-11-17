@@ -155,8 +155,8 @@ internal object MetadataParsers {
         musicTagWords.containsMatchIn(word) || trailingVideoNoiseRegex.containsMatchIn("x $word")
 
     /** The brackets of a tag, "(Official Video [4K])", which [bracketTags] reads. Its words are looked for in it after. */
-    private const val TAG_OPENS = "(["
-    private const val TAG_CLOSES = ")]"
+    private val TAG_OPENS = TitleDelimiters.tagOpens
+    private val TAG_CLOSES = TitleDelimiters.tagCloses
 
     /** The same said without brackets at the end, "Song Official Music Video", maybe after a "|" or a dash. */
     private val trailingVideoNoiseRegex = phoneRegex(
@@ -185,19 +185,15 @@ internal object MetadataParsers {
      * "|Lyrics|HD|" and "|OfficialMusicVisualizer", and a line break after.
      */
     private fun trailingQuality(text: CharSequence) =
-        if (endsOnAWord(text)) findNear(trailingQualityRegex, text, beforeLetters(text, lineEnd(text), QUALITY_LETTERS)) else null
+        if (endsOnOneOf(text, "scdqk|")) findNear(trailingQualityRegex, text, beforeLetters(text, lineEnd(text), QUALITY_LETTERS)) else null
 
     /** A video's noise a title may end on, "Official Video", as [trailingVideoNoiseRegex] finds it. */
     private fun trailingVideoNoise(text: CharSequence) =
-        if (endsOnAWord(text)) findNear(trailingVideoNoiseRegex, text, beforeLetters(text, lineEnd(text), VIDEO_NOISE_LETTERS)) else null
+        if (endsOnOneOf(text, "orpl")) findNear(trailingVideoNoiseRegex, text, beforeLetters(text, lineEnd(text), VIDEO_NOISE_LETTERS)) else null
 
-    /**
-     * Whether [text] ends on a letter or a bar, but for spaces and a line break, as [trailingQualityRegex] and
-     * [trailingVideoNoiseRegex] end: "Lyrics", "4K", "HD |", "Video". A run of dashes is cut one at a time, and isn't
-     * read by them each time.
-     */
-    internal fun endsOnAWord(text: CharSequence): Boolean =
-        text.getOrNull(spacesStart(text, lineEnd(text)) - 1)?.let { isLatinLetterIgnoringCase(it) || it == '|' } == true
+    /** Only a possible final letter enters the full suffix pattern, before spaces and a final line break. */
+    internal fun endsOnOneOf(text: CharSequence, letters: String): Boolean =
+        text.getOrNull(spacesStart(text, lineEnd(text)) - 1)?.let { last -> letters.any { readsAs(last, it) } } == true
     private const val QUALITY_LETTERS = 12
     private const val VIDEO_NOISE_LETTERS = 25
 
@@ -376,21 +372,21 @@ internal object MetadataParsers {
         fun songAndArtist(title: String): Pair<String, String>? {
             val line = line(title) ?: return null
             val artistEnd = line.length - afterLength
-            // One look finds where the wording starts: on a phone each new look copies the line first, and a look at each
-            // dash took time squared on a long one.
+            if (beforeLength >= artistEnd) return null
+            // One look finds the wording starts. Only those places can have the separator before them.
             val starts = BitSet()
             val look = before.toPattern().matcher(line)
             while (look.find()) starts.set(look.start())
-            for (songEnd in artistEnd downTo 1) {
-                val separator = when {
-                    line[songEnd] == ':' && line[songEnd + 1] == ' ' -> 2
-                    line[songEnd] == ' ' && line[songEnd + 1] in "-–‑" && line[songEnd + 2] == ' ' -> 3
-                    else -> continue
+            var start = starts.previousSetBit(artistEnd - beforeLength - 1)
+            while (start >= 3) {
+                val songEnd = when {
+                    line[start - 2] == ':' && line[start - 1] == ' ' -> start - 2
+                    start >= 4 && line[start - 3] == ' ' && line[start - 2] in "-–‑" && line[start - 1] == ' ' -> start - 3
+                    else -> 0
                 }
-                val artistStart = songEnd + separator + beforeLength
-                if (artistStart < artistEnd && starts[songEnd + separator]) {
-                    return line.substring(0, songEnd) to line.substring(artistStart, artistEnd)
-                }
+                if (songEnd > 0) return line.substring(0, songEnd) to line.substring(start + beforeLength, artistEnd)
+                // Descending starts retain the last separator's priority, including when the wording starts empty.
+                start = starts.previousSetBit(start - 1)
             }
             return null
         }
@@ -459,7 +455,7 @@ internal object MetadataParsers {
     private fun withoutPlayerSeparators(title: String): String {
         var kept = Kept(title, title.length, "")
         while (true) {
-            val dash = danglingDash(kept, "-–—") ?: return kept.toString()
+            val dash = danglingDash(kept, TitleDelimiters.DASHES) ?: return kept.toString()
             kept = kept.without(dash)
         }
     }
@@ -577,7 +573,7 @@ internal object MetadataParsers {
         return if (start < dash) start until spacesEnd(text, dash + 1) else null
     }
 
-    private const val DASHES = "-–"
+    private val DASHES = TitleDelimiters.tagDashes
 
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
     fun youtubeVideo(title: String, channel: String): MusicMetadata? {

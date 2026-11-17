@@ -1,7 +1,7 @@
 import importlib.util
-from pathlib import Path
 import unittest
-import xml.etree.ElementTree as ElementTree
+from pathlib import Path
+from xml.etree import ElementTree
 
 spec = importlib.util.spec_from_file_location("contrast", Path(__file__).with_name("contrast.py"))
 contrast = importlib.util.module_from_spec(spec)

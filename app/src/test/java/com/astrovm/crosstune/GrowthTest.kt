@@ -147,6 +147,35 @@ class GrowthTest {
     }
 
     @Test
+    fun repeatedlyPreparingAMatcherCountsThePhonesInputCopies() {
+        val pattern = java.util.regex.Pattern.compile("^a")
+        val preparations = mapOf<String, (java.util.regex.Matcher, String) -> java.util.regex.Matcher>(
+            "new matcher" to { _, text -> pattern.matcher(text) },
+            "reset input" to { matcher, text -> matcher.reset(text) },
+            "change pattern" to { matcher, _ -> matcher.usePattern(pattern) },
+            "set region" to { matcher, text -> matcher.region(0, text.length) }
+        )
+        val texts = { length: Int -> listOf("a".repeat(length)) }
+        val missed = preparations.filter { (name, prepare) ->
+            Growth.outOfStep(texts, LENGTH, { name }) { text ->
+                val matcher = pattern.matcher(text)
+                repeat(text.length) { check(prepare(matcher, text).lookingAt()) }
+            }.isEmpty()
+        }.keys
+        assertEquals(emptySet<String>(), missed)
+    }
+
+    @Test
+    fun aReusedMatcherDoesNotCopyItsInputForEachMatch() {
+        val pattern = java.util.regex.Pattern.compile("^a")
+        val texts = { length: Int -> listOf("a".repeat(length)) }
+        assertEquals(emptyList<String>(), Growth.outOfStep(texts, LENGTH, { "reuse matcher" }) { text ->
+            val matcher = pattern.matcher(text)
+            repeat(text.length) { check(matcher.lookingAt()) }
+        })
+    }
+
+    @Test
     fun aReadingThatSkipsLettersIsInStep() {
         // A pattern looks for a word by skipping as many letters as it has where they can't be it: fewer steps than letters.
         val word = Regex(Regex.escape("};</script>"))
@@ -154,7 +183,12 @@ class GrowthTest {
         val texts = { length: Int -> listOf(start.repeat(length / start.length + 1)) }
         assertEquals(emptyList<String>(), Growth.outOfStep(texts, LENGTH, { it.take(4) }) { text -> word.find(text) })
         val longer = texts(Growth.TIMES * LENGTH).single()
-        assertTrue(Growth.stepsOf(longer) { text: String -> word.find(text) } < longer.length)
+        val counted = Growth.stepsOf(longer) { text: String -> word.find(text) }
+        // Kotlin constructs the matcher, then find(start) resets it: two input copies on Android.
+        // The search itself still skips letters.
+        val searching = counted - 2L * longer.length
+        assertTrue(searching >= 0)
+        assertTrue(searching < longer.length)
     }
 
     @Test

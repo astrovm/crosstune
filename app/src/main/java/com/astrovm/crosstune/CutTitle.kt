@@ -263,9 +263,9 @@ internal class CutTitle(private val title: String) {
          * a) y". One in brackets reads on from the bracket that opens it, which is the last before the cut.
          */
         private const val NEAR = 10
-        private const val BRACKETS = "()[]"
-        private const val OPENS = "(["
-        private const val CLOSES = ")]"
+        private val BRACKETS = TitleDelimiters.tagBrackets
+        private val OPENS = TitleDelimiters.tagOpens
+        private val CLOSES = TitleDelimiters.tagCloses
     }
 }
 

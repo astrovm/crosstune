@@ -454,8 +454,9 @@ def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, ou
     """Draws every page in `browser_name` on this machine, with its fonts, and writes where the letters are to `out`.
     `size` and `scale` are the letters' size (None for the page's own) and the screen's pixels to a CSS pixel:
     40px at 4 places a letter most exactly, and a reader sees 15px at 1, 1.25 or 1.5."""
-    from playwright.sync_api import Error as PlaywrightError, sync_playwright
     from jtotal_widths import FONTS, environment, open_page
+    from playwright.sync_api import Error as PlaywrightError
+    from playwright.sync_api import sync_playwright
 
     css = (directory / "dat_st.css").read_bytes().decode(CHARSET, "replace")
     faces = "".join(

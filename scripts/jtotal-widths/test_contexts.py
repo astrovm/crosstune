@@ -9,8 +9,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import contexts as x  # noqa: E402
-import jtotal_widths as w  # noqa: E402
+import contexts as x
+import jtotal_widths as w
 
 
 def measurement(widths, fonts=None):

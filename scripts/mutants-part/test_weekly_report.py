@@ -50,7 +50,7 @@ if args[:2] in (["issue", "create"], ["issue", "comment"]):
             env = {**os.environ, 'PATH': f"{root / 'bin'}:{os.environ['PATH']}",
                    'PARTS': json.dumps(list(parts)), 'JOBS': jobs, 'MATCHER': matcher, 'RUN': 'https://example.invalid/run',
                    'GITHUB_STEP_SUMMARY': str(root / 'summary'), 'GH_REPO': 'example/repo'}
-            result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], cwd=root, env=env, capture_output=True, text=True)
+            result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], cwd=root, env=env, capture_output=True, text=True, check=False)
             self.posted = (root / 'posted.md').read_text() if (root / 'posted.md').exists() else ''
             return result, (root / 'summary').read_text() if (root / 'summary').exists() else ''
 
@@ -84,7 +84,7 @@ if args[:2] in (["issue", "create"], ["issue", "comment"]):
         self.assertIn(LOST_32, self.posted)
 
     def test_only_the_lost_part_is_named_next_to_other_parts_rows(self):
-        result, summary = self.run_report((33,), 'Example.kt:3  survived: boundary\n', parts=(32, 33))
+        result, _ = self.run_report((33,), 'Example.kt:3  survived: boundary\n', parts=(32, 33))
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.posted.count('No results from part'), 1)
         self.assertIn(LOST_32, self.posted)

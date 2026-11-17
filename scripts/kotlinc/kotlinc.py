@@ -16,8 +16,8 @@ import shutil
 import sys
 import tempfile
 import urllib.request
-import xml.etree.ElementTree as ElementTree
 from pathlib import Path
+from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCK = Path(__file__).with_name("kotlinc.lock")

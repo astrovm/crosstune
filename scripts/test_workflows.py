@@ -111,7 +111,7 @@ class WorkflowsTest(unittest.TestCase):
         self.assertEqual([], unrequired((WORKFLOWS / "ci.yml").read_text(encoding="utf-8")))
 
     def test_a_job_the_required_job_doesnt_need_is_named(self):
-        text = "\n".join([
+        lines = [
             "jobs:",
             "  a:",
             "    steps: []",
@@ -126,7 +126,8 @@ class WorkflowsTest(unittest.TestCase):
             "      - c",
             "    steps:",
             "      - run: true",
-        ])
+        ]
+        text = "\n".join(lines)
         self.assertEqual(["b"], unrequired(text))
 
     def test_only_a_job_that_pushes_keeps_its_token(self):
@@ -144,7 +145,7 @@ class WorkflowsTest(unittest.TestCase):
                 self.assertIn(job, [kept for kept, _ in checkouts_with_token((WORKFLOWS / name).read_text(encoding="utf-8"))], pushes)
 
     def test_a_checkout_is_read_with_what_it_is_given(self):
-        text = "\n".join([
+        lines = [
             "on:",
             "  push:",
             "jobs:",
@@ -173,7 +174,8 @@ class WorkflowsTest(unittest.TestCase):
             "          persist-credentials: false",
             "        uses: actions/checkout@abc # v1",
             "      - run: true",
-        ])
+        ]
+        text = "\n".join(lines)
         self.assertEqual([("plain", 6), ("other", 17), ("named", 23)], checkouts_with_token(text))
 
 

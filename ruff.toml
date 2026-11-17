@@ -1,0 +1,48 @@
+# Lint for the repository's Python: the scripts and their tests. CI runs `ruff check` with the version pinned in
+# scripts/ruff-requirements.txt (the "python" job). Formatting is not enforced.
+
+# The oldest Python these scripts run on: the Pi's (3.13) and the CI image's (3.14) are newer.
+target-version = "py312"
+
+# projectM and the other submodules are not ours.
+extend-exclude = ["third_party"]
+
+[lint]
+# Rules are picked for what they catch, not for being the default.
+select = [
+    "F",      # Pyflakes: unused or missing names, shadowed imports.
+    "E4",     # Imports that sit after code.
+    "E7",     # Statement slips: `== None`, bare `except`, ambiguous names, assigned lambdas.
+    "E9",     # Syntax and I/O errors.
+    "B",      # Bugbear: a function that reads a loop variable late, mutable defaults, `assert False`.
+    "PLE",    # Pylint errors.
+    "PLW",    # Pylint warnings: `subprocess.run` with no `check`, `preexec_fn`, bad `os.environ` defaults.
+    "SIM",    # A file that is never closed (SIM115), and the branches and returns that say it in more words.
+    "RUF",    # Ruff's own: mutable class defaults, unused unpacking, a `noqa` that silences nothing.
+    "FURB",   # Builtins and the standard library used the short way.
+    "UP",     # Syntax a newer Python makes shorter.
+    "C4",     # Needless `list()`, `set()` and comprehensions.
+    "FLY",    # `" ".join` of a fixed list.
+    "ISC",    # Strings that join by accident in a list.
+    "PLR0402",  # `import a.b as b` that `from a import b` says shorter.
+    "EXE",    # A shebang on a file that can't run, or the other way round.
+    "I",      # Imports in one order.
+]
+ignore = [
+    # `dict(a=1)` is how these scripts write a record with fixed names; a literal says no more.
+    "C408",
+    # Stacked `with patch.object(...)` blocks in the tests read the same nested or joined.
+    "SIM117",
+    # Most `zip` calls here pair two lists that stop at the shorter on purpose, or walk a list against its own tail.
+    "B905",
+    # The scripts read and write Japanese, Korean and Arabic text, whose letters look like Latin ones.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # `argv = argv + [x]` and `[*argv, x]` say the same.
+    "RUF005",
+    # `for line in lines: line = line.strip()` is the way these scripts clean what they read.
+    "PLW2901",
+    # A script's `main` sets its folders and options once, from the command line, before anything runs.
+    "PLW0603",
+]

@@ -3,13 +3,13 @@
 fastlane supply on its own commits with Play's default, which cancels a review in progress. play.sh loads
 review_guard.rb first. .github/play/test/play_test.rb tests play.sh itself.
 """
-from pathlib import Path
 import hashlib
 import os
 import re
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github/workflows"
@@ -80,7 +80,7 @@ class PlayWorkflowsTest(unittest.TestCase):
         for workflow, name, job in play_jobs():
             with self.subTest(workflow=workflow, job=name):
                 steps = job.split("\n      - ")
-                setup = [i for i, step in enumerate(steps) if re.search(r"\.github/play/play\.sh setup$", step, re.M)]
+                setup = [i for i, step in enumerate(steps) if re.search(r"\.github/play/play\.sh setup$", step, re.MULTILINE)]
                 keyed = [i for i, step in enumerate(steps) if PLAY_KEY in step]
                 self.assertEqual(1, len(setup), job)
                 self.assertNotIn("secrets.", steps[setup[0]])
@@ -110,7 +110,7 @@ class PlayWorkflowsTest(unittest.TestCase):
     def test_production_is_sent_by_hand_only(self):
         text = (WORKFLOWS / "promote.yml").read_text(encoding="utf-8")
         triggers = text[text.index("\non:\n"):text.index("\npermissions:")]
-        self.assertEqual(["workflow_dispatch:"], re.findall(r"^  (\S+:)$", triggers, re.M))
+        self.assertEqual(["workflow_dispatch:"], re.findall(r"^  (\S+:)$", triggers, re.MULTILINE))
         self.assertIn("version:", triggers)
         self.assertIn('.github/play/play.sh production "$VERSION"', text)
 

@@ -20,24 +20,24 @@ LETTER = r"[^\W_]"
 WORD = re.compile(
     r"(?<!" + LETTER + r")(?<!" + LETTER + r"-)(?:instrumentale?|inst\.?|off[ -]?vocal|(?-i:MR)|인스트루멘탈|"
     r"(?:伴奏|オフボーカル|纯音乐|純音樂|純音楽)(?:版本?|バージョン)?)(?!" + LETTER + r")",
-    re.I,
+    re.IGNORECASE,
 )
-SHORT = re.compile(r"inst\.?|MR", re.I)
-VOICE = re.compile(r"(?<!off )(?<!off-)\bvocals?\b|\ba[ -]?capp?ella\b", re.I)
+SHORT = re.compile(r"inst\.?|MR", re.IGNORECASE)
+VOICE = re.compile(r"(?<!off )(?<!off-)\bvocals?\b|\ba[ -]?capp?ella\b", re.IGNORECASE)
 PART_WORDS = {"with", "intro", "outro", "break", "interlude", "bridge", "from", "film", "movie", "live", "hall"}
 NOT_SAID = {"not", "non", "prod", "produced"}
-SINGER_AFTER = re.compile(r"(?:^|[\s(\[])(?:feat\.?|ft\.?|featuring|with|x|×)\s+\S", re.I)
+SINGER_AFTER = re.compile(r"(?:^|[\s(\[])(?:feat\.?|ft\.?|featuring|with|x|×)\s+\S", re.IGNORECASE)
 CHANNEL = re.compile(r"VEVO$|\s*-\s*Topic$")
 VERSION_WORDS = {"ver", "version", "versao"}
 BRACKET = re.compile(r"[(\[【「〔]([^()\[\]【】「」〔〕]*)[)\]】」〕]")
 DASH = re.compile(r"(?:(?<=\s)[-–]\s?|[~〜])([^-–~〜]*)")
 EAST_ASIAN = "[぀-ヿ㐀-䶿一-鿿가-힯]"
 OFF_VOCAL_AT_END = re.compile(
-    r"(?:(?<=" + EAST_ASIAN + r")\s*off[ -]?vocal(?:\s+ver(?:sion|\.)?)?|\soff[ -]?vocal\s+ver(?:sion|\.)?)\s*$", re.I
+    r"(?:(?<=" + EAST_ASIAN + r")\s*off[ -]?vocal(?:\s+ver(?:sion|\.)?)?|\soff[ -]?vocal\s+ver(?:sion|\.)?)\s*$", re.IGNORECASE
 )
-SING_ALONG = re.compile(r"karaoke|カラオケ|\bmade popular by\b|\blyrics?\b|\bsing[- ]?along\b|\bminus one\b|\bbacking track\b", re.I)
+SING_ALONG = re.compile(r"karaoke|カラオケ|\bmade popular by\b|\blyrics?\b|\bsing[- ]?along\b|\bminus one\b|\bbacking track\b", re.IGNORECASE)
 COVER_WORDS = r"\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"
-COVER = [re.compile(r"[(\[【][^)\]】]*(?:" + COVER_WORDS + r")[^)\]】]*[)\]】]", re.I), re.compile(r"\s[-–]\s[^-–]*(?:" + COVER_WORDS + r").*$", re.I)]
+COVER = [re.compile(r"[(\[【][^)\]】]*(?:" + COVER_WORDS + r")[^)\]】]*[)\]】]", re.IGNORECASE), re.compile(r"\s[-–]\s[^-–]*(?:" + COVER_WORDS + r").*$", re.IGNORECASE)]
 INSTRUMENTAL_GENRES = {"Instrumental", "インストゥルメンタル", "演奏曲", "Instrumentale"}
 SAME_LENGTH_S = 3.0
 
@@ -86,9 +86,9 @@ def copies(song):
     return []
 
 
-FEATURING = re.compile(r"\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]", re.I)
-EDITION = re.compile(r"(?:\s+[-–]\s+|\s*[(\[])[^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*[)\]]?$", re.I)
-SEPARATOR = re.compile(r"\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*|\s+(?:and|y|und|et)\s+", re.I)
+FEATURING = re.compile(r"\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]", re.IGNORECASE)
+EDITION = re.compile(r"(?:\s+[-–]\s+|\s*[(\[])[^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*[)\]]?$", re.IGNORECASE)
+SEPARATOR = re.compile(r"\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*|\s+(?:and|y|und|et)\s+", re.IGNORECASE)
 
 
 def plain(text):
@@ -98,7 +98,7 @@ def plain(text):
 
 def artists(credit):
     """Each name in a credit and the credit whole, as SongNames.artists, roughly."""
-    return {plain(re.sub(r"^the\s+", "", name, flags=re.I)) for name in SEPARATOR.split(credit) + [credit]} - {""}
+    return {plain(re.sub(r"^the\s+", "", name, flags=re.IGNORECASE)) for name in SEPARATOR.split(credit) + [credit]} - {""}
 
 
 def is_recording(copy, song):
