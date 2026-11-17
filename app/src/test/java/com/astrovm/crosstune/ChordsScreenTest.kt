@@ -2,24 +2,32 @@ package com.astrovm.crosstune
 
 import android.content.Context
 import android.os.SystemClock
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -91,6 +99,60 @@ class ChordsScreenTest {
     }
 
     private fun pausedAt(ms: Long) = Following(PlaybackClock(ms, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+
+    /** How [text] is laid out, room over its rows for chords or readings included. */
+    private fun layoutOf(text: String): TextLayoutResult {
+        val layouts = mutableListOf<TextLayoutResult>()
+        requireNotNull(lineOf(text).config[SemanticsActions.GetTextLayoutResult].action)(layouts)
+        return layouts.single()
+    }
+
+    private fun TextLayoutResult.firstRow() = getLineBottom(0) - getLineTop(0)
+
+    @Test
+    @Config(fontScale = 2f)
+    fun atTheLargestFontARowStillHasRoomForItsChordsOverIt() {
+        var chords by mutableStateOf(ChordsState())
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords), ScreenActions()) } }
+        composeRule.waitForIdle()
+        val words = layoutOf(lines[0].text)
+        chords = ChordsState(on = true, sheet = sheet)
+        chordsOver(lines[0].text)
+        val room = layoutOf(lines[0].text).firstRow() - words.firstRow()
+        // Chords are drawn a line 0.55 times the words' tall over each row. Android grows small text
+        // more than big at a big font, so that line is made bigger on its own; less room, and the
+        // words run up into the chords.
+        val chordLine = with(words.layoutInput.density) { (words.layoutInput.style.lineHeight * 0.55f).toPx() }
+        assertTrue("$room px over a row for a $chordLine px line of chords", room >= chordLine - 1f)
+    }
+
+    @Test
+    @Config(fontScale = 2f)
+    fun atTheLargestFontARowWithReadingsHasRoomForThemAndItsChordsEachAndOneWithoutForItsChordsOnly() {
+        val text = "夜空の星を見上げて君を想う夜"
+        val sheet = ChordSheet(listOf(SheetLine(text, listOf(Chord(0, "Am"), Chord(3, "F")))), capo = 0, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/x-1")
+        var state by mutableStateOf(japanese(LyricLine(1_000, text), sheet).let { it.copy(chords = ChordsState(), learning = it.learning.copy(readings = false)) })
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state, ScreenActions()) } }
+        composeRule.waitForIdle()
+        val words = layoutOf(text)
+        val wordsRow = words.firstRow()
+        val (chordLine, readingLetters) = with(words.layoutInput.density) {
+            (words.layoutInput.style.lineHeight * 0.55f).toPx() to (words.layoutInput.style.fontSize * READING_SCALE).toPx()
+        }
+        // Chords only: their line over each row, and no readings.
+        state = state.copy(chords = ChordsState(on = true, sheet = sheet))
+        chordsOver(text)
+        val chordsOnly = layoutOf(text).firstRow() - wordsRow
+        assertTrue("$chordsOnly px over a row for a $chordLine px line of chords", chordsOnly >= chordLine - 1f)
+        assertNull(readingsOver(text))
+        // With readings: room for them as well, on top of the chords' room, so neither runs into the
+        // other or the words; without them that room isn't kept.
+        state = state.copy(learning = state.learning.copy(readings = true))
+        composeRule.waitUntil(5_000) { readingsOver(text) != null }
+        assertEquals(listOf("よぞら", "ほし"), readingsOver(text))
+        val both = layoutOf(text).firstRow() - wordsRow
+        assertTrue("$both px over a row for chords and readings, ${both - chordsOnly} px for $readingLetters px readings", both - chordsOnly >= readingLetters)
+    }
 
     @Test
     fun theChordPlayedAndTheWordsSungLightAsALineWithChordsIsSung() {
@@ -302,5 +364,79 @@ class ChordsScreenTest {
         chords = chords.copy(on = false)
         composeRule.waitUntil(5_000) { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(ChordsShown), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
         composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_capo, 2)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun chordsThatCouldntBeLookedUpSaySoInWordsAndOfferToTryAgain() {
+        var asked = 0
+        var chords by mutableStateOf(ChordsState(on = true, loading = true))
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords), ScreenActions(onRetryChords = { asked++ })) } }
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertDoesNotExist()
+        // A site that wouldn't answer is said, which plain words alone don't: they look like a song with no chords.
+        chords = ChordsState(on = true, tried = true, failed = true)
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertExists()
+        composeRule.onNodeWithText(string(R.string.retry_button)).performClick()
+        assertEquals(1, asked)
+        // Looked up again, or switched off, there's nothing left to say.
+        chords = ChordsState(on = true, loading = true)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_chords_failed)).fetchSemanticsNodes().isEmpty() }
+        chords = ChordsState(on = true, tried = true, failed = true)
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertExists()
+        chords = ChordsState(on = false, failed = true)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_chords_failed)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun chordWikiCheckThatDoesntFinishSaysWhichAndOffersToTryAgain() {
+        var asked = 0
+        var chords by mutableStateOf(ChordsState(on = true, loading = true))
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords), ScreenActions(onRetryChords = { asked++ })) } }
+        // Still looking: neither reason is said yet.
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_wiki_timeout)).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_wiki_check)).assertDoesNotExist()
+        chords = ChordsState(on = true, tried = true, failed = true, failure = ChordFailure.WIKI_TIMEOUT)
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_wiki_timeout)).assertExists()
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.retry_button)).performClick()
+        assertEquals(1, asked)
+        // The other reason replaces it. There is no control that answers the check.
+        chords = ChordsState(on = true, loading = true)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_chords_wiki_timeout)).fetchSemanticsNodes().isEmpty() }
+        chords = ChordsState(on = true, tried = true, failed = true, failure = ChordFailure.WIKI_CHECK)
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_wiki_check)).assertExists()
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_wiki_timeout)).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.retry_button)).performClick()
+        assertEquals(2, asked)
+        chords = ChordsState(on = false, failed = true, failure = ChordFailure.WIKI_CHECK)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_chords_wiki_check)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun offlineTheFailedChordsAreSaidWithNothingToTap() {
+        val chords = ChordsState(on = true, tried = true, failed = true)
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords).copy(offline = true), ScreenActions()) } }
+        // The bar says it's offline; this says what that cost. They come back with the internet, so there's no button.
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertExists()
+        composeRule.onNodeWithText(string(R.string.retry_button)).assertDoesNotExist()
+    }
+
+    @Test
+    fun theFailureIsAnnouncedAsItAppearsAndDrawnWithTheErrorIcon() {
+        var error = 0
+        val failed = ChordsState(on = true, tried = true, failed = true)
+        composeRule.setContent { CrosstuneTheme { error = MaterialTheme.colorScheme.error.toArgb(); LyricsScreen(state(failed), ScreenActions()) } }
+        // A screen reader says it when it shows up: nothing else tells that the chords didn't come.
+        val status = composeRule.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite) and hasAnyDescendant(hasText(string(R.string.lyrics_chords_failed)))
+        )
+        status.assertExists()
+        // The words are in the theme's text color, the button in its primary: only the icon is drawn in the error color.
+        fun errorPixels(): Int {
+            val image = status.captureToImage().asAndroidBitmap()
+            val pixels = IntArray(image.width * image.height).also { image.getPixels(it, 0, image.width, 0, 0, image.width, image.height) }
+            fun near(a: Int, b: Int, shift: Int) = kotlin.math.abs(((a shr shift) and 0xFF) - ((b shr shift) and 0xFF)) <= 8
+            return pixels.count { (it ushr 24) == 0xFF && near(it, error, 16) && near(it, error, 8) && near(it, error, 0) }
+        }
+        composeRule.waitUntil(5_000) { errorPixels() > 20 }
     }
 }

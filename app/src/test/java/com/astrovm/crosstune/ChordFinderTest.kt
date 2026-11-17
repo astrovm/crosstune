@@ -1,11 +1,18 @@
 package com.astrovm.crosstune
 
+import android.util.Log
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,6 +21,7 @@ import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowLog
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -128,9 +136,10 @@ Singing to the morning light</div>"""
 
     private fun answer(request: Request, pages: Map<String, String>) =
         pages.entries.firstOrNull { request.url.toString().startsWith(it.key) }?.let { FakeSpotify.html(request, it.value) }
-            // Cifra Club's search and Apple's, where a test doesn't say, find nothing.
+            // Cifra Club's search, Apple's and J-Total's, where a test doesn't say, find nothing.
             ?: when (request.url.host) {
                 "solr.sscdn.co" -> FakeSpotify.html(request, cifraClubSearch())
+                "music.j-total.net" -> FakeSpotify.html(request, "")
                 "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
                 else -> FakeSpotify.html(request, "", code = 404)
             }
@@ -179,14 +188,195 @@ Singing to the morning light</div>"""
         assertEquals(0, (chords(river, english) as ChordFinder.Chords.Found).sheet.capo)
     }
 
+    /** J-Total's page, in Shift_JIS as it serves them, saying nothing of that. */
+    private fun jTotalPage(request: Request, page: String, charset: String = "Shift_JIS") = okhttp3.Response.Builder()
+        .request(request).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK")
+        .body(page.toByteArray(java.nio.charset.Charset.forName(charset)).toResponseBody("text/html".toMediaType()))
+        .build()
+
+    /** A song in J-Total's results. */
+    private fun jTotalResult(path: String, title: String, artist: String = "歩く人") =
+        """<td><a href="//music.j-total.net/data/$path.html" target="_blank"><li></a> <a href="https://music.j-total.net/data/$path.html" target=""><font size="3"><b>$title</b></font></a>
+        <tr><td>\u3000\u3000歌：$artist/詞：誰か/曲：誰か</td></tr>"""
+
+    private fun jTotalSong(vararg lines: String) = "<tt><!--HPSTART-->${lines.joinToString("<br>\n")}<!--HPEND--></tt>"
+
+    /** J-Total answering what's searched for with [searches], and each sheet's page from [pages], neither of the other sites having anything. */
+    private fun jTotal(searches: Map<String, String>, pages: Map<String, String> = emptyMap()) {
+        fake.handler = { request ->
+            val path = request.url.encodedPath
+            when {
+                request.url.host == "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch())
+                request.url.host != "music.j-total.net" -> FakeSpotify.html(request, "")
+                path == "/db/search.cgi" -> jTotalPage(request, searches.entries.firstOrNull { "word=${java.net.URLEncoder.encode(it.key, "Shift_JIS")}&" in request.url.encodedQuery.orEmpty() }?.value.orEmpty())
+                else -> jTotalPage(request, pages[path].orEmpty(), charset = "windows-31j")
+            }
+        }
+    }
+
+    private val jTotalChord = """<a href="JavaScript:jump_1('../../../cd/Am.html');">Am</a>"""
+
+    @Test
+    fun japaneseWordsOnNoOtherSiteAreFoundOnJTotalByTheSongsJapaneseName() {
+        jTotal(
+            mapOf("川の道" to jTotalResult("kawa/002", "川の道〜初心者向け簡単コードVer.〜") + jTotalResult("kawa/001", "川の道") + jTotalResult("kawa/003", "別の歌")),
+            mapOf("/data/kawa/001.html" to jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている"))
+        )
+        val found = chords(kawa, japanese) as ChordFinder.Chords.Found
+        assertEquals(ChordSite.J_TOTAL, found.sheet.site)
+        assertEquals("https://music.j-total.net/data/kawa/001.html", found.sheet.url)
+        assertEquals(listOf(SheetLine("川の道を歩いていく", listOf(Chord(0, "Am"))), SheetLine("朝の光に歌っている", listOf(Chord(0, "Am")))), found.sheet.lines)
+        // Asked in Shift_JIS, as it reads its searches.
+        assertTrue(fake.requestedUrls.any { it.startsWith("https://music.j-total.net/db/search.cgi") && "word=%90%EC%82%CC%93%B9" in it })
+        // Its easier version comes after, and another song is never read.
+        assertFalse(fake.requestedUrls.any { it.endsWith("kawa/003.html") })
+    }
+
+    @Test
+    fun jTotalsPageIsReadAsABrowserReadsShiftJis() {
+        // The circled number and the wave dash are Windows-31J's. Java's Shift_JIS has none of the first.
+        val words = "好きと①った～".repeat(5)
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to jTotalSong("${"x".repeat(14)}$jTotalChord", words)))
+        val found = chords(kawa, listOf(words)) as ChordFinder.Chords.Found
+        assertEquals(words, found.sheet.lines.single().text)
+    }
+
+    @Test
+    fun jTotalUsesTheFontStackFromThePage() {
+        // Both stacks draw a Windows-31J letter at one width. ۰ is not one, so a page writes it as an entity, and
+        // each stack draws it from another font on Windows: 1.144 columns on the main stack, 1.200 on the monospace
+        // one. Drawn there in Chromium, Edge and Chrome (scripts/jtotal-widths/invented.py), the chord after eleven
+        // columns lands on letter 10 with the main stack and on letter 9 with the monospace one.
+        // The kana at the end makes the words Japanese, as J-Total is asked only for those.
+        val words = "\u06F0".repeat(20) + "あ"
+        val sheet = jTotalSong("${"x".repeat(11)}$jTotalChord", "&#1776;".repeat(20) + "あ")
+        for ((stack, letter) in listOf("'Inconsolata','MS Gothic','Hiragino Kaku Gothic','Monaco',sans-serif" to 10, "'Inconsolata', monospace" to 9)) {
+            jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to "<style>tt { font-family: $stack; }</style>$sheet"))
+            val found = chords(kawa, listOf(words)) as ChordFinder.Chords.Found
+            assertEquals(words, found.sheet.lines.single().text)
+            assertEquals(letter, found.sheet.lines.single().chords.single().at)
+        }
+    }
+
+    @Test
+    fun jTotalsSongOfTheSameNameBySomeoneElseWaitsForTheArtists() {
+        jTotal(
+            mapOf("川の道" to jTotalResult("other/001", "川の道", "別の人") + jTotalResult("kawa/001", "川の道")),
+            mapOf(
+                "/data/other/001.html" to jTotalSong(jTotalChord, "川の道を歩いていく"),
+                "/data/kawa/001.html" to jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている")
+            )
+        )
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(kawa, japanese) as ChordFinder.Chords.Found).sheet.url)
+    }
+
+    @Test
+    fun jTotalsEasierVersionIsReadWhenItsOwnWontDo() {
+        jTotal(
+            mapOf("川の道" to jTotalResult("kawa/002", "川の道〜初心者向け簡単コードVer.〜") + jTotalResult("kawa/001", "川の道")),
+            mapOf("/data/kawa/001.html" to "<html>no sheet here</html>", "/data/kawa/002.html" to jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている"))
+        )
+        assertEquals("https://music.j-total.net/data/kawa/002.html", (chords(kawa, japanese) as ChordFinder.Chords.Found).sheet.url)
+    }
+
+    @Test
+    fun aSongNamedInLatinLettersIsLookedUpOnJTotalByItsNameInJapan() {
+        val named = MusicMetadata("Kawa no Michi", "Aruku Hito")
+        val jTotalPages = mapOf("/data/kawa/001.html" to jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている"))
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), jTotalPages)
+        val pages = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else pages(request)
+        }
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(named, japanese) as ChordFinder.Chords.Found).sheet.url)
+    }
+
+    @Test
+    fun aNameNetEaseGivesWithItsVersionAndOneJTotalCantReadAreNotWhatJTotalIsAskedFor() {
+        val named = MusicMetadata("Kawa no Michi", "Aruku Hito")
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to jTotalSheet))
+        val pages = fake.handler
+        // A Chinese song first, with a kanji Shift_JIS has no place for, then the song's own name with its version after it.
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, netEase("另一半" to listOf("別の人"), "川の道(Single Version)(オリジナルカラオケ)" to listOf("歩く人"))) else pages(request)
+        }
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(named, japanese) as ChordFinder.Chords.Found).sheet.url)
+        // The name Shift_JIS can't write is never sent as a mangled "?".
+        assertFalse(fake.requestedUrls.any { it.startsWith("https://music.j-total.net/db/search.cgi") && "%3F" in it })
+    }
+
+    private val jTotalSheet = jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている")
+
+    @Test
+    fun anotherSongOnJTotalIsNeverRead() {
+        jTotal(mapOf("川の道" to jTotalResult("kawa/003", "別の歌")), mapOf("/data/kawa/003.html" to jTotalSheet))
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+        assertFalse(fake.requestedUrls.any { it.endsWith("kawa/003.html") })
+    }
+
+    @Test
+    fun jTotalsSheetByTheArtistComesFirstAndItsOwnBeforeItsEasierVersion() {
+        // Each of them would fit, so only the order says which is taken.
+        val pages = listOf("other/001", "kawa/001", "kawa/002").associate { "/data/$it.html" to jTotalSheet }
+        val other = jTotalResult("other/001", "川の道", "別の人")
+        val own = jTotalResult("kawa/001", "川の道")
+        val easier = jTotalResult("kawa/002", "川の道〜初心者向け簡単コードVer.〜")
+        jTotal(mapOf("川の道" to other + easier + own), pages)
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(kawa, japanese) as ChordFinder.Chords.Found).sheet.url)
+        jTotal(mapOf("川の道" to other + easier), pages)
+        assertEquals("https://music.j-total.net/data/kawa/002.html", (chords(kawa, japanese) as ChordFinder.Chords.Found).sheet.url)
+    }
+
+    @Test
+    fun aJTotalSheetThatWontAnswerIsUnavailableNotNoChords() {
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")))
+        val site = fake.handler
+        fake.handler = { request -> if (request.url.encodedPath == "/data/kawa/001.html") FakeSpotify.html(request, "", code = 500) else site(request) }
+        assertEquals(ChordFinder.Chords.Unavailable, chords(kawa, japanese))
+    }
+
+    @Test
+    fun aSongNamedInJapaneseAlreadyIsNeverLookedUpByOtherNamesForJTotal() {
+        jTotal(emptyMap())
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+        assertFalse(fake.requestedUrls.any { "music.163.com" in it })
+    }
+
+    @Test
+    fun aJapaneseTitleOrArtistAloneStillLooksUpTheOtherNameForJTotal() {
+        val pages = mapOf("/data/kawa/001.html" to jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている"))
+        for (song in listOf(MusicMetadata("川の歌", "Aruku Hito"), MusicMetadata("Kawa no Michi", "歩く人"))) {
+            jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), pages)
+            val site = fake.handler
+            fake.handler = { request ->
+                if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else site(request)
+            }
+            assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(song, japanese) as ChordFinder.Chords.Found).sheet.url)
+        }
+    }
+
+    @Test
+    fun wordsInOtherLettersNeverAskJTotal() {
+        jTotal(emptyMap())
+        chords(river, english)
+        assertFalse(fake.requestedUrls.any { "j-total" in it })
+    }
+
+    @Test
+    fun aSheetOfOtherWordsOnJTotalIsNoSheet() {
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to jTotalSong(jTotalChord, "まるで違う歌の言葉です", jTotalChord, "それも別の話になります")))
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+    }
+
     @Test
     fun japaneseWordsAskUFretFirstForTheSongsOwnSheetByTheArtist() {
         fake.handler = { request ->
             answer(
                 request,
                 mapOf(
-                    "https://www.ufret.jp/search.php" to uFretResult(3, "川の道", "歩く人", beginner = true) + uFretResult(1, "川の道", "他の人") +
-                        uFretResult(2, "川の道", "歩く人") + uFretResult(4, "別の歌", "歩く人"),
+                    // Another song by the artist first, which isn't looked at.
+                    "https://www.ufret.jp/search.php" to uFretResult(4, "別の歌", "歩く人") + uFretResult(3, "川の道", "歩く人", beginner = true) +
+                        uFretResult(1, "川の道", "他の人") + uFretResult(2, "川の道", "歩く人"),
                     "https://www.ufret.jp/song.php?data=2" to uFretSong("[Am]川の[Em]道を歩いていく\r", "[F]朝の光に[G]歌っている\r"),
                     "https://www.ufret.jp/song.php?data=3" to uFretSong("[C]川の道を歩いていく\r", "朝の光に歌っている")
                 )
@@ -548,6 +738,7 @@ Singing to the morning light</div>"""
                 request.url.encodedPath == "/busca.php" -> FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
                 request.url.encodedPath == "/search.php" && request.url.host == "www.ufret.jp" -> FakeSpotify.html(request, uFretResult(2, "川の道", "歩く人"))
                 request.url.encodedPath == "/search.php" -> FakeSpotify.html(request, ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/gone-1", "River Road", "The Walkers", 900)))
+                request.url.encodedPath == "/db/search.cgi" -> jTotalPage(request, jTotalResult("gone/001", "川の道"))
                 request.url.host == "music.163.com" -> FakeSpotify.html(request, "{}")
                 request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
                 else -> FakeSpotify.html(request, "", code = 404)
@@ -561,6 +752,7 @@ Singing to the morning light</div>"""
         )))
         assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
         assertTrue("https://www.ufret.jp/song.php?data=2" in fake.requestedUrls)
+        assertTrue("https://music.j-total.net/data/gone/001.html" in fake.requestedUrls)
     }
 
     @Test
@@ -1067,12 +1259,41 @@ Singing to the morning light</div>"""
             listOf("The River Song (Long Version) Taro Yamada", "川の歌 山田太郎", "川の歌 2009 山田太郎", "The River Song (Long Version) 山田太郎", "山田太郎"),
             uFretSearches
         )
-        // Apple not answering may hide the sheet: that's chords unavailable, not none.
+        // An unreadable names answer gives no extra names; the chord sites can still answer.
         fake.handler = uFret(
             emptyMap(),
             mapOf("https://music.163.com/api/search/get" to "{}", "https://itunes.apple.com/search" to "", "https://www.ultimate-guitar.com/search.php" to ugSearch())
         )
-        assertEquals(ChordFinder.Chords.Unavailable, chords(song, japanese))
+        assertEquals(ChordFinder.Chords.None, chords(song, japanese))
+    }
+
+    @Test
+    fun aLookupAsksNetEaseAndAppleForASongsOtherNamesOnceWhicheverStepsNeedThem() {
+        val song = MusicMetadata("The River Song", "Taro Yamada")
+        val namesAsked = { fake.requestedUrls.count { "music.163.com" in it } to fake.requestedUrls.count { "itunes.apple.com" in it } }
+        // U-FRET and J-Total both want them, and nowhere has a sheet.
+        fake.handler = uFret(emptyMap(), mapOf("https://music.163.com/api/search/get" to "{}", "https://www.ultimate-guitar.com/search.php" to ugSearch()))
+        assertEquals(ChordFinder.Chords.None, chords(song, japanese))
+        assertEquals(1 to 1, namesAsked())
+        // J-Total reads the names U-FRET was given, and finds the sheet by one of them.
+        fake.requestedUrls.clear()
+        jTotal(mapOf("川の歌" to jTotalResult("kawa/001", "川の歌")), mapOf("/data/kawa/001.html" to jTotalSheet))
+        val pages = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, netEase("川の歌" to listOf("山田太郎"))) else pages(request)
+        }
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(song, japanese) as ChordFinder.Chords.Found).sheet.url)
+        assertEquals(1 to 0, namesAsked())
+        // A song named in Japanese needs no other names at all.
+        fake.requestedUrls.clear()
+        fake.handler = uFret(emptyMap(), mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch()))
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+        assertEquals(0 to 0, namesAsked())
+        // Each lookup asks once for itself: nothing is kept from one to the next.
+        fake.handler = uFret(emptyMap(), mapOf("https://music.163.com/api/search/get" to "{}", "https://www.ultimate-guitar.com/search.php" to ugSearch()))
+        assertEquals(ChordFinder.Chords.None, chords(song, japanese))
+        assertEquals(ChordFinder.Chords.None, chords(song, japanese))
+        assertEquals(2 to 2, namesAsked())
     }
 
     @Test
@@ -1276,5 +1497,580 @@ Singing to the morning light</div>"""
             }
         }
         assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("ひとつ", "Aruku Hito"), japanese))
+    }
+
+    private val chordPro = """
+        {title:川の道}
+        {subtitle:歌:歩く人}
+        {capo:2}
+        [Am]川の道を歩いていく
+        [F]朝の光に歌っている
+    """.trimIndent()
+
+    private fun wikiHref(page: String) = "https://ja.chordwiki.org/wiki/" + java.net.URLEncoder.encode(page, "UTF-8")
+
+    private fun withWiki(pages: ChordWikiPages, cache: LookupCache? = null, pauseMs: Long = 0) =
+        ChordFinder(fake.client(), lookups, cache, pages, chordWikiPauseMs = pauseMs, debugLogging = true)
+
+    /** The other chord sites have nothing, so only ChordWiki can answer. */
+    private fun noOtherChordSites() {
+        fake.handler = { request ->
+            when (request.url.host) {
+                "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch())
+                "music.j-total.net" -> FakeSpotify.html(request, "")
+                "www.ufret.jp" -> FakeSpotify.html(request, "")
+                "music.163.com" -> FakeSpotify.html(request, """{"result":{}}""")
+                "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                else -> answer(request, emptyMap())
+            }
+        }
+    }
+
+    @Test
+    fun malformedOptionalNamesStillReachJapaneseSites() {
+        for ((host, bad) in listOf("music.163.com" to "<html>bad</html>", "music.163.com" to "{broken", "itunes.apple.com" to "<html>bad</html>")) {
+            noOtherChordSites()
+            val previous = fake.handler
+            fake.handler = { request ->
+                if (request.url.host == host) FakeSpotify.html(request, bad) else previous(request)
+            }
+            val urls = mutableListOf<String>()
+            val result = chords(river, japanese, withWiki(ChordWikiPages { url -> urls += url; "" }))
+            assertEquals(bad, 2, urls.size)
+            assertEquals(bad, ChordFinder.Chords.None, result)
+        }
+    }
+
+    @Test
+    fun releaseLookupDoesNotLogSongNamesOrQueries() {
+        noOtherChordSites()
+        logging()
+        val finder = ChordFinder(fake.client(), lookups, chordWiki = ChordWikiPages { "" }, chordWikiPauseMs = 0)
+        chords(river, japanese, finder)
+        assertTrue(logged().toString(), logged().isEmpty())
+    }
+
+    @Test
+    fun englishWordsNeverAskChordWiki() {
+        var asked = false
+        fake.handler = { request -> answer(request, mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch())) }
+        chords(river, english, withWiki(ChordWikiPages { asked = true; error("ChordWiki was asked") }))
+        assertFalse(asked)
+    }
+
+    @Test
+    fun chordWikiIsLookedUpAlongsideUFretAndGivesWayWhenUFretHasTheSheet() {
+        val started = CompletableDeferred<Unit>()
+        fake.handler = uFret(
+            mapOf("川の道 歩く人" to uFretResult(1, "川の道", "歩く人")),
+            mapOf("https://www.ufret.jp/song.php?data=1" to uFretSong("[Am]川の道を歩いていく", "[F]朝の光に歌っている"))
+        )
+        val pages = ChordWikiPages {
+            started.complete(Unit)
+            suspendCancellableCoroutine { }
+        }
+        val began = System.nanoTime()
+        val found = chords(kawa, japanese, withWiki(pages)) as ChordFinder.Chords.Found
+        // Cancelling the wiki lookup is what lets this return. Waiting out its own timeout would take 20s.
+        assertTrue(System.nanoTime() - began < 8_000_000_000L)
+        assertTrue(started.isCompleted)
+        assertEquals(ChordSite.U_FRET, found.sheet.site)
+        assertEquals("https://www.ufret.jp/song.php?data=1", found.sheet.url)
+    }
+
+    @Test
+    fun chordWikiSuppliesTheSheetWhenNoOtherSiteHasIt() {
+        noOtherChordSites()
+        val urls = mutableListOf<String>()
+        val found = chords(kawa, japanese, withWiki(ChordWikiPages { url -> urls += url; chordPro })) as ChordFinder.Chords.Found
+        assertEquals(ChordSite.CHORDWIKI, found.sheet.site)
+        assertEquals(2, found.sheet.capo)
+        assertEquals("https://ja.chordwiki.org/wiki/${java.net.URLEncoder.encode("川の道", "UTF-8")}", found.sheet.url)
+        assertEquals(listOf(SheetLine("川の道を歩いていく", listOf(Chord(0, "Am"))), SheetLine("朝の光に歌っている", listOf(Chord(0, "F")))), found.sheet.lines)
+        // The edit page, once, and not the search: the title was already the sheet's name.
+        assertEquals(listOf(chordWikiEditUrl("川の道")), urls)
+        assertFalse(fake.requestedUrls.any { "music.163.com" in it })
+    }
+
+    @Test
+    fun aLatinTitleIsReadOnChordWikiByTheJapaneseNameAndAMissThereIsSearched() {
+        noOtherChordSites()
+        val song = MusicMetadata("Kawa no Michi", "歩く人")
+        val urls = mutableListOf<String>()
+        val sites = fake.handler
+        // Named in Japanese by NetEase, so the edit page is that name and the search is never opened.
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else sites(request)
+        }
+        var edits = 0
+        val found = chords(
+            song,
+            japanese,
+            withWiki(ChordWikiPages { url ->
+                urls += url
+                when {
+                    "search.html" in url -> error("searched")
+                    else -> { edits++; chordPro }
+                }
+            })
+        ) as ChordFinder.Chords.Found
+        assertEquals(chordWikiViewUrl("川の道"), found.sheet.url)
+        assertTrue(urls.first().contains(java.net.URLEncoder.encode("川の道", "UTF-8")))
+        assertEquals(1, edits)
+
+        // The name search fails, and the edit page for the Latin title is empty: one search, then that sheet, not another song's.
+        urls.clear()
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, "", code = 500) else sites(request)
+        }
+        // The title we could ask for is the Latin one, so a Japanese hit of another name isn't this song.
+        // The first edit of that title is empty; the same address after the search is the sheet the singer owns.
+        val hits = "海の歌 - 歩く人\t${wikiHref("海の歌")}\nKawa no Michi - 他の人\t${wikiHref("Kawa no Michi (2)")}\nKawa no Michi - 歩く人\t${wikiHref("Kawa no Michi")}"
+        edits = 0
+        val searched = chords(
+            song,
+            japanese,
+            withWiki(
+                ChordWikiPages { url ->
+                    urls += url
+                    when {
+                        "search.html" in url -> hits
+                        else -> if (edits++ == 0) "" else chordPro
+                    }
+                },
+                pauseMs = 1
+            )
+        ) as ChordFinder.Chords.Found
+        assertEquals(chordWikiViewUrl("川の道"), searched.sheet.url)
+        assertTrue(urls.any { "search.html" in it })
+        assertTrue(urls.none { java.net.URLDecoder.decode(it, "UTF-8").contains("海の歌") })
+    }
+
+    @Test
+    fun aLatinTitleWhoseJapaneseSearchHitIsAnotherSongIsStillReadOnChordWiki() {
+        // The search that names "This Night" also names "BEYOND THE TIME (メビウスの宇宙を越えて)",
+        // and the one for "IT'S SO DELICIOUS" leads with a longer Japanese title. Neither page is
+        // the song. The name it was given still has the sheet, and that is the one to show.
+        noOtherChordSites()
+        val sites = fake.handler
+        val own = """
+            {title:This Night}
+            {subtitle:歌:TM NETWORK}
+            [G]川の道を歩いていく
+            [A]朝の光に歌っている
+        """.trimIndent()
+        val other = """
+            {title:別の歌}
+            [C]全然違う歌詞です
+            これも別の話です
+        """.trimIndent()
+        val beyond = "BEYOND THE TIME (メビウスの宇宙を越えて) -2025 Version-"
+        val medley = "决戦は金曜日~IT'S SO DELICIOUS~决戦は金曜日"
+        val urls = mutableListOf<String>()
+        fun pages(ownTitle: String) = ChordWikiPages { url ->
+            urls += url
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url -> ""
+                beyond in decoded || medley in decoded -> other
+                decoded.contains("t=$ownTitle") -> own.replace("This Night", ownTitle)
+                else -> error(decoded)
+            }
+        }
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") {
+                FakeSpotify.html(request, netEase("This Night" to listOf("TM NETWORK"), beyond to listOf("TM NETWORK")))
+            } else {
+                sites(request)
+            }
+        }
+        val found = chords(MusicMetadata("This Night", "TM NETWORK"), japanese, withWiki(pages("This Night"))) as ChordFinder.Chords.Found
+        assertEquals(chordWikiViewUrl("This Night"), found.sheet.url)
+        assertEquals(listOf(beyond, "This Night"), urls.map { java.net.URLDecoder.decode(it.substringAfter("t="), "UTF-8") })
+
+        urls.clear()
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") {
+                FakeSpotify.html(request, netEase(medley to listOf("DREAMS COME TRUE"), "IT'S SO DELICIOUS" to listOf("DREAMS COME TRUE")))
+            } else {
+                sites(request)
+            }
+        }
+        val delicious = "IT'S SO DELICIOUS"
+        val second = chords(MusicMetadata(delicious, "DREAMS COME TRUE"), japanese, withWiki(pages(delicious))) as ChordFinder.Chords.Found
+        assertEquals(chordWikiViewUrl(delicious), second.sheet.url)
+        assertEquals(listOf(medley, delicious), urls.map { java.net.URLDecoder.decode(it.substringAfter("t="), "UTF-8") })
+    }
+
+    @Test
+    fun chordWikiWaitsBetweenPagesAndLeavesABlankArtistOutOfTheSearch() {
+        noOtherChordSites()
+        val urls = mutableListOf<String>()
+        var edits = 0
+        val marks = mutableListOf<Long>()
+        val found = chords(
+            MusicMetadata("川の道", " "),
+            japanese,
+            withWiki(
+                ChordWikiPages { url ->
+                    marks += System.nanoTime()
+                    urls += url
+                    when {
+                        "search.html" in url -> "川の道\t${wikiHref("川の道")}"
+                        else -> if (edits++ == 0) "" else chordPro
+                    }
+                },
+                pauseMs = 400
+            )
+        ) as ChordFinder.Chords.Found
+        assertEquals(3, marks.size)
+        // The pause is between the pages. A slow test around it doesn't count as that pause.
+        assertTrue(marks[1] - marks[0] >= 350_000_000L)
+        assertTrue(marks[2] - marks[1] >= 350_000_000L)
+        val query = java.net.URLDecoder.decode(urls.first { "search.html" in it }.substringAfter("q="), "UTF-8")
+        assertEquals("川の道", query)
+        assertEquals(ChordSite.CHORDWIKI, found.sheet.site)
+    }
+
+    @Test
+    fun chordWikiLeavesAnEmptyArtistOutOfTheSearch() {
+        noOtherChordSites()
+        val urls = mutableListOf<String>()
+        var edits = 0
+        chords(
+            MusicMetadata("川の道", ""),
+            japanese,
+            withWiki(ChordWikiPages { url ->
+                urls += url
+                when {
+                    "search.html" in url -> "川の道\t${wikiHref("川の道")}"
+                    else -> if (edits++ == 0) "" else chordPro
+                }
+            })
+        )
+        val query = java.net.URLDecoder.decode(urls.first { "search.html" in it }.substringAfter("q="), "UTF-8")
+        assertEquals("川の道", query)
+    }
+
+    @Test
+    fun chordWikiGivesUpAPageThatIsntTheSongAndACheckItCantPass() {
+        noOtherChordSites()
+        val wrong = "{title:別の歌}\n[C]全然違う歌詞です\nこれも別の話です"
+        var edits = 0
+        val found = chords(
+            kawa,
+            japanese,
+            withWiki(ChordWikiPages { url ->
+                when {
+                    "search.html" in url -> "川の道 - 歩く人\t${wikiHref("川の道")}"
+                    else -> { edits++; if (edits == 1) wrong else chordPro }
+                }
+            })
+        ) as ChordFinder.Chords.Found
+        assertEquals(ChordSite.CHORDWIKI, found.sheet.site)
+        assertEquals(2, edits)
+
+        // A check a person has to click is given up. It is not answered, and it is not "no chords".
+        var checks = 0
+        assertEquals(
+            ChordFinder.Chords.WikiCheck,
+            chords(kawa, japanese, withWiki(ChordWikiPages {
+                checks++
+                throw ChordWikiStopped(ChordWikiCheck.INTERACTIVE)
+            }))
+        )
+        assertEquals(1, checks)
+        assertEquals(
+            ChordFinder.Chords.WikiTimedOut,
+            chords(kawa, japanese, withWiki(ChordWikiPages { throw ChordWikiStopped(ChordWikiCheck.AUTOMATIC) }))
+        )
+        // A page that comes back unreadable is a site that wouldn't answer too, not a crash.
+        assertEquals(ChordFinder.Chords.Unavailable, chords(kawa, japanese, withWiki(ChordWikiPages { throw JSONException("unreadable page") })))
+        // Words of a check aren't sung, and a page that never arrives isn't "no chords" when the sites did answer.
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese, withWiki(ChordWikiPages { "Just a moment. Nothing like the song." })))
+        val slow = withWiki(ChordWikiPages { delay(1_000); chordPro })
+        // Out of time with no check seen is not said to be the check.
+        assertEquals(ChordFinder.Chords.Unavailable, runBlocking { slow.chordsOf(kawa, japanese, timeoutMs = 40) })
+    }
+
+    @Test
+    fun aChordWikiSheetIsKeptSoThePageIsntOpenedAgain() {
+        noOtherChordSites()
+        val file = File.createTempFile("chords", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        var calls = 0
+        val first = chords(kawa, japanese, withWiki(ChordWikiPages { calls++; chordPro }, cache)) as ChordFinder.Chords.Found
+        assertEquals(ChordSite.CHORDWIKI, first.sheet.site)
+        val again = chords(kawa, japanese, withWiki(ChordWikiPages { error("again") }, cache))
+        assertEquals(first, again)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun aGameVersionTagStillReadsTheChordWikiPageNamedWithoutIt() {
+        // Apple names the recording "キラッ! 満開スマイル (GAME VERSION)". ChordWiki's page omits the tag.
+        // The edit page of the whole name is empty, and a search hit of the page without the tag is the sheet.
+        noOtherChordSites()
+        val full = "キラッ! 満開スマイル (GAME VERSION)"
+        // The page itself has no space and a fullwidth bang. Guessing an edit address from Apple's
+        // spelling doesn't open it. The search lists it, and that hit is this song once the tag is gone.
+        val page = "キラッ！満開スマイル"
+        val answer = chords(MusicMetadata(full, "島村卯月"), japanese, withWiki(ChordWikiPages { url ->
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url -> "$page (アニメ「アイドルマスター シンデレラ ...\t${wikiHref(page)}"
+                decoded.contains("t=$page") -> chordPro.replace("川の道", page)
+                else -> ""
+            }
+        }))
+        val found = answer as? ChordFinder.Chords.Found
+        assertEquals(chordWikiViewUrl(page), found?.sheet?.url)
+        assertEquals(2, found?.sheet?.lines?.sumOf { it.chords.size })
+    }
+
+    @Test
+    fun aCreditWithVoiceActorsStillFindsTheChordWikiPage() {
+        // Apple credits the game recording to every character and the actor behind each, and
+        // ChordWiki's search lists nothing for a query that carries all of that. The song and its lead
+        // singer are enough to find the page.
+        noOtherChordSites()
+        val full = "キラッ! 満開スマイル (GAME VERSION)"
+        val credit = "島村卯月 (CV: 大橋彩香), 小日向美穂 (CV: 津田美波) & 双葉杏 (CV: 五十嵐裕美)"
+        val page = "キラッ！満開スマイル"
+        val queries = mutableListOf<String>()
+        val answer = chords(MusicMetadata(full, credit), japanese, withWiki(ChordWikiPages { url ->
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url -> {
+                    queries += decoded.substringAfter("q=")
+                    if ("CV:" in decoded || "GAME" in decoded) "" else "$page (アニメ「アイドルマスター シンデレラ ...\t${wikiHref(page)}"
+                }
+                decoded.contains("t=$page") -> chordPro.replace("川の道", page)
+                else -> ""
+            }
+        }))
+        assertEquals(chordWikiViewUrl(page), (answer as? ChordFinder.Chords.Found)?.sheet?.url)
+        assertTrue(queries.toString(), queries.none { "CV:" in it })
+    }
+
+    @Test
+    fun aHalfwidthBangStillOpensTheFullwidthChordWikiPage() {
+        // Apple writes a halfwidth "!". ChordWiki's page uses the fullwidth one, so the edit page of
+        // the name Apple gives is empty. The search lists nothing for that halfwidth name either.
+        noOtherChordSites()
+        val half = "回レ!雪月花"
+        val full = "回レ！雪月花"
+        val answer = chords(MusicMetadata(half, "歌組雪月花"), japanese, withWiki(ChordWikiPages { url ->
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url -> ""
+                decoded.contains("t=$full") -> chordPro.replace("川の道", full)
+                else -> ""
+            }
+        }))
+        assertEquals(chordWikiViewUrl(full), (answer as? ChordFinder.Chords.Found)?.sheet?.url)
+    }
+
+    @Test
+    fun aFullwidthBangStillOpensTheHalfwidthChordWikiPage() {
+        // The name we're given uses the fullwidth bang. ChordWiki's page uses the halfwidth one.
+        // The search lists nothing, so the edit page of the halfwidth name is the sheet.
+        noOtherChordSites()
+        val full = "回レ！雪月花"
+        val half = "回レ!雪月花"
+        val answer = chords(MusicMetadata(full, "歌組雪月花"), japanese, withWiki(ChordWikiPages { url ->
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url -> ""
+                decoded.contains("t=$half") -> chordPro.replace("川の道", half)
+                else -> ""
+            }
+        }))
+        assertEquals(chordWikiViewUrl(half), (answer as? ChordFinder.Chords.Found)?.sheet?.url)
+    }
+
+    @Test
+    fun anUpperCaseTitleIsFoundWhenTheJapaneseAliasPageIsNotTheSong() {
+        // NetEase's Japanese name is a different song. The edit page of THIS NIGHT is empty because
+        // ChordWiki's page is "This Night". The search for the alias does not list it. The search for
+        // the name the song was given does.
+        noOtherChordSites()
+        val beyond = "BEYOND THE TIME (メビウスの宇宙を越えて) -2025 Version-"
+        val sites = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") {
+                FakeSpotify.html(request, netEase(beyond to listOf("TM NETWORK")))
+            } else {
+                sites(request)
+            }
+        }
+        val answer = chords(MusicMetadata("THIS NIGHT", "TM NETWORK"), japanese, withWiki(ChordWikiPages { url ->
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url && "THIS NIGHT" in decoded -> "This Night - TM NETWORK\t${wikiHref("This Night")}"
+                "search.html" in url -> ""
+                decoded.contains("t=This Night") -> chordPro.replace("川の道", "This Night")
+                else -> ""
+            }
+        }))
+        assertEquals(chordWikiViewUrl("This Night"), (answer as? ChordFinder.Chords.Found)?.sheet?.url)
+    }
+
+    /** What the lookup told logcat. The phone check reads it, so each line is pinned. */
+    private fun logged(): List<String> = ShadowLog.getLogsForTag(ChordFinder.CHORD_LOG).map { it.msg }
+
+    private fun logging(level: Int = Log.INFO) {
+        ShadowLog.clear()
+        ShadowLog.setLoggable(ChordFinder.CHORD_LOG, level)
+    }
+
+    @Test
+    fun aChordWikiLookupSaysWhatItDidAndWhichChordsItLeftOffWithoutAWordOfTheLyrics() {
+        noOtherChordSites()
+        logging()
+        // A third line that isn't sung: its D has no letter to land on.
+        val page = chordPro + "\n[D]zzzzzzzzzz"
+        chords(kawa, japanese, withWiki(ChordWikiPages { page }))
+        val said = logged()
+        assertEquals("lookup title=川の道 artist=歩く人 lines=2", said.first())
+        assertEquals(listOf("ufret none", "ug none", "jtotal none"), said.filter { it.startsWith("ufret") || it.startsWith("ug") || it.startsWith("jtotal") })
+        assertEquals(
+            listOf(
+                "wiki open title=川の道 editorLines=3 editorChords=3 pageTitle=川の道",
+                "wiki lines=#2:0/10:0/1 letters=18/18 runs=17/18 placed=true drawn=2/3 dropped=D"
+            ),
+            said.filter { it.startsWith("wiki") }
+        )
+        assertEquals(said.toString(), 6, said.size)
+        assertTrue(said.toString(), said.none { "歩いて" in it || "朝の光" in it })
+    }
+
+    @Test
+    fun aCachedSheetIsLoggedAsTheCacheAndAFoundOneByHowManyChordsItHas() {
+        noOtherChordSites()
+        val file = File.createTempFile("chords", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        chords(kawa, japanese, withWiki(ChordWikiPages { chordPro }, cache))
+        logging()
+        chords(kawa, japanese, withWiki(ChordWikiPages { error("The page was opened again") }, cache))
+        assertEquals(listOf("lookup title=川の道 artist=歩く人 lines=2", "cache CHORDWIKI"), logged())
+
+        fake.handler = uFret(
+            mapOf("川の道 歩く人" to uFretResult(1, "川の道", "歩く人")),
+            mapOf("https://www.ufret.jp/song.php?data=1" to uFretSong("[Am]川の道を歩いていく", "[F]朝の光に歌っている"))
+        )
+        logging()
+        chords(kawa, japanese, withWiki(ChordWikiPages { suspendCancellableCoroutine { } }))
+        assertEquals(listOf("lookup title=川の道 artist=歩く人 lines=2", "ufret sheet 2"), logged())
+    }
+
+    @Test
+    fun aSiteThatWontAnswerIsLoggedAsAnErrorAndAWikiThatWontAsAnErrorWithWhy() {
+        fake.handler = { request ->
+            when (request.url.host) {
+                "www.ufret.jp" -> FakeSpotify.html(request, "", code = 500)
+                "music.163.com" -> FakeSpotify.html(request, "{}")
+                else -> FakeSpotify.html(request, "")
+            }
+        }
+        logging()
+        chords(kawa, japanese, withWiki(ChordWikiPages { throw IOException("ChordWiki asked for a check a person has to click") }))
+        val said = logged()
+        assertTrue(said.toString(), "ufret error" in said)
+        assertEquals(listOf("wiki error: ChordWiki asked for a check a person has to click"), said.filter { it.startsWith("wiki") })
+    }
+
+    @Test
+    fun aWikiThatIsTooSlowIsLoggedAsATimeout() {
+        noOtherChordSites()
+        logging()
+        val slow = withWiki(ChordWikiPages { delay(1_000); chordPro })
+        runBlocking { slow.chordsOf(kawa, japanese, timeoutMs = 400) }
+        assertEquals(listOf("wiki timeout"), logged().filter { it.startsWith("wiki") })
+    }
+
+    @Test
+    fun aSearchIsLoggedWithWhatItListedAndWhichPageItChose() {
+        noOtherChordSites()
+        logging()
+        var edits = 0
+        chords(kawa, japanese, withWiki(ChordWikiPages { url ->
+            when {
+                "search.html" in url -> "海の歌 - 他の人\t${wikiHref("海の歌")}\n川の道 - 歩く人\t${wikiHref("川の道")}"
+                else -> if (edits++ == 0) "" else chordPro
+            }
+        }))
+        assertEquals(
+            listOf(
+                "wiki open title=川の道 editorLines=0 editorChords=0 pageTitle=",
+                "wiki search q=川の道 歩く人 hits=海の歌 / 他の人 | 川の道 / 歩く人 best=川の道",
+                "wiki open title=川の道 editorLines=2 editorChords=2 pageTitle=川の道",
+                "wiki lines= letters=18/18 runs=17/18 placed=true drawn=2/2 dropped="
+            ),
+            logged().filter { it.startsWith("wiki") }
+        )
+    }
+
+    @Test
+    fun aSearchThatListsNothingIsLoggedAsNoPageAndTheLookupAsNone() {
+        noOtherChordSites()
+        logging()
+        chords(kawa, japanese, withWiki(ChordWikiPages { "Just a moment. Nothing like the song." }))
+        assertEquals(
+            listOf(
+                // The check's own words are one line with no chords, and none of its letters are the song's.
+                "wiki open title=川の道 editorLines=1 editorChords=0 pageTitle=",
+                "wiki lines= letters=0/18 runs=0/18 placed=false drawn=0/0 dropped=",
+                "wiki search q=川の道 歩く人 hits= best=none",
+                "wiki none"
+            ),
+            logged().filter { it.startsWith("wiki") }
+        )
+    }
+
+    @Test
+    fun nothingIsLoggedWhenLogcatIsNotListeningForIt() {
+        noOtherChordSites()
+        logging(Log.WARN)
+        chords(kawa, japanese, withWiki(ChordWikiPages { chordPro + "\n[D]zzzzzzzzzz" }))
+        assertEquals(emptyList<String>(), logged())
+    }
+
+    /** The pages the lookup opened for [title], by the name each asked for. Every one is empty, so they are all tried. */
+    private fun editsTried(title: String): List<String> {
+        noOtherChordSites()
+        val urls = mutableListOf<String>()
+        chords(MusicMetadata(title, "歩く人"), japanese, withWiki(ChordWikiPages { url -> urls += url; "" }))
+        return urls.filter { "search.html" !in it }.map { java.net.URLDecoder.decode(it.substringAfter("t="), "UTF-8") }
+    }
+
+    @Test
+    fun anAsciiBangAndTildeAreWrittenAtFullWidthButASpaceIsNot() {
+        // 0x21 and 0x7E are the first and last of the punctuation, and a space is the one before them.
+        val tried = editsTried("川!~ 道")
+        assertTrue(tried.toString(), "川！～ 道" in tried)
+    }
+
+    @Test
+    fun theCharacterAfterTheTildeIsNotPunctuationAndStaysAsItIs() {
+        // DEL is the one past the last of the punctuation. Its fullwidth twin would be a bracket.
+        val tried = editsTried("川~\u007F道")
+        assertTrue(tried.toString(), "川～\u007F道" in tried)
+    }
+
+    @Test
+    fun fullWidthPunctuationIsWrittenBackAtEachEndOfEachRangeAndLettersAndDigitsAreNot() {
+        // ！ ／, ： ＠, ［ ｀ and ｛ ～ are the first and last of the four ranges. Beside them are letters and digits, ｟ and a gap that aren't punctuation.
+        val tried = editsTried("川ＡＺａｚ０９｟\uFF00！／：＠［｀｛～道")
+        assertTrue(tried.toString(), "川ＡＺａｚ０９｟\uFF00!/:@[`{~道" in tried)
+    }
+
+    @Test
+    fun aTitleWithNothingButBlanksIsOnlyOpenedAsItIs() {
+        noOtherChordSites()
+        val urls = mutableListOf<String>()
+        chords(MusicMetadata("   ", "歩く人"), japanese, withWiki(ChordWikiPages { url -> urls += url; "" }))
+        // Trimmed, every other way of writing it is empty: no page to open and no search for the singer alone.
+        assertEquals(urls.toString(), 1, urls.size)
     }
 }

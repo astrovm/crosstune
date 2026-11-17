@@ -36,7 +36,7 @@ class WordCardTest {
             }
         }
         // The word, its kana and its romaji don't fit side by side: each still shows, on one line.
-        listOf("あやまりたくない", "ayamaritakunai").forEach { text ->
+        listOf("謝りたくない", "あやまりたくない", "ayamaritakunai").forEach { text ->
             val bounds = composeRule.onNodeWithText(text).getBoundsInRoot()
             val height = bounds.bottom - bounds.top
             assertTrue("$text: $bounds", bounds.right > bounds.left && height > 0.dp && height < 36.dp)

@@ -1,6 +1,8 @@
 package com.astrovm.crosstune
 
+import android.app.SearchManager
 import android.content.Context
+import android.content.Intent
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
@@ -83,10 +85,10 @@ internal enum class MusicService(
 
     /**
      * Whether its app plays a song asked for by name while Crosstune stays open. Spotify ignores
-     * apps it doesn't know, and Amazon Music's free plan plays the artist's radio instead, so a song
-     * is searched for there.
+     * apps it doesn't know, Amazon Music's free plan plays the artist's radio instead, and Bandcamp's
+     * comes to the front on a search and plays nothing, so a song is searched for there.
      */
-    val playsAskedSongs: Boolean get() = this != SPOTIFY && this != AMAZON_MUSIC
+    val playsAskedSongs: Boolean get() = this != SPOTIFY && this != AMAZON_MUSIC && this != BANDCAMP
 
     /**
      * Whether its app takes no list of songs, so a playlist plays there one song after another, see
@@ -133,9 +135,22 @@ internal enum class MusicService(
     }
 
     /**
+     * What [link] asks of this service's app by search, for an app that opens no page of its website's: Bandcamp's
+     * takes only its own search, so a song's page is looked for by the name [asking], or a search link by the
+     * words it holds. Null when the app opens [link] as it is, or when there's nothing to ask for.
+     */
+    fun appSearch(link: String, asking: String?): String? {
+        if (this != BANDCAMP) return null
+        val url = link.toHttpUrlOrNull() ?: return null
+        val search = url.pathSegments == listOf("search")
+        return (if (search) url.queryParameter("q") else asking)?.takeIf { it.isNotBlank() }
+    }
+
+    /**
      * The same page as [link], for an app that doesn't open its own website's: Qobuz's opens only
-     * open.qobuz.com, where a search is a path, never the web player's play.qobuz.com, and Deezer's
-     * and TIDAL's open no search on the web, only their own links to one. Null when the app opens [link].
+     * open.qobuz.com, never the web player's play.qobuz.com, and there a search can't say what for, so it
+     * opens empty. Deezer's and TIDAL's open no search on the web, only their own links to one. Null when
+     * the app opens [link].
      */
     private fun appOnlyLink(link: String): String? {
         val url = link.toHttpUrlOrNull() ?: return null
@@ -148,10 +163,23 @@ internal enum class MusicService(
     }
 
     companion object {
+        /** Where Bandcamp's app takes a search; it opens no page of its website's, and a song it doesn't own never loads by its id. */
+        const val BANDCAMP_SEARCH_ACTIVITY = "com.bandcamp.android.root.RootActivity"
+
         /** YouTube's app on Android TV and Google TV. */
         const val YOUTUBE_TV = "com.google.android.youtube.tv"
 
         fun fromName(name: String?): MusicService? = entries.firstOrNull { it.name == name }
+
+        /**
+         * The search [app] is asked for [link], and the intent that asks it, if [app] is one that takes only a search; see
+         * [appSearch]. Bandcamp's drops the first one it's sent while it starts, so it is sent twice, see [tryStartActivityTwice].
+         */
+        fun searchIn(app: String, link: String, asking: String?): Intent? {
+            val service = ofOwnApp(app)?.takeIf { it == BANDCAMP } ?: return null
+            val query = service.appSearch(link, asking) ?: return null
+            return Intent(Intent.ACTION_SEARCH).setClassName(app, BANDCAMP_SEARCH_ACTIVITY).putExtra(SearchManager.QUERY, query)
+        }
 
         /** The service whose own app, not a build patched from it, has [packageName]. */
         fun ofOwnApp(packageName: String?): MusicService? = entries.firstOrNull { it.packageName == packageName }
@@ -165,8 +193,25 @@ internal enum class MusicService(
         /** Each app a [link] may open in when [app] is chosen, with the link it takes there; see [appsFor]. */
         fun appLinksIn(app: String, link: String): List<Pair<String, String>> = ofOwnApp(app)?.appLinks(link) ?: listOf(app to link)
 
-        /** The service whose app, or a build patched from it, has [packageName]. */
-        fun ofPackage(packageName: String?): MusicService? = entries.firstOrNull { packageName in it.packageNames }
+        /**
+         * The service whose app, or a build patched from it, has [packageName]: one named in [packageNames], or one
+         * named as patchers name them, a prefix of its own and then the app's package without its "com.google", as
+         * every fork of YouTube and YouTube Music by ReVanced, Morphe and the like does, so a new one is seen as it is.
+         */
+        fun ofPackage(packageName: String?): MusicService? =
+            entries.firstOrNull { packageName in it.packageNames } ?: packageName?.let(::patchedBuildOf)
+
+        private fun patchedBuildOf(packageName: String): MusicService? = when {
+            packageName.endsWith(PATCHED_YOUTUBE_MUSIC) -> YOUTUBE_MUSIC
+            packageName.endsWith(PATCHED_YOUTUBE) -> YOUTUBE
+            else -> null
+        }
+
+        /** How a patched YouTube Music's package ends, whatever the patcher's own name before it. */
+        private const val PATCHED_YOUTUBE_MUSIC = ".android.apps.youtube.music"
+
+        /** How a patched YouTube's package ends. */
+        private const val PATCHED_YOUTUBE = ".android.youtube"
     }
 }
 
@@ -179,9 +224,7 @@ internal enum class MusicService(
 internal fun sameApp(one: String?, other: String?, installed: (String) -> Boolean): Boolean =
     one == other || (one != null && !installed(one) && MusicService.ofOwnApp(one)?.appPackages?.contains(other) == true)
 
-private fun qobuzAppLink(url: HttpUrl): String? = url.takeIf { it.host == "play.qobuz.com" }?.newBuilder()?.host("open.qobuz.com")?.query(null)?.apply {
-    if (url.pathSegments == listOf("search")) url.queryParameter("q")?.let(::addPathSegment)
-}?.build()?.toString()
+private fun qobuzAppLink(url: HttpUrl): String? = url.takeIf { it.host == "play.qobuz.com" }?.newBuilder()?.host("open.qobuz.com")?.query(null)?.build()?.toString()
 
 private fun deezerAppLink(url: HttpUrl): String? = url.pathSegments.takeIf { url.host == "www.deezer.com" && it.size == 2 && it[0] == "search" }
     ?.let { "deezer-query://www.deezer.com/search?" + query("query", it[1]) }
@@ -197,8 +240,17 @@ private fun querySearchUrl(baseUrl: String, parameter: String): (String) -> Stri
 }
 
 private fun pathSearchUrl(baseUrl: String): (String) -> String = { query ->
-    baseUrl.toHttpUrl().newBuilder().addPathSegment(query).build().toString()
+    baseUrl.toHttpUrl().newBuilder().addPathSegment(inOnePathSegment(query)).build().toString()
 }
+
+/**
+ * [query] for a search whose address is a path, e.g. Qobuz's, Deezer's and Amazon Music's: a "/" can't be in it, as they read
+ * even its %2F as a separator and answer 404 (measured, with "AC/DC"), so it's a space, which finds the same songs. Every other
+ * character was measured to go through (?, #, %, \, ;, &, +, :, quotes, accents, kana).
+ */
+internal fun inOnePathSegment(query: String): String = query.replace(slashes, " ").trim()
+
+private val slashes = phoneRegex("""$SPACES_START\s*+/\s*+""")
 
 /** Without a tag that names no other recording, which some services' names leave out, and then find nothing. */
 internal fun searchQuery(metadata: MusicMetadata): String =

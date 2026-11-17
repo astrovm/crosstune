@@ -1,9 +1,17 @@
 {
   "extName": { "message": "Crosstune" },
-  "extDescription": { "message": "Opens music links in the service you prefer." },
-  "actionTitle": { "message": "Crosstune settings" },
+  "extDescription": { "message": "Opens music links in the service you prefer, and shows the lyrics of what's playing." },
+  "actionTitle": { "message": "Crosstune lyrics" },
   "optionsEnabled": { "message": "Open music links in the service below" },
   "optionsService": { "message": "Open in" },
-  "optionsAccess": { "message": "Crosstune needs access to the music sites to open links for you." },
-  "optionsAllow": { "message": "Allow" }
+  "optionsAccess": { "message": "Crosstune needs access to the music sites to open links and show lyrics." },
+  "optionsAllow": { "message": "Allow" },
+  "lyricsNoSong": { "message": "Play a song on a music site" },
+  "lyricsLoading": { "message": "Looking for the lyrics" },
+  "lyricsNone": { "message": "No lyrics for this song" },
+  "lyricsInstrumental": { "message": "Instrumental" },
+  "lyricsOffline": { "message": "You're offline" },
+  "lyricsUnavailable": { "message": "Couldn't reach the lyrics sites" },
+  "lyricsRetry": { "message": "Retry" },
+  "lyricsSettings": { "message": "Settings" }
 }

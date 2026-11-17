@@ -67,16 +67,20 @@ internal data class UiState(
     val isLoadingLyrics: Boolean = false,
     /** Set when the service wouldn't answer, which isn't the same as the song having no words. */
     val lyricsFailed: Boolean = false,
+    /** Set when the song has no words to find, as an instrumental has none. */
+    val lyricsInstrumental: Boolean = false,
     /** The words with when each is sung, so they can follow the song; empty when they aren't timed. */
     val lyricLines: List<LyricLine> = emptyList(),
     /** Whether the user put any of [lyricLines] in time by hand. */
     val lyricsSynced: Boolean = false,
+    /** Whether [lyricLines] are timed by the singing heard, the words found having no timing: lines not heard yet aren't ([LyricLine.heard]). */
+    val lyricsTimedByEar: Boolean = false,
     /** How sending a report on the words is going, while one is being written. */
     val report: ReportStatus? = null,
     /** Whether Crosstune reports problems it finds with songs by itself; null while the user hasn't said. */
     val autoReports: Boolean? = null,
-    /** Whether the words shown have a problem Crosstune offers to report by itself, from now on. */
-    val reportOffer: Boolean = false,
+    /** The problems with the words shown that Crosstune offers to report by itself, from now on; empty when it's not asking. */
+    val reportOfferFor: Set<SongProblem> = emptySet(),
     /** The speech model that lines the words up to the singing, while it's missing and offered to be fetched by hand. */
     val singingModel: ModelOffer? = null,
     /** Whether [lyricLines] are timed for a recording not as long as the one playing, so likely off, and not yet put right. */
@@ -135,6 +139,8 @@ internal data class UiState(
     val sleep: Sleep? = null,
     /** The kinds of practice card, each with what it shows on either side. */
     val cardTypes: List<CardType> = DEFAULT_CARD_TYPES,
+    /** Whether due cards are asked back once a day, and when. */
+    val reminder: Reminder = Reminder(),
     /** The ChatGPT account whose plan the AI features run on. */
     val chatGpt: ChatGptState = ChatGptState(),
     /** The line the music app keeps going back to, while it does. */
@@ -172,10 +178,14 @@ internal data class UiState(
     val update: Update? = null,
     /** The song a music app on the phone plays, or has paused, while Crosstune is in sight: a bar to open its player from. */
     val playingNow: NowPlaying? = null,
+    /** What an app plays while it names no song, e.g. a radio station, while Crosstune is in sight; see [PlayingUnnamed]. */
+    val playingUnnamed: PlayingUnnamed? = null,
     val history: List<HistoryEntry> = emptyList(),
     /** False until there's an app songs play in: the only music app, or the first one picked on a song. */
     val hasDefault: Boolean = true,
     val installed: Set<MusicService> = emptySet(),
+    /** Every package a music app is installed under, as many as a service has; see [LinkState.apps]. */
+    val musicApps: List<String> = emptyList(),
     /** Each source's hosts Android doesn't let Crosstune open yet, or null before Android 12, which can't tell. */
     val unapprovedHosts: Map<MusicService, List<String>>? = null,
     /** Crosstune's own links are set to open in the browser, so none reach it; see [LinkState.ownLinksOff]. */
@@ -320,6 +330,9 @@ internal data class UiState(
     val resultDestination: Destination
         get() = selectedDestination ?: link?.let(::ruleFor) ?: defaultDestination
 
+    /** Whether Crosstune is asking to report problems by itself. */
+    val reportOffer: Boolean get() = reportOfferFor.isNotEmpty()
+
     /** Where links like [link] go unless changed for one result: their frontend's rule, then their service's. */
     fun ruleFor(link: MusicLink): Destination? = link.frontend?.let { frontendRules[it] } ?: rules[link.service]
 }
@@ -390,9 +403,16 @@ internal data class ChatGptState(
 internal data class NowPlaying(val song: MusicMetadata, val following: Following? = null)
 
 /**
+ * An app that plays with no song named, as [playing] has it, and the song [heard] in it once one is,
+ * by its sound or the microphone. The app's own name for a song always comes before it. [following]
+ * it in the app, for its buttons and where it is, as for a song.
+ */
+internal data class PlayingUnnamed(val playing: Unnamed, val heard: Heard.Song? = null, val following: Following? = null)
+
+/**
  * The player's [song], asked of the music app [app], by package, with its [link] there for YouTube
  * Music; [following] it once the app plays it, and [played] since. Its [lines], once found, show
- * the one being sung.
+ * the one being sung, [linesByEar] when they're timed by the singing heard, not by a service.
  */
 internal data class PlayerState(
     val song: MusicMetadata,
@@ -401,9 +421,18 @@ internal data class PlayerState(
     val following: Following? = null,
     val played: Boolean = false,
     val lines: List<LyricLine> = emptyList(),
+    val linesByEar: Boolean = false,
     /** What the app was playing when asked, so only a song it goes on to after is taken for the one asked. */
-    val over: MusicMetadata? = null
-)
+    val over: MusicMetadata? = null,
+    /**
+     * It plays what the app names no song for, e.g. a radio station, as the app names it: its buttons
+     * and where it is, but nothing that takes it for a song, no card, words, link or search.
+     */
+    val songless: Boolean = false
+) {
+    /** Who it's by, as shown under its name: for what names no song, the app that plays it. */
+    val byLine: String get() = if (songless) following?.app.orEmpty() else song.artist
+}
 
 internal data class Practice(
     val queue: List<SavedLine> = emptyList(),
@@ -414,19 +443,46 @@ internal data class Practice(
     val missed: Int = 0,
     val turned: Boolean = false,
     val sound: LineSound = LineSound.NONE,
+    /** The YouTube video the card's line plays from, in the small player on it, when the music app can't move to the line; null when the app plays it. */
+    val video: String? = null,
     /** The last card's line shown, for the song practice left off in. */
     val lastSong: SavedLine? = null,
     /** What the music app played before, to go back to once done. */
     val before: Before? = null
 ) {
     val line: SavedLine? get() = queue.firstOrNull()
+
+    /**
+     * This session's lines as [saved] keeps them now: only how they read. A refresh while the session
+     * runs then shows the new reading. The order and each card's schedule stay as the session has them.
+     */
+    fun withReadings(saved: List<SavedLine>): Practice {
+        val fresh = { line: SavedLine ->
+            val stored = saved.find { it.isSame(line) }
+            if (stored == null) line else line.withReadingFrom(stored)
+        }
+        return copy(queue = queue.map(fresh), lastSong = lastSong?.let(fresh))
+    }
 }
 
-/** How a card's line sounds: not at all, on its way in the music app, playing, or ready to play (again). */
+/** [stored]'s reading on this card, which keeps its place in the session and its schedule. */
+private fun SavedLine.withReadingFrom(stored: SavedLine) = copy(
+    reading = stored.reading,
+    romanized = stored.romanized,
+    ruby = stored.ruby,
+    typed = stored.typed,
+    readWith = stored.readWith,
+    readByHand = stored.readByHand,
+)
+
+/** How a card's line sounds: not at all, on its way in the music app or the small player, playing, or ready to play (again). */
 internal enum class LineSound { NONE, LOADING, PLAYING, PLAYED }
 
-/** A [song] the music app [app] played, at [positionMs], before practice took it over. */
-internal data class Before(val song: MusicMetadata, val positionMs: Long, val app: String?)
+/**
+ * A [song] the music app [app] played, at [positionMs], before practice took it over; [songless] when it named
+ * no song, e.g. a radio station, as [Unnamed.played], which goes on playing with no place in it to go back to.
+ */
+internal data class Before(val song: MusicMetadata, val positionMs: Long, val app: String?, val songless: Boolean = false)
 
 /** A question about a line, and ChatGPT's [answer] so far, until [done]; or why there's none. */
 internal data class LineQuestion(val question: String, val answer: String = "", val done: Boolean = false, val failed: Boolean = false, val limitReached: Boolean = false) {
@@ -441,12 +497,21 @@ internal data class LineExplanation(val index: Int, val text: String = "", val d
     val mayAskAgain get() = failed || limitReached
 }
 
-/** A song's chords, shown over its words while [on]; [tried] once looked up, whether or not any were found. */
+/** ChordWiki's check ran out of time, or asked a person to do it. The app does not do that check. */
+internal enum class ChordFailure { WIKI_TIMEOUT, WIKI_CHECK }
+
+/**
+ * A song's chords, shown over its words while [on]; [tried] once looked up, whether or not any were
+ * found. [failed] when a site wouldn't answer, so there may still be some: not the same as none.
+ * [failure] says when that was ChordWiki's check.
+ */
 internal data class ChordsState(
     val on: Boolean = false,
     val loading: Boolean = false,
     val tried: Boolean = false,
-    val sheet: ChordSheet? = null
+    val sheet: ChordSheet? = null,
+    val failed: Boolean = false,
+    val failure: ChordFailure? = null
 ) {
     /** For another song's words, or the same words written otherwise: switched on as it was, nothing looked up yet. */
     fun fresh() = ChordsState(on = on)
@@ -479,6 +544,11 @@ internal data class Learning(
     val script: Script? = null,
     /** How each line reads, once worked out. */
     val lines: List<LineReading> = emptyList(),
+    /**
+     * Whether [lines] lack what couldn't be had as they were worked out: UtaTen's or ChatGPT's answer, or UniDic, not on
+     * the phone yet. Kept so, they're read again when the words show again.
+     */
+    val readingsUnfinished: Boolean = false,
     /** How the song's title and its artist read, in that order, once worked out with its lines. */
     val names: List<LineReading> = emptyList(),
     /** Each line translated, or null where it needs none, once done. */
@@ -535,6 +605,12 @@ internal fun Learning.insteadOf(index: Int): String? {
     return null
 }
 
+/**
+ * Whether the words are read, for what's switched on: their readings, their romaji, or the words shown in kana
+ * or Latin letters, which are all made from how they're read.
+ */
+internal val Learning.reads: Boolean get() = readings || romanized || wordsAs != WordsAs.WRITTEN
+
 /** How the words show for the script they're in: only Japanese has kana, so the others show as written. */
 internal val Learning.showsAs: WordsAs get() = if (wordsAs == WordsAs.KANA && script != Script.JAPANESE) WordsAs.WRITTEN else wordsAs
 
@@ -553,8 +629,8 @@ internal data class NotFoundOffer(val song: MusicMetadata, val destination: Dest
 /** The app's look: as the phone is set, or always light or dark. */
 internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
-/** What's fixed in one tap after setup, from where it's needed: the links, following music apps, or floating lyrics. */
-internal enum class OneTapFix { LINKS, FOLLOW, FLOAT }
+/** What's fixed in one tap after setup, from where it's needed: the links, following music apps, floating lyrics, or exact reminders. */
+internal enum class OneTapFix { LINKS, FOLLOW, FLOAT, EXACT }
 
 /** A report on the words: on its way, there, or not sent. */
 internal enum class ReportStatus { SENDING, SENT, FAILED }

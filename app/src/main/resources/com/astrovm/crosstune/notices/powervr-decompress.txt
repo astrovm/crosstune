@@ -1,0 +1,8 @@
+/******************************************************************************
+ Taken from:
+ @File         PVRTDecompress.cpp
+ @Title        PVRTDecompress
+ @Copyright    Copyright (C)  Imagination Technologies Limited.
+ @Platform     ANSI compatible
+ @Description  PVRTC Texture Decompression.
+******************************************************************************/

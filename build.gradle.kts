@@ -8,7 +8,7 @@ buildscript {
             classpath("org.bouncycastle:bcutil-jdk18on:1.86")
             classpath("org.bitbucket.b_c:jose4j:0.9.7")
             classpath("org.jdom:jdom2:2.0.6.1")
-            classpath("org.apache.commons:commons-lang3:3.21.0")
+            classpath("org.apache.commons:commons-lang3:3.22.0")
             classpath("org.apache.httpcomponents:httpclient:4.5.14")
             classpath("com.google.guava:guava:33.7.2-jre")
         }
@@ -22,11 +22,19 @@ subprojects {
             if (requested.group == "com.google.guava" && requested.name == "guava") useVersion("33.7.2-jre")
         }
     }
+    // A warning in a CI log is a bug (Issue #812). The compilers stop on one, so a new one fails the
+    // build where it's made instead of waiting in the log for someone to read it.
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>>().configureEach {
+        compilerOptions.allWarningsAsErrors.set(true)
+    }
+    tasks.withType<JavaCompile>().configureEach {
+        options.compilerArgs.add("-Werror")
+    }
 }
 
 plugins {
-    id("com.android.application") version "9.5.0" apply false
-    id("com.android.test") version "9.5.0" apply false
+    id("com.android.application") version "9.5.1" apply false
+    id("com.android.test") version "9.5.1" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.21" apply false
     id("org.jetbrains.kotlinx.kover") version "0.9.11" apply false
     id("androidx.baselineprofile") version "1.5.0" apply false

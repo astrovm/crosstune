@@ -371,6 +371,10 @@ class LiveChordSweepTest {
                         lyricsStatus = "instrumental"
                         emptyList()
                     }
+                    LyricsFinder.Lyrics.LikelyInstrumental -> {
+                        lyricsStatus = "likely instrumental"
+                        emptyList()
+                    }
                     LyricsFinder.Lyrics.None -> {
                         lyricsStatus = "none"
                         emptyList()
@@ -401,6 +405,9 @@ class LiveChordSweepTest {
                         }
                         ChordFinder.Chords.None -> result = "None"
                         ChordFinder.Chords.Unavailable -> result = "Unavailable"
+                        // The check is still a site that didn't answer. The sweep keeps both kinds.
+                        ChordFinder.Chords.WikiTimedOut -> result = "WikiTimedOut"
+                        ChordFinder.Chords.WikiCheck -> result = "WikiCheck"
                     }
                 }
             } catch (e: Exception) {

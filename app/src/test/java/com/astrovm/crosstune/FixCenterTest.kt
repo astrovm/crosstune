@@ -44,6 +44,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 import org.robolectric.shadows.ShadowActivity
+import org.robolectric.shadows.ShadowAlarmManager
 import org.robolectric.shadows.ShadowSettings
 import java.io.File
 import java.time.Duration
@@ -53,7 +54,11 @@ import java.time.Duration
 @Config(qualifiers = "w411dp-h2000dp")
 class FixCenterTest {
 
-    @get:Rule
+    /** Outside the Compose rule, so a wait that never ends still says what it waited on (Issue #852). */
+    @get:Rule(order = 0)
+    val hangDump = HangDump()
+
+    @get:Rule(order = 1)
     val composeRule = createEmptyComposeRule()
 
     private val app: Application = ApplicationProvider.getApplicationContext()
@@ -104,7 +109,7 @@ class FixCenterTest {
     @After
     fun tearDown() {
         runCatching { guide?.pause()?.stop()?.destroy() }
-        runCatching { controller?.pause()?.stop()?.destroy() }
+        controller?.destroyAndSettle()
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
@@ -114,6 +119,7 @@ class FixCenterTest {
         MainActivity.checksForUpdates = ::looksForUpdates
         GuideActivity.host = null
         ShadowSettings.setCanDrawOverlays(false)
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -185,6 +191,7 @@ class FixCenterTest {
             "all" in command -> allowed = true
             "allow_listener" in command -> playback.access = true
             Manifest.permission.RECORD_AUDIO in command -> allowMicrophone()
+            OneTapSetup.EXACT_ALARM_OP in command -> ShadowAlarmManager.setCanScheduleExactAlarms(true)
         }
         true
     }
@@ -478,7 +485,7 @@ class FixCenterTest {
         click(string(R.string.fix_try_link))
         val test = nextStarted()!!
         assertEquals(Intent.ACTION_VIEW, test.action)
-        assertEquals("https://open.spotify.com/#$TEST_LINK", test.dataString)
+        assertEquals("https://open.spotify.com/track/$TEST_LINK#$TEST_LINK", test.dataString)
 
         // It reached Crosstune, which doesn't look it up: the links work, so Spotify's app doesn't take them.
         controller!!.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse(test.dataString)).setClass(app, MainActivity::class.java))
@@ -488,7 +495,7 @@ class FixCenterTest {
     }
 
     @Test
-    fun theGuideFloatsOverAndroidsPageAndBringsCrosstuneBackOnceDone() {
+    fun theGuideFloatsOverAndroidsPageAndOnceDoneMadeBigBringsCrosstuneBack() {
         installSpotify()
         shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE, true)
         launch()
@@ -504,19 +511,47 @@ class FixCenterTest {
         assertTrue(page.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertShown(string(R.string.fix_step_pick, string(R.string.android_in_your_browser)))
 
-        // Done, Crosstune is asked back, and says so while Android doesn't let it.
+        // Done, it says so. It doesn't ask Crosstune back, which newer Android blocks from a floating window.
         appKeepsLinks = false
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        composeRule.waitForIdle()
+        assertShown(string(R.string.practice_back_to, string(R.string.app_name)))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+        assertNull(nextStarted())
+        assertFalse(floating.get().isFinishing)
+
+        // Made big, it's in sight, so Android lets it bring Crosstune back, and the guide is done with.
+        floating.get().onPictureInPictureModeChanged(false, Configuration())
         val back = nextStarted()!!
         assertEquals(MainActivity::class.java.name, back.component!!.className)
         assertTrue(back.flags and Intent.FLAG_ACTIVITY_REORDER_TO_FRONT != 0)
-        composeRule.waitForIdle()
-        assertShown(string(R.string.practice_back_to, string(R.string.app_name)))
-        assertFalse(floating.get().isFinishing)
-
-        // Back, the guide is done with.
-        backToCrosstune()
         assertTrue(floating.get().isFinishing)
+    }
+
+    @Test
+    fun theStepsForAddingLinksWaitInCrosstuneWhereTheGuideWouldCoverAndroidsAddButton() {
+        shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE, true)
+        launch()
+        openFixes()
+        click(string(R.string.setup_check_allow))
+        click(string(R.string.fix_open_settings))
+        // Android's page opens at once, with no guide floating over its dialog.
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStarted()!!.action)
+        assertNull(GuideActivity.host)
+        backToCrosstune()
+        assertShown(string(R.string.fix_step_tap, string(R.string.android_add_link)))
+    }
+
+    @Test
+    fun theStepsForNotificationAccessWaitInCrosstuneWhereTheGuideWouldCoverAndroidsAllowButton() {
+        shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE, true)
+        launch()
+        openFixes()
+        click(string(R.string.follow_help_title))
+        click(string(R.string.fix_open_settings))
+        // Android asks to allow it in a dialog at the foot of the screen, where the guide would float.
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStarted()!!.action)
+        assertNull(GuideActivity.host)
     }
 
     @Test
@@ -598,6 +633,63 @@ class FixCenterTest {
     }
 
     @Test
+    fun aLateReminderIsListedAndOpensAlarmsAndReminders() {
+        prefs().edit().putBoolean("practice_reminder_on", true).putInt("practice_reminder_minute", 20 * 60 + 5).commit()
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        val activity = launch()
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("3"))
+        openFixes()
+        assertShown(string(R.string.practice_reminder_exact), string(R.string.practice_reminder_late))
+        click(string(R.string.practice_reminder_exact))
+        click(string(R.string.fix_open_settings))
+        val page = requireNotNull(nextStarted())
+        assertEquals(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, page.action)
+        assertEquals(Uri.parse("package:${activity.packageName}"), page.data)
+
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        comeBack()
+        waitUntil { !shown(string(R.string.practice_reminder_exact)) }
+        click(string(R.string.back_button))
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("2"))
+    }
+
+    @Test
+    fun withShizukuALateReminderIsFixedInTheSameOneTap() {
+        prefs().edit().putBoolean("practice_reminder_on", true).putInt("practice_reminder_minute", 20 * 60 + 5).commit()
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        val shell = doingShell()
+        MainActivity.shellFactory = { listOf(shell) }
+        launch()
+        openFixes()
+        assertShown(string(R.string.practice_reminder_exact), string(R.string.fix_with_shizuku))
+        click(string(R.string.fix_all))
+        // Android's alarms and reminders switch, as the user would turn it on, and no page opened for it.
+        waitUntil { !shown(string(R.string.practice_reminder_exact)) }
+        assertTrue(listOf("appops", "set", "--user", user, "--uid", app.packageName, "SCHEDULE_EXACT_ALARM", "allow") in shell.ran)
+        assertNull(nextStarted())
+        click(string(R.string.back_button))
+        assertFalse(barShown())
+        // And the alarm is set again at once for the exact minute.
+        val alarms = shadowOf(app.getSystemService(android.app.AlarmManager::class.java)).scheduledAlarms
+        assertTrue(alarms.any { it.isAllowWhileIdle && it.windowLengthMs == 0L })
+    }
+
+    @Test
+    fun withShizukuOnlyALateReminderLeftIsStillOneTap() {
+        prefs().edit().putBoolean("practice_reminder_on", true).putInt("practice_reminder_minute", 20 * 60 + 5).commit()
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        playback.access = true
+        val shell = doingShell()
+        MainActivity.shellFactory = { listOf(shell) }
+        launch()
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("2"))
+        openFixes()
+        click(string(R.string.fix_all))
+        waitUntil { !shown(string(R.string.practice_reminder_exact)) }
+        assertTrue(shell.ran.any { OneTapSetup.EXACT_ALARM_OP in it })
+    }
+
+    @Test
     fun withoutPictureInPictureAndroidsPageOpensFromCrosstune() {
         launch()
         openFixes()
@@ -616,7 +708,7 @@ class FixCenterTest {
         click(string(R.string.open_app_link_settings_button, "Spotify"))
         assertTrue(GuideActivity.host != null)
         activity.finish()
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         controller = null
         assertNull(GuideActivity.host)
     }

@@ -1,0 +1,7 @@
+/*
+    Jonathan Dummer
+
+    image helper functions
+
+    MIT license
+*/

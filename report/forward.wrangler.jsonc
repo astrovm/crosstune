@@ -1,0 +1,13 @@
+// The Worker at the old address, which passes reports on to the one in wrangler.jsonc. Deploy with
+// `npx wrangler deploy -c forward.wrangler.jsonc` from this folder. FORWARD_KEY is a secret both Workers hold.
+{
+  "name": "crosstune-report",
+  // The account that holds 4st.li, which the old custom domain needs.
+  "account_id": "862d327a982abfbbcd56c2ea3f4060d8",
+  "main": "forward.js",
+  "compatibility_date": "2026-10-01",
+  "routes": [{ "pattern": "report.crosstune.4st.li", "custom_domain": true }],
+  "workers_dev": false,
+  "ratelimits": [{ "name": "LIMIT", "namespace_id": "3921", "simple": { "limit": 5, "period": 60 } }],
+  "observability": { "enabled": false }
+}

@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "Otwiera linki do muzyki w wybranym serwisie."
-  },
-  "actionTitle": {
-    "message": "Ustawienia Crosstune"
-  },
-  "optionsEnabled": {
-    "message": "Otwieraj linki do muzyki w serwisie poniżej"
-  },
-  "optionsService": {
-    "message": "Otwórz w"
-  },
-  "optionsAccess": {
-    "message": "Crosstune potrzebuje dostępu do serwisów muzycznych, żeby otwierać za Ciebie linki."
-  },
-  "optionsAllow": {
-    "message": "Zezwól"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "Otwiera linki do muzyki w wybranym serwisie i pokazuje tekst tego, co gra." },
+  "actionTitle": { "message": "Teksty Crosstune" },
+  "optionsEnabled": { "message": "Otwieraj linki do muzyki w serwisie poniżej" },
+  "optionsService": { "message": "Otwórz w" },
+  "optionsAccess": { "message": "Crosstune potrzebuje dostępu do serwisów muzycznych, aby otwierać linki i pokazywać teksty." },
+  "optionsAllow": { "message": "Zezwól" },
+  "lyricsNoSong": { "message": "Włącz utwór w serwisie muzycznym" },
+  "lyricsLoading": { "message": "Szukam tekstu" },
+  "lyricsNone": { "message": "Brak tekstu tego utworu" },
+  "lyricsInstrumental": { "message": "Instrumentalny" },
+  "lyricsOffline": { "message": "Jesteś offline" },
+  "lyricsUnavailable": { "message": "Nie udało się połączyć ze stronami z tekstami" },
+  "lyricsRetry": { "message": "Ponów" },
+  "lyricsSettings": { "message": "Ustawienia" }
 }

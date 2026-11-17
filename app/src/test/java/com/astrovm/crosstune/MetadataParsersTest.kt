@@ -163,8 +163,44 @@ class MetadataParsersTest {
         )) assertEquals(title, queen, MetadataParsers.musicVideo(title, "open.spotify.com"))
         // The page auto report #15 had.
         assertEquals(MusicMetadata("new trick", "ROSÉ"), MetadataParsers.musicVideo("new trick – música, letra e videoclipe de ROSÉ | Spotify", "open.spotify.com"))
+        // A player that cut the title at its dash has the song as the artist and only the description as the title (Report 15).
+        assertEquals(MusicMetadata("Fake Tune", "Fake Singer"), MetadataParsers.musicVideo("música, letra e videoclipe de Fake Singer | Spotify", "Fake Tune"))
+        assertEquals(MusicMetadata("Fake Tune", "Fake Singer"), MetadataParsers.musicVideo("Song, Lyrics, and Music Video by Fake Singer\u00a0| Spotify", "Fake Tune"))
+        assertEquals(MusicMetadata("Fake Tune", "Fake Singer"), MetadataParsers.playerSong("música, letra e videoclipe de Fake Singer | Spotify", "Fake Tune"))
         // Worded in a way not known, the song is still read, by no artist rather than a wrong one.
         assertEquals(MusicMetadata("new trick", ""), MetadataParsers.musicVideo("new trick – Lied und Text von ROSÉ | Spotify", "open.spotify.com"))
+    }
+
+    @Test
+    fun aPlayerWithAThinTagStillNamesWhatItPlays() {
+        // A title alone plays, by no artist rather than an invented one (#780).
+        for (artist in listOf("", "  ", "<unknown>", "Unknown Artist", "unknown")) assertEquals(artist, MusicMetadata("Fake Song", ""), MetadataParsers.playerSong("Fake Song", artist))
+        // The artist is read from the title when it holds one, the file's extension left off.
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Artist - Fake Song.mp3", ""))
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Artist - Fake Song.FLAC", "Unknown Artist"))
+        // A placeholder named in the title is no artist either.
+        assertEquals(MusicMetadata("Fake Song", ""), MetadataParsers.playerSong("Unknown Artist - Fake Song.ogg", ""))
+        // No title, no song.
+        assertNull(MetadataParsers.playerSong("", "Fake Artist"))
+        assertNull(MetadataParsers.playerSong("  ", ""))
+    }
+
+    @Test
+    fun aPlayersTrailingSeparatorIsNotPartOfTheSong() {
+        for (dash in listOf("-", "–", "—")) for (space in listOf(" ", "\t", "\u00a0")) {
+            for (end in listOf("", " ", "\t", "\n")) {
+                val title = "Fake Song$space$dash$end"
+                assertEquals(title, MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong(title, "Fake Artist"))
+            }
+            assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Song$space$dash $dash", "Fake Artist"))
+        }
+        for (title in listOf("Fake-Song", "Fake Song-", "Fake Song–", "Fake Song—", "Fake Song - Live", "Fake Song – Remastered", "Fake Song — Explicit", "Fake Song HD")) {
+            assertEquals(title, MusicMetadata(title, "Fake Artist"), MetadataParsers.playerSong(title, "Fake Artist"))
+        }
+        assertNull(MetadataParsers.playerSong(" - ", "Fake Artist"))
+        // Earlier title fixes can expose the same empty last field.
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Artist『Fake Song - 』", "Unknown"))
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("「\u202f」Fake Song -", "Fake Artist"))
     }
 
     @Test
@@ -179,6 +215,14 @@ class MetadataParsersTest {
         assertEquals(MusicMetadata("Song - Remastered 2011", "Band"), MetadataParsers.musicVideo("Song - Remastered 2011", "Band"))
         assertEquals(MusicMetadata("Song (feat. A)", "Band"), MetadataParsers.musicVideo("Song (feat. A)", "Band"))
         assertNull(MetadataParsers.musicVideo("(Official Video)", "Band"))
+        // A line break after the song's brackets, or in later ones, still leaves the song in the first.
+        assertEquals(MusicMetadata("アイドル", "YOASOBI"), MetadataParsers.musicVideo("YOASOBI「アイドル」\nTV size", "Label"))
+        assertEquals(MusicMetadata("アイドル", "YOASOBI"), MetadataParsers.musicVideo("YOASOBI「アイドル」「Idol\nEnglish」", "Label"))
+        // Before them, a line break ends what can be the artist: this is a vlog's title, not a song's.
+        assertNull(MetadataParsers.musicVideo("Vlog\nYOASOBI「アイドル」", "Label"))
+        // A tag may hold one of its own.
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song (Official Video (Remastered))", "Band"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song [Lyrics (English)]", "Band"))
         // An app writing "Artist - Song" with no artist leaves no one before the dash.
         assertNull(MetadataParsers.musicVideo(" - Day 3 in Tokyo", "Someone"))
     }
@@ -205,6 +249,36 @@ class MetadataParsersTest {
             assertEquals(title, MusicMetadata("River Road", "Band"), MetadataParsers.youtubeVideo(title, "Band"))
         }
         assertEquals(MusicMetadata("Music Video Killed the Radio Star", "Band"), MetadataParsers.youtubeVideo("Band - Music Video Killed the Radio Star HD", "Band"))
+    }
+
+    @Test
+    fun aVideoTagThatHoldsATagGoesWhole() {
+        for (title in listOf("Artist - Song (Official Video [4K])", "Artist - Song (Official Video (Remastered))", "Artist - Song [Lyrics (English)]", "Artist - Song ([Lyrics])")) {
+            assertEquals(title, MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo(title, "Channel"))
+        }
+        // Its words are read as words, as main read them with no brackets in it: one says it's a video, and it goes whole.
+        assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (Live at Wembley [HD])", "Channel"))
+        assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (x[[4K]2 y])", "Channel"))
+        assertEquals(MusicMetadata("Song (Live (2020))", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (Live (2020))", "Channel"))
+        // A bracket that never closes, or one too many, is read from the first one to the first close, as it always was.
+        for (title in listOf("Artist - Song (Lyrics()", "Artist - Song ((Lyrics)", "Artist - Song (Official Video :( )")) {
+            assertEquals(title, MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo(title, "Channel"))
+        }
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song (Lyrics()", "Band"))
+    }
+
+    @Test
+    fun anUploadsDashTypedRightAfterTheArtistStillSplitsItFromTheSong() {
+        // A fan's upload, its dash against the artist and "Lyrics" with nothing before it.
+        assertEquals(MusicMetadata("Night Train Home", "Fake Singer"), MetadataParsers.youtubeVideo("Fake Singer- Night Train Home Lyrics", "uploader2001"))
+        assertEquals(MusicMetadata("Night Train Home", "Fake Singer"), MetadataParsers.youtubeVideo("Fake Singer– Night Train Home", "uploader2001"))
+        // A dash inside a name has no space after it, and a spaced one comes first.
+        assertEquals(MusicMetadata("Night Train Home", "Jay-Fake"), MetadataParsers.youtubeVideo("Jay-Fake - Night Train Home", "uploader2001"))
+        assertEquals(MusicMetadata("Jay-Fake Night Train", "uploader2001"), MetadataParsers.youtubeVideo("Jay-Fake Night Train", "uploader2001"))
+        // Two such dashes say nothing of which is the artist's.
+        assertEquals(MusicMetadata("One- Two- Three", "uploader2001"), MetadataParsers.youtubeVideo("One- Two- Three", "uploader2001"))
+        // A song named "Lyrics" alone keeps its name.
+        assertEquals(MusicMetadata("Lyrics", "Fake Singer"), MetadataParsers.youtubeVideo("Lyrics", "Fake Singer"))
     }
 
     @Test

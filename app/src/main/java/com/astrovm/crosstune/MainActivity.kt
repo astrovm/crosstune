@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.Activity
 import android.app.ActivityManager
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
@@ -15,6 +16,7 @@ import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutManager
 import android.Manifest
@@ -80,6 +82,7 @@ class MainActivity : ComponentActivity() {
                     client,
                     packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
                     cache("musicbrainz.json", maxEntries = 1000),
+                    musicBrainzTurn(applicationContext),
                     gapMs = musicBrainzGapMs
                 )
                 // What ChatGPT said is kept, so a song read again asks nothing.
@@ -133,7 +136,7 @@ class MainActivity : ComponentActivity() {
                     chatGpt = chatGpt,
                     tutor = tutor,
                     // Each song's chords are kept, so a song played again needs no lookup.
-                    chordFinder = ChordFinder(client, cache = cache("chords.json", maxEntries = 300)),
+                    chordFinder = ChordFinder(client, cache = cache("chords.json", maxEntries = 300), chordWiki = chordWikiFactory(this@MainActivity), debugLogging = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0),
                     lyricsLanguage = lyricsLanguageFactory?.invoke() ?: AndroidLyricsLanguage(applicationContext),
                     oneTap = OneTapSetup(applicationContext, shellFactory()),
                     // Each song's sung readings are kept, so a song read again needs no lookup.
@@ -143,18 +146,29 @@ class MainActivity : ComponentActivity() {
                         client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
                     ).takeIf { checksForUpdates(applicationContext) },
                     mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
+                    mayCapture = { Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && PlaybackCapture.allowed(applicationContext) },
                     singing = singingFactory(applicationContext, client),
-                    reports = ReportSender(client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(), lookupDispatcher),
+                    reminders = remindersFactory(applicationContext),
+                    reports = ReportSender(
+                        client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(), lookupDispatcher,
+                        ReportSender.urlFor(applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0, systemProperty("debug.crosstune.report_url"))
+                    ),
+                    reportPaceMs = reportPaceMs,
                     microphoneAccess = { microphoneAccess(applicationContext) },
                     phone = phoneFactory(applicationContext),
                     // The words of the songs shown lately, so they show at once after the app's closed too.
                     keptOnDisk = LookupCache(File(cacheDir, "kept_words.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS),
+                    // What was heard of songs whose words have no timing, so they're timed from the start when played again.
+                    heardUntimed = LookupCache(File(cacheDir, "heard_untimed.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS),
                     lookAhead = lookAheadLyrics,
                     playQueue = queue,
                     queueOrder = order,
                     sleepTimer = sleepTimer(applicationContext),
                     cast = castSender(applicationContext),
-                    offline = OfflineSongs(File(noBackupFilesDir, "$KEPT_OFFLINE_DIR/songs.json"), caches, artwork, lookupDispatcher)
+                    qobuzNumbers = qobuzNumbers(applicationContext, matcher),
+                    offline = OfflineSongs(File(noBackupFilesDir, "$KEPT_OFFLINE_DIR/songs.json"), caches, artwork, lookupDispatcher),
+                    newLinePlayer = { linePlayerFactory(applicationContext) },
+                    practiceClockLog = PracticeClockLog.of(applicationContext)
                 )
             }
         }
@@ -221,6 +235,54 @@ class MainActivity : ComponentActivity() {
      */
     private val signInNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { signInWithChatGpt() }
 
+    /**
+     * Reminders of due cards ask for notifications when their bell is tapped. Turned down for good,
+     * Android won't ask again, so the bell goes to its settings instead.
+     */
+    private val reminderPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) remindersOn()
+        else if (!shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+            getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putBoolean(KEY_REMINDER_DENIED, true).apply()
+        }
+    }
+
+    /** Set while away in Android's settings to allow reminders, so they're on once back, if they were. */
+    private var remindOnceAllowed = false
+
+    /**
+     * Coming back after a music app covered Crosstune needs a notification when it may not show over
+     * other apps. Asked once, before the app is left. Turned down, Back still returns.
+     * What was tapped runs once that has been asked about, so the music app doesn't cover the question.
+     */
+    private var afterReturnAsk: (() -> Unit)? = null
+
+    private val returnNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) dismissReturnToCard()
+        val next = afterReturnAsk
+        afterReturnAsk = null
+        next?.invoke()
+    }
+
+    /**
+     * Plays the song, once the way back has been asked about.
+     * On a TV that still can't cover the app, Play only shows how to allow that, and does not leave.
+     */
+    private fun playOrReturn() {
+        val showHowToCover = viewModel.uiState.phone == Phone.TV && !viewModel.uiState.canFloatOverApps
+        if (showHowToCover) viewModel.playResult() else askToReturn { viewModel.playResult() }
+    }
+
+
+    /** Asks for that notice while this screen is still in front, then does [then]. A second tap waits with the first. */
+    private fun askToReturn(then: () -> Unit) {
+        if (afterReturnAsk != null) return
+        afterReturnAsk = then
+        if (!askToReturnToCard { returnNotificationPermission.launch(it) }) {
+            afterReturnAsk = null
+            then()
+        }
+    }
+
     /** Set when the floating words' microphone was tapped without it allowed, to ask once back in sight. */
     private var listenAlongWhenBack = false
 
@@ -262,6 +324,10 @@ class MainActivity : ComponentActivity() {
         const val ACTION_LISTEN = "com.astrovm.crosstune.action.LISTEN"
         /** The unexported alias the widget listens through, so no other app can make Crosstune listen. */
         const val LISTEN_ALIAS = "com.astrovm.crosstune.ListenForSong"
+        /** Practises what's due, from a reminder. */
+        const val ACTION_PRACTISE = "com.astrovm.crosstune.action.PRACTISE"
+        /** The unexported alias reminders open through, so no other app can start a session, which moves the music app. */
+        const val PRACTISE_ALIAS = "com.astrovm.crosstune.PractiseDue"
         /** On a listen, opens the words of the song as soon as it's named, and keeps listening along. */
         const val EXTRA_LYRICS = "com.astrovm.crosstune.extra.LYRICS"
 
@@ -278,6 +344,12 @@ class MainActivity : ComponentActivity() {
         private const val KEY_ASKED_MICROPHONE = "asked_microphone"
         /** Set when the microphone was turned down for good, so Android won't ask again until it's allowed in settings. */
         private const val KEY_MICROPHONE_DENIED = "microphone_denied"
+
+        /** Set when notifications were turned down for good, for reminders, so Android won't ask again until they're allowed in settings. */
+        private const val KEY_REMINDER_DENIED = "reminder_notifications_denied"
+
+        /** Set once Android's alarms and reminders page was opened for a reminder, so it's asked once. */
+        private const val KEY_ASKED_EXACT_ALARMS = "reminder_exact_alarms_asked"
 
         /** Whether the microphone may be used, Android still asks for it, or it's turned down for good. */
         private fun microphoneAccess(context: Context): MicAccess = when {
@@ -312,6 +384,13 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         internal var httpClientFactory: () -> OkHttpClient = ::httpClient
 
+        /**
+         * ChordWiki's pages. The phone's web view reads them. A test answers instead, and still
+         * does not solve a check a person has to do.
+         */
+        @VisibleForTesting
+        internal var chordWikiFactory: (Activity) -> ChordWikiPages = { activity -> ChordWikiBrowser(activity) }
+
         /** Where Android is asked about apps and links; tests run it in step with the screen. */
         @VisibleForTesting
         internal var systemDispatcher: CoroutineDispatcher = Dispatchers.Default
@@ -323,6 +402,10 @@ class MainActivity : ComponentActivity() {
         /** What music apps are playing, which a song's timed words follow. */
         @VisibleForTesting
         internal var playbackFactory: (Context) -> PlaybackSource = ::MediaSessionPlayback
+
+        /** The small YouTube player a card's line plays in when its music app can't move to the line. */
+        @VisibleForTesting
+        internal var linePlayerFactory: (Context) -> LinePlayer = ::YouTubeLinePlayer
 
         /** The TVs the phone casts to; tests have fakes, and a build without Google Play Services has none. */
         @VisibleForTesting
@@ -366,6 +449,7 @@ class MainActivity : ComponentActivity() {
                 client,
                 app.packageManager.getPackageInfo(app.packageName, 0).versionName.orEmpty(),
                 LookupCache(File(app.cacheDir, "queue_musicbrainz.json"), lookupDispatcher, maxEntries = 1000),
+                musicBrainzTurn(app),
                 gapMs = musicBrainzGapMs
             )
             // Given longer than a screen's lookups, as nobody waits on them: a new Spotify song's artist, looked up
@@ -384,6 +468,19 @@ class MainActivity : ComponentActivity() {
                 app::hasApp
             ) { app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, false) }
                 .also { playQueue = app to it }
+        }
+
+        /** The app's turn at MusicBrainz, and the app it's for. */
+        private var musicBrainzTurn: Pair<Context, MusicBrainz.Turn>? = null
+
+        /**
+         * One for the whole app, so its lookups and its queue's keep to MusicBrainz's one a second together.
+         * Another app, as each test makes, gets its own: one the last app left asking holds none of its lookups up.
+         */
+        internal fun musicBrainzTurn(context: Context): MusicBrainz.Turn {
+            val app = context.applicationContext
+            musicBrainzTurn?.takeIf { it.first === app }?.let { return it.second }
+            return MusicBrainz.Turn().also { musicBrainzTurn = app to it }
         }
 
         private var queueOrder: Pair<Context, QueueOrder>? = null
@@ -408,6 +505,18 @@ class MainActivity : ComponentActivity() {
             return SleepTimer(playbackFactory(app), CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)).also { sleepTimer = app to it }
         }
 
+        private var qobuzNumbers: Pair<Context, QobuzNumbers>? = null
+
+        /** What tries Qobuz's other number, the app's rather than a screen's, as the screen closes as it opens a song. */
+        internal fun qobuzNumbers(context: Context, matcher: ExactMatcher): QobuzNumbers {
+            val app = context.applicationContext
+            qobuzNumbers?.takeIf { it.first === app }?.let { return it.second }
+            // One made for another app, as each test makes, is done with.
+            qobuzNumbers?.second?.off()
+            return QobuzNumbers(playbackFactory(app), matcher::otherQobuzLink, app::hasApp, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate))
+                .also { qobuzNumbers = app to it }
+        }
+
         /** Whether a song's lyrics are looked up as its card shows; off where a test counts what's asked. */
         @VisibleForTesting
         internal var lookAheadLyrics: Boolean = true
@@ -419,6 +528,10 @@ class MainActivity : ComponentActivity() {
         /** How long lyrics wait before asking a busy LRCLIB again; tests don't wait. */
         @VisibleForTesting
         internal var lyricsBusyPauseMs: Long = LYRICS_BUSY_PAUSE_MS
+
+        /** How long reports owed wait between each other; tests don't wait. */
+        @VisibleForTesting
+        internal var reportPaceMs: Long = MainViewModel.REPORT_PACE_MS
 
         /** How long listening along waits between songs heard; tests don't wait. */
         @VisibleForTesting
@@ -490,6 +603,10 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         internal var shellFactory: () -> List<Shell> = { listOf(ShizukuShell(), RootShell()) }
 
+        /** What asks cards due back, on the clock that's on the wall; tests set the clock. */
+        @VisibleForTesting
+        internal var remindersFactory: (Context) -> PracticeReminders = { PracticeReminders(it) }
+
         /** The kind of phone, whose settings pages the steps to fix things show. */
         @VisibleForTesting
         internal var phoneFactory: (Context) -> Phone = {
@@ -553,7 +670,7 @@ class MainActivity : ComponentActivity() {
                 viewModel.effects.collect { effect ->
                     when (effect) {
                         // Asked long ago, e.g. before Crosstune was left, it's no longer what the user is after.
-                        is Effect.Open -> if (SystemClock.elapsedRealtime() - effect.atMs <= STALE_OPEN_MS) open(effect)
+                        is Effect.Open -> if (SystemClock.elapsedRealtime() - effect.atMs <= STALE_OPEN_MS) open(effect) else effect.qobuz?.started(false)
                         is Effect.Show -> show(effect)
                         Effect.RecognizeElsewhere -> recognizers.firstOrNull { !it.listensHere }?.let { tryStartActivity(it.intent) }
                         Effect.ChooseTv -> castSender(applicationContext).chooseTv(this@MainActivity)
@@ -570,6 +687,12 @@ class MainActivity : ComponentActivity() {
         // Out of sight too: a song's app opens over Crosstune, which then covers it.
         lifecycleScope.launch {
             snapshotFlow { viewModel.uiState.coveringApp }.filter { it }.collect { cover() }
+        }
+        // Lines let go, or a kind of card turned off, may leave a reminder showing with nothing due.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                snapshotFlow { viewModel.uiState.run { savedLines to cardTypes } }.collect { viewModel.clearReminderIfNoneDue() }
+            }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -610,7 +733,7 @@ class MainActivity : ComponentActivity() {
         onClear = viewModel::clear,
         onRetry = { if (viewModel.retryListens) listen() else viewModel.retry() },
         onOpen = { viewModel.openResult() },
-        onPlayResult = viewModel::playResult,
+        onPlayResult = { playOrReturn() },
         onClosePlayer = viewModel::closePlayer,
         onPlayerOpenApp = viewModel::openPlayerApp,
         onPlayerOpenWith = viewModel::playerOpenWith,
@@ -641,7 +764,9 @@ class MainActivity : ComponentActivity() {
         onResetSync = viewModel::resetSync,
         onSendReport = viewModel::sendReport,
         onCloseReport = viewModel::closeReport,
+        onReportReading = viewModel::reportReading,
         onAllowAutoReports = viewModel::allowAutoReports,
+        onCloseAutoReportOffer = viewModel::closeAutoReportOffer,
         onFetchSingingModel = viewModel::fetchSingingModel,
         onCloseSingingModel = viewModel::closeSingingModel,
         onReadingsChange = viewModel::setReadings,
@@ -652,16 +777,18 @@ class MainActivity : ComponentActivity() {
         onTranslationChange = viewModel::setTranslation,
         onChordsChange = viewModel::setChords,
         onRetryTranslation = viewModel::retryTranslation,
+        onRetryChords = viewModel::retryChords,
         onToggleSavedLine = viewModel::toggleSavedLine,
         onLookUpWord = viewModel::lookUpWord,
         onExplainLine = viewModel::explainLine,
         onStartPractice = { viewModel.startPractice() },
-        onPractiseSong = viewModel::practiseSong,
-        onPractiseSongOf = viewModel::startPractice,
+        onPractiseSong = { viewModel.uiState.lyricsFor?.let { viewModel.startPractice(it) } },
+        onPractiseSongOf = { song -> viewModel.startPractice(song) },
         onReadCardAs = viewModel::readCardAs,
         onTurnPractice = viewModel::turnPractice,
         onGradePractice = viewModel::gradePractice,
         onStopPractice = viewModel::stopPractice,
+        linePlayerView = viewModel::linePlayerView,
         onReplayLine = viewModel::replayLine,
         onBackToBefore = viewModel::backToBefore,
         onChooseLines = viewModel::chooseLines,
@@ -717,6 +844,9 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch { CrosstuneWidget.updateAllWidgets(applicationContext) }
         },
         onPureBlackChange = viewModel::setPureBlack,
+        onReminderChange = { on -> if (on) remind() else viewModel.setReminder(false) },
+        onReminderTimeChange = viewModel::setReminderTime,
+        onReminderExact = ::allowExactReminders,
         onPlayingBarChange = viewModel::setPlayingBar,
         onLinesEarlyChange = viewModel::setLinesEarly,
         onNextLineAheadChange = viewModel::setNextLineAhead,
@@ -768,8 +898,8 @@ class MainActivity : ComponentActivity() {
         onHistoryOpen = viewModel::openHistoryEntry,
         onRemoveHistory = viewModel::removeHistoryEntry,
         onOpenTrack = viewModel::openTrack,
-        onPlayAll = { viewModel.playAll() },
-        onShuffleAll = { viewModel.playAll(shuffled = true) },
+        onPlayAll = { askToReturn { viewModel.playAll() } },
+        onShuffleAll = { askToReturn { viewModel.playAll(shuffled = true) } },
         onCopySongs = { copyToClipboard("Crosstune songs", viewModel.songList(), R.string.songs_copied) },
         onShareSongs = { viewModel.songList()?.let { startActivity(shareChooser(it)) } },
         onClearHistory = viewModel::clearHistory,
@@ -783,6 +913,9 @@ class MainActivity : ComponentActivity() {
         onPeekPlayingNow = viewModel::peekPlayingNow,
         onPlayingNowPlayPause = viewModel::playingNowPlayPause,
         onPlayingNowSkip = viewModel::playingNowSkip,
+        onOpenPlayingUnnamed = viewModel::openPlayingUnnamed,
+        onPeekPlayingUnnamed = viewModel::peekPlayingUnnamed,
+        onPlayingBarInSight = viewModel::playingBarInSight,
         onSettingsLeft = viewModel::settingsLeft,
         loadArtwork = viewModel.artwork::load,
         covers = viewModel.artwork
@@ -796,6 +929,10 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         refresh()
         recognizers = SongRecognizers.available(this)
+        viewModel.refreshReminder()
+        // Allowed in Android's settings, as just asked to, reminders are on now.
+        if (remindOnceAllowed && viewModel.uiState.reminder.allowed) remindersOn()
+        remindOnceAllowed = false
         // Its steps left without allowing it, the words don't float later out of the blue.
         if (viewModel.uiState.fixes?.need != Need.Float) floatOnceAllowed = false
         // Let show over other apps, as just asked to, the words float now.
@@ -823,18 +960,22 @@ class MainActivity : ComponentActivity() {
         // Opened, before Android 12 it's no longer known whether they're allowed, until a test link says.
         if (need == Need.Links) viewModel.dismissLinkSettingsHelper()
         if (need == Need.Float) floatOnceAllowed = true
-        val open: Context.() -> Unit = when (need) {
-            is Need.StopApp -> fun Context.() = openLinkSettingsOf(need.app.packageName)
-            Need.Links -> fun Context.() = openLinkSettingsOf(packageName)
-            Need.Microphone -> Context::openAppInfo
-            Need.Follow -> (viewModel.uiState.phone == Phone.TV).let { tv -> fun Context.() = openNotificationAccess(tv) }
-            Need.Float -> Context::openOverlaySettings
-        }
-        // Without picture-in-picture, the steps wait here in Crosstune.
-        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return open()
+        val open = pageFor(need)
+        // Without picture-in-picture, or where the guide would cover what it asks for, the steps wait here in Crosstune.
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) || !viewModel.uiState.guideFloats(need)) return open()
         GuideActivity.host = guideHost
         guideOpens = open
         startActivity(Intent(this, GuideActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    /** Android's page for [need]. Alarms and reminders are the user's to allow, so that page is asked for by name. */
+    private fun pageFor(need: Need): Context.() -> Unit = when (need) {
+        is Need.StopApp -> fun Context.() = openLinkSettingsOf(need.app.packageName)
+        Need.Links -> fun Context.() = openLinkSettingsOf(packageName)
+        Need.Microphone -> Context::openAppInfo
+        Need.Follow -> (viewModel.uiState.phone == Phone.TV).let { tv -> fun Context.() = openNotificationAccess(tv) }
+        Need.Float -> Context::openOverlaySettings
+        Need.Exact -> fun Context.() { tryStartActivity(PracticeReminders(this).exactPage) }
     }
 
     /** What Android's page the guide floats over is, opened from it or, without one, from here. */
@@ -876,6 +1017,50 @@ class MainActivity : ComponentActivity() {
         floatNow()
     }
 
+    /**
+     * Turns reminders on, once Android lets them show: asked here where it still asks, or else in its
+     * settings, and on once back if they were allowed there.
+     */
+    private fun remind() {
+        val denied = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getBoolean(KEY_REMINDER_DENIED, false)
+        val asks = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !denied && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        when {
+            viewModel.uiState.reminder.allowed -> remindersOn()
+            asks -> reminderPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            else -> {
+                remindOnceAllowed = true
+                tryStartActivity(remindersFactory(applicationContext).settingsPage)
+            }
+        }
+    }
+
+    /**
+     * Turns reminders on, and, once, takes the user to Android's page where exact alarms are allowed
+     * if they aren't yet and Shizuku or root cannot allow them. Without it a reminder can come late. Asked after
+     * notifications, since the time is no use for one that can't show. Turned off and on again, or
+     * said no to, it isn't asked again; settings says it and goes there.
+     */
+    private fun remindersOn() {
+        viewModel.setReminder(true)
+        if (viewModel.uiState.reminder.exact) return
+        // With Shizuku or root it's allowed in one tap, the tap that turned them on, so it's never asked.
+        if (viewModel.fixInOneTap(OneTapFix.EXACT)) return
+        val prefs = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
+        if (!prefs.getBoolean(KEY_ASKED_EXACT_ALARMS, false)) {
+            prefs.edit().putBoolean(KEY_ASKED_EXACT_ALARMS, true).apply()
+            openExactAlarmPage()
+        }
+    }
+
+    /** Alarms and reminders allowed, from settings: in one tap with Shizuku or root, otherwise on Android's page. */
+    private fun allowExactReminders() {
+        if (!viewModel.fixInOneTap(OneTapFix.EXACT)) openExactAlarmPage()
+    }
+
+    private fun openExactAlarmPage() {
+        tryStartActivity(remindersFactory(applicationContext).exactPage)
+    }
+
     /** Signs in with ChatGPT, kept running while the browser signs in, until it's done, however it ends. */
     private fun signInWithChatGpt() {
         ChatGptSignInService.start(this)
@@ -909,6 +1094,7 @@ class MainActivity : ComponentActivity() {
     /** Back in sight, the words stop floating, and listening along with them, and on to the next song, picks up again. */
     override fun onStart() {
         super.onStart()
+        dismissReturnToCard()
         // Back from Android's settings, the guide floating over them is done with.
         GuideActivity.close()
         // Even from a screen made again since, in a new look or language; but a new screen only handing a
@@ -939,6 +1125,7 @@ class MainActivity : ComponentActivity() {
         // Left with the words open, they're kept, as Android may close the app before they're shut.
         viewModel.keep()
         if (viewModel.uiState.listening) viewModel.stopListening()
+        viewModel.pausePracticeSound()
         if (!floatingOverApps) {
             viewModel.pauseListeningAlong()
             viewModel.pauseFollowingNext()
@@ -1016,13 +1203,9 @@ class MainActivity : ComponentActivity() {
         when (intent.action) {
             // The widget's songs ask to be shown here rather than opened. Back from signing in with
             // ChatGPT, it's all done by then.
-            // A test link Crosstune sent itself says its links reach it, and is nothing to look up.
-            Intent.ACTION_VIEW -> if (intent.data?.fragment == TEST_LINK) viewModel.linkTested(intent.data?.host) else if (intent.data?.scheme != ChatGpt.RETURN_SCHEME) viewModel.resolveIncoming(
-                intent.dataString,
-                show = intent.getBooleanExtra(EXTRA_SHOW_SONG, false),
-                keepWords = floatedWhenBack
-            )
+            Intent.ACTION_VIEW -> handleLink(intent)
             ACTION_OPEN_RECENT -> viewModel.openRecent(intent.dataString)
+            ACTION_PRACTISE -> if (intent.component?.className == PRACTISE_ALIAS) viewModel.practiseDue()
             Intent.ACTION_SEND -> {
                 // Some apps share styled text, which getStringExtra would drop.
                 val shared = listOf(Intent.EXTRA_TEXT, Intent.EXTRA_SUBJECT)
@@ -1035,6 +1218,16 @@ class MainActivity : ComponentActivity() {
                 withMicrophone(if (intent.getBooleanExtra(EXTRA_LYRICS, false)) MicrophoneFor.LISTEN_FOR_LYRICS else MicrophoneFor.LISTEN)
             }
         }
+    }
+
+    /** A link opened here: a test link Crosstune sent itself says its links reach it, and is nothing to look up. */
+    private fun handleLink(intent: Intent) {
+        if (intent.data?.fragment == TEST_LINK) return viewModel.linkTested(intent.data?.host)
+        if (intent.data?.scheme != ChatGpt.RETURN_SCHEME) viewModel.resolveIncoming(
+            intent.dataString,
+            show = intent.getBooleanExtra(EXTRA_SHOW_SONG, false),
+            keepWords = floatedWhenBack
+        )
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -1099,14 +1292,21 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun open(effect: Effect.Open) {
+        if (effect.qobuz?.superseded == true) return
         val uri = effect.url.toUri()
         val floatOn = floatsOnAfter(effect.finishAfterOpen)
-        // Floating on, Crosstune steps back rather than closing, so the app opens in a task of its own, not under it.
-        val flags = if (floatOn) Intent.FLAG_ACTIVITY_NEW_TASK else 0
+        // In Crosstune's task, an old link can bring back the app's last screen instead of opening the song.
+        val flags = Intent.FLAG_ACTIVITY_NEW_TASK
         // A service's own app stands in for the builds patched from it and its TV app, whichever is installed; a build chosen by name is only itself.
         val apps = effect.packageName?.let { MusicService.appLinksIn(it, effect.url) }.orEmpty()
-        val opened = apps.any { (app, link) -> tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app).addFlags(flags)) } ||
-            openOutsideCrosstune(uri, flags)
+        // An app that opens no page of its website's is asked for the song by search instead.
+        val search = effect.packageName?.let { MusicService.searchIn(it, effect.url, effect.asking) }
+        val opened = search?.let { tryStartActivityTwice(it.addFlags(flags)) } == true || apps.any { (app, link) ->
+            // Closing as it opens it gives Crosstune the time to open it again; a screen that stays doesn't.
+            if (!effect.finishAfterOpen && MusicService.ofOwnApp(app) == MusicService.QOBUZ) openLeavingTimeToOpenAgain(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app))
+            else tryStartMusicActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app).addFlags(flags))
+        } || openOutsideCrosstune(uri, flags)
+        effect.qobuz?.started(opened)
         when {
             !opened -> viewModel.showError(AppError.NO_APP_TO_OPEN)
             floatOn -> floatOn()
@@ -1118,7 +1318,7 @@ class MainActivity : ComponentActivity() {
         val launch = packageManager.getLaunchIntentForPackage(effect.packageName)
         val floatOn = floatsOnAfter(effect.finishAfterOpen)
         when {
-            launch == null || !tryStartActivity(launch.addFlags(if (floatOn) Intent.FLAG_ACTIVITY_NEW_TASK else 0)) -> if (effect.saysWhenItFails) viewModel.showError(AppError.NO_APP_TO_OPEN)
+            launch == null || !tryStartActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) -> if (effect.saysWhenItFails) viewModel.showError(AppError.NO_APP_TO_OPEN)
             floatOn -> floatOn()
             effect.finishAfterOpen -> finish()
         }

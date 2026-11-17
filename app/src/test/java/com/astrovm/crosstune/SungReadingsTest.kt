@@ -36,15 +36,21 @@ class SungReadingsTest {
     private fun site(rows: List<Pair<String, String>>, pages: Map<String, String>, failing: Boolean = false): (Request) -> Response = { request ->
         if (failing) throw IOException("offline")
         when (request.url.encodedPath) {
-            "/search" -> FakeSpotify.html(request, search(rows))
+            // As UtaTen does, it answers a search with nothing unless it says it came from its own pages.
+            "/search" -> FakeSpotify.html(request, if (request.header("Referer") == "https://utaten.com/") search(rows) else "")
             in pages.keys -> FakeSpotify.html(request, pages.getValue(request.url.encodedPath))
             else -> FakeSpotify.html(request, "", code = 404)
         }
     }
 
-    private fun search(rows: List<Pair<String, String>>) = """<table class="searchResult artistLyricList">""" + rows.joinToString("") { (page, by) ->
-        """<tr><td><p class="searchResult__title"><a href="$page">Song</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">$by</a></p></td></tr>"""
-    } + "</table>"
+    /** Its search's answer: a row for each of [rows], or, with none, that it found no words, as it says so. */
+    private fun search(rows: List<Pair<String, String>>) = if (rows.isEmpty()) {
+        """<section class="contentBox"><div class="contentBox__body"><p class="noItem">ごめんなさい。歌詞が見つかりませんでした。<br /></p></div></section>"""
+    } else {
+        """<table class="searchResult artistLyricList">""" + rows.joinToString("") { (page, by) ->
+            """<tr><td><p class="searchResult__title"><a href="$page">Song</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">$by</a></p></td></tr>"""
+        } + "</table>"
+    }
 
     private fun ruby(kanji: String, kana: String) = """<span class="ruby"><span class="rb">$kanji</span><span class="rt">$kana</span></span>"""
 
@@ -73,9 +79,9 @@ class SungReadingsTest {
     fun eachLineTakesTheReadingsOfTheLineMostLikeItThere() {
         val fixes = SungReadings.matched(lines, read(), SungReadings.linesOf(page))
         // 都会の夜が is written otherwise there, のよるが, but reads alike; the kanji it has are taken.
-        assertTrue(ReadingFix(0, "都会", "まち") in fixes)
-        assertTrue(ReadingFix(2, "存在", "こと") in fixes)
-        assertTrue(ReadingFix(3, "光", "ひか") in fixes)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in fixes)
+        assertTrue(ReadingFix(2, "存在", "こと", Reader.SUNG) in fixes)
+        assertTrue(ReadingFix(3, "光", "ひか", Reader.SUNG) in fixes)
         // Only kanji in the line, each in its own line.
         assertTrue(fixes.none { it.line == 1 })
         assertTrue(fixes.none { it.line == 3 && it.kanji == "夜" })
@@ -99,7 +105,7 @@ class SungReadingsTest {
         fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
         val cache = LookupCache(File(folder.root, "sung.json"), Dispatchers.Unconfined)
         val fixes = ask(cache)!!
-        assertTrue(ReadingFix(0, "都会", "まち") in fixes)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in fixes)
         val search = fake.requestedUrls.first().toHttpUrl()
         assertEquals("utaten.com", search.host)
         assertEquals("Band", search.queryParameter("artist_name"))
@@ -126,10 +132,29 @@ class SungReadingsTest {
                 else -> FakeSpotify.html(request, other)
             }
         }
-        assertTrue(ReadingFix(0, "都会", "まち") in ask()!!)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask()!!)
         assertTrue(fake.requestedUrls.any { "title=Night%20Town" in it })
         // The singer's own, though listed second.
         assertTrue(fake.requestedUrls.none { "/lyric/zz0002/" in it })
+    }
+
+    @Test
+    fun aSongIsLookedUpWithoutItsExclamationMarkAsTheSiteMayWriteItOtherwise() {
+        // UtaTen writes ！ where the song's name has !, and finds nothing by the one it doesn't write.
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath == "/search" && request.url.queryParameter("title") == "夜の都会" ->
+                    FakeSpotify.html(request, search(listOf("/lyric/ab0001/" to "Band")))
+                request.url.encodedPath == "/search" -> FakeSpotify.html(request, search(emptyList()))
+                else -> FakeSpotify.html(request, page)
+            }
+        }
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(song = MusicMetadata("夜の都会!", "Band")).orEmpty())
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(song = MusicMetadata("夜の都会？", "Band")).orEmpty())
+        // A title that is only the mark is not looked up as a blank name.
+        fake.requestedUrls.clear()
+        assertEquals(emptyList<ReadingFix>(), ask(song = MusicMetadata("!", "Band")))
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().queryParameter("title").isNullOrEmpty() })
     }
 
     @Test
@@ -169,7 +194,45 @@ class SungReadingsTest {
         // Kept from before, but kept wrong, it's asked again.
         runBlocking { cache.put("utaten|${SungReadings.CACHE_VERSION}|${SongNames.normalize(song.title)}|${SongNames.normalize(song.artist)}|${lines.hashCode()}", "not json") }
         fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
-        assertTrue(ReadingFix(0, "都会", "まち") in ask(cache)!!)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(cache)!!)
+    }
+
+    @Test
+    fun aPageUtaTenDoesntWriteIsNoAnswerNotASongItHasNoneFor() {
+        val cache = LookupCache(File(folder.root, "sung.json"), Dispatchers.Unconfined)
+        // A search answered with a page that's neither its results nor its "none found", one asking whether it's a person, say.
+        val elsewhere = "<html><body>Just a moment...</body></html>"
+        fake.handler = { request -> FakeSpotify.html(request, elsewhere) }
+        assertNull(ask(cache))
+        // The song found, but its page without the words.
+        fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to elsewhere))
+        assertNull(ask(cache))
+        // Neither was kept as none: once it answers, it's asked again.
+        fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(cache)!!)
+    }
+
+    @Test
+    fun failuresAreAskedAgainWithAFreshCacheAndCanRecover() {
+        val elsewhere = "<html><body>Just a moment...</body></html>"
+        val cases = listOf(
+            site(emptyList(), emptyMap(), failing = true) to 1,
+            { request: Request -> FakeSpotify.html(request, elsewhere) } to 1,
+            site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to elsewhere)) to 2
+        )
+        cases.forEachIndexed { index, (failure, requests) ->
+            val disk = File(folder.root, "failure-$index.json")
+            fun fresh() = LookupCache(disk, Dispatchers.Unconfined)
+            fake.handler = failure
+            fake.requestedUrls.clear()
+            assertNull(ask(fresh()))
+            assertEquals(requests, fake.requestedUrls.size)
+            assertNull(ask(fresh()))
+            assertEquals(requests * 2, fake.requestedUrls.size)
+            fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
+            assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(fresh())!!)
+            assertEquals(requests * 2 + 2, fake.requestedUrls.size)
+        }
     }
 
     @Test
@@ -177,8 +240,98 @@ class SungReadingsTest {
         val theirs = SungReadings.linesOf(page)
         // The dictionary read fewer lines than there are: the rest are compared as written.
         val fixes = SungReadings.matched(lines, read(lines.take(1)), theirs)
-        assertTrue(ReadingFix(2, "存在", "こと") in fixes)
+        assertTrue(ReadingFix(2, "存在", "こと", Reader.SUNG) in fixes)
         assertEquals(emptyList<ReadingFix>(), SungReadings.matched(lines, read(), emptyList()))
+    }
+
+    /** The key a phone on cache version [version] kept this song's readings under. */
+    private fun key(version: Int) = "utaten|$version|${SongNames.normalize(song.title)}|${SongNames.normalize(song.artist)}|${lines.hashCode()}"
+
+    @Test
+    fun readingsKeptByTheVersionBeforeAreStillUsedAndNothingIsAsked() = runBlocking {
+        val cache = LookupCache(File(folder.root, "sung.json"), Dispatchers.Unconfined)
+        // Version 3, pinned for a song kept offline: the readings are real, and the key names that version.
+        cache.put(key(3), """[[0,"都会","まち"]]""")
+        fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
+        val fixes = SungReadings(fake.client(), cache, Dispatchers.Unconfined).of(song, lines, read())
+        assertEquals(fake.requestedUrls.toString(), emptyList<String>(), fake.requestedUrls)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in fixes.orEmpty())
+    }
+
+    @Test
+    fun aNoneKeptByTheVersionBeforeIsAskedAgainAndKeptAsThisVersion() = runBlocking {
+        val cache = LookupCache(File(folder.root, "sung-none.json"), Dispatchers.Unconfined)
+        // Version 3 took a page UtaTen doesn't write as none. That one is asked again.
+        cache.put(key(3), "[]")
+        fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
+        val fixes = SungReadings(fake.client(), cache, Dispatchers.Unconfined).of(song, lines, read())
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in fixes.orEmpty())
+        assertTrue(fake.requestedUrls.any { "utaten.com" in it })
+        fake.requestedUrls.clear()
+        assertEquals(fixes, SungReadings(fake.client(), cache, Dispatchers.Unconfined).of(song, lines, read()))
+        assertEquals(emptyList<String>(), fake.requestedUrls)
+    }
+
+    @Test
+    fun oneMatchedLineInThreeIsEnoughToKeep() = runBlocking {
+        // Exactly a third of the kanji lines. One fewer, and the page is not this song.
+        val few = listOf("都会の夜", "別の言葉", "違う文です")
+        val one = """<div class="hiragana" >${ruby("都会", "まち")}のよる<br /></div>"""
+        fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to one))
+        val fixes = SungReadings(fake.client(), null, Dispatchers.Unconfined).of(song, few, read(few))
+        assertEquals(listOf(ReadingFix(0, "都会", "まち", Reader.SUNG)), fixes)
+    }
+
+    @Test
+    fun nothingIsAskedWhenReadingsAreAlreadyUnwanted() = runBlocking {
+        val cache = LookupCache(File(folder.root, "sung-off.json"), Dispatchers.Unconfined)
+        fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
+        assertNull(SungReadings(fake.client(), cache, Dispatchers.Unconfined).of(song, lines, read()) { false })
+        assertEquals(emptyList<String>(), fake.requestedUrls)
+    }
+
+    @Test
+    fun theSongsPageIsNotOpenedOnceReadingsAreNoLongerWanted() = runBlocking {
+        val cache = LookupCache(File(folder.root, "sung-stop.json"), Dispatchers.Unconfined)
+        var wanted = true
+        fake.handler = { request ->
+            // The search has left. Readings are turned off before the song's page is opened.
+            if (request.url.encodedPath == "/search") wanted = false
+            site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))(request)
+        }
+        assertNull(SungReadings(fake.client(), cache, Dispatchers.Unconfined).of(song, lines, read()) { wanted })
+        assertEquals(fake.requestedUrls.toString(), 1, fake.requestedUrls.size)
+        assertTrue(fake.requestedUrls.single().contains("/search"))
+        assertFalse(File(folder.root, "sung-stop.json").let { it.isFile && "utaten|${SungReadings.CACHE_VERSION}|" in it.readText() })
+    }
+
+    @Test
+    fun noneForASongIsNotKeptOnceReadingsAreNoLongerWanted() = runBlocking {
+        val cache = LookupCache(File(folder.root, "sung-none-off.json"), Dispatchers.Unconfined)
+        var calls = 0
+        // No kanji, so nothing is asked. Turned off after the lookup started, its "none" is not kept.
+        val plain = listOf("oh yeah")
+        assertNull(SungReadings(fake.client(), cache, Dispatchers.Unconfined).of(song, plain, read(plain)) { ++calls == 1 })
+        assertEquals(emptyList<String>(), fake.requestedUrls)
+        assertFalse(File(folder.root, "sung-none-off.json").let { it.isFile && "utaten|" in it.readText() })
+    }
+
+    @Test
+    fun anAnswerThatArrivesAfterReadingsAreTurnedOffIsNotKept() = runBlocking {
+        val cache = LookupCache(File(folder.root, "sung-late.json"), Dispatchers.Unconfined)
+        var wanted = true
+        fake.handler = { request ->
+            // The page has been asked. Turned off before its readings can be kept.
+            if (request.url.encodedPath != "/search") wanted = false
+            site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))(request)
+        }
+        assertNull(SungReadings(fake.client(), cache, Dispatchers.Unconfined).of(song, lines, read()) { wanted })
+        assertFalse(File(folder.root, "sung-late.json").let { it.isFile && "utaten|${SungReadings.CACHE_VERSION}|" in it.readText() })
+        wanted = true
+        fake.requestedUrls.clear()
+        fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in SungReadings(fake.client(), cache, Dispatchers.Unconfined).of(song, lines, read())!!)
+        assertTrue(fake.requestedUrls.any { "utaten.com" in it })
     }
 
     @Test
@@ -188,6 +341,6 @@ class SungReadingsTest {
         val parts = SungReadings.linesOf(there).single()
         assertEquals(listOf(Ruby("", "ひ"), Ruby("星", "ほし"), Ruby("が"), Ruby("ラ", "ら"), Ruby("月", "つき")), parts)
         val fixes = SungReadings.matched(listOf("星がラ"), read(listOf("星がラ")), listOf(parts))
-        assertEquals(listOf(ReadingFix(0, "星", "ほし")), fixes)
+        assertEquals(listOf(ReadingFix(0, "星", "ほし", Reader.SUNG)), fixes)
     }
 }

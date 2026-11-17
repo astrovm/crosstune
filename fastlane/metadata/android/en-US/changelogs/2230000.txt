@@ -1,0 +1,10 @@
+Practice can remind you once a day of the cards due.
+After a card opens your music app, one tap brings you back.
+Japanese songs get chords from ChordWiki and J-Total.
+Furigana sits over the kanji only.
+Lyrics come from Genius too, and a song with no words says so.
+Lyrics stay closer on sped-up or slowed recordings.
+Practice cards kept from Spotify play there.
+Each music app opens the song you just asked for.
+Qobuz's retries reach the right song.
+Chord lookups use less data.

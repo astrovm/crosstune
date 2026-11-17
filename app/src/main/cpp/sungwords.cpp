@@ -28,7 +28,8 @@ JNIEXPORT jlong JNICALL Java_com_astrovm_crosstune_NativeWhisper_nativeOpen(JNIE
 }
 
 // The words heard in [samples], 16 kHz mono, one a line: when it starts in milliseconds, a tab, and the word.
-// As bytes, since a token can end partway through a letter, which Java's strings won't take.
+// As bytes, since a token can end partway through a letter, which Java's strings won't take. Null when
+// whisper.cpp fails on them, as out of memory, which isn't the same as music with no words in it.
 JNIEXPORT jbyteArray JNICALL Java_com_astrovm_crosstune_NativeWhisper_nativeWords(JNIEnv* env, jobject, jlong instance, jfloatArray samples, jstring language, jint threads) {
     whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
     params.beam_search.beam_size = 5;
@@ -44,7 +45,8 @@ JNIEXPORT jbyteArray JNICALL Java_com_astrovm_crosstune_NativeWhisper_nativeWord
     jsize count = env->GetArrayLength(samples);
     jfloat* sound = env->GetFloatArrayElements(samples, nullptr);
     std::string words;
-    if (sound != nullptr && whisper_full(context(instance), params, sound, count) == 0) {
+    bool heard = sound != nullptr && whisper_full(context(instance), params, sound, count) == 0;
+    if (heard) {
         whisper_context* ctx = context(instance);
         whisper_token last = whisper_token_eot(ctx);
         for (int segment = 0; segment < whisper_full_n_segments(ctx); segment++) {
@@ -66,6 +68,7 @@ JNIEXPORT jbyteArray JNICALL Java_com_astrovm_crosstune_NativeWhisper_nativeWord
     }
     if (sound != nullptr) env->ReleaseFloatArrayElements(samples, sound, JNI_ABORT);
     if (lang != nullptr) env->ReleaseStringUTFChars(language, lang);
+    if (!heard) return nullptr;
     jbyteArray out = env->NewByteArray(static_cast<jsize>(words.size()));
     if (out != nullptr) env->SetByteArrayRegion(out, 0, static_cast<jsize>(words.size()), reinterpret_cast<const jbyte*>(words.data()));
     return out;

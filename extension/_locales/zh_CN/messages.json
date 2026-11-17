@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "在你喜欢的服务中打开音乐链接。"
-  },
-  "actionTitle": {
-    "message": "Crosstune 设置"
-  },
-  "optionsEnabled": {
-    "message": "在下面的服务中打开音乐链接"
-  },
-  "optionsService": {
-    "message": "打开方式"
-  },
-  "optionsAccess": {
-    "message": "Crosstune 需要访问音乐网站，才能为你打开链接。"
-  },
-  "optionsAllow": {
-    "message": "允许"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "在你喜欢的服务中打开音乐链接，并显示正在播放的歌词。" },
+  "actionTitle": { "message": "Crosstune 歌词" },
+  "optionsEnabled": { "message": "在下面的服务中打开音乐链接" },
+  "optionsService": { "message": "打开方式" },
+  "optionsAccess": { "message": "Crosstune 需要访问音乐网站才能打开链接并显示歌词。" },
+  "optionsAllow": { "message": "允许" },
+  "lyricsNoSong": { "message": "在音乐网站上播放一首歌" },
+  "lyricsLoading": { "message": "正在查找歌词" },
+  "lyricsNone": { "message": "这首歌没有歌词" },
+  "lyricsInstrumental": { "message": "纯音乐" },
+  "lyricsOffline": { "message": "你已离线" },
+  "lyricsUnavailable": { "message": "无法连接歌词网站" },
+  "lyricsRetry": { "message": "重试" },
+  "lyricsSettings": { "message": "设置" }
 }

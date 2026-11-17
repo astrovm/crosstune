@@ -311,4 +311,599 @@ class ChordSheetsTest {
         )
         assertEquals(listOf(0), ChordSheets.onto(LineChords(over = listOf(Chord(3, "C"))), "abcd", "", null).over.map { it.at })
     }
+
+    /** A chord as J-Total's page links it, to the picture of how it's played. */
+    private fun jTotal(name: String) = """<a href="JavaScript:jump_1('../../../cd/$name.html');">$name</a>"""
+
+    @Test
+    fun jTotalsChordsLandOnTheLetterAtTheirColumnInAFontWhereJapaneseTakesTwo() {
+        // E, six wide spaces and a space put Am 14 columns in: letter 7 of the words, as each of theirs takes two.
+        val sheet = "${jTotal("E")}\u3000\u3000\u3000\u3000\u3000\u3000 ${jTotal("Am")}<br>\n  川の道を歩いていく"
+        assertEquals(
+            listOf(SheetLine("川の道を歩いていく", listOf(Chord(0, "E"), Chord(7, "Am")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalsChordInATagOfItsOwnInItsLinkIsStillItsChord() {
+        // A tag that isn't a link is cut before the link is read.
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "Am")))),
+            ChordSheets.fromJTotal("""<a href="JavaScript:jump_1('../../../cd/Am.html');"><b>Am</b></a><br>abcd""")
+        )
+    }
+
+    @Test
+    fun jTotalsBassIsWrittenAfterItsLinkAsOn() {
+        assertEquals(
+            listOf(SheetLine("川の道", listOf(Chord(0, "E/G#"), Chord(3, "Am")))),
+            ChordSheets.fromJTotal("${jTotal("E")}onG#\u3000 ${jTotal("Am")}<br>川の道")
+        )
+    }
+
+    @Test
+    fun jTotalsPagesWrapChordsAcrossLinesOfTheirSourceWithoutEndingALine() {
+        // Its source wraps anywhere, as a browser takes that for one space; only <br> ends a line.
+        assertEquals(
+            listOf(SheetLine("", listOf(Chord(0, "E"), Chord(0, "G#m"), Chord(0, "Am")))),
+            ChordSheets.fromJTotal("${jTotal("E")} \n  / ${jTotal("G#m")}\n  / ${jTotal("Am")} /<BR>\n")
+        )
+    }
+
+    @Test
+    fun jTotalsBrokenSourceLineLandsWhereTheLivePageDoes() {
+        // IGNITE: Chromium collapses the source newlines to spaces, it does not break the line.
+        val sheet = "　　　　${jTotal("F")}　　　　　　 \n" +
+            "                        ${jTotal("G")}　　　　 \n" +
+            "                        ${jTotal("Em")}　　　${jTotal("Am")}　　　/ \n" +
+            "                        ${jTotal("Am")} \n                        /<br>\n" +
+            "                        迷わずに今　矛盾だらけの世界を　その手で撃ち放て<br>"
+        assertEquals(
+            listOf(SheetLine("迷わずに今　矛盾だらけの世界を　その手で撃ち放て", listOf(
+                Chord(4, "F"), Chord(11, "G"), Chord(16, "Em"), Chord(20, "Am"), Chord(24, "Am")
+            ))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalCollapsesSpacesAcrossInlineTags() {
+        val sheet = " </tt><tt> ${jTotal("Am7")} ${jTotal("G")}<br>目　と"
+        assertEquals(
+            listOf(SheetLine("目　と", listOf(Chord(0, "Am7"), Chord(2, "G")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalCollapsesSpacesInsideChordLinks() {
+        val sheet = "<a href='../../../cd/C.html'> C</a> ${jTotal("F")}<br>abcd"
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "C"), Chord(2, "F")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalIgnoresAChordLinkWithOnlyWhitespace() {
+        val sheet = "${jTotal("C")}<a href='../../../cd/C.html'> \n </a> ${jTotal("G")}<br>abcd"
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "C"), Chord(2, "G")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalCountsOneSpaceForSpacesAndEmptyLinksInARow() {
+        // A browser draws the space, the empty link and the spaces after it as one space.
+        val sheet = "${jTotal("D")} <a href='../../../cd/A.html'> \n </a> \u3000\u3000${jTotal("Em")}<br>あいうえおかき"
+        assertEquals(
+            listOf(SheetLine("あいうえおかき", listOf(Chord(0, "D"), Chord(3, "Em")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalKeepsAChordWhoseLinkClosesAfterTheBreakOnTheLineOfItsName() {
+        val sheet = "${jTotal("F")}\u3000 <a href='../../../cd/C.html'>C<br>\n </a><br>あいうえお"
+        assertEquals(
+            listOf(SheetLine("あいうえお", listOf(Chord(0, "F"), Chord(2, "C")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalTrimsNoBracketInEitherStack() {
+        // Drawn in Chromium, Edge and Chrome on Windows, in Japanese: MS Gothic has no narrow forms to trim to, so
+        // a full-width bracket or stop stays two columns. Trimmed, each chord would land one letter later.
+        for (monospace in listOf(false, true)) {
+            assertEquals(1, at("\u3000${jTotal("C")}<br>」\u3000い", monospace))
+            assertEquals(2, at("abcd${jTotal("C")}<br>あ、\u3000「いう」\u3000えお", monospace))
+            assertEquals(4, at("abcdefgh${jTotal("C")}<br>「あい」\u3000「うえ」お", monospace))
+        }
+    }
+
+    @Test
+    fun jTotalsPunctuationIsAsWideBesideOtherPunctuationAsAlone() {
+        // The pairs scripts/jtotal-widths measured on Windows: none is narrower than its two marks alone, so a
+        // chord over the columns of both is on the letter after them.
+        val marks = "、。，．・：；！？「」『』（）［］｛｝〈〉《》【】〔〕“”‘’\u3000"
+        for (monospace in listOf(false, true)) {
+            for (first in marks) {
+                for (second in marks) {
+                    val columns = (JTotalWidths.of(first.code, monospace) + JTotalWidths.of(second.code, monospace)) / JTotalWidths.COLUMN
+                    assertEquals("$first$second", 2, at("x".repeat(columns) + "${jTotal("C")}<br>$first${second}いう", monospace))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun jTotalsReferenceMarkIsTwoColumnsInBothStacks() {
+        // Drawn in Chromium on both stacks. At 1.650 columns, the first chord would land on the second a.
+        for (monospace in listOf(false, true)) {
+            assertEquals(4, at("abcdefgh${jTotal("C")}<br>※※※※aaaa", monospace))
+            assertEquals(4, at("abcdef${jTotal("C")}<br>※A\u3000ああ", monospace))
+        }
+    }
+
+    @Test
+    fun jTotalsHalfwidthSoundMarksTakeAColumnEach() {
+        // Drawn in Chromium on both stacks: ﾞ and ﾟ draw as part of the kana before them, and still move the line on
+        // by a column. With no width, each chord would land one letter later, on い.
+        for (monospace in listOf(false, true)) {
+            assertEquals(2, at("xx${jTotal("C")}<br>ｶﾞあい", monospace))
+            assertEquals(2, at("xx${jTotal("C")}<br>ﾊﾟあい", monospace))
+            assertEquals(4, at("xxxx${jTotal("C")}<br>ｶﾞｶﾞあい", monospace))
+        }
+    }
+
+    @Test
+    fun jTotalsGreekCyrillicAndOtherShiftJisSymbolsAreTwoColumns() {
+        // Drawn on Windows: MS Gothic has these, at two columns. Narrower, each chord would land a letter later.
+        for (monospace in listOf(false, true)) {
+            assertEquals(3, at("xxxxxx${jTotal("C")}<br>αβγδεあ", monospace))
+            assertEquals(3, at("xxxxxx${jTotal("C")}<br>жизньあ", monospace))
+            assertEquals(3, at("xxxxxx${jTotal("C")}<br>≒≒≒≒あ", monospace))
+        }
+    }
+
+    private fun at(sheet: String, monospace: Boolean) = ChordSheets.fromJTotal(sheet, monospace).single().chords.single().at
+
+    @Test
+    fun jTotalCountsALetterAboveTheBasicPlaneBeforeAChordOnce() {
+        // 𠮷 is one letter of two columns, which Java holds as two halves. Counted as two letters, it would
+        // move the chord after it on by two more columns, to the end of the line.
+        for (monospace in listOf(false, true)) assertEquals(2, at("\uD842\uDFB7${jTotal("C")}<br>abcd", monospace))
+    }
+
+    @Test
+    fun jTotalPutsNoChordOnHalfOfALetterAboveTheBasicPlane() {
+        // Read as two letters, 𠮷's second half would start where a does, and take the chord over it.
+        for (monospace in listOf(false, true)) assertEquals(2, at("xx${jTotal("C")}<br>\uD842\uDFB7ab", monospace))
+    }
+
+    @Test
+    fun aLongRunOfLinksAndSpacesFitsOnTheStack() {
+        // Read one at a time, each link and space of a run took a step deeper into the stack: 20,000 of them
+        // overflowed it. The run is a line of nothing but links, so no line comes out of it.
+        assertEquals(listOf(SheetLine("abcd", emptyList())), ChordSheets.fromJTotal("${"<a> ".repeat(100_000)}<br>abcd"))
+    }
+
+    @Test
+    fun jTotalDoesNotReadLinksToOtherVersionsAsChords() {
+        val sheet = "<a href='song-e.html'>Easy version</a><br>${jTotal("C")}<br>abcd"
+        assertEquals(
+            listOf(SheetLine("Easy version", emptyList()), SheetLine("abcd", listOf(Chord(0, "C")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalUsesTheLastActiveTtFontRule() {
+        val normal = "<style>tt { font-family: 'Inconsolata', sans-serif; }</style>"
+        val mono = "<style><!-- tt { font-family: 'Inconsolata', monospace; } --></style>"
+        assertEquals(false, ChordSheets.jTotalMonospace(""))
+        assertEquals(false, ChordSheets.jTotalMonospace("$normal<!-- $mono -->"))
+        assertEquals(true, ChordSheets.jTotalMonospace(normal + mono))
+        assertEquals(false, ChordSheets.jTotalMonospace(mono + normal))
+        assertEquals(false, ChordSheets.jTotalMonospace(normal + "<style>/* tt { font-family: 'Inconsolata', monospace; } */</style>"))
+        assertEquals(true, ChordSheets.jTotalMonospace(normal + "<STYLE>/* a */ tt { font-family: 'Inconsolata', monospace; } /* b */</STYLE>"))
+    }
+
+    @Test
+    fun jTotalReadsACssCommentFromItsOpeningToTheFirstCloseAfterIt() {
+        val monoRule = "tt { font-family: 'Inconsolata', monospace; }"
+        // A comment at the very start of the page's CSS.
+        assertEquals(false, ChordSheets.jTotalMonospace("<style>/* $monoRule */</style>"))
+        // The slash that opens a comment doesn't also close it: "/*/" is still open.
+        assertEquals(false, ChordSheets.jTotalMonospace("<style>/*/ $monoRule */</style>"))
+        // The rule right after the close, with no space: the close is all that goes.
+        assertEquals(true, ChordSheets.jTotalMonospace("<style>/* x */$monoRule</style>"))
+    }
+
+    @Test
+    fun jTotalsSheetIsFromItsFirstStartToTheEndAfterIt() {
+        assertEquals("ab", ChordSheets.jTotalSheet("x<!--HPSTART-->ab<!--HPEND-->c<!--HPSTART-->d<!--HPEND-->"))
+        assertEquals("", ChordSheets.jTotalSheet("<!--HPSTART--><!--HPEND-->"))
+        assertNull(ChordSheets.jTotalSheet("<!--HPEND--><!--HPSTART-->ab"))
+        assertNull(ChordSheets.jTotalSheet("ab<!--HPEND-->"))
+    }
+
+    @Test
+    fun jTotalsChordsPastTheWordsEndLandAtTheEndAndWordsWithNoChordsStay() {
+        assertEquals(
+            listOf(SheetLine("川の道", listOf(Chord(3, "Am"))), SheetLine("朝の光 2", emptyList())),
+            ChordSheets.fromJTotal("\u3000\u3000\u3000\u3000\u3000${jTotal("Am")}<br>川の道<br>\n<br>朝の光 2<br />")
+        )
+    }
+
+    @Test
+    fun jTotalsColumnsFollowTheFontItsPageAsksFor() {
+        // The letter before the chord is what's measured. Leading spaces would be trimmed, as the browser does.
+        // Inconsolata, the font the page names first, draws an ellipsis, an em dash and Ā at one column.
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("…${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("—${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("‘${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("↑${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("\u0100${jTotal("C")}<br>abcd"))
+        // A full-width ） and a corner bracket are two columns in the Japanese font under that.
+        // → is not in Inconsolata, so it is two as well. A zero-width mark adds none.
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("）${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("（${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("「${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("→${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(0, "C")))), ChordSheets.fromJTotal("\u200B${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(0, "C")))), ChordSheets.fromJTotal("\u0301${jTotal("C")}<br>abcd"))
+        // A half-width sound mark is a column, even with no kana before it to join.
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("\uFF9E${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("\uFF9F${jTotal("C")}<br>abcd"))
+        // Four Latin columns reach い: あ and ） are two each, because い is not punctuation.
+        assertEquals(listOf(SheetLine("あ）い", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ）い"))
+    }
+
+    @Test
+    fun jTotalsEmptyLinksAddNoColumnAndNoLine() {
+        // Measured in Chromium: an empty link is not drawn, so "C / " is four columns and the next C is on e.
+        val empty = """<a href="JavaScript:jump_1('../../../cd/C.html');"></a>"""
+        assertEquals(
+            listOf(SheetLine("abcdefghijklmnopqrstuvwxyz", listOf(Chord(0, "C"), Chord(4, "C")))),
+            ChordSheets.fromJTotal("${jTotal("C")} / $empty${jTotal("C")}<br>abcdefghijklmnopqrstuvwxyz")
+        )
+        // A line that is only that link is blank on the page, so the chord stays over the words under it.
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "C")))),
+            ChordSheets.fromJTotal("${jTotal("C")}<br>$empty<br>abcd")
+        )
+        assertEquals(
+            listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("abcd", listOf(Chord(0, "Am")))),
+            ChordSheets.fromJTotal("${jTotal("C")}<br>$empty<br>${jTotal("Am")}<br>abcd")
+        )
+        // Two empty links with a space between them are still a blank line once the tags are gone.
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "C")))),
+            ChordSheets.fromJTotal("${jTotal("C")}<br>$empty $empty<br>abcd")
+        )
+    }
+
+    @Test
+    fun jTotalsALinkSplitByALineBreakStillNamesItsChord() {
+        // Measured: the page breaks before Em, Em is two columns, and F is on d.
+        val split = """<a href="JavaScript:jump_1('../../../cd/Em.html');"><br>Em</a>"""
+        assertEquals(
+            listOf(SheetLine("abcdef", listOf(Chord(0, "Em"), Chord(3, "F")))),
+            ChordSheets.fromJTotal("$split ${jTotal("F")}<br>abcdef")
+        )
+        // The bass stays on the name, same as a link the line break did not cut. "EmonG#" is six columns.
+        val splitBass = """<a href="JavaScript:jump_1('../../../cd/Em.html');"><br>Em</a>onG#"""
+        assertEquals(
+            listOf(SheetLine("abcdefgh", listOf(Chord(0, "Em/G#"), Chord(7, "F")))),
+            ChordSheets.fromJTotal("$splitBass ${jTotal("F")}<br>abcdefgh")
+        )
+        // The cut link is its own line, so the chord above it does not take Em as its words.
+        assertEquals(
+            listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("abcdef", listOf(Chord(0, "Em")))),
+            ChordSheets.fromJTotal("${jTotal("C")}<br>$split<br>abcdef")
+        )
+    }
+
+    @Test
+    fun jTotalsInconsolataLettersTakeOneColumn() {
+        val letters = listOf(
+            '\u0100', '\u0131', '\u0134', '\u0148', '\u014A', '\u017E', '\u018F', '\u0192', '\u0198',
+            '\u01A0', '\u01A1', '\u01AF', '\u01B0', '\u01B8', '\u01B9', '\u01C7', '\u01C9', '\u01E6',
+            '\u01E7', '\u01EA', '\u01EB', '\u01FA', '\u021B', '\u022A', '\u022D', '\u0230', '\u0233',
+            '\u0237', '\u024D', '\u0259', '\u027B', '\u0298', '\u029A', '\u02B9', '\u02BC', '\u02BE',
+            '\u02BF', '\u02C6', '\u02CC', '\u02DA', '\u02DC', '\u02DD', '\u1E08', '\u1E09', '\u1E0C',
+            '\u1E0F', '\u1E14', '\u1E17', '\u1E1C', '\u1E1D', '\u1E20', '\u1E21', '\u1E24', '\u1E25',
+            '\u1E2A', '\u1E2B', '\u1E2E', '\u1E2F', '\u1E36', '\u1E37', '\u1E3A', '\u1E3B', '\u1E42',
+            '\u1E49', '\u1E4C', '\u1E53', '\u1E5A', '\u1E5B', '\u1E5E', '\u1E69', '\u1E6C', '\u1E6F',
+            '\u1E78', '\u1E7B', '\u1E80', '\u1E85', '\u1E8E', '\u1E8F', '\u1E92', '\u1E93', '\u1E97',
+            '\u1E9E', '\u1EA0', '\u1EF9', '\u2009', '\u2013', '\u2014', '\u2018', '\u201A', '\u201C',
+            '\u201E', '\u2020', '\u2022', '\u2026', '\u2032', '\u2033', '\u2039', '\u203A', '\u2044',
+            '\u20A1', '\u20A3', '\u20A4', '\u20A6', '\u20A7', '\u20A9', '\u20AB', '\u20AD', '\u20B1',
+            '\u20B2', '\u20B5', '\u20B9', '\u20BA', '\u20BC', '\u20BD', '\u2113', '\u2122', '\u2191',
+            '\u2193', '\u2212', '\u2215', '\uFFFD'
+        )
+        for (letter in letters) {
+            assertEquals(
+                "U+%04X".format(letter.code),
+                listOf(SheetLine("abcd", listOf(Chord(1, "C")))),
+                ChordSheets.fromJTotal("$letter${jTotal("C")}<br>abcd")
+            )
+        }
+        for (letter in listOf('\u0300', '\u0303', '\u0304', '\u0308', '\u0309', '\u0323', '\uFEFF')) {
+            assertEquals(
+                "U+%04X".format(letter.code),
+                listOf(SheetLine("abcd", listOf(Chord(0, "C")))),
+                ChordSheets.fromJTotal("$letter${jTotal("C")}<br>abcd")
+            )
+        }
+    }
+
+
+    @Test
+    fun jTotalsWideLettersStartRightPastLatinAndOnEitherSideOfHalfWidthKana() {
+        // What comes before the chord is what's measured; words in Latin letters say how many columns it took.
+        // Ā is one column: Inconsolata has it. The last half-width kana letter is one, and so are the sound marks, covered
+        // above. On Windows, Malgun Gothic draws the half-width Hangul filler at one column too.
+        val columnsOf = listOf('\u00FF' to 1, '\u0100' to 1, '\uFF60' to 2, '\uFF61' to 1, '\uFF9D' to 1, '\uFFA0' to 1)
+        for ((letter, columns) in columnsOf) {
+            assertEquals(
+                "U+%04X".format(letter.code),
+                listOf(SheetLine("abcd", listOf(Chord(columns, "C")))),
+                ChordSheets.fromJTotal("$letter${jTotal("C")}<br>abcd")
+            )
+        }
+    }
+
+    @Test
+    fun chordWikisChordsSitOnTheWordsAndItsNotesAreNotSung() {
+        val source = """
+            {title:川の道}
+            {subtitle:歌:歩く人　作詞:誰か}
+            {capo:2}
+            {c:BPM=90}
+            # [C]この行はメモ
+            |[Am]---- [G]----|
+            (4/4)[Am]川の道を歩いていく
+            [F]朝の光に[C]歌っている
+            {soc}
+            [G]川の道
+            {eoc}
+        """.trimIndent()
+        val song = ChordSheets.fromChordWiki(source)
+        assertEquals("川の道", song.title)
+        assertEquals("歩く人", song.artist)
+        assertEquals(2, song.capo)
+        assertEquals(
+            listOf(
+                SheetLine("", listOf(Chord(0, "Am"), Chord(5, "G"))),
+                SheetLine("川の道を歩いていく", listOf(Chord(0, "Am"))),
+                SheetLine("朝の光に歌っている", listOf(Chord(0, "F"), Chord(4, "C"))),
+                SheetLine("川の道", listOf(Chord(0, "G")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
+    fun aReadingInBracketsAfterAKanjiIsNotWordsOfTheSong() {
+        val song = ChordSheets.fromChordWiki(
+            """
+            [C]川(かわ)の道(みち)を[F]歩(ある)く人(ひと)
+            [G]今(い[F]----ま)の[Am]夜(ﾖﾙ)
+            [Dm]あ(パパヤ)[C]回(マワ)レ
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf(
+                // The chord before 歩 stays before it, with the readings gone.
+                SheetLine("川の道を歩く人", listOf(Chord(0, "C"), Chord(4, "F"))),
+                // A chord inside a reading sits where the reading was.
+                SheetLine("今の夜", listOf(Chord(0, "G"), Chord(1, "F"), Chord(2, "Am"))),
+                // Brackets that follow no kanji are sung.
+                SheetLine("あ(パパヤ)回レ", listOf(Chord(0, "Dm"), Chord(6, "C")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
+    fun aLineWhoseReadingsAreLongerThanItsWordsKeepsAllItsChords() {
+        val texts = listOf("朝の光に歌っているよ川の道", "風が吹いて花が咲く春の日", "夜明けの空に鳥が歌う", "遠い海へ船を漕ぎ出そう")
+        val written = ChordSheets.fromChordWiki(
+            """
+            [Am]朝(あさひかりのなか)の光(ひかりのさき)に[F]歌(うたごえがきこえる)っているよ[G]川(かわのながれ)の道(みちのり)[C]
+            [C]風が吹いて[Am]花が咲く春の日
+            [F]夜(よるのさき)明けの空に[G]鳥が歌(うたごえ)う
+            [C]遠い海へ[Am]船を漕ぎ出そう
+            """.trimIndent()
+        ).lines
+        val placed = ChordSheets.place(sheet(*written.toTypedArray()), texts)!!
+        // The last one is played after the line, past readings the song doesn't have.
+        assertEquals(listOf("Am", "F", "G", "C"), placed[0].over.map { it.name })
+        assertEquals(listOf("C", "Am"), placed[1].over.map { it.name })
+        assertEquals(listOf("F", "G"), placed[2].over.map { it.name })
+        assertEquals(listOf("C", "Am"), placed[3].over.map { it.name })
+        // And each over the letter it was played on.
+        assertEquals(listOf(0, 4, 10, 13), placed[0].over.map { it.at })
+    }
+
+    @Test
+    fun chordWikisEditorIsItsLongestTextareaAndAnEmptyOneIsNotThePageAroundIt() {
+        val page = """
+            <p>{title:外}</p>
+            <textarea>short</textarea>
+            <TEXTAREA id="chord">{title:川&amp;道}
+            {subtitle:歌：歩く人}
+            [F]あ</TEXTAREA>
+        """.trimIndent()
+        assertEquals(ChordWikiSong(listOf(SheetLine("あ", listOf(Chord(0, "F")))), title = "川&道", artist = "歩く人"), ChordSheets.fromChordWiki(page))
+        assertEquals(ChordWikiSong(emptyList()), ChordSheets.fromChordWiki("<textarea name=\"source\"></textarea>{title:外}[C]川"))
+    }
+
+    @Test
+    fun chordWikiKeepsRealChordsDropsWordsInBracketsAndSkipsTabsNotesAndASecondName() {
+        val source = """
+            {title:}
+            {title:一}
+            {t:二}
+            {subtitle:}
+            {subtitle:作詞:誰か}
+            {subtitle:歩く人　作曲:誰か}
+            {subtitle:歌:甲　作詞:誰か}
+            {st:歌：乙　歌詞:誰か}
+            {capo:no}
+            {capo:99}
+            {capo:2}
+            {capo:4}
+            {c:BPM=90}
+            {comment:メモ}
+            {ci:もう一つ}
+            {soc}
+            {eoc}
+            # [C]この行はメモ
+            {sot}
+            [D]----
+            {eot}
+            {start_of_tab}
+            [D]----
+            {end_of_tab}
+            {sog}
+            [D]----
+            {eog}
+            {start_of_grid}
+            [D]----
+            {end_of_grid}
+            [C#m]川 # [G]メモ
+            [サビ][Chorus][A B][Good][Caaa][Cabcdefghijklmno]川[C!]の道
+            [Cmaj7]の[N.C.]道[NC]よ[Dbadd9][Eb7(9)][Am7b5][F/G]ね
+            {川}
+            朝の光
+            ----
+            |(4/4)[Am]川|の[n.c.]道
+        """.trimIndent()
+        val song = ChordSheets.fromChordWiki(source)
+        assertEquals("一", song.title)
+        assertEquals("歩く人", song.artist)
+        assertEquals(2, song.capo)
+        assertEquals(
+            listOf(
+                SheetLine("川", listOf(Chord(0, "C#m"))),
+                SheetLine("川の道", emptyList()),
+                SheetLine("の道よね", listOf(Chord(0, "Cmaj7"), Chord(1, "N.C."), Chord(2, "NC"), Chord(3, "Dbadd9"), Chord(3, "Eb7(9)"), Chord(3, "Am7b5"), Chord(3, "F/G"))),
+                SheetLine("{川}", emptyList()),
+                SheetLine("朝の光", emptyList()),
+                SheetLine("川の道", listOf(Chord(0, "Am"), Chord(2, "n.c.")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
+    fun chordWikiKeepsTheLastFretAChordOfFifteenCharactersAndCutsANoteAfterAStrayBracket() {
+        val kept = "Cmaj7sus4add11x"
+        val dropped = "Cmaj7sus4add11xx"
+        assertEquals(15, kept.length)
+        assertEquals(16, dropped.length)
+        assertEquals(0, ChordSheets.fromChordWiki("{capo:25}\n[C]川").capo)
+        val song = ChordSheets.fromChordWiki(
+            """
+            {capo:25}
+            {capo:24}
+            [$kept]川
+            [$dropped]道
+            ]#[Am]メモ
+            """.trimIndent()
+        )
+        assertEquals(24, song.capo)
+        assertEquals(listOf(SheetLine("川", listOf(Chord(0, kept))), SheetLine("道", emptyList())), song.lines)
+    }
+
+    @Test
+    fun chordWikiTakesTheShortTitleAndSubtitleAndAChordOnceATabHasEnded() {
+        assertEquals("一", ChordSheets.fromChordWiki("{t:一}\n[C]川").title)
+        assertEquals("歩く人", ChordSheets.fromChordWiki("{st:歌：歩く人}\n[C]川").artist)
+        // A blank name after 歌： is nobody, so the subtitle's own words stay.
+        assertEquals("歌：", ChordSheets.fromChordWiki("{subtitle:歌： }\n[C]川").artist)
+        // A name of nothing but a space that isn't one of the plain ones is no name either.
+        assertEquals("歌：", ChordSheets.fromChordWiki("{st:歌：\u2003 作詞：山田}\n[C]川").artist)
+        // A credit right after the spaces is no name, on a phone too, where "\s" takes U+2003: main read "作詞：山田".
+        assertEquals("歌：", ChordSheets.fromChordWiki("{st:歌： 作詞：山田}\n[C]川").artist)
+        assertEquals("歌：", ChordSheets.fromChordWiki("{st:歌：　作曲：山田 歌詞：川}\n[C]川").artist)
+        assertEquals("歩く人", ChordSheets.fromChordWiki("{st:歌：\u2003歩く人 作詞：山田}\n[C]川").artist)
+        val song = ChordSheets.fromChordWiki(
+            """
+            {c:BPM=90}
+            [C]残
+            {sot}
+            [D]----
+            {eot}
+            [E]甲
+            {start_of_tab}
+            [D]----
+            {end_of_tab}
+            [F]乙
+            {sog}
+            [D]----
+            {eog}
+            [G]丙
+            {start_of_grid}
+            [D]----
+            {end_of_grid}
+            [A]丁
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf(
+                SheetLine("残", listOf(Chord(0, "C"))),
+                SheetLine("甲", listOf(Chord(0, "E"))),
+                SheetLine("乙", listOf(Chord(0, "F"))),
+                SheetLine("丙", listOf(Chord(0, "G"))),
+                SheetLine("丁", listOf(Chord(0, "A")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
+    fun aShortLineTheWordsDontHaveStillKeepsItsChordInOrder() {
+        // F7 sits on three letters the lyric lines don't have, between chords that do get drawn.
+        // Those three letters are too few to call the line another verse, so the chord stays, in order.
+        // Chords on their own after the last line stay too.
+        val sheet = sheet(
+            SheetLine("", listOf(Chord(0, "DbM7"), Chord(4, "E"))),
+            SheetLine("Hey", listOf(Chord(0, "F7"))),
+            SheetLine("", listOf(Chord(0, "C7"))),
+            SheetLine("Walking down the river road", listOf(Chord(0, "G"))),
+            SheetLine("Singing to the morning light", listOf(Chord(0, "D"))),
+            SheetLine("", listOf(Chord(0, "Em")))
+        )
+        val placed = ChordSheets.place(sheet, listOf("Walking down the river road", "Singing to the morning light"))!!
+        val names = placed.flatMap { line -> line.before + line.over.map { it.name } }
+        assertEquals(listOf("DbM7", "E", "F7", "C7", "G", "D", "Em"), names)
+    }
+
+    @Test
+    fun aChordOnLettersThatLinedUpStaysWhenTheRestOfTheLineDoesNot() {
+        // Most of the line is words the song never sings, so it is under half. The chord on the
+        // words that did line up stays. The one on the words that didn't is not this song's.
+        val lyric = "Walking down the river road"
+        val sheet = sheet(
+            SheetLine("$lyric ${"q".repeat(30)}", listOf(Chord(0, "G"), Chord(lyric.length + 1, "C"))),
+            SheetLine("Singing to the morning light", listOf(Chord(0, "D")))
+        )
+        val placed = ChordSheets.place(sheet, listOf(lyric, "Singing to the morning light"))!!
+        assertEquals(listOf("G", "D"), placed.flatMap { line -> line.before + line.over.map { it.name } })
+    }
+
+    @Test
+    fun jTotalsHalfWidthLettersTakeOneColumnAndChordsBeforeOthersHaveNoWords() {
+        assertEquals(
+            listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("ab川ｶ道", listOf(Chord(3, "G")))),
+            ChordSheets.fromJTotal("${jTotal("C")}<br>\u3000 ${jTotal("G")}<br>ab川ｶ道")
+        )
+    }
 }

@@ -28,6 +28,14 @@ class UiStateTest {
     }
 
     @Test
+    fun aSongIsOfferedToPlayOnlyWhereItsAppPlaysOneAskedFor() {
+        val youTubeMusic = UiState(result = song, selectedDestination = Destination.Service(MusicService.YOUTUBE_MUSIC), installed = setOf(MusicService.YOUTUBE_MUSIC))
+        assertTrue(youTubeMusic.canPlayResult)
+        // Bandcamp's app takes only a search, so asked to play it comes to the front on one and plays nothing.
+        assertFalse(youTubeMusic.copy(selectedDestination = Destination.Service(MusicService.BANDCAMP), installed = setOf(MusicService.BANDCAMP)).canPlayResult)
+    }
+
+    @Test
     fun theWordsCanStartTheSongOnlyOnceTheyAreItsAndNotFollowedInAnAppYet() {
         val ready = UiState(
             result = song, lyricsFor = song,

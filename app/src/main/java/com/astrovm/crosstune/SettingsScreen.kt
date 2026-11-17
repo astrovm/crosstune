@@ -1,6 +1,18 @@
 package com.astrovm.crosstune
 
 import androidx.annotation.DrawableRes
+import androidx.annotation.VisibleForTesting
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.shape.CornerBasedShape
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Scaffold
@@ -8,12 +20,17 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.draw.rotate
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -73,6 +90,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -82,6 +100,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -95,6 +114,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.unit.em
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 
 @Composable
@@ -110,7 +136,11 @@ internal fun SettingsScreen(
     // Kept out here, so a list is where it was on coming back from a page.
     val listScroll = rememberScrollState()
     val sourcesScroll = rememberScrollState()
-    val page = openSource?.takeIf { key -> key == VISUALS_PAGE || key == ADVANCED_PAGE || key == SOURCES_PAGE || sources.any { it.key == key } }
+    val page = openSource?.takeIf { key -> key in PAGES || sources.any { it.key == key } }
+    // The page just left for the list, so the row that opened it has the remote again.
+    val previous = remember { arrayOfNulls<String>(1) }
+    val backFrom = remember(page) { previous[0].takeIf { page == null } }
+    SideEffect { previous[0] = page }
     // Back from a page: the list, or the sources' from a source's own.
     val up = SOURCES_PAGE.takeIf { depth(page) == 2 }
     SwipedBackPages(page, back = up, label = "source", forward = { from, to -> depth(to) > depth(from) }, onBack = { onOpenSource(up) }) { key ->
@@ -119,21 +149,79 @@ internal fun SettingsScreen(
             VisualsPage(state.visualsSettings, actions, onBack = { onOpenSource(null) })
         } else if (key == ADVANCED_PAGE) {
             AdvancedPage(state, actions, onBack = { onOpenSource(null) })
+        } else if (key == LICENSES_PAGE) {
+            LicensesPage(onBack = { onOpenSource(null) })
         } else if (key == SOURCES_PAGE) {
             SourcesPage(state, actions, sources, sourcesScroll, onOpen = onOpenSource, onBack = { onOpenSource(null) })
         } else if (item != null) {
             SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, fixingLinks = state.fixingInOneTap == OneTapFix.LINKS, onBack = { onOpenSource(SOURCES_PAGE) })
         } else {
-            SettingsList(state, actions, sources, listScroll, onBack, onOpenSource)
+            SettingsList(state, actions, sources, listScroll, onBack, onOpenSource, backFrom)
         }
     }
 }
 
+/** The pages the list opens, each from a row of its own. */
+private val PAGES = setOf(VISUALS_PAGE, ADVANCED_PAGE, SOURCES_PAGE, LICENSES_PAGE)
+
 /** How deep a page is: the list, a page it opens, or a source's own page, opened from the sources'. */
 private fun depth(key: String?) = when (key) {
     null -> 0
-    VISUALS_PAGE, ADVANCED_PAGE, SOURCES_PAGE -> 1
+    in PAGES -> 1
     else -> 2
+}
+
+/** Once there's been a session to take the time from; the time is set from the bell on the practice list. */
+@Composable
+private fun ReminderSetting(state: UiState, actions: ScreenActions) {
+    val minute = state.reminderMinute ?: return
+    SectionHeader(stringResource(R.string.saved_practice))
+    Group {
+        SettingSwitch(
+            label = stringResource(R.string.practice_reminders),
+            description = when {
+                state.reminder.blocked -> stringResource(R.string.practice_reminder_blocked)
+                state.reminder.on -> reminderTime(LocalContext.current, minute)
+                else -> null
+            },
+            checked = state.reminder.working,
+            onCheckedChange = actions.onReminderChange
+        )
+        // A problem, so in words: Android can hold the reminder until exact access is allowed.
+        if (state.reminder.late) ExactReminderRow(state, actions.onReminderExact)
+    }
+}
+
+/** Allows exact reminders in one tap when available, or opens Android's page. */
+@Composable
+private fun ExactReminderRow(state: UiState, onClick: () -> Unit) {
+    val oneTap = state.canSetUpInOneTap
+    Row(
+        modifier = Modifier.fillMaxWidth().then(if (oneTap) Modifier else Modifier.clickable(onClick = onClick)).padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // At a big font, Allow goes under the words rather than squeezing them a part of a word a line.
+        LabelAndValue(
+            label = {
+                Column {
+                    LabelText(stringResource(R.string.practice_reminder_exact), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(R.string.practice_reminder_late),
+                        style = MaterialTheme.typography.bodySmall.copy(hyphens = Hyphens.Auto),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            },
+            modifier = Modifier.weight(1f)
+        ) {
+            if (oneTap) {
+                OneTapButton(stringResource(R.string.allow_button), onClick, fixing = state.fixingInOneTap == OneTapFix.EXACT)
+            } else {
+                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
 }
 
 @Composable
@@ -143,9 +231,14 @@ private fun SettingsList(
     sources: List<SourceSettings>,
     scroll: ScrollState,
     onBack: () -> Unit,
-    onOpenSource: (String?) -> Unit
+    onOpenSource: (String?) -> Unit,
+    backFrom: String?
 ) {
     val openWebPage = rememberWebOpener()
+    // Each page's row, which has the remote again when its page goes back to the list.
+    val openers = remember { PAGES.associateWith { FocusRequester() } }
+    LaunchedEffect(backFrom) { backFrom?.let { openers.getValue(it).requestFocus() } }
+    fun opener(page: String) = Modifier.focusRequester(openers.getValue(page))
     val githubUrl = stringResource(R.string.github_repo_url)
     val privacyUrl = stringResource(R.string.privacy_policy_url)
 
@@ -168,7 +261,7 @@ private fun SettingsList(
                 onSelect = actions.onTargetChange,
                 installed = state.installed,
                 label = stringResource(R.string.settings_default_label),
-                modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
             )
             SettingSwitch(
                 label = stringResource(R.string.setting_show_in_crosstune_first),
@@ -185,7 +278,7 @@ private fun SettingsList(
             )
             // A TV has nowhere to allow links in, so they can't open here.
             if (state.phone != Phone.TV) {
-                SourcesRow(sources, onOpen = { onOpenSource(SOURCES_PAGE) })
+                SourcesRow(sources, opener(SOURCES_PAGE), onOpen = { onOpenSource(SOURCES_PAGE) })
             }
         }
 
@@ -199,15 +292,18 @@ private fun SettingsList(
                 TranslationSourceRow(state.learning.chatGptTranslation, actions.onChatGptTranslationChange)
             }
             // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
+            // What it needs is said only while it's missing, never once it's allowed.
             SettingSwitch(
                 label = stringResource(R.string.setting_lyrics_follow),
-                description = stringResource(R.string.setting_lyrics_follow_description),
+                description = if (state.canFollowApps) null else stringResource(R.string.setting_lyrics_follow_description),
                 checked = state.canFollowApps,
                 onCheckedChange = { on -> if (on) actions.onAllowFollowing() else actions.onOpenFollowAccess() }
             )
             LinesEarlyRow(state.linesEarlyMs, actions.onLinesEarlyChange)
             NextLineAheadRow(state.nextLineAheadMs, actions.onNextLineAheadChange)
         }
+
+        ReminderSetting(state, actions)
 
         // The AI features run on the user's ChatGPT plan, once signed in.
         SectionHeader(stringResource(R.string.settings_chatgpt_title))
@@ -232,7 +328,7 @@ private fun SettingsList(
         // Which visuals move behind the words, and how long each shows; how dark they are is set over them.
         SectionHeader(stringResource(R.string.settings_visuals_title))
         Group {
-            VisualsListRow(state.visualsSettings, onOpen = { onOpenSource(VISUALS_PAGE) })
+            VisualsListRow(state.visualsSettings, opener(VISUALS_PAGE), onOpen = { onOpenSource(VISUALS_PAGE) })
             VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange)
         }
 
@@ -257,7 +353,7 @@ private fun SettingsList(
 
         // What few change, out of the way.
         Spacer(Modifier.height(16.dp))
-        Group { PageRow(stringResource(R.string.settings_advanced_title), onOpen = { onOpenSource(ADVANCED_PAGE) }) }
+        Group { PageRow(stringResource(R.string.settings_advanced_title), opener(ADVANCED_PAGE), onOpen = { onOpenSource(ADVANCED_PAGE) }) }
 
         SectionHeader(stringResource(R.string.settings_about_title))
         Group {
@@ -267,16 +363,9 @@ private fun SettingsList(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = stringResource(R.string.settings_version),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = appVersion(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                LabelAndValue(label = { LabelText(stringResource(R.string.settings_version), style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+                    Text(text = appVersion(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             var reporting by rememberSaveable { mutableStateOf(false) }
             val reportRow = remember { FocusRequester() }
@@ -288,13 +377,14 @@ private fun SettingsList(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = stringResource(R.string.report_problem), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                LabelText(stringResource(R.string.report_problem), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(20.dp))
             }
             if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false }, opener = reportRow)
             SettingSwitch(
                 label = stringResource(R.string.setting_auto_report),
-                description = null,
+                // Turned on, it also sends what was put in time by hand before, which waited on the phone.
+                description = stringResource(R.string.setting_auto_report_hint),
                 checked = state.autoReports == true,
                 onCheckedChange = actions.onAllowAutoReports
             )
@@ -305,13 +395,10 @@ private fun SettingsList(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = stringResource(R.string.privacy_policy),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f)
-                )
+                LabelText(stringResource(R.string.privacy_policy), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
             }
+            PageRow(stringResource(R.string.settings_licenses), opener(LICENSES_PAGE), onOpen = { onOpenSource(LICENSES_PAGE) })
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -319,14 +406,7 @@ private fun SettingsList(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val (before, after) = stringResource(R.string.made_with_love, HEART).split(HEART).map { it.trim() }
-                if (before.isNotEmpty()) Text(before, style = MaterialTheme.typography.bodyLarge)
-                Image(
-                    painterResource(R.drawable.ic_heart),
-                    contentDescription = null,
-                    modifier = Modifier.padding(horizontal = 4.dp).size(16.dp)
-                )
-                Text(after, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                MadeWithLove(Modifier.weight(1f))
                 AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
             }
         }
@@ -431,7 +511,7 @@ private fun ChatGptRow(chatGpt: ChatGptState, actions: ScreenActions) {
             Text(
                 email ?: stringResource(R.string.chatgpt_use_plan),
                 style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
+                maxLines = if (email == null) Int.MAX_VALUE else 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
@@ -469,9 +549,10 @@ internal fun ContinueWithChatGpt(chatGpt: ChatGptState, actions: ScreenActions, 
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.padding(top = 4.dp)
             ) {
-                // OpenAI's logo starts its button.
-                AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = null, modifier = Modifier.size(20.dp))
-                Text(stringResource(R.string.chatgpt_continue), modifier = Modifier.padding(start = 10.dp))
+                // OpenAI's logo starts its button, or goes over its words where a word wouldn't fit beside it.
+                LeadAndWords(lead = { AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = null, modifier = Modifier.size(20.dp)) }, gap = 10.dp) {
+                    Text(stringResource(R.string.chatgpt_continue))
+                }
             }
         }
     }
@@ -512,13 +593,12 @@ private const val VISUALS_PAGE = "visuals"
 
 /** How many of the visuals are on, opening the list of them. */
 @Composable
-private fun VisualsListRow(settings: VisualsSettings, onOpen: () -> Unit) {
+private fun VisualsListRow(settings: VisualsSettings, modifier: Modifier, onOpen: () -> Unit) {
     val names = presetNames()
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+    LabelAndValue(
+        label = { LabelText(stringResource(R.string.setting_visuals_list), style = MaterialTheme.typography.bodyLarge) },
+        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.setting_visuals_list), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Text(
             stringResource(R.string.visuals_list_summary, names.count(settings::shows), names.size),
             style = MaterialTheme.typography.bodyMedium,
@@ -583,8 +663,9 @@ private fun StepsRow(
     Column(modifier = modifier.fillMaxWidth().padding(start = inset, end = inset, top = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
-            Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            LabelAndValue(label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) }, modifier = Modifier.weight(1f)) {
+                Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            }
         }
         AppSlider(
             value = steps.indexOf(value).coerceAtLeast(0).toFloat(),
@@ -601,9 +682,9 @@ private fun StepsRow(
 
 /** A row that opens a page of its own. */
 @Composable
-private fun PageRow(label: String, onOpen: () -> Unit) {
+private fun PageRow(label: String, modifier: Modifier, onOpen: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
+        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
@@ -616,25 +697,26 @@ private const val SOURCES_PAGE = "sources"
 
 /** How many sources' links Crosstune opens, opening the list of them; marked when one's links can't reach it yet. */
 @Composable
-private fun SourcesRow(sources: List<SourceSettings>, onOpen: () -> Unit) {
+private fun SourcesRow(sources: List<SourceSettings>, modifier: Modifier, onOpen: () -> Unit) {
     val trouble = sources.firstNotNullOfOrNull { it.trouble() }
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+    LabelAndValue(
+        label = { LabelText(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge) },
+        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        if (trouble != null) {
-            AppIcon(
-                R.drawable.ic_error, contentDescription = trouble,
-                tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 8.dp).size(18.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (trouble != null) {
+                AppIcon(
+                    R.drawable.ic_error, contentDescription = trouble,
+                    tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 8.dp).size(18.dp)
+                )
+            }
+            Text(
+                // Web frontends' sites have no switch, so they're not counted as off.
+                sources.filter { it.onToggle != null }.let { switches -> stringResource(R.string.visuals_list_summary, switches.count { it.on }, switches.size) },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
             )
         }
-        Text(
-            // Web frontends' sites have no switch, so they're not counted as off.
-            sources.filter { it.onToggle != null }.let { switches -> stringResource(R.string.visuals_list_summary, switches.count { it.on }, switches.size) },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
     }
 }
 
@@ -660,6 +742,340 @@ private fun SourcesPage(state: UiState, actions: ScreenActions, sources: List<So
         }
     }
 }
+
+/** The page of the works by others that Crosstune ships or downloads, with their licences. */
+private const val LICENSES_PAGE = "licenses"
+
+/**
+ * Each work by others in the app, or downloaded by it: who it's by, its licence and what was changed,
+ * always shown; its licence's full text and where it is, under it once it's opened. Only what's on
+ * screen is drawn, as some licences are long. The remote starts on the first work when the page opens,
+ * and steps through a licence a piece at a time, each short enough to fit the screen at the largest
+ * font, so none is skipped. Back closes the open licence the remote is in, or the last one opened,
+ * and returns to that work's row; with none open, Back leaves the page. Turned or otherwise made
+ * again, the page keeps what's open, where it was scrolled to, and what the remote was on. A text is
+ * read and split once, never on the main thread: the longest is about half a million characters.
+ */
+@Composable
+private fun LicensesPage(onBack: () -> Unit) {
+    val openWebPage = rememberWebOpener()
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    var open by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var focusedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var entered by rememberSaveable { mutableStateOf(false) }
+    // A new one once a licence has been split, so the page draws the pieces it kept. The split itself
+    // stays off this pass: the longest text is hundreds of thousands of characters.
+    var splitDone by remember { mutableStateOf(Any()) }
+    val requesters = remember { mutableMapOf<String, FocusRequester>() }
+    // Made again with a licence open after Android stopped the app, its pieces are gone. The list stays
+    // empty until they are split again, below: with fewer rows it would lose where it was scrolled to.
+    // Turned, the pieces are kept, so the page draws at once.
+    var restoring by remember { mutableStateOf(open.any { LicenseSplits.of(it) == null }) }
+    val units = remember(open, splitDone) { open.mapNotNull { name -> LicenseSplits.of(name)?.let { name to it } }.toMap() }
+    // Crosstune's own words in the notices, in the app's language, which picks the file; licence texts stay as published.
+    // The first time, they're read off the main thread and the list waits for them. Turned, they're read already.
+    val tag = stringResource(R.string.language_tag)
+    val words by produceState(Notices.wordsRead(tag), tag) {
+        value = Notices.wordsRead(tag) ?: withContext(MainActivity.systemDispatcher) { Notices.words(tag) }
+    }
+    val look = LicenseLook(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), MaterialTheme.shapes.large)
+    // One path for a press and for a remote. The page's own Back still leaves once nothing is open, and
+    // while the words are read: nothing is shown to close yet, and the main thread doesn't wait for the notices.
+    BackHandler(enabled = open.isNotEmpty() && words != null) {
+        val closing = licenceToClose(focusedKey, open)
+        val next = open - closing
+        open = next
+        focusedKey = "work:$closing"
+        scope.launch { returnToLicenceRow(closing, next, listState, requesters) }
+    }
+    LazyPage(
+        title = stringResource(R.string.settings_licenses),
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+            }
+        },
+        listState = listState
+    ) {
+        val shown = words
+        if (!restoring && shown != null) {
+            licenseItems(open, units, shown, look, openWebPage, focusing = { key ->
+                Modifier.focusRequester(requesters.getOrPut(key) { FocusRequester() }).onFocusChanged { if (it.isFocused) focusedKey = key }
+            }) { name -> open = if (name in open) open - name else open + name }
+        }
+    }
+    // The pieces and the words are kept for as long as the page is shown, and while it turns, not for as long as the app runs:
+    // it stays up for days behind its notification access, and one text alone is about half a million characters.
+    val activity = LocalActivity.current
+    DisposableEffect(Unit) {
+        onDispose {
+            if (activity?.isChangingConfigurations != true) {
+                LicenseSplits.clear()
+                Notices.letGoOfWords()
+            }
+        }
+    }
+    LaunchedEffect(open) {
+        // Already split ones are kept. Only a work that is not split yet is split, and not while drawing.
+        if (open.any { LicenseSplits.of(it) == null }) {
+            withContext(MainActivity.systemDispatcher) { Notices.all.filter { it.name in open }.forEach { LicenseSplits.make(it) } }
+            splitDone = Any()
+        }
+        restoring = false
+    }
+    LaunchedEffect(Unit) {
+        // Wait for the rows to be placed, as the list draws only those on screen.
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.key } }.first { it.isNotEmpty() }
+        withFrameNanos { }
+        // A fresh visit starts on the first work; made again, the page goes back to what the remote was on.
+        val key = if (entered) focusedKey else "work:${Notices.all.first().name}"
+        entered = true
+        key?.let { requesters[it] }?.takeIf { listState.layoutInfo.visibleItemsInfo.any { item -> item.key == key } }?.requestFocus()
+    }
+}
+
+/** Scrolls to [name]'s row, once the licence under it has gone, and puts the remote there. */
+private suspend fun returnToLicenceRow(name: String, open: List<String>, listState: LazyListState, requesters: Map<String, FocusRequester>) {
+    // The list still has the pieces until the next frame. The row's place is the one after they go.
+    withFrameNanos { }
+    val units = open.associateWith { LicenseSplits.of(it).orEmpty() }
+    listState.scrollToItem(licenseWorkIndex(name, open, units))
+    val key = "work:$name"
+    snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+    withFrameNanos { }
+    requesters[key]?.requestFocus()
+}
+
+/** How the licences' group looks: its color, its hairlines' and its rounded corners. */
+private class LicenseLook(val color: Color, val hairline: Color, val corner: CornerBasedShape) {
+    private val square = CornerSize(0)
+
+    /** The group's rounded box, drawn a row at a time, as only the rows on screen are drawn. */
+    fun box(first: Boolean, last: Boolean) = Modifier.background(
+        color,
+        corner.copy(
+            topStart = if (first) corner.topStart else square,
+            topEnd = if (first) corner.topEnd else square,
+            bottomEnd = if (last) corner.bottomEnd else square,
+            bottomStart = if (last) corner.bottomStart else square
+        )
+    )
+}
+
+/** Each work's row, and under an open one where it is and its licence's pieces, each keyed, so the list keeps its place. */
+private fun LazyListScope.licenseItems(
+    open: List<String>,
+    units: Map<String, List<LicenseUnit>>,
+    words: Map<String, NoticeWords>,
+    look: LicenseLook,
+    openWebPage: (String) -> Unit,
+    focusing: (String) -> Modifier,
+    onToggle: (String) -> Unit
+) {
+    Notices.all.forEachIndexed { index, notice ->
+        val isOpen = notice.name in open
+        val last = index == Notices.all.lastIndex
+        item(key = "work:${notice.name}") {
+            Column(look.box(first = index == 0, last = last && !isOpen)) {
+                if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = look.hairline)
+                NoticeRow(words.getValue(notice.name), isOpen, focusing("work:${notice.name}")) { onToggle(notice.name) }
+            }
+        }
+        if (isOpen && notice.url != null) {
+            item(key = "url:${notice.name}") { NoticeLink(notice.url, look.box(first = false, last = false).then(focusing("url:${notice.name}")), openWebPage) }
+        }
+        val pieces = units[notice.name].orEmpty()
+        pieces.forEachIndexed { at, unit ->
+            item(key = "text:${notice.name}:$at") {
+                val end = at == pieces.lastIndex
+                LicensePiece(unit, end, look.box(first = false, last = last && end).then(focusing("text:${notice.name}:$at")))
+            }
+        }
+    }
+}
+
+/** One work: who it's by, its licence and what was changed; tapped, its licence opens under it, and tapped again it closes. */
+@Composable
+private fun NoticeRow(notice: NoticeWords, open: Boolean, modifier: Modifier, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(modifier)
+            .clickable(onClickLabel = stringResource(if (open) R.string.license_hide else R.string.license_show), onClick = onToggle)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(notice.name, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "${notice.by} · ${notice.license}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (notice.note != null) {
+                Text(
+                    notice.note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+        val turn by animateFloatAsState(if (open) 180f else 0f, label = "license")
+        AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 12.dp).size(20.dp).rotate(turn))
+    }
+}
+
+/** Where a work is, opened in the browser only on a tap. */
+@Composable
+private fun NoticeLink(url: String, modifier: Modifier, openWebPage: (String) -> Unit) {
+    Row(
+        modifier = modifier.fillMaxWidth().clickable { openWebPage(url) }.padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            url.removePrefix("https://"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f)
+        )
+        AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.padding(start = 12.dp).size(18.dp))
+    }
+}
+
+/** A piece of a licence; the remote stops on each, marked, so the text scrolls on under it. */
+@Composable
+private fun LicensePiece(unit: LicenseUnit, endsTheText: Boolean, modifier: Modifier) {
+    var focused by remember { mutableStateOf(false) }
+    Text(
+        unit.text,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .background(if (focused) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent)
+            .focusable()
+            .padding(start = 20.dp, end = 20.dp, top = if (unit.starts) 4.dp else 0.dp, bottom = if (endsTheText) 16.dp else if (unit.ends) 4.dp else 0.dp)
+    )
+}
+
+/** A piece of a licence's paragraph, and whether it [starts] or [ends] the paragraph, which is spaced from the next. */
+internal data class LicenseUnit(val text: String, val starts: Boolean, val ends: Boolean)
+
+/**
+ * Each work's licence, split once and kept. Opening another work must not split this one again, and
+ * the split stays off the pass that draws the page: one text is about half a million characters.
+ */
+internal object LicenseSplits {
+    private val pieces = HashMap<String, List<LicenseUnit>>()
+
+    /** A new one at each [clear], so a split that ends after the page was left isn't kept. */
+    private var kept = Any()
+
+    fun of(name: String): List<LicenseUnit>? = synchronized(pieces) { pieces[name] }
+
+    /** Reads [Notice]'s texts and splits them. Tests count the reads and see which thread does them. */
+    @VisibleForTesting
+    var split: (Notice) -> List<LicenseUnit> = { licenseUnits(Notices.text(it)) }
+
+    /**
+     * A lock for each work, by its name, so two passes that ask for the same one at once read it once.
+     * Kept for as long as the app runs: one small object for each of the about 40 works.
+     */
+    private val locks = HashMap<String, Any>()
+
+    /** Splits [notice]'s licence and keeps it, unless it's kept already. */
+    fun make(notice: Notice) {
+        synchronized(synchronized(locks) { locks.getOrPut(notice.name) { Any() } }) {
+            val asked = synchronized(pieces) { if (notice.name in pieces) return; kept }
+            val made = split(notice)
+            synchronized(pieces) { if (kept === asked) pieces[notice.name] = made }
+        }
+    }
+
+    fun clear() {
+        synchronized(pieces) {
+            pieces.clear()
+            kept = Any()
+        }
+    }
+}
+
+/** The open licence Back closes: the one the remote is in, or the last one opened when it is in none. */
+internal fun licenceToClose(focusedKey: String?, open: List<String>): String {
+    val holding = focusedKey?.let(::licenseFocusWork)?.takeIf { it in open }
+    return holding ?: open.last()
+}
+
+/** The work a list key belongs to: "work:Name", "url:Name" or "text:Name:3". */
+internal fun licenseFocusWork(key: String): String =
+    if (key.startsWith("text:")) key.removePrefix("text:").substringBeforeLast(':') else key.substringAfter(':')
+
+/** Where [name]'s row sits in the list, once each open licence's link and pieces are counted. */
+internal fun licenseWorkIndex(name: String, open: Collection<String>, units: Map<String, List<LicenseUnit>>): Int {
+    var at = 0
+    for (notice in Notices.all) {
+        if (notice.name == name) break
+        at++
+        if (notice.name !in open) continue
+        if (notice.url != null) at++
+        at += units[notice.name].orEmpty().size
+    }
+    return at
+}
+
+/** About how many characters a line of a licence holds on a phone; a shorter line, like a list's, takes a whole one. */
+internal const val LICENSE_ROW = 64
+
+/** The most lines a piece of a licence takes: at the largest font, on a TV, it still fits the screen. */
+internal const val LICENSE_ROWS = 5
+
+/** How many of a phone's lines [text] takes. */
+internal fun licenseRows(text: String): Int = text.lines().sumOf { maxOf(1, (it.length + LICENSE_ROW - 1) / LICENSE_ROW) }
+
+/** [text]'s paragraphs, each in pieces of at most [LICENSE_ROWS] lines: a list's items together while they fit, a long line cut. */
+internal fun licenseUnits(text: String): List<LicenseUnit> = licenseParagraphs(text).flatMap { paragraph ->
+    val pieces = mutableListOf<String>()
+    paragraph.lines().flatMap(::cutLicenseLine).forEach { line ->
+        val joined = pieces.lastOrNull()?.let { "$it\n$line" }
+        if (joined != null && licenseRows(joined) <= LICENSE_ROWS) pieces[pieces.lastIndex] = joined else pieces += line
+    }
+    pieces.mapIndexed { index, piece -> LicenseUnit(piece, starts = index == 0, ends = index == pieces.lastIndex) }
+}
+
+/** [line] in pieces of at most [LICENSE_ROWS] lines, cut at a sentence's end where one is near, else between words. */
+private fun cutLicenseLine(line: String): List<String> {
+    val most = LICENSE_ROW * LICENSE_ROWS
+    val pieces = mutableListOf<String>()
+    var rest = line
+    while (rest.length > most) {
+        val window = rest.substring(0, most + 1)
+        val sentence = phoneRegex("[.;:!?] ").matchesIn(window).lastOrNull()?.let { it.range.first + 1 }?.takeIf { it >= most / 3 }
+        val cut = sentence ?: window.lastIndexOf(' ').takeIf { it > 0 } ?: most
+        pieces += rest.substring(0, cut).trimEnd()
+        rest = rest.substring(cut).trimStart()
+    }
+    return pieces + rest
+}
+
+/**
+ * [text]'s paragraphs, apart where a line is blank, each paragraph's lines joined, as licences break
+ * them for a page as wide as a terminal; a line starting a list item stays a line of its own.
+ */
+internal fun licenseParagraphs(text: String): List<String> =
+    text.split(phoneRegex("\n\\s*\n")).map { paragraph ->
+        paragraph.lines().map(String::trim).filter(String::isNotEmpty).fold("") { joined, line ->
+            when {
+                joined.isEmpty() -> line
+                LIST_ITEM.containsMatchIn(line) -> "$joined\n$line"
+                else -> "$joined $line"
+            }
+        }
+    }.filter(String::isNotEmpty)
+
+/** A line that starts an item of a list: "* Name", "- Name", "1. Definitions", "(a) You must". */
+private val LIST_ITEM = phoneRegex("^([*•-]|\\(?([0-9]{1,3}|[a-z])[.)])\\s")
 
 /** The page of advanced settings. */
 private const val ADVANCED_PAGE = "advanced"
@@ -859,7 +1275,7 @@ private fun VisualsList(
 
 /** A visual's still, name and switch; tapped anywhere but the switch, it plays. */
 @Composable
-private fun VisualRow(name: String, settings: VisualsSettings, canTurnOff: Boolean, actions: ScreenActions, onSee: () -> Unit) {
+internal fun VisualRow(name: String, settings: VisualsSettings, canTurnOff: Boolean, actions: ScreenActions, onSee: () -> Unit) {
     val assets = LocalContext.current.assets
     val shows = settings.shows(name)
     Row(
@@ -871,17 +1287,25 @@ private fun VisualRow(name: String, settings: VisualsSettings, canTurnOff: Boole
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         CoverArt(name, load = { withContext(Dispatchers.IO) { milkdropThumb(assets, it) } }, size = 56.dp)
-        Column(modifier = Modifier.weight(1f)) {
-            // Some names run long: two lines keep the list quick to scan.
-            Text(text = name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (name in settings.heavy) HeavyNote()
+        // At a big font, the switch goes under the name rather than squeezing it.
+        LabelAndValue(
+            label = {
+                Column {
+                    // Similar preset names can differ only at their ends.
+                    LabelText(name, style = MaterialTheme.typography.bodyLarge)
+                    if (name in settings.heavy) HeavyNote()
+                }
+            },
+            modifier = Modifier.weight(1f),
+            gap = 16.dp
+        ) {
+            Switch(
+                checked = shows,
+                onCheckedChange = { actions.onVisualOnChange(name, it) },
+                enabled = canTurnOff,
+                modifier = Modifier.semantics { contentDescription = name }
+            )
         }
-        Switch(
-            checked = shows,
-            onCheckedChange = { actions.onVisualOnChange(name, it) },
-            enabled = canTurnOff,
-            modifier = Modifier.semantics { contentDescription = name }
-        )
     }
 }
 
@@ -1049,14 +1473,13 @@ private fun PickedMark(picked: Boolean) {
 @Composable
 private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, icon: ((T) -> Int)? = null) {
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 icon?.let { AppIcon(it(selected), contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp)) }
@@ -1096,8 +1519,7 @@ private fun PaletteRow(selected: Palette, onSelect: (Palette) -> Unit) {
     val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
         // The picked one by name, as the other rows say theirs, since a swatch alone doesn't say it.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = stringResource(R.string.setting_color), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        LabelAndValue(label = { LabelText(stringResource(R.string.setting_color), style = MaterialTheme.typography.bodyLarge) }) {
             Text(text = stringResource(selected.labelRes), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }
         // All in sight, spread across the row, onto another only on a screen too narrow for them.
@@ -1161,14 +1583,13 @@ private val Palette.labelRes: Int
 private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
     val appLanguage = stringResource(R.string.translate_into_app_language)
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { LabelText(stringResource(R.string.setting_translate_into), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.setting_translate_into), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LanguageMark(into, modifier = Modifier.padding(end = 6.dp))
@@ -1201,14 +1622,13 @@ private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
 @Composable
 private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { LabelText(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         val none = stringResource(R.string.untranslated_none)
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1216,9 +1636,10 @@ private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -
                     text = AppLanguage.untranslatedTags.filter { it in untranslated }.joinToString { AppLanguage.displayName(it) }.ifEmpty { none },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
+                    // A long list moves under the name and runs out at the row's end, never one word cut short.
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 160.dp)
+                    modifier = Modifier.weight(1f, fill = false)
                 )
                 AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
             }
@@ -1245,18 +1666,13 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
     val current = remember { AppLanguage.current(context) }
     val systemDefault = stringResource(R.string.language_system_default)
     var expanded by remember { mutableStateOf(false) }
-    Row(
+    LabelAndValue(
+        label = { LabelText(stringResource(R.string.setting_language), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Text(
-            text = stringResource(R.string.setting_language),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f)
-        )
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LanguageMark(current, modifier = Modifier.padding(end = 6.dp))
@@ -1515,13 +1931,12 @@ private fun SourcePage(
 @Composable
 private fun NotAllowedRow(fixing: Boolean, actions: ScreenActions) {
     Row(modifier = Modifier.padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = stringResource(R.string.setup_not_allowed),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error,
+        LabelAndValue(
+            label = { LabelText(stringResource(R.string.setup_not_allowed), style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.error)) },
             modifier = Modifier.weight(1f)
-        )
-        OneTapButton(stringResource(R.string.allow_button), actions.onAllowLinks, fixing = fixing)
+        ) {
+            OneTapButton(stringResource(R.string.allow_button), actions.onAllowLinks, fixing = fixing)
+        }
     }
 }
 
@@ -1622,3 +2037,26 @@ internal fun SettingsScreenPreview() {
         )
     }
 }
+
+/**
+ * "Made with ♥ by astro", the heart drawn in the words where the translation puts it, so the words
+ * wrap as one line of text at a big font rather than each piece squeezed beside the others.
+ * Screen readers read the words without it.
+ */
+@Composable
+private fun MadeWithLove(modifier: Modifier = Modifier) {
+    val (before, after) = stringResource(R.string.made_with_love, HEART).split(HEART)
+    val text = buildAnnotatedString {
+        append(before)
+        appendInlineContent(HEART_ID, HEART)
+        append(after)
+    }
+    val heart = mapOf(
+        HEART_ID to InlineTextContent(Placeholder(1.2.em, 1.em, PlaceholderVerticalAlign.TextCenter)) {
+            Image(painterResource(R.drawable.ic_heart), contentDescription = null, modifier = Modifier.padding(horizontal = 1.dp).fillMaxSize())
+        }
+    )
+    Text(text, style = MaterialTheme.typography.bodyLarge.copy(hyphens = Hyphens.Auto), inlineContent = heart, modifier = modifier.semantics { contentDescription = (before + after).replace(Regex("\\s+"), " ").trim() })
+}
+
+private const val HEART_ID = "heart"

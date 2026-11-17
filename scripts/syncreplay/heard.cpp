@@ -17,16 +17,16 @@ int main(int argc, char** argv) {
     p.language = argc > 2 ? argv[2] : "auto";
     if (argc > 3 && argv[3][0]) p.initial_prompt = argv[3];
     std::string words;
-    if (whisper_full(ctx, p, s.data(), s.size()) == 0) {
-        whisper_token last = whisper_token_eot(ctx);
-        for (int g = 0; g < whisper_full_n_segments(ctx); g++) for (int t = 0; t < whisper_full_n_tokens(ctx, g); t++) {
-            whisper_token_data d = whisper_full_get_token_data(ctx, g, t);
-            if (d.id >= last) continue;
-            const char* text = whisper_full_get_token_text(ctx, g, t);
-            bool starts = text[0] == ' ' || words.empty();
-            if (starts) { if (!words.empty()) words += '\n'; words += std::to_string(d.t_dtw < 0 ? -1 : d.t_dtw * 10); words += '\t'; }
-            words += text;
-        }
+    // A failed run, as out of memory, isn't music with no words: it fails, as the app hears nothing then.
+    if (whisper_full(ctx, p, s.data(), s.size()) != 0) { whisper_free(ctx); return 1; }
+    whisper_token last = whisper_token_eot(ctx);
+    for (int g = 0; g < whisper_full_n_segments(ctx); g++) for (int t = 0; t < whisper_full_n_tokens(ctx, g); t++) {
+        whisper_token_data d = whisper_full_get_token_data(ctx, g, t);
+        if (d.id >= last) continue;
+        const char* text = whisper_full_get_token_text(ctx, g, t);
+        bool starts = text[0] == ' ' || words.empty();
+        if (starts) { if (!words.empty()) words += '\n'; words += std::to_string(d.t_dtw < 0 ? -1 : d.t_dtw * 10); words += '\t'; }
+        words += text;
     }
     fwrite(words.data(), 1, words.size(), stdout); puts("");
     whisper_free(ctx);

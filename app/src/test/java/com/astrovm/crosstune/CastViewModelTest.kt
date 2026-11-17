@@ -67,7 +67,8 @@ class CastViewModelTest {
             listener = SongHearing { Heard.Nothing },
             systemDispatcher = Dispatchers.Unconfined,
             phone = phone,
-            cast = cast
+            cast = cast,
+            mayCapture = { false }
         ).also { made += it }
     }
 

@@ -1,9 +1,15 @@
 package com.astrovm.crosstune
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.Dispatchers
@@ -27,9 +33,10 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
 /**
  * Raised when songs are matched otherwise, so what was found the old way is looked for again, in the lookups kept and in
  * Recent: 2, as every edition's length counts, which finds a single's official song where an upload was found before;
- * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was.
+ * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was;
+ * 4, as Qobuz's songs are found in the phone's own store; 5, as another channel's video needs a known matching length.
  */
-internal const val MATCH_VERSION = 3
+internal const val MATCH_VERSION = 5
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -365,7 +372,6 @@ internal class ExactMatcher(
 
     private suspend fun itunesCoverNamed(metadata: MusicMetadata): String? {
         val title = SongNames.normalize(SongNames.withoutEditionTag(metadata.title))
-        val artists = SongNames.artists(metadata.artist)
         val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
             .addQueryParameter("term", searchQuery(metadata.copy(title = SongNames.withoutEditionTag(metadata.title), type = ItemType.TRACK)))
             .addQueryParameter("entity", "song")
@@ -374,22 +380,20 @@ internal class ExactMatcher(
             .build()
         return fetchJson(url.toString()).optJSONArray("results")?.objects()?.firstOrNull { result ->
             val name = SongNames.normalize(SongNames.withoutEditionTag(result.optString("trackName")))
-            val credit = SongNames.normalize(result.optString("artistName"))
-            title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
+            title.isNotEmpty() && name.startsWith(title) && sameArtist(metadata, result.optString("artistName"))
         }?.let { it.optString("artworkUrl100").ifBlank { null }?.replace("100x100bb", "600x600bb") }
     }
 
     private suspend fun deezerCoverNamed(metadata: MusicMetadata): String? {
         val title = SongNames.normalize(SongNames.withoutEditionTag(metadata.title))
-        // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do.
-        val artists = SongNames.artists(metadata.artist)
         // Searched for without its edition tag too: Deezer finds nothing for "Song (2018 Remix) (2024
         // Remaster)", though it has "Song (2018 Remix)", whose cover is the same.
         val searched = metadata.copy(title = SongNames.withoutEditionTag(metadata.title), type = ItemType.TRACK)
         return searchDeezer(searched).firstOrNull { result ->
             val name = SongNames.normalize(SongNames.withoutEditionTag(MetadataParsers.deezerTitle(result)))
-            val credit = SongNames.normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
-            title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
+            // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do. Being
+            // inside a longer name won't: Adele Harley isn't Adele, and has a Hello of their own.
+            title.isNotEmpty() && name.startsWith(title) && sameArtist(metadata, result.optJSONObject("artist")?.optString("name").orEmpty())
         }?.optJSONObject("album")?.let { it.optString("cover_big").ifBlank { null } }
     }
 
@@ -477,17 +481,68 @@ internal class ExactMatcher(
     /**
      * Qobuz's API needs an account, but its store's search page lists each song with its album:
      * enough for songs and albums. Its artists aren't told apart there, so they're left to the search.
+     * It answers only a phone's browser: anything else, a desktop browser too, gets a 403.
+     * A song's number can differ between its stores, and Qobuz's app shows only a loading page for one
+     * the account can't play, so [QobuzNumbers] tries another. The US has its own; the rest share the
+     * UK's, but Japan's store names songs in Japanese, so they'd never match, and Latin America's stores
+     * and Portugal's list none.
      */
-    private suspend fun findOnQobuz(metadata: MusicMetadata): String? {
-        if (metadata.type != ItemType.TRACK && metadata.type != ItemType.ALBUM) return null
-        val url = "https://www.qobuz.com/us-en/search/tracks".toHttpUrl().newBuilder().addPathSegment(searchQuery(metadata)).build()
-        val page = client.newCall(Request.Builder().url(url).get().build()).answer(ioDispatcher) { response ->
+    private suspend fun findOnQobuz(metadata: MusicMetadata): String? =
+        if (metadata.type != ItemType.TRACK && metadata.type != ItemType.ALBUM) null else findOnQobuzStore(qobuzStore, metadata)
+
+    /** The store [findOnQobuz] asks. */
+    private val qobuzStore = if (country == "US") "us-en" else "gb-en"
+
+    /**
+     * The number of [song] in the store [findOnQobuz] doesn't ask, when it isn't [link]'s: stores differ on about one song
+     * in four, and which one an account follows can't be told. Null with no other, or no answer.
+     *
+     * Android lets Crosstune open an app again only 9.5 s after the first launch, see [QobuzNumbers], which gives up on this
+     * then, so this gives the store all of that time. One try that failed isn't evidence that the store has no song, so a second
+     * goes out at once; one that is only slow goes on, with a second beside it after [timeoutMs] in case it's stuck. Cutting it
+     * off at [timeoutMs] and starting over, as it did, lost a store that takes 7 s to answer, and cost its data twice.
+     */
+    suspend fun otherQobuzLink(song: MusicMetadata, link: String): String? {
+        val other = if (qobuzStore == "us-en") "gb-en" else "us-en"
+        // Apart from this coroutine's job, as a try waiting on the store can't be interrupted, and mustn't hold back the answer.
+        val tries = CoroutineScope(currentCoroutineContext().minusKey(Job) + Job())
+        try {
+            val first = tries.async { qobuzTry(other, song) }
+            val wait = tries.async { delay(timeoutMs) }
+            // Null for a try that failed too: then the second goes out at once.
+            val answer = select<Answer?> {
+                first.onAwait { it }
+                wait.onAwait { null }
+            } ?: run {
+                val second = tries.async { qobuzTry(other, song) }
+                select<Answer?> {
+                    first.onAwait { it ?: second.await() }
+                    second.onAwait { it ?: first.await() }
+                }
+            }
+            return answer?.url?.takeIf { it != link }
+        } finally {
+            tries.cancel()
+        }
+    }
+
+    /** What the store said, or null when it couldn't be asked. */
+    private suspend fun qobuzTry(store: String, song: MusicMetadata): Answer? =
+        try {
+            Answer(findOnQobuzStore(store, song))
+        } catch (_: IOException) {
+            null
+        }
+
+    private suspend fun findOnQobuzStore(store: String, metadata: MusicMetadata): String? {
+        val url = "https://www.qobuz.com/$store/search/tracks".toHttpUrl().newBuilder().addPathSegment(inOnePathSegment(searchQuery(metadata))).build()
+        val page = client.newCall(Request.Builder().url(url).asPhoneBrowser().get().build()).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("Qobuz answered ${response.code}")
             response.body.stringAtMost()
         }
-        val songs = qobuzItemRegex.findAll(page).mapNotNull { item ->
-            val html = item.value
-            val (title, credit) = qobuzTitleRegex.find(html)?.groupValues?.drop(1)?.map(::htmlText) ?: return@mapNotNull null
+        val songs = qobuzItems.allIn(page).mapNotNull { item ->
+            val html = page.substring(item.whole)
+            val (title, credit) = qobuzTitle(html)?.toList()?.map(::htmlText) ?: return@mapNotNull null
             val (artist, album) = credit.split("•").map(String::trim).let { it.first() to it.getOrElse(1) { "" } }
             QobuzSong(title, artist, album, qobuzTrackRegex.find(html)?.groupValues?.get(1), qobuzAlbumRegex.find(html)?.groupValues?.get(1))
         }
@@ -503,11 +558,10 @@ internal class ExactMatcher(
 
     private class QobuzSong(val title: String, val artist: String, val albumTitle: String, val track: String?, val album: String?)
 
-    private fun htmlText(html: String) = android.text.Html.fromHtml(html.replace(tagRegex, " "), android.text.Html.FROM_HTML_MODE_LEGACY)
+    private fun htmlText(html: String) = android.text.Html.fromHtml(withoutTags(html, with = " "), android.text.Html.FROM_HTML_MODE_LEGACY)
         .toString().replace(spacesRegex, " ").trim()
 
-    private val tagRegex = Regex("<[^>]+>")
-    private val spacesRegex = Regex("\\s+")
+    private val spacesRegex = phoneRegex("\\s+")
 
     /** Whether [name] is one of [metadata]'s artists, e.g. the account an upload is on. */
     private fun sameArtist(metadata: MusicMetadata, name: String): Boolean {
@@ -606,6 +660,7 @@ internal class ExactMatcher(
             videos.await() to names.await()
         }
         items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return Answer(watchUrl + it.id) }
+        items.map(::row).firstOrNull { isTheSongInAnotherScript(it, names) }?.let { return Answer(watchUrl + it.id) }
         videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }?.let { return Answer(watchUrl + it.id) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
@@ -697,7 +752,7 @@ internal class ExactMatcher(
     /**
      * The song on Apple Music, by its name, or one of the same name and artist with a tag, as "(with
      * Delon)". A store may only have it in another script, as Argentina's has 夜に駆ける, so the US
-     * store, which names it in Latin letters too, is asked when this one doesn't have it; and last,
+     * store, which names it in Latin letters too, is asked when this one has no match or its search fails; and last,
      * at once, for a song named in Chinese, Japanese or Korean, the stores that name it as its own
      * country does, as only Taiwan's credits 光年之外 to 鄧紫棋, where the rest say G.E.M.
      */
@@ -784,6 +839,19 @@ internal class ExactMatcher(
     }
 
     /**
+     * A song result named in a script the song's known names aren't ("残酷な天使のテーゼ - Zankoku na Tenshi no
+     * Thesis" for "A Cruel Angel's Thesis"), which there are no words to compare. Its artist is the song's and
+     * it is as long as a known recording of it, to the second, which two songs of one artist hardly share.
+     */
+    private fun isTheSongInAnotherScript(row: Row, names: Names): Boolean {
+        val length = row.lengthMs ?: return false
+        if (row.id == null || names.lengthsMs.none { kotlin.math.abs(length - it) <= SAME_SONG_LENGTH_MS }) return false
+        if (row.name.none { it.isLetter() && Character.UnicodeBlock.of(it) != Character.UnicodeBlock.BASIC_LATIN }) return false
+        val wanted = names.artists.flatMap(SongNames::artists).toSet()
+        return SongNames.artists(row.details.first()).any(wanted::contains)
+    }
+
+    /**
      * A video result, "Title | Channel • 1.2M views • 3:45", that plays the song: one of its names in
      * the title, nothing in it saying it's another version, e.g. a cover or karaoke, and its artist
      * the one who put it up, or named in the title of one as long as the song, e.g. with its lyrics.
@@ -795,7 +863,7 @@ internal class ExactMatcher(
         if (names.titles.none { titleIn(it, row.name) }) return false
         if (names.titles.all { title -> SongNames.saysAnotherVersion(row.name, title, names.artists.joinToString(" ")) }) return false
         val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
-        val outside = row.name.replace(BRACKETED, " ")
+        val outside = outsideBrackets(row.name)
         val rest = SongNames.words(outside) - said.toSet() - VIDEO_TAGS
         if (rest.any { !YEAR.matches(it) }) return false
         // Nor anything in another script, which has no words to tell apart: "桜の雨" isn't "桜". Named
@@ -810,7 +878,7 @@ internal class ExactMatcher(
         // "Band - Topic", "BandVEVO".
         val uploader = SongNames.normalize(SongNames.withoutArticle(row.details.first()))
         val own = names.artists.flatMap(SongNames::artists).any { it == uploader || uploader.startsWith(it) && uploader.removePrefix(it) in CHANNEL_SUFFIXES }
-        return own || names.artists.any { artistIn(it, row.name) } && sameLength(row, names)
+        return own || names.artists.any { artistIn(it, row.name) } && row.lengthMs != null && names.lengthsMs.isNotEmpty() && sameLength(row, names)
     }
 
     /**
@@ -870,7 +938,7 @@ internal class ExactMatcher(
     private fun looselyMatches(metadata: MusicMetadata, name: String, artist: String): Boolean =
         SongNames.wordsMatch(name, metadata.title) && SongNames.artistInside(artist, metadata.artist)
 
-    private companion object {
+    internal companion object {
         const val TIMEOUT_MS = 5_000L
 
         /** How many of the Spotify songs ListenBrainz knows by a name are read to find the one. */
@@ -882,10 +950,21 @@ internal class ExactMatcher(
         const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"
         const val YOUTUBE_WATCH_VIDEOS_URL = "https://www.youtube.com/watch_videos"
         /** One song in Qobuz's search: its title and "artist • album", and the numbers of the song and its album. */
-        private val qobuzItemRegex = Regex("""<div class="ListItem">.*?</li>""", RegexOption.DOT_MATCHES_ALL)
-        private val qobuzTitleRegex = Regex("""class="ListItem__title"[^>]*>(.*?)</a>\s*<p class="ListItem__artists">(.*?)</p>""", RegexOption.DOT_MATCHES_ALL)
-        private val qobuzTrackRegex = Regex("""track&#x2F;(\d+)""")
-        private val qobuzAlbumRegex = Regex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)"""")
+        internal val qobuzItems = PageParts(phoneRegex("""<div class="ListItem">"""), phoneRegex("</li>"), tagEnd = null)
+        internal val qobuzTitles = PageParts(phoneRegex("""class="ListItem__title${'"'}"""), phoneRegex("""</a>\s*+<p class="ListItem__artists">"""))
+
+        /**
+         * A Qobuz song's title and credit, as main's `class="ListItem__title"[^>]*>(.*?)</a>\s*<p class="ListItem__artists">(.*?)</p>`
+         * read them: the title up to the first `</a>` that the credit follows, then the credit up to the first `</p>`.
+         */
+        fun qobuzTitle(html: String): Pair<String, String>? {
+            val title = qobuzTitles.firstIn(html) ?: return null
+            val credit = title.whole.last + 1
+            val end = html.indexOf("</p>", credit).orNone() ?: return null
+            return html.substring(title.between) to html.substring(credit, end)
+        }
+        private val qobuzTrackRegex = phoneRegex("""track&#x2F;(\d+)""")
+        private val qobuzAlbumRegex = phoneRegex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)${'"'}""")
 
         const val BANDCAMP_SEARCH_URL = "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
         const val YOUTUBE_MUSIC_SEARCH_URL = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
@@ -924,10 +1003,8 @@ internal class ExactMatcher(
         private val VIDEO_TAG_MARKS = listOf("歌詞付き", "歌詞付", "歌詞", "公式", "字幕", "高音質", "日本語", "中日羅", "가사").map(SongNames::normalize)
 
         /** A year, as a video's title may give the song's: "1984". */
-        private val YEAR = Regex("""(?:19|20)\d\d""")
+        private val YEAR = phoneRegex("""(?:19|20)\d\d""")
 
-        /** What's in brackets, of any kind a title uses. */
-        private val BRACKETED = Regex("""[(\[（【「『［][^)\]）】」』］]*[)\]）】」』］]""")
 
         /** Apple Music stores that write names as they are in Japanese, Korean and Chinese. */
         private val NAMING_STORES = listOf("JP", "KR", "TW", "HK", "CN")
@@ -937,6 +1014,7 @@ internal class ExactMatcher(
 
         /** How far another release of a song, e.g. a remaster or a video's, may be from its length. */
         const val SAME_LENGTH_MS = 8_000L
+        const val SAME_SONG_LENGTH_MS = 3_000L
 
         /** How far a video ChatGPT picks may be from the song's length, as a video may open or end with more. */
         const val PICKED_VIDEO_LENGTH_MS = 45_000L
@@ -973,3 +1051,6 @@ internal fun canBeMissing(target: MusicService, item: MusicMetadata): Boolean =
  * artist's own page or a verified account counts, and ListenBrainz doesn't know every Spotify song.
  */
 private val partlyKnown = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.SPOTIFY)
+
+/** [name] with what's in brackets put as a space, of any kind a title uses: "Song (An Endless Song (1987))" is "Song  ". */
+internal fun outsideBrackets(name: String) = replacingBracketTags(name, "([（【「『［", ")]）】」』］", " ")

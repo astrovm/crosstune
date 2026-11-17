@@ -15,8 +15,43 @@ class SongNamesVersionTest {
         assertEquals(SongNames.Covered("アイドル", null), SongNames.coverOf("アイドル【歌ってみた】"))
         assertEquals(SongNames.Covered("Zombie", "The Cranberries"), SongNames.coverOf("Zombie (Originally Performed by The Cranberries) [Karaoke]"))
         assertEquals(SongNames.Covered("Halo", "Beyoncé"), SongNames.coverOf("Halo (Made Famous by Beyoncé)"))
+        // A karaoke label's "Made Popular By" is left as it was: whether its tracks show the song's words is still to be decided (Issue #922).
+        assertNull(SongNames.coverOf("Song (Made Popular By Singer) [Instrumental Version]"))
         // A song named with the word is the artist's own, as is a tag that's all there is.
         for (own in listOf("Cover Me", "Undercover (Remix)", "Cover Girl - Live", "(Cover)")) assertNull(own, SongNames.coverOf(own))
+    }
+
+    @Test
+    fun aCoverTagMayHoldATagOfItsOwn() {
+        for (title in listOf("Song (Acoustic Cover (Live))", "Song (Cover [Acoustic])", "Song [Cover (Piano)]")) {
+            assertEquals(title, SongNames.Covered("Song", null), SongNames.coverOf(title))
+        }
+        // A bracket that never closes is read from the first one to the first close, as it always was.
+        for (title in listOf("Song (Acoustic Cover (Live)", "Song (Cover()")) assertEquals(title, SongNames.Covered("Song", null), SongNames.coverOf(title))
+        // Whose song it is ends where that tag starts.
+        assertEquals(SongNames.Covered("Song", "Artist"), SongNames.coverOf("Song (In the Style of Artist (Live))"))
+    }
+
+    @Test
+    fun aTitleThatSaysNoOneSingsInItSaysItsInstrumental() {
+        // The list scripts/songcheck/instrumental_rules.py is tested against too, so both read titles alike.
+        val titles = javaClass.getResource("/instrumental-titles.tsv")!!.readText().lines().filter { it.isNotBlank() && !it.startsWith("#") }
+        for (line in titles) {
+            val (says, title) = line.split("\t")
+            val artist = line.split("\t").getOrElse(2) { "" }
+            assertEquals(line, says == "yes", SongNames.saysInstrumental(title, artist))
+        }
+    }
+
+    @Test
+    fun anAlbumOfInstrumentalsSaysSo() {
+        for (album in listOf("Album (Instrumentals)", "Album (Instrumental Version)", "Album - Instrumental", "Album (Off Vocal Ver.)", "专辑 (伴奏版)", "Ａｌｂｕｍ （Ｉｎｓｔｒｕｍｅｎｔａｌｓ）",
+            // Review of PR #919: short forms as a whole tag, and tracks to sing over.
+            "Album (Inst.)", "Album (MR)", "Album (Karaoke Version)", "Album (Backing Tracks)")) {
+            assertTrue(album, SongNames.albumOfInstrumentals(album))
+        }
+        // "Inst." and "MR" are short for other words too, and a word holding "instrumental" is another word.
+        for (album in listOf("Album", "", "Live at MIT Inst.", "Mr. Album", "Instrumentalists")) assertFalse(album, SongNames.albumOfInstrumentals(album))
     }
 
     @Test
@@ -59,6 +94,29 @@ class SongNamesVersionTest {
         assertTrue(SongNames.sameButKanji("黄金時代", "黄金时代"))
         assertFalse(SongNames.sameButKanji("東京物語", "南京故事"))
         assertFalse(SongNames.sameButKanji("終わらない歌", "终わらない歌声"))
+    }
+
+    @Test
+    fun aGuestWrittenOutInTheTitleIsLeftOutLikeOneInBrackets() {
+        // Searched with its guest, Qobuz lists only tribute albums for Despacito, and says it hasn't the song.
+        assertEquals("Despacito", SongNames.withoutEditionTag("Despacito ft. Daddy Yankee"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song feat Someone"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song FEATURING Someone & Other"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song (feat. Someone)"))
+        // The recording's other marks stay, and a length isn't a guest, nor is a word that starts the same.
+        assertEquals("Song (Live)", SongNames.withoutEditionTag("Song ft. Someone (Live)"))
+        assertEquals("6 ft. Under", SongNames.withoutEditionTag("6 ft. Under"))
+        assertEquals("Feats of Strength", SongNames.withoutEditionTag("Feats of Strength"))
+        assertEquals("Despacito Luis Fonsi", searchQuery(MusicMetadata("Despacito ft. Daddy Yankee", "Luis Fonsi")))
+    }
+
+    @Test
+    fun aVideosMarkIsLeftOutSoASearchFindsTheSong() {
+        // With it, Qobuz's store lists nothing at all for Gangnam Style, and 60 without.
+        assertEquals("GANGNAM STYLE(강남스타일)", SongNames.withoutEditionTag("GANGNAM STYLE(강남스타일) M/V"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song (M/V)"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song [m/v]"))
+        assertEquals("M/V", SongNames.withoutEditionTag("M/V"))
     }
 
     @Test

@@ -1,0 +1,9 @@
+Mark a word's wrong reading and send it as a report.
+Smoother while music plays.
+Japanese readings follow how the song is sung more often.
+Search puts the artist's song ahead of karaoke.
+A song with no words is reported only if someone sings in it.
+Medleys, concerts and playlists aren't reported.
+"Artist- Song Lyrics" video titles find their words.
+Practice cards stop YouTube at the next line and skip links they won't open.
+Chord marks line up, and ChordWiki says when its check doesn't finish.

@@ -1,9 +1,13 @@
 package com.astrovm.crosstune
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.ResponseBody.Companion.asResponseBody
 import okio.ForwardingSource
@@ -68,6 +72,45 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().isMusicVideo("jNQXAC9IVRw") })
         fake.handler = { throw IOException("offline") }
         assertNull(runBlocking { matcher().isMusicVideo("jNQXAC9IVRw") })
+    }
+
+    @Test
+    fun aCoverIsNeverAnotherArtistsWhoseNameStartsTheSame() {
+        // Deezer's answer for Hello by Adele has this before any of hers.
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                if (request.url.host == "itunes.apple.com") {
+                    """{"results":[{"trackName":"Hello (Dub up Mix)","artistName":"Adele Harley","artworkUrl100":"https://harley/100x100bb.jpg"},{"trackName":"Hello","artistName":"Adele","artworkUrl100":"https://adele/100x100bb.jpg"}]}"""
+                } else {
+                    """{"data":[{"title":"Hello (Dub up Mix)","artist":{"name":"Adele Harley"},"album":{"cover_big":"https://harley.jpg"}}]}"""
+                }
+            )
+        }
+        assertEquals("https://adele/600x600bb.jpg", runBlocking { matcher().cover(MusicMetadata("Hello", "Adele")) })
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                """{"data":[{"title":"Hello (Dub up Mix)","artist":{"name":"Adele Harley"},"album":{"cover_big":"https://harley.jpg"}},{"title":"Hello","artist":{"name":"Adele"},"album":{"cover_big":"https://adele.jpg"}}]}"""
+            )
+        }
+        assertEquals("https://adele.jpg", runBlocking { matcher().cover(MusicMetadata("Hello", "Adele")) })
+    }
+
+    @Test
+    fun aTitleOfNoLettersOrDigitsGetsNoCover() {
+        // Such a title starts any name, so any song of the artist's would do, with the wrong cover.
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                if (request.url.host == "itunes.apple.com") {
+                    """{"results":[{"trackName":"Hello","artistName":"Adele","artworkUrl100":"https://adele/100x100bb.jpg"}]}"""
+                } else {
+                    """{"data":[{"title":"Hello","artist":{"name":"Adele"},"album":{"cover_big":"https://adele.jpg"}}]}"""
+                }
+            )
+        }
+        assertNull(runBlocking { matcher().cover(MusicMetadata("!!!", "Adele")) })
     }
 
     @Test
@@ -454,6 +497,41 @@ class ExactMatcherTest {
         assertEquals(emptyList<Pair<List<String>, Boolean>>(), asked)
         // By default nothing is picked.
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+    }
+
+    @Test
+    fun aSongNamedInAnotherScriptIsFoundOnYouTubeMusicByItsArtistAndLength() {
+        val angel = MusicMetadata("A Cruel Angel's Thesis", "Yoko Takahashi")
+        val apple = mapOf("AR" to appleSong("A Cruel Angel's Thesis (Director's Edit Version)", "Yoko Takahashi", 245_093))
+        val named = "残酷な天使のテーゼ - Zankoku na Tenshi no Thesis"
+        fun find(songs: List<String>) = runBlocking {
+            namesAndTabs(songs = songs, apple = apple)
+            matcher().find(MusicService.YOUTUBE_MUSIC, angel)
+        }
+        // Its artist and its length, to the second, are the song's, whatever it's called.
+        assertEquals(
+            "https://music.youtube.com/watch?v=xyVatKhd4s4",
+            find(listOf(youTubeMusicRow(named, "Yoko Takahashi • Zankoku na Tenshi no Thesis • 4:06", videoId = "xyVatKhd4s4")))
+        )
+        // Not another artist's, another length, or a title in the same script, which is compared by its words.
+        assertNull(find(listOf(youTubeMusicRow(named, "Someone Else • Zankoku na Tenshi no Thesis • 4:06", videoId = "other000000"))))
+        assertNull(find(listOf(youTubeMusicRow(named, "Yoko Takahashi • Zankoku na Tenshi no Thesis • 4:20", videoId = "longer00000"))))
+        assertNull(find(listOf(youTubeMusicRow("Another Song", "Yoko Takahashi • Another Album • 4:06", videoId = "latin000000"))))
+    }
+
+    @Test
+    fun aSongInAnotherScriptMayBeAsFarFromTheKnownLengthAsTheSameSongIsAndNoFarther() {
+        val angel = MusicMetadata("A Cruel Angel's Thesis", "Yoko Takahashi")
+        val named = "残酷な天使のテーゼ - Zankoku na Tenshi no Thesis"
+        fun find(length: String) = runBlocking {
+            namesAndTabs(songs = listOf(youTubeMusicRow(named, "Yoko Takahashi • Zankoku na Tenshi no Thesis • $length", videoId = "xyVatKhd4s4")), apple = mapOf("AR" to appleSong("A Cruel Angel's Thesis", "Yoko Takahashi", 245_000)))
+            matcher().find(MusicService.YOUTUBE_MUSIC, angel)
+        }
+        // 3 s past the known 4:05 is the same song; a second more is not, and nor is 3 s short of it, or a second less.
+        assertEquals("https://music.youtube.com/watch?v=xyVatKhd4s4", find("4:08"))
+        assertNull(find("4:09"))
+        assertEquals("https://music.youtube.com/watch?v=xyVatKhd4s4", find("4:02"))
+        assertNull(find("4:01"))
     }
 
     @Test
@@ -895,6 +973,51 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun applesUsSearchRunsAfterAMissingOrFailedRegionalSearch() {
+        val song = MusicMetadata("Paper Lantern Sky", "The Fixture Owls")
+        for (regional in listOf("missing", "timeout", "bad JSON", "server error", "match")) {
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow("灯りの空", "The Fixture Owls • Lanterns • 3:04", videoId = "fixture0000")),
+                apple = mapOf("US" to appleSong(song.title, song.artist, 184_000)),
+                elsewhere = mapOf("JP" to appleSong("灯りの空", song.artist, 184_000))
+            )
+            val otherwise = fake.handler
+            fake.handler = { request ->
+                if (request.url.host == "itunes.apple.com" && request.url.encodedPath == "/search" && request.url.queryParameter("country") == "AR") {
+                    when (regional) {
+                        "timeout" -> throw java.net.SocketTimeoutException("Invented regional timeout")
+                        "bad JSON" -> FakeSpotify.html(request, "not JSON")
+                        "server error" -> FakeSpotify.html(request, """{"results":[${appleSong(song.title, song.artist, 184_000)}]}""", code = 503)
+                        "match" -> FakeSpotify.html(request, """{"results":[${appleSong(song.title, song.artist, 184_000)}]}""")
+                        else -> otherwise(request)
+                    }
+                } else otherwise(request)
+            }
+            fake.requestedUrls.clear()
+            assertEquals(regional, "https://music.youtube.com/watch?v=fixture0000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+            val stores = fake.requestedUrls.map { it.toHttpUrl() }.filter { it.host == "itunes.apple.com" && it.encodedPath == "/search" }
+                .map { it.queryParameter("country") }
+            assertEquals(regional, if (regional == "match") listOf("AR") else listOf("AR", "US"), stores)
+        }
+    }
+
+    @Test
+    fun aThirdPartyVideoNeedsKnownMatchingLengths() {
+        val song = MusicMetadata("A Cruel Angel's Thesis", "高橋洋子")
+        // Recorded search row for the piano upload, with a fake channel and video ID.
+        val title = "高橋洋子「残酷な天使のテーゼ」/ A  Cruel Angel’s Thesis"
+        fun find(details: String, apple: Map<String, String>): String? {
+            namesAndTabs(videos = listOf(youTubeMusicRow(title, details, videoId = "piano000000")), apple = apple)
+            return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        val known = mapOf("AR" to appleSong("A Cruel Angel's Thesis", "高橋洋子", 239_000))
+        assertNull(find("Fan • 1.4K views • 3:59", emptyMap()))
+        assertNull(find("Fan • 1.4K views", known))
+        assertNull(find("Fan • 1.4K views • 4:30", known))
+        assertEquals("https://music.youtube.com/watch?v=piano000000", find("Fan • 1.4K views • 3:59", known))
+    }
+
+    @Test
     fun aSongOnlyPutUpByOthersIsFoundAsTheUploadThatPlaysIt() {
         val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS")
         val apple = mapOf("AR" to appleSong("Owaranai Uta", "THE BLUE HEARTS", 184_000))
@@ -923,12 +1046,15 @@ class ExactMatcherTest {
         // Someone else's of another length is another recording; the artist's own may be a longer video.
         assertNull(finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views • 4:30", videoId = "long0000000")))
         assertEquals("https://music.youtube.com/watch?v=own00000000", finds(youTubeMusicRow("終わらない歌 (Official Video)", "THE BLUE HEARTS Official • 1M views • 4:30", videoId = "own00000000")))
+        // What's in brackets may be in brackets of its own.
+        assertEquals("https://music.youtube.com/watch?v=nested00000", finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta (An Endless Song (1987))", "Fan • 1K views • 3:04", videoId = "nested00000")))
+        assertEquals("https://music.youtube.com/watch?v=unclosed000", finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta (An Endless Song (1987)", "Fan • 1K views • 3:04", videoId = "unclosed000")))
         // Not naming the artist, or saying more than the song outside brackets, is no match.
         assertNull(finds(youTubeMusicRow("Owaranai Uta with lyrics", "Fan • 1K views • 3:04", videoId = "noartist000")))
         assertNull(finds(youTubeMusicRow("THE BLUE HEARTS - Owaranai Uta Guitar Lesson Part 2", "Fan • 1K views • 3:04", videoId = "lesson00000")))
-        // Not known to Apple, Deezer says how long it is; and unknown anywhere, the length isn't held against it.
+        // Not known to Apple, Deezer says how long it is; unknown anywhere, another channel's video isn't taken.
         assertNull(finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views • 4:30", videoId = "long0000000"), deezer = """[{"title":"Owaranai Uta","artist":{"name":"THE BLUE HEARTS"},"duration":184}]""", names = emptyMap()))
-        assertEquals("https://music.youtube.com/watch?v=long0000000", finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views • 4:30", videoId = "long0000000"), names = emptyMap()))
+        assertNull(finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views • 4:30", videoId = "long0000000"), names = emptyMap()))
         // Apple without its length leaves it to Deezer; an hour-long video is far from it too.
         assertEquals("https://music.youtube.com/watch?v=lyrics00000", finds(lyrics, deezer = """[{"title":"Owaranai Uta","artist":{"name":"THE BLUE HEARTS"},"duration":184}]""", names = mapOf("AR" to """{"trackId":7,"trackName":"Owaranai Uta","artistName":"THE BLUE HEARTS"}""")))
         assertNull(finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views • 1:03:04", videoId = "hour0000000")))
@@ -968,7 +1094,7 @@ class ExactMatcherTest {
     fun aVideoSayingMoreInAnotherScriptIsAnotherSong() {
         val song = MusicMetadata("桜", "Band")
         fun finds(name: String, channel: String = "Band - Topic"): String? {
-            namesAndTabs(videos = listOf(youTubeMusicRow(name, "$channel • 1K views • 4:00", videoId = "video000000")))
+            namesAndTabs(videos = listOf(youTubeMusicRow(name, "$channel • 1K views • 4:00", videoId = "video000000")), apple = mapOf("AR" to appleSong("桜", "Band", 240_000)))
             return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) }
         }
         assertNull(finds("桜の雨"))
@@ -1008,13 +1134,13 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
         namesAndTabs(videos = listOf(youTubeMusicRow("YOASOBI - 夜に駆ける", "Fan • 1K views • 4:21", videoId = "yoru0000000")))
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("夜", "YOASOBI")) })
-        // A video that doesn't say how long it is isn't held to the song's length.
+        // A video from another channel must say how long it is.
         namesAndTabs(
             videos = listOf(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views", videoId = "nolength000")),
             apple = mapOf("US" to appleSong("Owaranai Uta", "THE BLUE HEARTS", 184_000))
         )
         fake.requestedUrls.clear()
-        assertEquals("https://music.youtube.com/watch?v=nolength000", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        assertNull(runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
         // From the US, a song Apple doesn't have is asked about once there.
         namesAndTabs()
         fake.requestedUrls.clear()
@@ -1039,7 +1165,7 @@ class ExactMatcherTest {
         // On YouTube it opens there.
         assertEquals("https://www.youtube.com/watch?v=demo0000000", runBlocking { matcher().find(MusicService.YOUTUBE, demo) })
 
-        // Someone else's upload counts when the title names the artist; a live take is another recording.
+        // Without a known length, someone else's upload isn't enough to identify the recording.
         youTubeMusicTabs(
             songs = emptyList(),
             videos = listOf(
@@ -1047,7 +1173,7 @@ class ExactMatcherTest {
                 youTubeMusicRow("Tiny Band - Bedroom Demo [Lyrics]", "Fan Channel • 50 views • 3:00", videoId = "upload00000")
             )
         )
-        assertEquals("https://music.youtube.com/watch?v=upload00000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, demo) })
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, demo) })
         // The artist's own channel by what YouTube calls it, though the title names only the song.
         youTubeMusicTabs(songs = emptyList(), videos = listOf(youTubeMusicRow("Bedroom Demo", "Tiny Band - Topic • 20 views • 3:00", videoId = "topic000000")))
         assertEquals("https://music.youtube.com/watch?v=topic000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, demo) })
@@ -1130,6 +1256,91 @@ class ExactMatcherTest {
         // Unbalanced or nested brackets are left alone rather than mangled.
         assertEquals(video, findsVideo("Song (feat. A", "Band", "Song (feat. A", "Band"))
         assertNull(findsVideo("Song (feat. A (B))", "Band", "Song", "Band"))
+    }
+
+    @Test
+    fun appleMusicTakesTheExactTaggedNameAndNeverAnotherBaseNameWithTheSameTag() {
+        val wrong = mutableListOf<String>()
+        fun apple(name: String, link: String) = """{"trackName":"$name","artistName":"${RecordingTagPairs.ARTIST}","trackViewUrl":"https://music.apple.com/$link"}"""
+        for ((asked, other) in RecordingTagPairs.wrongPicks) {
+            val song = MusicMetadata(asked, RecordingTagPairs.ARTIST)
+            // Only the other song: none is taken for it.
+            respond("""{"results":[${apple(other, "wrong")}]}""")
+            runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) }?.let { wrong += "only: $asked took $other: $it" }
+            // The other song first, then its own: the own one.
+            respond("""{"results":[${apple(other, "wrong")},${apple(asked, "exact")}]}""")
+            val found = runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) }
+            if (found != "https://music.apple.com/exact") wrong += "first: $asked found $found, wanted its own"
+        }
+        for (name in RecordingTagPairs.exactNames) {
+            respond("""{"results":[${apple(name, "exact")}]}""")
+            val found = runBlocking { matcher().find(MusicService.APPLE_MUSIC, MusicMetadata(name, RecordingTagPairs.ARTIST)) }
+            if (found != "https://music.apple.com/exact") wrong += "exact: $name found $found"
+        }
+        assertEquals("${wrong.size} wrong Apple Music picks", emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun youTubeMusicOpensTheExactTaggedNameAndNeverAnotherBaseNameWithTheSameTag() {
+        val wrong = mutableListOf<String>()
+        for ((asked, other) in RecordingTagPairs.wrongPicks) {
+            findsVideo(asked, RecordingTagPairs.ARTIST, other, RecordingTagPairs.ARTIST)?.let { wrong += "$asked took $other: $it" }
+            // The other song first, then its own: the own one, whatever its place.
+            respond(
+                youTubeMusicPage(
+                    youTubeMusicRow(other, "${RecordingTagPairs.ARTIST} • Album • 3:00", videoId = "wrong000000"),
+                    youTubeMusicRow(asked, "${RecordingTagPairs.ARTIST} • Album • 3:00", videoId = "video000000")
+                )
+            )
+            val found = runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata(asked, RecordingTagPairs.ARTIST)) }
+            if (found != video) wrong += "first: $asked found $found, wanted its own"
+        }
+        for (name in RecordingTagPairs.exactNames) {
+            val found = findsVideo(name, RecordingTagPairs.ARTIST, name, RecordingTagPairs.ARTIST)
+            if (found != video) wrong += "exact: $name found $found"
+        }
+        assertEquals("${wrong.size} wrong YouTube Music picks", emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun anotherSongsNameFromAppleCannotOpenItsVideoOnYouTubeMusic() {
+        val wrong = mutableListOf<String>()
+        val artist = RecordingTagPairs.ARTIST
+        for ((asked, other) in RecordingTagPairs.wrongPicks) {
+            // Apple, and YouTube Music, only know the other song: Apple's name for it is no name for this one.
+            namesAndTabs(songs = listOf(youTubeMusicRow(other, "$artist • Album • 5:12", videoId = "wrong000000")), apple = mapOf("AR" to appleSong(other, artist)))
+            runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata(asked, artist)) }?.let { wrong += "only: $asked opened $other: $it" }
+            // Apple knows both, in either order: the video of the one asked for opens.
+            for (apple in listOf(appleSong(other, artist) + "," + appleSong(asked, artist, id = 8), appleSong(asked, artist, id = 8) + "," + appleSong(other, artist))) {
+                namesAndTabs(
+                    songs = listOf(
+                        youTubeMusicRow(other, "$artist • Album • 5:12", videoId = "wrong000000"),
+                        youTubeMusicRow(asked, "$artist • Album • 5:12", videoId = "video000000")
+                    ),
+                    apple = mapOf("AR" to apple)
+                )
+                val found = runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata(asked, artist)) }
+                if (found != video) wrong += "both: $asked opened $found, wanted its own"
+            }
+        }
+        assertEquals("${wrong.size} wrong YouTube Music opens", emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun aQueueTakesTheExactTaggedNameAndNeverAnotherBaseNameWithTheSameTag() {
+        val wrong = mutableListOf<String>()
+        for ((asked, other) in RecordingTagPairs.wrongPicks) {
+            queueFinds(asked, RecordingTagPairs.ARTIST, other, RecordingTagPairs.ARTIST)?.let { wrong += "$asked queued $other: $it" }
+        }
+        for (name in RecordingTagPairs.exactNames) {
+            val found = queueFinds(name, RecordingTagPairs.ARTIST, name, RecordingTagPairs.ARTIST)
+            if (found != video) wrong += "exact: $name queued $found"
+        }
+        for ((asked, found) in RecordingTagPairs.same) {
+            val url = queueFinds(asked, RecordingTagPairs.ARTIST, found, RecordingTagPairs.ARTIST)
+            if (url != video) wrong += "same: $asked queued $url, wanted $found"
+        }
+        assertEquals("${wrong.size} wrong queue picks", emptyList<String>(), wrong)
     }
 
     @Test
@@ -1497,7 +1708,7 @@ class ExactMatcherTest {
             when {
                 request.url.toString() == ServiceApis.SOUNDCLOUD_URL ->
                     FakeSpotify.html(request, """<script crossorigin src="https://a-v2.sndcdn.com/assets/1.js"></script>""")
-                request.url.host == "a-v2.sndcdn.com" -> FakeSpotify.html(request, """client_id:"${"k".repeat(32)}"""")
+                request.url.host == "a-v2.sndcdn.com" -> FakeSpotify.html(request, """client_id:"${"k".repeat(32)}${'"'}""")
                 else -> FakeSpotify.html(request, """{"collection":${results(request.url.encodedPath.substringAfterLast('/'))}}""")
             }
         }
@@ -1530,7 +1741,7 @@ class ExactMatcherTest {
         fake.handler = { request ->
             when {
                 request.url.toString() == ServiceApis.SOUNDCLOUD_URL -> FakeSpotify.html(request, """<script crossorigin src="https://a-v2.sndcdn.com/assets/1.js"></script>""")
-                request.url.host == "a-v2.sndcdn.com" -> FakeSpotify.html(request, """client_id:"${"k".repeat(32)}"""")
+                request.url.host == "a-v2.sndcdn.com" -> FakeSpotify.html(request, """client_id:"${"k".repeat(32)}${'"'}""")
                 else -> FakeSpotify.html(request, "[1]")
             }
         }
@@ -1568,6 +1779,225 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun qobuzIsAskedInTheStoreWhoseNumbersOpenOnThisPhone() {
+        // A song's number differs between Qobuz's stores, and the app shows only a loading page for one
+        // that isn't its country's: Expresso Love is 45242130 in the US store and 625089 in the others (#673).
+        fake.handler = { request -> FakeSpotify.html(request, "") }
+        fun asks(country: String): String {
+            runBlocking { matcher(country).find(MusicService.QOBUZ, MusicMetadata("Song", "Band")) }
+            return fake.requestedUrls.last().substringAfter("qobuz.com/").substringBefore("/")
+        }
+        assertEquals("us-en", asks("US"))
+        // The rest share the UK's numbers, but Japan's store names songs in Japanese, so they'd never match,
+        // and Latin America's stores and Portugal's list no numbers.
+        listOf("GB", "IE", "DE", "AU", "JP", "AR", "BR", "PT", "").forEach { assertEquals(it, "gb-en", asks(it)) }
+    }
+
+    @Test
+    fun qobuzsOtherStoreGivesTheNumberThisPhonesStoreDoesnt() {
+        fun item(track: String) = """
+            <li><div class="ListItem">
+                <a href="/x/album/slug/a1" class="ListItem__title" title="Song">Song</a>
+                <p class="ListItem__artists">Band • Album</p>
+                <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;$track"></button>
+            </div></li>"""
+        val song = MusicMetadata("Song", "Band")
+        fake.handler = { request ->
+            when {
+                "/us-en/" in request.url.toString() -> FakeSpotify.html(request, item("45242130"))
+                else -> FakeSpotify.html(request, item("625089"))
+            }
+        }
+        fun other(country: String, link: String) = runBlocking { matcher(country).otherQobuzLink(song, link) }
+        assertEquals("https://play.qobuz.com/track/625089", other("US", "https://play.qobuz.com/track/45242130"))
+        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/gb-en/search/tracks/"))
+        assertEquals("https://play.qobuz.com/track/45242130", other("IE", "https://play.qobuz.com/track/625089"))
+        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/us-en/search/tracks/"))
+        // The same number there, there's nothing else to try.
+        assertNull(other("IE", "https://play.qobuz.com/track/45242130"))
+        // No answer from the store is no other number, not a failure to show.
+        var failures = 0
+        fake.handler = { request -> failures++; FakeSpotify.html(request, "busy", code = 503) }
+        assertNull(other("US", "https://play.qobuz.com/track/45242130"))
+        assertEquals(2, failures)
+        var attempts = 0
+        fake.handler = { request ->
+            attempts++
+            if (attempts == 1) throw java.net.SocketTimeoutException("slow store")
+            FakeSpotify.html(request, item("625089"))
+        }
+        assertEquals("https://play.qobuz.com/track/625089", other("US", "https://play.qobuz.com/track/45242130"))
+        assertEquals(2, attempts)
+    }
+
+    private fun qobuzItem(title: String, credit: String, track: String, album: String = "a1") = """
+        <li><div class="ListItem">
+            <a href="/us-en/album/slug/$album" class="ListItem__title" title="$title">$title</a>
+            <p class="ListItem__artists">$credit</p>
+            <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;$track"></button>
+        </div></li>"""
+
+    @Test
+    fun qobuzFindsASongWhoseNameHasASlash() {
+        // Qobuz's store answers 404 for a "/" in the search, even written %2F, so these songs had no number (#774, measured
+        // 2026-11-07: AC/DC "Back In Black", Tove Styrke "Me/You (always and forever)"). Spaced, it finds them.
+        val sent = CopyOnWriteArrayList<String>()
+        fake.handler = { request ->
+            sent += request.url.encodedPath
+            if (request.url.pathSegments.size != 4 || "%2F" in request.url.encodedPath.uppercase()) {
+                FakeSpotify.html(request, "Not found", code = 404)
+            } else {
+                FakeSpotify.html(
+                    request,
+                    qobuzItem("Me/You (always and forever)", "Tove Styrke • Me/You (always and forever)", "423808056", "album1") +
+                        qobuzItem("Quevedo: Bzrp Music Sessions, Vol. 52/66", "Bizarrap • Quevedo: Bzrp Music Sessions, Vol. 52/66", "164512766", "album2") +
+                        qobuzItem("Back In Black", "AC/DC • Back In Black", "19906024", "album3")
+                )
+            }
+        }
+        val me = MusicMetadata("Me/You (always and forever)", "Tove Styrke")
+        assertEquals("https://play.qobuz.com/track/423808056", find(MusicService.QOBUZ, me))
+        assertEquals("/gb-en/search/tracks/Me%20You%20(always%20and%20forever)%20Tove%20Styrke", sent.last())
+        assertEquals("https://play.qobuz.com/track/164512766", find(MusicService.QOBUZ, MusicMetadata("Quevedo: Bzrp Music Sessions, Vol. 52/66", "Bizarrap")))
+        assertEquals("https://play.qobuz.com/track/19906024", find(MusicService.QOBUZ, MusicMetadata("Back In Black", "AC/DC")))
+        assertEquals("/gb-en/search/tracks/Back%20In%20Black%20AC%20DC", sent.last())
+        // An album too, and the other store's number, which the retry asks for.
+        assertEquals("https://play.qobuz.com/album/album3", find(MusicService.QOBUZ, MusicMetadata("Back In Black", "AC/DC", ItemType.ALBUM)))
+        assertEquals("https://play.qobuz.com/track/19906024", runBlocking { matcher("IE").otherQobuzLink(MusicMetadata("Back In Black", "AC/DC"), "https://play.qobuz.com/track/1") })
+        assertEquals("/us-en/search/tracks/Back%20In%20Black%20AC%20DC", sent.last())
+        // " / " and a slash at an end leave one space, not a gap.
+        find(MusicService.QOBUZ, MusicMetadata("A / B", "/Band/"))
+        assertEquals("/gb-en/search/tracks/A%20B%20Band", sent.last())
+    }
+
+    private fun slowQobuz(timeoutMs: Long, vararg attempts: (Request) -> okhttp3.Response): Pair<ExactMatcher, AtomicInteger> {
+        val asked = AtomicInteger()
+        fake.handler = { request -> attempts[minOf(asked.getAndIncrement(), attempts.size - 1)](request) }
+        return ExactMatcher(fake.client(), "US", timeoutMs = timeoutMs) to asked
+    }
+
+    private fun qobuzAfter(ms: Long): (Request) -> okhttp3.Response = { request ->
+        Thread.sleep(ms)
+        FakeSpotify.html(request, qobuzItem("Song", "Band • Album", "625089"))
+    }
+
+    private fun qobuzFailsAfter(ms: Long): (Request) -> okhttp3.Response = { _ ->
+        Thread.sleep(ms)
+        throw IOException("reset")
+    }
+
+    private val usNumber = "https://play.qobuz.com/track/45242130"
+
+    @Test
+    fun qobuzsOtherStoreStillGetsItsTimeToAnswerAfterTheFirstTryIsSlow() {
+        // Android lets Crosstune open an app again only 9.5 s after the first launch (#745), and the store had two tries of 5 s
+        // one after the other: the first, cut off at 5 s, wasted what it had waited for, and the second had what was left. A
+        // store that takes 7 s to answer got nothing from either. Here 300 ms stand for 5 s: the first try answers at 700 ms,
+        // the second, which went out at 300 ms, would at 1000.
+        val (matcher, asked) = slowQobuz(300, qobuzAfter(700), qobuzAfter(700))
+        assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) })
+        assertEquals(2, asked.get())
+    }
+
+    @Test
+    fun qobuzsOtherStoreIsAskedAgainAtOnceWhenTheFirstTryFailsAndAfterAWhileWhenItIsSilent() {
+        val song = MusicMetadata("Song", "Band")
+        // Failed outright: the second try goes out at once, not after the wait.
+        slowQobuz(5_000, qobuzFailsAfter(0), qobuzAfter(0)).let { (matcher, asked) ->
+            assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(song, usNumber) })
+            assertEquals(2, asked.get())
+        }
+        // Silent: the second try answers while the first is still stuck.
+        slowQobuz(200, qobuzAfter(4_000), qobuzAfter(0)).let { (matcher, asked) ->
+            val started = System.nanoTime()
+            assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(song, usNumber) })
+            assertTrue((System.nanoTime() - started) / 1_000_000 < 2_000)
+            assertEquals(2, asked.get())
+        }
+        // The second fails while the first is still on its way, and the first fails after the second went out.
+        slowQobuz(200, qobuzAfter(900), qobuzFailsAfter(0)).let { (matcher, _) ->
+            assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(song, usNumber) })
+        }
+        slowQobuz(200, qobuzFailsAfter(500), qobuzAfter(600)).let { (matcher, _) ->
+            assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(song, usNumber) })
+        }
+        // Both failed: no other number.
+        slowQobuz(200, qobuzFailsAfter(0), qobuzFailsAfter(0)).let { (matcher, asked) ->
+            assertNull(runBlocking { matcher.otherQobuzLink(song, usNumber) })
+            assertEquals(2, asked.get())
+        }
+    }
+
+    @Test
+    fun qobuzsOtherStoreIsAskedOnceWhenTheFirstTryAnswersInTime() {
+        // Answered a little after it was asked, not at once, so a second that went out the moment the first was waited on shows.
+        val (matcher, asked) = slowQobuz(1_000, qobuzAfter(150), qobuzAfter(0))
+        val started = System.nanoTime()
+        assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) })
+        // Handed over when the first answers, not once the wait is over, which a lookup that only looks at the wait does too, with its second try called off before it asks.
+        assertTrue((System.nanoTime() - started) / 1_000_000 < 900)
+        // Past the wait for the first, a second would have gone out.
+        Thread.sleep(1_300)
+        assertEquals(1, asked.get())
+    }
+
+    @Test
+    fun qobuzsOtherStoreSendsNoSecondTryTheMomentTheFirstAnswers() {
+        // A second try that goes out is called off the moment the lookup is done, and whether it got to ask first depends on
+        // which thread got there first, so one lookup may not show it. Many on threads of their own do.
+        val lookups = 100
+        // Together, so that lookups which each wait out the timer, as they would if the first's answer weren't taken, end at once.
+        val (matcher, asked) = slowQobuz(5_000, qobuzAfter(0))
+        val links = runBlocking(Dispatchers.Default) {
+            (1..lookups).map { async { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) } }.awaitAll()
+        }
+        assertEquals(List(lookups) { "https://play.qobuz.com/track/625089" }, links)
+        assertEquals(lookups, asked.get())
+    }
+
+    @Test
+    fun qobuzsOtherStoreTakesTheFirstTrysAnswerWhenItComesBeforeTheSecondsAndDoesntWaitForTheSecond() {
+        val (matcher, _) = slowQobuz(200, qobuzAfter(600), qobuzAfter(4_000))
+        val started = System.nanoTime()
+        assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) })
+        assertTrue((System.nanoTime() - started) / 1_000_000 < 2_500)
+    }
+
+    @Test
+    fun qobuzsOtherStoreCallsOffTheTriesStillOnTheirWayWhenItIsDone() {
+        // A try waiting on the store goes on reading unless it's called off, and cost the phone its data for nothing.
+        val calledOff = CopyOnWriteArrayList<Boolean>()
+        fake.handler = { request -> Thread.sleep(1_200); FakeSpotify.html(request, qobuzItem("Song", "Band • Album", "625089")) }
+        // Ahead of the fake, which answers without passing the request on.
+        val client = fake.client().newBuilder().apply {
+            interceptors().add(0, Interceptor { chain ->
+                // A call called off fails instead of answering, so this looks at it either way.
+                try {
+                    chain.proceed(chain.request())
+                } finally {
+                    calledOff += chain.call().isCanceled()
+                }
+            })
+        }.build()
+        val matcher = ExactMatcher(client, "US", timeoutMs = 100)
+        assertNull(runBlocking { kotlinx.coroutines.withTimeoutOrNull(400) { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) } })
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (calledOff.size < 2 && System.nanoTime() < deadline) Thread.sleep(50)
+        assertEquals(listOf(true, true), calledOff.toList())
+    }
+
+    @Test
+    fun qobuzsOtherStoreStopsWhenItsCallerGivesUpWithoutWaitingForTheTriesInFlight() {
+        // At 9.5 s the retry is cancelled, see QobuzNumbers: tries still waiting on the store mustn't hold that up.
+        val (matcher, asked) = slowQobuz(100, qobuzAfter(3_000), qobuzAfter(3_000))
+        val started = System.nanoTime()
+        val answer = runBlocking { kotlinx.coroutines.withTimeoutOrNull(400) { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) } }
+        assertNull(answer)
+        assertTrue((System.nanoTime() - started) / 1_000_000 < 1_500)
+        assertEquals(2, asked.get())
+    }
+
+    @Test
     fun qobuzFindsSongsAndAlbumsOnItsStoresSearchPage() {
         fun item(title: String, credit: String, track: String, album: String) = """
             <li><div class="ListItem">
@@ -1584,9 +2014,12 @@ class ExactMatcherTest {
             </div></li>"""
         val page = "<ul class=\"ListContainer\">" + item("Song (Live)", "Band • Live Record", "11", "live1") +
             item("Song", "Band\n •\n Studio &amp; Co", "12", "studio2") + item("Broken", "", "", "") + "</ul>"
-        fake.handler = { request -> FakeSpotify.html(request, page) }
+        // Qobuz's store answers only a phone's browser, as measured: a desktop browser's name, or OkHttp's, gets a 403 (#673).
+        fake.handler = { request ->
+            if (request.header("User-Agent").orEmpty().contains("Mobile")) FakeSpotify.html(request, page) else FakeSpotify.html(request, "Access Denied", code = 403)
+        }
         assertEquals("https://play.qobuz.com/track/12", find(MusicService.QOBUZ, MusicMetadata("Song", "Band")))
-        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/us-en/search/tracks/Song%20Band"))
+        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/gb-en/search/tracks/Song%20Band"))
         assertEquals("https://play.qobuz.com/album/studio2", find(MusicService.QOBUZ, MusicMetadata("Studio & Co", "Band", ItemType.ALBUM)))
         // Qobuz's artists aren't told apart, so there's nothing to look up, and the search stands in.
         val asked = fake.requestedUrls.size
@@ -1646,7 +2079,7 @@ class ExactMatcherTest {
             Triple(MusicService.SOUNDCLOUD, "soundcloud.com", { request ->
                 when {
                     request.url.toString() == ServiceApis.SOUNDCLOUD_URL -> """<script crossorigin src="https://a-v2.sndcdn.com/assets/1.js"></script>"""
-                    request.url.host == "a-v2.sndcdn.com" -> """client_id:"${"k".repeat(32)}""""
+                    request.url.host == "a-v2.sndcdn.com" -> """client_id:"${"k".repeat(32)}${'"'}"""
                     else -> """{"collection":[{"title":"Song","user":{"username":"Band"},"permalink_url":"https://soundcloud.com/band/song"}]}"""
                 }
             }),

@@ -2,8 +2,11 @@ package com.astrovm.crosstune
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -183,16 +186,56 @@ class SavedLinesPracticeTest {
     fun aLineKeptBeforeItCouldBeTimedIsTimedLaterOnce() {
         val store = SavedLinesStore(prefs)
         store.toggle(line.copy(artworkUrl = "https://example.com/old.jpg"))
-        val timed = store.timed(line.copy(startMs = 1_000, endMs = 2_000, app = "com.example.music", artworkUrl = "https://example.com/new.jpg")).single()
+        val timed = store.timed(line.copy(startMs = 1_000, endMs = 2_000, nextMs = 2_500, lengthMs = 180_000, app = "com.example.music", artworkUrl = "https://example.com/new.jpg")).single()
         assertEquals(1_000L, timed.startMs)
+        assertEquals(2_500L, timed.nextMs)
+        assertEquals(180_000L, timed.lengthMs)
         assertEquals("com.example.music", timed.app)
         // The cover it had stays.
         assertEquals("https://example.com/old.jpg", timed.artworkUrl)
-        // Timed already, it stays as it was; with no app known, the one it had stays too.
-        assertEquals(timed, store.timed(line.copy(startMs = 9_000, endMs = 9_500)).single())
+        // Timed already, it stays as it was, next line and length included; with no app known, the one it had stays too.
+        assertEquals(timed, store.timed(line.copy(startMs = 9_000, endMs = 9_500, nextMs = 9_800, lengthMs = 90_000)).single())
         store.remove(timed)
         store.toggle(line.copy(app = "com.example.old"))
         assertEquals("com.example.old", store.timed(line.copy(startMs = 1_000, endMs = 2_000)).single().app)
+    }
+
+    @Test
+    fun aLineKeepsTheNextLinesStartAndHowLongTheRecordingIs() {
+        val store = SavedLinesStore(prefs)
+        val timed = line.copy(startMs = 10_000, endMs = 14_500, nextMs = 20_000, lengthMs = 214_000)
+        store.toggle(timed)
+        assertEquals(timed, SavedLinesStore(prefs).load().single())
+        // Kept before these were stored: no next start, no length, and it still knows where it was sung.
+        prefs.edit().putString("saved_lines", """[{"text":"A","title":"T","artist":"B","start":1000,"end":2000}]""").commit()
+        val old = store.load().single()
+        assertNull(old.nextMs)
+        assertNull(old.lengthMs)
+        assertTrue(old.timed)
+        // 0 is not a recording's length. A next line at 0 is where it starts. A broken length is none.
+        prefs.edit().putString(
+            "saved_lines",
+            """[{"text":"C","title":"T","artist":"B","start":1,"end":2,"next":0,"length":0},{"text":"D","title":"T","artist":"B","start":1,"end":2,"length":-5}]"""
+        ).commit()
+        val (zero, broken) = store.load()
+        assertEquals(0L, zero.nextMs)
+        assertNull(zero.lengthMs)
+        assertNull(broken.nextMs)
+        assertNull(broken.lengthMs)
+    }
+
+    @Test
+    fun timingALineKeepsALengthItAlreadyHadWhenTheNewOneHasNone() {
+        val store = SavedLinesStore(prefs)
+        store.toggle(line.copy(lengthMs = 50_000))
+        val timed = store.timed(line.copy(startMs = 1_000, endMs = 2_000, nextMs = 3_000)).single()
+        assertEquals(1_000L, timed.startMs)
+        assertEquals(3_000L, timed.nextMs)
+        assertEquals(50_000L, timed.lengthMs)
+        val replaced = store.timed(line.copy(startMs = 4_000, endMs = 5_000, nextMs = 6_000, lengthMs = 90_000), again = true).single()
+        assertEquals(4_000L, replaced.startMs)
+        assertEquals(6_000L, replaced.nextMs)
+        assertEquals(90_000L, replaced.lengthMs)
     }
 
     @Test
@@ -257,7 +300,7 @@ class SavedLinesPracticeTest {
     fun aLineReadOtherwiseByHandIsReadSoOnItsKanjiInItsKanaAndInRomaji() {
         assertEquals(listOf(Ruby("都会", "とかい"), Ruby("夜", "よる")), night.readable)
         val read = night.readAs(listOf("まち", "よる"))
-        assertEquals(listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よる")), read.ruby)
+        assertEquals(listOf(Ruby("都会", "まち", Reader.USER), Ruby("の"), Ruby("夜", "よる")), read.ruby)
         assertEquals("まちのよる", read.reading)
         assertEquals("machi no yoru", read.romanized)
         assertTrue(read.readByHand)
@@ -292,15 +335,17 @@ class SavedLinesPracticeTest {
         val store = SavedLinesStore(prefs)
         val morning = SavedLine("都会の朝", reading = "とかいのあさ", title = "Demo", artist = "Band", ruby = listOf(Ruby("都会", "とかい"), Ruby("の"), Ruby("朝", "あさ")))
         store.addAll(listOf(night, morning))
-        store.readAs(morning.readAs(listOf("とかい", "あした")))
+        runBlocking { store.change(Dispatchers.Unconfined) { kept -> kept.map { it.editedAs(morning, morning.readAs(listOf("とかい", "あした"))) ?: it } } }
         val sung = night.readAs(listOf("まち", "よる")).copy(readByHand = false)
         val again = store.reread(listOf(sung, morning.copy(reading = "まちのあさ", ruby = listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("朝", "あさ")))))
         assertEquals("まちのよる", again.first { it.text == night.text }.reading)
         assertEquals(sung.ruby, again.first { it.text == night.text }.ruby)
         assertFalse(again.first { it.text == night.text }.readByHand)
-        // Put right by hand, it stays so, after the phone's restarted too.
+        // Where it's put right by hand, it stays so, after the phone's restarted too. The rest is read as it's sung.
         val kept = SavedLinesStore(prefs).load().first { it.text == morning.text }
-        assertEquals("とかいのあした", kept.reading)
+        assertEquals("まちのあした", kept.reading)
+        // とかい was there already, so the user put right only 朝.
+        assertEquals(Ruby("朝", "あした", Reader.USER), kept.ruby?.last())
         assertTrue(kept.readByHand)
         assertFalse(SavedLinesStore(prefs).load().first { it.text == night.text }.readByHand)
     }

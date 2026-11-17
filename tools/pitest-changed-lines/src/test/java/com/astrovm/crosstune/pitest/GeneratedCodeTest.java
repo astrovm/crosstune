@@ -136,6 +136,19 @@ public class GeneratedCodeTest {
         assertFalse(generated(method, OBJECT, Opcodes.ARETURN, false));
     }
 
+    @Test
+    public void kotlinsLengthHandedToGetLengthIsABridge() {
+        // As Kotlin writes it: public final bridge, not synthetic as javac's.
+        MethodNode length = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL | Opcodes.ACC_BRIDGE, "length", "()I", null, null);
+        assertTrue(GeneratedCode.bridge(length));
+    }
+
+    @Test
+    public void theAppsOwnMethodIsntABridge() {
+        MethodNode getLength = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL | Opcodes.ACC_SYNTHETIC, "getLength", "()I", null, null);
+        assertFalse(GeneratedCode.bridge(getLength));
+    }
+
     private static boolean generated(MethodNode method, int opcode) {
         return generated(method, OBJECT, opcode, false);
     }

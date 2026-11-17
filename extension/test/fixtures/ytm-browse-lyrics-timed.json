@@ -1,0 +1,55 @@
+{
+ "contents": {
+  "elementRenderer": {
+   "newElement": {
+    "type": {
+     "componentType": {
+      "model": {
+       "timedLyricsModel": {
+        "lyricsData": {
+         "timedLyricsData": [
+          {
+           "lyricLine": "Paper boats along the river",
+           "cueRange": {
+            "startTimeMilliseconds": "10500",
+            "endTimeMilliseconds": "15000"
+           }
+          },
+          {
+           "lyricLine": "We sang until the morning came",
+           "cueRange": {
+            "startTimeMilliseconds": "15500",
+            "endTimeMilliseconds": "20000"
+           }
+          },
+          {
+           "lyricLine": "Every window holds a lantern",
+           "cueRange": {
+            "startTimeMilliseconds": "20500",
+            "endTimeMilliseconds": "25000"
+           }
+          },
+          {
+           "lyricLine": "And the night forgets its name",
+           "cueRange": {
+            "startTimeMilliseconds": "25500",
+            "endTimeMilliseconds": "30000"
+           }
+          },
+          {
+           "lyricLine": "♪",
+           "cueRange": {
+            "startTimeMilliseconds": "31000",
+            "endTimeMilliseconds": "40000"
+           }
+          }
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}

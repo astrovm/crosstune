@@ -1,5 +1,8 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.ui.draw.rotate
@@ -37,6 +40,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -76,6 +80,7 @@ import androidx.compose.material3.FabPosition
 import androidx.compose.material3.Icon
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.material3.Scaffold
@@ -88,10 +93,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -103,6 +109,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
@@ -121,6 +128,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.border
@@ -136,8 +144,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import com.astrovm.crosstune.ui.theme.Palette
 
@@ -146,6 +154,9 @@ internal const val PRACTICE_BADGE_TAG = "practice-badge"
 internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
 internal const val NOW_PLAYING_TAG = "now_playing"
+
+/** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
+internal const val CARD_TOOLS_TAG = "card_tools"
 
 /** Past this font scale, Play and Open stack: a long word like German's "Abspielen" no longer fits half the width. */
 private const val STACK_BUTTONS_FROM = 1.3f
@@ -257,6 +268,11 @@ internal data class ScreenActions(
     val onPeekPlayingNow: () -> Unit = {},
     val onPlayingNowPlayPause: () -> Unit = {},
     val onPlayingNowSkip: () -> Unit = {},
+    /** Shows the song heard in what an app plays with no song named. */
+    val onOpenPlayingUnnamed: () -> Unit = {},
+    val onPeekPlayingUnnamed: () -> Unit = {},
+    /** Says whether the bar with what an app plays with no song named is on screen, the only time it's named by ear. */
+    val onPlayingBarInSight: (Boolean) -> Unit = {},
     val onSettingsLeft: () -> Unit = {},
     /** Fetches the shown song's words and shows them. */
     val onShowLyrics: () -> Unit = {},
@@ -282,8 +298,12 @@ internal data class ScreenActions(
     val onSendReport: (comment: String) -> Unit = {},
     /** The report written, sent or not. */
     val onCloseReport: () -> Unit = {},
+    /** The reading shown for a word, in a line, marked wrong, with the right one when the user says it. */
+    val onReportReading: (word: Word, index: Int, right: String) -> Unit = { _, _, _ -> },
     /** Problems Crosstune finds with songs reported by itself from now on, or not. */
     val onAllowAutoReports: (Boolean) -> Unit = {},
+    /** The offer to do so closed for now, not as a no. */
+    val onCloseAutoReportOffer: () -> Unit = {},
     val onFetchSingingModel: () -> Unit = {},
     val onCloseSingingModel: () -> Unit = {},
     val onReadingsChange: (Boolean) -> Unit = {},
@@ -293,6 +313,7 @@ internal data class ScreenActions(
     val onCardTypesChange: (List<CardType>, Boolean) -> Unit = { _, _ -> },
     val onTranslationChange: (Boolean) -> Unit = {},
     val onRetryTranslation: () -> Unit = {},
+    val onRetryChords: () -> Unit = {},
     val onChordsChange: (Boolean) -> Unit = {},
     val onToggleSavedLine: (Int) -> Unit = {},
     /** Looks up a word, in the line it's in, by the line's index. */
@@ -309,6 +330,8 @@ internal data class ScreenActions(
     val onGradePractice: (Grade) -> Unit = {},
     val onStopPractice: () -> Unit = {},
     val onReplayLine: () -> Unit = {},
+    /** The small YouTube player's picture, for the card its line plays in. */
+    val linePlayerView: () -> android.view.View? = { null },
     val onBackToBefore: () -> Unit = {},
     /** Keeps the lines of the words shown given by index, lets the kept ones given go, and practises the song when asked. */
     val onChooseLines: (List<Int>, List<SavedLine>, Boolean) -> Unit = { _, _, _ -> },
@@ -357,6 +380,7 @@ internal data class ScreenActions(
     val onDismissChatGptWelcome: () -> Unit = {},
     /** Lets the words follow music apps: in one tap with Shizuku or root, otherwise the steps show how. */
     val onAllowFollowing: () -> Unit = {},
+    /** Lets Crosstune show over other apps, so it comes back over a music app it opens: in one tap with Shizuku or root, otherwise the steps show how. */
     /** Opens Android's page for Crosstune seeing what music apps play, where it's turned off too. */
     val onOpenFollowAccess: () -> Unit = {},
     /** Opens Crosstune's App info, where restricted settings are allowed. */
@@ -370,6 +394,12 @@ internal data class ScreenActions(
     val onDismissNotFoundOffer: () -> Unit = {},
     val onPaletteChange: (Palette) -> Unit = {},
     val onPureBlackChange: (Boolean) -> Unit = {},
+    /** Due cards asked back once a day, or not, Android asked first if need be. */
+    val onReminderChange: (Boolean) -> Unit = {},
+    /** The time of day they're asked back, in minutes from midnight. */
+    val onReminderTimeChange: (Int) -> Unit = {},
+    /** Opens Android's page where a reminder is allowed to go on the minute. */
+    val onReminderExact: () -> Unit = {},
     val onPlayingBarChange: (Boolean) -> Unit = {},
     /** How far ahead of the voice a line lights, one of [LINES_EARLY_STEPS]. */
     val onLinesEarlyChange: (Long) -> Unit = {},
@@ -445,7 +475,9 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     layers.up = when {
         // The song's card is only made under its player once the swipe gets there, so one let go early leaves the card shown.
         screen == Screen.MAIN && state.playingNow != null -> Layer(Screen.PLAYER, actions.onPeekPlayingNow, back = actions.onClosePlayer, settled = actions.onOpenPlayingNow)
-        screen == Screen.PLAYER && state.player?.song?.artist?.isNotBlank() == true -> Layer(Screen.LYRICS, actions.onPlayerLyrics, back = actions.onDismissLyrics)
+        // What names no song has no card to put under its player.
+        screen == Screen.MAIN && state.playingUnnamed != null -> Layer(Screen.PLAYER, actions.onPeekPlayingUnnamed, back = actions.onClosePlayer)
+        screen == Screen.PLAYER && state.player?.takeIf { !it.songless }?.song?.artist?.isNotBlank() == true -> Layer(Screen.LYRICS, actions.onPlayerLyrics, back = actions.onDismissLyrics)
         else -> null
     }
     layers.down = when (screen) {
@@ -567,7 +599,6 @@ private fun appLabel(packageName: String): String? {
 }
 
 /** Page scaffold shared by every screen: a flat top bar (none when [title] is null) and a centered, scrollable column. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun Page(
     title: String?,
@@ -581,26 +612,75 @@ internal fun Page(
     scrollState: ScrollState = rememberScrollState(),
     content: @Composable () -> Unit
 ) {
+    PageFrame(title, titleLeading, navigationIcon, actions, bottomBar, snackbarHost, floatingActionButton) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = ContentMaxWidth)
+                .fillMaxWidth()
+                .verticalScroll(scrollState)
+                .padding(start = 16.dp, end = 16.dp, bottom = 32.dp)
+        ) {
+            content()
+        }
+    }
+}
+
+/** [Page] for a long list, of which only what's on screen is drawn. */
+@Composable
+internal fun LazyPage(
+    title: String,
+    navigationIcon: @Composable () -> Unit,
+    listState: LazyListState,
+    content: LazyListScope.() -> Unit
+) {
+    PageFrame(title, null, navigationIcon, {}, {}, {}, {}) {
+        LazyColumn(
+            modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth(),
+            state = listState,
+            contentPadding = PaddingValues(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 32.dp),
+            content = content
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PageFrame(
+    title: String?,
+    titleLeading: (@Composable () -> Unit)?,
+    navigationIcon: @Composable () -> Unit,
+    actions: @Composable () -> Unit,
+    bottomBar: @Composable () -> Unit,
+    snackbarHost: @Composable () -> Unit,
+    floatingActionButton: @Composable () -> Unit,
+    body: @Composable () -> Unit
+) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.surface,
         snackbarHost = snackbarHost,
         topBar = {
             if (title != null) {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(color = MaterialTheme.colorScheme.surface) {
+                    // A large title can use another row without covering the page or losing its ending.
+                    LeadAndWords(
+                        lead = { Box { navigationIcon() } },
+                        modifier = Modifier.fillMaxWidth()
+                            .windowInsetsPadding(TopAppBarDefaults.windowInsets)
+                            .heightIn(min = 64.dp)
+                            .padding(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        LabelAndValue(label = {
                             if (titleLeading != null) {
-                                titleLeading()
-                                Spacer(Modifier.width(12.dp))
+                                LeadAndWords(lead = { Box { titleLeading() } }) {
+                                    LabelText(title, style = MaterialTheme.typography.titleLarge)
+                                }
+                            } else {
+                                LabelText(title, style = MaterialTheme.typography.titleLarge)
                             }
-                            Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    },
-                    navigationIcon = navigationIcon,
-                    actions = { actions() },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-                )
+                        }) { Row { actions() } }
+                    }
+                }
             }
         },
         bottomBar = bottomBar,
@@ -615,15 +695,7 @@ internal fun Page(
                 .imePadding(),
             contentAlignment = Alignment.TopCenter
         ) {
-            Column(
-                modifier = Modifier
-                    .widthIn(max = ContentMaxWidth)
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)
-                    .padding(start = 16.dp, end = 16.dp, bottom = 32.dp)
-            ) {
-                content()
-            }
+            body()
         }
     }
 }
@@ -653,10 +725,17 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
     val songList = state.result?.takeIf { state.isSongList && it.tracks.isNotEmpty() }
 
     // At the bottom, unless it's the song shown or it's turned off; not while a link is typed in.
-    val playing = state.playingNow?.takeIf { now ->
-        state.playingBar && state.error == null && !state.isLoading && !state.listening &&
-            (state.linkText.isBlank() || (state.result != null && state.linkText == state.link?.url))
+    val barOpen = state.playingBar && state.error == null && !state.isLoading && !state.listening &&
+        (state.linkText.isBlank() || (state.result != null && state.linkText == state.link?.url))
+    val playing = state.playingNow?.takeIf { barOpen }
+    // What an app plays with no song named is listened to only while its bar is on screen.
+    val unnamed = state.playingUnnamed?.takeIf { barOpen && playing == null }
+    val naming = unnamed != null
+    DisposableEffect(naming) {
+        actions.onPlayingBarInSight(naming)
+        onDispose { actions.onPlayingBarInSight(false) }
     }
+    val bar: Any? = playing ?: unnamed
     Page(
         title = stringResource(R.string.app_name),
         titleLeading = { AppLogo() },
@@ -678,13 +757,16 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
                 // What's broken stays in sight until it's fixed, over what's playing, once it isn't asked below the field.
                 val toFix = state.toFix.takeIf { !state.firstAsks } ?: 0
                 AnimatedVisibility(visible = toFix > 0, enter = Motion.appear, exit = Motion.disappear) {
-                    FixBar(toFix, actions.onOpenFixes, modifier = if (playing == null) Modifier.navigationBarsPadding() else Modifier)
+                    FixBar(toFix, actions.onOpenFixes, modifier = if (bar == null) Modifier.navigationBarsPadding() else Modifier)
                 }
-                AnimatedVisibility(visible = playing != null, enter = Motion.appear, exit = Motion.disappear) {
+                AnimatedVisibility(visible = bar != null, enter = Motion.appear, exit = Motion.disappear) {
                     // Kept while it fades out, as the song goes when it's tapped.
-                    val shown = remember { mutableStateOf(playing) }
-                    if (playing != null) shown.value = playing
-                    shown.value?.let { NowPlayingBar(it, actions) }
+                    val shown = remember { mutableStateOf(bar) }
+                    if (bar != null) shown.value = bar
+                    when (val now = shown.value) {
+                        is NowPlaying -> NowPlayingBar(now, actions)
+                        is PlayingUnnamed -> UnnamedBar(now, actions)
+                    }
                 }
             }
         },
@@ -733,37 +815,75 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
     }
 }
 
-/** The song a music app plays right now, or has paused: its buttons, where it is, and a tap opens its player. */
+/**
+ * The song a music app plays right now, or has paused: its buttons, where it is, and a tap opens its player. It reads
+ * only what it's handed, so it's never redrawn alone; [PlayingBar] is, as what it shows moves on.
+ */
 @Composable
+@NonRestartableComposable
 private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
     val song = now.song
     val following = now.following
+    PlayingBar(
+        song.title, listOfNotNull(song.artist.takeIf { it.isNotBlank() }, following?.app).joinToString(" · "), song.artworkUrl,
+        following, following?.durationMs ?: song.lengthMs, actions.onOpenPlayingNow, actions
+    )
+}
+
+/**
+ * What an app plays while it names no song, e.g. a radio station: the song heard in it, which a tap
+ * shows like a link when that's safe, or until one is, what the app calls it, e.g. the station, never
+ * as a song. Its buttons and where it is are the app's, as for a song. Never redrawn alone, as [NowPlayingBar] isn't.
+ */
+@Composable
+@NonRestartableComposable
+private fun UnnamedBar(now: PlayingUnnamed, actions: ScreenActions) {
+    val song = now.heard?.metadata
+    // The app's name as following it has it too, as both are from its package.
+    val app = now.playing.label
+    val name = song?.title ?: now.playing.name ?: app.orEmpty()
+    PlayingBar(
+        name, listOfNotNull(song?.artist, app).filter { it.isNotBlank() && it != name }.joinToString(" · "),
+        song?.artworkUrl ?: now.playing.artworkUrl, now.following, now.following?.durationMs, actions.onOpenPlayingUnnamed, actions
+    )
+}
+
+/**
+ * The bar at the bottom with what an app plays: [title] over [byLine], its cover, the app's buttons,
+ * and how far it is when [duration] is known. A tap does [onOpen]; swiped up, it opens the player.
+ */
+@Composable
+private fun PlayingBar(title: String, byLine: String, cover: String?, following: Following?, duration: Long?, onOpen: () -> Unit, actions: ScreenActions) {
     val playing = following?.clock?.playing != false
-    val duration = following?.durationMs ?: song.lengthMs
-    val position = rememberPosition(following)
+    // The buttons sit inside the bar's own tap target, where a remote's search from the bar never looks.
+    val bar = remember { FocusRequester() }
+    val playPause = remember { FocusRequester() }
     Surface(
-        onClick = actions.onOpenPlayingNow,
+        onClick = onOpen,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        // Swiped up, it opens the player.
         modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG).swipeLayers()
+            .focusRequester(bar).focusProperties { right = playPause }
     ) {
         Column(modifier = Modifier.navigationBarsPadding()) {
             Row(
                 modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp).widthIn(max = ContentMaxWidth),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CoverArt(song.artworkUrl, actions.loadArtwork, size = 48.dp)
+                CoverArt(cover, actions.loadArtwork, size = 48.dp)
                 Column(modifier = Modifier.padding(start = 12.dp, end = 8.dp).weight(1f)) {
-                    Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        listOfNotNull(song.artist.takeIf { it.isNotBlank() }, following?.app).joinToString(" · "),
+                        byLine,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                IconButton(onClick = actions.onPlayingNowPlayPause, modifier = Modifier.size(52.dp)) {
+                IconButton(
+                    onClick = actions.onPlayingNowPlayPause,
+                    modifier = Modifier.size(52.dp).focusRequester(playPause).focusProperties { left = bar }
+                ) {
                     AppIcon(
                         if (playing) R.drawable.ic_pause else R.drawable.ic_play,
                         contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play)
@@ -773,12 +893,25 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
                     AppIcon(R.drawable.ic_skip_next, contentDescription = stringResource(R.string.lyrics_next_song))
                 }
             }
-            if (position != null && duration != null) {
-                LinearProgressIndicator(progress = { (position.toFloat() / duration).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(2.dp))
-            }
+            if (following != null && duration != null) PlayedSoFar(following, duration)
         }
     }
 }
+
+/**
+ * How far into the song a music app is, as a thin line. It moves a step at a time, each about as wide
+ * as the eye can tell on so thin a line, and it's a layer of its own read only where it's drawn: the
+ * song moving on draws this line again, and never the bar's name, cover and buttons, or the screen.
+ */
+@Composable
+private fun PlayedSoFar(following: Following, duration: Long) {
+    val step = (duration / PLAYED_STEPS).coerceAtLeast(POSITION_STEP_MS)
+    val position = whilePlaying(following, step, { it - it % step + step }) { it - it % step }
+    LinearProgressIndicator(progress = { (position.value.toFloat() / duration).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(2.dp).graphicsLayer())
+}
+
+/** How many steps the bar's line takes through a song. */
+private const val PLAYED_STEPS = 500
 
 /**
  * What the user sees while a link from another app is on its way out: the song once known, where
@@ -1036,7 +1169,11 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     }
 }
 
-/** "Music app   Spotify ▾": the app songs open and play in, in settings. */
+/**
+ * "Music app   Spotify ▾": the app songs open and play in, in settings. The whole row is the button,
+ * so a screen reader says what's set with what it's for, and the name keeps its words whole beside
+ * the app, or over it at a big font.
+ */
 @Composable
 internal fun DefaultDestinationMenu(
     destinations: List<Destination>,
@@ -1047,13 +1184,15 @@ internal fun DefaultDestinationMenu(
     installed: Set<MusicService>
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+    LabelAndValue(
+        label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) },
+        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { expanded = true }.testTag(DEFAULT_MENU_TAG).then(modifier)
+    ) {
         Box {
-            TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 DestinationIcon(selected, installed, size = 20.dp)
                 Spacer(Modifier.size(8.dp))
-                Text(selected.label())
+                Text(selected.label(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 AppIcon(
                     R.drawable.ic_expand_more,
                     contentDescription = null,
@@ -1107,7 +1246,7 @@ private fun SongSearchSheet(
                     )
                 }
             } else {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Column {
                     // ChatGPT's picks come in a moment later, ahead of the others.
                     if (state.isAskingForSongs) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
                     // A mood, more than one song, makes a playlist of ChatGPT's picks.
@@ -1442,8 +1581,9 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 Text(stringResource(R.string.make_default_named, destination.label()))
             }
         }
-        // Flat: the song is the point, these are only within reach.
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        // Flat: the song is the point, these are only within reach. Spread across the row, and onto
+        // another where a big font or a long language leaves them no room, each word whole.
+        FlowRow(modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag(CARD_TOOLS_TAG), horizontalArrangement = Arrangement.SpaceEvenly) {
             // With its songs listed, the songs are what's worth copying or sharing, e.g. to move
             // the list to another service, rather than a search for its name. The songs listed
             // right below say what's copied, so the label is short; screen readers hear it all.
@@ -1928,6 +2068,13 @@ private fun MoreChoice(onClick: () -> Unit) {
 }
 
 /**
+ * Text as big as [this], at any font: a letter that stands in for an icon is as big as the icons
+ * beside it, which don't grow with the font, and stays inside the tile it's on.
+ */
+@Composable
+internal fun Dp.asIconText(): TextUnit = with(LocalDensity.current) { toSp() }
+
+/**
  * A destination's icon: an installed app's own, the bundled logo of a service, or, for sites
  * with no logo of their own (Invidious, Piped, custom ones), their first letter on a colored tile.
  */
@@ -1956,7 +2103,7 @@ internal fun DestinationIcon(destination: Destination, installed: Set<MusicServi
     }
     Surface(modifier = tag.size(size), shape = MaterialTheme.shapes.small, color = background, contentColor = Color.White) {
         Box(contentAlignment = Alignment.Center) {
-            Text(letter.uppercase(), style = MaterialTheme.typography.titleMedium, fontSize = (size.value * 0.5f).sp)
+            Text(letter.uppercase(), style = MaterialTheme.typography.titleMedium, fontSize = (size * 0.5f).asIconText(), lineHeight = (size * 0.5f).asIconText())
         }
     }
 }
@@ -1967,7 +2114,7 @@ private fun DestinationPicker(state: UiState, loadArtwork: suspend (String) -> I
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.picker_title)) },
         text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            Column {
                 state.result?.let { result ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
                         CoverArt(result.artworkUrl, loadArtwork, size = 48.dp)

@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "Ouvre les liens de musique dans le service de ton choix."
-  },
-  "actionTitle": {
-    "message": "Réglages de Crosstune"
-  },
-  "optionsEnabled": {
-    "message": "Ouvrir les liens de musique dans le service ci-dessous"
-  },
-  "optionsService": {
-    "message": "Ouvrir dans"
-  },
-  "optionsAccess": {
-    "message": "Crosstune a besoin d'accéder aux sites de musique pour ouvrir les liens pour toi."
-  },
-  "optionsAllow": {
-    "message": "Autoriser"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "Ouvre les liens de musique dans le service de ton choix et affiche les paroles de ce qui joue." },
+  "actionTitle": { "message": "Paroles Crosstune" },
+  "optionsEnabled": { "message": "Ouvrir les liens de musique dans le service ci-dessous" },
+  "optionsService": { "message": "Ouvrir dans" },
+  "optionsAccess": { "message": "Crosstune a besoin d'accéder aux sites de musique pour ouvrir les liens et afficher les paroles." },
+  "optionsAllow": { "message": "Autoriser" },
+  "lyricsNoSong": { "message": "Lance un morceau sur un site de musique" },
+  "lyricsLoading": { "message": "Recherche des paroles" },
+  "lyricsNone": { "message": "Pas de paroles pour ce morceau" },
+  "lyricsInstrumental": { "message": "Instrumental" },
+  "lyricsOffline": { "message": "Tu es hors ligne" },
+  "lyricsUnavailable": { "message": "Impossible de joindre les sites de paroles" },
+  "lyricsRetry": { "message": "Réessayer" },
+  "lyricsSettings": { "message": "Réglages" }
 }

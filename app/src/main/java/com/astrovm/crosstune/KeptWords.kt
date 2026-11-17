@@ -19,8 +19,13 @@ internal data class KeptWords(
     val learning: Learning,
     /** What the words were worked out with, see [MainViewModel]'s madeWith. */
     val madeWith: String,
-    val chords: ChordsState
+    val chords: ChordsState,
+    /** How much of the song plays per ms of the words past [syncPoints], see [LyricsSync.adjust]. */
+    val pace: Double = 1.0
 ) {
+    /** Whether [lines] are timed by the singing heard: words found with no timing, with lines timed since. */
+    val timedByEar: Boolean get() = foundLines.isEmpty() && lines.isNotEmpty()
+
     /** Only what shows them again: what's being asked of ChatGPT about the song is asked again. */
     fun json(): String = JSONObject()
         .put("lyrics", lyrics)
@@ -32,11 +37,13 @@ internal data class KeptWords(
         .put("syncPoints", syncPoints.json { JSONArray().put(it.lineMs).put(it.songMs) })
         .put("script", learning.script?.name)
         .put("readings", learning.lines.json(::readingJson))
+        .put("readingsUnfinished", learning.readingsUnfinished)
         .put("translations", learning.translations.json { it ?: JSONObject.NULL })
         .put("fromRomaji", learning.fromRomaji)
         .put("madeWith", madeWith)
         .put("chordsTried", chords.tried)
         .put("chords", chords.sheet?.let(::sheetJson))
+        .put("pace", pace)
         .toString()
 
     companion object {
@@ -56,11 +63,15 @@ internal data class KeptWords(
                 Learning(
                     script = if (kept.has("script")) Script.valueOf(kept.getString("script")) else null,
                     lines = kept.getJSONArray("readings").list(::reading),
+                    // Kept before this was said, they may lack UtaTen's: read again once.
+                    readingsUnfinished = kept.optBoolean("readingsUnfinished", true),
                     translations = kept.getJSONArray("translations").list { array, index -> if (array.isNull(index)) null else array.getString(index) },
                     fromRomaji = kept.getBoolean("fromRomaji")
                 ),
                 kept.getString("madeWith"),
-                ChordsState(tried = kept.getBoolean("chordsTried"), sheet = kept.optJSONObject("chords")?.let(::sheet))
+                ChordsState(tried = kept.getBoolean("chordsTried"), sheet = kept.optJSONObject("chords")?.let(::sheet)),
+                // Kept before the pace was, they go on as timed.
+                kept.optDouble("pace", 1.0)
             )
         } catch (_: JSONException) {
             null
@@ -85,14 +96,16 @@ internal data class KeptWords(
         }
 
         private fun readingJson(reading: LineReading) = JSONObject()
-            .put("parts", reading.parts.json { JSONArray().put(it.text).put(it.reading ?: JSONObject.NULL) })
+            // What put a reading right, when something did, so a word says it again once the words show again.
+            .put("parts", reading.parts.json { part -> JSONArray().put(part.text).put(part.reading ?: JSONObject.NULL).also { array -> part.by?.let { array.put(it.key) } } })
             .put("reading", reading.reading)
             .put("romanized", reading.romanized)
             .put("typed", reading.typed)
 
         private fun reading(array: JSONArray, index: Int) = array.getJSONObject(index).let { reading ->
             LineReading(
-                reading.getJSONArray("parts").list { parts, at -> parts.getJSONArray(at).let { Ruby(it.getString(0), if (it.isNull(1)) null else it.getString(1)) } },
+                // Kept over the kana among a word's kanji, as it once was, they're moved off them.
+                Readings.rubied(reading.getJSONArray("parts").list { parts, at -> parts.getJSONArray(at).let { Ruby(it.getString(0), if (it.isNull(1)) null else it.getString(1), Reader.of(it.optString(2))) } }),
                 reading.getString("reading"),
                 reading.getString("romanized"),
                 reading.getString("typed")

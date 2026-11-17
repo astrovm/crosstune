@@ -35,6 +35,12 @@
     <string name="settings_default_label">Music app</string>
     <string name="setting_show_in_crosstune_first">Show in Crosstune first</string>
     <string name="settings_about_title">About</string>
+    <!-- Settings → About: the works by others in the app, with their licences. -->
+    <string name="settings_licenses">Licenses</string>
+    <string name="license_show">Show license</string>
+    <string name="license_hide">Hide license</string>
+    <!-- This language's tag, for words kept outside these files: the licences' notes in notices-TAG.txt. Not shown. -->
+    <string name="language_tag">en</string>
     <string name="settings_links_title">Open links from</string>
     <string name="rule_opens_in">Opens in %1$s</string>
     <string name="rule_default">Default (%1$s)</string>
@@ -136,6 +142,7 @@
     <string name="lyrics_button">Lyrics</string>
     <string name="lyrics_loading">Getting lyrics…</string>
     <string name="lyrics_none">No lyrics found for this song.</string>
+    <string name="lyrics_instrumental">This song has no words.</string>
     <string name="lyrics_sync_service">Crosstune lyrics sync</string>
     <string name="lyrics_follow_allow">Let the words follow the song playing in your music app.</string>
     <string name="lyrics_following_app">Following %1$s</string>
@@ -248,7 +255,7 @@
     <string name="report_on_github" translatable="false">GitHub</string>
     <string name="privacy_policy">Privacy policy</string>
     <!-- Each language opens its own translation of the website's privacy policy. -->
-    <string name="privacy_policy_url">https://crosstune.4st.li/privacy/</string>
+    <string name="privacy_policy_url">https://crosstune.cc/privacy/</string>
 
     <string name="error_invalid_url">That\'s not a song, album, artist or playlist link.</string>
     <string name="error_network">Couldn\'t connect.</string>
@@ -312,6 +319,9 @@
     <string name="floating_close">Close</string>
     <string name="floating_done">Done</string>
     <string name="floating_channel">Floating lyrics</string>
+    <string name="return_channel">Coming back</string>
+    <string name="return_title">Back to the card</string>
+    <string name="return_text">Tap to return to Crosstune</string>
     <string name="hearing_channel">Hearing the music</string>
     <string name="floating_notification">Lyrics floating over your apps</string>
     <string name="lyrics_learn">Readings and translation</string>
@@ -326,23 +336,31 @@
     <string name="report_problem_text">Wrong words, bad timing or anything else. Say what\'s wrong, and send it.</string>
     <string name="report_by_email">Email</string>
     <string name="report_comment">What\'s wrong? (optional)</string>
-    <string name="report_what_goes">Sends the song, how its words are timed and the app\'s version. Only Crosstune\'s developer reads it.</string>
+    <string name="report_what_goes">Sends the song, how its words are timed and the app\'s version. Only Crosstune\'s developer reads it. For timing problems it also sends the player app, its speed, how far ahead the words show and the last minute of timing notes.</string>
     <string name="report_send">Send</string>
     <string name="report_sent">Sent. Thanks!</string>
     <string name="report_failed">Couldn\'t send it. Check your connection and try again.</string>
+    <string name="reading_wrong">Wrong reading</string>
+    <string name="reading_right">Right reading (optional)</string>
+    <string name="reading_what_goes">Sends the word, the reading shown and what made it, its line and script, the reading you type, the song\'s title and artist, where its lyrics came from, and the app and Android versions. Only Crosstune\'s developer reads it.</string>
     <string name="auto_report_offer">Report problems like this one automatically?</string>
+    <string name="auto_report_offer_words_off">This song\'s words were off. Report ones like it automatically?</string>
     <string name="auto_report_yes">Yes</string>
-    <string name="auto_report_no">No thanks</string>
+    <string name="auto_report_not_now">Not now</string>
     <string name="singing_model_offer">Lining lyrics up to the singing needs a 32 MB download.</string>
     <string name="singing_model_failed">The 32 MB download didn\'t finish.</string>
     <string name="singing_model_download">Download</string>
     <string name="singing_model_close">Not now</string>
     <string name="setting_auto_report">Report song problems automatically</string>
+    <string name="setting_auto_report_hint">Sends words you put in time by hand earlier, too.</string>
     <string name="lyrics_romanized">In Latin letters</string>
     <string name="lyrics_romaji_typed">Romaji as typed</string>
     <string name="lyrics_katakana_as_hiragana">Katakana as hiragana</string>
     <string name="lyrics_translation">Translation</string>
     <string name="lyrics_translation_failed">Couldn\'t translate just now.</string>
+    <string name="lyrics_chords_failed">Couldn\'t load the chords.</string>
+    <string name="lyrics_chords_wiki_timeout">ChordWiki\'s check didn\'t finish.</string>
+    <string name="lyrics_chords_wiki_check">ChordWiki asked for a check a person has to do.</string>
     <string name="lyrics_chords">Chords</string>
     <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Translate into</string>
@@ -385,6 +403,7 @@
     <string name="lyrics_line_saved">Saved</string>
     <string name="lyrics_word_failed">Couldn\'t find its meaning just now.</string>
     <string name="lyrics_word_unknown">No dictionary entry for this word.</string>
+    <string name="lyrics_word_modern">Old spelling of %1$s</string>
     <string name="lyrics_words_to_know_failed">Couldn\'t find the words to know.</string>
     <string name="lyrics_save_word">Save %1$s</string>
     <string name="lyrics_word_saved">%1$s saved</string>
@@ -410,10 +429,23 @@
     <string name="learn_song_new_words">Has words to know</string>
     <string name="practice_play">Play the line</string>
     <string name="practice_stop">Stop the line</string>
-    <string name="practice_loading">Opening in %1$s</string>
-    <string name="practice_done">%1$d practiced</string>
+    <plurals name="practice_done">
+        <item quantity="one">%1$d practiced</item>
+        <item quantity="other">%1$d practiced</item>
+    </plurals>
     <string name="practice_back_to">Back to %1$s</string>
     <string name="practice_progress">%1$d of %2$d</string>
+    <string name="practice_reminders">Practice reminders</string>
+    <string name="practice_remind_me">Remind me</string>
+    <string name="practice_reminder_at">Reminder at %1$s</string>
+    <string name="practice_reminder_blocked">Notifications are off</string>
+    <string name="practice_reminder_exact">Allow exact time</string>
+    <string name="practice_reminder_late">Without it, a reminder can arrive up to an hour late</string>
+    <string name="practice_reminder_songs">%1$s and %2$d more</string>
+    <plurals name="practice_reminder_title">
+        <item quantity="one">%1$d card to practice</item>
+        <item quantity="other">%1$d cards to practice</item>
+    </plurals>
     <string name="song_tab_meaning">Meaning</string>
     <string name="song_tab_words">Words</string>
     <string name="song_tab_artist">Artist</string>

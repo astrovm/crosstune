@@ -126,6 +126,19 @@ class DestinationStoreTest {
     }
 
     @Test
+    fun aSlashInASongsNameDoesntBreakTheSearchesThatPutItInThePath() {
+        // Deezer and Amazon Music answer 404 for a "/" in the path even written %2F (measured 2026-11-08), so the song would
+        // have no search; a space finds it as it does without the slash. Spotify answers either way, and is kept alike.
+        listOf(MusicService.SPOTIFY, MusicService.DEEZER, MusicService.AMAZON_MUSIC).forEach { service ->
+            val search = service.searchUrl("Back In Black AC/DC")
+            assertEquals(service.name, "Back%20In%20Black%20AC%20DC", search.substringAfterLast("/search/"))
+            assertEquals(service.name, "Me%20You%20(always%20and%20forever)", service.searchUrl("Me / You (always and forever)").substringAfterLast("/search/"))
+        }
+        // Where a query is a parameter, the slash is just text.
+        assertEquals("https://music.youtube.com/search?q=AC%2FDC", MusicService.YOUTUBE_MUSIC.searchUrl("AC/DC"))
+    }
+
+    @Test
     fun templatesNeedAPlaceholderAndAScheme() {
         assertTrue(Destination.isValidTemplate("https://example.com/?q={query}"))
         assertTrue(Destination.isValidTemplate("vlc://search/{query}"))

@@ -186,8 +186,8 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     }
     // The words, but a video's, as its clock may be the video's; blank ones, between verses, leave the last one up.
     val words = remember(player.lines, following?.video) { player.lines.takeIf { following?.video != true }.orEmpty().filter { it.text.isNotBlank() } }
-    // One whose artist is unknown can't be looked up safely, so it has no words to show.
-    val hasWords = song.artist.isNotBlank()
+    // One whose artist is unknown can't be looked up safely, so it has no words to show; nor has what names no song.
+    val hasWords = !player.songless && song.artist.isNotBlank()
     // Its card is under the player, so what it has is a menu away, not another screen.
     val card = state.result?.let { SongNames.same(it.title, song.title) && SongNames.sameArtist(it.artist, song.artist) } == true
     val ground = MaterialTheme.colorScheme.surface
@@ -208,7 +208,8 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             }
             // Its place keeps the list's name in the middle.
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp).moves("menu", moving)) {
-                PlayerMenu(ready = card && !state.isLoading && !state.isMatching, actions)
+                // What names no song has no link to copy, share or open elsewhere.
+                if (!player.songless) PlayerMenu(ready = card && !state.isLoading && !state.isMatching, actions)
             }
         }
     }
@@ -224,19 +225,20 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     val titleRow: @Composable (Morph, Boolean, (@Composable () -> Unit)?) -> Unit = { moving, crossing, lead ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
             lead?.invoke()
-            // A tap on its name opens its card, with its links, as music apps open a song's page. One line
-            // each, so the cover keeps its size from song to song; a longer name scrolls by.
+            // A tap on its name opens its card, with its links, as music apps open a song's page, but for what
+            // names no song, which has none. One line each, so the cover keeps its size from song to song; a
+            // longer name scrolls by.
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .then(if (crossing) Modifier.fades(moving) else Modifier.moves("names", moving))
                     .clip(MaterialTheme.shapes.small)
-                    .clickable(onClickLabel = stringResource(R.string.player_song_card), onClick = actions.onPlayerCard)
+                    .then(if (player.songless) Modifier else Modifier.clickable(onClickLabel = stringResource(R.string.player_song_card), onClick = actions.onPlayerCard))
                     .padding(vertical = 8.dp)
             ) {
                 Text(song.title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, modifier = Modifier.basicMarquee())
                 Text(
-                    song.artist,
+                    player.byLine,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -278,7 +280,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                 AppIcon(R.drawable.ic_queue_music, contentDescription = stringResource(R.string.player_up_next))
             }
         }
-        if (hasWords && words.isNotEmpty()) LyricsPeek(words, following?.ahead(state.linesEarlyMs), tint, actions.onPlayerLyrics, Modifier.padding(top = 8.dp))
+        if (hasWords && words.isNotEmpty()) LyricsPeek(words, player.linesByEar, following?.ahead(state.linesEarlyMs), tint, actions.onPlayerLyrics, Modifier.padding(top = 8.dp))
     }
     val queue: @Composable (Modifier, Morph) -> Unit = { modifier, moving ->
         // Only while it's open, which its list being there says.
@@ -441,7 +443,7 @@ private fun PlayerMenu(ready: Boolean, actions: ScreenActions) {
 /** Where the song is, to drag elsewhere when the app lets it, with how long it is when the app says. */
 @Composable
 private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
-    val position = rememberPosition(following) ?: 0L
+    val position = rememberSecond(following) ?: 0L
     val duration = following.durationMs
     // Where it's dragged to, held there until the app says it moved, or a moment passes without it saying.
     var dragged by remember { mutableStateOf<Float?>(null) }
@@ -732,7 +734,7 @@ private fun PlayingRow(player: PlayerState, cover: String?, loadArtwork: suspend
         }
         Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
             Text(player.song.title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(player.song.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(player.byLine, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -884,13 +886,20 @@ private fun LikeButton(like: AppAction, app: String?, onLike: () -> Unit, modifi
 
 /**
  * The line being sung, in a card at the bottom tinted as the cover is, which opens all the words, as
- * does a swipe up. Before the singing, the first. Two lines tall whatever the line, so the cover above
- * doesn't move as it's sung.
+ * does a swipe up. Lit as the words are, timed [byEar] or not: with none sung, as before the singing
+ * or past a line heard, the one coming next, dimmed; past the last, it. Two lines tall whatever the
+ * line, so the cover above doesn't move as it's sung.
  */
 @Composable
-private fun LyricsPeek(lines: List<LyricLine>, following: Following?, tint: Color, onLyrics: () -> Unit, modifier: Modifier) {
-    val at = rememberWhilePlaying(following?.takeIf { lines.size > 1 }) { position -> lines.indexOfLast { it.timeMs <= position }.coerceAtLeast(0) } ?: 0
-    val line = (lines.getOrNull(at) ?: lines.first()).text
+private fun LyricsPeek(lines: List<LyricLine>, byEar: Boolean, following: Following?, tint: Color, onLyrics: () -> Unit, modifier: Modifier) {
+    val changes = remember(lines, byEar) { SyncedLyrics.changes(lines, byEar) }
+    val (at, sung) = rememberWhilePlaying(following, lines to byEar, { at -> SyncedLyrics.nextAfter(changes, at) }) { position ->
+        val sung = SyncedLyrics.indexAt(lines, position, byEar)
+        if (sung >= 0) sung to true
+        else (lines.indexOfLast { it.timeMs <= position } + 1).coerceAtMost(lines.lastIndex) to false
+    } ?: (0 to true)
+    val line = lines[at].text
+    val ink = if (sung) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
     val name = stringResource(R.string.lyrics_button)
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -903,8 +912,8 @@ private fun LyricsPeek(lines: List<LyricLine>, following: Following?, tint: Colo
     ) {
         // Named as the button it stands in for: the line changes as it's sung, which a screen reader would read out each time.
         AppIcon(R.drawable.ic_lyrics, contentDescription = name, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-        Crossfade(line, label = "sung line", modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(it, style = MaterialTheme.typography.titleMedium, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Crossfade(line to ink, label = "sung line", modifier = Modifier.weight(1f).padding(start = 12.dp)) { (text, color) ->
+            Text(text, style = MaterialTheme.typography.titleMedium, color = color, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -925,8 +934,8 @@ private fun PlayerWaiting(app: String) {
 /** Without access to follow music apps, the player can't see or move the song: how to allow it. */
 @Composable
 private fun PlayerFollowOffer(actions: ScreenActions, fixing: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.player_follow_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    // The button under the words where a word of theirs wouldn't fit beside it.
+    LabelAndValue(label = { LabelText(stringResource(R.string.player_follow_allow), style = MaterialTheme.typography.bodyMedium) }, modifier = Modifier.fillMaxWidth()) {
         OneTapButton(stringResource(R.string.follow_turn_on), actions.onAllowFollowing, fixing = fixing)
     }
 }

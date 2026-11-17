@@ -1,11 +1,18 @@
 package com.astrovm.crosstune
 
+import com.astrovm.crosstune.PracticeClockLog.Companion.clock
+import android.app.ActivityOptions
 import android.app.KeyguardManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
 import android.media.MediaMetadata
@@ -17,25 +24,28 @@ import android.os.Build
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
+import android.provider.Settings
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import android.util.Log
 import android.service.notification.NotificationListenerService
+import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.edit
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import kotlin.math.abs
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.File
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Where in a song it is: [positionMs] at [atMs] on the clock that counts since the phone started,
@@ -43,6 +53,25 @@ import java.util.concurrent.ConcurrentHashMap
  */
 internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val speed: Float = 1f, val playing: Boolean = true) {
     fun positionAt(nowMs: Long): Long = if (playing) positionMs + ((nowMs - atMs) * speed).toLong() else positionMs
+
+    /**
+     * How long from [nowMs] until the song is where something next changes: [changesAt] gives that
+     * place, after the one it's handed, or null when nothing changes again. Null too for a song that
+     * isn't moving on. So what follows the song sleeps to its next change, where looking every frame
+     * kept the phone busy the whole song, with nothing new to draw.
+     */
+    fun untilMs(nowMs: Long, changesAt: (Long) -> Long?): Long? {
+        if (!playing || speed <= 0f) return null
+        val position = positionAt(nowMs)
+        val next = changesAt(position) ?: return null
+        return ((next - position) / speed).toLong().coerceAtLeast(1)
+    }
+}
+
+/** The clock the timing log last had from an app, so what the app says again to the same effect isn't kept over what's new. */
+internal class NotedClock {
+    @Volatile
+    var clock: PlaybackClock? = null
 }
 
 /**
@@ -60,6 +89,8 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
 internal class SteadyClock(
     /** The app's clock that's late, if Crosstune saw it fall behind; see [LateClock]. */
     private val late: LateClock?,
+    /** What the timing log last had of the app's clock, shared by every follower of it, as each one hears the same. */
+    private val noted: NotedClock = NotedClock(),
     /** Told of a clock the app fell behind on. */
     private val learn: (LateClock) -> Unit
 ) {
@@ -69,7 +100,16 @@ internal class SteadyClock(
     private var stopped = 0L
 
     fun of(clock: PlaybackClock): PlaybackClock = steady(clock).also {
-        if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) Log.d(TIMING_LOG, "said ${clock.positionMs} at ${clock.atMs} playing ${clock.playing}, kept ${it.positionMs} at ${it.atMs}")
+        if (isNews(clock)) {
+            noted.clock = clock
+            TimingLog.note("said ${clock.positionMs} at ${clock.atMs} playing ${clock.playing} speed ${clock.speed}, kept ${it.positionMs} at ${it.atMs}")
+        }
+    }
+
+    /** Whether [clock] says something the last one noted didn't: it plays or stops, changes speed, or is somewhere else than that one was going. */
+    private fun isNews(clock: PlaybackClock): Boolean {
+        val was = noted.clock ?: return true
+        return was.playing != clock.playing || was.speed != clock.speed || abs(was.positionAt(clock.atMs) - clock.positionMs) > SAME_CLOCK_NOTE_MS
     }
 
     private fun steady(clock: PlaybackClock): PlaybackClock {
@@ -140,7 +180,14 @@ internal data class Following(
     /** What the app plays after it, as far as it says. */
     val upNext: List<Queued> = emptyList(),
     /** The list it plays from, when Crosstune is playing one through: see [PlayQueue]. */
-    val from: String? = null
+    val from: String? = null,
+    /** It plays an ad under the song's name, as YouTube Music's free plan does, and the song waits at its start: see [PlaybackClock]. */
+    val ad: Boolean = false,
+    /**
+     * Which session plays it, by a number each session keeps, in every follow, even one started over: an app may start a
+     * new one for what it plays next, and say nothing else of it, as a player of files with no title may.
+     */
+    val session: Int = 0
 )
 
 /**
@@ -165,53 +212,74 @@ internal data class Queued(val title: String, val artist: String, val id: Long? 
  */
 internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false, val previousId: Long? = null)
 
+/** A matching session and controls bound to its token, even when its app has other sessions. */
+internal data class PlaybackMatch(
+    val following: Following?, val source: PlaybackSource,
+    val app: String? = following?.appPackage, val session: Int = following?.session ?: 0,
+    val playing: Boolean = following?.clock?.playing == true, val appSessions: Int = 1
+)
+
 /** What's playing on the phone, as far as Android lets Crosstune see. */
 internal interface PlaybackSource {
     /** Whether Android lets Crosstune see what plays, which the user allows in its settings. */
     fun hasAccess(): Boolean
 
-    /** Where [song] is in the app playing it, as that changes; null while no app plays it. */
-    fun follow(song: MusicMetadata): Flow<Following?>
+    /**
+     * Where [song] is in the app playing it, as that changes; null while no app plays it. Only [app], by package, when
+     * one is named. Asked of [app], what plays with no song named is [song] by just what it calls it, as
+     * [Unnamed.played], even nothing; see [playingUnnamed]. So is it for each control asked of [app] below.
+     */
+    fun follow(song: MusicMetadata, app: String? = null): Flow<Following?>
 
-    /** Moves the app playing [song] to [positionMs]. */
-    fun seekTo(song: MusicMetadata, positionMs: Long)
+    /** Existing sessions that have [song], including paused sessions. No app is started. */
+    fun matching(song: MusicMetadata): List<PlaybackMatch>
 
-    /** Has the app playing [song] [play] it, or pause it. */
-    fun playPause(song: MusicMetadata, play: Boolean)
+    /** Moves the app playing [song], [app] when named, to [positionMs]. */
+    fun seekTo(song: MusicMetadata, positionMs: Long, app: String? = null)
+
+    /** Has the app playing [song], [app] when named, [play] it, or pause it. */
+    fun playPause(song: MusicMetadata, play: Boolean, app: String? = null)
+
+    /** Pauses whatever [app], by package, plays: a song asked to play there may have gone on into another, which isn't left playing. */
+    fun pauseApp(app: String)
+
+    /** Has [app], by package, play whatever it has: what names no song can't be asked for by a name, once its app is on to another. */
+    fun playApp(app: String)
 
     /**
      * Has the app [song] is paused in play it on, from where it is, in the background. False when it
      * says it can't or hasn't started within a couple of seconds, as YouTube Music without Premium,
      * then known to [playsOnlyInFront], or already known to; or when no app has it.
      */
-    suspend fun resume(song: MusicMetadata): Boolean
+    suspend fun resume(song: MusicMetadata, app: String? = null): Boolean
 
     /** Brings the app [song] is paused in to the front and has it play on there, from where it is; false when it can't be. */
-    suspend fun bringToFront(song: MusicMetadata): Boolean
+    suspend fun bringToFront(song: MusicMetadata, app: String? = null): Boolean
 
-    /** Has the app playing [song] go on to its [next] song, or back to the one before, and play it. */
-    fun skip(song: MusicMetadata, next: Boolean)
+    /** Has the app playing [song], [app] when named, go on to its [next] song, or back to the one before, and play it. */
+    fun skip(song: MusicMetadata, next: Boolean, app: String? = null)
 
-    /** Has the app playing [song] shuffle, or play in order. */
-    fun shuffle(song: MusicMetadata, on: Boolean)
+    /** Has the app playing [song], [app] when named, shuffle, or play in order. */
+    fun shuffle(song: MusicMetadata, on: Boolean, app: String? = null)
 
-    /** Has the app playing [song] repeat [how], or, one with a repeat button of its own, the next way it goes on to there. */
-    fun repeat(song: MusicMetadata, how: Repeat)
+    /** Has the app playing [song], [app] when named, repeat [how], or, one with a repeat button of its own, the next way it goes on to there. */
+    fun repeat(song: MusicMetadata, how: Repeat, app: String? = null)
 
-    /** Presses the app's own like for [song], which likes it there, or no longer, as the app has it. */
-    fun like(song: MusicMetadata)
+    /** Presses the own like of the app playing [song], [app] when named, which likes it there, or no longer, as the app has it. */
+    fun like(song: MusicMetadata, app: String? = null)
 
-    /** Has the app playing [song] play the one numbered [id] in its queue now. */
-    fun playQueued(song: MusicMetadata, id: Long)
+    /** Has the app playing [song], [app] when named, play the one numbered [id] in its queue now. */
+    fun playQueued(song: MusicMetadata, id: Long, app: String? = null)
 
     /**
      * Has [app] find [song] by its name and play it, in the background, or YouTube Music play its
      * [link] there when it's known. Not running, [app] is woken in the background to; with no [link],
-     * the music app that last played is asked when [app] can't be. False with no app to ask, and, when
-     * [mustStart], when the app says it can't play it or hasn't started within a couple of seconds, as
-     * YouTube Music in the background without Premium: the caller then opens the song in the app.
+     * the music app that last played is asked when [app] can't be, unless not [orLastPlayed], as a practice
+     * card follows [app] alone. False with no app to ask, and, when [mustStart], when the app says it can't
+     * play it or hasn't started within a couple of seconds, as YouTube Music in the background without
+     * Premium: the caller then opens the song in the app.
      */
-    suspend fun playSong(song: MusicMetadata, app: String?, link: String? = null, mustStart: Boolean = false): Boolean
+    suspend fun playSong(song: MusicMetadata, app: String?, link: String? = null, mustStart: Boolean = false, orLastPlayed: Boolean = true): Boolean
 
     /**
      * Opens [app] on a song's [link], for when it isn't running and so has nothing to ask in the
@@ -222,6 +290,12 @@ internal interface PlaybackSource {
 
     /** Brings Crosstune back to the front, over the app [openSong] opened, unless it only plays in front. */
     fun comesBack()
+
+    /**
+     * Whether Crosstune can [comesBack] by itself over an app [openSong] opened: Android lets it only once it may show
+     * over other apps. Without that, the app stays in front, and Crosstune, behind it, can't open another either.
+     */
+    fun comesBackByItself(): Boolean
 
     /** Whether the phone is in use, its screen on and unlocked, so an app [openSong] opens comes to the front now. */
     fun unlocked(): Boolean
@@ -235,7 +309,10 @@ internal interface PlaybackSource {
     /** Whether [app] was seen to play only in front, as YouTube Music without Premium, so [comesBack] leaves it there. */
     fun playsOnlyInFront(app: String): Boolean
 
-    /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
+    /**
+     * The song an app is playing right now, and where it is, when it's what plays first, see [whatPlays]; null when
+     * none is, none can be seen, or what plays before it names no song, e.g. a station that played since.
+     */
     fun nowPlaying(): Heard.Song?
 
     /** The matching recording, including one paused in its music app. */
@@ -244,6 +321,24 @@ internal interface PlaybackSource {
     /** The song playing now, updated when music apps start, pause, stop, or change songs. */
     @MainThread
     fun nowPlayingUpdates(): Flow<Heard.Song?>
+
+    /**
+     * What an app plays while it names no song, e.g. a radio station, a file with no tags or a video that
+     * doesn't say it's music, when it's what plays first, see [whatPlays]; null when none plays, or a song
+     * plays first, which [nowPlaying] has. On the phone it's named by listening; cast to a speaker, it's
+     * [Unnamed.away], with nothing on the phone to hear.
+     */
+    fun playingUnnamed(): Unnamed?
+
+    /** What plays first, named or not, on the phone or not, as [playsFirst] ranks it. Null when nothing plays, or none can be seen. */
+    fun whatPlays(): WhatPlays?
+
+    /** [playingUnnamed], updated when apps start, pause, stop, or change what they play. */
+    @MainThread
+    fun unnamedUpdates(): Flow<Unnamed?>
+
+    /** Whether the phone's music plays out loud, where the microphone hears it: not muted, nor in headphones. */
+    fun playsAloud(): Boolean
 
     /** What [app] plays, playing or paused, and where in its queue, as that changes; null while it plays nothing. */
     @MainThread
@@ -274,22 +369,50 @@ internal class MediaSessionPlayback(
     /** An app's queue; Robolectric shows a test none. */
     private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue,
     private val lengths: SteadyLengths = SteadyLengths(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)),
+    /** How a title and an artist an app says read as a song's; see [MetadataParsers.playerSong]. */
+    readSong: (String, String) -> MusicMetadata? = MetadataParsers::playerSong,
     /** What an app calls one of its drawings, by its number there; Robolectric has no other app's. */
-    private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() }
+    private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() },
+    private val clockLog: PracticeClockLog = PracticeClockLog.of(context)
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
+    private val covers = PlaybackCovers.shared(context)
+
+    /**
+     * How each title and artist an app says read as a song's, by [readSong]: read once, as a long one takes a while, and
+     * each change is asked of many times over, for what plays first, what it's called, and whether it has a song.
+     */
+    private val songsRead = KeptReads<Pair<String, String>, MusicMetadata?>(SONGS_READ_KEPT) { (title, artist) -> readSong(title, artist) }
+
+    /** How many sessions were numbered; see [sessionNumbers]. */
+    private val sessionsNumbered = AtomicInteger()
+
+    /** Each session's number, by its token, the same in every follow of it; see [Following.session]. */
+    private val sessionNumbers = KeptReads<MediaSession.Token, Int>(SESSIONS_KEPT) { sessionsNumbered.getAndIncrement() }
+
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
     private val audio: AudioManager = context.getSystemService(AudioManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
     /** The clock each app, by package, last fell behind on. */
     private val late = ConcurrentHashMap<String, LateClock>()
-    /** How many times Crosstune has moved a song, so a move a moment back isn't taken for a stale clock. */
-    private var moves = 0
+    private val notedClocks = ConcurrentHashMap<String, NotedClock>()
+    /** Replaced each time Crosstune moves a song, so a move a moment back isn't taken for a stale clock. */
+    @Volatile
+    private var moves = Any()
     /** The apps that wouldn't play in the background when asked, as YouTube Music without Premium; see [comesBack]. */
     private val onlyInFront: MutableSet<String> = ConcurrentHashMap.newKeySet()
     /** The app [openSong] last opened. */
     @Volatile
     private var opened: String? = null
+    private val preferences = context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    init {
+        // Older builds muted the music while an app was opened for a card. One that stopped on the way left it muted: it is heard again.
+        if (preferences.getBoolean(QUIETED_KEY, false)) {
+            audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+            preferences.edit { remove(QUIETED_KEY) }
+        }
+    }
 
     override fun hasAccess(): Boolean = context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
 
@@ -297,21 +420,57 @@ internal class MediaSessionPlayback(
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             runCatching { context.packageManager.getInstallSourceInfo(context.packageName).packageSource }.getOrNull() in fromAFile
 
-    override fun follow(song: MusicMetadata): Flow<Following?> = callbackFlow {
+    override fun matching(song: MusicMetadata): List<PlaybackMatch> = runCatching {
+        val active = activeSessions()
+        val counts = active.groupingBy { it.packageName }.eachCount()
+        active.filter { it.has(song, null) }.map { controller ->
+            val number = sessionNumbers.of(controller.sessionToken)
+            PlaybackMatch(following(controller, song.lengthMs)?.copy(session = number), forSession(controller.sessionToken), controller.packageName, number,
+                controller.playbackState?.state == PlaybackState.STATE_PLAYING, counts.getValue(controller.packageName))
+        }
+    }.getOrDefault(emptyList())
+
+    private fun forSession(token: MediaSession.Token): PlaybackSource = object : PlaybackSource by this {
+        override fun follow(song: MusicMetadata, app: String?) = followSession(song, app, token)
+        override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) = seekIn(song, positionMs, app, token)
+        override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
+            if (play) playIn(song, app, token) else pauseIn(song, app, token)
+        }
+        override fun pauseApp(app: String) = pauseSession(token, app)
+    }
+
+    private fun pauseSession(token: MediaSession.Token, app: String?) {
+        runCatching { activeSessions().filter { it.sessionToken == token && (app == null || it.packageName == app) }.forEach { it.clockCommand("pause") { pause() } } }
+    }
+
+    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = followSession(song, app, null)
+
+    private fun followSession(song: MusicMetadata, app: String?, token: MediaSession.Token?): Flow<Following?> = callbackFlow {
+        val clockObserver = PracticeClockLog.nextId()
+        clockLog.note("follow_begin", now) { put("observer", clockObserver) }
         var followed: MediaController? = null
         var modesWatched: () -> Unit = {}
         var watched: List<MediaController> = emptyList()
+        var renamed: List<Pair<MediaController, MediaController.Callback>> = emptyList()
         lateinit var clocks: SteadyClock
         var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
         fun steadily(controller: MediaController) = following(controller, song.lengthMs)?.let {
             // Moved by Crosstune, where the app says next is believed, even a moment back.
-            if (moves != movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
-            it.copy(clock = clocks.of(it.clock), upNext = upNext(controller))
+            if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
+            it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
+                clockLog.note("followed_clock", now) { at ->
+                    put("observer", clockObserver)
+                    put("app", controller.packageName)
+                    put("session", seen.session)
+                    clock(seen, at)
+                }
+            }
         }
         val callback = object : MediaController.Callback() {
+            // Gone on to another song, as TIDAL does at the end of a preview, it plays this one no longer, even before it's said its new name.
             override fun onPlaybackStateChanged(state: PlaybackState?) {
-                trySend(followed?.let(::steadily))
+                trySend(followed?.takeIf { it.has(song, app) }?.let(::steadily))
             }
 
             // What it plays next.
@@ -320,7 +479,7 @@ internal class MediaSessionPlayback(
             }
         }
         fun pick(controllers: List<MediaController>) {
-            val playing = appFor(song, controllers)
+            val playing = appFor(song, controllers, app, token)
             if (playing?.sessionToken != followed?.sessionToken) {
                 followed?.unregisterCallback(callback)
                 modesWatched()
@@ -333,89 +492,175 @@ internal class MediaSessionPlayback(
             trySend(playing?.let(::steadily))
         }
         // An app moving on to another song, e.g. YouTube from an ad to the video, may now play it, or no longer.
-        val renamed = object : MediaController.Callback() {
-            override fun onMetadataChanged(metadata: MediaMetadata?) = pick(watched)
-        }
         fun watch(controllers: List<MediaController>) {
-            watched.forEach { it.unregisterCallback(renamed) }
+            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             watched = controllers
-            controllers.forEach { it.registerCallback(renamed, handler) }
+            renamed = controllers.map { controller ->
+                val callback = object : MediaController.Callback() {
+                    override fun onMetadataChanged(metadata: MediaMetadata?) = pick(watched)
+                    override fun onPlaybackStateChanged(state: PlaybackState?) {
+                        clockLog.note("media_report", now) {
+                            put("observer", clockObserver)
+                            put("app", controller.packageName)
+                            put("session", sessionNumbers.peek(controller.sessionToken) ?: org.json.JSONObject.NULL)
+                            put("present", state != null)
+                            if (state != null) {
+                                put("state", state.state)
+                                put("position_ms", state.position)
+                                put("updated_ms", state.lastPositionUpdateTime)
+                                put("speed", state.playbackSpeed.toString())
+                                put("actions", state.actions)
+                            }
+                        }
+                    }
+                }
+                controller.registerCallback(callback, handler)
+                controller to callback
+            }
             pick(controllers)
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
         // Without the user's say-so, e.g. taken back meanwhile, Android shows none, and says so by throwing.
         val watching = runCatching {
             sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
-            watch(sessions.getActiveSessions(listener))
+            watch(activeSessions())
         }.isSuccess
         if (!watching) trySend(null)
         awaitClose {
             sessions.removeOnActiveSessionsChangedListener(changed)
-            watched.forEach { it.unregisterCallback(renamed) }
+            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             followed?.unregisterCallback(callback)
             modesWatched()
+            clockLog.note("follow_end", now) { put("observer", clockObserver) }
         }
     }.distinctUntilChanged()
 
     /** [app]'s clock kept steady; see [SteadyClock]. With no app, there's nothing to keep. */
-    private fun steadyClock(app: String?) = SteadyClock(app?.let(late::get)) { if (app != null) late[app] = it }
+    private fun steadyClock(app: String?) = SteadyClock(app?.let(late::get), notedClocks.getOrPut(app.orEmpty(), ::NotedClock)) { if (app != null) late[app] = it }
 
     /**
      * The app playing [song], among all that have it: one playing it beats one paused on it. It's the
-     * one followed, so it's the one moved, played, paused and skipped too.
+     * one followed, so it's the one moved, played, paused and skipped too. Only [app]'s, by package, when one is named.
      */
     @VisibleForTesting
-    internal fun appFor(song: MusicMetadata, controllers: List<MediaController> = sessions.getActiveSessions(listener)): MediaController? =
-        controllers.filter { it.plays(song) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
+    internal fun appFor(song: MusicMetadata, controllers: List<MediaController> = activeSessions(), app: String? = null, token: MediaSession.Token? = null): MediaController? =
+        controllers.filter { (app == null || it.packageName == app) && (token == null || it.sessionToken == token) && it.has(song, app) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
 
-    override fun seekTo(song: MusicMetadata, positionMs: Long) {
-        moves++
-        // Taken back meanwhile, the words just stay where they are.
-        runCatching { appFor(song)?.transportControls?.seekTo(positionMs) }
+    /**
+     * Whether it has [song], by its name. What names no song, asked for as [Unnamed.played], e.g. a station or a
+     * file with no title, is only asked of [app] by package, by just what it's called, even nothing: so a station's
+     * buttons reach it whatever it's called, and never the station before, as "Los 40" and "Los 40 Classic". Its
+     * app may name who sings it later on, and still has it. A song, even one with no artist, as a song shared from
+     * Google is, is had by its name, as any app names it ([SongNames.names]).
+     */
+    private fun MediaController.has(song: MusicMetadata, app: String?): Boolean {
+        if (!song.unnamed) return plays(song)
+        val (title, artist) = calls()
+        val said = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        return app != null && title == song.title && (artist == song.artist || !Songless.namesNoSong(said, artist, songsRead.of(said to artist)))
     }
 
-    override fun playPause(song: MusicMetadata, play: Boolean) {
+    /**
+     * What it calls what it plays, as what names no song is shown and asked for by: its title, read as Crosstune
+     * once read a song's, "Fake Song" from "Fake Song.mp3", "" with none; and its artist, as the app has it.
+     */
+    private fun MediaController.calls(): Pair<String, String> {
+        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }.orEmpty()
+        val read = said(this)?.takeIf { it.artist.isBlank() }?.title?.takeIf { it.isNotBlank() }
+        return (read ?: title) to metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+    }
+
+    /** What it plays, as what names no song is shown. */
+    private fun MediaController.unnamed(): Unnamed {
+        val (title, artist) = calls()
+        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let { coverOf(it, sessionToken) }, artist, where = place(), said = said(this) != null)
+    }
+
+    override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) = seekIn(song, positionMs, app, null)
+
+    private fun seekIn(song: MusicMetadata, positionMs: Long, app: String?, token: MediaSession.Token?) {
+        // Taken back meanwhile, the words just stay where they are. An app that doesn't offer a seek,
+        // as Spotify's free plan, errors its player if one is sent, so it isn't.
+        runCatching {
+            val controller = appFor(song, app = app, token = token) ?: return
+            val actions = controller.playbackState?.actions ?: 0L
+            if (actions and PlaybackState.ACTION_SEEK_TO == 0L) return
+            moves = Any()
+            controller.clockCommand("seek", positionMs) { seekTo(positionMs) }
+        }
+    }
+
+    override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
+        if (play) playIn(song, app, null) else pauseIn(song, app, null)
+    }
+
+    private fun pauseIn(song: MusicMetadata, app: String?, token: MediaSession.Token?) {
+        runCatching { appFor(song, app = app, token = token)?.clockCommand("pause") { pause() } }
+    }
+
+    private fun playIn(song: MusicMetadata, app: String?, token: MediaSession.Token?) {
         // Taken back meanwhile, the song just keeps on as it was.
-        runCatching { appFor(song)?.transportControls?.run { if (play) play() else pause() } }
+        runCatching { appFor(song, app = app, token = token)?.clockCommand("play") { play() } }
     }
 
-    override suspend fun resume(song: MusicMetadata): Boolean {
-        val app = runCatching { appFor(song) }.getOrNull() ?: return false
-        return watchStart(app, mustStart = true) { app.transportControls.play() }
+    override fun pauseApp(app: String) {
+        // Taken back meanwhile, it plays on.
+        runCatching {
+            activeSessions().filter { it.packageName == app && it.playbackState?.state == PlaybackState.STATE_PLAYING }.forEach { it.clockCommand("pause") { pause() } }
+        }
+    }
+
+    private fun MediaController.clockCommand(command: String, position: Long? = null, act: MediaController.TransportControls.() -> Unit) {
+        clockLog.note("media_command", now) {
+            put("app", packageName)
+            put("session", sessionNumbers.peek(sessionToken) ?: org.json.JSONObject.NULL)
+            put("command", command)
+            put("target_ms", position ?: org.json.JSONObject.NULL)
+        }
+        transportControls.act()
+    }
+
+    override fun playApp(app: String) {
+        runCatching { activeSessions().filter { it.packageName == app }.sortedWith(nearestFirst).firstOrNull()?.clockCommand("play") { play() } }
+    }
+
+    override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
+        val controller = runCatching { appFor(song, app = app) }.getOrNull() ?: return false
+        return watchStart(controller, mustStart = true) { controller.clockCommand("play") { play() } }
     }
 
     // Opened as from its icon, which brings back the screen it was on, song and all; a link would start it over.
-    override suspend fun bringToFront(song: MusicMetadata): Boolean {
-        val app = runCatching { appFor(song) }.getOrNull() ?: return false
-        val opens = context.packageManager.getLaunchIntentForPackage(app.packageName) ?: return false
+    override suspend fun bringToFront(song: MusicMetadata, app: String?): Boolean {
+        val playing = runCatching { appFor(song, app = app) }.getOrNull() ?: return false
+        val opens = context.packageManager.getLaunchIntentForPackage(playing.packageName) ?: return false
         val back = CompletableDeferred<Unit>()
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
                 if (state?.state == PlaybackState.STATE_PAUSED || state?.state == PlaybackState.STATE_PLAYING) back.complete(Unit)
             }
         }
-        app.registerCallback(callback, handler)
+        playing.registerCallback(callback, handler)
         try {
             if (runCatching { context.startActivity(opens.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isFailure) return false
-            opened = app.packageName
+            opened = playing.packageName
             // Back in front, YouTube Music puts the song where it was, paused; asked to play before that, it starts it over.
             withTimeoutOrNull(startMs) { back.await() }
-            runCatching { app.transportControls.play() }
+            runCatching { playing.clockCommand("play") { play() } }
             return true
         } finally {
-            app.unregisterCallback(callback)
+            playing.unregisterCallback(callback)
         }
     }
 
-    override fun skip(song: MusicMetadata, next: Boolean) = moveOn(song) { if (next) skipToNext() else skipToPrevious() }
+    override fun skip(song: MusicMetadata, next: Boolean, app: String?) = moveOn(song, app) { if (next) skipToNext() else skipToPrevious() }
 
-    override fun playQueued(song: MusicMetadata, id: Long) = moveOn(song) { skipToQueueItem(id) }
+    override fun playQueued(song: MusicMetadata, id: Long, app: String?) = moveOn(song, app) { skipToQueueItem(id) }
 
-    /** Has the app playing [song] go on to another, as [move] asks it, and play it. */
-    private fun moveOn(song: MusicMetadata, move: MediaController.TransportControls.() -> Unit) {
+    /** Has the app playing [song], [named] when it is, go on to another, as [move] asks it, and play it. */
+    private fun moveOn(song: MusicMetadata, named: String?, move: MediaController.TransportControls.() -> Unit) {
         // Taken back meanwhile, the song just keeps on as it was.
         runCatching {
-            val app = appFor(song) ?: return
+            val app = appFor(song, app = named) ?: return
             val paused = app.playbackState?.state != PlaybackState.STATE_PLAYING
             app.transportControls.run {
                 move()
@@ -425,38 +670,38 @@ internal class MediaSessionPlayback(
         }
     }
 
-    override fun shuffle(song: MusicMetadata, on: Boolean) {
+    override fun shuffle(song: MusicMetadata, on: Boolean, app: String?) {
         // Taken back meanwhile, it plays on as it did.
-        runCatching { appFor(song)?.let { modes.shuffle(it, on) } }
+        runCatching { appFor(song, app = app)?.let { modes.shuffle(it, on) } }
     }
 
-    override fun repeat(song: MusicMetadata, how: Repeat) {
+    override fun repeat(song: MusicMetadata, how: Repeat, app: String?) {
         // Taken back meanwhile, it plays on as it did.
         runCatching {
-            val app = appFor(song) ?: return
+            val playing = appFor(song, app = app) ?: return
             // One with a button of its own for it goes on to its next way as when it's tapped there: YouTube Music
             // only repeats a mix's song, never the endless mix, and won't be told to.
-            val own = app.playbackState?.customActions?.firstOrNull { it.action in REPEATS }
-            if (own != null) app.transportControls.sendCustomAction(own, Bundle()) else modes.repeat(app, how)
+            val own = playing.playbackState?.customActions?.firstOrNull { it.action in REPEATS }
+            if (own != null) playing.transportControls.sendCustomAction(own, Bundle()) else modes.repeat(playing, how)
         }
     }
 
-    override fun like(song: MusicMetadata) {
+    override fun like(song: MusicMetadata, app: String?) {
         // Taken back meanwhile, nothing's liked.
         runCatching {
-            val app = appFor(song) ?: return
-            val like = app.playbackState?.customActions?.firstOrNull { it.action in LIKES } ?: return
-            app.transportControls.sendCustomAction(like, Bundle())
+            val playing = appFor(song, app = app) ?: return
+            val like = playing.playbackState?.customActions?.firstOrNull { it.action in LIKES } ?: return
+            playing.transportControls.sendCustomAction(like, Bundle())
         }
     }
 
-    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
+    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean): Boolean {
         // Without the user's say-so Android shows none, and says so by throwing; an app can still be woken.
-        val apps = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).filter { it.packageName != context.packageName }
+        val apps = runCatching { activeSessions() }.getOrDefault(emptyList()).filter { it.packageName != context.packageName }
         // Not running, the app's woken, as Android Auto wakes one; another app wouldn't have its link.
         val asked = apps.firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: app?.let { waker.wake(MusicService.appsFor(it)) }
-            ?: apps.takeIf { link == null }?.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L }
+            ?: apps.takeIf { link == null && (app == null || orLastPlayed) }?.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L }
             ?: return false
         return watchStart(asked, mustStart) { ask(asked, song, link) }
     }
@@ -497,17 +742,26 @@ internal class MediaSessionPlayback(
             putString(MediaStore.EXTRA_MEDIA_ARTIST, song.artist)
         }
         // YouTube Music says it plays what's asked for by name, but doesn't; a link of its own it plays.
-        if (link != null && MusicService.ofPackage(asked.packageName) == MusicService.YOUTUBE_MUSIC) asked.transportControls.playFromUri(Uri.parse(link), Bundle())
-        else asked.transportControls.playFromSearch("${song.title} ${song.artist}", wanted)
+        if (link != null && MusicService.ofPackage(asked.packageName) == MusicService.YOUTUBE_MUSIC) asked.clockCommand("play_from_uri") { playFromUri(Uri.parse(link), Bundle()) }
+        else asked.clockCommand("play_from_search") { playFromSearch(searchQuery(song), wanted) }
     }
 
     // The app may be installed as a build patched from it, under a name of its own, or as its TV app.
-    override fun openSong(app: String, link: String): Boolean = MusicService.appLinksIn(app, link).any { (packageName, its) ->
+    override fun openSong(app: String, link: String): Boolean = openSearch(app, link) || MusicService.appLinksIn(app, link).any { (packageName, its) ->
         runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            opened = packageName
-            true
+            // Qobuz may have to be opened again if the song doesn't start, see [QobuzNumbers].
+            if (MusicService.ofOwnApp(packageName) == MusicService.QOBUZ) {
+                context.openLeavingTimeToOpenAgain(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName)).also { if (it) opened = packageName }
+            } else {
+                context.tryStartMusicActivity(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName)).also { if (it) opened = packageName }
+            }
         }.getOrDefault(false)
+    }
+
+    // An app that opens no page of its website's is asked for the search in the link, if it holds one.
+    private fun openSearch(app: String, link: String): Boolean {
+        val search = MusicService.searchIn(app, link, asking = null)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: return false
+        return context.tryStartActivityTwice(search).also { if (it) opened = app }
     }
 
     override fun playsOnlyInFront(app: String) = onlyInFront.any { sameApp(app, it, context::hasApp) }
@@ -525,29 +779,58 @@ internal class MediaSessionPlayback(
         context.getSystemService(PowerManager::class.java).newWakeLock(wakes, "crosstune:next song").acquire(WAKE_MS)
     }
 
-    // From the background, Android only lets it if Crosstune may show over other apps; otherwise it stays behind.
-    // Behind it too when the app opened wouldn't play in the background, as it would stop as soon as it's left.
+    // From the background, Android only lets the activity start if Crosstune may show over other apps, and a
+    // blocked start doesn't say so. Otherwise a notification is one tap back: Android sends that tap itself.
+    // Left alone when the app opened wouldn't play in the background, as it would stop as soon as it's left.
     override fun comesBack() {
-        if (opened in onlyInFront) return
-        runCatching { context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }
+        if (opened?.let(onlyInFront::contains) == true) return
+        val back = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        runCatching { context.startActivity(back) }
+        if (!comesBackByItself()) context.noticeToReturn(back)
     }
 
-    // Without the user's say-so Android shows none, and says so by throwing.
-    override fun nowPlaying(): Heard.Song? {
-        if (!hasAccess()) return null
-        // An app may still say it plays long after it stopped, e.g. a browser tab left behind, so one
-        // playing on the phone is only believed while the phone is playing something. Cast to a TV, or
-        // played on a computer, the phone itself stays quiet.
-        val sounding = audio.isMusicActive
-        return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
-            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() && (sounding || it.remote()) }
-            .sortedWith(nearestFirst)
-            .firstNotNullOfOrNull(::playing)
+    override fun comesBackByItself(): Boolean = Settings.canDrawOverlays(context)
+
+    // What plays first, as [whatPlays] ranks it, so the bar, the sleep timer and practice never disagree.
+    override fun nowPlaying(): Heard.Song? = (whatPlays() as? WhatPlays.Named)?.song
+
+    override fun playingUnnamed(): Unnamed? = (whatPlays() as? WhatPlays.Nameless)?.playing
+
+    override fun whatPlays(): WhatPlays? =
+        playingApps().minWithOrNull(compareBy(playsFirst) { Rank(said(it) != null, it.place(), it.playbackState?.lastPositionUpdateTime ?: 0L) })
+            ?.let { app -> playing(app)?.let(WhatPlays::Named) ?: WhatPlays.Nameless(app.unnamed()) }
+
+    override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
+
+    override fun playsAloud(): Boolean =
+        !audio.isStreamMute(AudioManager.STREAM_MUSIC) && audio.getStreamVolume(AudioManager.STREAM_MUSIC) > 0 &&
+            audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).all { it.type in ROOM_OUTPUTS }
+
+    private fun activeSessions(): List<MediaController> = sessions.getActiveSessions(listener).also { controllers ->
+        covers.retainSessions(controllers.map { it.sessionToken }.toSet())
     }
+
+    /**
+     * The apps playing now, in no order: [whatPlays] ranks them, by [playsFirst] alone. Without the user's say-so Android shows none, and says so by
+     * throwing. An app may still say it plays long after it stopped, e.g. a browser tab left behind, so one
+     * playing on the phone is only believed while the phone is playing something. Cast to a TV, or
+     * played on a computer, the phone itself stays quiet.
+     */
+    private fun playingApps(): List<MediaController> {
+        val sounding = audio.isMusicActive
+        val all = if (hasAccess()) runCatching { activeSessions() }.getOrNull() else null
+        return all.orEmpty()
+            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() && (sounding || it.remote()) }
+    }
+
+    /** What the app [packageName] is called, as Android shows it. */
+    private fun labelOf(packageName: String): String? = runCatching {
+        context.packageManager.run { getApplicationLabel(getApplicationInfo(packageName, 0)).toString() }
+    }.getOrNull()
 
     override fun recording(song: MusicMetadata): MusicMetadata? {
         if (!hasAccess()) return null
-        return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
+        return runCatching { activeSessions() }.getOrNull().orEmpty()
             .filter { it.packageName != context.packageName && it.plays(song) }
             .sortedWith(nearestFirst)
             // plays() already checked the session's title and artist. YouTube's video-title
@@ -558,7 +841,7 @@ internal class MediaSessionPlayback(
     override fun nowPlayingUpdates(): Flow<Heard.Song?> = changes(::nowPlaying)
 
     override fun plays(app: String): Flow<AppPlays?> = changes {
-        runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
+        runCatching { activeSessions() }.getOrNull().orEmpty()
             .filter { sameApp(app, it.packageName, context::hasApp) }
             .firstNotNullOfOrNull { controller ->
                 val ended = controller.ended()
@@ -611,26 +894,40 @@ internal class MediaSessionPlayback(
     }
 
     override suspend fun playList(app: String, link: String, mustStart: Boolean): Boolean {
-        val asked = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName, context::hasApp) }
+        val asked = runCatching { activeSessions() }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: waker.wake(MusicService.appsFor(app))
             ?: return false
-        return watchStart(asked, mustStart) { asked.transportControls.playFromUri(Uri.parse(link), Bundle()) }
+        return watchStart(asked, mustStart) { asked.clockCommand("play_from_uri") { playFromUri(Uri.parse(link), Bundle()) } }
     }
 
     /** What [read] says, again whenever an app starts, pauses, stops, changes songs or its queue. */
     private fun <T> changes(read: () -> T): Flow<T> = callbackFlow {
-        var watched: List<MediaController> = emptyList()
+        var watched: List<Pair<MediaController, MediaController.Callback>> = emptyList()
         fun update() { trySend(read()) }
-        val callback = object : MediaController.Callback() {
-            override fun onMetadataChanged(metadata: MediaMetadata?) = update()
-            override fun onPlaybackStateChanged(state: PlaybackState?) = update()
-            override fun onSessionDestroyed() = update()
-            override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) = update()
+        val refreshCover = Runnable { if (isActive) update() }
+        val coverChanges = launch {
+            covers.updates.collect {
+                handler.removeCallbacks(refreshCover)
+                handler.post(refreshCover)
+            }
         }
         fun watch(controllers: List<MediaController>) {
-            watched.forEach { it.unregisterCallback(callback) }
-            watched = controllers
-            watched.forEach { it.registerCallback(callback, handler) }
+            watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
+            watched = controllers.map { controller ->
+                // Metadata can change while no screen was watching this session.
+                covers.forget(controller.sessionToken)
+                val callback = object : MediaController.Callback() {
+                    override fun onMetadataChanged(metadata: MediaMetadata?) {
+                        covers.forget(controller.sessionToken)
+                        update()
+                    }
+                    override fun onPlaybackStateChanged(state: PlaybackState?) = update()
+                    override fun onSessionDestroyed() { covers.forget(controller.sessionToken); update() }
+                    override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) = update()
+                }
+                controller.registerCallback(callback, handler)
+                controller to callback
+            }
             update()
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
@@ -641,35 +938,26 @@ internal class MediaSessionPlayback(
         val watching = runCatching {
             sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
             audio.registerAudioPlaybackCallback(sounding, handler)
-            watch(sessions.getActiveSessions(listener))
+            watch(activeSessions())
         }.isSuccess
         if (!watching) update()
         awaitClose {
+            coverChanges.cancel()
+            handler.removeCallbacks(refreshCover)
             sessions.removeOnActiveSessionsChangedListener(changed)
             audio.unregisterAudioPlaybackCallback(sounding)
-            watched.forEach { it.unregisterCallback(callback) }
+            watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
         }
     }.distinctUntilChanged()
 
-    /** What [controller] plays, as a song; [asked] is how long the song asked for is, when known. */
+    /** What [controller] plays, as a song, unless it names none; [asked] is how long the song asked for is, when known. */
     private fun playing(controller: MediaController, asked: Long? = null): Heard.Song? {
         val metadata = controller.metadata ?: return null
-        val (title, artist) = MetadataParsers.playerSong(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
-        // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
-        // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
-        // YouTube Music plays videos with no album too, all of them music, "Queen - Bohemian Rhapsody (Lyrics)" by "7clouds".
-        // A music app's "Song - Remastered" stays whole.
-        // A song's length tells its versions apart; a video's is the video's, which may open with more.
-        val named = when {
-            !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = controller.lengthOf(metadata, asked))
-            MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist) ?: return null
-            // A computer's video, as KDE Connect shows one, is only a song when it says so plainly: a
-            // talk show's "Show - Episode 12" isn't, though a video on the phone named so is taken as one.
-            controller.mirrored() -> MetadataParsers.musicVideo(title, artist, byDash = false) ?: return null
-            else -> MetadataParsers.musicVideo(title, artist) ?: return null
-        }
-        val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
-            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata, named)
+        val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        if (Songless.namesNoSong(title, artist, songsRead.of(title to artist))) return null
+        val named = said(controller, asked) ?: return null
+        val artwork = coverOf(metadata, controller.sessionToken)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         // Nor where a song waiting for an ad to end is, as it isn't playing yet.
         val clock = following(controller, asked)?.takeIf { !it.video }?.clock?.takeIf { it.playing }
@@ -680,39 +968,53 @@ internal class MediaSessionPlayback(
             artworkUrl = artwork,
             url = uri ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
             recordingId = RecordingKey.playing(controller.packageName, id, duration)
-        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName)
+        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f)
     }
+
+    /**
+     * What [controller] says it plays, read as a song's title and artist, even a station's name, as Crosstune
+     * once took it; null when it says nothing a song could be read from, e.g. no title, or a video that doesn't
+     * say it's music. What plays is ranked by it, see [playsFirst].
+     */
+    private fun said(controller: MediaController, asked: Long? = null): MusicMetadata? {
+        val metadata = controller.metadata ?: return null
+        val (title, artist) = songsRead.of(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty() to metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
+        // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
+        // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
+        // YouTube Music plays videos with no album too, all of them music, "Queen - Bohemian Rhapsody (Lyrics)" by "7clouds".
+        // A music app's "Song - Remastered" stays whole.
+        // A song's length tells its versions apart; a video's is the video's, which may open with more.
+        return when {
+            !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = controller.lengthOf(metadata, asked))
+            MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist)
+            // A computer's video, as KDE Connect shows one, is only a song when it says so plainly: a
+            // talk show's "Show - Episode 12" isn't, though a video on the phone named so is taken as one.
+            controller.mirrored() -> MetadataParsers.musicVideo(title, artist, byDash = false)
+            else -> MetadataParsers.musicVideo(title, artist)
+        }
+    }
+
+    /** The cover the app shows: its link on the web, or the picture itself; see [ownCover]. */
+    private fun coverOf(metadata: MediaMetadata, session: MediaSession.Token): String? =
+        listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata, session)
 
     /**
      * The cover the app shows, when it gives no link to one, e.g. YouTube Music for a song no other
      * store has: kept as a file with the covers downloaded, once a song, so it shows like those.
      */
-    private fun ownCover(metadata: MediaMetadata, song: MusicMetadata): String? {
-        val file = File(context.cacheDir, "$ARTWORK_DIR/playing-${UUID.nameUUIDFromBytes("${song.title}\n${song.artist}".toByteArray())}.jpg")
-        if (!file.isFile) {
-            val cover = COVERS.firstNotNullOfOrNull(metadata::getBitmap) ?: return null
-            // Written aside and moved in once whole, so one cut short isn't the song's cover from then on.
-            val part = File(file.path + ".part")
-            val saved = runCatching {
-                file.parentFile?.mkdirs()
-                part.outputStream().use { cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, it) } && part.renameTo(file)
-            }.getOrDefault(false)
-            if (!saved) {
-                part.delete()
-                return null
-            }
+    private fun ownCover(metadata: MediaMetadata, session: MediaSession.Token?): String? =
+        COVERS.firstNotNullOfOrNull(metadata::getBitmap)?.let { bitmap ->
+            covers.of(bitmap, session, listOf(MediaMetadata.METADATA_KEY_TITLE, MediaMetadata.METADATA_KEY_ARTIST,
+                MediaMetadata.METADATA_KEY_ALBUM, MediaMetadata.METADATA_KEY_MEDIA_ID, MediaMetadata.METADATA_KEY_MEDIA_URI).map(metadata::getString))
         }
-        return file.toURI().toString()
-    }
 
     private fun following(controller: MediaController, asked: Long?): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
         val state = controller.playbackState?.takeIf { it.state !in NOT_PLAYING } ?: return null
         // An app that doesn't say where it is gives nothing to keep the words in time with.
         if (state.position < 0) return null
-        val app = runCatching {
-            context.packageManager.run { getApplicationLabel(getApplicationInfo(controller.packageName, 0)).toString() }
-        }.getOrNull()
+        val app = labelOf(controller.packageName)
         // Its position is from when it last said so; since then it moved on at its own speed.
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
         val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
@@ -726,7 +1028,8 @@ internal class MediaSessionPlayback(
             durationMs = controller.metadata?.let { controller.lengthOf(it, asked) },
             shuffle = modes.shuffles(controller),
             repeat = modes.repeats(controller),
-            like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon, liked(controller.packageName, it)) }
+            like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon, liked(controller.packageName, it)) },
+            ad = ad
         )
     }
 
@@ -761,7 +1064,10 @@ internal class MediaSessionPlayback(
     /** Music apps also play singles and local files with no album tag; YouTube Music leaves it out only for videos. */
     private fun MediaController.isVideo(): Boolean =
         metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank() &&
-            MusicService.ofPackage(packageName).let { it == null || it == MusicService.YOUTUBE || it == MusicService.YOUTUBE_MUSIC }
+            MusicService.ofPackage(packageName).let {
+                it == MusicService.YOUTUBE || it == MusicService.YOUTUBE_MUSIC ||
+                    (it == null && !MetadataParsers.noArtist(metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()))
+            }
 
     /**
      * A session left behind, e.g. a browser tab that once played: it says it plays, but not where,
@@ -785,13 +1091,14 @@ internal class MediaSessionPlayback(
     /** Only shown here from another device, e.g. a computer's player through KDE Connect: what the phone itself plays comes first. */
     private fun MediaController.mirrored(): Boolean = remote() && !cast()
 
+    private fun MediaController.place(): Place = if (mirrored()) Place.ELSEWHERE else if (cast()) Place.CAST else Place.PHONE
+
     /**
      * What the phone itself plays, then what it casts, then what another device plays; among each, the
      * one that last said where it is, over one that said so long ago. A computer's player says so every
      * second, but the phone's own music app is what the phone plays.
      */
-    private val nearestFirst = compareBy<MediaController> { if (it.mirrored()) 2 else if (it.cast()) 1 else 0 }
-        .thenByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
+    private val nearestFirst = compareBy<MediaController> { it.place() }.thenByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
 
     /** Whether what this app has [playing] is known to be another recording than [song], whatever it's named. */
     private fun MediaController.anotherRecording(playing: MediaMetadata, song: MusicMetadata): Boolean {
@@ -802,19 +1109,19 @@ internal class MediaSessionPlayback(
         return !isVideo() && length != null && song.lengthMs?.let { abs(it - length) > SAME_RECORDING_LENGTH_MS } == true
     }
 
-    /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)". */
     private fun MediaController.plays(song: MusicMetadata): Boolean {
         val playing = metadata ?: return false
         if (anotherRecording(playing, song)) return false
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
-        if (title.isBlank()) return false
-        // A video's title, read as the song it names the way the song playing is named, e.g. "YOASOBI「アイドル」 Official Music Video".
-        val named = MetadataParsers.youtubeVideo(title, artist)?.title
-        if (!(SongNames.same(title, song.title) || SongNames.wordsMatch(title, song.title) || named?.let { SongNames.same(it, song.title) } == true)) return false
-        // A video's channel may be named "Artist - Topic", or not be the artist at all, when the title names them.
-        return artist.isBlank() || SongNames.artistInside(artist, song.artist) || SongNames.sameArtist(song.artist, artist) ||
-            SongNames.artistNames(song.artist).map(SongNames::words).any { it.isNotEmpty() && SongNames.words(title).containsAll(it) }
+        // A station or untagged file has no artist to support a partial title match.
+        if (MetadataParsers.noArtist(artist)) {
+            if (!SongNames.names(title, "", song)) return false
+            if (SongNames.wholeTitle(title, song.title)) return true
+            val named = songsRead.of(title to artist) ?: return false
+            return named.artist.isNotBlank() && SongNames.sameArtist(named.artist, song.artist) && SongNames.wholeTitle(named.title, song.title)
+        }
+        return SongNames.names(title, artist, song)
     }
 }
 
@@ -824,6 +1131,44 @@ private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, Packag
 /** How long an app asked to play in the background has to say it does, before it's taken as not playing. */
 internal const val START_MS = 3_000L
 
+
+/**
+ * What [read] makes of each key, read once while kept: only the [kept] asked of last are kept. Its reads aren't
+ * locked, so two at once may read one key twice, which costs a read and nothing else.
+ */
+internal class KeptReads<K, V>(private val kept: Int, private val read: (K) -> V) {
+    /** Each key read, the one asked of least lately first. */
+    private val values = LinkedHashMap<K, Read<V>>(kept, LOAD_FACTOR, true)
+
+    /** What a key read as, even null. */
+    private class Read<V>(val value: V)
+
+    /** Observe a retained value without reading a new key or making this one more recent. */
+    fun peek(key: K): V? = synchronized(values) { values.entries.firstOrNull { it.key == key }?.value?.value }
+
+    fun of(key: K): V {
+        synchronized(values) { values[key] }?.let { return it.value }
+        val value = read(key)
+        synchronized(values) {
+            values[key] = Read(value)
+            if (values.size > kept) values.remove(values.keys.first())
+        }
+        return value
+    }
+}
+
+/** How many titles and artists apps said are kept as read: more than a phone has apps playing at once. */
+private const val SONGS_READ_KEPT = 32
+
+/** How many sessions keep their numbers: more than a phone has apps playing at once. */
+private const val SESSIONS_KEPT = 32
+
+/** How full [KeptReads]' map may get before it grows, as Java's own maps have it. */
+private const val LOAD_FACTOR = 0.75f
+
+/** Whether an older build left the phone's music muted for a card, to be heard again at the next start. */
+internal const val QUIETED_KEY = "quieted_music"
+
 /** How long a session that doesn't say where it is can stay quiet before it's taken as left behind. */
 internal const val LEFT_BEHIND_MS = 10 * 60_000L
 
@@ -831,7 +1176,7 @@ internal const val LEFT_BEHIND_MS = 10 * 60_000L
  * The size in a cover's link, as YouTube Music's say how big to draw it: the 60 pixels it gives other
  * apps blur at a row's size, so a bigger one of the same cover is asked for.
  */
-private val SIZED_COVER = Regex("=w\\d+-h\\d+")
+private val SIZED_COVER = phoneRegex("=w\\d+-h\\d+")
 private const val QUEUED_COVER_PX = 180
 
 /** How far behind where it was playing on to an app may say it is, and still be believed to be there instead. */
@@ -839,6 +1184,9 @@ internal const val STALE_CLOCK_MS = 2_000L
 
 /** A clock said this little behind is just how long saying it took, as YouTube Music says a song starts twice within a tenth or so. */
 internal const val SAYING_MS = 300L
+
+/** An app saying where it is to within this of where it was going is saying the same, and the timing log keeps it once. */
+private const val SAME_CLOCK_NOTE_MS = 20L
 
 /** Longer than any free YouTube Music ad: the longest seen was 2:14. */
 internal const val LONGEST_AD_MS = 150_000L
@@ -849,7 +1197,6 @@ internal const val SAME_CLOCK_MS = 50L
 /** Where an app puts the cover it shows, the song's own before its album's. */
 private val COVERS = listOf(MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADATA_KEY_ALBUM_ART, MediaMetadata.METADATA_KEY_DISPLAY_ICON)
 
-private const val COVER_QUALITY = 90
 
 /**
  * A music app's own button to like a song, or keep it, by what the app's session calls it. Most call it
@@ -871,6 +1218,23 @@ private const val SPOTIFY_LIKED = "CHECK_FILL"
 /** A music app's own button to repeat, which goes round its ways as it does there, by what the app's session calls it. */
 private val REPEATS = setOf("loop_mode_action") // YouTube Music
 
+/**
+ * Where the phone's music is heard in the room, or never goes: its own speaker and earpiece, a call, a TV
+ * over HDMI, a car, a Bluetooth LE speaker. Any other output may be heard by its listener alone, so the
+ * microphone isn't asked to hear it: headphones, a hearing aid, a USB or classic Bluetooth one, which can't
+ * be told from headphones, a line out, a dock, or a kind a later Android adds.
+ */
+private val ROOM_OUTPUTS = buildSet {
+    addAll(
+        listOf(
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_TELEPHONY,
+            AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_BUS
+        )
+    )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) addAll(listOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE, AudioDeviceInfo.TYPE_REMOTE_SUBMIX))
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) addAll(listOf(AudioDeviceInfo.TYPE_HDMI_EARC, AudioDeviceInfo.TYPE_BLE_SPEAKER))
+}
+
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)
 
@@ -885,6 +1249,59 @@ private const val ENDED_WITHIN_MS = 2_000L
  * Android counts the wake as using the phone, so the screen then stays on until it times out.
  */
 private const val WAKE_MS = 1_000L
+
+/** The notice that brings Crosstune back after a music app covered it. */
+internal const val RETURN_CHANNEL = "return"
+
+/** 1 is floating lyrics, 3 is ChatGPT sign-in, 4 is hearing, and 5 is a practice reminder. */
+internal const val RETURN_NOTICE_ID = 6
+
+/** Set once Android has been asked for the notice, so it isn't asked on every card. */
+internal const val KEY_ASKED_RETURN = "asked_return_notifications"
+
+/** Removes the notice, once Crosstune is in front again or the tap opened it. */
+internal fun Context.dismissReturnToCard() {
+    getSystemService(NotificationManager::class.java).cancel(RETURN_NOTICE_ID)
+}
+
+/**
+ * Asks [launch] for notification permission once, while Crosstune is still in front, when it can't
+ * show over other apps. Returns whether it asked, so what would leave can wait for the answer.
+ * Turned down, the music app stays in front and Back still returns.
+ */
+internal fun Context.askToReturnToCard(launch: (String) -> Unit): Boolean {
+    if (Settings.canDrawOverlays(this)) return false
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+    if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return false
+    val prefs = getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+    if (prefs.getBoolean(KEY_ASKED_RETURN, false)) return false
+    prefs.edit().putBoolean(KEY_ASKED_RETURN, true).apply()
+    launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    return true
+}
+
+/** One tap back to the card. Android sends the tap, so it can start the activity the app itself no longer can. */
+private fun Context.noticeToReturn(back: Intent) {
+    val notices = getSystemService(NotificationManager::class.java)
+    notices.createNotificationChannel(NotificationChannel(RETURN_CHANNEL, getString(R.string.return_channel), NotificationManager.IMPORTANCE_HIGH))
+    val options = ActivityOptions.makeBasic()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        options.setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS)
+    }
+    val open = PendingIntent.getActivity(this, RETURN_NOTICE_ID, back, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE, options.toBundle())
+    notices.notify(
+        RETURN_NOTICE_ID,
+        NotificationCompat.Builder(this, RETURN_CHANNEL)
+            .setSmallIcon(R.drawable.ic_lyrics)
+            .setContentTitle(getString(R.string.return_title))
+            .setContentText(getString(R.string.return_text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+    )
+}
 
 /**
  * Only here so Android shows Crosstune what music apps are playing, which it does for an app the

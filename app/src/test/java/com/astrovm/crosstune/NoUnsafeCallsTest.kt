@@ -2,7 +2,6 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.io.File
 
 /**
  * A value that may be null is handled, never asserted with `!!`: when it is null after all, the app
@@ -12,12 +11,24 @@ import java.io.File
 class NoUnsafeCallsTest {
     @Test
     fun theAppsCodeNeverAssertsAValueIsThere() {
-        val found = File("src/main/java").walk().filter { it.extension == "kt" }.flatMap { file ->
+        val found = AppPatterns.sources("src/main/java").flatMap { file ->
             val source = file.readText()
-            val code = Code(source).read()
+            val code = Code(source, java = file.extension == "java").read()
             assertEquals(file.name, source.lines().size, code.lines().size)
             code.lines().withIndex().filter { "!!" in it.value }.map { "${file.name}:${it.index + 1}" }
         }.toList()
+        assertEquals(emptyList<String>(), found)
+    }
+
+    /**
+     * Lint's HTML report reads `"""a` and four quotes as a string closed and a quote that opens another. With a quote in
+     * backticks in a comment after it, it reads on to before the file's start and crashes, and the report says nothing
+     * of what it found. Such a string ends in ${'"'} instead.
+     */
+    @Test
+    fun noRawStringEndsInAQuote() {
+        val found = listOf("src/main/java", "src/test/java").flatMap(AppPatterns::sources)
+            .flatMap { file -> Code(file.readText(), java = file.extension == "java").also { it.read() }.endsInAQuote.map { "${file.name}:$it" } }
         assertEquals(emptyList<String>(), found)
     }
 
@@ -28,16 +39,30 @@ class NoUnsafeCallsTest {
             /* d!!
             */ val e = "f!!" + '!' + '\'' + ""${'"'}g!!""${'"'}${'"'} + "${'$'}{h!!.let { "i!!" }}" + "\"j!!"
         """.trimIndent()
-        assertEquals("val a = b!! \n\n val e =  +  +  +  + h!!.let {  } + ", Code(source).read())
+        val code = Code(source)
+        assertEquals("val a = b!! \n\n val e =  +  +  +  + h!!.let {  } + ", code.read())
+        assertEquals(listOf(3), code.endsInAQuote)
+    }
+
+    @Test
+    fun javaIsReadAsJava() {
+        // Java has no templates, and reads escapes in a text block.
+        val source = "String a = \"${'$'}{b!!}\" + \"\"\"\n  c!!\\\"\"\"\"; boolean d = !!e;"
+        val code = Code(source, java = true)
+        assertEquals("String a =  + \n; boolean d = !!e;", code.read())
+        assertEquals(emptyList<Int>(), code.endsInAQuote)
     }
 
     /**
-     * Kotlin source with comments and string or character literals left out, line breaks kept so lines
-     * keep their numbers. What's inside a string's ${...} is code, so it stays.
+     * Kotlin or, when [java], Java source with comments and string or character literals left out, line breaks kept so
+     * lines keep their numbers. What's inside a Kotlin string's ${...} is code, so it stays.
      */
-    private class Code(private val source: String) {
+    private class Code(private val source: String, private val java: Boolean = false) {
         private val kept = StringBuilder()
         private var at = 0
+
+        /** The line of each raw string that ends in a quote of its own. */
+        val endsInAQuote = mutableListOf<Int>()
 
         fun read(): String {
             code(inTemplate = false)
@@ -65,12 +90,13 @@ class NoUnsafeCallsTest {
         }
 
         private fun literal(quote: String) {
-            val raw = quote == "\"\"\""
+            // A Java text block reads escapes, as a quoted string does.
+            val raw = quote == "\"\"\"" && !java
             at += quote.length
             while (!source.startsWith(quote, at)) {
                 when {
                     source[at] == '\\' && !raw -> at += 2
-                    source.startsWith("\${", at) -> {
+                    !java && source.startsWith("\${", at) -> {
                         at += 2
                         code(inTemplate = true)
                         at++
@@ -79,6 +105,7 @@ class NoUnsafeCallsTest {
                 }
             }
             at += quote.length
+            if (raw && source.getOrNull(at) == '"') endsInAQuote += source.substring(0, at).count { it == '\n' } + 1
             // A raw string can end in quotes of its own: """a"""" is a" closed.
             while (raw && source.getOrNull(at) == '"') at++
         }

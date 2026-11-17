@@ -180,14 +180,16 @@ internal class CastPlayback(
         casting = song
     }
 
-    private fun tv(song: MusicMetadata): CastTarget? = cast.target.value?.takeIf { casting?.let { c -> sameSong(c, song) } == true }
+    private fun tv(song: MusicMetadata, app: String? = null): CastTarget? =
+        cast.target.value?.takeIf { app == null && casting?.let { c -> sameSong(c, song) } == true }
 
     // Cast to a TV, what plays is known without Android's say.
     override fun hasAccess() = source.hasAccess() || (casting != null && cast.target.value != null)
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    override fun follow(song: MusicMetadata): Flow<Following?> = cast.target.flatMapLatest { target ->
-        if (tv(song) == null) source.follow(song) else flowOf(target?.let(::following))
+    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = cast.target.flatMapLatest {
+        val target = tv(song, app)
+        if (target == null) source.follow(song, app) else flowOf(following(target))
     }
 
     private fun following(target: CastTarget): Following? = target.state?.let {
@@ -201,24 +203,24 @@ internal class CastPlayback(
         )
     }
 
-    override fun seekTo(song: MusicMetadata, positionMs: Long) =
-        if (tv(song) != null) cast.send(CastCommand.Seek(positionMs)) else source.seekTo(song, positionMs)
+    override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) =
+        if (tv(song, app) != null) cast.send(CastCommand.Seek(positionMs)) else source.seekTo(song, positionMs, app)
 
-    override fun playPause(song: MusicMetadata, play: Boolean) =
-        if (tv(song) != null) cast.send(if (play) CastCommand.Play else CastCommand.Pause) else source.playPause(song, play)
+    override fun playPause(song: MusicMetadata, play: Boolean, app: String?) =
+        if (tv(song, app) != null) cast.send(if (play) CastCommand.Play else CastCommand.Pause) else source.playPause(song, play, app)
 
-    override suspend fun resume(song: MusicMetadata): Boolean {
-        if (tv(song) == null) return source.resume(song)
+    override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
+        if (tv(song, app) == null) return source.resume(song, app)
         cast.send(CastCommand.Play)
         return true
     }
 
-    override fun skip(song: MusicMetadata, next: Boolean) =
-        if (tv(song) != null) cast.send(if (next) CastCommand.Next else CastCommand.Previous) else source.skip(song, next)
+    override fun skip(song: MusicMetadata, next: Boolean, app: String?) =
+        if (tv(song, app) != null) cast.send(if (next) CastCommand.Next else CastCommand.Previous) else source.skip(song, next, app)
 
     // The song is the TV's: asked to play, the phone's app must not start it again.
-    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean) =
-        tv(song) != null || source.playSong(song, app, link, mustStart)
+    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean) =
+        (orLastPlayed && tv(song) != null) || source.playSong(song, app, link, mustStart, orLastPlayed)
 }
 
 /** Use a link only when it belongs to the song being handed over, preferring its open player. */

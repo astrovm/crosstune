@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -80,6 +81,95 @@ class SungWordsTest {
         val heardAs = listOf("corazon", "Si.", "el", "No", "SABE", "dimelo", "ya", "que", "sera", "manana", "es", "hoy", "ven", "aqui")
         val sung = Sung(0, heard(written, 1_000).words.zip(heardAs) { word, text -> word.copy(text = text) })
         assertEquals(1_000L, SungAlignment.shiftMs(sung, fromTheStart, written))
+    }
+
+    @Test
+    fun differentSyllablesAreNotMatchedByTheirSharedLetters() {
+        val written = timed("가나마바사자차카타파하", "고노모보소조초코토포호", "구누무부수주추쿠투푸후")
+        val sung = heard(timed("거너머버서저처커터퍼허", "기니미비시지치키티피히", "그느므브스즈츠크트프흐"), 1_000)
+        assertNull(SungAlignment.shiftMs(sung, fromTheStart, written))
+    }
+
+    @Test
+    fun aDistinctLongPhraseCanPlaceASparseLineWithoutWaitingForThreeLines() {
+        val written = timed("夜空の星を数える", "明るい朝が来た", "静かな川を渡る", gapMs = 10_000)
+        val sung = Sung(0, listOf(HeardWord("夜空の", 1_000 + SungAlignment.HEARD_LATE_MS), HeardWord("星を数える", 1_400 + SungAlignment.HEARD_LATE_MS)))
+        assertEquals(1_000L, SungAlignment.shiftMs(sung, fromTheStart, written))
+        val misheard = sung.copy(words = sung.words.mapIndexed { index, word -> if (index == 0) word.copy(text = "朝空の") else word })
+        assertEquals(1_000L, SungAlignment.shiftMs(misheard, fromTheStart, written))
+        val clipped = sung.copy(words = sung.words.mapIndexed { index, word -> if (index == 0) word.copy(text = "空の") else word })
+        assertNull(SungAlignment.shiftMs(clipped, fromTheStart, written))
+    }
+
+    private val SPARSE_SHIFT_MS = 1_000L
+
+    /** Three lines no word of which is in another, ten seconds apart, the second with the [second] words given. */
+    private fun sparse(second: List<TimedWord> = emptyList()) = listOf(
+        LyricLine(20_000, "november oscar papa quebec romeo"),
+        LyricLine(30_000, "alpha bravo charlie delta echo foxtrot golf".takeIf { second.isEmpty() } ?: second.joinToString(" ") { it.text }, second),
+        LyricLine(40_000, "hotel india juliet kilo lima"),
+    )
+
+    private fun sparseHeard(vararg words: Pair<String, Long>) = Sung(0, words.map { (text, at) -> HeardWord(text, at) })
+
+    /** When a word's heard if the line at 30 seconds is sung [SPARSE_SHIFT_MS] late, as it's heard a little late. */
+    private fun sparseAt(ms: Long) = ms + SPARSE_SHIFT_MS + SungAlignment.HEARD_LATE_MS
+
+    @Test
+    fun aDistinctLineWellIntoTheSongIsPlacedByTheWordsHeardInPlaceOfItsFirst() {
+        // Two words misheard, as many as may be: where they're heard is where the line starts.
+        val misheard = sparseHeard("xray yankee" to sparseAt(30_000), "charlie delta echo foxtrot golf" to sparseAt(30_400))
+        assertEquals(SPARSE_SHIFT_MS, SungAlignment.shiftMs(misheard, fromTheStart, sparse()))
+    }
+
+    @Test
+    fun aDistinctLinesFirstWordsHeardASecondApartArentOneAfterTheOther() {
+        fun heardApart(ms: Long) = sparseHeard("xray" to sparseAt(30_000), "bravo" to sparseAt(30_100), "charlie delta echo foxtrot golf" to sparseAt(30_100 + ms))
+        assertEquals(SPARSE_SHIFT_MS, SungAlignment.shiftMs(heardApart(999), fromTheStart, sparse()))
+        assertNull(SungAlignment.shiftMs(heardApart(1_000), fromTheStart, sparse()))
+    }
+
+    @Test
+    fun aDistinctLineTimedWordByWordIsPlacedByTheWordsThatAgree() {
+        val words = sparse(listOf(TimedWord(30_000, "alpha bravo charlie"), TimedWord(31_500, "delta echo")))
+        // Its words too far apart for the first two to say where it starts, so the times of its words are all there is.
+        fun heardWith(lastLateMs: Long) = sparseHeard("alpha" to sparseAt(30_000), "bravo charlie" to sparseAt(31_100), "delta echo" to sparseAt(31_500 + lastLateMs))
+        assertEquals(SPARSE_SHIFT_MS, SungAlignment.shiftMs(heardWith(0), fromTheStart, words))
+        // One word says one thing and the other another: no most of them agree.
+        assertNull(SungAlignment.shiftMs(heardWith(1_500), fromTheStart, words))
+    }
+
+    @Test
+    fun twoDistinctLinesPlaceTheSongOnlyWhenTheyAgree() {
+        val two = listOf(LyricLine(30_000, "alpha bravo charlie delta echo"), LyricLine(40_000, "foxtrot golf hotel india juliet"))
+        fun heardWith(secondLateMs: Long) = sparseHeard("alpha bravo charlie delta echo" to sparseAt(30_000), "foxtrot golf hotel india juliet" to sparseAt(40_000 + secondLateMs))
+        assertEquals(SPARSE_SHIFT_MS, SungAlignment.shiftMs(heardWith(0), fromTheStart, two))
+        assertNull(SungAlignment.shiftMs(heardWith(1_600), fromTheStart, two))
+    }
+
+    @Test
+    fun aLineCanBePlacedAloneWithEnoughWordsThatArentMostlyInAnother() {
+        fun alone(line: String, other: String) = LyricLine(0, line).let { SungAlignment.canPlaceAlone(it, listOf(it, LyricLine(9_000, other))) }
+        assertTrue(alone("alpha bravo charlie delta echo", "foxtrot golf"))
+        assertFalse(alone("alpha bravo charlie delta", "foxtrot golf"))
+        // Half of its words in another line is too many, and less isn't.
+        assertFalse(alone("alpha bravo charlie delta echo foxtrot", "alpha bravo charlie golf"))
+        assertTrue(alone("alpha bravo charlie delta echo foxtrot", "alpha bravo golf hotel"))
+    }
+
+    @Test
+    fun unspacedLyricsMatchSingingSplitElsewhere() {
+        val lines = timed("夜の海を歩く", "朝の光が見える", "君の声を探す")
+        val sung = Sung(0, listOf(
+            HeardWord("夜の", 1_000 + SungAlignment.HEARD_LATE_MS),
+            HeardWord("海を歩く", 1_600 + SungAlignment.HEARD_LATE_MS),
+            HeardWord("朝の光が", 4_000 + SungAlignment.HEARD_LATE_MS),
+            HeardWord("見える", 4_800 + SungAlignment.HEARD_LATE_MS),
+            HeardWord("君の声", 7_000 + SungAlignment.HEARD_LATE_MS),
+            HeardWord("を探す", 7_600 + SungAlignment.HEARD_LATE_MS)
+        ))
+        assertEquals(1_000L, SungAlignment.shiftMs(sung, fromTheStart, lines))
+        assertEquals(mapOf(0 to 1_000L, 1 to 4_000L, 2 to 7_000L), SungAlignment.linesMs(sung, fromTheStart, lines, 1_000))
     }
 
     @Test
@@ -199,6 +289,25 @@ class SungWordsTest {
     }
 
     /** The words of [lines] after their first, sung evenly over the first 2.4 s of the 3 s each line has. */
+    @Test
+    fun wordsHeardAboutAsWellWhereTheLinesAreDontMoveThemFarOff() {
+        // The same words sung twice, 48 s apart, spaced differently, and heard without their lines'
+        // first words: spaced as the later ones, they agree there, and they don't agree here.
+        val sung = listOf(
+            "Skip the signs of my body" to Pair(25_000L, 72_000L),
+            "Wait im on tonight" to Pair(31_000L, 76_000L),
+            "Here im starting to" to Pair(33_500L, 78_000L),
+            "Far away and gone" to Pair(36_000L, 80_000L)
+        )
+        val lines = sung.map { (text, at) -> LyricLine(at.first, text) } + sung.map { (text, at) -> LyricLine(at.second, text) }
+        val heard = listOf(
+            "the" to 24_640L, "signs" to 25_120L, "of" to 25_920L, "my" to 26_240L, "body" to 26_560L,
+            "im" to 28_426L, "on" to 28_640L, "tonight" to 28_853L,
+            "im" to 30_400L, "starting" to 30_600L, "to" to 31_400L
+        ).map { (text, at) -> HeardWord(text, at + SungAlignment.HEARD_LATE_MS) }
+        assertNull(SungAlignment.shiftMs(Sung(0, heard), { it }, lines))
+    }
+
     private fun heardMidLine(lines: List<LyricLine>, shiftMs: Long) = Sung(0, lines.flatMap { line ->
         val words = line.text.split(' ')
         val letters = words.sumOf { it.length }
@@ -271,6 +380,64 @@ class SungWordsTest {
         // Three lines still do; two, as near, don't.
         assertEquals(10_800L, SungAlignment.shiftMs(heard(lines.take(3), 10_800), fromTheStart, lines))
         assertNull(SungAlignment.shiftMs(heard(lines.take(2), 10_800), fromTheStart, lines))
+    }
+
+    /** Three lines timed a line at a time from [startMs], twelve words in all, none of them in the song twice. */
+    private fun verse(startMs: Long) = timed("Sing to me tonight", "Under yellow moon above", "Morning light dancing water", startMs = startMs)
+
+    /** The [verse] heard sung [shiftMs] later than timed, in a song that has [others] too. */
+    private fun farShift(startMs: Long, shiftMs: Long, vararg others: LyricLine): Long? {
+        val lines = (verse(startMs) + others).sortedBy { it.timeMs }
+        return SungAlignment.shiftMs(heard(verse(startMs), shiftMs), fromTheStart, lines)
+    }
+
+    /** A line of the verse's words, as many as [count], timed to be sung at [atMs]. */
+    private fun echo(atMs: Long, count: Int, from: Int = 0) =
+        LyricLine(atMs, "Sing to me tonight under yellow moon above morning light dancing water".split(' ').drop(from).take(count).joinToString(" "))
+
+    // Heard 23.6 s late, from 24.0 s to 30.75 s, the words of the verse timed 0 to 6 s. Filler at 9 s keeps the verse's last line out of what's sung while it's heard.
+    private val filler = LyricLine(9_000, "Ooh ooh")
+
+    @Test
+    fun linesFarOffStayWhereTheyAreOnlyWhenHalfTheWordsHeardAreSungThereToo() {
+        // Five of the twelve words heard match where lines are timed at the time: less than half.
+        assertEquals(23_600L, farShift(0, 23_600, filler, echo(25_000, 5)))
+        // Six are exactly half: as sung there as anywhere.
+        assertNull(farShift(0, 23_600, filler, echo(25_000, 6)))
+    }
+
+    @Test
+    fun linesTimedExactlyTenSecondsOffAreToldEvenWhenSungAsWellWhereTheyAre() {
+        // Not further off than near looks; heard from 30.4 s, the verse timed 20 s on, a line of it too early for near to see.
+        assertEquals(10_000L, farShift(20_000, 10_000, LyricLine(28_000, "Ooh ooh"), echo(31_000, 6)))
+        // A little further off, they are not.
+        assertNull(farShift(20_000, 10_800, LyricLine(28_000, "Ooh ooh"), echo(31_000, 6)))
+    }
+
+    @Test
+    fun aLineTimedWhenTheLastWordIsHeardIsSungThenButOneTimedAfterIsNot() {
+        assertEquals(23_600L, farShift(0, 23_600, filler, echo(25_000, 5)))
+        // One more word of the verse, timed as the last word heard is: six words of twelve are sung where the lines are.
+        assertNull(farShift(0, 23_600, filler, echo(25_000, 5), echo(30_750, 1, from = 5)))
+        // A moment after the last word, it's not.
+        assertEquals(23_600L, farShift(0, 23_600, filler, echo(25_000, 5), echo(30_751, 1, from = 5)))
+    }
+
+    @Test
+    fun aLineEndingAsTheFirstWordIsHeardWasNotSungThen() {
+        // The line before is over by then, though it has a word of the verse.
+        assertEquals(23_600L, farShift(0, 23_600, echo(9_000, 1), echo(24_000, 5, from = 1)))
+        // A moment later it's still going, and six of twelve are sung there.
+        assertNull(farShift(0, 23_600, echo(9_000, 1), echo(24_001, 5, from = 1)))
+    }
+
+    @Test
+    fun linesTimedFarOffAreOnlyToldWhenSungByFarMoreThanAnywhereElse() {
+        fun elsewhere(lastLine: String) = listOf(LyricLine(100_000, "Sing to him later"), LyricLine(103_000, "Under yellow rain again"), LyricLine(106_000, lastLine))
+        // Another place in the song with five of the twelve words heard, over three lines: less than half.
+        assertEquals(23_600L, farShift(0, 23_600, filler, *elsewhere("Morning song for you").toTypedArray()))
+        // Six are exactly half, and not by far.
+        assertNull(farShift(0, 23_600, filler, *elsewhere("Morning light again today").toTypedArray()))
     }
 
     @Test
@@ -418,6 +585,36 @@ class SungWordsTest {
     }
 
     @Test
+    fun noSoundAtAllIsNotListenedTo() = runBlocking {
+        // A phone turned all the way down gives only zeros.
+        val microphone = FakeMicrophone().apply { repeat(SingingListener.SECONDS) { playSecond(0) }; play(SingingListener.SECONDS.toDouble()) }
+        val words = FakeWords(listOf(HeardWord("Oh", 320)))
+        val listener = listener(microphone, hearing = words)
+        assertNull(listener.hear(null, null))
+        assertTrue(listener.heardNoSound)
+        assertFalse(listener.missesModel)
+        // The speech model wasn't run on it.
+        assertNull(words.samples)
+        // Sound again, it's heard as ever.
+        assertNotNull(listener.hear(null, null))
+        assertFalse(listener.heardNoSound)
+    }
+
+    @Test
+    fun aPhoneThatGivesNoRecordingHasNoSoundToHearEither() = runBlocking {
+        // It won't share its sound at all.
+        val unshared = listener(FakeMicrophone(works = false))
+        assertNull(unshared.hear(null, null))
+        assertTrue(unshared.heardNoSound)
+        // Or its sound ends before a while is in, as silence that isn't taken for sound does.
+        val short = listener(FakeMicrophone().apply { play(1.0); end(); play(SingingListener.SECONDS.toDouble()) })
+        assertNull(short.hear(null, null))
+        assertTrue(short.heardNoSound)
+        assertNotNull(short.hear(null, null))
+        assertFalse(short.heardNoSound)
+    }
+
+    @Test
     fun theModelIsMissedOnlyWhenItWasWantedAndWasntThere() = runBlocking {
         // A phone that won't share its sound never got as far as wanting it.
         val silent = listener(FakeMicrophone(works = false), model = null)
@@ -486,11 +683,36 @@ class SungWordsTest {
     }
 
     @Test
-    fun aModelThatWontLoadOrHearsNoWordsHearsNothing() = runBlocking {
-        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = null).hear(null, null))
+    fun aWhileWithNoWordsInItIsHeardAsNoneSung() = runBlocking {
+        // whisper.cpp gives nothing for music with no voice, as an intro: heard, with nothing sung, which isn't a while that couldn't be heard.
         val words = FakeWords(emptyList())
-        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = words).hear(null, null))
+        val listener = listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = words)
+        assertEquals(Sung(1_234, emptyList()), listener.hear(null, null))
+        assertFalse(listener.missesModel)
+        assertFalse(listener.heardNoSound)
         assertTrue(words.closed)
+    }
+
+    @Test
+    fun aWhileTheModelFailsToMakeOutIsntHeard() = runBlocking {
+        // whisper.cpp failing on it, as out of memory, isn't music with no voice: nothing's heard, not nothing sung.
+        val failing = object : WordHearing, Closeable {
+            var closed = false
+            override fun words(samples: FloatArray, language: String?): List<HeardWord>? = null
+            override fun close() {
+                closed = true
+            }
+        }
+        val told = mutableListOf<Sung>()
+        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = failing).hear(null) { told += it; false })
+        // Its first seconds failed too, so they tell nothing either.
+        assertTrue(told.isEmpty())
+        assertTrue(failing.closed)
+    }
+
+    @Test
+    fun aModelThatWontLoadHearsNothing() = runBlocking {
+        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = null).hear(null, null))
         // One that isn't closed needn't be.
         val open = WordHearing { _, _ -> listOf(HeardWord("Oh", 320)) }
         assertEquals(1, listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null, null)!!.words.size)
@@ -592,5 +814,20 @@ class SungWordsTest {
     fun theModelIsWhisperCppsTinyOne() {
         assertEquals("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin", WhisperModel.URL)
         assertEquals("818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7", WhisperModel.SHA256)
+    }
+
+    @Test
+    fun aVoiceIsHeardSingingUnlessTheModelGoesRoundOnOneWord() {
+        fun sung(vararg words: String) = Sung(0, words.mapIndexed { at, text -> HeardWord(text, at * 500L) })
+        assertTrue(sung("(upbeat music)", "Hold", "the", "light").sings)
+        // Two of one word is a little singing.
+        assertTrue(sung("Oh,", "oh,").sings)
+        // Music alone, or rain heard as one word over and over, is no one singing.
+        assertFalse(sung("[Music]").sings)
+        assertFalse(sung("(rain)", "H3B", "H3B", "H3B", "H3B").sings)
+        // Three of one word is the model going round. A mark between them is not another word.
+        assertFalse(sung("H3B", "H3B", "H3B").sings)
+        assertFalse(sung("H3B", "...", "H3B", "H3B").sings)
+        assertFalse(sung().sings)
     }
 }

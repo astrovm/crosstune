@@ -16,6 +16,15 @@ class RecordingKeyTest {
         assertEquals("https://example.com/other", RecordingKey.asPlayed(opened, song.copy(url = "https://example.com/other", recordingId = "music:other")).url)
     }
 
+    @Test fun theLengthItWasHeardOrOpenedAtStaysAHintToItsTakes() {
+        val silent = song.copy(recordingId = "music:one")
+        val played = RecordingKey.asPlayed(song.copy(lengthMs = 200_000), silent)
+        assertNull(played.lengthMs)
+        assertEquals(200_000L, played.heardLengthMs)
+        // Played again by what says nothing either, it's still what was heard.
+        assertEquals(200_000L, RecordingKey.asPlayed(played, silent).heardLengthMs)
+    }
+
     @Test fun recordingsAndLengthsKeepTheirOwnWords() {
         val keys = listOf(song, song.copy(lengthMs = 100_000), song.copy(lengthMs = 101_000),
             song.copy(recordingId = "player:one"), song.copy(recordingId = "player:two"),

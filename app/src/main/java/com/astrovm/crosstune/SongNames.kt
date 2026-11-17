@@ -18,38 +18,154 @@ internal fun sameSong(one: MusicMetadata, other: MusicMetadata) =
  * anyway, and when they are close enough to be worth taking.
  */
 internal object SongNames {
-    private val leadingArticle = Regex("""^the\s+""", RegexOption.IGNORE_CASE)
-    private val artistSeparator = Regex(
-        """\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*""",
+    private const val ARTICLE = "the"
+    private val leadingArticle = phoneRegex("""^$ARTICLE\s+""", RegexOption.IGNORE_CASE)
+    private val artistSeparator = phoneRegex(
+        """$SPACES_START\s*+(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*+""",
         RegexOption.IGNORE_CASE
     )
-    private val marks = Regex("""\p{M}+""")
-    private val lettersAndDigits = Regex("""[^\p{L}\p{N}]+""")
-    private val wordSplit = Regex("""[^a-z0-9]+""")
+    private val marks = phoneRegex("""\p{M}+""")
+    private val lettersAndDigits = phoneRegex("""[^\p{L}\p{N}]+""")
+    private val wordSplit = phoneRegex("""[^a-z0-9]+""")
 
     /** "Zion and Lennox" and "Zion & Lennox" are two names, whichever language says so. */
-    private val conjunction = Regex("""\s+(?:and|y|und|et)\s+""", RegexOption.IGNORE_CASE)
+    private val conjunction = phoneRegex("""$SPACES_START\s++(?:and|y|und|et)\s++""", RegexOption.IGNORE_CASE)
 
-    /** A guest credited in the title, as "(feat. Emel)", which some services leave out. */
-    private val featuring = Regex("""\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]""", RegexOption.IGNORE_CASE)
-    private val guestCredit = Regex("""[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]""", RegexOption.IGNORE_CASE)
+    /**
+     * [title] without the guests it credits, as "(feat. Emel)", which some services leave out. Or written out, as a
+     * video's title has it, "Despacito ft. Daddy Yankee", though not "6 ft. Under", up to the spaces before the next tag
+     * or the end. Read in code as the pattern `\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]|(?<!\d)\s+(?:feat\.?|ft\.?|
+     * featuring)\s+[^()\[\]]*?(?=\s*[(\[]|$)` read it, from the left, as that pattern read on to the next bracket from
+     * each place, and took time squared on a long title.
+     */
+    fun withoutFeaturing(title: String): String = CutTitle(title).apply { cutEach(CutTitle.ALL) { at, word -> guestEnd(this, at, word) } }.toString()
+
+    /** Where a guest from [at] in [title] ends, [word] being where the spaces from there end, or null. */
+    private fun guestEnd(title: CutTitle, at: Int, word: Int): Int? = guestInBrackets(title, word) ?: if (word > at) guestWrittenOut(title, at, word) else null
+
+    /** "(feat. A)", at [open]: where it ends, or null. */
+    private fun guestInBrackets(title: CutTitle, open: Int): Int? {
+        if (open >= title.end || title[open] !in TAG_OPENS) return null
+        val start = title.spacesEnd(open + 1)
+        if (!title.beginsWith(start, 'f')) return null
+        val word = featuringWord.matchAt(title.letters(start, LONGEST_WORD), 0) ?: return null
+        val close = title.nextBracket(title.after(start, word.value.length))
+        return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
+    }
+
+    /** " ft. A", from the spaces at [at] before [word]: up to the spaces before the next tag, or to the end. Where it ends, or null. */
+    private fun guestWrittenOut(title: CutTitle, at: Int, word: Int): Int? {
+        if (!title.beginsWith(word, 'f') || title.afterDigit(at)) return null
+        val said = featuringSaid.matchAt(title.letters(word, LONGEST_WORD), 0) ?: return null
+        val guest = title.spacesEnd(title.after(word, said.value.length - 1))
+        val bracket = title.nextBracket(guest)
+        return when {
+            // A guest starts on a letter that's no space, so past the line break that ends the title only at its end.
+            bracket >= title.end -> maxOf(title.lineEnd(), guest)
+            title[bracket] in TAG_CLOSES -> null
+            else -> title.spacesStart(bracket, guest)
+        }
+    }
+
+    private val featuringWord = phoneRegex("""(?:feat|ft|featuring)\b""", RegexOption.IGNORE_CASE)
+    private val featuringSaid = phoneRegex("""(?:feat\.?|ft\.?|featuring)\s""", RegexOption.IGNORE_CASE)
+
+    /** The most letters [featuringWord] and [featuringSaid] read: "featuring" and the one after it. */
+    private const val LONGEST_WORD = 10
+    private val TAG_OPENS = TitleDelimiters.tagOpens
+    private val TAG_CLOSES = TitleDelimiters.tagCloses
+
+    /** Skip native matcher setup and word copies when the required first letter is absent. */
+    private fun CutTitle.beginsWith(at: Int, letter: Char) = at < end && readsAs(this[at], letter)
+
+    /**
+     * Where what marks [title] as a music video's from [at] ends, [mark] being where the spaces from there end, or null:
+     * "M/V" or "(M/V)", as K-pop has it, which no store has it under. Read in code as the pattern `\s*[(\[]\s*M/V\s*[)\]]|
+     * \s+M/V\b` read it.
+     */
+    private fun markEnd(title: CutTitle, at: Int, mark: Int): Int? = markInBrackets(title, mark)
+        ?: if (mark > at && title.beginsWith(mark, 'm') && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
+
+    private fun markInBrackets(title: CutTitle, open: Int): Int? {
+        if (open >= title.end || title[open] !in TAG_OPENS) return null
+        val mark = title.spacesEnd(open + 1)
+        if (!title.beginsWith(mark, 'm')) return null
+        val letters = title.letters(mark, VIDEO_MARK.length)
+        if (letters.length < VIDEO_MARK.length || !VIDEO_MARK.indices.all { readsAs(letters[it], VIDEO_MARK[it]) }) return null
+        val close = title.spacesEnd(title.after(mark, VIDEO_MARK.length))
+        return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
+    }
+
+    private const val VIDEO_MARK = "m/v"
+    private val videoMarkAt = phoneRegex("""M/V\b""", RegexOption.IGNORE_CASE)
+
+    private val tagOpenClass = TitleDelimiters.regexClass(TitleDelimiters.tagOpens)
+    private val tagCloseClass = TitleDelimiters.regexClass(TitleDelimiters.tagCloses)
+    private val tagBracketClass = TitleDelimiters.regexClass(TitleDelimiters.tagBrackets)
+    private val tagDashClass = TitleDelimiters.regexClass(TitleDelimiters.tagDashes)
+    private val inTag = """(?:(?!\s[$tagDashClass]\s)[^$tagBracketClass])"""
+
+    private val guestCredit = phoneRegex("""[$tagOpenClass]\s*(?:feat|ft|featuring)\b\.?\s*([^$tagBracketClass]*)[$tagCloseClass]""", RegexOption.IGNORE_CASE)
 
     /**
      * A trailing tag that names no other recording: "Remastered 2012" and "Mono" anywhere in
      * it, a whole "Album Version" or "Original", or what film or show it's the song of,
      * "(電影《我的少女時代》主題曲)". "Live", "Acoustic" or "Remix" are other recordings, so they stay.
      */
-    private val editionTag = Regex(
-        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$IN_TAG*|$IN_TAG*(?:$TIE_IN)$IN_TAG*)\s*[)\]]?$""",
+    private val editionTag = phoneRegex(
+        """(?<!\s)(?:\s++[$tagDashClass]\s++|\s*+[$tagOpenClass]\s*+)(?=$inTag*+\s*+[$tagCloseClass]?$)""" +
+            """(?:$EDITION_WORDS|$inTag*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$inTag*+|$inTag*(?:$TIE_IN)$inTag*+)\s*+[$tagCloseClass]?$""",
         RegexOption.IGNORE_CASE
     )
+
+    /**
+     * The [editionTag] that ends [title], as main's pattern found it, and where it was looked for from. A tag starts at
+     * the last bracket that opens, or after it at one of the last two dashes, and holds no bracket that closes but one
+     * it ends on, so it's looked for from there, and each pass of a long title's loop reads its end only.
+     */
+    private fun editionTagIn(title: CutTitle): TagLook {
+        val first = title.next(0)
+        val lastCloser = title.previous(title.lineEnd() - 1)
+        var dashes = 0
+        var at = title.previous(title.end - 1)
+        while (at > first) {
+            val char = title[at]
+            val next = title.next(at + 1)
+            val spacedDash = char in TitleDelimiters.tagDashes && next < title.end && isPatternSpace(title[title.previous(at - 1)]) && isPatternSpace(title[next])
+            // A tag holds no bracket but the one that opens it and the one that closes it at the end.
+            val bracket = char in TAG_OPENS || char in TAG_CLOSES && at != lastCloser
+            if (bracket || spacedDash && ++dashes == 2) break
+            at = title.previous(at - 1)
+        }
+        val start = title.spacesStart(maxOf(at, first))
+        val (end, places) = title.lettersFrom(start)
+        if (!mayNameEdition(end)) return TagLook(start, null)
+        val tag = editionTag.find(end)?.range?.let { places[it.first]..places[it.last] }
+        return TagLook(start, tag)
+    }
+
+    /** The ASCII words in [editionTag] start with these letters. Other writing still goes to the full pattern. */
+    private fun mayNameEdition(text: String): Boolean {
+        var wordStart = true
+        for (letter in text) {
+            if (letter.code > 127) return true
+            if (wordStart && letter.lowercaseChar() in "amorst") return true
+            wordStart = letter !in 'a'..'z' && letter !in 'A'..'Z' && letter !in '0'..'9' && letter != '_'
+        }
+        return false
+    }
+
+    /**
+     * What [editionTagIn] found, looking from [start]: none, if it's still looked at, as a tag found is cut or says it's
+     * another recording. That holds until a cut takes a letter from [start] on, as all it read but where the spaces before
+     * [start] begin is from there on, and those say only where a tag would start, not if there's one.
+     */
+    private class TagLook(val start: Int, val tag: IntRange?)
+
     private const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
 
     /** The song a film or show opens, ends or plays it in, in Chinese, Japanese or English, or its soundtrack, as K-pop says. */
     private const val TIE_IN = """主[題题][曲歌]|挿入歌|插曲|片[頭头尾]曲|\bOST\b|\btheme\s+song\b"""
-
-    /** A letter of a tag: none of a bracket, nor the dash before another part of the name, "Band - Song - Remastered". */
-    private const val IN_TAG = """(?:(?!\s[-–]\s)[^()\[\]])"""
 
     /**
      * The small words a title may say either way, "de" or "del", "el" or "la": articles and
@@ -105,16 +221,30 @@ internal object SongNames {
      * "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself; "Song
      * (Live; 2013 Remaster)" and "Song - Stereo MC's Remix" are other recordings, so they keep their tags.
      */
-    fun withoutEditionTag(title: String): String {
-        var stripped = title
+    fun withoutEditionTag(title: String): String = withoutEditionTag(CutTitle(title))
+
+    /** [withoutEditionTag] on [cut], which counts the steps it takes. */
+    internal fun withoutEditionTag(cut: CutTitle): String {
+        var guestsSince = CutTitle.ALL
+        var marksSince = CutTitle.ALL
+        var look: TagLook? = null
+        // How many cuts there were when [look] was last found to hold.
+        var lookedAt = 0
         // "Song - 2012 Remaster (Mono)" has two, and a title that's only a tag is left as it is.
         while (true) {
-            val unfeatured = stripped.replace(featuring, "")
-            val tag = editionTag.find(unfeatured)?.value.orEmpty()
-            if (words(tag).any { it in OTHER_RECORDING }) return unfeatured
-            val shorter = unfeatured.replace(editionTag, "")
-            if (shorter == stripped || shorter.isBlank()) return stripped
-            stripped = shorter
+            val pass = cut.cuts
+            cut.cutEach(guestsSince) { at, word -> guestEnd(cut, at, word) }
+            guestsSince = pass
+            val marks = cut.cuts
+            cut.cutEach(marksSince) { at, mark -> markEnd(cut, at, mark) }
+            marksSince = marks
+            val tag = look?.takeUnless { cut.cutSince(lookedAt, it.start) } ?: editionTagIn(cut)
+            lookedAt = cut.cuts
+            look = tag
+            val range = tag.tag
+            if (range != null && words(cut.letters(range)).any { it in OTHER_RECORDING }) return cut.toString()
+            if (range != null) cut.cut(range.first, range.last + 1)
+            if (cut.cuts == pass || cut.isBlank()) return cut.before(pass)
         }
     }
 
@@ -146,6 +276,43 @@ internal object SongNames {
         "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
         "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방"
     ).map(::normalize)
+
+    /**
+     * Whether [song] is many songs in one, which has no one song's words to find: a medley, a mashup,
+     * a whole concert or album played as one, a playlist or compilation, "50 Viral Audios", or three or
+     * more songs named apart by slashes.
+     */
+    fun manySongs(song: MusicMetadata): Boolean {
+        val names = "${song.title} ${song.artist}"
+        val words = wordList(names)
+        if (words.any { it in MANY_SONGS_WORDS } || MANY_SONGS_MARKS.any { it in normalize(names) } || countsSongs(words)) return true
+        return wholeShow.containsMatchIn(names) || song.title.split(" / ").count { it.isNotBlank() } >= MIN_SONGS_IN_A_TITLE
+    }
+
+    /** Whether [words] count songs, as "Top 20 Hits" or "50 Viral TikTok Audios" do: many of them, a few words on. */
+    private fun countsSongs(words: List<String>): Boolean = words.indices.any { at ->
+        (words[at].toIntOrNull() ?: 0) >= MIN_SONGS_COUNTED && words.subList(at + 1, minOf(words.size, at + 1 + COUNTED_WITHIN)).any { it in SONGS_COUNTED }
+    }
+
+    private val MANY_SONGS_WORDS = setOf(
+        "medley", "medleys", "mashup", "megamix", "potpourri", "popurri", "popurris", "enganchados",
+        "playlist", "playlists", "compilation", "compilacion", "compilado", "compilacao", "recopilacion"
+    )
+
+    /** What a count of many songs counts. */
+    private val SONGS_COUNTED = setOf("songs", "hits", "audios", "tracks", "canciones", "temas", "exitos", "musicas", "cancoes", "chansons", "titres", "lieder")
+    private const val MIN_SONGS_COUNTED = 10
+    private const val COUNTED_WITHIN = 3
+    private val MANY_SONGS_MARKS = listOf("メドレー", "串烧", "串燒", "메들리").map(::normalize)
+
+    /** A whole show or album as one, in the languages its uploads are named in: "Full Concert", "(Recital Completo)". */
+    private val wholeShow = phoneRegex(
+        """(?<![\p{L}\p{N}])(?:(?:full|complete|whole|entire)\s+(?:concert|show|album|live\s+show|set)|""" +
+            """(?:concierto|recital|show|[áa]lbum|disco|concerto|konzert|concert)\s+(?:completo|completa|entero|inteiro|integral|komplett|complet|intero))(?![\p{L}\p{N}])""",
+        RegexOption.IGNORE_CASE
+    )
+
+    private const val MIN_SONGS_IN_A_TITLE = 3
 
     /** Words in a tag that make it another recording, though it also says it's remastered or in mono. */
     private val OTHER_RECORDING = setOf("live", "remix", "acoustic", "demo", "instrumental", "unplugged", "karaoke", "cover", "session", "sessions")
@@ -219,29 +386,387 @@ internal object SongNames {
      * Artist)". Null for a title that doesn't say so, which is the artist's own song.
      */
     fun coverOf(title: String): Covered? {
-        val tag = coverTags.firstNotNullOfOrNull { it.find(title) } ?: return null
-        val song = bareTitle(title.substring(0, tag.range.first)).ifEmpty { return null }
-        return Covered(song, coverBy.find(tag.value)?.groupValues?.get(1)?.trim()?.ifEmpty { null })
+        val tag = bracketTags(title, COVER_OPENS, COVER_CLOSES).firstOrNull { coverWords.containsMatchIn(title.substring(it)) }
+            ?: coverAfterDash(title) ?: return null
+        val song = bareTitle(title.substring(0, tag.first)).ifEmpty { return null }
+        // Where tags hold tags, the name ends at one, "(In the Style of Artist (Live))"; where not, at the tag's end.
+        val by = if (bracketsInOrder(title, COVER_OPENS, COVER_CLOSES)) coverByOwnName else coverBy
+        return Covered(song, by.find(title.substring(tag))?.groupValues?.get(1)?.trim()?.ifEmpty { null })
+    }
+
+    /**
+     * "Song - Acoustic Cover": a dash between spaces, then a cover's words on the last line with no dash between, to the
+     * end. Read in code as the pattern `\s[-–]\s[^-–]*(?:words).*$` read it, which tried each dash, and took time squared
+     * on a long title: here each of the words on the last line is read once, with the last dash before it, by one look
+     * along it, as on a phone each new look copies the title first.
+     */
+    private fun coverAfterDash(title: String): IntRange? {
+        val end = lineEnd(title)
+        var lineStart = end
+        while (lineStart > 0 && !isLineBreak(title[lineStart - 1])) lineStart--
+        // Words on the last line end before its line break, if any: what's after [end] is that line break alone.
+        val marks = TrailingMarks(title)
+        val words = coverWords.toPattern().matcher(title)
+        var found = words.find(lineStart)
+        while (found) {
+            // The space after the dash comes before the words, which start with a letter.
+            val dash = marks.dashBefore(words.start())
+            if (isBetweenSpaces(title, dash)) return dash - 1 until end
+            found = words.find()
+        }
+        return null
+    }
+
+    /**
+     * Whether [title] says no one sings in the recording: "Song (Instrumental)", "Song - Inst.", "曲 (伴奏版)",
+     * "曲 off vocal ver.". Not a karaoke track's or a cover's, which is sung along to, by its title or a karaoke label's name, nor one that says a voice
+     * is in it too, "Song (Vocal & Instrumental)", or names a singer after the tag, "Song (Instrumental Mix) [feat. Singer]". Nor a tag that names a
+     * part of it, "(with Instrumental Break)", or something else, "(Live at MIT Inst.)", "- Live at the Instrumental Hall", nor a song of that name,
+     * "Band - Instrumental" by Band, or by their channel, "BandVEVO", nor one that says it isn't, "(Not Instrumental)", or names who
+     * made it, "(Prod. Instrumental)", nor one with a singer after it, "Song (Instrumental) ft. Singer", "... with Singer", "... x Singer".
+     * Of 2,551 song names the iTunes Store gave, all that say so are instrumentals (Issue #861).
+     */
+    fun saysInstrumental(title: String, artist: String): Boolean {
+        // Written in full-width or half-width letters, "（Ｉｎｓｔ）" or "ｵﾌﾎﾞｰｶﾙ", it says the same.
+        val name = Normalizer.normalize(title, Normalizer.Form.NFKC)
+        if (sungAlong(name, artist) || coverOf(name) != null || voiceIn.containsMatchIn(name)) return false
+        // A guest named before the tag is the song's, "Song (feat. Guest) [Instrumental]"; after it, they sing in this mix.
+        val lastSinger = singerAfter.matchesIn(name).lastOrNull()?.range?.first ?: -1
+        fun says(tag: MatchResult) = onlyInstrumental(tag.groupValues[1]) && tag.range.first > lastSinger
+        // What follows "Artist - " is the song's name, not a tag; a video's channel is named for the artist.
+        val by = artist.replace(channel, "")
+        val before = if (by.isBlank()) null else ArtistBefore(name, by)
+        return bracketTag.matchesIn(name).any(::says) || dashTag.matchesIn(name).any { says(it) && before?.isTheirs(it.range.first) != true } ||
+            offVocalAtEnd.containsMatchIn(name)
+    }
+
+    /**
+     * Whether what's before each dash of [name] is by the artist [by], as [sameArtist] says of [name] up to it, asked of its
+     * dashes in order, those after a space and the tildes that [dashTag] finds. On a phone each look copies what it reads,
+     * and reading the title up to each of many dashes again took time squared: this reads each part of it once. A dash or
+     * a tilde starts no letter, mark or word of what's before it, so what's before one reads as the start of what's before
+     * the next: the names that end before it stay, and the last name and the whole only go on.
+     */
+    internal class ArtistBefore(private val name: String, by: String) {
+        private val theirs = artists(by).toList()
+        private val longest = theirs.map(String::length).maxOrNull() ?: 0
+
+        /** Once a name ended by a separator or a conjunction is theirs, it's before each later dash too. */
+        private var settled = theirs.isEmpty()
+        private val whole = Letters(leadingArticle.find(name)?.value?.length ?: 0)
+        private val separators = artistSeparator.matchesIn(name).iterator()
+        private var separator = separators.nextOrNull()
+        private var piece = Piece(0)
+
+        /** Whether what's before [dash], the next dash asked of, is by them. */
+        fun isTheirs(dash: Int): Boolean {
+            var ended = separator
+            // A separator that ends where the dash starts ends a name before it too: "A, B x - Song".
+            while (!settled && ended != null && ended.range.last + 1 <= dash) {
+                settled = partsAreTheirs(piece.text.trim())
+                separator = separators.nextOrNull()
+                piece = Piece(ended.range.last + 1)
+                ended = separator
+            }
+            if (settled) return true
+            whole.readTo(dash)
+            return whole.areTheirs(0) || piece.isTheirs(dash)
+        }
+
+        /** Whether a name between separators, or one of the names a conjunction joins in it, is theirs, as [artists] splits it. */
+        private fun partsAreTheirs(piece: String) = piece.split(conjunction).any(::nameIsTheirs)
+
+        /** Whether [part] is a name of theirs; an empty one is none of theirs, as [isOneOf] says, which [artists] leaves none of. */
+        private fun nameIsTheirs(part: String) = isOneOf(normalize(part.replace(leadingArticle, "")), theirs)
+
+        /** The name from the last separator on, as [artistNames] trims it, and the names a conjunction joins in it. */
+        private inner class Piece(start: Int) {
+            private val end = separator?.range?.first ?: name.length
+
+            /** The name up to the next separator, read whole once that's before a dash. */
+            val text = name.substring(start, end)
+            private val trimmed = (start until end).firstOrNull { !name[it].isWhitespace() } ?: end
+            private val joins = conjunction.matchesIn(name.substring(trimmed, end)).iterator()
+            private var join = joins.nextOrNull()
+            private var partStart = trimmed
+            private var part = Letters(trimmed)
+
+            fun isTheirs(dash: Int): Boolean {
+                var until = dash
+                while (until > trimmed && name[until - 1].isWhitespace()) until--
+                var next = join
+                while (!settled && next != null && trimmed + next.range.last < until) {
+                    settled = nameIsTheirs(name.substring(partStart, trimmed + next.range.first))
+                    partStart = trimmed + next.range.last + 1
+                    part = Letters(partStart)
+                    next = joins.nextOrNull()
+                    join = next
+                }
+                if (settled) return true
+                // A conjunction that ends past the trimmed name joins there too if its word and a space are in it: then the last name is
+                // empty. The trimmed name ends in a space of its only after the word, as nothing but spaces is before the dash after it.
+                if (next != null && next.range.contains(until - 1 - trimmed) && isPatternSpace(name[until - 1])) {
+                    return nameIsTheirs(name.substring(partStart, trimmed + next.range.first))
+                }
+                part.readTo(dash)
+                val article = leadingArticle.containsMatchIn(name.substring(partStart, minOf(until, partStart + ARTICLE.length + 1)))
+                return part.areTheirs(if (article) normalize(name.substring(partStart, partStart + ARTICLE.length)).length else 0)
+            }
+        }
+
+        /** The letters of [name] from [from] on, as [normalize] reads them, read on to each dash, and which of theirs are in them. */
+        private inner class Letters(from: Int) {
+            private val letters = StringBuilder()
+            private var read = from
+            private var drop = 0
+            private val lookFrom = IntArray(theirs.size)
+            private val found = BooleanArray(theirs.size)
+
+            /** On to [dash], which is never before the dash read to last, as dashes are asked of in order. */
+            fun readTo(dash: Int) {
+                letters.append(normalize(name.substring(read, dash)))
+                read = dash
+            }
+
+            /**
+             * Whether these letters but the first [drop], which an article took, are a name of theirs, as [isOneOf] says. An article
+             * is seen once a letter is after it, so the drop changes only from none to its, and before that the letters are at most
+             * its own, too few to hold a name: none is found yet to forget.
+             */
+            fun areTheirs(drop: Int): Boolean {
+                if (drop != this.drop) {
+                    this.drop = drop
+                    lookFrom.fill(drop)
+                }
+                val length = letters.length - drop
+                if (length <= longest) return isOneOf(letters.substring(drop), theirs)
+                // Longer than each of theirs, they are theirs only with one of theirs in them, which stays as they go on.
+                return theirs.indices.any(::holds)
+            }
+
+            private fun holds(index: Int): Boolean {
+                val wanted = theirs[index]
+                if (!found[index] && wanted.length >= MIN_PARTIAL_ARTIST) {
+                    found[index] = letters.indexOf(wanted, lookFrom[index]) >= 0
+                    // On, from where one of theirs could start and end past what's been looked at.
+                    lookFrom[index] = maxOf(drop, letters.length - wanted.length)
+                }
+                return found[index]
+            }
+        }
+
+        private fun <T> Iterator<T>.nextOrNull() = if (hasNext()) next() else null
+    }
+
+    /** Whether [title] or [artist] says it's a track to sing along to, which shows the song's words: see [singAlong]. */
+    fun sungAlong(title: String, artist: String): Boolean = listOf(Normalizer.normalize(title, Normalizer.Form.NFKC), artist).any(singAlong::containsMatchIn)
+
+    /**
+     * Whether an [album]'s name says it's of instrumentals, "Album (Instrumentals)", "Album (Off Vocal Ver.)", "专辑 (伴奏版)",
+     * "Album (Karaoke Version)", "Album (Backing Tracks)": its recordings are named as the sung ones. "Inst." and "MR", short
+     * for other words too, say so only as a whole tag, "Album (Inst.)", "Album (MR)".
+     */
+    fun albumOfInstrumentals(album: String): Boolean {
+        val name = Normalizer.normalize(album, Normalizer.Form.NFKC).replace(instrumentals, "")
+        return instrumentalWord.matchesIn(name).any { !shortForm.matches(it.value) } || accompaniment.containsMatchIn(name) ||
+            (bracketTag.matchesIn(name) + dashTag.matchesIn(name)).any { onlyInstrumental(it.groupValues[1]) }
+    }
+
+    /** Whether a [tag], what's in brackets or after a dash, says the whole recording is an instrumental. */
+    private fun onlyInstrumental(tag: String): Boolean {
+        val said = instrumentalWord.find(tag) ?: return false
+        val rest = words(tag.removeRange(said.range))
+        if (rest.any { it in PART_WORDS || it in NOT_SAID }) return false
+        // "Inst." and "MR" are short for other words too, so they say it alone, or with "Ver." only.
+        return !shortForm.matches(said.value) || rest.all { it in SAYS_VERSION }
     }
 
     /** A cover's song: its [title], and its [artist] when the cover's title names them. */
     data class Covered(val title: String, val artist: String?)
 
     private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"""
-    private val coverTags = listOf(
-        Regex("""[(\[【][^)\]】]*(?:$COVER_WORDS)[^)\]】]*[)\]】]""", RegexOption.IGNORE_CASE),
-        Regex("""\s[-–]\s[^-–]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
+    private val coverWords = phoneRegex("""(?:$COVER_WORDS)""", RegexOption.IGNORE_CASE)
+
+    private val COVER_OPENS = TitleDelimiters.OPENS.take(3)
+    private val COVER_CLOSES = TitleDelimiters.CLOSES.take(3)
+    private val DASHES = TitleDelimiters.tagDashes
+
+    /** Whose song it is, up to the end of the tag. */
+    private val coverCloseClass = TitleDelimiters.regexClass(COVER_CLOSES)
+    private val coverBracketClass = TitleDelimiters.regexClass(COVER_OPENS + COVER_CLOSES)
+    private val coverBy = phoneRegex("""(?:$COVER_BY)\s+([^$coverCloseClass]+)""", RegexOption.IGNORE_CASE)
+
+    /** The same, up to the start of a tag inside it too, "(In the Style of Artist (Live))". */
+    private val coverByOwnName = phoneRegex("""(?:$COVER_BY)\s+([^$coverBracketClass]+)""", RegexOption.IGNORE_CASE)
+    private const val COVER_BY = """in the style of|originally (?:performed )?by|made famous by|cover of"""
+
+    /**
+     * A word saying no one sings, not inside another word, nor the end of one joined by a hyphen, "Show-Off Vocal".
+     * A word in Chinese or Japanese may say "version" after it, "伴奏版".
+     */
+    private val instrumentalWord = phoneRegex(
+        """(?<![\p{L}\p{N}])(?<![\p{L}\p{N}]-)(?:instrumentale?|inst\.?|off[ -]?vocal|(?-i:MR)|인스트루멘탈|""" +
+            """(?:伴奏|オフボーカル|纯音乐|純音樂|純音楽)(?:版本?|バージョン)?)(?![\p{L}\p{N}])""",
+        RegexOption.IGNORE_CASE
     )
-    private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made famous by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
+    private val shortForm = phoneRegex("""inst\.?|MR""", RegexOption.IGNORE_CASE)
+    private val instrumentals = phoneRegex("""(?<=instrumental)s\b""", RegexOption.IGNORE_CASE)
+
+    /** A voice in the recording, other than in "off vocal": "(Vocal Mix)", "(A Cappella & Instrumental)". */
+    private val voiceIn = phoneRegex("""(?<!off )(?<!off-)\bvocals?\b|\ba[ -]?capp?ella\b""", RegexOption.IGNORE_CASE)
+
+    /**
+     * What a tag naming a part of a song, or what it's from, or where it was played, says: "(with Instrumental Break)", "(From the film
+     * Instrumental)", "- Live at the Instrumental Hall".
+     */
+    private val PART_WORDS = setOf("with", "intro", "outro", "break", "interlude", "bridge", "from", "film", "movie", "live", "hall")
+
+    /** What says a tag isn't the recording's: "(Not Instrumental)", or names who made it, "(Prod. Instrumental)". */
+    private val NOT_SAID = setOf("not", "non", "prod", "produced")
+
+    /**
+     * Where a singer may be named, in brackets or not: "[feat. Singer]", "ft. Singer", "with Singer", "x Singer". Each
+     * place, as it reads no letter: one after a tag names a singer after it. A tag starts with a bracket, a dash or a
+     * tilde, which no singer's word is, so one isn't named at the start of what follows it.
+     */
+    private val singerAfter = phoneRegex("""(?=[\s$tagOpenClass](?:feat\.?|ft\.?|featuring|with|x|×)\s+\S)""", RegexOption.IGNORE_CASE)
+
+    /** An album of tracks to sing over, "(Karaoke Version)", "(Backing Tracks)", "(Minus One)". */
+    private val accompaniment = phoneRegex("""karaoke|カラオケ|\bbacking tracks?\b|\bminus ones?\b""", RegexOption.IGNORE_CASE)
+
+    /** What YouTube adds to an artist's name for their channel: "BandVEVO", "Band - Topic". */
+    private val channel = phoneRegex("""VEVO$|$SPACES_START\s*+-\s*+Topic$""")
+    private val SAYS_VERSION = setOf("ver", "version", "versao")
+
+    /** What's in brackets, of any kind Chinese and Japanese titles use, once full-width ones are written as others. */
+    private val normalizedOpenClass = TitleDelimiters.regexClass(TitleDelimiters.normalizedOpens)
+    private val normalizedCloseClass = TitleDelimiters.regexClass(TitleDelimiters.normalizedCloses)
+    private val bracketTag = phoneRegex("""[$normalizedOpenClass]([^$normalizedOpenClass$normalizedCloseClass]*)[$normalizedCloseClass]""")
+
+    /** What follows a dash, or a tilde, which a Japanese title may put right after its name: "曲〜伴奏〜". */
+    private val dashTag = phoneRegex("""(?:(?<=\s)[$tagDashClass]\s?|[~〜])([^$tagDashClass~〜]*)""")
+
+    /**
+     * "Off vocal" ending the title with nothing around it, after a name in Chinese, Japanese or Korean, "曲 Off Vocal",
+     * or with "ver." after it, "Song off vocal ver.": "Kiss Off Vocal" may be the song "Kiss Off" sung.
+     */
+    private val offVocalAtEnd = phoneRegex(
+        """(?:(?<=[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af])\s*off[ -]?vocal(?:\s+ver(?:sion|\.)?)?|\soff[ -]?vocal\s+ver(?:sion|\.)?)\s*$""",
+        RegexOption.IGNORE_CASE
+    )
+    /**
+     * A track made to sing along to, as karaoke labels name theirs, "Song (Made Popular By Singer) [Instrumental Version]"
+     * by "Party Tyme Karaoke", or one shown with the words, "(Instrumental + Lyrics)", or to sing over, "(Minus One)",
+     * "(Backing Track)". These show the words of the song they play, as before; whether they should is still to be decided (Issue #922).
+     */
+    private val singAlong = phoneRegex("""karaoke|カラオケ|\bmade popular by\b|\blyrics?\b|\bsing[- ]?along\b|\bminus one\b|\bbacking track\b""", RegexOption.IGNORE_CASE)
 
     /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
     fun bareTitle(title: String): String {
-        var bare = title.trim()
+        val text = title.trim()
+        // It's text up to [end], and the line break that ended it if a tag ended before that, as "$" may. Kept in
+        // place as each tag goes, with where each bracket and dash before a place is, so a long title is read once.
+        val marks = TrailingMarks(text)
+        var end = beforeLineBreak(text, text.length)
+        var lineBreak = text.substring(end)
         while (true) {
-            val shorter = bare.replace(trailingTag, "").trim()
-            if (shorter == bare || shorter.isEmpty()) return bare
-            bare = shorter
+            val (start, afterDash) = marks.tagStart(end, lineBreak) ?: break
+            // A tag that runs to the very end takes the spaces before it, and leaves the line break before those, if any.
+            val toTheEnd = afterDash || lineBreak.isEmpty()
+            if (!toTheEnd) {
+                end = start
+                continue
+            }
+            val kept = trimmedEnd(text, start)
+            if (kept == 0) break
+            end = beforeLineBreak(text, kept)
+            lineBreak = text.substring(end, kept)
         }
+        return text.substring(0, end) + lineBreak
+    }
+
+    /** [end], or right before the line break that [text] has there. */
+    private fun beforeLineBreak(text: String, end: Int) = if (end > 0 && isLineBreak(text[end - 1])) end - 1 else end
+
+    private fun trimmedEnd(text: String, end: Int): Int {
+        var at = end
+        while (at > 0 && text[at - 1].isWhitespace()) at--
+        return at
+    }
+
+    /**
+     * Where a [bareTitle]'s last tag starts, as the pattern `(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$` found it in
+     * the text up to a place: a tag in brackets ends right before it, or before the line break that ends it, and a part
+     * after a dash runs from the last dash to the very end, line break and all. With whether it's after a dash.
+     */
+    private class TrailingMarks(private val text: String) {
+        private val lastBracket = IntArray(text.length + 1)
+        private val lastDash = IntArray(text.length + 1)
+
+        init {
+            var bracket = -1
+            var dash = -1
+            for (at in text.indices) {
+                lastBracket[at] = bracket
+                lastDash[at] = dash
+                if (text[at] in TitleDelimiters.tagBrackets) bracket = at
+                if (text[at] in DASHES) dash = at
+            }
+            lastBracket[text.length] = bracket
+            lastDash[text.length] = dash
+        }
+
+        /** The last dash before [place], or -1. */
+        fun dashBefore(place: Int) = lastDash[place]
+
+        /** In the text up to [end], then [lineBreak]: what's left once tags that ended before that line break went. */
+        fun tagStart(end: Int, lineBreak: String): Pair<Int, Boolean>? {
+            val open = if (end > 0 && text[end - 1] in TAG_CLOSES) lastBracket[end - 1] else -1
+            val inBrackets = if (open >= 0 && text[open] in TAG_OPENS) spacesStart(text, open) else Int.MAX_VALUE
+            val dash = lastDash[end]
+            // The space after the dash is in the text up to [end], not one a tag in brackets after it had, or it's the
+            // line break: on a phone `\s` reads U+0085 as a space, which trimming leaves.
+            val after = if (dash < end - 1) text.getOrNull(dash + 1) else lineBreak.firstOrNull()
+            val spaced = dash > 0 && isPatternSpace(text[dash - 1]) && after?.let(::isPatternSpace) == true
+            val afterDash = if (spaced) spacesStart(text, dash) else Int.MAX_VALUE
+            return when {
+                afterDash < inBrackets -> afterDash to true
+                inBrackets < Int.MAX_VALUE -> inBrackets to false
+                else -> null
+            }
+        }
+    }
+
+    /**
+     * Whether [one] and [other] are releases of one song, as Shazam calls the song an app plays "Song (Live
+     * at Home)": by one artist, and one name but for what each adds after it. Another song isn't, however
+     * near where the song is it's heard.
+     */
+    fun releasesOfOneSong(one: MusicMetadata, other: MusicMetadata): Boolean =
+        same(bareTitle(one.title), bareTitle(other.title)) && (sameArtist(one.artist, other.artist) || sameArtist(other.artist, one.artist))
+
+    /**
+     * Whether what a player names by [title] and [artist] is [song]. A video's title names more, e.g.
+     * "Artist - Song (Official Video)", and its channel may be named "Artist - Topic", or not be the
+     * artist at all, when the title names them: "Police, The   Every Little Thing She Does Is Magic
+     * Audio Flac" by "keyloginhot".
+     */
+    fun names(title: String, artist: String, song: MusicMetadata): Boolean {
+        if (title.isBlank()) return false
+        // Read as the song it names the way the song playing is named, e.g. "YOASOBI「アイドル」 Official Music Video".
+        val named = MetadataParsers.youtubeVideo(title, artist)
+        val inferred = named?.let { same(it.title, song.title) && (titleWordsMatch(title, song.title) || namesWithArtist(title, song, artist)) } == true
+        if (!(same(title, song.title) || wordsMatch(title, song.title) || inferred)) return false
+        return artist.isBlank() || artistInside(artist, song.artist) || sameArtist(song.artist, artist) ||
+            artistNames(song.artist).map(::words).any { it.isNotEmpty() && words(title).containsAll(it) }
+    }
+
+    /** A guessed artist/title split needs the artist too: "Live Forever - Live" may be a song with a live tag. */
+    private fun namesWithArtist(title: String, song: MusicMetadata, artist: String): Boolean {
+        val named = MetadataParsers.videoName(MetadataParsers.comparisonTitle(title), artist)
+        val by = song.artist.ifBlank { artist.takeUnless(MetadataParsers::noArtist).orEmpty() }
+        return named.artist.isNotBlank() && by.isNotBlank() && (artistInside(named.artist, by) || sameArtist(by, named.artist)) &&
+            titleWordsMatch(named.title, song.title)
     }
 
     /**
@@ -256,18 +781,29 @@ internal object SongNames {
         val said = consonants(Readings.romaji(katakana))
         val written = consonants(bareTitle(latin))
         if (said.length < fewest) return false
-        return if (said.length < FUZZY_SOUNDS) said == written else distance(said, written) <= 1
+        return if (said.length < FUZZY_SOUNDS) said == written else oneEditApart(said, written)
     }
 
     /** The consonants [text] is said with, those that sound alike as one: "Plastic Love" is "prstkrb". */
     private fun consonants(text: String): String {
         var said = text.lowercase().filter { it in 'a'..'z' }
         for ((from, to) in sounds) said = said.replace(from, to)
-        return said.filter { it !in "aeiouhwy" }.fold("") { kept, c -> if (kept.lastOrNull() == c) kept else kept + c }
+        val kept = StringBuilder()
+        for (c in said) if (c !in "aeiouhwy" && kept.lastOrNull() != c) kept.append(c)
+        return kept.toString()
+    }
+
+    /** Whether [one] becomes [other] with one letter changed, added or taken away at most: [distance] at most 1, in time in step with them. */
+    internal fun oneEditApart(one: String, other: String): Boolean {
+        if (kotlin.math.abs(one.length - other.length) > 1) return false
+        val (shorter, longer) = listOf(one, other).sortedBy { it.length }
+        val same = shorter.indices.firstOrNull { shorter[it] != longer[it] } ?: return true
+        return if (shorter.length == longer.length) shorter.regionMatches(same + 1, longer, same + 1, shorter.length - same - 1)
+        else shorter.regionMatches(same, longer, same + 1, shorter.length - same)
     }
 
     /** How many letters to change to make [one] into [other]. */
-    private fun distance(one: String, other: String): Int {
+    internal fun distance(one: String, other: String): Int {
         var previous = IntArray(other.length + 1) { it }
         for (i in one.indices) {
             val row = IntArray(other.length + 1).also { it[0] = i + 1 }
@@ -281,28 +817,25 @@ internal object SongNames {
 
     /** Spellings of one sound, in order: "ch" before "c", and an r that ends a sound before l is read as r. */
     private val sounds = listOf(
-        Regex("th") to "s", Regex("ph") to "f", Regex("ck|qu?") to "k",
-        Regex("x") to "ks", Regex("c(?=[eiy])") to "s", Regex("c") to "k", Regex("r(?![aeiouy])") to "",
-        Regex("l") to "r", Regex("v") to "b", Regex("z") to "s", Regex("m(?=[bp])") to "n"
+        phoneRegex("th") to "s", phoneRegex("ph") to "f", phoneRegex("ck|qu?") to "k",
+        phoneRegex("x") to "ks", phoneRegex("c(?=[eiy])") to "s", phoneRegex("c") to "k", phoneRegex("r(?![aeiouy])") to "",
+        phoneRegex("l") to "r", phoneRegex("v") to "b", phoneRegex("z") to "s", phoneRegex("m(?=[bp])") to "n"
     )
 
     /** Fewer consonants than this say too little to tell names apart; under [FUZZY_SOUNDS], all must agree. */
     private const val MIN_SOUNDS = 3
     private const val FUZZY_SOUNDS = 5
 
-    /** What a name adds at its end, in brackets or after a dash: "(2018 Remix)", "[Live]", " - Remastered". */
-    private val trailingTag = Regex("""(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$""")
-
     /** Two credits for one artist, near enough: "Randy" is in "Randy Nota Loca". */
     fun sameArtist(one: String, other: String): Boolean {
         val theirs = artists(other)
         if (theirs.isEmpty()) return true
-        return artists(one).any { candidate ->
-            theirs.any { wanted ->
-                wanted == candidate || (minOf(candidate.length, wanted.length) >= MIN_PARTIAL_ARTIST &&
-                    (candidate in wanted || wanted in candidate))
-            }
-        }
+        return artists(one).any { isOneOf(it, theirs) }
+    }
+
+    /** Whether [candidate] is one of [theirs], or one of them is in it, or it's in one of them, when both are long enough to say so. */
+    private fun isOneOf(candidate: String, theirs: Collection<String>) = theirs.any { wanted ->
+        wanted == candidate || (minOf(candidate.length, wanted.length) >= MIN_PARTIAL_ARTIST && (candidate in wanted || wanted in candidate))
     }
 
     /**
@@ -311,19 +844,286 @@ internal object SongNames {
      * little, but two titles reduced to the same word are the same title with a tag left off.
      */
     fun wordsMatch(one: String, other: String): Boolean {
+        val onePlain = withoutEditionTag(one)
+        val otherPlain = withoutEditionTag(other)
         // Entirely non-Latin titles have no words below. Two empty sets say nothing about
         // whether they name the same song; compare their actual letters first.
-        if (same(one, other) && normalize(one).isNotEmpty()) return true
+        if (normalize(onePlain) == normalize(otherPlain) && normalize(one).isNotEmpty()) return true
         // Nor do they have words for a note in brackets: "小幸运 (电影《我的少女时代》主题曲)" is "小幸运".
         if (words(one).isEmpty() && words(other).isEmpty()) {
             val bare = normalize(bareTitle(one))
             if (bare.isNotEmpty() && bare == normalize(bareTitle(other))) return true
         }
-        val ours = words(withoutEditionTag(one))
-        val theirs = words(withoutEditionTag(other))
+        val ours = words(onePlain)
+        val theirs = words(otherPlain)
+        val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
+        return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter) && titleWordsMatch(one, other, onePlain, otherPlain)
+    }
+
+    /** Without an artist, require the whole title. A bare word such as Radio can be part of a station's name. */
+    fun wholeTitle(one: String, other: String): Boolean {
+        val title = wholeTitleWords(one)
+        return title.isNotEmpty() && title == wholeTitleWords(other)
+    }
+
+    /** Keep word boundaries and non-Latin marks, such as the voicing in ガラス and カラス. */
+    private fun wholeTitleWords(title: String): List<String> =
+        Normalizer.normalize(titleEvidence(title, bareNotes = false), Normalizer.Form.NFC).lowercase(Locale.ROOT)
+            .split(titleWordSplit).filter { word -> word.codePoints().anyMatch(Character::isLetterOrDigit) }.map { word ->
+                if (word.codePoints().filter(Character::isLetter).allMatch { Character.UnicodeScript.of(it) == Character.UnicodeScript.LATIN }) normalize(word) else word
+            }
+
+    private val titleWordSplit = phoneRegex("""[^\p{L}\p{N}\p{M}]+""")
+
+    /** A recording note cannot provide the second word that makes a partial title specific enough. */
+    private fun titleWordsMatch(one: String, other: String, onePlain: String? = null, otherPlain: String? = null): Boolean {
+        val first = titleEvidence(one, plain = onePlain)
+        val second = titleEvidence(other, plain = otherPlain)
+        if (normalize(first).isNotEmpty() && normalize(first) == normalize(second)) return true
+        val ours = words(first)
+        val theirs = words(second)
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
     }
+
+    private fun titleEvidence(title: String, bareNotes: Boolean = true, plain: String? = null): String {
+        val compared = MetadataParsers.comparisonTitle(title)
+        // A caption can change the text, but an unchanged title has already had its edition read.
+        val untagged = if (plain != null && compared == title) plain else withoutEditionTag(compared)
+        return MetadataParsers.withoutFileNumber(titleWithoutNotes(untagged, bareNotes))
+    }
+
+    /** The same note grammar reads brackets, dashes, bare suffixes and unfinished notes. */
+    private fun titleWithoutNotes(title: String, bareNotes: Boolean): String {
+        val original = RecordingNotes(title)
+        val named = withoutBracketNotes(title, original).trim()
+        // Without a cut or a trim, both passes read the same words at the same positions.
+        val notes = if (named == title) original else RecordingNotes(named)
+        val start = notes.tokens.firstOrNull { token ->
+            token.start > 0 && isPatternSpace(named[token.start - 1]) && (bareNotes || notes.afterDash(token.start)) &&
+                notes.isNote(token.start, named.length, notes.afterDash(token.start))
+        }?.start ?: named.length
+        return if (start < named.length) named.substring(0, start).trim().trimEnd { it in NAME_TAG_DASHES }.trim() else named
+    }
+
+    /** Keep ordinary title words. Intervals merge once, so nested notes never copy their parents repeatedly. */
+    private fun withoutBracketNotes(title: String, grammar: RecordingNotes): String {
+        val opens = ArrayDeque<Int>()
+        val notes = ArrayDeque<IntRange>()
+        for (at in title.indices) {
+            when {
+                title[at] in NAME_TAG_OPENS -> opens.addLast(at)
+                opens.isNotEmpty() && NAME_TAG_CLOSES[NAME_TAG_OPENS.indexOf(title[opens.last()])] == title[at] -> {
+                    val open = opens.removeLast()
+                    if (grammar.isNote(open + 1, at, true)) addNote(notes, open, at + 1)
+                }
+            }
+        }
+        opens.firstOrNull { grammar.isNote(it + 1, title.length, true) }?.let { addNote(notes, it, title.length) }
+        if (notes.isEmpty()) return title
+        val text = StringBuilder()
+        var from = 0
+        for (note in notes) {
+            text.append(title, from, note.first).append(' ')
+            from = note.last + 1
+        }
+        return text.append(title, from, title.length).toString()
+    }
+
+    private fun addNote(notes: ArrayDeque<IntRange>, from: Int, until: Int) {
+        while (notes.isNotEmpty() && notes.last().first >= from) notes.removeLast()
+        notes.addLast(from until until)
+    }
+
+    private data class NoteToken(val start: Int, val end: Int, val letters: String)
+
+    /** Unicode words retain the title's script; a later Latin word cannot stand in for the word inspected. */
+    private fun noteTokens(text: String): List<NoteToken> {
+        val words = mutableListOf<NoteToken>()
+        var at = 0
+        while (at < text.length) {
+            val code = text.codePointAt(at)
+            if (!nameLetter(code)) {
+                at += Character.charCount(code)
+                continue
+            }
+            val start = at
+            do {
+                at += Character.charCount(text.codePointAt(at))
+            } while (at < text.length && (nameLetter(text.codePointAt(at)) || nameMark(text.codePointAt(at))))
+            val token = text.substring(start, at)
+            // ASCII letters and digits need no decomposition or mark removal.
+            val letters = if (token.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }) token.lowercase(Locale.ROOT) else normalize(token)
+            words += NoteToken(start, at, letters)
+        }
+        return words
+    }
+
+    private fun nameLetter(code: Int): Boolean = Character.isLetterOrDigit(code) || when (Character.getType(code)) {
+        Character.LETTER_NUMBER.toInt(), Character.OTHER_NUMBER.toInt() -> true
+        else -> false
+    }
+
+    private fun nameMark(code: Int): Boolean = when (Character.getType(code)) {
+        Character.NON_SPACING_MARK.toInt(), Character.COMBINING_SPACING_MARK.toInt(), Character.ENCLOSING_MARK.toInt() -> true
+        else -> false
+    }
+
+    /** Prefix counts make each nested bracket and suffix a constant-time grammar query. */
+    private class RecordingNotes(private val text: String) {
+        val tokens = noteTokens(text)
+        private val before = IntArray(text.length + 1)
+        private val nonspace = IntArray(text.length + 1)
+        private val quotes = IntArray(text.length + 1)
+        private val numeric = BooleanArray(tokens.size) { tokens[it].letters.codePoints().allMatch(Character::isDigit) }
+        private val years = BooleanArray(tokens.size) { numeric[it] && tokens[it].letters.codePointCount(0, tokens[it].letters.length) == YEAR_DIGITS }
+        private val marks = BooleanArray(tokens.size) { !numeric[it] && noteWord(tokens[it].letters) }
+        private val qualifiers = BooleanArray(tokens.size) { tokens[it].letters in NOTE_QUALIFIERS }
+        private val places = BooleanArray(tokens.size) { tokens[it].letters in NOTE_PLACES }
+        private val versionLabels = BooleanArray(tokens.size) { withoutNoteYear(tokens[it].letters) in VERSION_LABELS }
+        private val recordingEnds = BooleanArray(tokens.size) { withoutNoteYear(tokens[it].letters) in NOTE_RECORDINGS }
+        private val lastWord = IntArray(tokens.size + 1) { -1 }
+        private val possessive = IntArray(tokens.size + 1) { -1 }
+        private val languages by lazy { BooleanArray(tokens.size) { tokens[it].letters in noteLanguages } }
+        private val unknown = IntArray(tokens.size + 1)
+        private val languageUnknown by lazy {
+            IntArray(tokens.size + 1).also { counts ->
+                for (i in tokens.indices) counts[i + 1] = counts[i] + if (known(i) || languages[i]) 0 else 1
+            }
+        }
+
+        init {
+            var word = 0
+            var last = -1
+            var quoted = 0
+            for (at in 0..text.length) {
+                while (word < tokens.size && tokens[word].start < at) word++
+                before[at] = word
+                nonspace[at] = last
+                quotes[at] = quoted
+                if (at < text.length) {
+                    if (!isPatternSpace(text[at])) last = at
+                    if (text[at] == '\'' || text[at] == '"') quoted++
+                }
+            }
+            for (i in tokens.indices) {
+                unknown[i + 1] = unknown[i] + if (known(i)) 0 else 1
+                lastWord[i + 1] = if (numeric[i]) lastWord[i] else i
+                val start = tokens[i].start
+                possessive[i + 1] = if (tokens[i].letters == "s" && start > 0 && text[start - 1] in "'’") i else possessive[i]
+            }
+        }
+
+        private fun known(at: Int) = marks[at] || numeric[at] || qualifiers[at]
+
+        fun afterDash(at: Int): Boolean = nonspace[at].let { it >= 0 && text[it] in NAME_TAG_DASHES }
+
+        fun isNote(from: Int, until: Int, explicit: Boolean): Boolean {
+            val first = before[from]
+            val end = before[until]
+            if (first == end) return false
+            val lead = lead(first, end)
+            if (lead != null && (unknown[end] == unknown[first] || location(lead, end))) return true
+            if (bracketRecording(from, first, end)) return true
+            if (descriptor(first, end, from, until, explicit)) return true
+            return language(first, end)
+        }
+
+        private fun bracketRecording(from: Int, first: Int, end: Int): Boolean {
+            if (from == 0 || text[from - 1] !in NAME_TAG_OPENS) return false
+            val ending = lastWord[end]
+            return ending >= first && recordingEnds[ending]
+        }
+
+        private fun lead(first: Int, end: Int): Int? {
+            if (marks[first]) return first
+            if (first + 1 == end) return null
+            val next = tokens[first + 1].letters
+            val year = years[first]
+            val paired = when (tokens[first].letters) {
+                "en", "ao" -> next == "vivo"
+                "a" -> next in setOf("cappella", "capella")
+                "re" -> next == "recorded"
+                "music" -> next == "video"
+                else -> false
+            }
+            return (first + 1).takeIf { (year || paired) && marks[it] }
+        }
+
+        private fun location(lead: Int, end: Int) = lead + 2 < end && places[lead + 1]
+
+        private fun descriptor(first: Int, end: Int, from: Int, until: Int, explicit: Boolean): Boolean {
+            if (explicit && credit(first, end, from, until)) return true
+            val ending = lastWord[end]
+            if (ending <= first || tokens[ending].letters !in NOTE_ENDS) return false
+            if (tokens[first].letters in NOTE_DESCRIPTORS && unknown[end] == unknown[first]) return true
+            val owner = possessive[ending]
+            val bracketed = from > 0 && text[from - 1] in NAME_TAG_OPENS
+            return owner > first && (owner == first + 1 || bracketed) && unknown[end] == unknown[owner + 1]
+        }
+
+        private fun credit(first: Int, end: Int, from: Int, until: Int): Boolean =
+            (tokens[first].letters == "from" && quotes[until] > quotes[from]) || NOTE_CREDITS.any { prefix ->
+                prefix.size < end - first && prefix.indices.all { tokens[first + it].letters == prefix[it] }
+            }
+
+        private fun language(first: Int, end: Int): Boolean {
+            val version = lastWord[end]
+            return version > first && versionLabels[version] && languages[first] && languageUnknown[end] == languageUnknown[first]
+        }
+    }
+
+    /** A mark can join scripts, as カバーLive, without lending its Latin part to the song title. */
+    private fun noteWord(word: String): Boolean {
+        if (word in noteMarks || MetadataParsers.videoCaptionWord(word)) return true
+        if (word.isEmpty()) return false
+        if (word[0] !in noteMarkStarts) return languageVersion(word)
+        val reached = BooleanArray(word.length + 1)
+        reached[0] = true
+        for (at in word.indices) if (reached[at]) {
+            val code = word.codePointAt(at)
+            if (Character.isDigit(code)) reached[at + Character.charCount(code)] = true
+            for (mark in noteMarkStarts[word[at]].orEmpty()) if (word.startsWith(mark, at)) reached[at + mark.length] = true
+        }
+        return reached.last() || languageVersion(word)
+    }
+
+    private fun languageVersion(word: String): Boolean {
+        val label = withoutNoteYear(word)
+        val language = label.removeSuffix("version")
+        return language != label && language.isNotEmpty() && language in noteLanguages
+    }
+
+    private fun withoutNoteYear(word: String): String {
+        var end = word.length
+        while (end > 0 && Character.isDigit(word.codePointBefore(end))) end -= Character.charCount(word.codePointBefore(end))
+        return word.substring(0, end)
+    }
+
+    private val noteLeads = VERSION_WORDS + setOf(
+        "part", "pt", "reprise", "interlude", "extended", "explicit", "clean", "original", "album", "single", "radio", "mono", "stereo",
+        "remaster", "remastered", "recorded", "stripped", "vip", "mv", "version", "ver", "audio", "video", "visualizer", "visualiser", "official", "lyric", "lyrics", "animated", "hd", "hq", "4k"
+    )
+    private val noteMarks = noteLeads.map(::normalize).toSet() + VERSION_MARKS
+    private val noteMarkStarts = noteMarks.groupBy { it.first() }
+    private val noteLanguages by lazy {
+        Locale.getISOLanguages().flatMap { code ->
+            val language = Locale.forLanguageTag(code)
+            listOf(language.getDisplayLanguage(Locale.ENGLISH), language.getDisplayLanguage(language)).flatMap { noteTokens(it).map(NoteToken::letters) }
+        }.toSet()
+    }
+    private val NOTE_QUALIFIERS = setOf("a", "en", "ao", "re", "at", "in", "of", "by", "from", "the", "and", "to", "with", "version", "ver", "edit", "record", "original", "album", "single", "short", "radio", "recorded", "stripped", "alternate", "extended", "take", "s", "up", "off", "vocal", "full", "music", "clip", "club", "studio", "acustica", "akustik")
+    private val NOTE_PLACES = setOf("at", "in", "from", "by", "of")
+    private val VERSION_LABELS = setOf("version", "ver")
+    private val NOTE_ENDS = setOf("version", "ver", "mix", "take", "edit", "recorded")
+    private val NOTE_RECORDINGS = setOf("cover", "covers", "covered", "remix", "mix", "version", "ver", "take", "edit", "recorded")
+    private val NOTE_DESCRIPTORS = setOf("alternate", "akustik", "acustica", "club", "studio")
+    private val NOTE_CREDITS = listOf(listOf("in", "the", "style", "of"), listOf("made", "famous", "by"), listOf("originally", "performed", "by"), listOf("originally", "by"), listOf("made", "popular", "by"), listOf("cover", "of"))
+
+    private const val NAME_TAG_OPENS = TitleDelimiters.OPENS
+    private const val NAME_TAG_CLOSES = TitleDelimiters.CLOSES
+    private const val NAME_TAG_DASHES = TitleDelimiters.DASHES
+    private const val YEAR_DIGITS = 4
 
     /**
      * The same title but for its small words, as sites write them down either way: "Vahos de ayer"
@@ -342,7 +1142,7 @@ internal object SongNames {
      * "Paraquedas (feat. Gusttavo Lima)": some sites have a song under a guest's name only.
      */
     fun withGuests(artist: String, title: String): String =
-        (listOf(artist) + guestCredit.findAll(title).map { it.groupValues[1].trim() }).joinToString(" feat. ")
+        (listOf(artist) + guestCredit.matchesIn(title).map { it.groupValues[1].trim() }).joinToString(" feat. ")
 
     /**
      * The iTunes Store of the country that writes names as [names] are, which names its songs as

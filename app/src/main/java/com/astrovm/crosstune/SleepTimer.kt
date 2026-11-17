@@ -33,16 +33,19 @@ internal class SleepTimer(
         val at = now() + minutes * MINUTE_MS
         start(Sleep(at)) {
             delay(at - now())
-            playback.nowPlaying()?.let { playback.playPause(it.metadata, false) }
+            pauseWhatPlays()
             off()
         }
     }
 
-    /** Pauses [song] as it ends, or what plays once it's no longer playing, e.g. skipped. */
-    fun afterSong(song: MusicMetadata) = start(Sleep()) {
-        playback.follow(song).collectLatest { following ->
+    /**
+     * Pauses [song] as it ends, or what plays once it's no longer playing, e.g. skipped. [app] has it when it names
+     * no song, e.g. a file with no tags, as it's followed and paused there; see [PlaybackSource.follow].
+     */
+    fun afterSong(song: MusicMetadata, app: String? = null) = start(Sleep()) {
+        playback.follow(song, app).collectLatest { following ->
             if (following == null) {
-                playback.nowPlaying()?.let { playback.playPause(it.metadata, false) }
+                pauseWhatPlays()
                 return@collectLatest off()
             }
             // Paused, or of no known length, it waits to hear more.
@@ -50,8 +53,17 @@ internal class SleepTimer(
             val duration = following.durationMs ?: return@collectLatest
             // A moment before its end, as the app may already be on to the next one at it.
             delay(((duration - clock.positionAt(now())) / clock.speed).toLong() - SONG_END_EARLY_MS)
-            playback.playPause(song, false)
+            playback.playPause(song, false, app)
             off()
+        }
+    }
+
+    /** Pauses what plays first, a song or what names none, e.g. a radio station, even cast to a speaker: music to sleep to. */
+    private fun pauseWhatPlays() {
+        when (val first = playback.whatPlays()) {
+            is WhatPlays.Named -> playback.playPause(first.song.metadata, false)
+            is WhatPlays.Nameless -> playback.playPause(first.playing.played, false, first.playing.app)
+            null -> Unit
         }
     }
 

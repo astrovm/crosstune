@@ -25,12 +25,14 @@ class KeptWordsTest {
         syncPoints = listOf(SyncPoint(1_000, 1_250)),
         learning = Learning(
             script = Script.JAPANESE,
-            lines = listOf(LineReading(listOf(Ruby("晴", "は"), Ruby("れた")), "はれた", "hareta", typed = "hareta")),
+            // A reading UtaTen put right says so again.
+            lines = listOf(LineReading(listOf(Ruby("晴", "は"), Ruby("れた"), Ruby("日", "ひ", Reader.SUNG), Ruby("に")), "はれたひに", "hareta hi ni", typed = "hareta hi ni")),
             translations = listOf("On a sunny day", null),
             fromRomaji = true
         ),
         madeWith = "[en, [], true]",
-        chords = ChordsState(tried = true, sheet = ChordSheet(listOf(SheetLine("Walking down", listOf(Chord(0, "G"), Chord(8, "C")))), capo = 2, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/demo-1"))
+        chords = ChordsState(tried = true, sheet = ChordSheet(listOf(SheetLine("Walking down", listOf(Chord(0, "G"), Chord(8, "C")))), capo = 2, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/demo-1")),
+        pace = 0.97
     )
 
     @Test
@@ -42,6 +44,40 @@ class KeptWordsTest {
     fun wordsWithNothingWorkedOutForThemReadBackSo() {
         val bare = KeptWords("Hello", listOf(LyricLine(0, "Hello")), false, null, emptyList(), null, emptyList(), Learning(), "[]", ChordsState())
         assertEquals(bare, KeptWords.from(bare.json()))
+    }
+
+    @Test
+    fun readingsKeptOverKanaAmongKanjiReadBackOverTheKanjiOnly() {
+        val flying = all.copy(learning = all.learning.copy(lines = listOf(LineReading(listOf(Ruby("飛び立", "とびた"), Ruby("つ")), "とびたつ", "tobitatsu"))))
+        val back = KeptWords.from(flying.json())!!
+        assertEquals(listOf(Ruby("飛", "と"), Ruby("び"), Ruby("立", "た"), Ruby("つ")), back.learning.lines.single().parts)
+    }
+
+    @Test
+    fun readingsKeptOverKanaTheySpellAnotherWayReadBackOverTheKanjiOnly() {
+        val today = all.copy(learning = all.learning.copy(lines = listOf(LineReading(listOf(Ruby("今日は", "こんにちわ")), "こんにちわ", "konnichiwa"))))
+        val back = KeptWords.from(today.json())!!
+        assertEquals(listOf(Ruby("今日", "こんにち"), Ruby("は", "わ")), back.learning.lines.single().parts)
+    }
+
+    @Test
+    fun aReadingPutRightByWhatThisVersionDoesntKnowReadsBackAsTheDictionarys() {
+        val back = KeptWords.from(all.json().replace("\"utaten\"", "\"klingon\""))!!
+        assertEquals(Ruby("日", "ひ"), back.learning.lines.single().parts[2])
+    }
+
+    @Test
+    fun wordsKeptBeforeTheirPaceWasGoOnAsTimed() {
+        val before = org.json.JSONObject(all.json()).apply { remove("pace") }.toString()
+        assertEquals(all.copy(pace = 1.0), KeptWords.from(before))
+    }
+
+    @Test
+    fun readingsKeptBeforeTheyCouldBeUnfinishedAreReadAgainOnce() {
+        val before = org.json.JSONObject(all.json()).apply { remove("readingsUnfinished") }.toString()
+        assertEquals(true, KeptWords.from(before)?.learning?.readingsUnfinished)
+        // Kept since, they're as they were left.
+        assertEquals(false, KeptWords.from(all.json())?.learning?.readingsUnfinished)
     }
 
     @Test

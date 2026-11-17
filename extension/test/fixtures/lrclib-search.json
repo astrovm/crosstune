@@ -1,0 +1,50 @@
+[
+ {
+  "id": 1,
+  "name": "Africa",
+  "trackName": "Africa",
+  "artistName": "Toto",
+  "albumName": "Toto IV",
+  "duration": 295.0,
+  "instrumental": false,
+  "hasWordSync": false,
+  "plainLyrics": "Paper boats along the river\nWe sang until the morning came\nEvery window holds a lantern\nAnd the night forgets its name",
+  "syncedLyrics": "[00:10.50] Paper boats along the river\n[00:15.50] We sang until the morning came\n[00:20.50] Every window holds a lantern\n[00:25.50] And the night forgets its name\n[00:31.00] "
+ },
+ {
+  "id": 2,
+  "name": "Africa",
+  "trackName": "Africa",
+  "artistName": "Toto",
+  "albumName": "Live in Somewhere",
+  "duration": 340.0,
+  "instrumental": false,
+  "hasWordSync": false,
+  "plainLyrics": "Paper boats along the river\nWe sang until the morning came\nEvery window holds a lantern\nAnd the night forgets its name",
+  "syncedLyrics": "[00:40.50] Paper boats along the river\n[00:45.50] We sang until the morning came\n[00:50.50] Every window holds a lantern\n[00:55.50] And the night forgets its name\n[00:61.00] "
+ },
+ {
+  "id": 3,
+  "name": "Africa",
+  "trackName": "Africa",
+  "artistName": "A Cover Band",
+  "albumName": "Covers",
+  "duration": 280.0,
+  "instrumental": false,
+  "hasWordSync": false,
+  "plainLyrics": "Words of another song",
+  "syncedLyrics": null
+ },
+ {
+  "id": 4,
+  "name": "Africa (Live)",
+  "trackName": "Africa (Live)",
+  "artistName": "Toto",
+  "albumName": "Live",
+  "duration": 330.0,
+  "instrumental": false,
+  "hasWordSync": false,
+  "plainLyrics": "Live words only",
+  "syncedLyrics": null
+ }
+]

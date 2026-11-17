@@ -1,0 +1,1 @@
+LetrasSug({"response": {"numFound": 2, "docs": [{"art": "Mercedes Sosa", "dns": "mercedes-sosa", "txt": "Gracias a La Vida", "t": "2", "url": "37544", "full_txt": "Gracias a La Vida Mercedes Sosa"}, {"art": "Mercedes Sosa", "dns": "mercedes-sosa", "txt": "Como Pajaros En El Aire", "t": "2", "url": "200666", "full_txt": "Como Pajaros En El Aire Mercedes Sosa"}]}})

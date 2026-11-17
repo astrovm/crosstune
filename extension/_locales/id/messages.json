@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "Membuka link musik di layanan pilihanmu."
-  },
-  "actionTitle": {
-    "message": "Setelan Crosstune"
-  },
-  "optionsEnabled": {
-    "message": "Buka link musik di layanan di bawah"
-  },
-  "optionsService": {
-    "message": "Buka di"
-  },
-  "optionsAccess": {
-    "message": "Crosstune perlu akses ke situs musik untuk membuka link untukmu."
-  },
-  "optionsAllow": {
-    "message": "Izinkan"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "Membuka link musik di layanan pilihanmu dan menampilkan lirik lagu yang sedang diputar." },
+  "actionTitle": { "message": "Lirik Crosstune" },
+  "optionsEnabled": { "message": "Buka link musik di layanan di bawah" },
+  "optionsService": { "message": "Buka di" },
+  "optionsAccess": { "message": "Crosstune perlu akses ke situs musik untuk membuka link dan menampilkan lirik." },
+  "optionsAllow": { "message": "Izinkan" },
+  "lyricsNoSong": { "message": "Putar lagu di situs musik" },
+  "lyricsLoading": { "message": "Mencari lirik" },
+  "lyricsNone": { "message": "Tidak ada lirik untuk lagu ini" },
+  "lyricsInstrumental": { "message": "Instrumental" },
+  "lyricsOffline": { "message": "Kamu sedang offline" },
+  "lyricsUnavailable": { "message": "Tidak bisa menghubungi situs lirik" },
+  "lyricsRetry": { "message": "Coba lagi" },
+  "lyricsSettings": { "message": "Setelan" }
 }

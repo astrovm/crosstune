@@ -1,0 +1,987 @@
+package com.astrovm.crosstune
+
+import android.app.AlarmManager
+import android.app.Application
+import android.app.Notification
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
+import androidx.core.app.NotificationCompat
+import androidx.test.core.app.ApplicationProvider
+import java.time.LocalDateTime
+import java.time.ZoneId
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowAlarmManager
+import org.robolectric.annotation.Config
+import org.robolectric.util.ReflectionHelpers
+
+/** When due cards are asked back, what's said, and when nothing is. */
+@RunWith(RobolectricTestRunner::class)
+class PracticeRemindersTest {
+
+    private val app: Application = ApplicationProvider.getApplicationContext()
+    private val zone = ZoneId.of("America/Argentina/Buenos_Aires")
+    private var clock = at(day = 2, hour = 20, minute = 5)
+    private val alarms get() = shadowOf(app.getSystemService(AlarmManager::class.java))
+    private val manager get() = app.getSystemService(NotificationManager::class.java)
+    private val shown get() = shadowOf(manager).allNotifications
+    private val reminders by lazy { PracticeReminders(app, now = { clock }, zone = { zone }) }
+
+    private fun at(day: Int, hour: Int, minute: Int = 0, zone: ZoneId = this.zone) = LocalDateTime.of(2026, 3, day, hour, minute).atZone(zone).toInstant().toEpochMilli()
+
+    /** The day's alarm as the app asks Android for it: it's the same one that's found, set or cancelled. */
+    private fun alarmIntent(flag: Int): PendingIntent? =
+        PendingIntent.getBroadcast(app, 0, Intent(PracticeReminders.ACTION_REMIND).setClass(app, PracticeReminderReceiver::class.java), PendingIntent.FLAG_IMMUTABLE or flag)
+
+    /** The inexact spare, a different action, so Android keeps it when it deletes the exact alarm. */
+    private fun keepIntent(flag: Int): PendingIntent? =
+        PendingIntent.getBroadcast(app, 1, Intent(PracticeReminders.ACTION_REMIND_KEEP).setClass(app, PracticeReminderReceiver::class.java), PendingIntent.FLAG_IMMUTABLE or flag)
+
+    private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    private fun saved(vararg lines: JSONObject) = prefs().edit().putString("saved_lines", JSONArray(lines.toList()).toString()).commit()
+
+    private fun line(text: String, title: String = "Demo", due: Long = 0) =
+        JSONObject().put("text", text).put("translation", "Meaning").put("title", title).put("artist", "Band").put("due", due)
+
+    /** The bell set after a first session at 20:05, with [lines] saved. */
+    private fun setUpWith(vararg lines: JSONObject) {
+        saved(*lines)
+        reminders.sessionDone()
+        reminders.turn(true)
+    }
+
+    /** The alarm going, on [day], at 20:05. */
+    private fun firesOn(day: Int) {
+        clock = at(day, 20, 5)
+        reminders.remind()
+    }
+
+    private fun Notification.title() = extras.getString(Notification.EXTRA_TITLE)
+
+    @Before
+    fun setUp() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        // Android's page for it, where a user has allowed it.
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+    }
+
+    @Test
+    fun aReminderIsTheNextTimeTheWallSaysItsMinute() {
+        val eight = 20 * 60
+        // Still to come today.
+        assertEquals(at(2, 20), nextReminderAt(eight, at(2, 9), zone))
+        // Gone by, and only just there, it's tomorrow, so an alarm that just went doesn't go again.
+        assertEquals(at(3, 20), nextReminderAt(eight, at(2, 21), zone))
+        assertEquals(at(3, 20), nextReminderAt(eight, at(2, 20), zone))
+        // Moved to another time zone, it's that zone's eight o'clock.
+        val tokyo = ZoneId.of("Asia/Tokyo")
+        assertEquals(at(2, 20, zone = tokyo), nextReminderAt(eight, at(2, 9, zone = tokyo), tokyo))
+    }
+
+    @Test
+    fun aClockGoingForwardOrBackKeepsTheSameHourOnTheWall() {
+        val newYork = ZoneId.of("America/New_York")
+        // Clocks go forward on March 8th, 2026, so that day is an hour short.
+        val before = LocalDateTime.of(2026, 3, 7, 21, 0).atZone(newYork).toInstant().toEpochMilli()
+        val next = nextReminderAt(20 * 60, before, newYork)
+        assertEquals(LocalDateTime.of(2026, 3, 8, 20, 0), java.time.Instant.ofEpochMilli(next).atZone(newYork).toLocalDateTime())
+        // 23 hours away by the wall, 22 by the clock, the hour that day skips.
+        assertEquals(22 * 60 * 60_000L, next - before)
+    }
+
+    @Test
+    fun theDayAfterAGapReturnsToTheChosenMinute() {
+        val berlin = ZoneId.of("Europe/Berlin")
+        assertEquals(at(30, 2, 30, berlin), nextReminderAt(150, at(29, 3, 33, berlin), berlin))
+    }
+
+    @Test
+    fun theLatestDueMinuteAndNextOneBoundNowAcrossTimeZones() {
+        val instants = listOf("2026-03-29T01:10:00Z", "2026-11-01T06:15:00Z", "2011-12-30T12:00:00Z")
+        for (name in ZoneId.getAvailableZoneIds()) {
+            val local = ZoneId.of(name)
+            for (instant in instants) {
+                val now = java.time.Instant.parse(instant).toEpochMilli()
+                for (minute in listOf(0, 150, 1410)) {
+                    val due = latestReminderAt(minute, now, local)
+                    val context = "$name $instant $minute"
+                    assertTrue(context, due <= now)
+                    assertTrue(context, nextReminderAt(minute, due, local) > now)
+                    assertEquals(context, due, nextReminderAt(minute, due - 1, local))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun theMinuteOfTheDayIsWhatTheWallSays() {
+        assertEquals(20 * 60 + 5, minuteOfDay(at(2, 20, 5), zone))
+        assertEquals(0, minuteOfDay(at(2, 0), zone))
+    }
+
+    @Test
+    fun aSessionCountsForTheSameDayOrAcrossMidnightButNotForTheNextDayAtTheSameTime() {
+        // Earlier today, even long before.
+        assertTrue(practisedLately(at(2, 7), at(2, 20), zone))
+        // Just before midnight, with a reminder just after.
+        assertTrue(practisedLately(at(1, 23, 50), at(2, 0, 30), zone))
+        // Just after yesterday's reminder, today's still goes, or it would go every other day.
+        assertFalse(practisedLately(at(1, 20, 10), at(2, 20), zone))
+        // Never.
+        assertFalse(practisedLately(0, at(2, 20), zone))
+        // Six hours ago to the minute, over midnight, is no longer lately; a minute short of it still is.
+        assertFalse(practisedLately(at(1, 18), at(2, 0), zone))
+        assertTrue(practisedLately(at(1, 18, 1), at(2, 0), zone))
+    }
+
+    @Test
+    fun aSessionDoneTakesBackAReminderAndStartsTheCountOverToo() {
+        setUpWith(line("One"))
+        prefs().edit().remove("practice_reminder_done_at").commit()
+        firesOn(3)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        reminders.sessionDone()
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", -1))
+        assertNotNull(alarms.peekNextScheduledAlarm())
+    }
+
+    @Test
+    fun theTimeIsWrittenTheWayThePhoneWritesIt() {
+        assertTrue(reminderTime(app, 20 * 60 + 5).startsWith("8:05"))
+        assertTrue(reminderTime(app, 0).startsWith("12:00"))
+        assertTrue(reminderTime(app, 9 * 60 + 30).startsWith("9:30"))
+    }
+
+    @Test
+    fun midnightIsATimeLikeAnyOther() {
+        reminders.sessionDone()
+        reminders.turn(true)
+        reminders.at(0)
+        assertEquals(0, reminders.state.minute)
+        assertEquals(at(3, 0), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun theAlarmMakesTheChannelItShowsInWhenAndroidHasNone() {
+        setUpWith(line("One"))
+        manager.deleteNotificationChannel(PracticeReminders.CHANNEL)
+        assertNull(manager.getNotificationChannel(PracticeReminders.CHANNEL))
+        firesOn(3)
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, manager.getNotificationChannel(PracticeReminders.CHANNEL)?.importance)
+    }
+
+    @Test
+    fun itNamesTheSongDueLongestAndHowManyMore() {
+        val named = { first: String, others: Int -> "$first +$others" }
+        assertNull(reminderSongs(emptyList(), named))
+        val demo = SavedLine("One", title = "Demo", artist = "Band")
+        // Two lines of one song are one song.
+        assertEquals("Demo", reminderSongs(listOf(demo, demo.copy(text = "Two")), named))
+        assertEquals("Demo +2", reminderSongs(listOf(demo, demo.copy(title = "Other"), demo.copy(text = "Two"), demo.copy(title = "Third")), named))
+        // The same name by someone else is another song.
+        assertEquals("Demo +1", reminderSongs(listOf(demo, demo.copy(artist = "Other band")), named))
+    }
+
+    @Test
+    fun theFirstSessionSetsTheTimeAndLaterOnesLeaveIt() {
+        assertNull(reminders.state.minute)
+        reminders.sessionDone()
+        assertEquals(20 * 60 + 5, reminders.state.minute)
+        clock = at(3, 9)
+        reminders.sessionDone()
+        assertEquals(20 * 60 + 5, reminders.state.minute)
+    }
+
+    @Test
+    fun turnedOnWithExactAlarmsAllowedItSetsOneThatGoesOnTimeEvenInDoze() {
+        reminders.sessionDone()
+        // Off, nothing wakes the phone.
+        reminders.arm()
+        assertNull(alarms.peekNextScheduledAlarm())
+        reminders.turn(true)
+        val set = alarms.scheduledAlarms
+        // The exact one, and the inexact spare for the same minute. Two at one time, so the next in line is either.
+        assertEquals(2, set.size)
+        assertTrue(set.all { it.triggerAtMs == at(3, 20, 5) && it.getType() == AlarmManager.RTC_WAKEUP && it.isAllowWhileIdle })
+        assertEquals(1, set.count { it.windowLengthMs == 0L })
+        assertEquals(1, set.count { it.windowLengthMs != 0L })
+        assertTrue(reminders.state.exact)
+        assertFalse(reminders.state.late)
+        assertNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))
+        assertNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))
+        reminders.turn(false)
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+    }
+
+    @Test
+    fun withoutThePermissionItSetsTheInexactOneAndSaysItCanBeLate() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        reminders.sessionDone()
+        reminders.turn(true)
+        val alarm = requireNotNull(alarms.scheduledAlarms.singleOrNull())
+        assertEquals(at(3, 20, 5), alarm.triggerAtMs)
+        assertEquals(true, alarm.isAllowWhileIdle)
+        assertTrue(alarm.windowLengthMs != 0L)
+        assertFalse(reminders.state.exact)
+        // Only a reminder that's on can be late.
+        assertTrue(reminders.state.late)
+        reminders.turn(false)
+        assertFalse(reminders.state.late)
+    }
+
+    /**
+     * Revoking alarms and reminders deletes every exact alarm and does not start the app, and the
+     * broadcast is not sent. The shadow only flips the flag, so the exact alarm is dropped here the
+     * way Android does. A due reminder must still arrive from an alarm Android keeps.
+     */
+    @Test
+    fun revokedExactAlarmsStillDeliverTheReminderWithoutTheAppBeingOpened() {
+        setUpWith(line("One"))
+        assertTrue(reminders.state.exact)
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        val manager = app.getSystemService(AlarmManager::class.java)
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        val kept = alarms.scheduledAlarms
+        assertEquals("Android kept no alarm once the exact one was dropped", 1, kept.size)
+        assertTrue(kept.single().windowLengthMs != 0L)
+        assertTrue(kept.single().isAllowWhileIdle)
+        val keep = requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))
+        val delivered = Intent(shadowOf(keep).savedIntent)
+        // Cancelling that spare leaves nothing, so the alarm Android kept is the spare.
+        manager.cancel(keep)
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        // One minute on, so the stored minute is the alarm's own, not whatever the clock says now.
+        clock = at(3, 20, 6)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals("1 card to practice", shown.single().title())
+        assertEquals(delivered.getLongExtra(PracticeReminders.EXTRA_AT, 0L), prefs().getLong("practice_reminder_posted_for", 0L))
+    }
+
+    @Test
+    fun theSameAlarmIsReplacedWhenThePermissionChangesSoOneIsNeverLeftBehind() {
+        reminders.sessionDone()
+        reminders.turn(true)
+        assertEquals(2, alarms.scheduledAlarms.size)
+        val manager = app.getSystemService(AlarmManager::class.java)
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        // Android deletes the exact one as it revokes the access. The process is still here, so the app sets the inexact one.
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        assertEquals(1, alarms.scheduledAlarms.size)
+        reminders.arm()
+        assertEquals(1, alarms.scheduledAlarms.size)
+        assertTrue(alarms.scheduledAlarms.single().windowLengthMs != 0L)
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        reminders.arm()
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        reminders.arm()
+        assertEquals(2, alarms.scheduledAlarms.size)
+        assertEquals(1, alarms.scheduledAlarms.count { it.windowLengthMs == 0L })
+        assertNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))
+    }
+
+    /** Before Android 12 there's no permission: exact is always allowed. */
+    @Test
+    @Config(sdk = [30])
+    fun beforeAndroidTwelveExactNeedsNothingAsked() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        reminders.sessionDone()
+        reminders.turn(true)
+        assertEquals(1, alarms.scheduledAlarms.size)
+        assertEquals(0L, alarms.scheduledAlarms.single().windowLengthMs)
+        assertTrue(reminders.state.exact)
+    }
+
+    /**
+     * Android 12 is the first one that asks, so the spare starts on that version, not the one after.
+     * Robolectric has no jar for it, so only the number is set. Exact is allowed, which is when the spare is set.
+     */
+    @Test
+    fun onAndroidTwelveItselfTheExactMinuteKeepsASpare() {
+        val was = Build.VERSION.SDK_INT
+        ReflectionHelpers.setStaticField(Build.VERSION::class.java, "SDK_INT", Build.VERSION_CODES.S)
+        try {
+            ShadowAlarmManager.setCanScheduleExactAlarms(true)
+            reminders.sessionDone()
+            reminders.turn(true)
+            val set = alarms.scheduledAlarms
+            assertEquals(2, set.size)
+            assertEquals(1, set.count { it.windowLengthMs == 0L })
+            assertEquals(1, set.count { it.windowLengthMs != 0L })
+            assertNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))
+        } finally {
+            ReflectionHelpers.setStaticField(Build.VERSION::class.java, "SDK_INT", was)
+        }
+    }
+
+    /** Android 12 is the first one that asks, so the boundary is its own version. Robolectric has no jar for it, so only the number is set. */
+    @Test
+    fun onAndroidTwelveItselfExactIsTheUsersToAllow() {
+        val was = Build.VERSION.SDK_INT
+        ReflectionHelpers.setStaticField(Build.VERSION::class.java, "SDK_INT", Build.VERSION_CODES.S)
+        try {
+            ShadowAlarmManager.setCanScheduleExactAlarms(false)
+            reminders.sessionDone()
+            reminders.turn(true)
+            assertEquals(1, alarms.scheduledAlarms.size)
+            assertTrue(alarms.scheduledAlarms.single().windowLengthMs != 0L)
+            assertFalse(reminders.state.exact)
+        } finally {
+            ReflectionHelpers.setStaticField(Build.VERSION::class.java, "SDK_INT", was)
+        }
+    }
+
+    @Test
+    fun theExactAlarmPageIsTheAppsOwnOnAndroidsAlarmsAndRemindersList() {
+        val page = reminders.exactPage
+        assertEquals(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, page.action)
+        assertEquals("package:${app.packageName}", page.dataString)
+    }
+
+    @Test
+    fun theAppAsksForTheExactAlarmPermissionAndHearsWhenItChanges() {
+        val declared = app.packageManager.getPackageInfo(app.packageName, android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
+        assertTrue("android.permission.SCHEDULE_EXACT_ALARM" in declared)
+        // Never the one for alarm and calendar apps, which Play gives only to them.
+        assertFalse("android.permission.USE_EXACT_ALARM" in declared)
+        val heard = app.packageManager.queryBroadcastReceivers(Intent(AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED).setPackage(app.packageName), 0)
+        assertTrue(heard.any { it.activityInfo.name == PracticeReminderReceiver::class.java.name })
+    }
+
+    @Test
+    fun allowedFromAndroidsSettingsTheReceiverSetsTheAlarmAgainExact() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        val phone = PracticeReminders(app)
+        phone.sessionDone()
+        phone.turn(true)
+        assertTrue(requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs != 0L)
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        PracticeReminderReceiver().onReceive(app, Intent(AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED))
+        assertEquals(2, alarms.scheduledAlarms.size)
+        assertEquals(1, alarms.scheduledAlarms.count { it.windowLengthMs == 0L })
+        assertNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))
+    }
+
+    @Test
+    fun theTimeCanBeChanged() {
+        reminders.sessionDone()
+        reminders.turn(true)
+        reminders.at(9 * 60)
+        assertEquals(9 * 60, reminders.state.minute)
+        assertEquals(at(3, 9), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun returningAfterTheMinuteKeepsAnUndeliveredReminderForToday() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        setUpWith(line("One"))
+        val today = at(3, 20, 5)
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = today
+        reminders.arm()
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(3, 20, 8)
+        reminders.arm()
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+
+        // A new process and a newly allowed exact alarm must retain that same due minute too.
+        val restarted = PracticeReminders(app, now = { clock }, zone = { zone })
+        restarted.arm()
+        assertEquals(today, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        restarted.arm()
+        assertEquals(2, alarms.scheduledAlarms.size)
+        assertTrue(alarms.scheduledAlarms.all { it.triggerAtMs == today })
+        assertEquals(1, alarms.scheduledAlarms.count { it.windowLengthMs == 0L })
+    }
+
+    @Test
+    fun restartingAfterSeveralOccurrencesArmsTheLatestDueMinute() {
+        setUpWith(line("One"))
+        for (day in listOf(4, 6)) {
+            prefs().edit().putLong("practice_reminder_armed_for", at(3, 20, 5)).commit()
+            clock = at(day, 21)
+            PracticeReminders(app, now = { clock }, zone = { zone }).arm()
+            assertEquals(at(day, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        }
+    }
+
+    @Test
+    fun rearmingALateEveningDeliveryCanCrossMidnightBeforeItsNextOccurrence() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        clock = at(2, 23, 30)
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(4, 0, 5)
+        reminders.arm()
+        assertEquals(at(3, 23, 30), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(4, 0, 10)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(4, 23, 30), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun restartingWithinTheCurrentOccurrenceKeepsItsUndeliveredSlot() {
+        setUpWith(line("One"))
+        clock = at(4, 7)
+        PracticeReminders(app, now = { clock }, zone = { zone }).arm()
+        assertEquals(at(3, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aDeliveryBeforeItsSlotDoesNotPost() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 4)
+        // Android removes a delivered alarm. A rejected early delivery must put it back.
+        val manager = app.getSystemService(AlarmManager::class.java)
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        manager.cancel(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE)))
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(at(3, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aDeliveryAtItsSlotPosts() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+    }
+
+    @Test
+    fun aDeliveryWithoutAChosenMinuteDoesNotPost() {
+        saved(line("One"))
+        reminders.turn(true)
+        reminders.remind(Intent().putExtra(PracticeReminders.EXTRA_AT, clock))
+        assertTrue(shown.isEmpty())
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+    }
+
+    @Test
+    fun aDeliveryPastItsNextOccurrencePostsTheLatestDueMinuteOnce() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(4, 20, 30)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(at(4, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
+        assertEquals(at(5, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        reminders.remind(delivered)
+        reminders.remind(Intent(delivered).putExtra(PracticeReminders.EXTRA_AT, at(4, 20, 5)))
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        clock = at(6, 20, 30)
+        reminders.remind(delivered)
+        assertEquals(2, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(6, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
+    fun anOlderPendingSlotCannotRearmAnOccurrenceAlreadyPosted() {
+        setUpWith(line("One"))
+        prefs().edit().putLong("practice_reminder_posted_for", at(4, 20, 5)).commit()
+        clock = at(4, 21)
+        reminders.arm()
+        assertEquals(at(5, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aDeliveryForAnotherMinuteCannotConsumeThePendingReminder() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 8)
+        reminders.remind(Intent(delivered).putExtra(PracticeReminders.EXTRA_AT, at(3, 19)))
+        assertTrue(shown.isEmpty())
+        assertEquals(at(3, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+    }
+
+    @Test
+    fun aBlockedDeliveryConsumesTheOccurrenceBeforeItsSpareArrives() {
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        val spare = Intent(shadowOf(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        shadowOf(manager).setNotificationsEnabled(false)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        shadowOf(manager).setNotificationsEnabled(true)
+        reminders.remind(spare)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(3, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
+    fun aDeliveryWithNoDueCardsConsumesTheOccurrenceBeforeItsSpareArrives() {
+        setUpWith(line("One", due = at(4, 20, 5)))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        val spare = Intent(shadowOf(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        saved(line("One"))
+        reminders.remind(spare)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(3, 20, 5), prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
+    fun practiceOnTheIntendedDayStillCountsAfterMidnightOrRestart() {
+        val berlin = ZoneId.of("Europe/Berlin")
+        clock = at(3, 7, zone = berlin)
+        val local = PracticeReminders(app, now = { clock }, zone = { berlin })
+        saved(line("One"))
+        local.sessionDone()
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        for (hour in listOf(0, 7)) {
+            clock = at(4, hour, 10, berlin)
+            PracticeReminders(app, now = { clock }, zone = { berlin }).arm()
+            local.remind(delivered)
+            assertTrue(shown.isEmpty())
+            assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+        }
+    }
+
+    @Test
+    fun practiceOnTheGapDayCountsForTheShiftedMidnightOccurrence() {
+        val nuuk = ZoneId.of("America/Nuuk")
+        clock = java.time.Instant.parse("2026-03-28T14:00:00Z").toEpochMilli()
+        val local = PracticeReminders(app, now = { clock }, zone = { nuuk })
+        saved(line("One"))
+        local.sessionDone()
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = java.time.Instant.parse("2026-03-29T01:30:00Z").toEpochMilli()
+        local.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
+    fun practiceAtTheStartOfTheIntendedDaySuppressesItsReminder() {
+        clock = at(3, 0)
+        saved(line("One"))
+        reminders.sessionDone()
+        reminders.at(20 * 60 + 5)
+        reminders.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 5)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
+    fun exactlySixHoursOfRestBeforeTheIntendedDayAllowsItsReminder() {
+        clock = at(2, 18)
+        saved(line("One"))
+        reminders.sessionDone()
+        reminders.at(0)
+        reminders.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 0)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
+    fun restBeforeTheOccurrenceStillCountsWhenDeliveryIsHeld() {
+        clock = at(3, 19)
+        saved(line("One"))
+        reminders.sessionDone()
+        reminders.at(30)
+        reminders.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(4, 8)
+        reminders.remind(delivered)
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", 0))
+    }
+
+    @Test
+    fun aMidnightGapKeepsItsShiftedAlarmBeforeItFires() {
+        val nuuk = ZoneId.of("America/Nuuk")
+        clock = java.time.Instant.parse("2026-03-28T22:00:00Z").toEpochMilli()
+        val local = PracticeReminders(app, now = { clock }, zone = { nuuk })
+        saved(line("One"))
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val shifted = java.time.Instant.parse("2026-03-29T01:30:00Z").toEpochMilli()
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = shifted - 20 * 60_000L
+        local.arm()
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun aMidnightGapDeliversItsShiftedAlarmOnTime() {
+        val nuuk = ZoneId.of("America/Nuuk")
+        clock = java.time.Instant.parse("2026-03-28T22:00:00Z").toEpochMilli()
+        val local = PracticeReminders(app, now = { clock }, zone = { nuuk })
+        saved(line("One"))
+        local.at(23 * 60 + 30)
+        local.turn(true)
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = java.time.Instant.parse("2026-03-29T01:30:00Z").toEpochMilli()
+        local.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(clock, prefs().getLong("practice_reminder_posted_for", 0))
+    }
+
+    @Test
+    fun aGapInTheClockKeepsTodaysShiftedOccurrence() {
+        val berlin = ZoneId.of("Europe/Berlin")
+        clock = at(29, 1, zone = berlin)
+        val local = PracticeReminders(app, now = { clock }, zone = { berlin })
+        saved(line("One"))
+        local.at(2 * 60 + 30)
+        local.turn(true)
+        val shifted = at(29, 3, 30, berlin)
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(29, 3, 33, berlin)
+        local.arm()
+        assertEquals(shifted, alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun choosingTheMinutePractisingOrTurningOffStartsAfresh() {
+        setUpWith(line("One"))
+        clock = at(3, 20, 8)
+        reminders.at(20 * 60 + 7)
+        assertEquals(at(4, 20, 7), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(4, 20, 8)
+        reminders.practised()
+        assertEquals(at(5, 20, 7), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        clock = at(5, 20, 8)
+        reminders.turn(false)
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        reminders.turn(true)
+        assertEquals(at(6, 20, 7), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun anUndeliveredReminderMovesToTheRequestedMinuteInTheNewZone() {
+        setUpWith(line("One"))
+        clock = at(3, 20, 8)
+        val tokyo = ZoneId.of("Asia/Tokyo")
+        PracticeReminders(app, now = { clock }, zone = { tokyo }).arm()
+        assertEquals(at(4, 20, 5, zone = tokyo), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun deliveringAnOverdueAlarmConsumesItsSlotAndStillIgnoresDuplicates() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        setUpWith(line("One"))
+        val delivered = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        clock = at(3, 20, 8)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        reminders.arm()
+        assertEquals(at(4, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        reminders.remind(delivered)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(at(4, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun itSaysHowManyAndWhichSongsThenOpensThePractice() {
+        setUpWith(line("One"), line("Two"), line("Three", "Other"))
+        // A new card is the one due longest, so they're all there, and the session's over a day ago.
+        firesOn(3)
+        val notification = shown.single()
+        assertEquals("3 cards to practice", notification.title())
+        assertEquals("Demo and 1 more", notification.extras.getString(Notification.EXTRA_TEXT))
+        assertEquals(PracticeReminders.CHANNEL, notification.channelId)
+        // Tapped, it goes away, and it opens through the alias only Crosstune can reach.
+        assertTrue(notification.flags and Notification.FLAG_AUTO_CANCEL != 0)
+        val opens = shadowOf(notification.contentIntent).savedIntent
+        assertEquals(MainActivity.ACTION_PRACTISE, opens.action)
+        assertEquals(MainActivity.PRACTISE_ALIAS, opens.component?.className)
+        // On the lock screen, only the count.
+        assertEquals(NotificationCompat.VISIBILITY_PRIVATE, notification.visibility)
+        assertEquals("3 cards to practice", notification.publicVersion.title())
+        assertNull(notification.publicVersion.extras.getString(Notification.EXTRA_TEXT))
+        // And tomorrow's is set.
+        assertEquals(at(4, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun oneCardIsOneCardOfOneSong() {
+        setUpWith(line("One"))
+        firesOn(3)
+        assertEquals("1 card to practice", shown.single().title())
+        assertEquals("Demo", shown.single().extras.getString(Notification.EXTRA_TEXT))
+        // Asked directly, with no minute on the intent: nothing is stored to tell a second delivery by.
+        assertFalse(prefs().contains("practice_reminder_posted_for"))
+    }
+
+    @Test
+    fun nothingDueSaysNothingAndTomorrowsIsStillSet() {
+        setUpWith(line("Later", due = at(9, 0)))
+        firesOn(3)
+        assertTrue(shown.isEmpty())
+        assertEquals(at(4, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        // Nor are days with nothing to say ignored ones.
+        firesOn(4)
+        firesOn(5)
+        firesOn(6)
+        assertEquals(at(7, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        // Once due, it says so.
+        firesOn(9)
+        assertEquals("1 card to practice", shown.single().title())
+    }
+
+    @Test
+    fun aCardOfAKindTurnedOffIsntDue() {
+        saved(line("One"))
+        saveCardTypes(prefs(), DEFAULT_CARD_TYPES.map { if (it.id == READ_TYPE) it.copy(on = false) else it.copy(on = it.id == HEAR_TYPE) })
+        reminders.sessionDone()
+        reminders.turn(true)
+        // Hearing it needs a line that's timed.
+        firesOn(3)
+        assertTrue(shown.isEmpty())
+    }
+
+    @Test
+    fun aSessionDoneThatDaySaysNothingEvenWithCardsLeft() {
+        setUpWith(line("One"))
+        clock = at(3, 7)
+        reminders.sessionDone()
+        firesOn(3)
+        assertTrue(shown.isEmpty())
+        firesOn(4)
+        assertEquals(1, shown.size)
+    }
+
+    @Test
+    fun threeIgnoredInARowStopThemUntilTheNextTimeCardsArePractised() {
+        setUpWith(line("One"))
+        firesOn(3)
+        firesOn(4)
+        firesOn(5)
+        assertEquals(1, shown.size)
+        // No fourth: nothing wakes the phone for it, even after a reboot.
+        assertNull(alarms.peekNextScheduledAlarm())
+        clock = at(6, 8)
+        reminders.arm()
+        assertNull(alarms.peekNextScheduledAlarm())
+        // The one showing is out of date as soon as a card's practised, and they start over.
+        reminders.practised()
+        assertTrue(shown.isEmpty())
+        assertEquals(at(6, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+        firesOn(7)
+        firesOn(8)
+        firesOn(9)
+        assertNull(alarms.peekNextScheduledAlarm())
+        // Turned off and on again, they start over too.
+        reminders.turn(false)
+        assertTrue(shown.isEmpty())
+        reminders.turn(true)
+        assertEquals(at(10, 20, 5), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun notAllowedItSaysNothingAndCountsNothingAndShowsAsBlocked() {
+        setUpWith(line("One"))
+        assertEquals(Reminder(20 * 60 + 5, on = true, allowed = true, turnedOff = false), reminders.state)
+        assertTrue(reminders.state.working)
+        shadowOf(manager).setNotificationsEnabled(false)
+        assertTrue(reminders.state.blocked)
+        assertFalse(reminders.state.working)
+        assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, reminders.settingsPage.action)
+        assertEquals(app.packageName, reminders.settingsPage.getStringExtra(Settings.EXTRA_APP_PACKAGE))
+        // With the channel named too, Android shows that channel's page, whose switch can't undo the app's being off.
+        assertNull(reminders.settingsPage.getStringExtra(Settings.EXTRA_CHANNEL_ID))
+        repeat(5) { firesOn(3 + it) }
+        assertTrue(shown.isEmpty())
+        // Still set, for when they're allowed again.
+        shadowOf(manager).setNotificationsEnabled(true)
+        firesOn(8)
+        assertEquals(1, shown.size)
+    }
+
+    @Test
+    fun onlyTheChannelTurnedOffIsBlockedToo() {
+        setUpWith(line("One"))
+        manager.getNotificationChannel(PracticeReminders.CHANNEL).importance = NotificationManager.IMPORTANCE_NONE
+        manager.createNotificationChannel(manager.getNotificationChannel(PracticeReminders.CHANNEL))
+        assertTrue(reminders.state.blocked)
+        assertEquals(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS, reminders.settingsPage.action)
+        assertEquals(PracticeReminders.CHANNEL, reminders.settingsPage.getStringExtra(Settings.EXTRA_CHANNEL_ID))
+        firesOn(3)
+        assertTrue(shown.isEmpty())
+    }
+
+    @Test
+    fun takenBackWhenAskedTo() {
+        setUpWith(line("One"))
+        firesOn(3)
+        reminders.clear()
+        assertTrue(shown.isEmpty())
+    }
+
+    @Test
+    @Config(sdk = [32])
+    fun androidTwelveHasNoPermissionToAskAndStillShowsIt() {
+        setUpWith(line("One"))
+        firesOn(3)
+        assertEquals(1, shown.size)
+    }
+
+    @Test
+    fun theAlarmWordsItInTheLanguagePickedEvenWhereAndroidLeavesItToTheScreens() {
+        // The alarm starts the app with no screen, and a process Android hasn't set the app's language on.
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        AppLanguage.set(activity, "de")
+        try {
+            setUpWith(line("One"), line("Two"))
+            firesOn(3)
+            assertEquals("2 Karten zum Üben", shown.single().title())
+            assertEquals("Übungserinnerungen", manager.getNotificationChannel("practice_reminders").name.toString())
+        } finally {
+            AppLanguage.set(activity, null)
+        }
+    }
+
+    @Test
+    fun theReceiverTakesTheAlarmAndSetsItAgainAfterWhatLosesIt() {
+        // With the phone's own clock, as Android starts it.
+        val phone = PracticeReminders(app)
+        saved(line("One"))
+        phone.sessionDone()
+        phone.turn(true)
+        val manager = app.getSystemService(AlarmManager::class.java)
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        manager.cancel(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE)))
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        PracticeReminderReceiver().onReceive(app, Intent(Intent.ACTION_BOOT_COMPLETED))
+        assertNotNull(alarms.peekNextScheduledAlarm())
+        // A session long ago, as its clock moved on past the same day.
+        prefs().edit().remove("practice_reminder_done_at").commit()
+        for (action in listOf(PracticeReminders.ACTION_REMIND, PracticeReminders.ACTION_REMIND_KEEP)) {
+            PracticeReminderReceiver().onReceive(app, Intent(action))
+            assertEquals(1, shown.size)
+        }
+    }
+
+    @Test
+    fun androidBringsItThoseAfterARebootAnUpdateOrATimeChange() {
+        val receivers = { action: String -> app.packageManager.queryBroadcastReceivers(Intent(action).setPackage(app.packageName), 0).map { it.activityInfo.name } }
+        val name = PracticeReminderReceiver::class.java.name
+        listOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED).forEach { action ->
+            assertTrue(action, name in receivers(action))
+        }
+    }
+
+    /**
+     * A reboot, an update, or a new clock drops both alarms. Android starts the receiver with the
+     * phone's own clock, and each one sets the exact alarm and the spare for the same minute.
+     */
+    @Test
+    fun everyChangeOfTheClockOrTheAppSetsTheBestAlarmStillAllowed() {
+        setUpWith(line("One"))
+        val manager = app.getSystemService(AlarmManager::class.java)
+        val minute = requireNotNull(reminders.state.minute)
+        listOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED).forEach { action ->
+            manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+            manager.cancel(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE)))
+            assertTrue(action, alarms.scheduledAlarms.isEmpty())
+            PracticeReminderReceiver().onReceive(app, Intent(action))
+            val set = alarms.scheduledAlarms
+            val whenDue = nextReminderAt(minute, System.currentTimeMillis(), ZoneId.systemDefault())
+            assertEquals(action, 2, set.size)
+            assertTrue(action, set.all { it.triggerAtMs == whenDue })
+            assertEquals(action, 1, set.count { it.windowLengthMs == 0L })
+            assertTrue(action, set.any { it.windowLengthMs != 0L && it.isAllowWhileIdle })
+        }
+    }
+
+    /** Both can be on their way for one minute. The second asks nothing more, and it still sets tomorrow. */
+    @Test
+    fun bothAlarmsOfOneMinuteAskOnceAndTheNextDayStillAsks() {
+        setUpWith(line("One"))
+        val exact = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        val keep = Intent(shadowOf(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        val slot = exact.getLongExtra(PracticeReminders.EXTRA_AT, 0L)
+        assertEquals(at(3, 20, 5), slot)
+        assertEquals(slot, keep.getLongExtra(PracticeReminders.EXTRA_AT, 0L))
+        deliverBoth(exact, keep, slot)
+        val next = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        assertEquals(at(4, 20, 5), next.getLongExtra(PracticeReminders.EXTRA_AT, 0L))
+        clock = at(4, 20, 6)
+        reminders.remind(next)
+        assertEquals(2, prefs().getInt("practice_reminder_ignored", 0))
+        deliverBoth(keep, exact, slot)
+    }
+
+    /** [first] asks, then the alarms are dropped, then [second] of the same minute arrives. */
+    private fun deliverBoth(first: Intent, second: Intent, slot: Long) {
+        prefs().edit().putInt("practice_reminder_ignored", 0).remove("practice_reminder_posted_for").commit()
+        reminders.clear()
+        clock = at(3, 20, 6)
+        reminders.remind(first)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(slot, prefs().getLong("practice_reminder_posted_for", 0L))
+        val manager = app.getSystemService(AlarmManager::class.java)
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        manager.cancel(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE)))
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        reminders.remind(second)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        val set = alarms.scheduledAlarms
+        assertEquals(2, set.size)
+        assertTrue(set.all { it.triggerAtMs == at(4, 20, 5) })
+        assertEquals(1, set.count { it.windowLengthMs == 0L })
+    }
+
+    @Test
+    fun everyLanguageHasWordsForIt() {
+        AppLanguage.tags.forEach { tag ->
+            val configuration = android.content.res.Configuration(app.resources.configuration).apply { setLocale(java.util.Locale.forLanguageTag(tag)) }
+            val words = app.createConfigurationContext(configuration)
+            assertTrue(tag, words.resources.getQuantityString(R.plurals.practice_reminder_title, 12, 12).contains("12"))
+            assertTrue(tag, words.resources.getQuantityString(R.plurals.practice_reminder_title, 1, 1).contains("1"))
+            val songs = words.getString(R.string.practice_reminder_songs, "Demo", 2)
+            assertTrue(tag, songs.contains("Demo") && songs.contains("2"))
+            assertTrue(tag, words.getString(R.string.practice_reminder_at, "8:05").contains("8:05"))
+            // Said in the language, not left in English by a language missing it.
+            if (!tag.startsWith("en")) {
+                assertTrue(tag, words.getString(R.string.practice_reminder_exact) != app.getString(R.string.practice_reminder_exact))
+                assertTrue(tag, words.getString(R.string.practice_reminder_late) != app.getString(R.string.practice_reminder_late))
+            }
+        }
+    }
+}

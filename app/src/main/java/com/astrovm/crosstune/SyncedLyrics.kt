@@ -5,7 +5,15 @@ package com.astrovm.crosstune
  * when the words are timed that closely, and when it ends, when that's known. The words, put
  * together, are the line.
  */
-internal data class LyricLine(val timeMs: Long, val text: String, val words: List<TimedWord> = emptyList(), val endMs: Long? = null)
+internal data class LyricLine(val timeMs: Long, val text: String, val words: List<TimedWord> = emptyList(), val endMs: Long? = null) {
+    /** Whether it's known when it's sung: words found with no timing are timed by the singing heard, a line at a time, and not all are heard. */
+    val heard: Boolean get() = timeMs != NOT_HEARD
+
+    companion object {
+        /** When a line not heard yet is sung: never, so it's never lit, though it's shown in its place. */
+        const val NOT_HEARD = Long.MAX_VALUE
+    }
+}
 
 /** A word of a line, or a syllable, as it's timed, and when in the song it's sung. */
 internal data class TimedWord(val timeMs: Long, val text: String)
@@ -21,20 +29,24 @@ internal object SyncedLyrics {
     /** Too short to tell: "Oh, yeah" can go by in a moment. */
     private const val MIN_SOUNDS = 3
     private const val RUSHED_LINES = 2
-    private val syllable = Regex("[\\u3040-\\u30FF\\u4E00-\\u9FFF\\uAC00-\\uD7AF]")
-    private val latinWord = Regex("[A-Za-z\\u00C0-\\u024F']+")
+    private val syllable = phoneRegex("[\\u3040-\\u30FF\\u4E00-\\u9FFF\\uAC00-\\uD7AF]")
+    private val latinWord = phoneRegex("[A-Za-z\\u00C0-\\u024F']+")
 
-    private val stamp = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
+    /**
+     * A line's time: "[01:02.34]". NetEase ends the stamp of a line it has no time for with "-1", as in
+     * "[00:00.00-1]", which is no part of the time.
+     */
+    private val stamp = phoneRegex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?(?:-\d+)?]""")
 
     /** A word's time in a line, as enhanced LRC writes it: "<01:02.34>". */
-    private val wordStamp = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
+    private val wordStamp = phoneRegex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
 
     /** A line as NetEase times it word by word: "[start,length]" and then "(start,length,0)" before each word. */
-    private val netEaseLine = Regex("""^\[(\d+),(\d+)](.*)""")
-    private val netEaseWord = Regex("""\((\d+),\d+,\d+\)""")
+    private val netEaseLine = phoneRegex("""^\[(\d+),(\d+)](.*)""")
+    private val netEaseWord = phoneRegex("""\((\d+),\d+,\d+\)""")
 
     /** "[offset:+500]": how many milliseconds sooner every line comes, or later when it's less than none. */
-    private val offsetTag = Regex("""^\[offset:\s*([+-]?\d+)\s*]""", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+    private val offsetTag = phoneRegex("""^\[offset:\s*([+-]?\d+)\s*]""", RegexOption.IGNORE_CASE, RegexOption.MULTILINE)
 
     /**
      * The timed lines in [lrc], in the order they're sung, moved as its offset tag says. A line sung
@@ -71,7 +83,7 @@ internal object SyncedLyrics {
      * unless every word has one. Spaces stay with the word before them, so the words together are the line.
      */
     private fun timedWords(text: String, stamps: Regex, timeOf: (MatchResult) -> Long): List<TimedWord> {
-        val found = stamps.findAll(text).toList()
+        val found = stamps.matchesIn(text).toList()
         if (found.isEmpty() || text.substring(0, found.first().range.first).isNotBlank()) return emptyList()
         val words = mutableListOf<TimedWord>()
         found.forEachIndexed { index, match ->
@@ -115,10 +127,35 @@ internal object SyncedLyrics {
      * About how many sounds a line has, to sing it: a word for each in Latin letters, and a syllable
      * for each Japanese kana, Chinese character or Korean block.
      */
-    private fun soundsIn(text: String): Int = syllable.findAll(text).count() + latinWord.findAll(text).count()
+    private fun soundsIn(text: String): Int = syllable.matchesIn(text).count() + latinWord.matchesIn(text).count()
 
-    /** The line being sung at [positionMs], or -1 before the first. */
-    fun indexAt(lines: List<LyricLine>, positionMs: Long): Int = lines.indexOfLast { it.timeMs <= positionMs }
+    /**
+     * The line being sung at [positionMs], or -1 before the first. Of words timed [byEar], a line with
+     * an end, as one heard with the next not heard, or the last, is only lit till it ends: what's sung
+     * after it isn't known. A line timed by a service stays lit till the next, and the last through the outro.
+     */
+    fun indexAt(lines: List<LyricLine>, positionMs: Long, byEar: Boolean): Int {
+        val at = lines.indexOfLast { it.timeMs <= positionMs }
+        val end = litTill(lines, at, byEar)
+        return if (end != null && positionMs > end) -1 else at
+    }
+
+    /**
+     * Where in the song the line lit by [indexAt] changes: as each line heard starts, and just past the
+     * end of one lit only till it ends. Lines not heard start never, so they're left out.
+     */
+    fun changes(lines: List<LyricLine>, byEar: Boolean): List<Long> =
+        lines.indices.flatMap { index -> listOfNotNull(lines[index].timeMs.takeIf { lines[index].heard }, litTill(lines, index, byEar)?.plus(1)) }
+
+    /**
+     * Where line [at] goes dark once it's sung through, as what's sung after it isn't known; null while
+     * it's lit till the next. Timed by ear, a line has an end only then, so it holds with the lines
+     * between left out, as blank ones are under the player.
+     */
+    private fun litTill(lines: List<LyricLine>, at: Int, byEar: Boolean): Long? = lines.getOrNull(at)?.endMs?.takeIf { byEar }
+
+    /** Where the next of [times] after [positionMs] is, when the line or word lit changes; null after the last. */
+    fun nextAfter(times: List<Long>, positionMs: Long): Long? = times.filter { it > positionMs }.minOrNull()
 
     /** The fraction is decimals of a second: ".5" is half of one, ".05" a twentieth. */
     private fun MatchResult.toMillis(): Long {

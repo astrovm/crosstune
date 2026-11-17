@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,11 +34,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
@@ -45,18 +47,18 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 internal const val FIX_BAR_TAG = "fix_bar"
 
 /** How long a thing just fixed shows checked off before the next one. */
 internal const val FIX_DONE_PAUSE_MS = 700L
-
-/** How long the floating guide shows each step before the next. */
-internal const val GUIDE_STEP_MS = 4_000L
 
 /** What a test link carries, so Crosstune knows it's the one it sent rather than a song to look up. */
 internal const val TEST_LINK = "crosstune-test"
@@ -115,6 +117,14 @@ internal sealed interface Need {
     data object Float : Need {
         override val key get() = "float"
     }
+
+    /**
+     * Alarms and reminders, so a practice reminder can go at its minute.
+     * Without them it can still go, up to an hour late, which is said here.
+     */
+    data object Exact : Need {
+        override val key get() = "exact"
+    }
 }
 
 /** A [need] and whether it's [done]: null when Android can't tell. */
@@ -140,10 +150,20 @@ internal fun UiState.checks(apps: List<LinkApp> = appsInTheWay): List<Check> = b
         add(Check(Need.Links, linksAllowed))
     }
     add(Check(Need.Follow, canFollowApps))
+    // On, but only the inexact alarm: it can arrive late, access to the exact minute still needs allowing.
+    if (reminder.late) add(Check(Need.Exact, done(Need.Exact)))
 }
 
-/** How many things are known to need fixing; none until Android has been asked. */
-internal val UiState.toFix: Int get() = if (systemStateKnown) checks().count { it.done == false } else 0
+/**
+ * How many things are known to need fixing. A late reminder is known from the app, before Android
+ * has been asked about the rest.
+ */
+internal val UiState.toFix: Int get() = checks().count { broken(it) }
+
+private fun UiState.broken(check: Check): Boolean {
+    if (check.done != false) return false
+    return systemStateKnown || check.need == Need.Exact
+}
 
 /**
  * Whether Crosstune's links are allowed. From Android 12, as Android says; before, which can't
@@ -164,10 +184,19 @@ internal fun UiState.done(need: Need): Boolean? = when (need) {
     Need.Microphone -> microphone == MicAccess.ALLOWED
     Need.Follow -> canFollowApps
     Need.Float -> canFloatOverApps
+    Need.Exact -> !reminder.late
 }
 
 /** A link of [service]'s, which opens in whatever app takes its links, Crosstune or another, [TEST_LINK] telling it apart. */
-internal fun testLink(service: MusicService): String = "https://${testHost(service)}/#$TEST_LINK"
+internal fun testLink(service: MusicService): String {
+    // The host's home page is outside our item filters, so Android would send the test to a browser.
+    val path = when (service) {
+        MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC -> "/watch?v=$TEST_LINK"
+        MusicService.APPLE_MUSIC -> "/song/$TEST_LINK"
+        else -> "/track/$TEST_LINK"
+    }
+    return "https://${testHost(service)}$path#$TEST_LINK"
+}
 
 /** One of [service]'s sites that Crosstune opens. */
 internal fun testHost(service: MusicService): String = LinkInterception.HOSTS[service].orEmpty().first()
@@ -272,7 +301,8 @@ private fun FixAll(state: UiState, actions: ScreenActions, left: List<Need>) {
             .padding(top = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val oneTap = state.canSetUpInOneTap && !state.oneTapFailed
+        // One tap can allow links, following, the microphone and alarms and reminders.
+        val oneTap = state.canSetUpInOneTap && !state.oneTapFailed && left.isNotEmpty()
         val press = rememberPress()
         Button(
             onClick = if (oneTap) actions.onSetUpInOneTap else { { actions.onFixSteps(left) } },
@@ -345,25 +375,28 @@ private fun FixRow(check: Check, asks: Boolean, onOpen: (Need) -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        NeedIcon(check.need)
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 12.dp)
-        ) {
-            Text(needTitle(check.need), style = MaterialTheme.typography.bodyLarge)
-            check.need.gets().takeIf { asks }?.let {
-                Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        AnimatedContent(targetState = check.done, transitionSpec = { fade() }, label = "check") { shown ->
-            Box(modifier = Modifier.heightIn(min = 24.dp).widthIn(min = 24.dp), contentAlignment = Alignment.Center) {
-                if (shown == true) {
-                    AppIcon(R.drawable.ic_check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                } else if (shown == false && asks && check.need.gets() != null) {
-                    Text(stringResource(R.string.allow_button), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                } else if (shown == false) {
-                    Box(Modifier.size(10.dp).background(MaterialTheme.colorScheme.error, CircleShape))
+        // At a big font or in a long language, the icon goes over the words and Allow under them,
+        // rather than the words squeezed between them a part of a word a line.
+        LeadAndWords(lead = { NeedIcon(check.need) }) {
+            LabelAndValue(label = {
+                Column {
+                    LabelText(needTitle(check.need), style = MaterialTheme.typography.bodyLarge)
+                    val under = check.need.problem() ?: check.need.gets().takeIf { asks }
+                    under?.let {
+                        Text(stringResource(it), style = MaterialTheme.typography.bodyMedium.copy(hyphens = Hyphens.Auto), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }) {
+                AnimatedContent(targetState = check.done, transitionSpec = { fade() }, label = "check") { shown ->
+                    Box(modifier = Modifier.heightIn(min = 24.dp).widthIn(min = 24.dp), contentAlignment = Alignment.Center) {
+                        if (shown == true) {
+                            AppIcon(R.drawable.ic_check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        } else if (shown == false && asks && check.need.gets() != null) {
+                            Text(stringResource(R.string.allow_button), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        } else if (shown == false) {
+                            Box(Modifier.size(10.dp).background(MaterialTheme.colorScheme.error, CircleShape))
+                        }
+                    }
                 }
             }
         }
@@ -392,9 +425,14 @@ private fun Need.gets(): Int? = when (this) {
     else -> null
 }
 
-private fun Need.icon(): Int = when (this) {
+/** What is wrong, said whenever the row shows. What allowing it gets you is separate, and only said the first time. */
+@StringRes
+private fun Need.problem(): Int? = if (this == Need.Exact) R.string.practice_reminder_late else null
+
+internal fun Need.icon(): Int = when (this) {
     Need.Microphone -> R.drawable.ic_recognize
     Need.Float -> R.drawable.ic_float
+    Need.Exact -> R.drawable.ic_notifications_on
     else -> R.drawable.ic_lyrics
 }
 
@@ -405,6 +443,7 @@ private fun Need.title(): Int = when (this) {
     Need.Microphone -> R.string.fix_mic_title
     Need.Follow -> R.string.follow_help_title
     Need.Float -> R.string.floating_permission_title
+    Need.Exact -> R.string.practice_reminder_exact
 }
 
 @Composable
@@ -439,21 +478,23 @@ internal fun FixStepPage(state: UiState, actions: ScreenActions) {
             Column {
                 // A single thing needs no counting.
                 if (fixes.steps.size > 1) StepProgress(fixes.steps.indexOf(shown) + 1, fixes.steps.size)
-                Row(modifier = Modifier.padding(top = 24.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AnimatedContent(targetState = state.done(shown) == true, transitionSpec = { fade() }, label = "done") { checked ->
-                        if (checked) {
-                            AppIcon(
-                                R.drawable.ic_check,
-                                contentDescription = stringResource(R.string.setup_done),
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        } else {
-                            NeedIcon(shown)
+                LeadAndWords(
+                    lead = {
+                        AnimatedContent(targetState = state.done(shown) == true, transitionSpec = { fade() }, label = "done") { checked ->
+                            if (checked) {
+                                AppIcon(
+                                    R.drawable.ic_check,
+                                    contentDescription = stringResource(R.string.setup_done),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            } else {
+                                NeedIcon(shown)
+                            }
                         }
-                    }
-                    Text(needTitle(shown), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 12.dp))
-                }
+                    },
+                    modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)
+                ) { Text(needTitle(shown), style = MaterialTheme.typography.headlineSmall) }
                 if (fixes.failed) {
                     Text(
                         stringResource(R.string.fix_failed),
@@ -464,16 +505,14 @@ internal fun FixStepPage(state: UiState, actions: ScreenActions) {
                 }
                 val steps = fixSteps(shown, state, actions)
                 steps.forEachIndexed { index, step ->
-                    NumberedStep(index + 1, step.text)
-                    step.button?.let { (label, onClick) ->
-                        FilledTonalButton(onClick = onClick, modifier = Modifier.padding(start = 44.dp, bottom = 4.dp)) { Text(label) }
-                    }
-                    step.picture?.let { picture ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 44.dp, top = 4.dp, bottom = 16.dp)
-                        ) { picture() }
+                    // Its button and picture under its words, wherever its number leaves them.
+                    NumberedStep(index + 1, step.text) {
+                        step.button?.let { (label, onClick) ->
+                            FilledTonalButton(onClick = onClick, modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)) { Text(label) }
+                        }
+                        step.picture?.let { picture ->
+                            Box(modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp)) { picture() }
+                        }
                     }
                 }
             }
@@ -545,6 +584,8 @@ private fun bold(@StringRes template: Int, vararg words: String): AnnotatedStrin
  */
 @Composable
 internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<FixStep> {
+    // The manual path allows the exact minute on Android's alarms and reminders page.
+    if (need == Need.Exact) return listOf(FixStep(AnnotatedString(stringResource(R.string.practice_reminder_late))))
     val phone = state.phone
     val tap = R.string.fix_step_tap
     val pick = R.string.fix_step_pick
@@ -562,8 +603,13 @@ internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<
         )
     }
     if (need == Need.Follow) {
-        // Samsung and TVs list every app, each with its switch, rather than open Crosstune's own page.
-        val access = stringResource(if (phone == Phone.SAMSUNG || phone == Phone.TV) R.string.app_name else R.string.android_allow_notification_access)
+        // Before Android 11, the list names the listener service. Samsung and TV name its app.
+        val older = Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+        val access = stringResource(when {
+            phone == Phone.SAMSUNG || phone == Phone.TV -> R.string.app_name
+            older -> R.string.lyrics_sync_service
+            else -> R.string.android_allow_notification_access
+        })
         val allow = stringResource(R.string.allow_button)
         if (!state.followRestricted) {
             // Google TV's page, opened straight away, can leave the remote stuck outside its list, as on
@@ -575,6 +621,7 @@ internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<
                     inWords(turnOn, access)
                 )
             }
+            if (older) return listOf(inWords(turnOn, access), inWords(tap, allow))
             return listOf(phone.step(turnOn, access) { AndroidPictures.AccessSwitch(phone) }, phone.step(tap, allow) { AndroidPictures.AllowDialog() })
         }
         // Android turns the first try down for an app installed from a file, and only then offers
@@ -657,57 +704,97 @@ private fun UiState.hostsToTick(): List<String> =
 
 /** A step's number beside what to do. */
 @Composable
-internal fun NumberedStep(number: Int, text: AnnotatedString) {
-    Row(
+internal fun NumberedStep(number: Int, text: AnnotatedString, more: @Composable ColumnScope.() -> Unit = {}) {
+    LeadAndWords(
+        lead = {
+            // The circle grows with its number at a big font, rather than cutting it off.
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.round().defaultMinSize(28.dp, 28.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(number.toString(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(4.dp))
+                }
+            }
+        },
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+        gap = 16.dp,
+        top = true
     ) {
-        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(28.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(number.toString(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
+        Column {
+            Text(text, style = MaterialTheme.typography.bodyLarge)
+            more()
         }
-        Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 16.dp))
     }
 }
 
+internal const val FLOATING_STEPS_TAG = "floating_steps"
+
+/** As wide as it is tall, whichever is bigger, so a circle stays round. */
+private fun Modifier.round() = layout { measurable, constraints ->
+    val side = maxOf(measurable.maxIntrinsicWidth(constraints.maxHeight), measurable.maxIntrinsicHeight(constraints.maxWidth))
+    val placeable = measurable.measure(Constraints.fixed(side, side))
+    layout(side, side) { placeable.placeRelative(0, 0) }
+}
+
 /**
- * How [need] is done, small, floating over Android's page while the user is there: each of its
- * steps in turn, with its picture.
+ * How [need] is done, small, floating over Android's page while the user is there: all of its steps
+ * at once, each with its picture, shrunk to fit. Android doesn't say which of them the user is on, so
+ * none is picked out as the one; it says only when it's all done.
  */
 @Composable
 internal fun FloatingGuide(need: Need, state: UiState) {
     val steps = fixSteps(need, state, ScreenActions())
-    var shown by remember(need) { mutableIntStateOf(0) }
-    LaunchedEffect(need, steps.size) {
-        while (steps.size > 1) {
-            delay(GUIDE_STEP_MS)
-            shown = (shown + 1) % steps.size
-        }
-    }
-    val step = steps[shown % steps.size]
     Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxSize()) {
         if (state.done(need) == true) {
-            // Newer Android won't let Crosstune come back from a floating window by itself, but
-            // making it big brings it back.
+            // Crosstune doesn't come back from a floating window by itself, as newer Android blocks
+            // that; making it big brings it back.
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically), modifier = Modifier.padding(12.dp)) {
                 AppIcon(R.drawable.ic_check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(64.dp))
                 Text(stringResource(R.string.practice_back_to, stringResource(R.string.app_name)), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
             }
             return@Surface
         }
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AppLogo(size = 18.dp)
-                Spacer(Modifier.weight(1f))
-                if (steps.size > 1) {
-                    Text("${shown + 1}/${steps.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(modifier = Modifier.fitsHeight().testTag(FLOATING_STEPS_TAG).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AppLogo(size = 18.dp)
+            steps.forEachIndexed { index, step ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (steps.size > 1) {
+                        Text("${index + 1}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(step.text, style = MaterialTheme.typography.titleMedium)
+                        step.picture?.invoke()
+                    }
                 }
             }
-            Text(step.text, style = MaterialTheme.typography.titleMedium)
-            step.picture?.invoke()
         }
     }
+}
+
+/** Laid out as tall as it needs, then shrunk, from the top and in the middle, to the height there is. */
+private fun Modifier.fitsHeight() = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+    val scale = if (constraints.hasBoundedHeight && placeable.height > 0) minOf(1f, constraints.maxHeight.toFloat() / placeable.height) else 1f
+    val width = placeable.width.coerceIn(constraints.minWidth, constraints.maxWidth)
+    val height = (placeable.height * scale).roundToInt().coerceIn(constraints.minHeight, constraints.maxHeight)
+    layout(width, height) {
+        placeable.placeWithLayer(((width - placeable.width * scale) / 2).roundToInt(), 0) {
+            scaleX = scale
+            scaleY = scale
+            transformOrigin = TransformOrigin(0f, 0f)
+        }
+    }
+}
+
+/**
+ * Whether the steps for [need] float over Android's page. Android puts the floating window at the
+ * bottom right, and Crosstune can't move it. Where Android asks in a dialog, its buttons are right
+ * there, so a guide over it would cover the very button it asks for: those steps wait in Crosstune
+ * instead. Every phone asks whether to allow notification access that way, and Android 12 and up
+ * add links in one, but Samsung and Xiaomi, which tick links on a page.
+ */
+internal fun UiState.guideFloats(need: Need, sdk: Int = Build.VERSION.SDK_INT): Boolean = when (need) {
+    Need.Follow -> false
+    Need.Links -> sdk < Build.VERSION_CODES.S || phone == Phone.SAMSUNG || phone == Phone.XIAOMI
+    else -> true
 }

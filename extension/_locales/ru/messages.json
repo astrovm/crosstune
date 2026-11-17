@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "Открывает музыкальные ссылки в сервисе, который вы выберете."
-  },
-  "actionTitle": {
-    "message": "Настройки Crosstune"
-  },
-  "optionsEnabled": {
-    "message": "Открывать музыкальные ссылки в сервисе ниже"
-  },
-  "optionsService": {
-    "message": "Открывать в"
-  },
-  "optionsAccess": {
-    "message": "Crosstune нужен доступ к музыкальным сайтам, чтобы открывать ссылки за вас."
-  },
-  "optionsAllow": {
-    "message": "Разрешить"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "Открывает музыкальные ссылки в выбранном сервисе и показывает текст того, что играет." },
+  "actionTitle": { "message": "Тексты Crosstune" },
+  "optionsEnabled": { "message": "Открывать музыкальные ссылки в сервисе ниже" },
+  "optionsService": { "message": "Открывать в" },
+  "optionsAccess": { "message": "Crosstune нужен доступ к музыкальным сайтам, чтобы открывать ссылки и показывать тексты." },
+  "optionsAllow": { "message": "Разрешить" },
+  "lyricsNoSong": { "message": "Включите песню на музыкальном сайте" },
+  "lyricsLoading": { "message": "Ищем текст" },
+  "lyricsNone": { "message": "Для этой песни нет текста" },
+  "lyricsInstrumental": { "message": "Инструментальная" },
+  "lyricsOffline": { "message": "Нет подключения к сети" },
+  "lyricsUnavailable": { "message": "Не удалось связаться с сайтами с текстами" },
+  "lyricsRetry": { "message": "Повторить" },
+  "lyricsSettings": { "message": "Настройки" }
 }

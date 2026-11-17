@@ -10,3 +10,4 @@ captures/
 externalNativeBuild/
 .cxx/
 __pycache__/
+.coverage

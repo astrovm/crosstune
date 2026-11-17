@@ -17,6 +17,8 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -39,13 +41,17 @@ import androidx.compose.ui.semantics.SemanticsActions
 
 import androidx.lifecycle.ViewModelProvider
 
+import org.json.JSONObject
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertNotNull
+import android.app.AppOpsManager
+import android.os.Build
 import android.os.Looper
 import android.os.PowerManager
 import android.Manifest
+import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowSettings
 import org.robolectric.shadows.ShadowWindowManagerImpl
 import org.robolectric.shadow.api.Shadow
@@ -88,6 +94,7 @@ import androidx.compose.ui.test.performFirstLinkClick
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -137,7 +144,8 @@ class ListeningTest {
         MainActivity.milkdropFactory = { NoMilkdrop }
         MainActivity.soundTapFactory = { null }
         // Visuals are on from the start; the tests about turning them on start with them off.
-        prefs().edit().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).putBoolean("visuals", false).commit()
+        prefs().edit().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).putBoolean("visuals", false).putBoolean(KEY_ASKED_RETURN, true).commit()
+        TimingLog.clear()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "sung_readings.json").delete()
@@ -150,7 +158,7 @@ class ListeningTest {
 
     @After
     fun tearDown() {
-        runCatching { controller?.pause()?.stop()?.destroy() }
+        controller?.destroyAndSettle()
         // Anything still listening hears the end.
         microphone.end()
         MainActivity.httpClientFactory = ::httpClient
@@ -173,6 +181,7 @@ class ListeningTest {
         FloatingLyricsService.host = null
         ShadowSettings.setCanDrawOverlays(false)
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
+        MainActivity.chordWikiFactory = { ChordWikiBrowser(it) }
         MainActivity.connectionFactory = ::AndroidConnection
     }
 
@@ -199,6 +208,12 @@ class ListeningTest {
     }
 
     private fun shazamRequests() = fake.requestedUrls.count { it.startsWith("https://amp.shazam.com/") }
+
+    /** Closes the words, not the offer to follow the music app above them, which has a Dismiss of its own. */
+    private fun closeWords() {
+        composeRule.onNode(hasContentDescription(string(R.string.dismiss_button)) and !hasAnySibling(hasText(string(R.string.follow_turn_on)))).performClick()
+        composeRule.waitForIdle()
+    }
 
     private fun click(text: String) {
         composeRule.onNode(hasText(text) or hasContentDescription(text)).performClick()
@@ -244,6 +259,119 @@ class ListeningTest {
     }
 
     @Test
+    fun aRadioStationKeepsItsButtonsAndPlayerAsItIsUntilItsSongIsHeardAndThenATapShowsTheSong() {
+        // VRadio names only the station (#998).
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2")
+            playing.value = Following(PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "VRadio", canSeek = false, appPackage = "com.ilv.vradio", canSkipNext = true)
+        }
+        MainActivity.playbackFactory = { radio }
+        val heard = kotlinx.coroutines.CompletableDeferred<Heard>()
+        MainActivity.hearingFactory = { SongHearing { heard.await() } }
+        // It can be heard, by the microphone, and is being listened to.
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertTrue(shown("RTP Antena 2"))
+        assertTrue(shown("VRadio"))
+        // Its buttons are the app's, as for a song.
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_pause)) and hasClickAction()).performClick()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_next_song)) and hasClickAction()).performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf(false), radio.plays)
+        assertEquals(listOf(true), radio.skips)
+        // A tap opens its player, as the app names it: no song, so no menu with its link, no words, and nothing kept.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        composeRule.waitForIdle()
+        assertTrue(shown("RTP Antena 2"))
+        assertFalse(described(string(R.string.more_button)))
+        assertFalse(described(string(R.string.lyrics_button)))
+        assertTrue(composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isEmpty())
+        closeWords()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertNull(controllerModel().uiState.player)
+        // A swipe up opens the same player.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput { swipe(center, center - Offset(0f, 1500f)) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        closeWords()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        // Its song heard, which has a while left, a tap shows it, as a Shazam result.
+        heard.complete(Heard.Song(MusicMetadata("Fake Song", "Fake Band", lengthMs = 200_000), null, 50_000, SystemClock.elapsedRealtime()))
+        waitForText("Fake Song")
+        assertTrue(shown("Fake Band \u00b7 VRadio"))
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(HistoryStore(prefs()).load().none { it.metadata.title == "RTP Antena 2" })
+    }
+
+    @Test
+    fun aStationIsListenedToOnlyWhileItsBarIsInSightNotUnderItsPlayer() {
+        val radio = FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "Fake FM") }
+        MainActivity.playbackFactory = { radio }
+        var listens = 0
+        var stopped = 0
+        MainActivity.hearingFactory = {
+            SongHearing {
+                listens++
+                try {
+                    kotlinx.coroutines.awaitCancellation()
+                } finally {
+                    stopped++
+                }
+            }
+        }
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        // Its player covers the bar, and the main screen with it: the listen stops.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        composeRule.waitForIdle()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1 to 1, listens to stopped)
+        // Back on the bar, it's listened to again.
+        closeWords()
+        waitUntil(TIMEOUT_MS) { listens == 2 }
+        assertEquals(1, stopped)
+    }
+
+    /**
+     * A station named by ear, with the microphone allowed, that heard no song: Shizuku or root then
+     * shares the phone's own sound, after a second. Returns how many times it was listened to.
+     */
+    private fun listensWhenTheSoundIsShared(): Int {
+        allowMicrophone()
+        val radio = FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "Fake FM") }
+        MainActivity.playbackFactory = { radio }
+        var listens = 0
+        MainActivity.hearingFactory = {
+            SongHearing {
+                listens++
+                Heard.Nothing
+            }
+        }
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        PhoneAppOps.projectMedia = AppOpsManager.MODE_ALLOWED
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        return listens
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.Q])
+    fun fromAndroid10TheStationIsListenedToAgainAtOnceWhenItsSoundIsShared() {
+        assertEquals(2, listensWhenTheSoundIsShared())
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.P])
+    fun beforeAndroid10SharingTheSoundIsNoNewWayToHear() {
+        // Android 9 can't capture what other apps play, shared or not.
+        assertEquals(1, listensWhenTheSoundIsShared())
+    }
+
+    @Test
     fun theBarOfWhatsPlayingCanBeTurnedOff() {
         val playing = MusicMetadata("Demo", "Band")
         MainActivity.playbackFactory = {
@@ -265,7 +393,7 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertFalse(barShown())
         // Kept for the next launch, and back on, it shows again.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         launch()
         composeRule.waitForIdle()
         assertFalse(barShown())
@@ -325,7 +453,7 @@ class ListeningTest {
         // Its player opens, with the song's card made under it for its link tools.
         waitForDescription(string(R.string.more_button))
         assertFalse(barShown())
-        click(string(R.string.dismiss_button))
+        closeWords()
         // The card shows the song that plays, and the bar stays, a swipe from its player.
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(barShown())
@@ -568,7 +696,7 @@ class ListeningTest {
         click("Iris")
         waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         assertFalse(barShown())
-        click(string(R.string.dismiss_button))
+        closeWords()
         // Once the song the tap looked up is found, which happens off the main thread.
         waitUntil(TIMEOUT_MS) { barShown() }
         // The app letting it go takes the bar away.
@@ -769,6 +897,34 @@ class ListeningTest {
         waitForDescription(string(R.string.keep_offline))
     }
 
+    @Test
+    fun aSongLrclibMarksInstrumentalKeptOfflineKeepsItsWordsAndTheirTranslation() {
+        // Review of PR #919: two of LRCLIB's copies marked instrumental and one with words, kept with Download. On main,
+        // its words, and what goes with them, are kept, and show offline.
+        MainActivity.connectionFactory = { FakeConnection() }
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        val marked = """{"trackName":"Demo","artistName":"Band","instrumental":true}"""
+        fake.handler = { request ->
+            when (request.url.host) {
+                "lrclib.net" -> FakeSpotify.html(request, """[$marked,$marked,{"trackName":"Demo","artistName":"Band","syncedLyrics":"[00:00.00] Night sky\n[00:30.00] Stars"}]""")
+                else -> FakeSpotify.html(request, "{}")
+            }
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        waitUntil(TIMEOUT_MS) { File(app.noBackupFilesDir, "kept/lyrics.json").let { it.isFile && "Night sky" in it.readText() } }
+        assertTrue(fake.requestedUrls.any { it.startsWith(Translator.GOOGLE_URL) })
+        // Offline, with no app on the phone playing it to listen to, they show.
+        fake.handler = { request -> throw java.io.IOException("offline ${request.url.host}") }
+        click(string(R.string.lyrics_button))
+        waitForText("Night sky")
+    }
+
     /** Demo, as Spotify follows it, with its like showing whether it's [liked] there, or not saying. */
     private fun demoFollowed(liked: Boolean?) = Following(
         PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "Spotify", canSeek = true,
@@ -865,6 +1021,233 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { File(app.noBackupFilesDir, "kept/sung_readings.json").let { it.isFile && "まち" in it.readText() } }
     }
 
+    /**
+     * Whether a Japanese song's title and artist go to UtaTen with the words shown as [readings], [romaji]
+     * and [wordsAs] say: while its words show or, [offline], while it's kept offline.
+     */
+    private fun utaTenAsked(readings: Boolean, romaji: Boolean, wordsAs: WordsAs, offline: Boolean): Boolean {
+        prefs().edit().putBoolean("lyrics_readings", readings).putBoolean("lyrics_romanized", romaji).putString("lyrics_words_as", wordsAs.name).commit()
+        val asked = { fake.requestedUrls.any { it.toHttpUrl().host == "utaten.com" } }
+        val sites = { request: okhttp3.Request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } }
+        if (offline) {
+            MainActivity.connectionFactory = { FakeConnection() }
+            MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+            fake.handler = { request -> sites(request) ?: FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""") }
+            allowMicrophone()
+            launch()
+            recognize()
+            waitForText("Demo")
+            click(string(R.string.keep_offline))
+            // Kept once all it needs is looked up, UtaTen too when it's asked.
+            waitForDescription(string(R.string.kept_offline))
+        } else {
+            wordsOf(null, "都会の夜", sites = sites)
+            // Asked once the words are read, a moment after they show; with nothing to read, they're not.
+            if (readings || romaji || wordsAs != WordsAs.WRITTEN) waitUntil(TIMEOUT_MS) { asked() } else waitUntil(TIMEOUT_MS) { shown("都会の夜") }
+        }
+        composeRule.waitForIdle()
+        return asked()
+    }
+
+    @Test
+    fun aJapaneseSongsNameGoesToUtaTenWithReadingsOn() {
+        assertTrue(utaTenAsked(readings = true, romaji = false, wordsAs = WordsAs.WRITTEN, offline = false))
+    }
+
+    @Test
+    fun aJapaneseSongsNameGoesToUtaTenWithRomajiOn() {
+        assertTrue(utaTenAsked(readings = false, romaji = true, wordsAs = WordsAs.WRITTEN, offline = false))
+    }
+
+    @Test
+    fun aJapaneseSongsNameGoesToUtaTenWithItsWordsShownInKana() {
+        assertTrue(utaTenAsked(readings = false, romaji = false, wordsAs = WordsAs.KANA, offline = false))
+    }
+
+    @Test
+    fun aJapaneseSongsNameDoesntGoToUtaTenWithItsWordsShownAsWritten() {
+        assertFalse(utaTenAsked(readings = false, romaji = false, wordsAs = WordsAs.WRITTEN, offline = false))
+    }
+
+    @Test
+    fun aJapaneseSongKeptOfflineHasItsNameGoToUtaTenWithReadingsOn() {
+        assertTrue(utaTenAsked(readings = true, romaji = false, wordsAs = WordsAs.WRITTEN, offline = true))
+    }
+
+    @Test
+    fun aJapaneseSongKeptOfflineHasItsNameGoToUtaTenWithRomajiOn() {
+        assertTrue(utaTenAsked(readings = false, romaji = true, wordsAs = WordsAs.WRITTEN, offline = true))
+    }
+
+    @Test
+    fun aJapaneseSongKeptOfflineHasItsNameGoToUtaTenWithItsWordsShownInKana() {
+        assertTrue(utaTenAsked(readings = false, romaji = false, wordsAs = WordsAs.KANA, offline = true))
+    }
+
+    @Test
+    fun aJapaneseSongKeptOfflineDoesntHaveItsNameGoToUtaTenWithItsWordsShownAsWritten() {
+        assertFalse(utaTenAsked(readings = false, romaji = false, wordsAs = WordsAs.WRITTEN, offline = true))
+    }
+
+    @Test
+    fun aJapaneseSongsNameGoesToUtaTenWithItsWordsShownInLatinLetters() {
+        assertTrue(utaTenAsked(readings = false, romaji = false, wordsAs = WordsAs.LATIN, offline = false))
+    }
+
+    @Test
+    fun aJapaneseSongKeptOfflineHasItsNameGoToUtaTenWithItsWordsShownInLatinLetters() {
+        assertTrue(utaTenAsked(readings = false, romaji = false, wordsAs = WordsAs.LATIN, offline = true))
+    }
+
+    /**
+     * Whether a Japanese song's name goes to UtaTen when readings, on as its words are being read, are turned off before
+     * they're read: as they show or, [offline], as it's kept offline.
+     */
+    private fun utaTenAskedOnceTurnedOff(offline: Boolean): Boolean {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        val gate = Gate()
+        MainActivity.systemDispatcher = gate
+        val asked = { fake.requestedUrls.any { it.toHttpUrl().host == "utaten.com" } }
+        val sites = { request: okhttp3.Request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } }
+        if (offline) {
+            MainActivity.connectionFactory = { FakeConnection() }
+            MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+            fake.handler = { request -> sites(request) ?: FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""") }
+            allowMicrophone()
+            launch()
+            recognize()
+            waitForText("Demo")
+            gate.held = true
+            click(string(R.string.keep_offline))
+        } else {
+            wordsOf(null, "都会の夜", sites = sites, before = { gate.held = true })
+        }
+        // The words are being read, away from the screen, when readings are turned off.
+        waitUntil(TIMEOUT_MS) { gate.queued.isNotEmpty() }
+        composeRule.runOnIdle { controllerModel().setReadings(false) }
+        gate.letGo()
+        if (offline) waitForDescription(string(R.string.kept_offline))
+        else waitUntil(TIMEOUT_MS) { shown("都会の夜") }
+        // Asked at once when it is: the fake answers at once.
+        val until = System.currentTimeMillis() + 3_000
+        while (!asked() && System.currentTimeMillis() < until) composeRule.waitForIdle()
+        return asked()
+    }
+
+    @Test
+    fun aJapaneseSongsNameDoesntGoToUtaTenOnceReadingsAreTurnedOffWhileItsWordsAreRead() {
+        assertFalse(utaTenAskedOnceTurnedOff(offline = false))
+    }
+
+    @Test
+    fun aJapaneseSongKeptOfflineDoesntHaveItsNameGoToUtaTenOnceReadingsAreTurnedOffWhileItsWordsAreRead() {
+        assertFalse(utaTenAskedOnceTurnedOff(offline = true))
+    }
+
+    /** How many requests reached UtaTen. */
+    private fun utatenRequests() = fake.requestedUrls.count { it.toHttpUrl().host == "utaten.com" }
+
+    /**
+     * How many requests reach UtaTen when readings are turned off after the first one has already left,
+     * while the words show or, [offline], while the song is kept offline. The first answer is held until then.
+     */
+    private fun utatenRequestsOnceTheFirstIsOut(offline: Boolean): Int {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        val hold = CountDownLatch(1)
+        val started = CountDownLatch(1)
+        val ruby = """<span class="ruby"><span class="rb">都会</span><span class="rt">まち</span></span>"""
+        val search = """<p class="searchResult__title"><a href="/lyric/ab0001/">Demo</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>"""
+        val page = """<div class="hiragana" >${ruby}の${ruby.replace("都会", "夜").replace("まち", "よる")}<br /></div>"""
+        val sites = { request: okhttp3.Request ->
+            if (request.url.host != "utaten.com") null
+            else {
+                // The first request is the search. Held, so readings can be turned off before the song's page is opened.
+                if (started.count == 1L) {
+                    started.countDown()
+                    hold.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                }
+                FakeSpotify.html(request, if (request.url.encodedPath == "/search") search else page)
+            }
+        }
+        if (offline) {
+            MainActivity.connectionFactory = { FakeConnection() }
+            MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+            fake.handler = { request -> sites(request) ?: FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""") }
+            allowMicrophone()
+            launch()
+            recognize()
+            waitForText("Demo")
+            click(string(R.string.keep_offline))
+        } else {
+            wordsOf(null, "都会の夜", sites = sites)
+        }
+        // Idle the screen while the first request is out: waiting here without that never lets it leave.
+        waitUntil(TIMEOUT_MS) { started.count == 0L }
+        composeRule.runOnIdle { controllerModel().setReadings(false) }
+        hold.countDown()
+        // The fake answers at once, so a second request would already have left.
+        val until = System.currentTimeMillis() + 3_000
+        while (utatenRequests() < 2 && System.currentTimeMillis() < until) {
+            composeRule.waitForIdle()
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        return utatenRequests()
+    }
+
+    @Test
+    fun noFurtherUtaTenRequestLeavesOnceReadingsAreTurnedOffAfterTheFirstHasLeft() {
+        assertEquals(fake.requestedUrls.filter { "utaten.com" in it }.toString(), 1, utatenRequestsOnceTheFirstIsOut(offline = false))
+    }
+
+    @Test
+    fun noFurtherUtaTenRequestLeavesFromASongKeptOfflineOnceReadingsAreTurnedOffAfterTheFirstHasLeft() {
+        assertEquals(fake.requestedUrls.filter { "utaten.com" in it }.toString(), 1, utatenRequestsOnceTheFirstIsOut(offline = true))
+        val kept = listOf(File(app.cacheDir, "sung_readings.json"), File(app.noBackupFilesDir, "kept/sung_readings.json"))
+            .filter { it.isFile }.joinToString { it.readText() }
+        assertFalse("a result was kept after readings were turned off: $kept", "utaten|${SungReadings.CACHE_VERSION}|" in kept)
+    }
+
+    @Test
+    fun aSongKeptOfflineBeforeNoneWasCachedAgainStillShowsHowItsKanjiAreSungWithNoNetwork() {
+        MainActivity.connectionFactory = { FakeConnection() }
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        val ruby = { kanji: String, kana: String -> """<span class="ruby"><span class="rb">$kanji</span><span class="rt">$kana</span></span>""" }
+        fake.handler = { request ->
+            when {
+                request.url.host != "utaten.com" -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""")
+                request.url.encodedPath == "/search" ->
+                    FakeSpotify.html(request, """<p class="searchResult__title"><a href="/lyric/ab0001/">Demo</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>""")
+                else -> FakeSpotify.html(request, """<div class="hiragana" >${ruby("都会", "まち")}の${ruby("夜", "よる")}<br /></div>""")
+            }
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        val pinned = File(app.noBackupFilesDir, "kept/sung_readings.json")
+        waitUntil(TIMEOUT_MS) { pinned.isFile && "まち" in pinned.readText() && "utaten|4|" in pinned.readText() }
+        controller?.destroyAndSettle()
+        // What version 3 kept for this song, still pinned: the version is in the key.
+        pinned.writeText(pinned.readText().replace("utaten|4|", "utaten|3|"))
+        File(app.cacheDir, "sung_readings.json").delete()
+        fake.requestedUrls.clear()
+        fake.handler = { request ->
+            if (request.url.host == "utaten.com") throw IOException("offline")
+            FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""")
+        }
+        launch()
+        recognize()
+        waitForText("Demo")
+        waitForDescription(string(R.string.kept_offline))
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { readingShown("まち") || readingShown("とかい") || utatenRequests() > 0 }
+        assertEquals(fake.requestedUrls.filter { "utaten.com" in it }.toString(), 0, utatenRequests())
+        assertTrue(readingShown("まち"))
+        assertFalse(readingShown("とかい"))
+    }
+
     @Test
     fun withNoRoomLeftASongKeptOfflineSaysSo() {
         prefs().edit().putInt("offline_space_mb", 0).commit()
@@ -883,7 +1266,7 @@ class ListeningTest {
         demoCard()
         click(string(R.string.keep_offline))
         waitForDescription(string(R.string.kept_offline))
-        controller?.pause()?.stop()?.destroy()
+        controller?.destroyAndSettle()
         launch()
         recognize()
         waitForText("Demo")
@@ -918,29 +1301,87 @@ class ListeningTest {
     }
 
     @Test
-    fun aNetworkBackWhileTheLastOneStillFailsIsTriedAgainToo() {
+    fun aSongWhoseSungReadingsCantBeReachedIsKeptWithTheRestOfItsAlbumAndTheyreAskedForOnTheNextNetwork() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
         MainActivity.connectionFactory = { FakeConnection() }
-        val keeping = java.util.concurrent.atomic.AtomicBoolean(false)
-        val first = java.util.concurrent.atomic.AtomicReference<String>()
-        val back = java.util.concurrent.atomic.AtomicBoolean(false)
-        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        val down = java.util.concurrent.atomic.AtomicBoolean(true)
+        val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
+            {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":"Band"}]}}}}}}</script>"""
+        // The Japanese song first, so its readings failing comes before the other's words are looked up.
+        val englishAsked = java.util.concurrent.atomic.AtomicBoolean(false)
         fake.handler = { request ->
             val url = request.url.toString()
-            // Kept, the next network comes while it's still giving up on the one that went away; what
-            // it asks first, asked again, is it trying on the new one.
-            if (keeping.get() && !first.compareAndSet(null, url) && url == first.get()) back.set(true)
-            if (keeping.get() && first.get() == url && !back.get()) networkBackNow()
-            if (!back.get()) throw IOException("offline")
-            FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
+            when {
+                request.url.host == "utaten.com" -> if (down.get()) throw IOException("offline") else utaTenSingsMachi(request)
+                request.url.host == "open.spotify.com" && request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
+                request.url.host == "open.spotify.com" -> FakeSpotify.html(request, FakeSpotify.trackPage("Road Trip | Spotify", "album"))
+                "Second" in url -> FakeSpotify.html(request, """[{"trackName":"Second Song","artistName":"Band","plainLyrics":"Night sky"}]""").also { englishAsked.set(true) }
+                else -> FakeSpotify.html(request, """[{"trackName":"First Song","artistName":"Band","plainLyrics":"都会の夜"}]""")
+            }
+        }
+        launch()
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy")
+        click(string(R.string.resolve_button))
+        waitForText("First Song")
+        click(string(R.string.keep_offline))
+        // Both kept: the English one's words too, after UtaTen failed for the Japanese one.
+        waitForDescription(string(R.string.kept_offline))
+        assertTrue(utatenRequests() > 0)
+        assertTrue(englishAsked.get())
+        val pinned = File(app.noBackupFilesDir, "kept/sung_readings.json")
+        assertFalse(pinned.isFile && "まち" in pinned.readText())
+        // Kept as still to be read, the Japanese one only.
+        val songs = File(app.noBackupFilesDir, "kept/songs.json")
+        assertEquals(1, org.json.JSONArray(songs.readText()).getJSONObject(0).getJSONArray("unread").length())
+        // The next network costing no data, they're asked for again, and kept.
+        down.set(false)
+        controllerModel().unmeteredChanged(true)
+        waitUntil(TIMEOUT_MS) { pinned.isFile && "まち" in pinned.readText() && org.json.JSONArray(songs.readText()).getJSONObject(0).getJSONArray("unread").length() == 0 }
+    }
+
+    @Test
+    fun aNetworkBackWhileTheLastOneStillFailsIsTriedAgainToo() {
+        MainActivity.connectionFactory = { FakeConnection() }
+        val model = java.util.concurrent.atomic.AtomicReference<MainViewModel>()
+        // The time round that keeps it. Told by the round, not by what's asked: the song's card asks the same
+        // services, and its requests can arrive late, after the tap that keeps it (Issue #938).
+        val keeping = java.util.concurrent.atomic.AtomicInteger(Int.MAX_VALUE)
+        val telling = java.util.concurrent.atomic.AtomicBoolean(false)
+        val told = CountDownLatch(1)
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        fake.handler = { request ->
+            val round = model.get()?.keptOfflineRounds ?: 0
+            when {
+                round < keeping.get() -> throw IOException("offline")
+                round == keeping.get() -> {
+                    // The next network comes while each request of the first time round still fails on the one that
+                    // went away: none fails before it's told, so the fetch is still running when it hears.
+                    if (telling.compareAndSet(false, true)) {
+                        // Told even when the telling fails, so the test ends on that failure and not on a wait.
+                        try {
+                            networkBackNow()
+                        } finally {
+                            told.countDown()
+                        }
+                    }
+                    told.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    throw IOException("offline")
+                }
+                else -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
+            }
         }
         allowMicrophone()
         launch()
+        model.set(controllerModel())
         recognize()
         waitForText("Demo")
         composeRule.waitForIdle()
-        keeping.set(true)
+        keeping.set(model.get().keptOfflineRounds + 1)
         click(string(R.string.keep_offline))
         waitForDescription(string(R.string.kept_offline))
+        // Told while the first time round failed, and kept the next time round, which that started.
+        assertTrue(telling.get())
+        assertEquals(keeping.get() + 1, model.get().keptOfflineRounds)
     }
 
     /**
@@ -975,6 +1416,10 @@ class ListeningTest {
         switchedOn?.let { prefs().edit().putBoolean(it, true).commit() }
         MainActivity.connectionFactory = { FakeConnection() }
         demoCard()
+        // These checks need successful chord-site responses, not the lyrics JSON used by the card.
+        val sites = chordSitesWithNone()
+        val answer = fake.handler
+        fake.handler = { request -> sites(request) ?: answer(request) }
         fake.requestedUrls.clear()
         click(string(R.string.keep_offline))
         waitForDescription(string(R.string.kept_offline))
@@ -997,6 +1442,34 @@ class ListeningTest {
     @Test
     fun aSongKeptOfflineKeepsItsChordsWhenSwitchedOn() {
         assertTrue(hostsAskedKeepingWith("lyrics_chords").any { "ultimate-guitar" in it })
+    }
+
+    @Test
+    fun aKeptSongWaitsForFailedChordsAndFinishesWhenTheNetworkComesBack() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        val connection = FakeConnection()
+        MainActivity.connectionFactory = { connection }
+        demoCard()
+        val sites = chordSitesWithNone()
+        val answer = fake.handler
+        val up = java.util.concurrent.atomic.AtomicBoolean(false)
+        fake.handler = { request ->
+            if (request.url.host == "www.ultimate-guitar.com" && !up.get()) throw IOException("offline chords")
+            sites(request) ?: answer(request)
+        }
+        fake.requestedUrls.clear()
+        click(string(R.string.keep_offline))
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "ultimate-guitar.com" in it } }
+        val field = MainViewModel::class.java.getDeclaredField("keepingOffline").apply { isAccessible = true }
+        val job = composeRule.runOnIdle { field.get(controllerModel()) as kotlinx.coroutines.Job }
+        waitUntil(TIMEOUT_MS) { job.isCompleted }
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.keptOffline.single().done })
+        assertFalse(described(string(R.string.kept_offline)))
+        up.set(true)
+        connection.unmetered.value = false
+        composeRule.waitForIdle()
+        connection.unmetered.value = true
+        waitForDescription(string(R.string.kept_offline))
     }
 
     @Test
@@ -1162,7 +1635,7 @@ class ListeningTest {
         assertEquals("package:${app.packageName}", settings.dataString)
 
         // Tapped again later, Android won't ask, so the steps to its page show instead.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         val next = launch()
         recognize()
         waitForText(string(R.string.fix_mic_title))
@@ -1267,7 +1740,7 @@ class ListeningTest {
         launch(Intent(MainActivity.ACTION_LISTEN).setClassName(app, MainActivity.LISTEN_ALIAS))
         waitForText(string(R.string.listening_text))
         waitUntil(TIMEOUT_MS) { microphone.opened == 1 }
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // MainActivity itself is exported; asked directly, it doesn't listen.
         microphone = FakeMicrophone()
@@ -1328,7 +1801,8 @@ class ListeningTest {
     }.also { phone -> MainActivity.playbackFactory = { phone } }
 
     /** The app moves on to [song], which it plays from the start. */
-    private fun FakePlayback.goesOnTo(song: String) = composeRule.runOnIdle {
+    private fun FakePlayback.goesOnTo(song: String) {
+        composeRule.settle(controller?.get())
         playing.value = null
         onThePhone = Heard.Song(MusicMetadata(song, "Band"), null, 0, SystemClock.elapsedRealtime())
     }
@@ -1660,6 +2134,32 @@ class ListeningTest {
     }
 
     @Test
+    fun anotherSongHeardNearWhereTheSongShownIsTakesOverAsItsNoReleaseOfIt() {
+        // As on a phone: a song in the room was named, then the one the phone plays was heard again and
+        // again, well into it and 6 seconds from where the one shown had got to.
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        hearing.song("Demo", 41.0)
+        hearing.song("Demo", 41.0)
+        waitUntil(TIMEOUT_MS) { lit("Demo three") }
+        hearing.song("Other", 35.0)
+        waitUntil(TIMEOUT_MS) { lit("Other two") }
+        assertEquals("Other", HistoryStore(prefs()).load().first().metadata.title)
+        // Nor is one of the same name by someone else.
+        hearing.song("Other", 36.0, artist = "Someone Else")
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyricsFor?.artist == "Someone Else" }
+    }
+
+    @Test
+    fun wordsFollowedByEarWhileWhatPlaysCantBeSeenStillSayHowToFollowTheMusicApp() {
+        MainActivity.playbackFactory = { FakePlayback() }
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        // The microphone hears the room as well as the phone, so it isn't the music app's place to go by.
+        waitForText(string(R.string.lyrics_follow_allow))
+    }
+
+    @Test
     fun aSongHeardAlongWithNoCoverGetsOneByItsNameInRecentAndItsWords() {
         val hearing = FakeHearing()
         demoWords(hearing)
@@ -1774,7 +2274,7 @@ class ListeningTest {
         val hearing = FakeHearing()
         demoWords(hearing)
         waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_stop_listening)) }
-        click(string(R.string.dismiss_button))
+        closeWords()
         waitForText(string(R.string.lyrics_button))
         // The music moves on meanwhile; the words opened again are still the song shown, and don't listen.
         hearing.song("Other", 1.0)
@@ -2078,6 +2578,8 @@ class ListeningTest {
         }
         assertNotNull(ShazamGapStore(prefs()).load(52_000, "longer"))
         assertTrue(controllerModel().uiState.listeningAlong)
+        // What it learnt goes in the timing log for a report about the timing.
+        assertTrue(TimingLog.lastMinute(), Regex("gap -?\\d+ to match longer").containsMatchIn(TimingLog.lastMinute()))
     }
 
     @Test
@@ -2102,14 +2604,13 @@ class ListeningTest {
         assertTrue(LeadStore(prefs()).load(song)!! in 9_000..11_000)
     }
 
-    @Test
-    fun wordsPutInTimeByHandOnAVideoLinedUpByShazamTeachItsGapForEveryRelease() {
+    /** A video with words on it, lined up by Shazam, whose recording is five seconds ahead of the words: learnt as the video's lead, not yet as Shazam's gap. */
+    private fun videoLinedUpByShazam(): Pair<FakePlayback, MusicMetadata> {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         val song = controllerModel().uiState.lyricsFor!!
         composeRule.runOnIdle { controllerModel().toggleSavedLine(1) }
-        val lines = SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")
         // The video is ten seconds ahead of the words, but Shazam's recording five ahead of them, which isn't known yet.
         for (index in 0..2) {
             composeRule.runOnIdle {
@@ -2121,6 +2622,13 @@ class ListeningTest {
         }
         waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
         assertTrue(LeadStore(prefs()).load(song)!! in 4_000..6_000)
+        return phone to song
+    }
+
+    @Test
+    fun wordsPutInTimeByHandOnAVideoLinedUpByShazamTeachItsGapForEveryRelease() {
+        val (phone, song) = videoLinedUpByShazam()
+        val lines = SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")
         // Ten seconds into the words, the second line is tapped as it's sung: the words were five seconds ahead.
         composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
         click(string(R.string.lyrics_sync))
@@ -2150,6 +2658,58 @@ class ListeningTest {
     }
 
     @Test
+    fun aGapMovedByHandOffersToReportByItselfAndTheOfferStaysOnceTheBarGoes() {
+        val (phone, _) = videoLinedUpByShazam()
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        composeRule.onNodeWithText("Demo two").performClick()
+        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") != null }
+        // The gap moved, not the lines: a way to put the words in time by hand all the same.
+        assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(controllerModel().uiState.lyricsFor!!, SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")))
+        assertEquals(setOf(SongProblem.TIMED_BY_HAND), controllerModel().uiState.reportOfferFor)
+        // Owed at once, so it isn't lost if the app is killed before the words are left.
+        assertTrue(prefs().getString("auto_reports_owed", "[]").orEmpty().contains("timed_by_hand"))
+        click(string(R.string.lyrics_sync_done))
+        composeRule.mainClock.advanceTimeBy(8_000)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.auto_report_offer))).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun aGapMovedByHandAloneIsReportedAsTheWordsAreLeftWhenReportsAreAllowed() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        val (phone, _) = videoLinedUpByShazam()
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        composeRule.onNodeWithText("Demo two").performClick()
+        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") != null }
+        fun timedByHand() = fake.requestedUrls.indices.count { fake.requestedUrls[it] == ReportSender.URL && "timed_by_hand" in fake.requestBodies[it] }
+        assertEquals(0, timedByHand())
+        // No line was put in time, only Shazam's gap moved: that's words put in time by hand all the same.
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        waitUntil(TIMEOUT_MS) { timedByHand() == 1 }
+    }
+
+    @Test
+    fun aGapMovedByTheArrowsOffersToReportByItselfAndTheOfferStaysOnceTheBarGoes() {
+        val (phone, _) = videoLinedUpByShazam()
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        val before = ShazamGapStore(prefs()).load(52_000, "longer")
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_sync_later))).performClick()
+        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") != before }
+        // The gap moved, not the lines: the arrows are a way to put the words in time by hand too.
+        assertEquals(setOf(SongProblem.TIMED_BY_HAND), controllerModel().uiState.reportOfferFor)
+        click(string(R.string.lyrics_sync_done))
+        composeRule.mainClock.advanceTimeBy(8_000)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.auto_report_offer))).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
     fun wordsOfASongHeardPutInTimeByHandMoveShazamsGapAndResetPutsItBack() {
         // Shazam hears 12.5 seconds into the recording it matched, which is ten seconds ahead of the words, as learnt before.
         ShazamGapStore(prefs()).save(MusicMetadata("Demo", "Band"), 600_000, "1", -10_000)
@@ -2175,11 +2735,17 @@ class ListeningTest {
         // The second line is tapped as it's sung, so Shazam's recording is less ahead than learnt.
         click(string(R.string.lyrics_sync))
         waitForText(string(R.string.lyrics_sync_hint))
+        // The song can play on while the words load and the timing controls open.
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(4))
+        val original = composeRule.runOnIdle { checkNotNull(controllerModel().uiState.following).clock }
+        val beforeTap = SystemClock.elapsedRealtime()
         composeRule.onNodeWithText("Ten").performClick()
+        val afterTap = SystemClock.elapsedRealtime()
         waitUntil(TIMEOUT_MS) { lit("Ten") }
-        assertTrue(gap().toString(), gap()!! in -3_500..-1_500)
-        // Nudged half a second later, the gap moves along.
+        // Gap = original gap - (song position at the tap - line time).
         val tapped = gap()!!
+        assertTrue(tapped.toString(), tapped in (-original.positionAt(afterTap))..(-original.positionAt(beforeTap)))
+        // Nudged half a second later, the gap moves along.
         click(string(R.string.lyrics_sync_later))
         waitUntil(TIMEOUT_MS) { gap() == tapped - 500 }
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
@@ -2192,7 +2758,10 @@ class ListeningTest {
         assertEquals(-10_000L - gap()!!, moved.getLong("heardMs") - moved.getLong("timedMs"))
         // Reset puts back the gap learnt before, and the words with it, at once.
         click(string(R.string.lyrics_sync_reset))
-        composeRule.runOnIdle { assertTrue(controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()) < 6_000) }
+        composeRule.runOnIdle {
+            val now = SystemClock.elapsedRealtime()
+            assertEquals(original.positionAt(now), checkNotNull(controllerModel().uiState.following).clock.positionAt(now))
+        }
         assertEquals(-10_000L, gap())
         // A line tapped too far from Shazam's place to be its gap is kept for these words alone.
         composeRule.onNodeWithText("Late").performClick()
@@ -2211,6 +2780,422 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertNull(controllerModel().uiState.error)
         assertEquals(1, hearing.listens)
+    }
+
+    /** A video first named by its fingerprint, as opening lyrics of what is playing does. */
+    private fun heardVideo(hearing: FakeHearing, recognizedMs: Long? = null, heardSeconds: Double = 2.0, playerMs: Long = 12_000, playerSpeed: Float = 1f): FakePlayback {
+        listeningAlong(hearing)
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
+        val phone = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "video:demo"), null)
+            playing.value = Following(PlaybackClock(playerMs, SystemClock.elapsedRealtime(), speed = playerSpeed), "YouTube", canSeek = true, video = true, durationMs = 62_000)
+        }
+        MainActivity.playbackFactory = { phone }
+        allowMicrophone()
+        launch()
+        composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // Heard from the moment the player said where it is, so how far apart they are is exact.
+        hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band", lengthMs = recognizedMs), null, kotlin.math.round(heardSeconds * 1000).toLong(), phone.playing.value!!.clock.atMs, "reference"))
+        waitForText("Demo one")
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        return phone
+    }
+
+    /** Hears music and no voice in whatever it's given, as an instrumental's: counts how often it's asked. */
+    private class NoVoice : SingingHearing {
+        @Volatile
+        var hears = 0
+
+        override val missesModel = false
+        override val heardNoSound = false
+
+        override suspend fun fetchModel() = true
+
+        override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung {
+            hears++
+            return Sung(0, listOf(HeardWord("[Music]", 0)))
+        }
+    }
+
+    @Test
+    fun wordsAMarkHoldsShowAtOnceForASongNoAppOnThePhonePlays() {
+        // Review of PR #919: named by Shazam as it plays on another device, or in an app Crosstune can't see, with two of
+        // LRCLIB's copies marked instrumental and one with timed words, or a title saying so. On main, the words show at once.
+        val marked = """{"trackName":"Demo","artistName":"Band","instrumental":true}"""
+        val cases = listOf(
+            Triple("another device", "Demo", FakePlayback().apply { access = true }),
+            // Without notification access, Android shows Crosstune no app's session, whatever plays.
+            Triple("app not seen", "Demo", FakePlayback().apply { access = false; playing.value = Following(PlaybackClock(2_000, SystemClock.elapsedRealtime()), "Music", canSeek = true) }),
+            Triple("title", "Demo (Instrumental)", FakePlayback().apply { access = true })
+        )
+        val realSinging = MainActivity.singingFactory
+        try {
+            for ((case, title, phone) in cases) {
+                controller?.destroyAndSettle()
+                File(app.cacheDir, "lyrics.json").delete()
+                File(app.cacheDir, "kept_words.json").delete()
+                val hearing = FakeHearing()
+                listeningAlong(hearing)
+                val copies = if (title == "Demo") "$marked,$marked," else ""
+                fake.handler = { request ->
+                    FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[$copies{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two"}]""" else "{}")
+                }
+                val singing = NoVoice()
+                MainActivity.singingFactory = { _, _ -> singing }
+                MainActivity.playbackFactory = { phone }
+                allowMicrophone()
+                launch()
+                composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
+                waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+                hearing.song(title, 2.0)
+                try {
+                    waitForText("Demo one")
+                } catch (e: Throwable) {
+                    throw AssertionError(case, e)
+                }
+                assertFalse(case, described(string(R.string.lyrics_instrumental)))
+                assertEquals(case, 0, singing.hears)
+            }
+        } finally {
+            MainActivity.singingFactory = realSinging
+        }
+    }
+
+    /** Heard twice: the first answer opens the words, the second keeps them in time. */
+    private fun heardTwice(): List<String> {
+        val hearing = FakeHearing()
+        heardVideo(hearing)
+        hearing.song("Demo", 12.0, matchId = "reference")
+        waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        return ShadowLog.getLogsForTag(TIMING_LOG).map { it.msg }
+    }
+
+    /** The phone check reads every fingerprint from this log, so it replays what the phone was told. */
+    @Test
+    fun aTimingCheckLogsEachAnswerShazamGave() {
+        ShadowLog.setLoggable(TIMING_LOG, android.util.Log.DEBUG)
+        val logged = heardTwice()
+        assertTrue(logged.toString(), logged.any { it.startsWith("recognized 2000 ") })
+        val answer = logged.first { it.startsWith("fingerprint 12000 ") }
+        assertTrue(answer, " app PlaybackClock(" in answer)
+        assertTrue(answer, " video true duration 62000 lead " in answer)
+    }
+
+    @Test
+    fun nothingAboutTimingIsLoggedUnlessAsked() {
+        assertEquals(emptyList<String>(), heardTwice())
+    }
+
+    /** Each answer [songMs] into the song, playing at [speed], heard just now; waits for the next listen. */
+    private fun hearsAt(hearing: FakeHearing, songMs: Long, speed: Float) {
+        val before = hearing.listens
+        hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band"), null, songMs, SystemClock.elapsedRealtime(), "reference", speed = speed))
+        waitUntil(TIMEOUT_MS) { hearing.listens > before }
+    }
+
+    private fun playerAt(phone: FakePlayback, positionMs: Long) {
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(positionMs, SystemClock.elapsedRealtime())) }
+        composeRule.waitForIdle()
+    }
+
+    /** Followed from one answer 10 seconds into the video, as Shazam's other answers, wherever they say it is, say how fast it goes. */
+    private fun videoHeardGoingAt(hearing: FakeHearing, speeds: List<Float>): FakePlayback {
+        val phone = heardVideo(hearing)
+        // Each impossible as a place in it, as a part played again is.
+        speeds.forEach { hearsAt(hearing, 200_000, it) }
+        return phone
+    }
+
+    @Test
+    fun thePlayersSpeedIsNotCountedAgainAsTheRecordingsSpeed() {
+        val hearing = FakeHearing()
+        heardVideo(hearing, playerSpeed = 1.05f)
+        composeRule.runOnIdle {
+            controllerModel().syncLine(0)
+        }
+        repeat(3) { hearsAt(hearing, 200_000, 1.05f) }
+        composeRule.runOnIdle {
+            assertEquals(1.05f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(40_000L, wordsSpan())
+        }
+    }
+
+    @Test
+    fun thePlayersSpeedAtCaptureIsUsedWhenItChangesBeforeTheAnswer() {
+        val hearing = FakeHearing()
+        val phone = heardVideo(hearing, playerSpeed = 1.05f)
+        composeRule.runOnIdle { controllerModel().syncLine(0) }
+        repeat(2) { hearsAt(hearing, 200_000, 1.05f) }
+        // The third capture is already waiting for its answer at 1.05, then the player changes rate.
+        composeRule.runOnIdle {
+            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(12_000, SystemClock.elapsedRealtime(), speed = 1.25f))
+        }
+        hearsAt(hearing, 200_000, 1.05f)
+        composeRule.runOnIdle {
+            assertEquals(1.25f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(40_000L, wordsSpan())
+        }
+    }
+
+    @Test
+    fun aMusicAppsLeadTakesTheRecordingsSpeedOffItsClockOnlyOnce() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing, video = false)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // Avoid the app's immediate answer being fed back into automatic calibration after each reply.
+        composeRule.runOnIdle { phone.onThePhone = null }
+        hearIntro(phone, hearing, 0..2)
+        waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
+        composeRule.runOnIdle {
+            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(32_000, SystemClock.elapsedRealtime(), speed = 1.05f))
+            controllerModel().listenAlong()
+            controllerModel().syncLine(0)
+        }
+        repeat(4) { hearsAt(hearing, 200_000, 0.945f) }
+        composeRule.runOnIdle {
+            assertEquals(0.945f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(40_000L, wordsSpan())
+        }
+    }
+
+    @Test
+    fun aVideoSlowerThanItsSongKeepsToItAsItPlays() {
+        val phone = videoHeardGoingAt(FakeHearing(), listOf(0.99f, 0.97f, 0.99f))
+        playerAt(phone, 42_000)
+        composeRule.runOnIdle {
+            val at = SystemClock.elapsedRealtime()
+            // 2 seconds into the song 12 into the video, and 30 seconds of the video later, 29.7 of the song.
+            assertEquals(31_700.0, controllerModel().uiState.following!!.clock.positionAt(at).toDouble(), 150.0)
+            assertEquals(0.99f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+        }
+    }
+
+    /** How far "Demo three" is from "Demo one" in the words as shown, 40 s as they're found. */
+    private fun wordsSpan() = controllerModel().uiState.lyricLines.let { it[2].timeMs - it[0].timeMs }
+
+    @Test
+    fun aVideosSpeedIsntCountedTwiceOnceItIsTakenOffItsClock() {
+        val hearing = FakeHearing()
+        val phone = heardVideo(hearing)
+        playerAt(phone, 12_000)
+        composeRule.runOnIdle { controllerModel().syncLine(0) }
+        // Heard going slower than the recording the words are timed for, the lines past the one put in time go on at its pace...
+        hearsAt(hearing, 200_000, 0.9f)
+        composeRule.runOnIdle { assertEquals(40_000 / 0.9, wordsSpan().toDouble(), 1.0) }
+        assertTrue(TimingLog.lastMinute(), Regex("pace 1\\.11\\d* from speed 0\\.9\\d* player speed 1\\.0").containsMatchIn(TimingLog.lastMinute()))
+        // ...until the video's speed, once enough hearings agree, is taken off its clock: it's the clock that goes at it then.
+        repeat(2) { hearsAt(hearing, 200_000, 0.9f) }
+        composeRule.runOnIdle { assertEquals(0.9f, controllerModel().uiState.following!!.clock.speed, 0.001f) }
+        composeRule.runOnIdle { assertEquals(40_000L, wordsSpan()) }
+    }
+
+    @Test
+    fun aVideoTooFarOffItsSongsSpeedToTakeItOffItsClockKeepsThePaceOfItsWords() {
+        val hearing = FakeHearing()
+        val phone = heardVideo(hearing)
+        playerAt(phone, 12_000)
+        composeRule.runOnIdle { controllerModel().syncLine(0) }
+        repeat(3) { hearsAt(hearing, 200_000, 0.5f) }
+        composeRule.runOnIdle { assertEquals(1f, controllerModel().uiState.following!!.clock.speed, 0.001f) }
+        composeRule.runOnIdle { assertEquals(80_000L, wordsSpan()) }
+    }
+
+    @Test
+    fun aLineOfASlowVideoIsSoughtWhereItIs() {
+        val phone = videoHeardGoingAt(FakeHearing(), listOf(0.99f, 0.99f, 0.99f))
+        playerAt(phone, 12_000)
+        composeRule.runOnIdle { controllerModel().seekLyrics(40_000) }
+        // 38 seconds of the song after its second 2, at 12 in the video, take 38.4 of the video.
+        assertEquals(50_384.0, phone.seeks.last().toDouble(), 100.0)
+    }
+
+    @Test
+    fun oneOrTwoAnswersDontSayHowFastAVideoGoes() {
+        val phone = videoHeardGoingAt(FakeHearing(), listOf(0.5f, 0.5f))
+        playerAt(phone, 42_000)
+        composeRule.runOnIdle {
+            assertEquals(32_000.0, controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 150.0)
+        }
+    }
+
+    @Test
+    fun aVideoIsntTakenToGoAtASpeedNoVideoGoes() {
+        val phone = videoHeardGoingAt(FakeHearing(), listOf(0.5f, 0.5f, 0.5f))
+        playerAt(phone, 42_000)
+        composeRule.runOnIdle {
+            assertEquals(32_000.0, controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 150.0)
+        }
+    }
+
+    @Test
+    fun aLengthHeardOnlyTellsTakesApartWhenThePlayerDoesNotKnowIt() {
+        heardVideo(FakeHearing(), recognizedMs = 52_000)
+        val song = controllerModel().uiState.lyricsFor!!
+        assertEquals(52_000L, song.heardLengthMs)
+        // It isn't said to be this recording's length, so the words looked up and kept stay the player's.
+        assertNull(song.lengthMs)
+        assertEquals(RecordingKey.of(MusicMetadata("Demo", "Band", recordingId = "video:demo")), RecordingKey.of(song))
+    }
+
+    /** The song heard [leadMs] behind what the video plays now, as the answer's taken to say. */
+    private fun heardBehind(hearing: FakeHearing, phone: FakePlayback, leadMs: Long, speed: Float = 1f) =
+        hearsAt(hearing, phone.playing.value!!.clock.positionAt(SystemClock.elapsedRealtime()) - leadMs, speed)
+
+    /** How far the video is ahead of the words followed, as they go now. */
+    private fun followedBehind(phone: FakePlayback) = SystemClock.elapsedRealtime().let { at ->
+        phone.playing.value!!.clock.positionAt(at) - controllerModel().uiState.following!!.clock.positionAt(at)
+    }
+
+    private fun assertLinedUp(lined: Boolean) =
+        composeRule.runOnIdle { assertEquals(controllerModel().uiState.following.toString(), lined, controllerModel().uiState.following!!.timingKnown) }
+
+    // A video 10 seconds longer than its words may be 8 seconds behind them, or 18 ahead.
+    @Test
+    fun aVideoAsFarBehindItsWordsAsOneCouldBeIsLinedUp() {
+        heardVideo(FakeHearing(), heardSeconds = 33.0, playerMs = 25_000)
+        assertLinedUp(true)
+    }
+
+    @Test
+    fun aVideoAnyFurtherBehindItsWordsIsnt() {
+        heardVideo(FakeHearing(), heardSeconds = 33.001, playerMs = 25_000)
+        assertLinedUp(false)
+    }
+
+    @Test
+    fun aVideoAsFarAheadOfItsWordsAsOneCouldBeIsLinedUp() {
+        heardVideo(FakeHearing(), heardSeconds = 7.0, playerMs = 25_000)
+        assertLinedUp(true)
+    }
+
+    @Test
+    fun aVideoAnyFurtherAheadOfItsWordsIsnt() {
+        heardVideo(FakeHearing(), heardSeconds = 6.999, playerMs = 25_000)
+        assertLinedUp(false)
+    }
+
+    @Test
+    fun theOneRightAnswerAfterAFalseOneLinesAVideoUp() {
+        val hearing = FakeHearing()
+        val phone = heardVideo(hearing, heardSeconds = 39.0)
+        assertLinedUp(false)
+        heardBehind(hearing, phone, 10_000)
+        assertLinedUp(true)
+        composeRule.runOnIdle { assertEquals(10_000.0, followedBehind(phone).toDouble(), 100.0) }
+    }
+
+    /** Heard while the video, 4 seconds ahead, can't be told from its 10 seconds of extra yet; then [laterMs] on, the player says where it is. */
+    private fun heardBeforeItMayHaveStarted(laterMs: Long): FakePlayback {
+        // A phone's been on a while, so how long ago it was heard isn't told by the clock's own reading.
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMinutes(2))
+        val phone = heardVideo(FakeHearing(), heardSeconds = 1.0, playerMs = 5_000)
+        assertLinedUp(false)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(laterMs))
+        composeRule.runOnIdle { SystemClock.elapsedRealtime().let { at -> phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(phone.playing.value!!.clock.positionAt(at), at)) } }
+        composeRule.waitForIdle()
+        return phone
+    }
+
+    @Test
+    fun aVideoHeardBeforeItsSongMayHaveStartedIsLinedUpOnceItMayHave() {
+        val phone = heardBeforeItMayHaveStarted(8_000)
+        assertLinedUp(true)
+        composeRule.runOnIdle { assertEquals(4_000.0, followedBehind(phone).toDouble(), 100.0) }
+    }
+
+    @Test
+    fun aVideoHeardLongAgoIsntLinedUpByThat() {
+        heardBeforeItMayHaveStarted(61_000)
+        assertLinedUp(false)
+    }
+
+    @Test
+    fun aVideoFollowedAgainGoesAsFastAsItsHeardToFromThenOn() {
+        val hearing = FakeHearing()
+        val phone = videoHeardGoingAt(hearing, listOf(0.9f, 0.9f, 0.9f))
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        val listens = hearing.listens
+        composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
+        waitUntil(TIMEOUT_MS) { hearing.listens > listens }
+        heardBehind(hearing, phone, 10_000)
+        composeRule.runOnIdle { assertEquals(1f, controllerModel().uiState.following!!.clock.speed, 0.001f) }
+    }
+
+    @Test
+    fun aVideoOpenedAgainWellIntoItIsTakenToGoSlowerOnlyFromThere() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val song = controllerModel().uiState.lyricsFor!!
+        hearIntro(phone, hearing, 0..2)
+        waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        playerAt(phone, 100_000)
+        val listens = hearing.listens
+        composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
+        waitUntil(TIMEOUT_MS) { hearing.listens > listens }
+        // The first opens the words, so it's from after that they're followed.
+        repeat(4) { hearsAt(hearing, 200_000, 0.9f) }
+        playerAt(phone, 130_000)
+        // 30 seconds of the video from where it was opened, 27 of the song.
+        composeRule.runOnIdle { assertEquals(LeadStore(prefs()).load(song)!! + 3_000.0, followedBehind(phone).toDouble(), 500.0) }
+    }
+
+    @Test
+    fun aLineOfASlowVideoTappedAsItsSungIsWhereItsSungAndGoesOnFromThere() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val song = controllerModel().uiState.lyricsFor!!
+        for (index in 0..2) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band"), null, position + 5_000, SystemClock.elapsedRealtime(), "longer", speed = 0.9f))
+            }
+            if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
+        playerAt(phone, 20_000)
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        composeRule.onNodeWithText("Demo two").performClick()
+        waitUntil(TIMEOUT_MS) { lit("Demo two") }
+        playerAt(phone, 50_000)
+        // 30 seconds of the video from where the line, 10 seconds in, was tapped: 27 of the song.
+        composeRule.runOnIdle { assertEquals(37_000.0, controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 500.0) }
+    }
+
+    @Test
+    fun aLeadKeptThatNoVideoOfTheseWordsCouldHaveGivesWayToWhatsHeard() {
+        LeadStore(prefs()).save(MusicMetadata("Demo", "Band", recordingId = "video:demo"), -27_000)
+        val phone = heardVideo(FakeHearing())
+        composeRule.runOnIdle { assertEquals(10_000.0, followedBehind(phone).toDouble(), 100.0) }
+    }
+
+    @Test
+    fun aVideoDoesNotStartAtAnImpossibleFingerprintPosition() {
+        heardVideo(FakeHearing(), heardSeconds = 39.0)
+        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+    }
+
+    @Test
+    fun aFingerprintJumpCannotReplaceTheVideosExistingLead() {
+        val hearing = FakeHearing()
+        heardVideo(hearing)
+        val before = controllerModel().uiState.following!!.clock
+        // The same reference gives two consistent but false positions, 37 seconds ahead.
+        repeat(2) { index ->
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(10))
+            composeRule.runOnIdle { hearing.song("Demo", (before.positionAt(SystemClock.elapsedRealtime()) + 37_000) / 1000.0, matchId = "reference") }
+            waitUntil(TIMEOUT_MS) { hearing.listens == index + 3 }
+        }
+        composeRule.runOnIdle {
+            val at = SystemClock.elapsedRealtime()
+            assertTrue(controllerModel().uiState.following.toString(), kotlin.math.abs(controllerModel().uiState.following!!.clock.positionAt(at) - before.positionAt(at)) < 1_000)
+        }
     }
 
     @Test
@@ -2277,6 +3262,7 @@ class ListeningTest {
         hearIntro(phone, hearing, 0..0)
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
         composeRule.runOnIdle { controllerModel().syncLine(0) }
+        assertTrue(TimingLog.lastMinute(), Regex("lead guessed -?\\d+").containsMatchIn(TimingLog.lastMinute()))
         // Heard again, 16 seconds ahead this time: the words stay where they were put.
         composeRule.runOnIdle {
             phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime()))
@@ -2290,6 +3276,22 @@ class ListeningTest {
     }
 
     @Test
+    fun aReportOnWordsPutInTimeFromAGuessSaysTheLeadGuessed() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // Heard 10 seconds into the video's lead, once: a guess, not yet confirmed by three hearings.
+        hearIntro(phone, hearing, 0..0)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        composeRule.runOnIdle { controllerModel().syncLine(0) }
+        composeRule.runOnIdle { controllerModel().sendReport("") }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.contains(ReportSender.URL) }
+        val song = JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)]).getJSONObject("song")
+        assertEquals(10_000.0, song.getDouble("leadMs"), 1_500.0)
+        assertFalse(song.getString("log").contains("lead unavailable"))
+    }
+
+    @Test
     fun linesKeptBeforeAVideosIntroIsConfirmedStartWhereTheSongDoesOnceItIs() {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)
@@ -2299,6 +3301,7 @@ class ListeningTest {
         hearIntro(phone, hearing, 0..2)
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines.single().leadMs in 9_000..11_000 }
         assertEquals(controllerModel().uiState.savedLines, SavedLinesStore(prefs()).load())
+        assertTrue(TimingLog.lastMinute(), Regex("lead -?\\d+ from hearing at").containsMatchIn(TimingLog.lastMinute()))
     }
 
     @Test
@@ -2489,7 +3492,7 @@ class ListeningTest {
         hearing.next.trySend(Heard.Failed(AppError.MICROPHONE))
         waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_listen_along)) }
         // The words stay; closed, the song says why it stopped.
-        click(string(R.string.dismiss_button))
+        closeWords()
         waitForText(string(R.string.error_microphone))
     }
 
@@ -2950,7 +3953,7 @@ class ListeningTest {
                 // Answering late, as on a slow machine.
                 Thread.sleep(500)
                 // Found untimed at first, shown as they are; a timed copy comes from asking again.
-                val timed = if (++asked == 1) "" else ""","syncedLyrics":"[00:01.00] Night sky\n[00:05.00] Stars""""
+                val timed = if (++asked == 1) "" else ""","syncedLyrics":"[00:01.00] Night sky\n[00:05.00] Stars${'"'}"""
                 FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars"$timed}]""")
             } else {
                 FakeSpotify.html(request, """{"results":[]}""")
@@ -3137,7 +4140,8 @@ class ListeningTest {
 
     private fun ServiceController<FloatingLyricsService>.command(action: String) {
         get().onStartCommand(Intent(app, FloatingLyricsService::class.java).setAction(action), 0, 2)
-        composeRule.waitForIdle()
+        // Compose waits 2 s for a screen to be resumed when none is, as after the words close.
+        if (overlays(get()).isNotEmpty()) composeRule.waitForIdle() else composeRule.settle(controller?.get())
     }
 
     @Test
@@ -3640,7 +4644,8 @@ class ListeningTest {
         openAi: FakeOpenAi? = null,
         title: String = "Demo",
         artist: String = "Band",
-        sites: (okhttp3.Request) -> okhttp3.Response? = { null }
+        sites: (okhttp3.Request) -> okhttp3.Response? = { null },
+        before: () -> Unit = {}
     ) {
         MainActivity.listenAlongPauseMs = 0
         MainActivity.hearingFactory = { FakeHearing().apply { song(title, 2.0, artist = artist) } }
@@ -3649,7 +4654,7 @@ class ListeningTest {
                 GOOGLE_TRANSLATE_HOST -> translation(request, translations)
                 "api.mymemory.translated.net" -> myMemoryTranslation(request, translations)
                 else -> {
-                    val timed = synced?.let { ""","syncedLyrics":"$it"""" }.orEmpty()
+                    val timed = synced?.let { ""","syncedLyrics":"$it${'"'}""" }.orEmpty()
                     FakeSpotify.html(request, """[{"trackName":"$title","artistName":"$artist","plainLyrics":"$plain"$timed}]""")
                 }
             }
@@ -3658,6 +4663,7 @@ class ListeningTest {
         launch()
         recognize()
         waitForText(title)
+        before()
         click(string(R.string.lyrics_button))
     }
 
@@ -3895,8 +4901,515 @@ class ListeningTest {
         assertFalse(readingShown("とかい"))
         val kept = SavedLinesStore(prefs()).load()
         assertEquals("まちのよる", kept.first { it.text == "都会の夜" }.reading)
+        // Where it's put right by hand, before that was marked, it stays so: the dictionary reads 朝 あさ. The rest is read as it's sung.
+        assertEquals("まちのあした", kept.first { it.text == "都会の朝" }.reading)
+        assertEquals(Ruby("朝", "あした", Reader.USER), kept.first { it.text == "都会の朝" }.ruby?.last())
+    }
+
+    /** UtaTen's answer for a song it hasn't: its search, saying it found no words. */
+    private fun utaTenHasNone(request: okhttp3.Request) =
+        FakeSpotify.html(request, """<section class="contentBox"><div class="contentBox__body"><p class="noItem">ごめんなさい。歌詞が見つかりませんでした。<br /></p></div></section>""")
+
+    /** Kept as a version before [Readings.VERSION] 4 kept them, which read 三本 as さんほん: no word of what read them. */
+    private val keptBeforeVersion4 =
+        """{"text":"三本の花","reading":"さんほんのはな","romanized":"sanhon no hana","title":"Demo","artist":"Band","ruby":[["三本","さんほん"],["の",null],["花","はな"]]},""" +
+            """{"text":"三本の木","reading":"さんほんのき","title":"Demo","artist":"Band","ruby":[["三本","さんほん"],["の",null],["木","き"]],"byHand":true},""" +
+            """{"text":"都会の三本","reading":"まちのさんほん","title":"Demo","artist":"Band","ruby":[["都会","まち","utaten"],["の",null],["三本","さんほん"]]},""" +
+            """{"text":"三本","reading":"さんほん","translation":"three","title":"Demo","artist":"Band","line":"三本の花"}"""
+
+    @Test
+    fun linesKeptReadByAnOlderDictionaryAreReadAsTheDictionaryReadsThemNowButForWhatItDidntRead() {
+        prefs().edit().putString("saved_lines", "[$keptBeforeVersion4]").commit()
+        // UtaTen hasn't the song, and ChatGPT isn't signed in: the dictionary's readings are all there are.
+        wordsOf(null, "三本の花\\n三本の木\\n都会の三本", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { readingShown("さんぼん") }
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().first { it.text == "三本の花" }.reading == "さんぼんのはな" }
+        val kept = SavedLinesStore(prefs()).load()
+        val line = kept.first { it.text == "三本の花" }
+        assertEquals(listOf(Ruby("三本", "さんぼん"), Ruby("の"), Ruby("花", "はな")), line.ruby)
+        assertEquals("sanbon no hana", line.romanized)
+        assertEquals(Readings.VERSION, readWith("三本の花", "Demo"))
         // Put right by hand, it stays so.
-        assertEquals("とかいのあした", kept.first { it.text == "都会の朝" }.reading)
+        assertEquals("さんほんのき", kept.first { it.text == "三本の木" }.reading)
+        // UtaTen's まち stays, and the dictionary's 三本 is read as it is now.
+        val sung = kept.first { it.text == "都会の三本" }
+        assertEquals("まちのさんぼん", sung.reading)
+        assertEquals(Ruby("都会", "まち", Reader.SUNG), sung.ruby?.first())
+        // A word kept has ChatGPT's reading, which the dictionary leaves.
+        assertEquals("さんほん", kept.first { it.line != null }.reading)
+    }
+
+    /**
+     * The line 都会の夜 kept read as it's sung, まち, before what read it was marked, once its song's words are read
+     * again and UtaTen answers as [utaTen] does.
+     */
+    private fun keptSungUnmarked(utaTen: (okhttp3.Request) -> okhttp3.Response): SavedLine {
+        val kept = """{"text":"都会の夜","reading":"まちのよる","title":"Demo","artist":"Band","ruby":[["都会","まち"],["の",null],["夜","よる"]]}"""
+        prefs().edit().putString("saved_lines", "[$kept]").commit()
+        wordsOf(null, "都会の夜", sites = { request -> utaTen(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.toHttpUrl().host == "utaten.com" } && readingShown("よる") }
+        composeRule.waitForIdle()
+        return SavedLinesStore(prefs()).load().single()
+    }
+
+    @Test
+    fun aReadingKeptAsItsSungButUnmarkedStaysAndIsMarkedWhenUtaTenSingsItSo() {
+        val ruby = { kanji: String, kana: String -> """<span class="ruby"><span class="rb">$kanji</span><span class="rt">$kana</span></span>""" }
+        val line = keptSungUnmarked { request ->
+            if (request.url.encodedPath == "/search") FakeSpotify.html(request, """<p class="searchResult__title"><a href="/lyric/ab0001/">Demo</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>""")
+            else FakeSpotify.html(request, """<div class="hiragana" >${ruby("都会", "まち")}の${ruby("夜", "よる")}<br /></div>""")
+        }
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().ruby?.first()?.by == Reader.SUNG }
+        assertEquals("まちのよる", SavedLinesStore(prefs()).load().single().reading)
+        assertEquals("都会の夜", line.text)
+    }
+
+    @Test
+    fun aReadingKeptAsItsSungButUnmarkedIsTheDictionarysOnceUtaTenHasNoneForTheSong() {
+        // Kept unmarked, it can't be told from the dictionary's: with nothing from UtaTen nor ChatGPT, the dictionary's is all there is.
+        keptSungUnmarked(::utaTenHasNone)
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().reading == "とかいのよる" }
+    }
+
+    @Test
+    fun aReadingKeptAsItsSungButUnmarkedStaysAsKeptWhenUtaTenCantBeAsked() {
+        val kept = keptSungUnmarked { request -> FakeSpotify.html(request, "", code = 503) }
+        assertEquals("まちのよる", kept.reading)
+        assertEquals(listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よる")), kept.ruby)
+        assertNull(readWith("都会の夜", "Demo"))
+    }
+
+    @Test
+    fun aReadingKeptAsItsSungButUnmarkedStaysAsKeptWhenUtaTenAnswersWithAPageItDoesntWrite() {
+        // A page that asks whether it's a person, say: not a search that found nothing.
+        val kept = keptSungUnmarked { request -> FakeSpotify.html(request, "<html><body>Just a moment...</body></html>") }
+        assertEquals("まちのよる", kept.reading)
+        assertEquals(listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よる")), kept.ruby)
+    }
+
+    /** UtaTen's search finding Demo by Band, and its page, which sings 都会 as まち and 夜 as よる. */
+    private fun utaTenSingsMachi(request: okhttp3.Request): okhttp3.Response {
+        val ruby = { kanji: String, kana: String -> """<span class="ruby"><span class="rb">$kanji</span><span class="rt">$kana</span></span>""" }
+        return if (request.url.encodedPath == "/search") FakeSpotify.html(request, """<p class="searchResult__title"><a href="/lyric/ab0001/">Demo</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>""")
+        else FakeSpotify.html(request, """<div class="hiragana" >${ruby("都会", "まち")}の${ruby("夜", "よる")}<br /></div>""")
+    }
+
+    private fun lrclibRequests() = fake.requestedUrls.count { it.toHttpUrl().host == "lrclib.net" }
+
+    /** The words shown closed, as they're kept, and opened again: kept, so LRCLIB isn't asked again. */
+    private fun closedAndOpenedAgain(meanwhile: () -> Unit = {}) {
+        val looked = lrclibRequests()
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        meanwhile()
+        click(string(R.string.lyrics_button))
+        composeRule.waitForIdle()
+        assertEquals(looked, lrclibRequests())
+    }
+
+    /** Lets what's still being worked out away from the screen finish, as the fakes answer at once. */
+    private fun settle() {
+        val until = System.currentTimeMillis() + 500
+        while (System.currentTimeMillis() < until) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(20)
+        }
+    }
+
+    @Test
+    fun aSungReadingUtaTenCouldntGiveIsAskedForAgainWhenTheWordsShowAgain() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        val up = java.util.concurrent.atomic.AtomicBoolean(false)
+        wordsOf(null, "都会の夜", sites = { request ->
+            when {
+                request.url.host != "utaten.com" -> null
+                up.get() -> utaTenSingsMachi(request)
+                else -> throw java.io.IOException("offline")
+            }
+        })
+        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && readingShown("とかい") }
+        settle()
+        val asked = utatenRequests()
+        closedAndOpenedAgain { up.set(true) }
+        // UtaTen couldn't be asked then, so it's asked now, and the words read as they're sung.
+        waitUntil(TIMEOUT_MS) { readingShown("まち") }
+        assertTrue(utatenRequests() > asked)
+    }
+
+    @Test
+    fun aSongUtaTenHasNoPageForIsntAskedForAgainWhenItsWordsShowAgain() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files"))
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }) }
+        wordsOf(null, "都会の夜", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && readingShown("とかい") }
+        settle()
+        assertFalse(controllerModel().uiState.learning.readingsUnfinished)
+        val asked = utatenRequests()
+        val disk = File(app.cacheDir, "kept_words.json")
+        composeRule.runOnIdle { controllerModel().keep() }
+        waitUntil(TIMEOUT_MS) { disk.exists() && runBlocking { LookupCache(disk, Dispatchers.Unconfined).entries().isNotEmpty() } }
+        val kept = runBlocking { LookupCache(disk, Dispatchers.Unconfined).entries() }.single().second
+        val restored = requireNotNull(KeptWords.from(kept))
+        assertEquals("都会の夜", restored.lyrics)
+        assertFalse(restored.learning.readingsUnfinished)
+        closedAndOpenedAgain()
+        waitUntil(TIMEOUT_MS) { readingShown("とかい") }
+        settle()
+        assertEquals(asked, utatenRequests())
+        controller!!.destroyAndSettle()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { readingShown("とかい") }
+        settle()
+        assertFalse(controllerModel().uiState.learning.readingsUnfinished)
+        assertEquals(asked, utatenRequests())
+    }
+
+    @Test
+    fun readingsChatGptCouldntCheckAreCheckedAgainWhenTheWordsShowAgain() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        val up = java.util.concurrent.atomic.AtomicBoolean(false)
+        openAi.reply = { body -> if (!up.get() && "You check the readings" in body.getString("instructions")) 500 to "" else answers(body) }
+        wordsOf(null, "都会の夜", openAi = openAi, sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { openAi.askedFor("You check the readings") > 0 && readingShown("とかい") }
+        settle()
+        val asked = openAi.askedFor("You check the readings")
+        closedAndOpenedAgain { up.set(true) }
+        waitUntil(TIMEOUT_MS) { openAi.askedFor("You check the readings") > asked }
+    }
+
+    @Test
+    fun readingsMadeBeforeUniDicCameAreReadWithItWhenTheWordsShowAgain() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        // Not fetched here: on a metered network, say.
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { false }) }
+        wordsOf(null, "君が溢した涙", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && readingShown("なみだ") }
+        settle()
+        assertFalse(readingShown("こぼ"))
+        // UniDic comes meanwhile, as for another song shown on Wi-Fi.
+        closedAndOpenedAgain { TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files")) }
+        waitUntil(UNIDIC_MS) { readingShown("こぼ") }
+    }
+
+    @Test
+    fun aLineKeptFollowsItsWordsWhenTheyChangeWithWhatWasPutRightInIt() {
+        prefs().edit().putBoolean("lyrics_readings", true).putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"まちのよ","title":"Demo","artist":"Band","ruby":[["都会","まち","utaten"],["の",null],["夜","よ","user"]],"byHand":true,"readWith":${Readings.VERSION}}]"""
+        ).commit()
+        val movedWithoutCorrection = java.util.concurrent.atomic.AtomicBoolean(false)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
+            if (key == "saved_lines") {
+                val line = SavedLinesStore(preferences).load().singleOrNull()
+                if (line?.text == "都会の夜に" && line.ruby.orEmpty().none { it.by == Reader.USER }) movedWithoutCorrection.set(true)
+            }
+        }
+        prefs().registerOnSharedPreferenceChangeListener(listener)
+        // Found again with a word more, and UtaTen has none for it now.
+        wordsOf(null, "都会の夜に", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
+        // The marks are laid away from the screen, after the line takes its new words.
+        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && SavedLinesStore(prefs()).load().single().ruby.orEmpty().any { it.by == Reader.USER } }
+        settle()
+        val line = SavedLinesStore(prefs()).load().single()
+        prefs().unregisterOnSharedPreferenceChangeListener(listener)
+        assertFalse("The moved line was saved without the user's correction", movedWithoutCorrection.get())
+        assertEquals("都会の夜に", line.text)
+        assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), line.ruby.orEmpty().filter { it.reading != null })
+        assertEquals("まちのよに", line.reading)
+        assertTrue(line.readByHand)
+        // Practised as it's kept now.
+        assertEquals(listOf(line), controllerModel().uiState.savedLines)
+    }
+
+    @Test
+    fun aMovedLineKeepsANewerTimingAndTranslation() {
+        aLineMovesWhile { store, old ->
+            store.replaceAll(listOf(old to old.copy(
+                startMs = 7_000, endMs = 9_000, nextMs = 10_000, lengthMs = 200_000,
+                leadMs = 800, app = "demo.player", artworkUrl = "https://example.invalid/cover", translation = "New translation"
+            )))
+        }
+        val moved = SavedLinesStore(prefs()).load().single()
+        assertEquals("Night sky above", moved.text)
+        assertEquals(7_000L, moved.startMs)
+        assertEquals(9_000L, moved.endMs)
+        assertEquals(10_000L, moved.nextMs)
+        assertEquals(200_000L, moved.lengthMs)
+        assertEquals(800L, moved.leadMs)
+        assertEquals("demo.player", moved.app)
+        assertEquals("https://example.invalid/cover", moved.artworkUrl)
+        assertEquals("New translation", moved.translation)
+    }
+
+    @Test
+    fun aMovedLineKeepsTheWholeNewTimingWhenOnlyItsStartChanged() {
+        aLineMovesWhile(timed = true) { store, old ->
+            store.replaceAll(listOf(old to old.copy(startMs = 4_000)))
+        }
+        val moved = SavedLinesStore(prefs()).load().single()
+        assertEquals(4_000L, moved.startMs)
+        assertEquals(5_000L, moved.endMs)
+        assertEquals(6_000L, moved.nextMs)
+    }
+
+    @Test
+    fun aLineSavedAtTheDestinationWhileAMoveWaitsIsNotDuplicated() {
+        aLineMovesWhile { store, old ->
+            store.addAll(listOf(old.copy(text = "Night sky above", translation = "Kept separately", interval = 8, due = 123_000)))
+        }
+        val kept = SavedLinesStore(prefs()).load()
+        assertEquals(kept.size, kept.distinctBy { Triple(it.text, it.title, it.artist) }.size)
+        val destination = kept.single { it.text == "Night sky above" }
+        assertEquals("Kept separately", destination.translation)
+        assertEquals(8, destination.interval)
+        assertEquals(123_000L, destination.due)
+        assertTrue(kept.any { it.text == "Night sky" })
+    }
+
+    @Test
+    fun aWordSavedAtTheDestinationWhileAMoveWaitsIsNotDuplicated() {
+        aLineMovesWhile { store, old ->
+            store.addAll(listOf(old.copy(text = "Night sky above", line = "Under the Night sky above", translation = "Kept word", interval = 8)))
+        }
+        val kept = SavedLinesStore(prefs()).load()
+        assertEquals(kept.size, kept.distinctBy { Triple(it.text, it.title, it.artist) }.size)
+        val destination = kept.single { it.text == "Night sky above" }
+        assertEquals("Kept word", destination.translation)
+        assertEquals("Under the Night sky above", destination.line)
+        assertEquals(8, destination.interval)
+        assertTrue(kept.any { it.text == "Night sky" })
+    }
+
+    /** Hold the move's background work while another save changes the current store. */
+    private fun aLineMovesWhile(timed: Boolean = false, change: (SavedLinesStore, SavedLine) -> Unit) {
+        val timing = if (timed) ""","start":1000,"end":5000,"next":6000""" else ""
+        prefs().edit().putString(
+            "saved_lines", """[{"text":"Night sky","title":"Demo","artist":"Band","readWith":${Readings.VERSION}$timing}]"""
+        ).commit()
+        val gate = Gate()
+        MainActivity.systemDispatcher = gate
+        val synced = if (timed) "[00:01.00] Night sky above\\n[00:03.00] Clear dawn" else null
+        wordsOf(synced, "Night sky above", translations = 503, before = { gate.held = true })
+        try {
+            waitUntil(TIMEOUT_MS) { gate.queued.isNotEmpty() }
+            val store = SavedLinesStore(prefs())
+            change(store, store.load().single())
+        } finally {
+            gate.letGo()
+        }
+        settle()
+    }
+
+    @Test
+    fun aLineKeptWithNothingPutRightFollowsItsWordsWhenTheyChange() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよる","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よる"]],"readWith":${Readings.VERSION}}]"""
+        ).commit()
+        wordsOf(null, "都会の夜に", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines.singleOrNull()?.text == "都会の夜に" }
+        settle()
+        assertEquals(SavedLinesStore(prefs()).load(), controllerModel().uiState.savedLines)
+    }
+
+    @Test
+    fun aLineKeptCarriesWhatTheUserPutRightWhenItsWordsChangeWithReadingsOff() {
+        // Readings are on unless turned off, and reading the words would keep the line again and show it as kept.
+        prefs().edit().putBoolean("lyrics_readings", false).putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよ","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よ","user"]],"byHand":true,"readWith":${Readings.VERSION}}]"""
+        ).commit()
+        wordsOf(null, "都会の夜に")
+        // Nothing reads the words on screen, so the line's read by the dictionary away from it, with the user's 夜.
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines.singleOrNull()?.let { it.text == "都会の夜に" && it.ruby.orEmpty().any { part -> part.by == Reader.USER } } == true }
+        settle()
+        val line = SavedLinesStore(prefs()).load().single()
+        assertEquals("都会の夜に", line.text)
+        assertEquals(Ruby("夜", "よ", Reader.USER), line.ruby.orEmpty().last { it.reading != null })
+        assertEquals(listOf(line), controllerModel().uiState.savedLines)
+    }
+
+    @Test
+    fun readingsReadAgainKeepWhatChatGptPutRightWhileUtaTenIsAskedAgain() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        openAi.reply = { body -> if ("You check the readings" in body.getString("instructions")) 200 to FakeOpenAi.stream("[{\"line\": 1, \"kanji\": \"夜\", \"reading\": \"よ\"}]") else answers(body) }
+        val held = java.util.concurrent.atomic.AtomicBoolean(false)
+        val asked = CountDownLatch(1)
+        val hold = CountDownLatch(1)
+        wordsOf(null, "都会の夜", openAi = openAi, sites = { request ->
+            when {
+                request.url.host != "utaten.com" -> null
+                held.get() -> {
+                    asked.countDown()
+                    hold.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    throw java.io.IOException("offline")
+                }
+                else -> throw java.io.IOException("offline")
+            }
+        })
+        // UtaTen couldn't be asked, so they're read again when they show again; ChatGPT put 夜 right meanwhile.
+        waitUntil(TIMEOUT_MS) { readingShown("よ") }
+        settle()
+        assertTrue(controllerModel().uiState.learning.readingsUnfinished)
+        closedAndOpenedAgain { held.set(true) }
+        assertTrue(asked.await(TIMEOUT_MS, TimeUnit.MILLISECONDS))
+        composeRule.waitForIdle()
+        // Read again, but what ChatGPT put right stays until it answers again.
+        assertTrue(readingShown("よ"))
+        assertFalse(readingShown("よる"))
+        assertEquals(Reader.CHATGPT, controllerModel().uiState.learning.lines.single().parts.last().by)
+        hold.countDown()
+        // UtaTen fails again once let go, so the words are left to be read again; ChatGPT's 夜 still shows.
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.learning.readingsUnfinished }
+        settle()
+        assertTrue(readingShown("よ"))
+    }
+
+    @Test
+    fun aLineKeptIsReadAsItsSungWhenChatGptCantCheckTheWords() {
+        prefs().edit().putBoolean("lyrics_readings", true).putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよる","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よる"]],"readWith":${Readings.VERSION}}]"""
+        ).commit()
+        // UniDic is on the phone already, so only ChatGPT leaves the readings to be read again.
+        TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files"))
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }) }
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        openAi.reply = { body -> if ("You check the readings" in body.getString("instructions")) 500 to "" else answers(body) }
+        wordsOf(null, "都会の夜", openAi = openAi, sites = { request -> if (request.url.host == "utaten.com") utaTenSingsMachi(request) else null })
+        // ChatGPT's answer comes after UtaTen's, so the words are left to be read again only then.
+        waitUntil(TIMEOUT_MS) { readingShown("まち") && controllerModel().uiState.learning.readingsUnfinished }
+        // UtaTen's readings go into the line kept now, as ChatGPT may not answer for a while; the words wait for it.
+        assertEquals("まちのよる", SavedLinesStore(prefs()).load().single().reading)
+    }
+
+    @Test
+    fun aLineKeptIsReadAgainByTheDictionaryWhenNothingElseCanPutItRight() {
+        // Kept by an app that read 夜 wrong, before it marked which dictionary read a line.
+        prefs().edit().putBoolean("lyrics_readings", true).putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよ","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よ"]]}]"""
+        ).commit()
+        // UniDic is on the phone already, so the readings aren't left for it to read again.
+        TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files"))
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }) }
+        wordsOf(null, "都会の夜", sites = { request -> if (request.url.host == "utaten.com") utaTenHasNone(request) else null })
+        // UtaTen hasn't the song, and there's no ChatGPT: the dictionary's readings are all there are.
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().reading == "とかいのよる" }
+        assertFalse(controllerModel().uiState.learning.readingsUnfinished)
+    }
+
+    @Test
+    fun aLinePutRightByHandIsReadByANewerDictionaryButWhereTheUserPutItRight() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"三本の木","reading":"さんほんのこ","title":"Other","artist":"Band","ruby":[["三本","さんほん"],["の",null],["木","こ","user"]],"byHand":true,"readWith":3}]"""
+        ).commit()
+        launch()
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().reading == "さんぼんのこ" }
+        val line = SavedLinesStore(prefs()).load().single()
+        assertEquals(listOf(Ruby("三本", "さんぼん"), Ruby("木", "こ", Reader.USER)), line.ruby.orEmpty().filter { it.reading != null })
+        assertTrue(line.readByHand)
+        assertEquals(Readings.VERSION, readWith("三本の木", "Other"))
+    }
+
+    @Test
+    fun aLinePutRightByHandTakesHowItsSungButWhereTheUserPutItRight() {
+        prefs().edit().putBoolean("lyrics_readings", true).putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよ","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よ","user"]],"byHand":true,"readWith":${Readings.VERSION}}]"""
+        ).commit()
+        // UtaTen sings 夜 as よる: the user's よ stays, and its 都会 is sung まち.
+        wordsOf(null, "都会の夜", sites = { request -> utaTenSingsMachi(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { readingShown("まち") }
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().reading == "まちのよ" }
+        val line = SavedLinesStore(prefs()).load().single()
+        assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), line.ruby.orEmpty().filter { it.reading != null })
+        assertTrue(line.readByHand)
+    }
+
+    /** Which [Readings.VERSION] read the line [text] of [title] kept, as kept; null when that isn't said. */
+    private fun readWith(text: String, title: String): Int? {
+        val kept = org.json.JSONArray(prefs().getString("saved_lines", null))
+        val line = (0 until kept.length()).map(kept::getJSONObject).first { it.getString("text") == text && it.getString("title") == title }
+        return if (line.has("readWith")) line.getInt("readWith") else null
+    }
+
+    @Test
+    fun linesKeptOfASongNotOpenedAgainAreReadAsTheDictionaryReadsThemNowWhenTheyreKnownToBeItsReadings() {
+        prefs().edit().putString(
+            "saved_lines",
+            "[" + keptBeforeVersion4.replace("\"Demo\"", "\"Other\"") + "," +
+                // Kept by a version that said which dictionary read it: what isn't marked as put right is the dictionary's.
+                """{"text":"三本の花","reading":"さんほんのはな","title":"Demo","artist":"Band","ruby":[["三本","さんほん"],["の",null],["花","はな"]],"readWith":3},""" +
+                """{"text":"都会の三本","reading":"まちのさんほん","title":"Demo","artist":"Band","ruby":[["都会","まち","utaten"],["の",null],["三本","さんほん"]],"readWith":3},""" +
+                """{"text":"三本の木","reading":"さんほんのき","title":"Demo","artist":"Band","ruby":[["三本","さんほん","user"],["の",null],["木","き"]],"byHand":true,"readWith":3}]"""
+        ).commit()
+        launch()
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().first { it.text == "三本の花" && it.title == "Demo" }.reading == "さんぼんのはな" }
+        val kept = SavedLinesStore(prefs()).load()
+        val demo = kept.filter { it.title == "Demo" }
+        assertEquals(Readings.VERSION, readWith("三本の花", "Demo"))
+        assertEquals("まちのさんぼん", demo.first { it.text == "都会の三本" }.reading)
+        assertEquals("さんほんのき", demo.first { it.text == "三本の木" }.reading)
+        // Kept before that was said, UtaTen's readings were kept unmarked, as the dictionary's are: they wait for the song to be opened again.
+        val other = kept.filter { it.title == "Other" }
+        assertEquals(listOf("さんほんのはな", "さんほんのき", "まちのさんほん", "さんほん"), other.map { it.reading })
+        assertTrue(other.all { readWith(it.text, "Other") == null })
+    }
+
+    @Test
+    fun linesKeptPractisedWhileTheyreReadAgainAsTheAppStartsArePractisedAndReadAgain() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"三本の花","reading":"さんほんのはな","title":"Demo","artist":"Band","ruby":[["三本","さんほん"],["の",null],["花","はな"]],"readWith":3},""" +
+                """{"text":"都会の三本","reading":"まちのさんほん","title":"Demo","artist":"Band","ruby":[["都会","まち","utaten"],["の",null],["三本","さんほん"]],"readWith":3}]"""
+        ).commit()
+        val gate = Gate().apply { held = true }
+        MainActivity.systemDispatcher = gate
+        launch()
+        // Read again away from the screen, and meanwhile practised.
+        waitUntil(TIMEOUT_MS) { gate.queued.isNotEmpty() }
+        val store = SavedLinesStore(prefs())
+        store.practised(store.load().first { it.text == "都会の三本" }, Grade.EASY, 1_000_000L)
+        gate.letGo()
+        waitUntil(TIMEOUT_MS) { store.load().all { it.readWith == Readings.VERSION } }
+        val sung = store.load().first { it.text == "都会の三本" }
+        assertEquals("まちのさんぼん", sung.reading)
+        assertEquals(4, sung.interval)
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines == store.load() }
+    }
+
+    @Test
+    fun aCardStartedWhileKeptLinesAreReadAgainShowsTheReadingTheyHaveNow() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"三本の花","reading":"さんほんのはな","title":"Demo","artist":"Band","ruby":[["三本","さんほん"],["の",null],["花","はな"]],"readWith":3,"interval":4,"due":9}]"""
+        ).commit()
+        val gate = Gate().apply { held = true }
+        MainActivity.systemDispatcher = gate
+        launch()
+        waitUntil(TIMEOUT_MS) { gate.queued.isNotEmpty() }
+        click("${string(R.string.saved_practice)}, ${string(R.string.practice_due, 1)}")
+        click(string(R.string.practice_all_songs))
+        click(string(R.string.practice_show))
+        assertTrue("the card copied the reading from before the refresh", readingShown("さんほん"))
+        gate.letGo()
+        waitUntil(TIMEOUT_MS) { readingShown("さんぼん") }
+        assertFalse(readingShown("さんほん"))
+        val practice = controllerModel().uiState.practice
+        assertEquals(listOf("三本の花"), practice?.queue?.map { it.text })
+        assertEquals(0, practice?.done)
+        assertEquals(4, practice?.queue?.single()?.interval)
+        assertEquals(9L, practice?.queue?.single()?.due)
     }
 
     @Test
@@ -3905,7 +5418,8 @@ class ListeningTest {
         prefs().edit().putString(
             "saved_lines",
             """[{"text":"真実の瞬间はいつも，","reading":"しんじつのまどか间はいつも，","title":"Demo","artist":"Band","ruby":[["真実","しんじつ"],["の",null],["瞬","まどか"],["间はいつも，",null]]},""" +
-                """{"text":"都会の夜","reading":"まちのよる","title":"Demo","artist":"Band","ruby":[["都会","まち"],["の",null],["夜","よる"]]}]"""
+                // Read as it's sung, marked so: UtaTen has nothing for the song now, and it stays.
+                """{"text":"都会の夜","reading":"まちのよる","title":"Demo","artist":"Band","ruby":[["都会","まち","utaten"],["の",null],["夜","よる"]]}]"""
         ).commit()
         wordsOf(null, "真実の瞬间はいつも，\\n仆や君のため，\\n都会の夜")
         waitUntil(TIMEOUT_MS) { readingShown("しゅんかん") && readingShown("ぼく") }
@@ -3927,14 +5441,16 @@ class ListeningTest {
                 request.url.toString() == UniDic.URL -> FakeSpotify.image(request, jar)
                 // Looking for the sung readings takes until it's here, so the words are still being read.
                 request.url.host == "utaten.com" -> {
-                    val until = System.currentTimeMillis() + TIMEOUT_MS
+                    val until = System.currentTimeMillis() + UNIDIC_MS
                     while (Readings.uniDic == null && System.currentTimeMillis() < until) Thread.sleep(20)
-                    FakeSpotify.html(request, "")
+                    utaTenHasNone(request)
                 }
                 else -> null
             }
         })
-        // Fetched while the words show, which are read again with it.
+        // Fetched while the words show: that's 46 MB checked and 150 MB unpacked on disk, which a busy machine takes seconds over.
+        waitUntil(UNIDIC_MS) { Readings.uniDic != null }
+        // They're read again with it, which the screen shows at once.
         waitUntil(TIMEOUT_MS) { readingShown("こぼ") }
         assertTrue(readingShown("きみ") && readingShown("なみだ"))
         assertEquals(1, fake.requestedUrls.count { it == UniDic.URL })
@@ -3986,7 +5502,7 @@ class ListeningTest {
         click(string(R.string.practice_good))
         assertEquals(1, SavedLinesStore(prefs()).load().single().step)
         // Nothing else is due: one practised.
-        waitForText(string(R.string.practice_done, 1))
+        waitForText(app.resources.getQuantityString(R.plurals.practice_done, 1, 1))
         // Closed, it's back to the words.
         click(string(R.string.floating_close))
         waitForText("«Night sky»")
@@ -4024,7 +5540,34 @@ class ListeningTest {
         val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
         assertEquals(1, good.step)
         assertTrue(good.due >= before + 10 * 60_000L && good.due <= System.currentTimeMillis() + 10 * 60_000L)
-        waitForText(string(R.string.practice_done, 2))
+        waitForText(app.resources.getQuantityString(R.plurals.practice_done, 2, 2))
+    }
+
+    @Test
+    fun aTranslationThatFinishesWhileALineMovesIsKeptWithItsNewWords() = aTranslationFinishesWhileALineMoves(close = false)
+
+    @Test
+    fun closingTheWordsDoesNotLoseATranslationThatFinishedWhileALineMoves() = aTranslationFinishesWhileALineMoves(close = true)
+
+    private fun aTranslationFinishesWhileALineMoves(close: Boolean) {
+        prefs().edit().putString(
+            "saved_lines", """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band"}]"""
+        ).putBoolean("lyrics_translation", true).commit()
+        val gate = Gate()
+        MainActivity.systemDispatcher = gate
+        wordsOf(null, "Night sky", before = { gate.held = true })
+        try {
+            waitUntil(TIMEOUT_MS) { gate.queued.isNotEmpty() }
+            waitUntil(TIMEOUT_MS) {
+                controllerModel().uiState.learning.let { it.translations == listOf("[Night sky]") && !it.translating }
+            }
+            assertEquals("Night  Sky!", SavedLinesStore(prefs()).load().single().text)
+            if (close) closeWords()
+        } finally {
+            gate.letGo()
+        }
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().text == "Night sky" }
+        assertEquals("[Night sky]", SavedLinesStore(prefs()).load().single().translation)
     }
 
     @Test
@@ -4060,6 +5603,19 @@ class ListeningTest {
         // A line no longer sung, and another song's, are left as they were; so is one whose line is kept already.
         assertEquals("Lluvia", kept[6].translation)
         assertEquals("Noche", kept[7].translation)
+    }
+
+    @Test
+    fun aLineKeptKeepsItsTranslationWhenTheWordsChangeAndNothingIsTranslatedNow() {
+        // Kept from the words as another site wrote them, and translated then; translation is off now.
+        val saved = """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band","box":2,"due":5}]"""
+        prefs().edit().putString("saved_lines", saved).putBoolean("lyrics_translation", false).commit()
+        wordsOf(null, "Night sky")
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().text == "Night sky" }
+        val kept = SavedLinesStore(prefs()).load().single()
+        // The practice and the translation it had go with the line to its new words.
+        assertEquals(3, kept.interval)
+        assertEquals("Cielo", kept.translation)
     }
 
     @Test
@@ -4389,7 +5945,7 @@ class ListeningTest {
                 else -> words(request)
             }
         }
-        // A site that won't answer shows nothing; switched off and on, it's asked again.
+        // A site that won't answer is said, not taken for no chords; switched off and on, it's asked again.
         studyMenu()
         click(string(R.string.lyrics_chords))
         assertTrue(prefs().getBoolean("lyrics_chords", false))
@@ -4412,6 +5968,231 @@ class ListeningTest {
         assertEquals(asked, fake.requestedUrls.size)
     }
 
+    /** Ultimate Guitar's pages for Demo's chords, down while [up] says so. The other sites have none. */
+    private fun chordSitesThatAreUp(up: () -> Boolean): (okhttp3.Request) -> okhttp3.Response? {
+        val page = { content: String ->
+            val store = org.json.JSONObject().put("store", org.json.JSONObject().put("page", org.json.JSONObject().put("data", org.json.JSONObject(content)))).toString()
+            """<div class="js-store" data-content="${store.replace("&", "&amp;").replace("\"", "&quot;")}"></div>"""
+        }
+        return { request ->
+            when (request.url.host) {
+                "www.ufret.jp" -> FakeSpotify.html(request, "")
+                "www.ultimate-guitar.com" -> if (up()) {
+                    FakeSpotify.html(request, page("""{"results":[{"song_name":"Demo","artist_name":"Band","type":"Chords","votes":5,"tab_url":"https://tabs.ultimate-guitar.com/tab/demo-1"}]}"""))
+                } else {
+                    throw IOException("offline")
+                }
+                "tabs.ultimate-guitar.com" -> FakeSpotify.html(
+                    request,
+                    page("""{"tab_view":{"meta":{"capo":0},"wiki_tab":{"content":"[ch]G[/ch]      [ch]C[/ch]\nWalking down the river road\n[ch]D[/ch]\nSinging to the morning light"}}}""")
+                )
+                else -> null
+            }
+        }
+    }
+
+    /**
+     * ChordWiki's check can run out of time, or stop and ask a person to click. The words say which,
+     * and trying again looks the song up once more. The app does not click the check.
+     */
+    @Test
+    fun chordWikiCheckThatDoesntFinishSaysWhyAndTryAgain() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        File(app.cacheDir, "chords.json").delete()
+        File(app.noBackupFilesDir, "kept/chords.json").delete()
+        val timeout = string(R.string.lyrics_chords_wiki_timeout)
+        val check = string(R.string.lyrics_chords_wiki_check)
+        val generic = string(R.string.lyrics_chords_failed)
+        val line = "川の道を歩いていく"
+        val chordPro = "{title:川の道}\n[Am]$line\n[F]朝の光に歌っている"
+        var stage = 0
+        val entered = CountDownLatch(1)
+        val held = CountDownLatch(1)
+        val enteredAgain = CountDownLatch(1)
+        val heldAgain = CountDownLatch(1)
+        MainActivity.chordWikiFactory = {
+            ChordWikiPages {
+                withContext(Dispatchers.IO) {
+                    when (++stage) {
+                        1 -> {
+                            entered.countDown()
+                            held.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                            throw ChordWikiStopped(ChordWikiCheck.AUTOMATIC)
+                        }
+                        2 -> {
+                            enteredAgain.countDown()
+                            heldAgain.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                            throw ChordWikiStopped(ChordWikiCheck.INTERACTIVE)
+                        }
+                        else -> chordPro
+                    }
+                }
+            }
+        }
+        wordsOf(null, "$line\\n朝の光に歌っている", title = "川の道", artist = "歩く人", sites = chordSitesWithNone())
+        // Held, so the words are up and the chords are still on their way. Nothing says they failed yet.
+        // The test thread is the main thread, so this pumps it instead of waiting on the latch.
+        waitUntil(TIMEOUT_MS) { entered.count == 0L }
+        assertTrue(composeRule.runOnIdle { controllerModel().uiState.chords.loading })
+        assertFalse(shown(timeout))
+        assertFalse(shown(check))
+        assertFalse(shown(generic))
+        assertNull(chordsOver(line))
+        held.countDown()
+        // The check ran out of time. The plain words say that, and a tap looks again.
+        waitUntil(TIMEOUT_MS) { shown(timeout) }
+        assertFalse(shown(generic))
+        assertFalse(shown(check))
+        assertTrue(shown(string(R.string.retry_button)))
+        assertNull(chordsOver(line))
+        click(string(R.string.retry_button))
+        // Held again, so the first reason goes while the next answer is still out.
+        waitUntil(TIMEOUT_MS) { enteredAgain.count == 0L }
+        waitUntil(TIMEOUT_MS) { !shown(timeout) }
+        assertFalse(shown(check))
+        heldAgain.countDown()
+        // A check a person has to do. The app does not do it. Trying again is the way on.
+        waitUntil(TIMEOUT_MS) { shown(check) }
+        assertFalse(shown(timeout))
+        assertFalse(shown(generic))
+        assertTrue(shown(string(R.string.retry_button)))
+        assertNull(chordsOver(line))
+        assertEquals(2, stage)
+        click(string(R.string.retry_button))
+        waitUntil(TIMEOUT_MS) { chordsOver(line) == listOf("Am") }
+        assertFalse(shown(check))
+        assertFalse(shown(timeout))
+        assertFalse(shown(generic))
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.chords.failed })
+    }
+
+    @Test
+    fun chordsThatCouldntBeLoadedSayWhyAndTryAgain() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        var up = false
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSitesThatAreUp { up })
+        // The words are there without chords; only saying so tells that from a song with none.
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_chords_failed)) }
+        assertNull(chordsOver("Walking down the river road"))
+        assertTrue(shown(string(R.string.retry_button)))
+        up = true
+        click(string(R.string.retry_button))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
+        assertFalse(shown(string(R.string.lyrics_chords_failed)))
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.chords.failed })
+    }
+
+    @Test
+    fun chordsSwitchedOffAfterTheyCouldntBeLoadedStopSayingSo() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSitesThatAreUp { false })
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_chords_failed)) }
+        studyMenu()
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_chords_failed)) }
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.chords.failed })
+    }
+
+    @Test
+    fun offlineTheChordsThatCouldntBeLoadedSaySoAndComeOnceTheInternetIsBack() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        var up = false
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSitesThatAreUp { up })
+        // The bar says it's offline; the words say what that cost, with nothing to tap: they come back by themselves.
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_chords_failed)) }
+        assertTrue(described(string(R.string.offline)))
+        assertFalse(shown(string(R.string.retry_button)))
+        up = true
+        connection.online.value = true
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
+        assertFalse(shown(string(R.string.lyrics_chords_failed)))
+    }
+
+    /** Every chord site answers, and none has a sheet for Demo. */
+    private fun chordSitesWithNone(): (okhttp3.Request) -> okhttp3.Response? {
+        val chordHosts = setOf("www.cifraclub.com.br", "acordes.lacuerda.net", "www.ufret.jp")
+        val noResults = org.json.JSONObject().put("store", org.json.JSONObject().put("page", org.json.JSONObject().put("data", org.json.JSONObject("""{"results":[]}""")))).toString()
+        return { request ->
+            when (request.url.host) {
+                "www.ultimate-guitar.com" -> FakeSpotify.html(request, """<div class="js-store" data-content="${noResults.replace("&", "&amp;").replace("\"", "&quot;")}"></div>""")
+                // The other names U-FRET asks for, with none.
+                "music.163.com" -> FakeSpotify.html(request, """{"result":{}}""")
+                "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                // Cifra Club answers its search as a call to a function.
+                "solr.sscdn.co" -> FakeSpotify.html(request, """cb({"response":{"docs":[]}})""")
+                in chordHosts -> FakeSpotify.html(request, "")
+                else -> null
+            }
+        }
+    }
+
+    @Test
+    fun chordsNoSiteHasAreNotACouldntLoad() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSitesWithNone())
+        waitUntil(TIMEOUT_MS) { composeRule.runOnIdle { controllerModel().uiState.chords.tried } }
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.chords.failed })
+        assertFalse(shown(string(R.string.lyrics_chords_failed)))
+    }
+
+    @Test
+    fun chordsFoundStayWhenSwitchedOffAndOnAndAreNotLookedUpAgain() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        var up = true
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSitesThatAreUp { up })
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
+        // Were they asked for again now, the sites that are down would take the chords away.
+        up = false
+        studyMenu()
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == null }
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { composeRule.runOnIdle { !controllerModel().uiState.chords.loading } }
+        assertEquals(listOf("G", "C"), chordsOver("Walking down the river road"))
+        assertFalse(shown(string(R.string.lyrics_chords_failed)))
+    }
+
+    @Test
+    fun chordsSwitchedOffWhileBeingLookedUpAreLookedUpWhenSwitchedOnAgain() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        val held = CountDownLatch(1)
+        var hold = true
+        val sites = chordSitesThatAreUp { true }
+        // Ultimate Guitar is slow to answer the first time.
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = { request ->
+            if (hold && request.url.host == "www.ultimate-guitar.com") held.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            sites(request)
+        })
+        waitUntil(TIMEOUT_MS) { composeRule.runOnIdle { controllerModel().uiState.chords.loading } }
+        studyMenu()
+        click(string(R.string.lyrics_chords))
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.chords.loading })
+        // The lookup that was cancelled doesn't count: switched on again, the chords are asked for.
+        hold = false
+        held.countDown()
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
+    }
+
+    @Test
+    fun noChordsFoundAreLookedForAgainWhenSwitchedOffAndOn() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        var listed = false
+        val none = chordSitesWithNone()
+        val some = chordSitesThatAreUp { true }
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = { request -> if (listed) some(request) else none(request) })
+        waitUntil(TIMEOUT_MS) { composeRule.runOnIdle { controllerModel().uiState.chords.tried } }
+        assertNull(chordsOver("Walking down the river road"))
+        // A site has the song's chords by now: switched off and on, they're found.
+        listed = true
+        studyMenu()
+        click(string(R.string.lyrics_chords))
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
+    }
+
     @Test
     fun wordsOpenedAgainShowAtOnceAsTheyWereLeft() {
         prefs().edit().putBoolean("lyrics_chords", true).putBoolean("lyrics_translation", true).putString("translate_into", "pt-BR").commit()
@@ -4429,7 +6210,11 @@ class ListeningTest {
             }
         }
         wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSites)
-        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") && shown("[Singing to the morning light]") }
+        // The title is translated after the lines. Finish that initial request before counting any reopen work.
+        waitUntil(TIMEOUT_MS) {
+            chordsOver("Walking down the river road") == listOf("G", "C") && shown("[Singing to the morning light]") &&
+                composeRule.runOnIdle { controllerModel().uiState.learning.titleMeaning == "[Demo]" }
+        }
         val asked = fake.requestedUrls.size
         composeRule.runOnIdle { controllerModel().dismissLyrics() }
 
@@ -4441,6 +6226,7 @@ class ListeningTest {
             assertEquals("Walking down the river road\nSinging to the morning light", state.lyrics)
             assertEquals(listOf("[Walking down the river road]", "[Singing to the morning light]"), state.learning.translations)
             assertNotNull(state.chords.sheet)
+            assertEquals("[Demo]", state.learning.titleMeaning)
         }
         assertEquals(listOf("G", "C"), chordsOver("Walking down the river road"))
         assertTrue(shown("[Singing to the morning light]"))
@@ -4486,7 +6272,8 @@ class ListeningTest {
         composeRule.runOnIdle { controller!!.pause().stop() }
         timing.countDown()
         waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
-        composeRule.runOnIdle { controller!!.destroy() }
+        composeRule.settle(controller!!.get())
+        controller!!.destroy()
         val asked = fake.requestedUrls.size
 
         launch()
@@ -4513,7 +6300,8 @@ class ListeningTest {
         // Kept once they're timed, by a second copy from LRCLIB, which may still be on its way when the app's left.
         composeRule.runOnIdle { controller!!.pause().stop() }
         waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
-        composeRule.runOnIdle { controller!!.destroy() }
+        composeRule.settle(controller!!.get())
+        controller!!.destroy()
         // As an earlier version kept them from NetEase, opening with the song's name and its artist's.
         for (name in listOf("lyrics.json", "kept_words.json")) {
             val file = File(app.cacheDir, name)
@@ -4539,6 +6327,10 @@ class ListeningTest {
     fun wordsKeptBeforeTheLookupWasFixedAreLookedUpAgain() = keptBeforeAFix("[${LyricsFinder.CACHE_VERSION}, ", "[${LyricsFinder.CACHE_VERSION - 1}, ")
 
     @Test
+    fun wordsKeptBeforeTheirReadingsWereFixedAreWorkedOutAgain() =
+        keptBeforeAFix("[${LyricsFinder.CACHE_VERSION}, ${Readings.VERSION}, ", "[${LyricsFinder.CACHE_VERSION}, ${Readings.VERSION - 1}, ")
+
+    @Test
     fun wordsKeptBeforeChatGptWasAskedToTranslateAnotherWayAreWorkedOutAgain() =
         keptBeforeAFix(", $TRANSLATION_VERSION, null]", ", ${TRANSLATION_VERSION - 1}, null]")
 
@@ -4548,7 +6340,8 @@ class ListeningTest {
         waitForText("Walking down the river road\nSinging to the morning light")
         composeRule.runOnIdle { controller!!.pause().stop() }
         waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
-        composeRule.runOnIdle { controller!!.destroy() }
+        composeRule.settle(controller!!.get())
+        controller!!.destroy()
         // As kept before the fix, with nothing saying where they came from, which only words worked out again have.
         val file = File(app.cacheDir, "kept_words.json")
         val entries = org.json.JSONArray(file.readText())
@@ -5079,8 +6872,31 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { shown("[사랑해]") }
     }
 
+    @Test
+    fun aWordInOldKanaSaysHowItIsSpelledTodayWhileTheLyricKeepsItsOwn() {
+        prefs().edit().putBoolean("lyrics_readings", true).putBoolean("lyrics_translation", true).commit()
+        TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files"))
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }) }
+        wordsOf(null, "思ひ出")
+        waitUntil(TIMEOUT_MS) { readingShown("おも") }
+        // A tap on the line opens it to study, its words to tap.
+        composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
+        composeRule.waitForIdle()
+        // In the sheet, the line with its reading over its kanji; its word taps for its meaning.
+        val word = hasText("思") and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
+        waitUntil(TIMEOUT_MS) { runCatching { composeRule.onAllNodes(word).onFirst().performFirstLinkClick() }.isSuccess }
+        waitForText(string(R.string.lyrics_word_modern, "思い出"))
+        // Its meaning is asked for in today's spelling (the fake answers a word in brackets): the translator knows 思い出, not 思ひ出.
+        waitUntil(TIMEOUT_MS) { shown("[思い出]") }
+        // The card names it; the lyric above it is as it was sent.
+        assertTrue(shown("思ひ出"))
+    }
+
     private companion object {
         const val TIMEOUT_MS = 5_000L
+
+        /** For a dictionary that never comes to fail the test. The wait ends the moment it's here, 1 to 3 s in on a busy machine, whatever this says. */
+        const val UNIDIC_MS = 60_000L
         const val DAY_MS = 24 * 60 * 60 * 1000L
         const val NO_MATCH = """{"matches":[]}"""
         const val MATCH = """{"matches":[{"id":"1"}],"track":{"title":"Iris","subtitle":"The Goo Goo Dolls",""" +
@@ -5205,41 +7021,59 @@ class ListeningTest {
         val answers = openAi.reply
         val late = java.util.concurrent.CountDownLatch(1)
         val answeredLate = java.util.concurrent.atomic.AtomicInteger()
-        // What it says about Demo comes only once the next song plays; about any other, there's nothing to say.
+        val aboutDemo = { body: org.json.JSONObject ->
+            val instructions = body.getString("instructions")
+            ("covers and samples" in instructions || "explain the song in four parts" in instructions) &&
+                "Demo" in body.getJSONArray("input").getJSONObject(0).getString("content")
+        }
+        // What it says about Demo comes only once the next song plays, however long that takes; about any other, there's nothing to say.
         openAi.reply = { body ->
             val instructions = body.getString("instructions")
-            val about = "covers and samples" in instructions || "explain the song in four parts" in instructions
-            val demo = "Demo" in body.getJSONArray("input").getJSONObject(0).getString("content")
             when {
-                about && demo -> { late.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS); answers(body).also { answeredLate.incrementAndGet() } }
-                about -> 500 to ""
+                aboutDemo(body) -> { late.await(); answers(body).also { answeredLate.incrementAndGet() } }
+                "covers and samples" in instructions || "explain the song in four parts" in instructions -> 500 to ""
                 else -> answers(body)
             }
         }
-        val hearing = FakeHearing()
-        listeningAlong(hearing)
-        val words = fake.handler
-        fake.handler = { request -> openAi.answer(request) ?: words(request) }
-        allowMicrophone()
-        launch()
-        hearing.song("Demo", 2.0)
-        recognize()
-        waitForText("Demo")
-        click(string(R.string.lyrics_button))
-        waitUntil(TIMEOUT_MS) { lit("Demo one") }
-        aboutSong()
-        waitUntil(TIMEOUT_MS) { openAi.asked.count { "Demo" in it.getJSONArray("input").getJSONObject(0).getString("content") && ("covers and samples" in it.getString("instructions") || "explain the song in four parts" in it.getString("instructions")) } == 2 }
-        hearing.song("Other", 1.0)
-        waitUntil(TIMEOUT_MS) { lit("Other one") }
-        late.countDown()
-        waitUntil(TIMEOUT_MS) { answeredLate.get() == 2 }
-        Thread.sleep(300)
-        composeRule.waitForIdle()
-        // Other's words don't say Demo covers First Demo, or what Demo is about.
-        val learning = controllerModel().uiState.learning
-        assertNull(learning.songFacts)
-        assertFalse(learning.songExplanation?.text.orEmpty().contains("under the stars"))
-        assertFalse(shown("Old Band") || shown("A night under the stars."))
+        // The asks about Demo the app let go of.
+        val letGo = java.util.concurrent.atomic.AtomicInteger()
+        MainActivity.httpClientFactory = {
+            fake.client().newBuilder().eventListener(object : okhttp3.EventListener() {
+                override fun canceled(call: okhttp3.Call) {
+                    if (call.request().url.toString() == ChatGpt.RESPONSES_URL && aboutDemo(org.json.JSONObject(FakeSpotify.bodyOf(call.request())))) letGo.incrementAndGet()
+                }
+            }).build()
+        }
+        // Let go of at the end, passing or failing, so no answer waits past the test.
+        try {
+            val hearing = FakeHearing()
+            listeningAlong(hearing)
+            val words = fake.handler
+            fake.handler = { request -> openAi.answer(request) ?: words(request) }
+            allowMicrophone()
+            launch()
+            hearing.song("Demo", 2.0)
+            recognize()
+            waitForText("Demo")
+            click(string(R.string.lyrics_button))
+            waitUntil(TIMEOUT_MS) { lit("Demo one") }
+            aboutSong()
+            waitUntil(TIMEOUT_MS) { openAi.asked.count(aboutDemo) == 2 }
+            hearing.song("Other", 1.0)
+            waitUntil(TIMEOUT_MS) { lit("Other one") }
+            // Both asks about Demo were let go of as Other took over, so their answers have nowhere to go.
+            waitUntil(TIMEOUT_MS) { letGo.get() == 2 }
+            late.countDown()
+            waitUntil(TIMEOUT_MS) { answeredLate.get() == 2 }
+            composeRule.waitForIdle()
+            // Other's words don't say Demo covers First Demo, or what Demo is about.
+            val learning = controllerModel().uiState.learning
+            assertNull(learning.songFacts)
+            assertFalse(learning.songExplanation?.text.orEmpty().contains("under the stars"))
+            assertFalse(shown("Old Band") || shown("A night under the stars."))
+        } finally {
+            late.countDown()
+        }
     }
 
 

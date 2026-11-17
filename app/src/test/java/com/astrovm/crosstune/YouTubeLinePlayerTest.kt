@@ -1,0 +1,195 @@
+package com.astrovm.crosstune
+
+import android.content.Context
+import android.webkit.WebResourceRequest
+import android.net.Uri
+import android.webkit.WebView
+import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+
+/** The small YouTube player in its WebView: set up to play on its own, loaded once per video, and telling how a line went. */
+@RunWith(RobolectricTestRunner::class)
+class YouTubeLinePlayerTest {
+    private val player = YouTubeLinePlayer(ApplicationProvider.getApplicationContext<Context>())
+    private val web get() = player.view() as WebView
+    private val ends = mutableListOf<LineEnd>()
+
+    @Test
+    fun itPlaysOnItsOwnWithoutAnyoneTouchingIt() {
+        assertTrue(web.settings.javaScriptEnabled)
+        assertTrue(!web.settings.mediaPlaybackRequiresUserGesture)
+    }
+
+    @Test
+    fun theBoxIsBlackWhileTheVideoHasntShownYet() {
+        assertEquals(android.graphics.Color.BLACK, shadowOf(web).backgroundColor)
+    }
+
+    @Test
+    fun aVideoIsLoadedOnceAndItsNextLinesAreOnlyToldToThePage() {
+        player.show("abc", 10_000, 15_000, 200_000, play = false) { ends += it }
+        val loaded = shadowOf(web).lastLoadDataWithBaseURL
+        assertEquals(LinePlayerPage.BASE_URL, loaded.baseUrl)
+        // The page asks for its line as it starts, so it's the one asked for last, even by a card turned while it loaded.
+        assertEquals(LinePlayerPage.html("abc", LinePlayerPage.LATEST), loaded.data)
+        assertEquals(LinePlayerPage.call(10_000, 15_000, 200_000, false, 1), latest())
+        assertEquals("text/html", loaded.mimeType)
+        assertEquals("utf-8", loaded.encoding)
+        // The same video again is told the line, not loaded again.
+        player.show("abc", 20_000, 25_000, 200_000, play = true) { ends += it }
+        assertEquals("if (typeof line == 'function') " + LinePlayerPage.call(20_000, 25_000, 200_000, true, 2), shadowOf(web).lastEvaluatedJavascript)
+        assertEquals(LinePlayerPage.call(20_000, 25_000, 200_000, true, 2), latest())
+        assertEquals(loaded, shadowOf(web).lastLoadDataWithBaseURL)
+        // Another video is loaded.
+        player.show("xyz", 1_000, 2_000, null, play = true) { ends += it }
+        assertEquals(LinePlayerPage.html("xyz", LinePlayerPage.LATEST), shadowOf(web).lastLoadDataWithBaseURL.data)
+        assertEquals(LinePlayerPage.call(1_000, 2_000, null, true, 3), latest("xyz"))
+    }
+
+    /** What the page gets when it asks the app for its line. */
+    private fun latest(video: String = "abc"): Any? = shadowOf(web).getJavascriptInterface("Line").let { page ->
+        page.javaClass.getMethod("latest", String::class.java).apply { isAccessible = true }.invoke(page, video)
+    }
+
+    private fun answer(kind: String, request: Long = 1) {
+        val page = shadowOf(web).getJavascriptInterface("Line")
+        page.javaClass.getMethod(kind, java.lang.Long.TYPE).apply { isAccessible = true }.invoke(page, request)
+    }
+
+    @Test
+    fun pausingTellsThePageToPauseIfItHasWoken() {
+        player.pause()
+        assertEquals("if (typeof pause == 'function') pause()", shadowOf(web).lastEvaluatedJavascript)
+    }
+
+    @Test
+    fun thePageSaysHowTheLineWentAndAPageThatFailsToLoadIsFailed() {
+        player.show("abc", 0, 1_000, null, play = true) { ends += it }
+        answer("ended")
+        answer("failed")
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(listOf(LineEnd.ENDED), ends)
+        player.show("abc", 2_000, 3_000, null, play = true) { ends += it }
+        // Only the page itself failing counts, not something it loads.
+        val client = shadowOf(web).webViewClient
+        client.onReceivedError(web, request(mainFrame = false), error)
+        assertEquals(1, ends.size)
+        client.onReceivedError(web, request(mainFrame = true), error)
+        assertEquals(listOf(LineEnd.ENDED, LineEnd.FAILED), ends)
+    }
+
+    @Test
+    fun pausingBeforeThePageIsReadyCannotLeaveAPlayWaitingForIt() {
+        player.show("abc", 0, 1_000, null, play = true) { ends += it }
+        player.pause()
+        assertEquals("pause();", latest())
+    }
+
+    @Test
+    fun anAnswerPostedForAnEarlierLineCannotFinishTheNewLine() {
+        player.show("abc", 0, 1_000, null, play = true) { ends += it }
+        answer("ended")
+        val next = mutableListOf<LineEnd>()
+        player.show("abc", 2_000, 3_000, null, play = true) { next += it }
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertTrue(ends.isEmpty())
+        assertTrue(next.isEmpty())
+    }
+
+    @Test
+    fun aPlayerThatNeverAnswersFailsWithinTheLineAndFiveSeconds() {
+        player.show("abc", 10_000, 11_000, null, play = true) { ends += it }
+        val main = shadowOf(android.os.Looper.getMainLooper())
+        main.idleFor(5_999, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertTrue(ends.isEmpty())
+        main.idleFor(1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(listOf(LineEnd.FAILED), ends)
+    }
+
+    @Test
+    fun thePagesFailureFinishesItsRequestOnlyOnce() {
+        player.show("abc", 10_000, 11_000, null, play = true) { ends += it }
+        answer("failed")
+        answer("failed")
+        answer("ended")
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(listOf(LineEnd.FAILED), ends)
+        assertEquals("pause();", latest())
+    }
+
+    @Test
+    fun stoppedAndReplacedLinesRemoveTheirPendingDeadline() {
+        val main = shadowOf(android.os.Looper.getMainLooper())
+        main.idle()
+        val before = main.nextScheduledTaskTime
+        player.show("abc", 10_000, 110_000, null, play = true) { ends += it }
+        assertTrue(main.nextScheduledTaskTime > before)
+        player.pause()
+        assertEquals(before, main.nextScheduledTaskTime)
+        player.show("abc", 10_000, 110_000, null, play = true) { ends += it }
+        player.show("abc", 10_000, 11_000, null, play = false) { ends += it }
+        assertEquals(before, main.nextScheduledTaskTime)
+        player.show("abc", 10_000, 110_000, null, play = true) { ends += it }
+        player.release()
+        assertEquals(before, main.nextScheduledTaskTime)
+    }
+
+    @Test
+    fun pausedAndReplacedRequestsCannotTimeOutOrFinishTheNewLine() {
+        player.show("abc", 0, 1_000, null, play = true) { ends += it }
+        player.pause()
+        answer("failed")
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(6, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue(ends.isEmpty())
+        player.show("abc", 10_000, 20_000, null, play = true) { ends += it }
+        answer("ended", 1)
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertTrue(ends.isEmpty())
+        answer("ended", 2)
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(20, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(listOf(LineEnd.ENDED), ends)
+    }
+
+    @Test
+    fun anOlderVideoCannotReadOrFailTheCurrentRequest() {
+        player.show("abc", 0, 1_000, null, play = true) { ends += it }
+        val oldClient = shadowOf(web).webViewClient
+        player.show("xyz", 0, 1_000, null, play = true) { ends += it }
+        assertEquals("pause();", latest("abc"))
+        oldClient.onReceivedError(web, request(mainFrame = true), error)
+        assertTrue(ends.isEmpty())
+    }
+
+    @Test
+    fun releasingRemovesAndDestroysTheViewAndDropsPendingWork() {
+        val parent = android.widget.FrameLayout(web.context)
+        parent.addView(web)
+        player.show("abc", 0, 1_000, null, play = true) { ends += it }
+        answer("ended")
+        player.release()
+        player.release()
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(6, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue(ends.isEmpty())
+        assertEquals(0, parent.childCount)
+        assertTrue(shadowOf(web).wasDestroyCalled())
+        player.pause()
+        player.show("abc", 0, 1_000, null, play = true) { ends += it }
+        assertEquals(listOf(LineEnd.FAILED), ends)
+    }
+
+    private val error = android.webkit.FakeWebResourceError()
+
+    private fun request(mainFrame: Boolean) = object : WebResourceRequest {
+        override fun getUrl(): Uri = Uri.parse("https://www.youtube.com/")
+        override fun isForMainFrame() = mainFrame
+        override fun isRedirect() = false
+        override fun hasGesture() = false
+        override fun getMethod() = "GET"
+        override fun getRequestHeaders(): Map<String, String> = emptyMap()
+    }
+}

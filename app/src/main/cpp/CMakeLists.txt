@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 project(crosstune_milkdrop LANGUAGES C CXX)
 
+include("${CMAKE_CURRENT_LIST_DIR}/patch.cmake")
+
 # Builds the same bytes wherever the source is checked out, so the release APK stays reproducible.
 set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../..")
 get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" ABSOLUTE)
@@ -32,7 +34,30 @@ string(REGEX MATCH "([0-9]+)\\.([0-9]+)\\.([0-9]+)" CMAKE_PROJECT_VERSION "${PRO
 set(CMAKE_PROJECT_VERSION_MAJOR "${CMAKE_MATCH_1}")
 set(CMAKE_PROJECT_VERSION_MINOR "${CMAKE_MATCH_2}")
 set(CMAKE_PROJECT_VERSION_PATCH "${CMAKE_MATCH_3}")
-add_subdirectory("${PROJECT_ROOT}/third_party/projectm" projectm EXCLUDE_FROM_ALL)
+# projectM from a copy with the fixes to what warns when it's built: a format with one argument too many
+# (hlslparser) and a field nothing reads (Waveform). A copy of the whole folder, as the field is in a
+# header that every file of the preset code includes, and each of them has to see the same class.
+set(PROJECTM_COPY "${CMAKE_BINARY_DIR}/patched/projectm")
+crosstune_copy_tree("${PROJECT_ROOT}/third_party/projectm" "${PROJECTM_COPY}"
+    vendor/hlslparser/src/GLSLGenerator.cpp src/libprojectM/MilkdropPreset/Waveform.hpp)
+crosstune_patch("${PROJECT_ROOT}/third_party/projectm/vendor/hlslparser/src/GLSLGenerator.cpp"
+    "${PROJECTM_COPY}/vendor/hlslparser/src/GLSLGenerator.cpp"
+    "m_writer.Write(\",\", op);" "m_writer.Write(\",\");"
+    "2026-11-09: a call to m_writer.Write no longer passes an argument its format doesn't use.")
+crosstune_patch("${PROJECT_ROOT}/third_party/projectm/src/libprojectM/MilkdropPreset/Waveform.hpp"
+    "${PROJECTM_COPY}/src/libprojectM/MilkdropPreset/Waveform.hpp"
+    "    int m_samples{};         //!< Number of samples in the current waveform. Depends on the mode.\n" ""
+    "2026-11-09: the unused m_samples field is gone.")
+# Optimized in the dev build too, as in the release: unoptimized, the visuals' thread took the dev app
+# 450 ms of CPU a second on lyrics, against 250 optimized (Issue #884), so how heavy they looked
+# there wasn't what anyone's phone does. Only projectM's directory gets it.
+set(CROSSTUNE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+set(CROSSTUNE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+string(APPEND CMAKE_C_FLAGS_DEBUG " -O2")
+string(APPEND CMAKE_CXX_FLAGS_DEBUG " -O2")
+add_subdirectory("${PROJECTM_COPY}" projectm EXCLUDE_FROM_ALL)
+set(CMAKE_C_FLAGS_DEBUG "${CROSSTUNE_C_FLAGS_DEBUG}")
+set(CMAKE_CXX_FLAGS_DEBUG "${CROSSTUNE_CXX_FLAGS_DEBUG}")
 # Our copy of projectM's Framebuffer.cpp, which keeps the picture when the visuals change size. Built
 # from the one this copy was made from only: a new projectM's needs the change brought over again.
 set(PROJECTM_FRAMEBUFFER "${PROJECT_ROOT}/third_party/projectm/src/libprojectM/Renderer/Framebuffer.cpp")
@@ -64,10 +89,25 @@ if(EXISTS "${PROJECT_ROOT}/third_party/whisper.cpp/CMakeLists.txt")
     set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     # ggml bakes its commit into the library, as short as the clone allows: 7 letters in a shallow
     # clone, 8 in a full one. Always 12, so any clone builds the same APK, as F-Droid checks.
-    set(ENV{GIT_CONFIG_COUNT} 1)
+    # The build box runs Git as another user. Git would then call a clean tree dirty, and bake
+    # "-dirty" into the library. minimal checks size and time only, which still sees a real edit.
+    set(ENV{GIT_CONFIG_COUNT} 2)
     set(ENV{GIT_CONFIG_KEY_0} core.abbrev)
     set(ENV{GIT_CONFIG_VALUE_0} 12)
+    set(ENV{GIT_CONFIG_KEY_1} core.checkStat)
+    set(ENV{GIT_CONFIG_VALUE_1} minimal)
+    # whisper.cpp asks for CMake 3.5, which CMake 4 warns it will drop. Its build works the same with
+    # the policies of 3.10, the oldest CMake doesn't warn about, so it's told to use those.
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
     add_subdirectory("${PROJECT_ROOT}/third_party/whisper.cpp" whisper EXCLUDE_FROM_ALL)
+    # Its file with the fix to a size printed as a long, which is not what a size_t is on 32-bit phones.
+    set(WHISPER_PATCHED "${CMAKE_BINARY_DIR}/patched/whisper.cpp/whisper.cpp")
+    crosstune_patch("${PROJECT_ROOT}/third_party/whisper.cpp/src/whisper.cpp" "${WHISPER_PATCHED}"
+        "alignment heads masks size = %ld B" "alignment heads masks size = %zu B"
+        "2026-11-09: the alignment heads masks size is printed with %zu, the format of a size_t.")
+    get_target_property(WHISPER_SOURCES whisper SOURCES)
+    list(TRANSFORM WHISPER_SOURCES REPLACE "^whisper\\.cpp$" "${WHISPER_PATCHED}")
+    set_target_properties(whisper PROPERTIES SOURCES "${WHISPER_SOURCES}")
     # Optimized in the dev build too: unoptimized, hearing 20 seconds takes a phone minutes.
     foreach(library whisper ggml ggml-base ggml-cpu)
         target_compile_options(${library} PRIVATE -O3)

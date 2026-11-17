@@ -13,19 +13,23 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.Closeable
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.text.Normalizer
 import kotlin.math.abs
 
 /** A word heard sung, and when it starts, [atMs] into what was heard. */
 internal data class HeardWord(val text: String, val atMs: Long)
 
-/** Hears the words sung in [samples], 16 kHz mono, in [language] when it's known. */
+/**
+ * Hears the words sung in [samples], 16 kHz mono, in [language] when it's known: none when none are,
+ * as in an intro; null when the model fails on them, as out of memory, so they're not heard at all.
+ */
 internal fun interface WordHearing {
-    fun words(samples: FloatArray, language: String?): List<HeardWord>
+    fun words(samples: FloatArray, language: String?): List<HeardWord>?
 }
 
 /** What was heard sung, from [startedAtMs] on the clock that counts since the phone started. */
@@ -40,12 +44,30 @@ internal data class Sung(val startedAtMs: Long, val words: List<HeardWord>) {
                 !sound && word.text.any { it.isLetterOrDigit() }
             }?.atMs
         }
+
+    /**
+     * Whether someone's heard singing: a voice, and not one word said over and over, as the speech
+     * model makes of rain, waves or other noise with no one in it.
+     */
+    val sings: Boolean
+        get() {
+            val voiceAt = voiceAtMs ?: return false
+            val said = words.filter { it.atMs >= voiceAt }.map { word -> word.text.filter(Char::isLetterOrDigit).lowercase() }.filter(String::isNotEmpty)
+            return said.size < LOOPED_WORDS || said.distinct().size > 1
+        }
+
+    private companion object {
+        /** A word heard this many times, and no other, is the speech model going round on noise. */
+        const val LOOPED_WORDS = 3
+    }
 }
 
-/** Hears the words of the song the phone plays now; null when it can't, or heard none. */
+/** Hears the words of the song the phone plays now; null when it can't. */
 internal interface SingingHearing {
     /**
-     * What's sung in the next while the phone plays, in [language] when it's known. Given [first],
+     * What's sung in the next while the phone plays, in [language] when it's known: no words when none
+     * are, as in an intro; null only when it can't be heard at all, e.g. for want of the speech model or
+     * of sound to hear, or the model failing on it. Given [first],
      * what's sung in its first [SingingListener.FIRST_SECONDS] is told it as soon as that's heard,
      * while the rest still is. When [first] says to, as many seconds from [SingingListener.AGAIN_SECONDS]
      * in are heard and told it too, as the speech model sometimes hears singing as music alone,
@@ -55,6 +77,12 @@ internal interface SingingHearing {
 
     /** Whether the last try heard nothing for want of the speech model, which wasn't fetched then, e.g. on mobile data. */
     val missesModel: Boolean
+
+    /**
+     * Whether the last try heard no sound at all: the phone is turned all the way down, or the music
+     * app keeps its sound to itself. Nothing can be told of the song from that, a voice or none.
+     */
+    val heardNoSound: Boolean
 
     /** Fetches the speech model now, on any network; whether it's here after. */
     suspend fun fetchModel(): Boolean
@@ -89,11 +117,17 @@ internal class SingingListener(
     override var missesModel = false
         private set
 
+    @Volatile
+    override var heardNoSound = false
+        private set
+
     override suspend fun fetchModel(): Boolean = fetch() != null
 
     override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? {
         // A phone that won't share its sound has nothing to hear, so the model isn't fetched for it.
-        val recording = withContext(recordDispatcher) { sound.open() } ?: return null
+        val recording = withContext(recordDispatcher) { sound.open() }
+        heardNoSound = recording == null
+        if (recording == null) return null
         val (file, heard) = recording.use {
             // The model first, so what's heard is fresh when it's listened to.
             val file = model()
@@ -106,15 +140,20 @@ internal class SingingListener(
                     val heard = withContext(recordDispatcher) {
                         record(recording, again) { startedAt, part ->
                             // Told back where it was asked, while the rest is still heard.
-                            if (first != null) this@coroutineScope.launch { words(file, part, language)?.let { if (first(Sung(startedAt, it))) hearAgain(file, again.await(), language, first) } }
+                            // Nothing heard in them tells nothing.
+                            if (first != null) this@coroutineScope.launch { words(file, part, language)?.ifEmpty { null }?.let { if (first(Sung(startedAt, it))) hearAgain(file, again.await(), language, first) } }
                         }
                     }
                     // Sound that ended before them has none to hear again.
                     again.cancel()
                     heard
-                } ?: return null
+                    // A phone turned all the way down may give no recording at all, as its silence isn't taken for sound.
+                } ?: return null.also { heardNoSound = true }
                 )
         }
+        // No sound at all has no words to hear, so the speech model isn't run on it.
+        heardNoSound = heard.second.all { it.toInt() == 0 }
+        if (heardNoSound) return null
         keepTo?.let { File(it, "heard-${heard.first}.pcm").writeBytes(ByteBuffer.allocate(heard.second.size * 2).order(ByteOrder.LITTLE_ENDIAN).apply { asShortBuffer().put(heard.second) }.array()) }
         val words = words(file, heard.second, language) ?: return null
         return Sung(heard.first, words)
@@ -122,14 +161,14 @@ internal class SingingListener(
 
     /** The sound in [part], from when it started, heard with [model] and told [first]. */
     private suspend fun hearAgain(model: File, part: Pair<Long, ShortArray>, language: String?, first: suspend (Sung) -> Boolean) {
-        words(model, part.second, language)?.let { first(Sung(part.first, it)) }
+        words(model, part.second, language)?.ifEmpty { null }?.let { first(Sung(part.first, it)) }
     }
 
-    /** The words sung in [audio], heard with [model], in [language] when it's known; null when it can't be loaded, or hears none. */
+    /** The words sung in [audio], heard with [model], in [language] when it's known: none when none are sung; null when it can't be loaded or fails on them. */
     private suspend fun words(model: File, audio: ShortArray, language: String?): List<HeardWord>? = withContext(computeDispatcher) {
         val hears = hearing(model) ?: return@withContext null
         try {
-            Busy.during { hears.words(FloatArray(audio.size) { audio[it] / 32768f }, language) }.ifEmpty { null }
+            Busy.during { hears.words(FloatArray(audio.size) { audio[it] / 32768f }, language) }
         } finally {
             (hears as? Closeable)?.close()
         }
@@ -229,7 +268,7 @@ internal object SungAlignment {
      * moment of [sung], by the clock the words follow.
      */
     fun shiftMs(sung: Sung, songAt: (Long) -> Long, lines: List<LyricLine>): Long? {
-        val heard = sung.words.mapNotNull { word -> plain(word.text).takeIf { it.isNotEmpty() }?.let { it to songAt(sung.startedAtMs + word.atMs) } }
+        val heard = sung.words.flatMap { word -> pieces(word.text).map { it to songAt(sung.startedAtMs + word.atMs) } }
         if (heard.isEmpty()) return null
         return near(heard, lines)?.first ?: far(heard, lines)
     }
@@ -243,7 +282,7 @@ internal object SungAlignment {
      * told where it starts, stays [shiftMs] off.
      */
     fun linesMs(sung: Sung, songAt: (Long) -> Long, lines: List<LyricLine>, shiftMs: Long): Map<Int, Long> {
-        val heard = sung.words.mapNotNull { word -> plain(word.text).takeIf { it.isNotEmpty() }?.let { it to songAt(sung.startedAtMs + word.atMs) - HEARD_LATE_MS } }
+        val heard = sung.words.flatMap { word -> pieces(word.text).map { it to songAt(sung.startedAtMs + word.atMs) - HEARD_LATE_MS } }
         if (heard.isEmpty()) return emptyMap()
         val from = heard.first().second - LINE_OFF_MS
         val to = heard.last().second + LINE_OFF_MS
@@ -256,15 +295,39 @@ internal object SungAlignment {
                 val offs = its.mapNotNull { (h, t) -> timed[t].ms?.let { heard[h].second - it } }
                 offs.takeIf { it.size >= 2 }?.sorted()?.let { it[it.size / 2] + lines[line].timeMs }
             } else {
-                val (h, t) = its.first()
-                val before = t - timed.indexOfFirst { it.line == line }
-                // A pair: the next word of the line heard right after.
-                val pair = its.getOrNull(1) == (h + 1 to t + 1) && heard[h + 1].second - heard[h].second < PAIR_MS
-                heard.getOrNull(h - before)?.second?.takeIf { pair && before <= MAX_MISHEARD && (h - before until h).none { it in matchedHeard } }
+                prefixStart(its, timed, heard, matchedHeard)
             } ?: return@mapNotNull (line to lines[line].timeMs + shiftMs).takeIf { its.size >= 2 }
             val off = startMs - lines[line].timeMs - shiftMs
             if (abs(off) > LINE_OFF_MS) null else line to lines[line].timeMs + shiftMs + if (abs(off) >= OWN_LINE_MS) off else 0L
         }.toMap()
+    }
+
+    /** A distinct phrase supplies enough content without waiting for several sparse lines. */
+    fun canPlaceAlone(line: LyricLine, lines: List<LyricLine>) = distinctLine(pieces(line.text), line, lines)
+
+    private fun distinctLine(heard: List<String>, line: LyricLine, lines: List<LyricLine>): Boolean {
+        val support = matched(heard, pieces(line.text)).size
+        return support >= MIN_WORDS && lines.none { it !== line && matched(heard, pieces(it.text)).size * FAR_CLEARLY >= support }
+    }
+
+    private fun prefixStart(its: List<Pair<Int, Int>>, timed: List<Word>, heard: List<Pair<String, Long>>, matchedHeard: Set<Int>): Long? {
+        val (h, t) = its.first()
+        val before = t - timed.indexOfFirst { it.line == timed[t].line }
+        // A pair: the next word of the line heard right after.
+        val pair = its.getOrNull(1) == (h + 1 to t + 1) && heard[h + 1].second - heard[h].second < PAIR_MS
+        return heard.getOrNull(h - before)?.second?.takeIf { pair && before <= MAX_MISHEARD && (h - before until h).none { it in matchedHeard } }
+    }
+
+    private fun distinctLineShift(heard: List<Pair<String, Long>>, near: List<LyricLine>, timed: List<Word>, pairs: List<Pair<Int, Int>>, lines: List<LyricLine>): Long? {
+        val used = pairs.map { it.first }.toSet()
+        val shifts = pairs.groupBy { (_, t) -> timed[t].line }.mapNotNull { (line, its) ->
+            if (!distinctLine(its.map { (h) -> heard[h].first }, near[line], lines)) return@mapNotNull null
+            val known = its.mapNotNull { (h, t) -> timed[t].ms?.let { (heard[h].second - it) to line } }
+            val shift = agreed(known, AGREE_MS) { it.size * 2 > known.size }
+                ?: prefixStart(its, timed, heard, used)?.minus(near[line].timeMs)
+            shift?.let { it to line }
+        }
+        return agreed(shifts, AGREE_MS) { it.size * 2 > shifts.size }
     }
 
     /** How far off the lines timed near what was [heard] are, and how many words heard match them; null when too few. */
@@ -279,6 +342,7 @@ internal object SungAlignment {
         val told = agreed(pairs.mapNotNull { (h, t) -> timed[t].ms?.let { (heard[h].second - it) to timed[t].line } }, AGREE_MS) {
             it.size >= MIN_WORDS || it.distinctBy { (_, line) -> line }.size >= MIN_LINES
         }
+            ?: distinctLineShift(heard, near, timed, pairs, lines)
             // Or else when the rest of a line's words are sung by where they are in it: a guess, so it takes more of them.
             ?: agreed(pairs.map { (h, t) -> (heard[h].second - timed[t].guessMs) to timed[t].line }, GUESSED_AGREE_MS) {
                 it.size >= MIN_GUESSED && it.distinctBy { (_, line) -> line }.size >= MIN_LINES
@@ -303,7 +367,18 @@ internal object SungAlignment {
         }.sortedByDescending { it.second }
         val best = found.firstOrNull()?.takeIf { it.second >= MIN_FAR_WORDS } ?: return null
         val other = found.firstOrNull { abs(it.first - best.first) > AGREE_MS }
-        return best.first.takeIf { other == null || other.second * FAR_CLEARLY < best.second }
+        // Where the lines are is a place too, though the words heard there may not agree how far off they are.
+        val stays = abs(best.first) > MAX_SHIFT_MS && matchingWhereTimed(heard, lines) * FAR_CLEARLY >= best.second
+        return best.first.takeIf { !stays && (other == null || other.second * FAR_CLEARLY < best.second) }
+    }
+
+    /** How many words [heard] match the lines timed to be sung while they were heard, however far off each says it is. */
+    private fun matchingWhereTimed(heard: List<Pair<String, Long>>, lines: List<LyricLine>): Int {
+        val here = lines.filterIndexed { index, line ->
+            line.timeMs <= heard.last().second && (lines.getOrNull(index + 1)?.timeMs ?: Long.MAX_VALUE) > heard.first().second
+        }
+        val timed = here.indices.flatMap { line -> wordsOf(here[line], here.getOrNull(line + 1)?.timeMs, line) }
+        return matched(heard.map { it.first }, timed.map { it.text }).size
     }
 
     /** Where most of [shifts], each with its line, agree within [within] ms; null when they're too few to tell, or split. */
@@ -324,7 +399,7 @@ internal object SungAlignment {
      */
     private fun wordsOf(line: LyricLine, nextMs: Long?, index: Int): List<Word> {
         val words = line.words.ifEmpty { listOf(TimedWord(line.timeMs, line.text)) }.flatMap { word ->
-            word.text.split(' ').map(::plain).filter { it.isNotEmpty() }.mapIndexed { at, text -> text to word.timeMs.takeIf { at == 0 } }
+            pieces(word.text).mapIndexed { at, text -> text to word.timeMs.takeIf { at == 0 } }
         }
         val letters = words.sumOf { it.first.length }
         val sungFor = (nextMs ?: (line.timeMs + LAST_LINE_MS)) - line.timeMs
@@ -334,9 +409,7 @@ internal object SungAlignment {
         }
     }
 
-    /** A word as it sounds, near enough: lower case, without accents or anything but letters and digits. */
-    private fun plain(word: String): String =
-        Normalizer.normalize(word.lowercase(), Normalizer.Form.NFKD).filter { it.isLetterOrDigit() }
+    private fun pieces(text: String) = SpokenWords.pieces(text)
 
     /** Which of [heard] match which of [timed], in order, as many as can: index pairs. */
     private fun matched(heard: List<String>, timed: List<String>): List<Pair<Int, Int>> {
@@ -396,6 +469,39 @@ internal object SungAlignment {
 
     /** How close together the places tried for far-off lines are: as close as words heard can tell apart. */
     private const val FAR_STEP_MS = 1_000L
+}
+
+/** What was heard sung of songs whose words have no timing, per recording and words, so they're timed from the start when played again. */
+internal class HeardSongs(private val cache: LookupCache) {
+    suspend fun load(song: MusicMetadata, words: String): List<HeardStretch> {
+        val json = cache.get(keyOf(song, words)) ?: return emptyList()
+        // Kept by an older Crosstune some other way, it's heard again.
+        return runCatching { JSONArray(json).let { all -> (0 until all.length()).map { stretch(all.getJSONObject(it)) } } }.getOrDefault(emptyList())
+    }
+
+    suspend fun save(song: MusicMetadata, words: String, heard: List<HeardStretch>) {
+        val kept = heard.takeLast(MAX_STRETCHES).map { stretch ->
+            JSONObject().put("from", stretch.fromMs).put("to", stretch.toMs).put("words", JSONArray(stretch.words.map { (text, ms) -> JSONArray().put(text).put(ms) }))
+        }
+        cache.put(keyOf(song, words), JSONArray(kept).toString())
+        cache.save()
+    }
+
+    private fun stretch(json: JSONObject): HeardStretch {
+        val words = json.getJSONArray("words")
+        return HeardStretch(json.getLong("from"), json.getLong("to"), (0 until words.length()).map { words.getJSONArray(it).let { word -> word.getString(0) to word.getLong(1) } })
+    }
+
+    /** Other words for the song are other lines, so they're heard again. */
+    private fun keyOf(song: MusicMetadata, words: String) = RecordingKey.of(song) + "\u0000" + words.hashCode().toString(16)
+
+    companion object {
+        /**
+         * Half an hour heard: a song up to 15 minutes long heard through twice, as hearing stops there, so
+         * none of it is lost. Hearing a longer one stops here too. The oldest go first.
+         */
+        const val MAX_STRETCHES = 90
+    }
 }
 
 /** The songs whose words were heard sung and lined up, per recording and words, so each is heard once. */

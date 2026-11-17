@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "音楽リンクを好きなサービスで開きます。"
-  },
-  "actionTitle": {
-    "message": "Crosstune の設定"
-  },
-  "optionsEnabled": {
-    "message": "音楽リンクを下のサービスで開く"
-  },
-  "optionsService": {
-    "message": "開くサービス"
-  },
-  "optionsAccess": {
-    "message": "リンクを開くには、Crosstune に音楽サイトへのアクセスが必要です。"
-  },
-  "optionsAllow": {
-    "message": "許可"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "音楽リンクを好きなサービスで開き、再生中の曲の歌詞を表示します。" },
+  "actionTitle": { "message": "Crosstune の歌詞" },
+  "optionsEnabled": { "message": "音楽リンクを下のサービスで開く" },
+  "optionsService": { "message": "開くサービス" },
+  "optionsAccess": { "message": "リンクを開いて歌詞を表示するには、音楽サイトへのアクセスが必要です。" },
+  "optionsAllow": { "message": "許可" },
+  "lyricsNoSong": { "message": "音楽サイトで曲を再生してください" },
+  "lyricsLoading": { "message": "歌詞を探しています" },
+  "lyricsNone": { "message": "この曲の歌詞はありません" },
+  "lyricsInstrumental": { "message": "インストゥルメンタル" },
+  "lyricsOffline": { "message": "オフラインです" },
+  "lyricsUnavailable": { "message": "歌詞サイトに接続できませんでした" },
+  "lyricsRetry": { "message": "再試行" },
+  "lyricsSettings": { "message": "設定" }
 }

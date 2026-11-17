@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class SyncedLyricsTest {
@@ -19,6 +20,12 @@ class SyncedLyricsTest {
             listOf(LyricLine(1_500, "First line"), LyricLine(3_050, "Second line"), LyricLine(62_000, "Third line")),
             SyncedLyrics.parse(lrc)
         )
+    }
+
+    @Test
+    fun aStampNetEaseEndsWithMinusOneIsReadAndNeverPartOfTheWords() {
+        // Its lines with no time of their own, such as a credit, come with one.
+        assertEquals(listOf(LyricLine(0, "作曲 : Someone")), SyncedLyrics.parse("[00:00.00-1] 作曲 : Someone"))
     }
 
     @Test
@@ -66,9 +73,53 @@ class SyncedLyricsTest {
     @Test
     fun theLineSungIsTheLastOneStarted() {
         val lines = listOf(LyricLine(1_000, "One"), LyricLine(2_000, "Two"))
-        assertEquals(-1, SyncedLyrics.indexAt(lines, 999))
-        assertEquals(0, SyncedLyrics.indexAt(lines, 1_000))
-        assertEquals(1, SyncedLyrics.indexAt(lines, 60_000))
+        assertEquals(-1, SyncedLyrics.indexAt(lines, 999, byEar = false))
+        assertEquals(0, SyncedLyrics.indexAt(lines, 1_000, byEar = false))
+        assertEquals(1, SyncedLyrics.indexAt(lines, 60_000, byEar = false))
+        // Timed by a service, a line's end says nothing: it goes on till the next.
+        assertEquals(0, SyncedLyrics.indexAt(listOf(LyricLine(1_000, "One", endMs = 1_500), LyricLine(2_000, "Two")), 1_800, byEar = false))
+    }
+
+    @Test
+    fun aLineHeardWithTheNextNotIsLitTillItEnds() {
+        val lines = listOf(LyricLine(1_000, "One", endMs = 3_000), LyricLine(LyricLine.NOT_HEARD, "Two"), LyricLine(9_000, "Three"))
+        assertEquals(0, SyncedLyrics.indexAt(lines, 3_000, byEar = true))
+        // Past its end, nothing's known to be sung till the next line heard.
+        assertEquals(-1, SyncedLyrics.indexAt(lines, 3_001, byEar = true))
+        assertEquals(2, SyncedLyrics.indexAt(lines, 9_000, byEar = true))
+        assertEquals(listOf(true, false, true), lines.map { it.heard })
+        // With the line between left out, as a blank one is under the player, it still goes dark there.
+        assertEquals(-1, SyncedLyrics.indexAt(lines.filter { it.heard }, 3_001, byEar = true))
+    }
+
+    @Test
+    fun theLastLineIsLitTillItEndsOnlyWhenTimedByEar() {
+        val lines = listOf(LyricLine(1_000, "One"), LyricLine(4_000, "Two", endMs = 6_000))
+        assertEquals(1, SyncedLyrics.indexAt(lines, 6_000, byEar = true))
+        // What's sung after it isn't known.
+        assertEquals(-1, SyncedLyrics.indexAt(lines, 6_001, byEar = true))
+        // Timed by a service, its outro is still it.
+        assertEquals(1, SyncedLyrics.indexAt(lines, 6_001, byEar = false))
+        // With no end said, it stays lit either way.
+        assertEquals(0, SyncedLyrics.indexAt(listOf(LyricLine(1_000, "One")), 60_000, byEar = true))
+    }
+
+    @Test
+    fun theLineLitChangesAsLinesHeardStartAndJustPastWhereOnesGoingDarkEnd() {
+        val lines = listOf(
+            LyricLine(1_000, "One", endMs = 3_000),
+            LyricLine(LyricLine.NOT_HEARD, "Two"),
+            LyricLine(9_000, "Three"),
+            LyricLine(12_000, "Four", endMs = 14_000)
+        )
+        // A line not heard is never lit, so it changes nothing, and nothing waits for it.
+        assertEquals(listOf(1_000L, 3_001L, 9_000L, 12_000L, 14_001L), SyncedLyrics.changes(lines, byEar = true))
+        // Timed by a service, the last line goes on, and the lines with ends say nothing more.
+        assertEquals(listOf(1_000L, 9_000L, 12_000L), SyncedLyrics.changes(lines.filter { it.heard }, byEar = false))
+        // Each change is where indexAt gives another line.
+        SyncedLyrics.changes(lines, byEar = true).forEach { at -> assertNotEquals(SyncedLyrics.indexAt(lines, at - 1, byEar = true), SyncedLyrics.indexAt(lines, at, byEar = true)) }
+        // Past the last line's end, nothing changes again, however near the end of time.
+        assertEquals(null, SyncedLyrics.nextAfter(SyncedLyrics.changes(lines, byEar = true), 14_001))
     }
 
     @Test
@@ -154,5 +205,36 @@ class SyncedLyricsTest {
         assertEquals(1, SyncedLyrics.wordsSungBy(words, 1_000))
         assertEquals(1, SyncedLyrics.wordsSungBy(words, 1_499))
         assertEquals(2, SyncedLyrics.wordsSungBy(words, 9_000))
+    }
+
+    @Test
+    fun theNextChangeIsTheNearestTimeAfterNow() {
+        // Not in order, as lines from some services come.
+        val times = listOf(20_000L, 0L, 10_000L)
+        assertEquals(0L, SyncedLyrics.nextAfter(times, -1))
+        assertEquals(10_000L, SyncedLyrics.nextAfter(times, 0))
+        assertEquals(20_000L, SyncedLyrics.nextAfter(times, 10_000))
+        assertEquals(null, SyncedLyrics.nextAfter(times, 20_000))
+        assertEquals(null, SyncedLyrics.nextAfter(emptyList(), 0))
+    }
+
+    @Test
+    fun aSongWaitsUntilItsNextChange() {
+        val clock = PlaybackClock(positionMs = 1_000, atMs = 50_000)
+        // 2 s into the song, a change at 5 s is 3 s away.
+        assertEquals(3_000L, clock.untilMs(51_000) { 5_000 })
+        // The place asked about is where the song is now, not where the clock was read.
+        assertEquals(500L, clock.untilMs(51_000) { it + 500 })
+        // At double speed it comes in half the time, and at half speed in twice.
+        assertEquals(1_500L, clock.copy(speed = 2f).untilMs(50_500) { 5_000 })
+        assertEquals(6_000L, clock.copy(speed = 0.5f).untilMs(52_000) { 5_000 })
+        // A change that's due, or just passed, is looked at on the next moment, never in a tight loop.
+        assertEquals(1L, clock.untilMs(51_000) { 2_000 })
+        assertEquals(1L, clock.untilMs(51_000) { 1_500 })
+        // Nothing changes again: no wait at all.
+        assertEquals(null, clock.untilMs(51_000) { null })
+        // A song that's paused, or isn't moving, never gets there.
+        assertEquals(null, clock.copy(playing = false).untilMs(51_000) { 5_000 })
+        assertEquals(null, clock.copy(speed = 0f).untilMs(51_000) { 5_000 })
     }
 }

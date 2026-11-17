@@ -159,6 +159,26 @@ class CastTest {
     }
 
     @Test
+    fun aPracticeRequestForAnAppStaysOnThePhoneWhileTheSameSongCasts() {
+        val app = "com.spotify.music"
+        val local = Following(PlaybackClock(3_000, 0, playing = false), "Spotify", canSeek = true, appPackage = app)
+        val source = FakePlayback().apply { playing.value = local }
+        val cast = FakeCast().apply { target.value = CastTarget("Living room", tv) }
+        val playback = castPlayback(cast, source)
+        playback.casting(song)
+
+        assertEquals(local, runBlocking { playback.follow(song, app).first() })
+        playback.seekTo(song, 3_700, app)
+        playback.playPause(song, true, app)
+        assertTrue(runBlocking { playback.playSong(song, app, orLastPlayed = false) })
+        assertEquals(listOf(app), source.followedApps)
+        assertEquals(listOf(3_700L), source.seeks)
+        assertEquals(listOf(true), source.plays)
+        assertEquals(listOf(song to app), source.songsAsked)
+        assertTrue(cast.sent.isEmpty())
+    }
+
+    @Test
     fun resumingTheCastSongPlaysOnTheTvAndOtherResumesStayWithThePhone() {
         val source = FakePlayback().apply { startsInBackground = false }
         val cast = FakeCast().apply { target.value = CastTarget("Living room", tv.copy(playing = false)) }

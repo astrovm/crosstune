@@ -5,10 +5,15 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import okhttp3.Request
 import okhttp3.Response
@@ -16,6 +21,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -453,7 +459,20 @@ class SongListenerTest {
     }
 
     private var clock = 0L
-    private fun played(tap: SoundTap?, every: Long = PlayedSound.POLL_MS) = PlayedSound({ tap }, now = { clock }, sleep = { clock += every })
+
+    /** Waits in the current listen. A real probe gives up after 400. Far past that, the listen is stuck. */
+    private var waits = 0
+
+    private fun waitFor(every: Long) {
+        clock += every
+        waits += 1
+        check(waits <= 4_000) { "the listen did not finish" }
+    }
+
+    private fun played(tap: SoundTap?, every: Long = PlayedSound.POLL_MS): PlayedSound {
+        waits = 0
+        return PlayedSound({ tap }, now = { clock }, sleep = { waitFor(every) })
+    }
 
     /** All [recording] gives, [count] samples asked for at a time, until it gives no more or [max]. */
     private fun all(recording: Recording, count: Int = 1_600, max: Int = 32_000): ShortArray {
@@ -468,6 +487,164 @@ class SongListenerTest {
     }
 
     private fun music(seconds: Int, rateHz: Int = 48_000) = Random(7).let { random -> ByteArray(seconds * rateHz) { (random.nextInt(40, 216)).toByte() } }
+
+    @Test
+    fun shortSoundsDoNotMakeThePhoneShareItsSound() {
+        val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("short-sounds", Context.MODE_PRIVATE)
+        for (durationMs in listOf(10, 100, 300)) {
+            preferences.edit().clear().commit()
+            clock = 0
+            val sound = ByteArray(48_000 * 3) { 128.toByte() }
+            music(1).copyInto(sound, 48_000 / 2, 0, durationMs * 48)
+            val tap = PlayingTap(sound) { clock }
+            waits = 0
+            val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
+            assertEquals("$durationMs ms blip", 0, played.open()!!.use { it.read(ShortArray(1), 0, 1) })
+            assertFalse("$durationMs ms blip was saved as shared sound", preferences.getBoolean(PlayedSound.KEY_SHARES, false))
+        }
+    }
+
+    /** What [PlayedSound] gives for a phone that plays [sound] from the start, and whether it then keeps that the phone shares its sound. */
+    private fun heardAndShared(name: String, sound: ByteArray, max: Int): Pair<ShortArray, Boolean> {
+        val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences(name, Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        clock = 0
+        val tap = PlayingTap(sound) { clock }
+        waits = 0
+        val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
+        val heard = played.open()!!.use { all(it, max = max) }
+        return heard to preferences.getBoolean(PlayedSound.KEY_SHARES, false)
+    }
+
+    @Test
+    fun clicksTypedAtAKeyboardsPaceDoNotAddUpToSound() {
+        // 50 ms clicks, 200 ms apart, for the whole probe.
+        val sound = ByteArray(48_000 * 3) { 128.toByte() }
+        for (click in 0 until 15) music(1).copyInto(sound, 4_800 + click * 9_600, 0, 2_400)
+        val (heard, shared) = heardAndShared("clicks", sound, 16_000)
+        assertEquals(0, heard.size)
+        assertFalse(shared)
+    }
+
+    @Test
+    fun soundThatBreaksOffForMoreThanARestIsNotOneSound() {
+        // 600 ms of sound, 100 ms of quiet, again and again: never a second of it in one go.
+        val sound = ByteArray(48_000 * 3) { 128.toByte() }
+        for (burst in 0 until 4) music(1).copyInto(sound, burst * 33_600, 0, 28_800)
+        val (heard, shared) = heardAndShared("bursts", sound, 16_000)
+        assertEquals(0, heard.size)
+        assertFalse(shared)
+    }
+
+    @Test
+    fun musicWithRestsInItIsOneSoundAndMarksThePhoneAsSharingItsSound() {
+        // 30 ms of quiet every 400 ms.
+        val sound = music(3)
+        for (rest in 0 until 7) sound.fill(128.toByte(), rest * 19_200 + 9_600, rest * 19_200 + 11_040)
+        val (heard, shared) = heardAndShared("rests", sound, 16_000)
+        assertEquals(16_000, heard.size)
+        assertTrue(shared)
+    }
+
+    @Test
+    fun musicThatStartsJustBeforeTheProbeGivesUpStillCounts() {
+        // 1.9 s of silence, 100 ms before it would have given up.
+        val sound = ByteArray(91_200) { 128.toByte() } + music(3)
+        val (heard, shared) = heardAndShared("late", sound, 40_000)
+        assertEquals(40_000, heard.size)
+        assertTrue(heard.copyOfRange(0, 30_000).all { it == 0.toShort() })
+        assertTrue(heard.copyOfRange(31_000, 40_000).any { it != 0.toShort() })
+        assertTrue(shared)
+    }
+
+    /**
+     * Hands [samples] out in reads of [size], then silence. At 1 kHz a read of [size] is [size] ms
+     * on the clock, so each read is all new and a sample is a millisecond.
+     */
+    private class SampleTap(private val samples: ByteArray, private val size: Int) : SoundTap {
+        override val rateHz = 1_000
+        private var at = 0
+
+        override fun read(into: ByteArray): Int {
+            for (index in 0 until size) into[index] = samples.getOrElse(at + index) { 128.toByte() }
+            at += size
+            return size
+        }
+
+        override fun close() = Unit
+    }
+
+    /** How much the first read gives, and whether that listen marked the phone as sharing its sound. */
+    private fun probed(name: String, samples: ByteArray, size: Int = 100): Pair<Int, Boolean> {
+        val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences(name, Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        clock = 0
+        waits = 0
+        val played = PlayedSound({ SampleTap(samples, size) }, preferences, now = { clock }, sleep = { waitFor(size.toLong()) })
+        val got = played.open()!!.use { it.read(ShortArray(8), 0, 8) }
+        return got to preferences.getBoolean(PlayedSound.KEY_SHARES, false)
+    }
+
+    private fun tone(count: Int) = ByteArray(count) { 200.toByte() }
+
+    private fun hush(count: Int) = ByteArray(count) { 128.toByte() }
+
+    @Test
+    fun soundThatHoldsForASecondMarksThePhoneAsSharingItsSound() {
+        // The first read played before listening started, so it does not count.
+        val (got, shared) = probed("holds", hush(100) + tone(1_000))
+        assertEquals(8, got)
+        assertTrue(shared)
+    }
+
+    @Test
+    fun soundOneSampleShortOfASecondDoesNotMarkThePhoneAsSharingItsSound() {
+        val (got, shared) = probed("short-by-one", hush(100) + tone(999))
+        assertEquals(0, got)
+        assertFalse(shared)
+    }
+
+    @Test
+    fun quietBeforeTheSoundDoesNotCountTowardsItHoldingOn() {
+        // One quiet sample, then one sample short of a second. That quiet is not part of the sound.
+        val (got, shared) = probed("quiet-before", hush(100) + hush(1) + tone(999))
+        assertEquals(0, got)
+        assertFalse(shared)
+    }
+
+    @Test
+    fun aRestOfSixtyMillisecondsKeepsTheSoundAsOne() {
+        val (got, shared) = probed("rest-60", hush(100) + tone(500) + hush(60) + tone(500))
+        assertEquals(8, got)
+        assertTrue(shared)
+    }
+
+    @Test
+    fun aRestOneSampleLongerThanSixtyMillisecondsBreaksTheSound() {
+        val (got, shared) = probed("rest-61", hush(100) + tone(500) + hush(61) + tone(500))
+        assertEquals(0, got)
+        assertFalse(shared)
+    }
+
+    @Test
+    fun theProbeGivesUpAsTheTwoSecondsEnd() {
+        // One read every 5 ms fills the 2 s. Sound in the next read is too late.
+        val reads = (PlayedSound.SILENT_MS / PlayedSound.POLL_MS).toInt()
+        val (got, shared) = probed("give-up", hush(reads * 100) + tone(1_000))
+        assertEquals(0, got)
+        assertFalse(shared)
+    }
+
+    @Test
+    fun anOldSharingDecisionDoesNotSkipTheNewProbe() {
+        val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("old-sharing", Context.MODE_PRIVATE)
+        preferences.edit().clear().putBoolean("sound_shared", true).commit()
+        clock = 0
+        val tap = PlayingTap(ByteArray(48_000 * 3) { 128.toByte() }) { clock }
+        waits = 0
+        val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
+        assertEquals(0, played.open()!!.use { it.read(ShortArray(1), 0, 1) })
+    }
 
     @Test
     fun thePhonesOwnSoundIsHeardWhole() {
@@ -511,7 +688,8 @@ class SongListenerTest {
         clock = 100
         val tap = PlayingTap(sound) { clock }
         // A clock that's behind: the reads overlap by more than it says, so where they match is looked for.
-        val heard = PlayedSound({ tap }, now = { 0L }, sleep = { clock += 1 }).open()!!.use { all(it, max = 3_200) }
+        waits = 0
+        val heard = PlayedSound({ tap }, now = { 0L }, sleep = { waitFor(1) }).open()!!.use { all(it, max = 3_200) }
         assertEquals(3_200, heard.size)
         assertEquals(sixteenKilohertz(sound, 100, 3_200), heard.toList())
     }
@@ -563,9 +741,12 @@ class SongListenerTest {
     fun aPhoneThatHasSharedItsSoundIsntCountedOutByAQuietStart() {
         // A phone that shared its sound once does again, so a video's silent start isn't heard by the microphone.
         clock = 0
-        val taps = ArrayDeque(listOf(PlayingTap(music(1)) { clock }, PlayingTap(ByteArray(48_000 * 5) { 128.toByte() }) { clock }))
+        val taps = ArrayDeque(listOf(PlayingTap(music(2)) { clock }, PlayingTap(ByteArray(48_000 * 5) { 128.toByte() }) { clock }))
         val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("played", Context.MODE_PRIVATE)
-        fun sound() = PlayedSound({ taps.removeFirst() }, preferences, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
+        fun sound(): PlayedSound {
+            waits = 0
+            return PlayedSound({ taps.removeFirst() }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
+        }
         assertTrue(sound().open()!!.use { all(it, max = 8_000) }.any { it != 0.toShort() })
         // Even after Crosstune starts again.
         clock = 0
@@ -599,6 +780,104 @@ class SongListenerTest {
         val unshared = PlayingFirst(phone, SongHearing { byMicrophone }, SongHearing { Heard.Failed(AppError.MICROPHONE) })
         assertEquals(Heard.Failed(AppError.MICROPHONE), runBlocking { unshared.listenToPlaying(byMicrophone = false) })
         assertEquals(bySound, runBlocking { PlayingFirst(phone, SongHearing { byMicrophone }, SongHearing { bySound }).listenToPlaying(byMicrophone = false) })
+    }
+
+    @Test
+    fun theMicrophoneNamesASongNearbyEvenWhileAnAppPlaysWithNoSongNamed() {
+        // A radio station that sends only its name, as VRadio does (#998), or a video with no song in it.
+        val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
+        val nearby = Heard.Song(MusicMetadata("Fake Song", "Fake Artist"), null, 12_000, 400_000)
+        // The phone's own sound, as through headphones, would hear the station, not the song asked about.
+        val station = Heard.Song(MusicMetadata("Other Fake Song", "Other Fake Artist"), null, 13_000, 400_000)
+        assertEquals(nearby, runBlocking { PlayingFirst(phone, SongHearing { nearby }, SongHearing { station }).listen() })
+        assertEquals(nearby, runBlocking { PlayingFirst(phone, SongHearing { nearby }, SongHearing { Heard.Nothing }).listen() })
+    }
+
+    @Test
+    fun aSongOnlyTheMicrophoneHeardWithNoSongNamedIsKeptAsHeardInTheRoom() {
+        val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
+        val song = Heard.Song(MusicMetadata("Fake Song", "Fake Artist"), null, 12_000, 400_000)
+        val unshared = SongHearing { Heard.Failed(AppError.MICROPHONE) }
+        // The phone won't share its sound: the microphone may hear another song in the room than the station's (#1002).
+        assertEquals(song.copy(inRoom = true), runBlocking { PlayingFirst(phone, SongHearing { song }, unshared).listenToPlaying() })
+        // Heard in the phone's own sound, it's the station's, and the microphone isn't asked.
+        assertEquals(song, runBlocking { PlayingFirst(phone, SongHearing { error("not asked") }, SongHearing { song }).listenToPlaying() })
+        assertEquals(Heard.Nothing, runBlocking { PlayingFirst(phone, SongHearing { Heard.Nothing }, unshared).listenToPlaying() })
+    }
+
+    @Test
+    fun whileAloudTheMicrophoneStopsOnceThePhoneGoesQuietButItsOwnSoundGoesOn() = runTest {
+        val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
+        val unshared = Heard.Failed(AppError.MICROPHONE)
+        val song = Heard.Song(MusicMetadata("Fake Song", "Fake Artist"), null, 12_000, 400_000)
+        var microphoneStopped = false
+        val room = SongHearing {
+            try {
+                awaitCancellation()
+            } finally {
+                microphoneStopped = true
+            }
+        }
+        val check = PlayingFirst.ALOUD_CHECK_MS
+        // Headphones plugged in midway: the microphone would hear nothing from then on, so it stops at the next check.
+        val stopped = async { PlayingFirst(phone, room, SongHearing { unshared }).listenToPlaying(whileAloud = true) }
+        delay(check * 5)
+        assertTrue(stopped.isActive)
+        phone.aloud = false
+        // On virtual time, as all of this test: a delay here passes at once.
+        delay(check * 2)
+        assertTrue(stopped.isCompleted)
+        assertEquals(unshared, stopped.await())
+        assertTrue(microphoneStopped)
+        // The phone's own sound still hears it through headphones, so that listen goes on.
+        val shared = CompletableDeferred<Heard>()
+        phone.aloud = true
+        val goesOn = async { PlayingFirst(phone, room, SongHearing { shared.await() }).listenToPlaying(whileAloud = true) }
+        delay(check * 5)
+        phone.aloud = false
+        delay(check * 5)
+        assertTrue(goesOn.isActive)
+        shared.complete(song)
+        assertEquals(song, goesOn.await())
+        // Not asked to, the microphone goes on though the phone is quiet: someone may be naming a song in the room.
+        val asked = CompletableDeferred<Heard>()
+        val byHand = async { PlayingFirst(phone, SongHearing { asked.await() }, SongHearing { unshared }).listenToPlaying() }
+        delay(check * 5)
+        assertTrue(byHand.isActive)
+        asked.complete(song)
+        // Heard by the microphone alone, it may be the room's: see aSongOnlyTheMicrophoneHeardWithNoSongNamedIsKeptAsHeardInTheRoom.
+        assertEquals(song.copy(inRoom = true), byHand.await())
+        // A song heard while the phone plays out loud is the answer.
+        phone.aloud = true
+        assertEquals(song.copy(inRoom = true), PlayingFirst(phone, SongHearing { song }, SongHearing { unshared }).listenToPlaying(whileAloud = true))
+    }
+
+    @Test
+    fun anotherSongTheMicrophoneHearsInTheRoomIsntTakenForTheOneThePhonePlays() {
+        // A video, so its app can't say where in the song it is, and the phone won't share its sound.
+        val video = Heard.Song(MusicMetadata("Every Little Thing She Does Is Magic", "The Police"), null)
+        val phone = FakePlayback().apply { onThePhone = video }
+        val unshared = SongHearing { Heard.Failed(AppError.MICROPHONE) }
+        val room = Heard.Song(MusicMetadata("No Llora", "El Cuarteto de Nos"), null, 56_000, 400_000)
+        assertEquals(video, runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listen() })
+        assertEquals(Heard.Nothing, runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listenToPlaying() })
+        // Nor one of the same name by someone else.
+        val namesake = Heard.Song(MusicMetadata("Every Little Thing She Does Is Magic", "Someone Else"), null, 56_000, 400_000)
+        assertEquals(video, runBlocking { PlayingFirst(phone, SongHearing { namesake }, unshared).listen() })
+        // The song played, heard by the microphone, still says where it is, though Shazam names it otherwise.
+        val heard = Heard.Song(MusicMetadata("Every Little Thing She Does Is Magic (Remastered 2003)", "The Police"), null, 54_000, 400_000)
+        assertEquals(heard, runBlocking { PlayingFirst(phone, SongHearing { heard }, unshared).listen() })
+        // So does a video whose title names more and whose channel isn't the artist, as YouTube Music's upload
+        // "Police, The   Every Little Thing She Does Is Magic Audio Flac" by "keyloginhot".
+        phone.onThePhone = Heard.Song(checkNotNull(MetadataParsers.youtubeVideo("Police, The   Every Little Thing She Does Is Magic Audio Flac", "keyloginhot")), null)
+        val shazam = heard.copy(metadata = MusicMetadata("Every Little Thing She Does Is Magic", "The Police"))
+        assertEquals(shazam, runBlocking { PlayingFirst(phone, SongHearing { shazam }, unshared).listen() })
+        assertEquals(phone.onThePhone, runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listen() })
+        // Nothing playing on the phone, the room's song is the one asked for.
+        phone.onThePhone = null
+        assertEquals(room, runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listen() })
+        // Heard to tell what the phone plays, it's kept as the room's, as nothing tells it's the phone's.
+        assertEquals(room.copy(inRoom = true), runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listenToPlaying() })
     }
 
     private companion object {

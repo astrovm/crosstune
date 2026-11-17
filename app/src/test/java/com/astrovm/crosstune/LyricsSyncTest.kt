@@ -82,8 +82,37 @@ class LyricsSyncTest {
     fun linesDriftingExactlyAsFarAsTheyNeedToTellAPace() {
         // A second further off across them, 4% slower: past the last, it goes on at that pace.
         assertEquals(56_800L, LyricsSync.timeOf(55_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(35_000, 36_000))))
+        // Just a second, to the ms: it's a pace all the same.
+        assertEquals(53_312L, LyricsSync.timeOf(52_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(42_000, 43_000))))
         // Less, it's as far as two lines heard can be off from each other, not a pace: past the last, they keep to it.
         assertEquals(55_900L, LyricsSync.timeOf(55_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(35_000, 35_900))))
+    }
+
+    @Test
+    fun linesAsFarFromTheKnownPaceAsATakeIsSungStillGoOnAtTheirOwn() {
+        // Only a pace of 0 lets the lines lie along exactly 0.05 of it to the last bit; any other is off by one.
+        assertEquals(4_000L, LyricsSync.timeOf(80_000, listOf(SyncPoint(0, 0), SyncPoint(40_000, 2_000)), 0.0))
+        // A hair further off, it's lines timed out of place, and they go on at the known pace.
+        assertEquals(2_002L, LyricsSync.timeOf(80_000, listOf(SyncPoint(0, 0), SyncPoint(40_000, 2_002)), 0.0))
+    }
+
+    @Test
+    fun aRecordingKnownToPlayFasterGoesOnAtItsPacePastTheLinesPutInTime() {
+        // Bizarre Love Triangle's upload plays 3.5% faster than the release its words are timed for.
+        val pace = 1 / 1.035
+        // One line heard: those after come sooner and sooner, those before later and later.
+        assertEquals(50_000L + (100_000 * pace).toLong(), LyricsSync.timeOf(130_000, listOf(SyncPoint(30_000, 50_000)), pace))
+        assertEquals(50_000L - (20_000 * pace).toLong(), LyricsSync.timeOf(10_000, listOf(SyncPoint(30_000, 50_000)), pace))
+        // As it is with lines too close together to tell a pace of their own.
+        assertEquals(41_600L + (10_000 * pace).toLong(), LyricsSync.timeOf(50_000, listOf(SyncPoint(30_000, 30_000), SyncPoint(40_000, 41_600)), pace))
+        // Lines drifting from it far enough to tell, at a pace near it, go on at their own: they were heard.
+        assertEquals(70_000L, LyricsSync.timeOf(70_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(60_000, 60_000)), pace))
+        // Further from it than a take is sung, they were heard a little off, and it goes on at the known pace.
+        assertEquals(36_000L + (20_000 * pace).toLong(), LyricsSync.timeOf(55_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(35_000, 36_000)), pace))
+        // Between two lines put in time they still stretch to fit, and with none they're as timed.
+        assertEquals(25_000L, LyricsSync.timeOf(20_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(30_000, 40_000)), pace))
+        assertEquals(lines, LyricsSync.adjust(lines, emptyList(), pace))
+        assertEquals(listOf(10_000L, 10_000L + (10_000 * pace).toLong()), LyricsSync.adjust(lines.take(2), listOf(SyncPoint(10_000, 10_000)), pace).map { it.timeMs })
     }
 
     @Test
@@ -129,6 +158,40 @@ class LyricsSyncTest {
         store.save(song, lines, emptyList())
         assertEquals(emptyList<SyncPoint>(), store.load(song, lines))
         assertEquals("{}", prefs.getString("lyrics_sync", null))
+    }
+
+    @Test
+    fun aRecordingsPaceIsKeptWithItsLinesForTheSameWords() {
+        val store = LyricsSyncStore(prefs)
+        assertEquals(1.0, store.pace(song, lines), 0.0)
+        // Known before any line is put in time, it's kept on its own.
+        store.save(song, lines, emptyList(), 0.97)
+        assertEquals(0.97, LyricsSyncStore(prefs).pace(song, lines), 0.0)
+        assertEquals(emptyList<SyncPoint>(), store.load(song, lines))
+        // And with them, both.
+        val points = listOf(SyncPoint(10_000, 12_000))
+        store.save(song, lines, points, 0.97)
+        assertEquals(points, store.load(song, lines))
+        assertEquals(0.97, store.pace(song, lines), 0.0)
+        // Other words for it go on as timed.
+        assertEquals(1.0, store.pace(song, lines.dropLast(1)), 0.0)
+        // Lines kept before the pace was go on as timed too.
+        store.save(song, lines, points)
+        assertEquals(1.0, store.pace(song, lines), 0.0)
+        assertEquals(points, store.load(song, lines))
+    }
+
+    @Test
+    fun aLaterPlayFindsTheLinesAndThePaceKeptBeforeIt() {
+        val points = listOf(SyncPoint(10_000, 12_000), SyncPoint(30_000, 33_000))
+        LyricsSyncStore(prefs).save(song, lines, points, 0.966)
+        // Another store, as on the next play, reads both back from the phone's preferences.
+        val later = LyricsSyncStore(prefs)
+        assertEquals(points, later.load(song, lines))
+        assertEquals(0.966, later.pace(song, lines), 0.0)
+        // And a pace kept with no line at all has no lines to give back.
+        LyricsSyncStore(prefs).save(song, lines, emptyList(), 0.966)
+        assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs).load(song, lines))
     }
 
     @Test

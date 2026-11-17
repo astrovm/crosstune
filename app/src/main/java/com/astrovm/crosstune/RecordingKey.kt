@@ -26,7 +26,7 @@ internal object RecordingKey {
      * was opened by when the app gives none, as YouTube Music doesn't.
      */
     fun asPlayed(song: MusicMetadata, playing: MusicMetadata): MusicMetadata =
-        song.copy(recordingId = playing.recordingId, lengthMs = playing.lengthMs, url = playing.url ?: song.url)
+        song.copy(recordingId = playing.recordingId, lengthMs = playing.lengthMs, heardLengthMs = song.heardLengthMs ?: song.lengthMs, url = playing.url ?: song.url)
 
     /** Android players can omit the ID, as YouTube Music does; their duration still separates edits. */
     fun playing(app: String, id: String?, durationMs: Long?): String? {

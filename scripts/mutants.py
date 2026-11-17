@@ -10,21 +10,24 @@ Uncommitted changes count too. Lists the changes that lived, by file and line, a
 did; PIT's full report is in app/build/reports/pitest/playDebug/.
 """
 import argparse
+import importlib
 import re
 import shlex
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent / "mutants-part"))
+mutants_part = importlib.import_module("mutants_part")
+
 SOURCES = ("app/src/main/java/", "app/src/play/java/")
 LINES = ROOT / "app/build/mutants/changed-lines.txt"
 REPORT = ROOT / "app/build/reports/pitest/playDebug/mutations.xml"
 
 
 def changed_lines(base):
-    """Each changed Kotlin line, as "com/astrovm/crosstune/File.kt:12", the way PIT names one."""
+    """Each changed line of code, as "com/astrovm/crosstune/File.kt:12", the way PIT names one."""
     since = subprocess.run(["git", "merge-base", base, "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
     diff = subprocess.run(["git", "diff", "-U0", "--no-color", since, "--", *SOURCES], cwd=ROOT, check=True, capture_output=True, text=True).stdout
     lines, file = [], None
@@ -32,7 +35,7 @@ def changed_lines(base):
         if line.startswith("+++ "):
             path = line[4:].removeprefix("b/")
             source = next((source for source in SOURCES if path.startswith(source)), None)
-            file = path.removeprefix(source) if source and path.endswith(".kt") else None
+            file = path.removeprefix(source) if source and path.endswith(mutants_part.CODE) else None
         elif line.startswith("@@") and file:
             start, _, count = re.match(r"@@ -\S+ \+(\d+)(,(\d+))? @@", line).groups()
             lines += [f"{file}:{n}" for n in range(int(start), int(start) + int(count or 1))]
@@ -47,7 +50,7 @@ def main():
 
     lines = changed_lines(args.base)
     if not lines:
-        print("No Kotlin lines changed in the app.")
+        print("No lines of code changed in the app.")
         return 0
     LINES.parent.mkdir(parents=True, exist_ok=True)
     LINES.write_text("\n".join(lines) + "\n")
@@ -57,12 +60,11 @@ def main():
     # test and nothing else, and a test that fails once in a while can't be looked into.
     subprocess.run([*shlex.split(args.gradle), ":app:pitestPlayDebug", f"-PmutateLines={LINES}", "-PmutateVerbose=true"], cwd=ROOT, check=True)
 
-    mutations = ET.parse(REPORT).getroot()
-    lived = [m for m in mutations if m.get("status") in ("SURVIVED", "NO_COVERAGE")]
-    for m in sorted(lived, key=lambda m: (m.findtext("sourceFile"), int(m.findtext("lineNumber")))):
-        print(f"{m.findtext('sourceFile')}:{m.findtext('lineNumber')}  {m.get('status').lower().replace('_', ' ')}: {m.findtext('description')}")
-    print(f"{len(mutations) - len(lived)} of {len(mutations)} changes caught by a test.")
-    return 1 if lived else 0
+    rows, total = mutants_part.lived(REPORT)
+    for row in rows:
+        print(row)
+    print(f"{total - len(rows)} of {total} changes caught by a test.")
+    return 1 if rows else 0
 
 
 if __name__ == "__main__":

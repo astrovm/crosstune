@@ -1,7 +1,10 @@
+import json
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 # Latin letters go through anyascii as they are, so it needn't be installed to test with them.
 sys.modules.setdefault("anyascii", types.SimpleNamespace(anyascii=lambda text: text))
@@ -42,6 +45,29 @@ class LineTimingTest(unittest.TestCase):
                   ("under", 35_050), ("the", 35_300), ("water", 35_500)),
         )
         self.assertEqual(["Under the water"], [line["text"] for line in found["lines"]])
+
+
+class HearTest(unittest.TestCase):
+    def test_hears_on_the_gpu_with_openai_whisper_in_the_same_shape(self):
+        asked = []
+
+        class Model:
+            def transcribe(self, samples, **settings):
+                asked.append(settings)
+                return {"language": "es", "segments": [{"words": [{"word": " hola", "start": 1.25}]}, {"words": [{"word": " mundo", "start": 2.0}]}, {}]}
+
+        loaded = []
+        whisper = types.SimpleNamespace(load_model=lambda name, device: loaded.append((name, device)) or Model())
+        numpy = types.SimpleNamespace(int16="int16", float32="float32", frombuffer=lambda *_, **__: types.SimpleNamespace(astype=lambda _: 1.0))
+        with tempfile.TemporaryDirectory() as folder, mock.patch.dict(sys.modules, {"whisper": whisper, "numpy": numpy}), mock.patch.object(songcheck, "OUT", Path(folder)):
+            (Path(folder) / "audio").mkdir()
+            (Path(folder) / "audio" / "a.pcm").write_bytes(b"\0\0")
+            songcheck.hear(types.SimpleNamespace(model="small", retry_model="medium", device="cuda", threads=4))
+            found = json.loads((Path(folder) / "heard" / "a.json").read_text())
+        self.assertEqual([("small", "cuda")], loaded)
+        self.assertEqual({"language": "es", "words": [{"ms": 1250, "word": " hola"}, {"ms": 2000, "word": " mundo"}], "model": "small"}, found)
+        # As faster-whisper hears on the CPU, so both count the same.
+        self.assertEqual((True, False, 5), (asked[0]["word_timestamps"], asked[0]["condition_on_previous_text"], asked[0]["beam_size"]))
 
 
 if __name__ == "__main__":

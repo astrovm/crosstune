@@ -20,14 +20,18 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCES = (ROOT / "app/src/main/java", ROOT / "app/src/play/java")
 LINES = ROOT / "app/build/mutants/part-lines.txt"
 REPORT = ROOT / "app/build/reports/pitest/playDebug/mutations.xml"
+# The app's code: Kotlin, and the few classes in Java that Kotlin would add bridges to which PIT never sees run.
+CODE = (".kt", ".java")
 
 
 def all_lines(sources=SOURCES):
-    """Every line of every Kotlin file, as "com/astrovm/crosstune/File.kt:12", the way PIT names one."""
+    """Every line of every file of code, as "com/astrovm/crosstune/File.kt:12", the way PIT names one."""
     roots = (sources,) if isinstance(sources, Path) else sources
     lines = set()
     for source in roots:
-        for file in source.rglob("*.kt"):
+        for file in source.rglob("*"):
+            if file.suffix not in CODE:
+                continue
             name = file.relative_to(source).as_posix()
             count = len(file.read_text(encoding="utf-8").splitlines())
             lines.update((name, n) for n in range(1, count + 1))
@@ -42,12 +46,14 @@ def part(lines, k, n):
 
 
 def lived(report):
-    """What no test caught, "File.kt:12  survived: description", by file and line, and how many changes there were."""
+    """What no test killed, "File.kt:12  survived: description", by file and line, and how many changes there were.
+    Anything but KILLED counts: a change that ran out of memory or broke the run was not caught either, and
+    must not vanish from the list while the job says success."""
     mutations = ET.parse(report).getroot()
-    left = [m for m in mutations if m.get("status") in ("SURVIVED", "NO_COVERAGE", "TIMED_OUT")]
+    left = [m for m in mutations if m.get("status") != "KILLED"]
     left.sort(key=lambda m: (m.findtext("sourceFile"), int(m.findtext("lineNumber"))))
     rows = [
-        f"{m.findtext('sourceFile')}:{m.findtext('lineNumber')}  {m.get('status').lower().replace('_', ' ')}: {m.findtext('description')}"
+        f"{m.findtext('sourceFile')}:{m.findtext('lineNumber')}  {m.get('status').lower().replace('_', ' ')}: {m.findtext('description')} [class={m.findtext('mutatedClass')} method={m.findtext('mutatedMethod')}{m.findtext('methodDescription')} mutator={m.findtext('mutator')} index={','.join(e.text for e in m.findall('indexes/index'))} block={','.join(e.text for e in m.findall('blocks/block'))}]"
         for m in left
     ]
     return rows, len(mutations)

@@ -10,13 +10,17 @@ import androidx.core.content.edit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -41,7 +45,8 @@ internal sealed interface Heard {
      * since the phone started, so the words can follow on from there. [matchId] is the recording Shazam
      * matched it to, whose place [offsetMs] is: often another release than the one playing. [speed] is
      * how fast that recording goes by as the sound heard plays, faster for an upload sped up. [app] is
-     * the music app playing it on the phone, by package.
+     * the music app playing it on the phone, by package. [inRoom] when only the microphone heard it, with
+     * nothing to tell it from another song playing in the room.
      */
     data class Song(
         val metadata: MusicMetadata,
@@ -50,7 +55,8 @@ internal sealed interface Heard {
         val startedAtMs: Long? = null,
         val matchId: String? = null,
         val app: String? = null,
-        val speed: Float = 1f
+        val speed: Float = 1f,
+        val inRoom: Boolean = false
     ) : Heard {
         /** Where the song is, as heard, when both halves are known. */
         val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs, speed) else null
@@ -227,6 +233,10 @@ private fun micRecord(): AudioRecord {
  * The sound the phone itself plays, through the visuals' [tap], for a song an app on the phone
  * plays: heard through headphones too, and nothing else in the room, unlike the microphone. Each
  * read is the last moment of sound, so reads close together overlap, and only what's new is kept.
+ *
+ * The tap hears everything the phone plays, a tap's click or a notification too, and Android scales
+ * a quiet sound up. So the phone only counts as sharing its sound once sound holds on, as music does
+ * and a blip doesn't.
  */
 internal class PlayedSound(
     private val tap: () -> SoundTap?,
@@ -244,13 +254,27 @@ internal class PlayedSound(
         // Once the phone has shared its sound, silence is just a quiet moment, like a video's start.
         var heardAny = preferences?.getBoolean(KEY_SHARES, false) == true
         var waited = 0L
+        // How long sound has held on, in samples up to its last sound, and how much quiet has come since.
+        val gap = sound.rateHz * GAP_MS / 1000
+        val holdsOn = sound.rateHz * HOLDS_ON_MS / 1000
+        var run = 0
+        var quiet = 0
         // What's new and not yet made 16 kHz, and how far into it the next sample made starts.
         val fresh = ArrayList<Int>()
         var from = 0.0
         val ready = ArrayDeque<Short>()
 
         fun take(samples: IntArray, start: Int) {
-            for (index in start until samples.size) fresh += samples[index]
+            for (index in start until samples.size) {
+                fresh += samples[index]
+                if (abs(samples[index]) > QUIET) {
+                    run += quiet + 1
+                    quiet = 0
+                } else if (run > 0 && ++quiet > gap) {
+                    run = 0
+                    quiet = 0
+                }
+            }
             while (from + step <= fresh.size) {
                 ready += (fresh.subList(from.toInt(), (from + step).toInt()).average() * 256).toInt().toShort()
                 from += step
@@ -265,15 +289,12 @@ internal class PlayedSound(
                 // Silence is held back until there's sound: a phone that won't share its sound gives
                 // only silence, and the microphone hears instead.
                 while (ready.isEmpty() || !heardAny) {
-                    if (!heardAny && waited >= SILENT_MS) return 0
+                    // Sound that's started may still turn out to hold on, so it's waited for.
+                    if (!heardAny && waited >= SILENT_MS && run == 0) return 0
                     val read = sound.read(window)
                     val readAt = now()
                     if (read > 0) {
                         val samples = IntArray(read) { (window[it].toInt() and 0xFF) - 128 }
-                        if (!heardAny && samples.any { abs(it) > QUIET }) {
-                            heardAny = true
-                            preferences?.edit { putBoolean(KEY_SHARES, true) }
-                        }
                         // The first read is what played before listening started.
                         last?.let { before ->
                             val expected = ((readAt - lastAt) * sound.rateHz / 1000).toInt()
@@ -281,6 +302,10 @@ internal class PlayedSound(
                             // Reads too far apart to overlap missed some sound, kept as silence so what's heard stays in time.
                             if (new == read && expected > read) take(IntArray(expected - read), 0)
                             take(samples, read - new)
+                            if (!heardAny && run >= holdsOn) {
+                                heardAny = true
+                                preferences?.edit { putBoolean(KEY_SHARES, true) }
+                            }
                         }
                         last = samples
                         lastAt = readAt
@@ -315,7 +340,12 @@ internal class PlayedSound(
     companion object {
         /** How long only silence means the phone won't share its sound. */
         const val SILENT_MS = 2_000L
-        const val KEY_SHARES = "sound_shared"
+        // Not "sound_shared": a click could have set that one, and it was never taken back.
+        const val KEY_SHARES = "sound_shared_by_music"
+        /** Sound this long, with no more quiet than [GAP_MS] inside, isn't a click or a notification. */
+        private const val HOLDS_ON_MS = 1_000
+        /** A quiet moment this short is music breathing, like a rest, not the end of it. */
+        private const val GAP_MS = 60
         /** A little more often than a read lasts, so they overlap. */
         const val POLL_MS = 5L
         /** Off by this much from silence is still silence. */
@@ -332,8 +362,9 @@ internal fun interface SongHearing {
     /**
      * What an app on the phone plays, heard rather than as the app says, to tell how far the app is from
      * the words; by the microphone too, when the phone won't share its sound, unless not [byMicrophone].
+     * With [whileAloud], the microphone stops once the phone no longer plays out loud.
      */
-    suspend fun listenToPlaying(byMicrophone: Boolean = true): Heard = listen()
+    suspend fun listenToPlaying(byMicrophone: Boolean = true, whileAloud: Boolean = false): Heard = listen()
 }
 
 /**
@@ -343,15 +374,40 @@ internal fun interface SongHearing {
  * microphone hears poorly, and not at all through headphones; with the microphone only when the
  * phone won't share its sound. Nothing heard, it's named as the app does.
  */
-internal class PlayingFirst(private val playback: PlaybackSource, private val hearing: SongHearing, private val played: SongHearing = hearing) : SongHearing {
+internal class PlayingFirst(
+    private val playback: PlaybackSource,
+    private val hearing: SongHearing,
+    private val played: SongHearing = hearing
+) : SongHearing {
     override suspend fun listen(): Heard {
+        // With no song named, even while an app plays one it doesn't name, the microphone names one
+        // nearby: naming what the phone plays is the bar's to do.
         val playing = playback.nowPlaying() ?: return hearing.listen()
         if (playing.clock != null) return playing
         return listenToPlaying() as? Heard.Song ?: playing
     }
 
-    override suspend fun listenToPlaying(byMicrophone: Boolean): Heard =
-        played.listen().let { if (byMicrophone && it == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else it }
+    override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
+        val heard = played.listen()
+        if (!byMicrophone || heard != Heard.Failed(AppError.MICROPHONE)) return heard
+        // Through headphones or muted, the microphone hears nothing of it: no more use than none at all.
+        val room = (if (whileAloud) aloud() else hearing.listen()) ?: return heard
+        // The microphone hears the room too: another song playing there isn't the one the phone plays.
+        // With no song named to tell, the one heard may be either.
+        val playing = playback.nowPlaying()?.metadata ?: return (room as? Heard.Song)?.copy(inRoom = true) ?: room
+        return room.takeIf { it !is Heard.Song || SongNames.names(playing.title, playing.artist, it.metadata) } ?: Heard.Nothing
+    }
+
+    /** What the microphone hears while the phone plays out loud, or null once it doesn't, as when headphones are plugged in. */
+    private suspend fun aloud(): Heard? = coroutineScope {
+        val listening = async { hearing.listen() }
+        val quiet = launch { while (playback.playsAloud()) delay(ALOUD_CHECK_MS) }
+        select<Heard?> { listening.onAwait { it }; quiet.onJoin { null } }.also { coroutineContext.cancelChildren() }
+    }
+
+    companion object {
+        const val ALOUD_CHECK_MS = 1_000L
+    }
 }
 
 /**

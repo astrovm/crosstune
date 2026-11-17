@@ -87,6 +87,17 @@ internal object AppLanguage {
         return base.createConfigurationContext(configuration)
     }
 
+    /**
+     * [base] in the picked language, on every version. For what runs with no screen, like the daily alarm:
+     * Android 13 sets the app's language on screens, not on the app a broadcast starts.
+     */
+    fun words(base: Context, sdk: Int = Build.VERSION.SDK_INT): Context {
+        val tags = current(base, sdk) ?: return base
+        val configuration = Configuration(base.resources.configuration)
+        configuration.setLocales(LocaleList.forLanguageTags(tags))
+        return base.createConfigurationContext(configuration)
+    }
+
     /** A language's name in that language, e.g. "Español" or "日本語". */
     fun displayName(tag: String): String {
         names[tag]?.let { return it }

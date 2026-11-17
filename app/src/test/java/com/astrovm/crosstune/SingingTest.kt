@@ -9,7 +9,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -20,6 +24,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import org.junit.After
@@ -88,7 +93,7 @@ class SingingTest {
 
     @After
     fun tearDown() {
-        runCatching { controller?.pause()?.stop()?.destroy() }
+        controller?.destroyAndSettle()
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
@@ -181,11 +186,90 @@ class SingingTest {
         assertEquals(0L, firstLineMs())
         assertEquals(1, singing.hears)
         // Opened again, the song's words were heard already.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         openLyrics()
         plays(positionMs = 200)
         composeRule.waitForIdle()
         assertEquals(1, singing.hears)
+    }
+
+    /** Shazam's answers: each one [songMs] into the song, for audio heard just now, then no more. */
+    private fun shazamAnswers(vararg songMs: Long) {
+        val answers = songMs.iterator()
+        MainActivity.hearingFactory = {
+            SongHearing {
+                if (!answers.hasNext()) awaitCancellation()
+                Heard.Song(MusicMetadata("Demo", "Band"), null, answers.next(), SystemClock.elapsedRealtime(), "reference")
+            }
+        }
+    }
+
+    /** Where the music app's clock is when the first line is lit, whatever part of that is how far ahead it's taken to be. */
+    private fun firstLineOnAppsClock() = SystemClock.elapsedRealtime().let { now -> firstLineMs() + playback.playing.value!!.clock.positionAt(now) - followedAt() }
+
+    @Test
+    fun aVideoNoAnswerFitsIsLinedUpByTheSingingAlone() {
+        // Heard as a part played again, the answer is minutes from what the video could be.
+        shazamAnswers(180_000)
+        singing.answer = { sung(SHIFT_MS) }
+        openLyrics()
+        plays(positionMs = 1_000, video = true)
+        waitUntil { singing.hears >= 1 && model().uiState.following?.timingKnown == true }
+        assertEquals(SHIFT_MS, firstLineMs())
+    }
+
+    @Test
+    fun aVideoFarFromItsWordsNoAnswerFitsIsLinedUpByTheSingingAlone() {
+        shazamAnswers(180_000)
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 1_000, video = true)
+        waitUntil { singing.hears >= 1 && model().uiState.following?.timingKnown == true }
+        assertEquals(FAR_MS, firstLineMs())
+    }
+
+    @Test
+    fun aVideoWhoseSongMayNotHaveStartedIsntHeardForItsSingingYet() {
+        // Sixty seconds longer than its words, it may still be in what opens it.
+        lyricsTimedFor(30)
+        shazamAnswers(180_000)
+        openLyrics()
+        plays(positionMs = 1_000, video = true, durationMs = 90_000)
+        passes(5_000)
+        assertEquals(0, singing.hears)
+    }
+
+    @Test
+    fun anAnswerHeardAfterTheSingingPlacedTheLinesDoesntMoveThem() {
+        shazamAnswers(180_000, 4_000)
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 1_000, video = true)
+        waitUntil { model().uiState.following?.timingKnown == true }
+        val off = firstLineOnAppsClock()
+        composeRule.runOnIdle { model().listenAlong() }
+        passes(1_000)
+        assertEquals(off.toDouble(), firstLineOnAppsClock().toDouble(), 500.0)
+    }
+
+    @Test
+    fun aVideoPlacedFromOneAnswerIsWhereItWasOpenedAgain() {
+        // The video 2 seconds ahead of the words, as one answer says, and the singing another 4 off from there.
+        shazamAnswers(0)
+        singing.answer = { sung(FAR_MS + 2_000L) }
+        openLyrics()
+        plays(positionMs = 2_000, video = true)
+        waitUntil { model().uiState.lyricsSynced }
+        val off = firstLineOnAppsClock()
+        // Next time nothing's heard yet, so what's kept has to say it without that answer.
+        shazamAnswers()
+        singing.answer = { CompletableDeferred<Sung?>().await() }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        plays(positionMs = 2_000, video = true)
+        waitUntil { model().uiState.following?.timingKnown == true }
+        assertEquals(off.toDouble(), firstLineOnAppsClock().toDouble(), 500.0)
     }
 
     private fun shown(id: Int) = composeRule.onAllNodesWithText(app.getString(id)).fetchSemanticsNodes().isNotEmpty()
@@ -521,7 +605,7 @@ class SingingTest {
     }
 
     @Test
-    fun wordsHeardOffAreReportedWhenProblemsAreButNeverAskedAbout() {
+    fun wordsHeardOffAreReportedWhenProblemsAreAllowedWithoutAsking() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         // A second off is already off.
         singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
@@ -530,10 +614,194 @@ class SingingTest {
         waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
         val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
         assertEquals("sung_off", sent.getString("problem"))
+        assertFalse(offerShown())
+        // Moved by what was sung, not put in time by hand, so nothing is owed to be sent later.
+        assertEquals(0, owed())
+        // Words heard off are a problem with their timing, so it says how it went, though nothing was put in time by hand.
+        val song = sent.getJSONObject("song")
+        assertTrue(song.has("earlyMs"))
+        assertFalse(song.has("timing"))
+        assertTrue(song.getString("log"), song.getString("log").contains("lines in time"))
         // Moved by the singing, not by hand, so leaving them sends nothing more.
         composeRule.runOnIdle { model().dismissLyrics() }
         composeRule.waitForIdle()
         assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    /** How many timing reports are owed, kept to be sent once the words are left, or at the next start. */
+    private fun owed() = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]")).length()
+
+    private fun offerShown() = listOf(R.string.auto_report_offer, R.string.auto_report_offer_words_off).any { composeRule.onAllNodes(hasText(app.getString(it))).fetchSemanticsNodes().isNotEmpty() }
+
+    @Test
+    fun wordsHeardOffOfferToReportWhenTheUserHasntSaidAndYesSendsThisOne() {
+        singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { model().uiState.reportOffer }
+        composeRule.waitForIdle()
+        assertTrue(offerShown())
+        // Nothing goes before the user says so.
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        composeRule.mainClock.advanceTimeBy(OFFER_ARMED_MS)
+        composeRule.onNodeWithText(app.getString(R.string.auto_report_yes)).performClick()
+        waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
+        assertEquals("sung_off", org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)]).getString("problem"))
+        assertFalse(offerShown())
+        assertEquals(true, prefs().getBoolean("auto_reports", false))
+        // Once a song: heard again, it doesn't go again.
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun wordsHeardOffAndTheOfferClosedSendNothingNorAskAgainThisSession() {
+        singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { model().uiState.reportOffer }
+        composeRule.waitForIdle()
+        composeRule.mainClock.advanceTimeBy(OFFER_ARMED_MS)
+        composeRule.onNodeWithContentDescription(app.getString(R.string.auto_report_not_now)).performClick()
+        composeRule.waitForIdle()
+        assertFalse(offerShown())
+        // Not now isn't a no: nothing is saved as the answer, and nothing is sent.
+        assertFalse(prefs().contains("auto_reports"))
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        // Heard off again, not asked again until the app starts anew.
+        plays(positionMs = 20_000)
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.reportOffer)
+    }
+
+    @Test
+    fun theOfferForWordsHeardOffOverTheBiggestFontInGermanFitsAboveTheBar() {
+        org.robolectric.RuntimeEnvironment.setQualifiers("+de")
+        org.robolectric.RuntimeEnvironment.setFontScale(2f)
+        try {
+            singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
+            openLyrics()
+            plays(positionMs = 1_000)
+            waitUntil { model().uiState.reportOffer }
+            composeRule.mainClock.advanceTimeBy(OFFER_ARMED_MS)
+            composeRule.waitForIdle()
+            val words = app.getString(R.string.auto_report_offer_words_off)
+            assertTrue(words, words.startsWith("Der Text"))
+            val box = composeRule.onNodeWithText(words)
+            box.assertIsDisplayed()
+            composeRule.onNodeWithText(app.getString(R.string.auto_report_yes)).assertIsDisplayed()
+            composeRule.onNodeWithContentDescription(app.getString(R.string.auto_report_not_now)).assertIsDisplayed()
+            val bounds = box.getUnclippedBoundsInRoot()
+            val root = composeRule.onRoot().getUnclippedBoundsInRoot()
+            assertTrue("$bounds is wider than the screen $root", bounds.left >= 0.dp && bounds.right <= root.right)
+            assertTrue("$bounds takes too much of $root", bounds.bottom - bounds.top <= (root.bottom - root.top) / 4)
+        } finally {
+            org.robolectric.RuntimeEnvironment.setFontScale(1f)
+        }
+    }
+
+    @Test
+    fun theOfferForWordsHeardOffStaysOnScreenWhileTheBarIsAway() {
+        singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { model().uiState.reportOffer }
+        // The words glide, and the bar leaves them to it; the offer isn't something to find by touching the screen.
+        composeRule.mainClock.advanceTimeBy(6_000)
+        composeRule.waitForIdle()
+        assertFalse(composeRule.onAllNodes(hasContentDescription(app.getString(R.string.lyrics_learn))).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(offerShown())
+    }
+
+    @Test
+    fun wordsPutInTimeByHandWhileTheOfferForWordsHeardOffIsUpJoinIt() {
+        singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { model().uiState.reportOffer }
+        composeRule.onNodeWithContentDescription(app.getString(R.string.lyrics_sync)).performClick()
+        composeRule.onNodeWithText(lines[2]).performClick()
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF, SongProblem.TIMED_BY_HAND) }
+        // No longer only words heard off: the offer says what it says for any problem.
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText(app.getString(R.string.auto_report_offer))).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun pickedUpPartwayWordsHeardFarOffOfferToReportOnce() {
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { model().uiState.reportOffer }
+        composeRule.waitForIdle()
+        assertEquals(setOf(SongProblem.SUNG_OFF), model().uiState.reportOfferFor)
+        assertTrue(offerShown())
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+    }
+
+    @Test
+    fun pickedUpPartwayWordsHeardFarOffAreReportedOnceWhenAllowed() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
+        assertEquals("sung_off", org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)]).getString("problem"))
+        // Kept by then, so placing them again from the same while sends nothing more.
+        waitUntil { prefs().contains("lyrics_sync") }
+        composeRule.waitForIdle()
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun pickedUpPartwayWordsHeardJustFarEnoughOffAreKeptAndOffered() {
+        singing.answer = { sung(MainViewModel.WORDS_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { model().uiState.reportOffer }
+        assertTrue(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun theTimingNotesSayHowFarOffTheSingingWasHeardAndHowSureTheClockWas() {
+        TimingLog.clear()
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { prefs().contains("lyrics_sync") }
+        assertTrue(TimingLog.lastMinute(), TimingLog.lastMinute().contains("sung $FAR_MS off, clock sure false, first true"))
+    }
+
+    @Test
+    fun theTimingNotesSayWhenNothingHeardCouldBePlaced() {
+        TimingLog.clear()
+        singing.answer = { Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("la", 500))) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears >= 1 && TimingLog.lastMinute().contains("sung nothing to place, clock sure false") }
+        assertFalse(TimingLog.lastMinute().contains(" off, clock sure"))
+    }
+
+    @Test
+    fun pickedUpPartwayWordsHeardALittleOffDontOfferToReport() {
+        singing.answer = { sung(MainViewModel.SUNG_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[2].timeMs == 6_000 + MainViewModel.SUNG_OFF_MS }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.reportOffer)
+    }
+
+    @Test
+    fun wordsHeardALittleOffDontOfferToReport() {
+        singing.answer = { sung(-600) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { model().uiState.lyricsSynced }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.reportOffer)
+        assertFalse(offerShown())
     }
 
     @Test
@@ -589,6 +857,39 @@ class SingingTest {
         openLyrics()
         plays(positionMs = 7_000, speed = 2f)
         passes(15_000)
+        assertEquals(0, singing.hears)
+    }
+
+    @Test
+    fun aLineThatSaysWhichItIsIsHeardAloneWithNoLinesNearIt() {
+        // Every line is too far from the next to hear three, but the third has five words no other line shares:
+        // heard from a second and a half before its 40 seconds, which at double speed is 15.75 seconds away.
+        lyricsTimedFor(null, times = listOf(0, 3, 40, 60, 80, 99))
+        openLyrics()
+        plays(positionMs = 7_000, speed = 2f)
+        passes(15_650)
+        assertEquals(0, singing.hears)
+        passes(200)
+        assertEquals(1, singing.hears)
+    }
+
+    @Test
+    fun aLineThatSaysWhichItIsIsHeardAloneJustBeforeItStarts() {
+        // Not right at its 40 seconds: the first change to the screen can ask for a frame, and Robolectric moves the clock 15 ms for that.
+        lyricsTimedFor(null, times = listOf(0, 3, 40, 60, 80, 99))
+        openLyrics()
+        plays(positionMs = 39_900)
+        passes(1)
+        assertEquals(1, singing.hears)
+    }
+
+    @Test
+    fun aLineAlreadyBegunIsntHeardAlone() {
+        // Only this line says which it is, and its first words are gone, so nothing's left to hear.
+        lyricsTimedFor(null, times = listOf(0, 3, 40, 60, 80, 99))
+        openLyrics()
+        plays(positionMs = 40_100)
+        passes(60_000)
         assertEquals(0, singing.hears)
     }
 
@@ -733,6 +1034,8 @@ class SingingTest {
         repeat(5) { plays(positionMs = it.toLong()) }
         // Heard straight on, a while at a time.
         waitUntil { singing.hears == 1 }
+        // Music alone where the words are timed says they may be timed into an intro.
+        assertFalse(model().uiState.following!!.timingKnown)
         passes(20_000)
         waitUntil { singing.hears == 2 }
         passes(20_000)
@@ -745,6 +1048,26 @@ class SingingTest {
     }
 
     @Test
+    fun nothingMadeOutAtAllLeavesTheTimingBe() {
+        // whisper.cpp makes out nothing in a while, not even music: that says nothing of where the words are timed.
+        singing.answer = { Sung(SystemClock.elapsedRealtime(), emptyList()) }
+        openLyrics()
+        repeat(5) { plays(positionMs = it.toLong()) }
+        // Heard on a few times, the lines are shown sung as they're timed all the while.
+        waitUntil { singing.hears == 1 }
+        assertTrue(model().uiState.following!!.timingKnown)
+        passes(20_000)
+        waitUntil { singing.hears == 2 }
+        assertTrue(model().uiState.following!!.timingKnown)
+        passes(20_000)
+        waitUntil { singing.hears == 3 }
+        assertTrue(model().uiState.following!!.timingKnown)
+        passes(60_000)
+        assertEquals(3, singing.hears)
+        assertTrue(model().uiState.following!!.timingKnown)
+    }
+
+    @Test
     fun outOfSightItStopsAndBackInSightItHearsAgain() {
         val heard = CompletableDeferred<Sung?>()
         singing.answer = { heard.await() }
@@ -753,7 +1076,7 @@ class SingingTest {
         waitUntil { singing.hears == 1 }
         controller!!.pause().stop()
         heard.complete(sung(SHIFT_MS))
-        composeRule.waitForIdle()
+        composeRule.settle(controller!!.get())
         assertFalse(model().uiState.lyricsSynced)
         singing.answer = { sung(SHIFT_MS) }
         controller!!.start().resume()
@@ -794,15 +1117,12 @@ class SingingTest {
     }
 
     @Test
-    fun aVideoShazamCantLineUpIsHeardOnceItGivesUpSoItsLinesLight() {
+    fun aVideoShazamCantLineUpIsHeardSoItsLinesLight() {
         val shazam = FakeHearing()
         MainActivity.hearingFactory = { shazam }
         singing.answer = { sung(SHIFT_MS) }
         openLyrics()
         plays(video = true)
-        waitUntil { shazam.listens == 1 }
-        assertEquals(0, singing.hears)
-        assertEquals(false, model().uiState.following?.timingKnown)
         // As a sped-up upload of a longer release is: Shazam never hears it anywhere a video could be.
         repeat(6) { shazam.next.trySend(Heard.Nothing) }
         waitUntil { singing.hears > 0 }
@@ -1102,6 +1422,11 @@ class SingingTest {
 
         override val missesModel get() = missing
 
+        @Volatile
+        var noSound = false
+
+        override val heardNoSound get() = noSound
+
         override suspend fun fetchModel(): Boolean {
             fetches++
             return fetched()
@@ -1164,5 +1489,7 @@ class SingingTest {
         const val TIMEOUT_MS = 10_000L
         const val SHIFT_MS = -1_300L
         const val FAR_MS = 4_000L
+        /** The offer takes no tap for 500 ms from the frame it first shows, so a frame more. */
+        const val OFFER_ARMED_MS = 600L
     }
 }

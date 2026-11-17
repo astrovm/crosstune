@@ -1,0 +1,32 @@
+{
+ "contents": {
+  "elementRenderer": {
+   "newElement": {
+    "type": {
+     "componentType": {
+      "model": {
+       "timedLyricsModel": {
+        "lyricsData": {
+         "timedLyricsData": [
+          {
+           "lyricLine": "Paper boats along the river"
+          },
+          {
+           "lyricLine": "We sang until the morning came"
+          },
+          {
+           "lyricLine": "Every window holds a lantern"
+          },
+          {
+           "lyricLine": "And the night forgets its name"
+          }
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}
