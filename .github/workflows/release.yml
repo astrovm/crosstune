@@ -160,8 +160,11 @@ jobs:
           # tag and ship this APK. Without it apksigner re-pads entries and the builds don't match.
           # JDK 25 warns, and a later JDK will block, a native call from apksigner's unnamed module.
           # The JDK names this flag. apksigner passes each -J option through to java.
+          # API 26 and later accept v2. The v1 ZIP metadata cannot always be reproduced by apksigcopier.
           "$apksigner" -J-enable-native-access=ALL-UNNAMED sign \
             --alignment-preserved \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
             --ks "$keystore" \
             --ks-key-alias "$RELEASE_KEY_ALIAS" \
             --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
@@ -249,8 +252,10 @@ jobs:
 
       - name: Compare with the signed APK
         run: |
-          sudo timeout 60 apt-get update -q || echo "::notice::apt-get update did not finish"
-          sudo apt-get -o Acquire::Retries=5 install -y -q apksigcopier
+          verifier="$RUNNER_TEMP/apksigcopier"
+          python3 -m venv "$verifier"
+          "$verifier/bin/pip" install --disable-pip-version-check --only-binary=:all: --require-hashes \
+            -r scripts/release/apksigcopier-requirements.txt
           # apksigcopier calls apksigner. The same JDK flag as the sign job, through a wrapper,
           # because apksigcopier does not take apksigner's -J options.
           tools="$(printf '%s\n' "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1)"
@@ -262,7 +267,7 @@ jobs:
           EOF
           chmod +x "$bindir/apksigner"
           PATH="$bindir:$tools:$PATH"
-          if ! apksigcopier compare "Crosstune-$TAG.apk" --unsigned app/build/outputs/apk/release/app-release-unsigned.apk; then
+          if ! "$verifier/bin/apksigcopier" compare "Crosstune-$TAG.apk" --unsigned app/build/outputs/apk/release/app-release-unsigned.apk; then
             echo "::error::The signed APK doesn't match a fresh build, so F-Droid can't ship it"
             exit 1
           fi

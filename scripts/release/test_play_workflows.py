@@ -32,6 +32,16 @@ def play_jobs():
 
 
 class PlayWorkflowsTest(unittest.TestCase):
+    def test_release_keeps_the_supported_signature_and_uses_checked_verifier_wheels(self):
+        release = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
+        self.assertIn("--alignment-preserved", release["sign"])
+        self.assertIn("--v1-signing-enabled false", release["sign"])
+        self.assertIn("--v2-signing-enabled true", release["sign"])
+        self.assertIn("--require-hashes", release["verify"])
+        self.assertIn("scripts/release/apksigcopier-requirements.txt", release["verify"])
+        self.assertIn('apksigcopier" compare', release["verify"])
+        self.assertNotIn("apt-get", release["verify"])
+
     def test_the_play_key_is_in_the_three_play_jobs_only(self):
         found = sorted((workflow, job) for workflow, job, _ in play_jobs())
         self.assertEqual(
