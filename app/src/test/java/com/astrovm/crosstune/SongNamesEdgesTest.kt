@@ -26,6 +26,14 @@ class SongNamesEdgesTest {
     }
 
     @Test
+    fun recordingWordsKeepCaseAndAccentNormalization() {
+        for (note in listOf("live", "LIVE", "LÍVE", "2012 LIVE", "ENGLISH VERSION", "ÉNGLISH VERSION")) {
+            assertFalse(note, SongNames.wordsMatch("Hello ($note)", "Hello World ($note)"))
+            assertFalse(note, SongNames.wordsMatch("Hello World ($note)", "Hello ($note)"))
+        }
+    }
+
+    @Test
     fun numericUnicodeTitleCharactersKeepTheTwoWordPartialRule() {
         for (number in listOf("Ⅻ", "½")) {
             val one = "Fake Song $number (Live)"

@@ -946,7 +946,10 @@ internal object SongNames {
             do {
                 at += Character.charCount(text.codePointAt(at))
             } while (at < text.length && (nameLetter(text.codePointAt(at)) || nameMark(text.codePointAt(at))))
-            words += NoteToken(start, at, normalize(text.substring(start, at)))
+            val token = text.substring(start, at)
+            // ASCII letters and digits need no decomposition or mark removal.
+            val letters = if (token.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }) token.lowercase(Locale.ROOT) else normalize(token)
+            words += NoteToken(start, at, letters)
         }
         return words
     }
