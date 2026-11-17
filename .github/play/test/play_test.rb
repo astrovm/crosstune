@@ -469,6 +469,9 @@ class PlayTest < Minitest::Test
       refute status.success?, output
 
       assert_includes output, "Backend Error"
+      # Supply sets five retries. The fake skips their waits, not their requests.
+      reads = requests.select { |request| request["method"] == "GET" && request["path"].end_with?("/tracks") }
+      assert_equal 6, reads.size
       opened = requests.select { |r| r["method"] == "POST" && r["path"].end_with?("/edits") }
       deleted = requests.select { |r| r["method"] == "DELETE" }
       refute_empty opened

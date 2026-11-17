@@ -12,6 +12,10 @@ return unless File.basename($PROGRAM_NAME) == "play.rb"
 require "digest"
 require "json"
 require "webmock"
+require "retriable"
+
+# Keep Google's retry attempts, but don't wait between deterministic fake errors.
+Retriable.configure { |config| config.sleep_disabled = true }
 
 module FakePlay
   extend WebMock::API
