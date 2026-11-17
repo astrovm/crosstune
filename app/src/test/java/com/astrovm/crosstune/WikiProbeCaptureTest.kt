@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -139,6 +140,43 @@ class WikiProbeCaptureTest {
         whileBuilding { capture, hold ->
             val answer = capture.resource(1, { hold(); "fixture" }, { mapOf("decision" to it) }) { "not_intercepted" }
             assertEquals("not_intercepted", answer)
+        }
+    }
+
+    @Test fun aResourceReturningAfterCloseDoesNotBuildDiscardedMetadata() {
+        afterClose { capture, forward, metadata ->
+            val response = capture.resource(1, { "fixture" }, { metadata() }) { forward(); "fixture response" }
+            assertEquals("fixture response", response)
+        }
+    }
+
+    @Test fun anErrorReturningAfterCloseDoesNotBuildDiscardedMetadata() {
+        afterClose { capture, forward, metadata -> capture.record(metadata, forward) }
+    }
+
+    private fun afterClose(callback: (WikiProbeCapture, () -> Unit, () -> Map<String, Any>) -> Unit) {
+        val capture = WikiProbeCapture()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val metadataRead = AtomicBoolean(false)
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            val pending = executor.submit {
+                callback(capture, {
+                    entered.countDown()
+                    check(release.await(5, TimeUnit.SECONDS))
+                }, { metadataRead.set(true); mapOf("type" to "fixture") })
+            }
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            val sealed = capture.close()
+            assertFalse(sealed.complete)
+            release.countDown()
+            pending.get(5, TimeUnit.SECONDS)
+            assertFalse(metadataRead.get())
+            assertSame(sealed, capture.close())
+        } finally {
+            release.countDown()
+            executor.shutdownNow()
         }
     }
 

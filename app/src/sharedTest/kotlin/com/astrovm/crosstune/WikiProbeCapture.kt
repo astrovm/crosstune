@@ -54,11 +54,14 @@ internal class WikiProbeCapture(private val limit: Int = 500) {
     }
 
     /** A failed observation marks the capture. It must not change the browser's response or callback. */
-    private fun <T> metadata(read: () -> T): T? = try {
-        read()
-    } catch (_: Exception) {
-        synchronized(lock) { failed = true }
-        null
+    private fun <T> metadata(read: () -> T): T? {
+        if (synchronized(lock) { snapshot != null }) return null
+        return try {
+            read()
+        } catch (_: Exception) {
+            synchronized(lock) { failed = true }
+            null
+        }
     }
 
     private fun begin(): Boolean = synchronized(lock) {
