@@ -441,6 +441,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         }
     }
     var openSource by rememberSaveable { mutableStateOf<String?>(null) }
+    val licenseCache = rememberLicenseCache(showSettings && openSource == LICENSES_PAGE)
     // A link from another app on its way out shows just that, the fixes waiting till after.
     val fixes = state.fixes?.takeIf { !state.handingOff }
     // What's shown, and so what Back goes back to, without what it closes.
@@ -541,7 +542,10 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             } else if (shown == Screen.FIXES) {
                 FixesPage(state, actions)
             } else if (shown == Screen.SETTINGS) {
-                SettingsScreen(state, actions, onBack = { showSettings = false }, openSource = openSource, onOpenSource = { openSource = it })
+                SettingsScreen(
+                    state, actions, onBack = { showSettings = false }, openSource = openSource,
+                    onOpenSource = { openSource = it }, licenseCache = licenseCache
+                )
             } else if (shown == Screen.HANDOFF) {
                 Handoff(state, actions)
             } else if (shown == Screen.LISTENING) {

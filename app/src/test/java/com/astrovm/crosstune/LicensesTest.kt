@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -378,6 +379,113 @@ class LicensesTest {
         composeRule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString(piece)))).assertIsDisplayed()
         assertEquals(listOf("projectM"), splitWorks())
         assertEquals(emptyList<String>(), splitOnTheMainThread())
+    }
+
+    @Test
+    fun turningDuringTheLicensesExitReleasesTheCacheAndKeepsTheDepartingText() {
+        openLicenses()
+        work("projectM").performClick()
+        val piece = text("GNU LESSER GENERAL PUBLIC LICENSE")
+        piece.assertIsDisplayed()
+        val cache = pageCache()
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.onNode(hasContentDescription(string(R.string.back_button))).performClick()
+            composeRule.mainClock.advanceTimeByFrame()
+            piece.assertIsDisplayed()
+            assertNull("The outgoing Licenses frame still owns the cache", cacheOwner().cache)
+            controller = checkNotNull(controller).recreate()
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.settings_about_title)))
+        assertNull("The restored Settings list kept the Licenses owner", cacheOwner().cache)
+        assertNull(cache.pieces("projectM"))
+        assertNull(cache.wordsRead("en"))
+    }
+
+    @Test
+    fun turningDuringAnOuterSettingsExitReleasesTheLicensesCache() {
+        openLicenses()
+        work("projectM").performClick()
+        val piece = text("GNU LESSER GENERAL PUBLIC LICENSE")
+        piece.assertIsDisplayed()
+        val cache = pageCache()
+        composeRule.mainClock.autoAdvance = false
+        try {
+            val activity = checkNotNull(controller)
+            val viewModel = ViewModelProvider(activity.get())[MainViewModel::class.java]
+            activity.newIntent(Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "not a music link")
+            })
+            // Wait for the outer route to handle the request, then draw its first exit frame.
+            assertTrue(viewModel.uiState.leaveSettings)
+            composeRule.waitUntil(5_000) {
+                composeRule.runOnUiThread { Snapshot.sendApplyNotifications() }
+                composeRule.mainClock.advanceTimeByFrame()
+                composeRule.waitForIdle()
+                !viewModel.uiState.leaveSettings
+            }
+            composeRule.runOnUiThread { Snapshot.sendApplyNotifications() }
+            composeRule.mainClock.advanceTimeByFrame()
+            piece.assertIsDisplayed()
+            assertNull("The outgoing Settings frame still owns the cache", cacheOwner().cache)
+            controller = activity.recreate()
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.error_invalid_url)))
+        assertNull("The restored main screen kept the Licenses owner", cacheOwner().cache)
+        assertNull(cache.pieces("projectM"))
+        assertNull(cache.wordsRead("en"))
+    }
+
+    @Test
+    fun aRestoredPageDrawsPiecesThatArriveBeforeItsSplitEffectChecksTheCache() {
+        openLicenses()
+        work("projectM").performClick()
+        text("GNU LESSER GENERAL PUBLIC LICENSE").assertIsDisplayed()
+
+        // Restore the expanded row as another page's split of that work is about to finish.
+        val owner = cacheOwner()
+        owner.leave()
+        owner.enter()
+        val cache = pageCache()
+        val notice = Notices.all.first { it.name == "projectM" }
+        val pieces = split(notice)
+        val reading = CountDownLatch(1)
+        val letGo = CountDownLatch(1)
+        val reads = AtomicInteger()
+        LicenseCache.split = {
+            reads.incrementAndGet()
+            reading.countDown()
+            assertTrue(letGo.await(10, TimeUnit.SECONDS))
+            pieces
+        }
+        val sharedSplit = background.submit { cache.make(notice) }
+        try {
+            assertTrue("The shared split never started", reading.await(5, TimeUnit.SECONDS))
+            Notices.open = { name ->
+                // The page has read its initial units when its words effect starts. Finish the split
+                // before the next effect checks whether those units still need to be made.
+                if (name == "notices-en.txt") {
+                    assertNull(cache.pieces("projectM"))
+                    letGo.countDown()
+                    sharedSplit.get(5, TimeUnit.SECONDS)
+                }
+                open(name)
+            }
+            controller = checkNotNull(controller).recreate()
+            composeRule.waitForIdle()
+            assertSame(pieces, cache.pieces("projectM"))
+            assertEquals(1, reads.get())
+            text("GNU LESSER GENERAL PUBLIC LICENSE").assertIsDisplayed()
+        } finally {
+            letGo.countDown()
+        }
     }
 
     @Test

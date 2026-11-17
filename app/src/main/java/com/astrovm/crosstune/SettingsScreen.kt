@@ -2,9 +2,6 @@ package com.astrovm.crosstune
 
 import androidx.annotation.DrawableRes
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.LocalActivity
-import androidx.activity.ComponentActivity
-import androidx.lifecycle.ViewModelProvider
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CornerBasedShape
@@ -21,7 +18,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.ImageBitmap
@@ -131,7 +127,8 @@ internal fun SettingsScreen(
     onBack: () -> Unit,
     // Kept by the caller, so coming back from a guide returns to the same source's page.
     openSource: String? = null,
-    onOpenSource: (String?) -> Unit = {}
+    onOpenSource: (String?) -> Unit = {},
+    licenseCache: LicenseCache? = null
 ) {
     val sources = sourceSettings(state, actions)
     // Kept out here, so a list is where it was on coming back from a page.
@@ -151,7 +148,7 @@ internal fun SettingsScreen(
         } else if (key == ADVANCED_PAGE) {
             AdvancedPage(state, actions, onBack = { onOpenSource(null) })
         } else if (key == LICENSES_PAGE) {
-            LicensesPage(onBack = { onOpenSource(null) })
+            LicensesPage(licenseCache, onBack = { onOpenSource(null) })
         } else if (key == SOURCES_PAGE) {
             SourcesPage(state, actions, sources, sourcesScroll, onOpen = onOpenSource, onBack = { onOpenSource(null) })
         } else if (item != null) {
@@ -745,7 +742,7 @@ private fun SourcesPage(state: UiState, actions: ScreenActions, sources: List<So
 }
 
 /** The page of the works by others that Crosstune ships or downloads, with their licences. */
-private const val LICENSES_PAGE = "licenses"
+internal const val LICENSES_PAGE = "licenses"
 
 /**
  * Each work by others in the app, or downloaded by it: who it's by, its licence and what was changed,
@@ -758,8 +755,7 @@ private const val LICENSES_PAGE = "licenses"
  * read and split once, never on the main thread: the longest is about half a million characters.
  */
 @Composable
-private fun LicensesPage(onBack: () -> Unit) {
-    val cache = rememberLicenseCache()
+private fun LicensesPage(cache: LicenseCache?, onBack: () -> Unit) {
     val openWebPage = rememberWebOpener()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -770,7 +766,12 @@ private fun LicensesPage(onBack: () -> Unit) {
     // stays off this pass: the longest text is hundreds of thousands of characters.
     var splitDone by remember { mutableStateOf(Any()) }
     val requesters = remember { mutableMapOf<String, FocusRequester>() }
-    val units = remember(cache, open, splitDone) { open.mapNotNull { name -> cache?.pieces(name)?.let { name to it } }.toMap() }
+    // Keep the last drawn pieces until the page finishes sliding out.
+    val lastUnits = remember { arrayOf(emptyMap<String, List<LicenseUnit>>()) }
+    val units = remember(cache, open, splitDone) {
+        if (cache == null) lastUnits[0] else open.mapNotNull { name -> cache.pieces(name)?.let { name to it } }.toMap()
+    }
+    SideEffect { lastUnits[0] = units }
     // Made again with a licence open after Android stopped the app, its pieces are gone. The list stays
     // empty until they are split again, below: with fewer rows it would lose where it was scrolled to.
     // Turned, the pieces are kept, so the page draws at once.
@@ -779,7 +780,7 @@ private fun LicensesPage(onBack: () -> Unit) {
     val look = LicenseLook(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), MaterialTheme.shapes.large)
     // One path for a press and for a remote. The page's own Back still leaves once nothing is open, and
     // while the words are read: nothing is shown to close yet, and the main thread doesn't wait for the notices.
-    BackHandler(enabled = open.isNotEmpty() && words != null) {
+    BackHandler(enabled = cache != null && open.isNotEmpty() && words != null) {
         val closing = licenceToClose(focusedKey, open)
         val next = open - closing
         open = next
@@ -808,8 +809,9 @@ private fun LicensesPage(onBack: () -> Unit) {
         // Already split ones are kept. Only a work that is not split yet is split, and not while drawing.
         if (opened.any { cache.pieces(it) == null }) {
             withContext(MainActivity.systemDispatcher) { Notices.all.filter { it.name in opened }.forEach(cache::make) }
-            splitDone = Any()
         }
+        // Another page may have filled the cache since this page first read it.
+        splitDone = Any()
         restoring = false
     }
     LaunchedEffect(Unit) {
@@ -823,25 +825,12 @@ private fun LicensesPage(onBack: () -> Unit) {
     }
 }
 
-@Composable
-private fun rememberLicenseCache(): LicenseCache? {
-    val activity = LocalActivity.current
-    val cacheOwner = remember(activity) {
-        (activity as? ComponentActivity)?.let { ViewModelProvider(it)[LicenseCacheOwner::class.java] } ?: LicenseCacheOwner()
-    }
-    DisposableEffect(cacheOwner) {
-        cacheOwner.enter()
-        onDispose { if (activity !is ComponentActivity || !activity.isChangingConfigurations) cacheOwner.leave() }
-    }
-    return cacheOwner.cache
-}
-
 /** Reads the notices in the app's language. A page that turns can use the words it already has. */
 @Composable
 private fun licenseWords(cache: LicenseCache?): Map<String, NoticeWords>? {
     val tag = stringResource(R.string.language_tag)
     val words by produceState(cache?.wordsRead(tag), cache, tag) {
-        value = cache?.let { it.wordsRead(tag) ?: withContext(MainActivity.systemDispatcher) { it.words(tag) } }
+        if (cache != null) value = cache.wordsRead(tag) ?: withContext(MainActivity.systemDispatcher) { cache.words(tag) }
     }
     return words
 }

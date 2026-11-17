@@ -1,10 +1,32 @@
 package com.astrovm.crosstune
 
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.annotation.VisibleForTesting
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+
+private val licenseCacheOwners = mutableSetOf<LicenseCacheOwner>()
+
+/** Tracks the saved route even while the page animates out or is covered by another screen. */
+@Composable
+internal fun rememberLicenseCache(active: Boolean): LicenseCache? {
+    val activity = LocalActivity.current as? ComponentActivity
+    val owner = remember(activity) {
+        activity?.let { ViewModelProvider(it)[LicenseCacheOwner::class.java] } ?: LicenseCacheOwner()
+    }
+    DisposableEffect(owner, active) {
+        if (active) owner.enter() else owner.leave()
+        onDispose { if (activity?.isChangingConfigurations != true) owner.leave() }
+    }
+    return if (active) owner.cache else null
+}
 
 /** Holds one activity's claim on the shared texts across a configuration change. */
 internal class LicenseCacheOwner : ViewModel() {
@@ -12,26 +34,22 @@ internal class LicenseCacheOwner : ViewModel() {
         private set
 
     fun enter() {
-        synchronized(owners) {
-            cache = owners.firstOrNull()?.cache ?: LicenseCache()
-            owners.add(this)
+        synchronized(licenseCacheOwners) {
+            cache = licenseCacheOwners.firstOrNull()?.cache ?: LicenseCache()
+            licenseCacheOwners.add(this)
         }
     }
 
     fun leave() {
-        synchronized(owners) {
+        synchronized(licenseCacheOwners) {
             val leaving = cache ?: return
-            owners.remove(this)
-            if (owners.isEmpty()) leaving.close()
+            licenseCacheOwners.remove(this)
+            if (licenseCacheOwners.isEmpty()) leaving.close()
             cache = null
         }
     }
 
     override fun onCleared() = leave()
-
-    private companion object {
-        val owners = mutableSetOf<LicenseCacheOwner>()
-    }
 }
 
 /** The texts kept from the first Licenses page opening until the last one leaves. */
