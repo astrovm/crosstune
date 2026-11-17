@@ -137,6 +137,9 @@ jobs:
       - name: Fetch the locked Kotlin compiler
         run: python3 scripts/kotlinc/kotlinc.py fetch
 
+      - name: Read the pinned Whisper headers for the JNI test
+        run: git submodule update --init --depth 1 -- third_party/whisper.cpp
+
       # The committed site has to be what build-site.py makes, new pages included.
       - name: Test site and media scripts
         run: |

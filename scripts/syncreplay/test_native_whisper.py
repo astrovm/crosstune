@@ -1,9 +1,11 @@
 """Test the production JNI bridge with deterministic decoder outcomes, without a model."""
-from pathlib import Path
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 JNI = ROOT / "scripts/syncreplay/jni"
@@ -15,19 +17,32 @@ class NativeWhisperTest(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.temp.cleanup)
         cls.out = Path(cls.temp.name)
-        javac = Path(shutil.which("javac")).resolve()
-        java_home = javac.parent.parent
-        subprocess.run([str(javac), "-d", str(cls.out), str(JNI / "com/astrovm/crosstune/NativeWhisper.java")], check=True)
-        cls.lib = cls.out / "libwhisper_test.so"
+        java_home = os.environ.get("JAVA_HOME")
+        if java_home is None and sys.platform == "darwin":
+            java_home = subprocess.check_output(["/usr/libexec/java_home"], text=True).strip()
+        if java_home is None:
+            javac = shutil.which("javac")
+            if javac is None:
+                raise RuntimeError("The native Whisper test needs a JDK with javac")
+            java_home = Path(javac).resolve().parent.parent
+        jdk = Path(java_home)
+        compiler = shutil.which("g++")
+        if compiler is None:
+            raise RuntimeError("The native Whisper test needs a C++ compiler")
+        subprocess.run([str(jdk / "bin/javac"), "-d", str(cls.out), str(JNI / "com/astrovm/crosstune/NativeWhisper.java")], check=True)
+        platform_include = "darwin" if sys.platform == "darwin" else "linux"
+        link = ["-dynamiclib"] if sys.platform == "darwin" else ["-shared", "-Wl,--no-undefined"]
+        extension = ".dylib" if sys.platform == "darwin" else ".so"
+        cls.lib = cls.out / f"libwhisper_test{extension}"
         subprocess.run([
-            "g++", "-std=c++17", "-shared", "-fPIC", "-Wl,--no-undefined",
-            "-I" + str(java_home / "include"), "-I" + str(java_home / "include/linux"),
+            compiler, "-std=c++17", "-fPIC", *link,
+            "-I" + str(jdk / "include"), "-I" + str(jdk / "include" / platform_include),
             "-I" + str(ROOT / "third_party/whisper.cpp/include"),
             "-I" + str(ROOT / "third_party/whisper.cpp/ggml/include"),
             str(ROOT / "app/src/main/cpp/sungwords.cpp"), str(JNI / "fake_whisper.cpp"),
             "-o", str(cls.lib),
         ], check=True)
-        cls.java = str(java_home / "bin/java")
+        cls.java = str(jdk / "bin/java")
 
     def run_outcome(self, outcome):
         subprocess.run([self.java, "-Xcheck:jni", "-cp", str(self.out),
