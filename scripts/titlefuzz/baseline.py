@@ -5,7 +5,9 @@
     python3 scripts/titlefuzz/baseline.py [REF] --jvm [--out FILE]
     python3 scripts/titlefuzz/baseline.py [REF] --long [--serial SERIAL]
     python3 scripts/titlefuzz/baseline.py [REF] --long-all [--serial SERIAL]
+    python3 scripts/titlefuzz/baseline.py [REF] --long-warm [--serial SERIAL]
     python3 scripts/titlefuzz/baseline.py [REF] --long-instrumental [--serial SERIAL]
+    python3 scripts/titlefuzz/baseline.py [REF] --long-matcher-input [--serial SERIAL]
 
 REF is the commit to read with, origin/main by default. It's checked out in a temporary worktree, under
 $TITLEFUZZ_TMP if set; TitleFuzz.kt, PhoneRegex.kt, PhoneRegexTable.kt and the tests' pattern writer, IcuPattern.kt
@@ -23,8 +25,12 @@ line. Make them again when TitleFuzz.kt changes what it makes, or when main's ow
 --count reads only the first N titles, to time a run.
 
 --long writes no readings: it times each reader on long titles on the emulator instead, with LongTitlesProbe.kt, at
-three lengths. --long-all times them once at 10,000 letters on each of LongTitlesTest's titles, and names those
-over 50 ms. --long-instrumental times whether a title says it's an instrumental, at three lengths, on the titles
+three lengths. --long-all reads the shared LongTitleInputs at 10,000 letters, including all ten title readers,
+instrumentals, comparisons and shares. It prints case/call counts and the longest reader and whole-case times.
+It also compares native matcher preparation with reuse, as --long-matcher-input does on its own.
+--long-warm runs all 697 title inputs at 20,000 characters through all ten readers after warming each at 2,000.
+It repeats a case once when it exceeds 300 ms and reports the best wall and thread CPU times separately.
+These diagnostic times are not CI wall-clock assertions. The deterministic guard charges the native input copies. --long-instrumental times whether a title says it's an instrumental, at three lengths, on the titles
 whose tags it reads, by an artist named first and by one named in each tag. On a phone each look with a pattern copies the whole title first, so a reader that looks once a pass or
 once a bracket takes time squared there, where the JVM, and so LongTitlesTest, sees none.
 
@@ -51,9 +57,10 @@ MAIN = Path("app/src/main/java/com/astrovm/crosstune")
 OUT = ROOT / "app/src/test/titlefuzz/main.tsv.gz"
 WRITER = "com.astrovm.crosstune.WriteTitlesBaseline"
 DEVICE_JAR = "/data/local/tmp/titles-baseline.jar"
+DEVICE_APP = "/data/local/tmp/titles-baseline-app.apk"
 DEVICE_OUT = "/data/local/tmp/titles-baseline.tsv.gz"
 # The classes the writer runs: the app's, and the tests' that make and read the titles.
-TEST_CLASSES = ("TitleFuzz", "TitleProbes", "WriteTitlesBaseline", "LongTitlesProbe")
+TEST_CLASSES = ("TitleFuzz", "TitleProbes", "WriteTitlesBaseline", "LongTitlesProbe", "LongTitleInputs")
 TIMER = "com.astrovm.crosstune.LongTitlesProbe"
 
 
@@ -73,12 +80,16 @@ def on_jvm(checkout):
 
 def on_emulator(checkout, serial, count, long=None):
     serial = regextable.emulator(serial)
+    # The app supplies its actual runtime dependencies, including HttpUrl for shared links.
+    box(checkout, ":app:assembleDebug")
     box(checkout, ":app:compileDebugUnitTestKotlin")
     built = checkout / "app/build/intermediates/built_in_kotlinc"
     tests = built / "debugUnitTest/compileDebugUnitTestKotlin/classes"
     work = checkout.parent
     classes = work / "classes"
-    shutil.copytree(built / "debug/compileDebugKotlin/classes", classes)
+    (classes / "com/astrovm/crosstune").mkdir(parents=True)
+    app_classes = built / "debug/compileDebugKotlin/classes"
+    shutil.make_archive(str(work / "app-classes"), "zip", app_classes)
     for name in TEST_CLASSES:
         for found in (tests / "com/astrovm/crosstune").glob(f"{name}*.class"):
             shutil.copy(found, classes / "com/astrovm/crosstune" / found.name)
@@ -88,24 +99,27 @@ def on_emulator(checkout, serial, count, long=None):
     platform = max((regextable.SDK / "platforms").iterdir()) / "android.jar"
     # The app's resource ids, which the readers' enums name.
     ids = next(checkout.glob("app/build/intermediates/*r_class_jar/debug/*/R.jar"))
-    regextable.run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "dex.jar"), str(work / "classes.zip"), str(ids), str(stdlib))
-    regextable.run("adb", "-s", serial, "push", str(work / "dex.jar"), DEVICE_JAR)
+    regextable.run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "dex.jar"), "--classpath", str(work / "app-classes.zip"), "--classpath", str(ids), "--classpath", str(stdlib), str(work / "classes.zip"))
+    app = checkout / "app/build/outputs/apk/debug/app-debug.apk"
     try:
+        regextable.run("adb", "-s", serial, "push", str(app), DEVICE_APP)
+        regextable.run("adb", "-s", serial, "push", str(work / "dex.jar"), DEVICE_JAR)
         if long is not None:
-            subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_JAR} /system/bin {TIMER} {long}"], check=True)
+            subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {TIMER} {long}"], check=True)
             return None
         started = time.monotonic()
-        subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_JAR} /system/bin {WRITER} {DEVICE_OUT} {count}"], check=True)
+        subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {WRITER} {DEVICE_OUT} {count}"], check=True)
         print(f"{count} titles read on {serial} in {time.monotonic() - started:.0f} s")
         regextable.run("adb", "-s", serial, "pull", DEVICE_OUT, str(work / "made.tsv.gz"))
     finally:
-        regextable.run("adb", "-s", serial, "shell", f"rm -f {DEVICE_JAR} {DEVICE_OUT}")
+        regextable.run("adb", "-s", serial, "shell", f"rm -f {DEVICE_APP} {DEVICE_JAR} {DEVICE_OUT}")
     return work / "made.tsv.gz"
 
 
 def copy_in(checkout):
     """This checkout's fuzz titles, probes and phone pattern writer, into [checkout]: see the top."""
     shutil.copy(ROOT / TESTS / "TitleFuzz.kt", checkout / TESTS / "TitleFuzz.kt")
+    shutil.copy(ROOT / TESTS / "LongTitleInputs.kt", checkout / TESTS / "LongTitleInputs.kt")
     # A commit with its own TitleProbes.kt, such as a PR's, is read through it; main's through MainTitleProbes.kt.
     if not (checkout / TESTS / "TitleProbes.kt").exists():
         shutil.copy(HERE / "MainTitleProbes.kt", checkout / TESTS / "TitleProbes.kt")
@@ -120,6 +134,10 @@ def copy_in(checkout):
 
 def timing(args):
     """What LongTitlesProbe times, as its argument, or None when the readings are made."""
+    if args.long_matcher_input:
+        return "matcher-input"
+    if args.long_warm:
+        return "warm"
     if args.long_all:
         return "all"
     if args.long_instrumental:
@@ -144,6 +162,8 @@ def main():
     parser.add_argument("ref", nargs="?", default="origin/main")
     parser.add_argument("--jvm", action="store_true", help="read on the JVM, not on the emulator")
     parser.add_argument("--long", action="store_true", help="time the readers on long titles on the emulator")
+    parser.add_argument("--long-matcher-input", action="store_true", help="compare matcher preparation and reuse on Android")
+    parser.add_argument("--long-warm", action="store_true", help="check the original 20,000-character whole-title budget after warm-up")
     parser.add_argument("--long-all", action="store_true", help="time the readers on each of LongTitlesTest's titles, naming the slow ones")
     parser.add_argument("--long-instrumental", action="store_true", help="time saysInstrumental on long titles of its tags")
     parser.add_argument("--serial")
