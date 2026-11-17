@@ -439,27 +439,23 @@ private fun PlayerMenu(ready: Boolean, actions: ScreenActions) {
     }
 }
 
+private class HeldSeek(val positionMs: Long)
+
 /** Where the song is, to drag elsewhere when the app lets it, with how long it is when the app says. */
 @Composable
 private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
     val position = rememberPlayerPosition(following)
     val duration = following.durationMs
-    // Where it's dragged to, held there until the app says it moved, or a moment passes without it saying.
-    var dragged by remember { mutableStateOf<Float?>(null) }
-    var seeking by remember { mutableStateOf(false) }
-    LaunchedEffect(following.clock, following.appPackage, following.session) {
-        if (seeking) {
-            seeking = false
-            dragged = null
-        }
-    }
-    LaunchedEffect(seeking) {
-        if (!seeking) return@LaunchedEffect
+    var dragged by remember(following.appPackage, following.session) { mutableStateOf<Float?>(null) }
+    // A clock change ends the seek hold. Neither an acknowledgement nor its timeout cancels a drag.
+    var held by remember(following.clock, following.appPackage, following.session) { mutableStateOf<HeldSeek?>(null) }
+    val waiting = held
+    LaunchedEffect(waiting) {
+        if (waiting == null) return@LaunchedEffect
         delay(SEEK_HOLD_MS)
-        seeking = false
-        dragged = null
+        if (held === waiting) held = null
     }
-    val shown = dragged?.toLong() ?: position
+    val shown = dragged?.toLong() ?: held?.positionMs ?: position
     Column(modifier = Modifier.fillMaxWidth()) {
         if (duration != null) {
             val description = stringResource(R.string.player_position, clockText(shown), clockText(duration))
@@ -467,8 +463,11 @@ private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
                 value = shown.coerceIn(0L, duration).toFloat(),
                 onValueChange = { dragged = it },
                 onValueChangeFinished = {
-                    dragged?.let { onSeek(it.toLong()) }
-                    seeking = true
+                    dragged?.toLong()?.let { target ->
+                        held = HeldSeek(target)
+                        dragged = null
+                        onSeek(target)
+                    }
                 },
                 valueRange = 0f..duration.toFloat(),
                 enabled = following.canSeek,

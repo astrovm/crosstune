@@ -244,6 +244,29 @@ class FollowsTheSongTest {
     }
 
     @Test
+    fun anEarlierSeekTimeoutDoesNotDiscardTheNextDrag() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(1_000).copy(durationMs = 10_000)
+        player(onSeek = { sent += it })
+        seekTo(3_000)
+        passes(1_000)
+
+        val node = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
+        node.performTouchInput {
+            down(Offset(width * 0.3f, center.y))
+            moveTo(Offset(width * 0.8f, center.y))
+        }
+        settles()
+        val target = slider()
+        assertTrue(target > 7_000)
+        passes(500)
+        assertEquals(target, slider())
+        node.performTouchInput { up() }
+        settles()
+        assertEquals(listOf(3_000L, target.toLong()), sent)
+    }
+
+    @Test
     fun shuffleDoesNotMoveTheSliderOrClearAnUnacknowledgedSeek() {
         following = playingFrom(1_000)
         player()
