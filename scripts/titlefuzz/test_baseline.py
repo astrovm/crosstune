@@ -1,5 +1,6 @@
 import argparse
 import gzip
+import os
 import shutil
 import subprocess
 import tempfile
@@ -51,6 +52,44 @@ class BaselineTest(unittest.TestCase):
         self.assertEqual("warm", asked(long_warm=True))
         self.assertEqual("instrumental", asked(long_instrumental=True))
         self.assertEqual("matcher-input", asked(long_matcher_input=True))
+
+    def test_a_native_probe_gets_the_pinned_submodule_before_building(self):
+        dependency = self.work / "dependency"
+        repository = self.work / "repository"
+        dependency.mkdir()
+        repository.mkdir()
+
+        def git(where, *args):
+            return subprocess.run(["git", *args], cwd=where, check=True, capture_output=True, text=True).stdout.strip()
+
+        def commit(where, message):
+            git(where, "add", ".")
+            git(where, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-qm", message)
+
+        git(dependency, "init", "-b", "main")
+        (dependency / "CMakeLists.txt").write_text("pinned visuals", encoding="utf-8")
+        commit(dependency, "test(fixture): add the pinned visuals")
+        git(repository, "init", "-b", "main")
+        git(repository, "-c", "protocol.file.allow=always", "submodule", "add", str(dependency), "third_party/projectm")
+        commit(repository, "test(fixture): pin the visuals")
+        (dependency / "CMakeLists.txt").write_text("newer visuals", encoding="utf-8")
+        commit(dependency, "test(fixture): change the upstream visuals")
+        original_git = baseline.git
+
+        def from_repository(*args, **kwargs):
+            return original_git(*args, cwd=kwargs.get("cwd", repository))
+
+        def build(checkout, *args, **kwargs):
+            self.assertEqual("pinned visuals", (checkout / "third_party/projectm/CMakeLists.txt").read_text(encoding="utf-8"))
+
+        with mock.patch.object(baseline, "git", side_effect=from_repository), \
+             mock.patch.object(baseline, "copy_in"), \
+             mock.patch.object(baseline, "on_emulator", side_effect=build) as probe, \
+             mock.patch.object(baseline.sys, "argv", ["baseline.py", "HEAD", "--long", "--serial", "emulator-fixture"]), \
+             mock.patch.dict(os.environ, {"TITLEFUZZ_TMP": str(self.work), "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "protocol.file.allow", "GIT_CONFIG_VALUE_0": "always"}):
+            baseline.main()
+        probe.assert_called_once()
+        self.assertEqual(1, len(git(repository, "worktree", "list", "--porcelain").split("worktree ")) - 1)
 
     def test_the_device_uses_the_apps_runtime_and_always_removes_both_files(self):
         for failed in (False, True):

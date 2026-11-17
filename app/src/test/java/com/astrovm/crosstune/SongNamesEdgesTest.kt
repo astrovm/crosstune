@@ -26,6 +26,14 @@ class SongNamesEdgesTest {
     }
 
     @Test
+    fun recordingWordsKeepCaseAndAccentNormalization() {
+        for (note in listOf("live", "LIVE", "LÍVE", "2012 LIVE", "ENGLISH VERSION", "ÉNGLISH VERSION")) {
+            assertFalse(note, SongNames.wordsMatch("Hello ($note)", "Hello World ($note)"))
+            assertFalse(note, SongNames.wordsMatch("Hello World ($note)", "Hello ($note)"))
+        }
+    }
+
+    @Test
     fun numericUnicodeTitleCharactersKeepTheTwoWordPartialRule() {
         for (number in listOf("Ⅻ", "½")) {
             val one = "Fake Song $number (Live)"
@@ -69,10 +77,31 @@ class SongNamesEdgesTest {
         val wrong = mutableListOf<String>()
         if (SongNames.names("Hello (Video Games)", "Fake Band", MusicMetadata("Hello", "Fake Band"))) wrong += "Video Games lost"
         if (!SongNames.names("Hello // Sub Español + Lyrics // Video Oficial", "", MusicMetadata("Hello", ""))) wrong += "subtitles blocked"
+        val caption = " // Sub Español + Lyrics // Video Oficial"
+        for ((title, asked, wanted) in listOf(
+            Triple("Hello$caption", "Hello Sub", false),
+            Triple("Fake Song$caption", "Fake Song", true)
+        )) for ((one, other) in listOf(title to asked, asked to title)) {
+            if (SongNames.wordsMatch(one, other) != wanted) wrong += "caption: $one / $other"
+        }
         for (tag in listOf("Akustik Version", "Taylor's Version", "Alternate Take", "Club Mix")) {
             if (!SongNames.wordsMatch("Hello ($tag) [Explicit]", "Hello [Explicit]")) wrong += tag
         }
         assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun editionWordsStillReachTheCompletePattern() {
+        for (note in listOf(
+            "Original", "Album Version", "Single Version", "Short Version", "Original Version", "Radio Version",
+            "Remaster", "Remastered 2012", "Remasterizado 2012", "Mono", "Stereo", "OST", "Theme Song", "主題曲"
+        )) for (suffix in listOf(" ($note)", " - $note")) {
+            assertEquals(note, "Fake Song", SongNames.withoutEditionTag("Fake Song$suffix"))
+        }
+        for (note in listOf("English Version", "Great Unknown", "Verson", "_mono", "monophonic")) {
+            val title = "Fake Song ($note)"
+            assertEquals(title, title, SongNames.withoutEditionTag(title))
+        }
     }
 
     @Test
