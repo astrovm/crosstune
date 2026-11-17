@@ -55,6 +55,7 @@ run_propose() {
 }
 propose() { checkout && run_propose; }
 calls() { cat "$FAKE/calls" 2>/dev/null || true; }
+verified() { python3 "$here/proposal.py" verify "$1" "$(git rev-parse "origin/$BRANCH")" "$TABLES" "$NOTICE_MANIFEST" "$FAKE/body"; }
 proof() { PYTHONPATH="$here" python3 -c 'import sys; from check_golden import readings_digest; print(readings_digest(".", *sys.argv[1:]))' origin/main "origin/$BRANCH"; }
 
 # Main is moved in origin by fetching into it, as a hook may refuse any push to a main.
@@ -92,6 +93,7 @@ grep -qxF "To run CI, select **Approve workflows to run** at the bottom of this 
 grep -q "were from JMdict 2000-01-01" "$FAKE/body" || fail "body lacks the old date"
 grep -q "jmdict-simplified \`$TAG\` (JMdict 2000-02-01)" "$FAKE/body" || fail "body lacks the release"
 grep -q "2 files changed" "$FAKE/body" || fail "body lacks the diff"
+verified origin/main || fail "the proposed input fingerprint or body was invalid"
 grep -qF "add a line \`golden: none\` here when no reading changes" "$FAKE/body" || fail "body doesn't say how to pass the locked readings check"
 # A mark is a whole line of the body: the hint must never be one, or the check would pass by itself.
 grep -qF "add the \`golden: lines checked\` line it prints" "$FAKE/body" || fail "body doesn't say how to pass the whole-lines check"
@@ -173,7 +175,7 @@ python3 "$here/check_golden.py" --repo . --base origin/main --head "origin/$BRAN
 printf 'revised licence\n' > "$TABLES/notices/edrdg-licence.txt"
 propose || { cat "$work/out"; fail "update with a changed notice failed"; }
 [ "$(proof)" = "$digest" ] || fail "the notice change changed the readings digest"
-grep -qxE 'golden: (none|accept .*|lines checked .*)' "$FAKE/body" && fail "a changed notice inherited the old proof"
+grep -qxF "golden: lines checked $digest" "$FAKE/body" || fail "a changed notice erased valid readings proof"
 
 # The snapshot can still be rebased with a fresh remake when main changes a locked input, but its
 # proof used the older input. First change the golden audit, which is not part of the readings digest.
@@ -195,6 +197,22 @@ for input in "$golden_file" scripts/readingsaudit/wholelines.py "$readings_file"
   grep -qxE 'golden: (none|lines checked .*)' "$FAKE/body" && fail "proof survived a change to $input"
 done
 
+# If the branch push succeeds and the body edit fails, the next run makes the body current.
+digest=$(proof)
+printf '\ngolden: none\ngolden: lines checked %s\n' "$digest" >> "$FAKE/body"
+printf '# audit: 2 lines, 2 right readings, sha256 0123456789abcdef\n' > "$golden_file"
+person add "$golden_file" && person commit -qm "fix: change the locked audit again" && main_to_origin
+echo "HTTP 502" > "$FAKE/fail-pr-edit"
+propose && fail "went on after gh pr edit failed"
+held=$(git rev-parse "origin/$BRANCH")
+git merge-base --is-ancestor origin/main "$held" || fail "the branch was not pushed"
+verified origin/main > "$work/verify" 2>&1 && fail "CI accepted proof from before the failed body edit"
+grep -q "proposal body is stale" "$work/verify" || fail "CI did not identify the stale body"
+propose || { cat "$work/out"; fail "rerun after a failed body update failed"; }
+[ "$(git rev-parse "origin/$BRANCH")" = "$held" ] || fail "pushed the snapshot again to repair the body"
+grep -qxE 'golden: (none|lines checked .*)' "$FAKE/body" && fail "rerun left obsolete proof on the updated pull request"
+verified origin/main || fail "CI rejected the repaired body"
+
 # A stale digest cannot be carried forward even after a README-only change.
 printf '\ngolden: none\ngolden: lines checked 0123456789abcdef\n' >> "$FAKE/body"
 echo more >> README && person commit -qm "docs: more" -- README && main_to_origin
@@ -214,7 +232,7 @@ remade "
 風花	かざはな" && rm -f "$FAKE/calls"
 checkout && git -C "$work/ci" remote set-url origin "$work/nowhere.git"
 run_propose && fail "went on without origin"
-grep -q "Can't read $BRANCH from origin" "$work/out" || fail "no error for an origin it can't read"
+grep -q "Can't read main from origin" "$work/out" || fail "no error for an origin it can't read"
 [ -z "$(calls)" ] || fail "asked gh without origin"
 
 # Commits a person made on the branch: nothing is thrown away, and the run fails. One the person
@@ -273,6 +291,22 @@ changed=$(git diff --name-only origin/main "origin/$BRANCH")
 expected=$(printf '%s\n' "$TABLES/notices/edrdg-licence.txt" "$TABLES/notices/jmdict-documentation.txt" "$NOTICE_MANIFEST")
 [ "$changed" = "$expected" ] || fail "notice-only proposal changed the wrong paths"
 grep -q "3 files changed" "$FAKE/body" || fail "body lacks the notice diff"
+
+# Main may move after the proposal job checks out a commit. Compare the published snapshot with both
+# the checkout it started from and the main tip it actually reads at runtime.
+old_commit=$SOURCE_COMMIT
+held=$(git rev-parse "origin/$BRANCH")
+checkout
+mkdir -p "$(dirname "$test_unidic")"
+printf 'dictionary fixture changed after checkout\n' >> "$test_unidic"
+person add "$test_unidic" && person commit -qm "fix: change the dictionary fixture" && main_to_origin
+rm -f "$FAKE/calls"
+SOURCE_COMMIT=$old_commit run_propose && fail "accepted a stale snapshot after the job checked out"
+grep -q "changed since the snapshot was made" "$work/out" || fail "no reason for rejecting stale checkout"
+verified origin/main > "$work/verify" 2>&1 && fail "CI accepted a snapshot produced for older inputs"
+grep -q "inputs on main differ" "$work/verify" || fail "CI did not reject outdated inputs"
+[ "$(git rev-parse "origin/$BRANCH")" = "$held" ] || fail "the stale checkout pushed its snapshot"
+[ -z "$(calls)" ] || fail "the stale checkout asked gh"
 
 # When main changes an input after remake, reject its artifact before pushing or calling GitHub.
 for input in "$TABLES/notices/jmdict-documentation.txt" "$readings_file" "$test_unidic" app/build.gradle.kts \
