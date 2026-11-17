@@ -91,34 +91,46 @@ def page_text(data: bytes, charset: str, base: str) -> bytes:
     return ("\n\n".join(parser.blocks) + "\n").encode()
 
 
-def download(url: str) -> bytes:
+class InvalidPage(Exception):
+    pass
+
+
+def download(url: str, validate=None) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": "crosstune-notices"})
     for attempt in range(1, 4):
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
-                return response.read()
-        except (TimeoutError, ConnectionError, urllib.error.URLError, http.client.IncompleteRead) as error:
+                data = response.read()
+                if validate is not None:
+                    validate(data)
+                return data
+        except (TimeoutError, ConnectionError, urllib.error.URLError, http.client.IncompleteRead, InvalidPage) as error:
             permanent = False
             if isinstance(error, urllib.error.HTTPError):
                 error.close()
                 permanent = error.code not in (408, 429) and error.code < 500
             if permanent or attempt == 3:
                 print(f"Could not fetch {url}: {error}", file=sys.stderr)
+                if isinstance(error, InvalidPage):
+                    sys.exit(str(error))
                 raise
             print(f"{url}: attempt {attempt} failed ({error}). Retrying.", file=sys.stderr, flush=True)
             time.sleep(attempt)
 
 
-def source_bytes(source: str) -> bytes:
+def source_bytes(source: str, validate=None) -> bytes:
     lines = None
     if re.search(r"#L\d+-L\d+$", source):
         source, span = source.rsplit("#", 1)
         first, last = (int(n) for n in re.findall(r"\d+", span))
         lines = (first, last)
     if source.startswith("html:"):
-        raw = download(source[5:])
-        charset = re.search(rb'charset="?([\w-]+)', raw)
-        data = page_text(raw, charset.group(1).decode() if charset else "utf-8", source[5:])
+        def convert(raw):
+            charset = re.search(rb'charset="?([\w-]+)', raw)
+            return page_text(raw, charset.group(1).decode() if charset else "utf-8", source[5:])
+
+        raw = download(source[5:], lambda raw: validate(convert(raw))) if validate else download(source[5:])
+        data = convert(raw)
     elif "!" in source:
         url, inner = source.split("!", 1)
         archive = download(url)
@@ -128,7 +140,7 @@ def source_bytes(source: str) -> bytes:
             with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
                 data = tar.extractfile(inner).read()
     elif source.startswith("https://"):
-        data = download(source)
+        data = download(source, validate) if validate else download(source)
     elif source.startswith("ndk:"):
         data = (ndk() / source[4:]).read_bytes()
     else:
@@ -162,6 +174,10 @@ JMDICT_PAGES = {
         rb"jmdict - japanese-multilingual dictionary file",
         rb"3\. licence conditions",
         rb"creative commons attribution-sharealike licence",
+        rb"acknowledge the usage and source of the files",
+        rb"provide copies of the documentation and licence files",
+        rb"provide links to either local copies of the documentation and licence files",
+        rb"for smartphone and tablet apps, acknowledgement must be made",
         rb"4\. updating dictionary versions",
         rb"procedure for regular updating",
         rb"5\. warranty and liability",
@@ -202,10 +218,25 @@ def check_jmdict_page(name, data):
 
 def fetch_texts(manifest, selected):
     # Download all selected texts first, so a failed download cannot change half the snapshot.
-    texts = {name: source_bytes(source) for name, _, source in selected}
-    if manifest == JMDICT_MANIFEST:
-        for name, data in texts.items():
-            check_jmdict_page(name, data)
+    texts = {}
+    for name, _, source in selected:
+        if manifest == JMDICT_MANIFEST:
+            def validate(data):
+                try:
+                    check_jmdict_page(name, data)
+                    if len(data) < (TEXTS / name).stat().st_size:
+                        sys.exit(f"EDRDG content in {name} is shorter than the snapshot. Review it before replacing the snapshot.")
+                except SystemExit as error:
+                    raise InvalidPage(str(error)) from error
+
+            try:
+                data = source_bytes(source, validate=validate)
+                validate(data)
+            except InvalidPage as error:
+                sys.exit(str(error))
+        else:
+            data = source_bytes(source)
+        texts[name] = data
     lines = manifest.read_text().splitlines()
     for name, data in texts.items():
         (TEXTS / name).write_bytes(data)
