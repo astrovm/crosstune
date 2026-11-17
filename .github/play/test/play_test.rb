@@ -806,7 +806,8 @@ class PlayTest < Minitest::Test
     release_file = File.join(@dir, "github-release.json")
     File.write(release_file, release_json)
     output, status = play_rb("edit", "--from", "beta", "--code", other.to_s, "--to", "production",
-                             "--release", release_file, "--tag", TAG, "--tags", "#{CODE},#{other}", "--tracks", "internal,beta")
+                             "--release", release_file, "--tag", TAG, "--tags", "#{CODE},#{other}",
+                             "--tracks", "internal,beta")
     assert_promotion_stopped(output, status, "doesn't name version code #{other}")
   end
 

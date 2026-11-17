@@ -350,7 +350,9 @@ module Crosstune
     def change(edit, options)
       if options[:from]
         if (proof = options[:promotion])
-          edit.promotion(options[:from], proof[:tracks], options[:to], options[:code], proof[:tags], proof[:digest], proof[:tag])
+          edit.promotion(
+            options[:from], proof[:tracks], options[:to], options[:code], proof[:tags], proof[:digest], proof[:tag]
+          )
         end
         edit.stop_going_back(options[:to], options[:code])
         edit.promote(options[:from], options[:code], options[:to])
