@@ -99,6 +99,8 @@ class ArtistlessPlaybackCheck : Instrumentation() {
             Fixture("Glass Lantern Radio", "", "Glass Lantern", false),
             Fixture("Fixture Artist - Glass Lantern Radio", "", "Glass Lantern", false),
             Fixture("Other Artist - Glass Lantern", "", "Glass Lantern", false),
+            Fixture("Other Artist - Fixture Artist Song", "", "Fixture Artist Song", false),
+            Fixture("काला", "", "किला", false),
             Fixture("Apart", "", "A Part", false),
             Fixture("Glass Lantern Meadow", "", "Glass Lantern", false),
             Fixture("Glass Lantern", "", "Glass Lantern Meadow", false),

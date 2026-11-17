@@ -838,9 +838,11 @@ internal object SongNames {
     /** Keep word boundaries and non-Latin marks, such as the voicing in ガラス and カラス. */
     private fun wholeTitleWords(title: String): List<String> =
         Normalizer.normalize(titleEvidence(title, bareNotes = false), Normalizer.Form.NFC).lowercase(Locale.ROOT)
-            .split(lettersAndDigits).filter { it.isNotEmpty() }.map { word ->
-                if (word.codePoints().allMatch { Character.isDigit(it) || Character.UnicodeScript.of(it) == Character.UnicodeScript.LATIN }) normalize(word) else word
+            .split(titleWordSplit).filter { word -> word.codePoints().anyMatch(Character::isLetterOrDigit) }.map { word ->
+                if (word.codePoints().filter(Character::isLetter).allMatch { Character.UnicodeScript.of(it) == Character.UnicodeScript.LATIN }) normalize(word) else word
             }
+
+    private val titleWordSplit = phoneRegex("""[^\p{L}\p{N}\p{M}]+""")
 
     /** A recording note cannot provide the second word that makes a partial title specific enough. */
     private fun titleWordsMatch(one: String, other: String): Boolean {

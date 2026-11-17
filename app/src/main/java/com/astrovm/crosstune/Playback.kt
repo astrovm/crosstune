@@ -1075,9 +1075,10 @@ internal class MediaSessionPlayback(
         val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
         // A station or untagged file has no artist to support a partial title match.
         if (MetadataParsers.noArtist(artist)) {
-            if (SongNames.wholeTitle(title, song.title) && SongNames.names(title, "", song)) return true
+            if (!SongNames.names(title, "", song)) return false
+            if (SongNames.wholeTitle(title, song.title)) return true
             val named = songsRead.of(title to artist) ?: return false
-            return named.artist.isNotBlank() && SongNames.names(named.title, named.artist, song) && SongNames.wholeTitle(named.title, song.title)
+            return named.artist.isNotBlank() && SongNames.sameArtist(named.artist, song.artist) && SongNames.wholeTitle(named.title, song.title)
         }
         return SongNames.names(title, artist, song)
     }

@@ -2018,6 +2018,23 @@ class PlaybackTest {
     }
 
     @Test
+    fun aParsedArtistCannotBeTakenFromTheSongsOwnTitle() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Other Band - Fake Band Song", ""))
+        assertNull(playback.appFor(MusicMetadata("Fake Band Song", "Fake Band")))
+    }
+
+    @Test
+    fun aWholePlayerTitleKeepsNonLatinVowels() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "काला", ""))
+        assertNull(playback.appFor(MusicMetadata("किला", "Fake Band")))
+        assertFalse(SongNames.wholeTitle("काला", "किला"))
+    }
+
+    @Test
     fun aWholePlayerTitleKeepsItsWordBoundaries() {
         allow()
         sounding()
@@ -2072,6 +2089,7 @@ class PlaybackTest {
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Fake Band - Fake Song", ""))
         assertEquals("com.example.player", playback.appFor(MusicMetadata("Fake Band - Fake Song", ""))?.packageName)
+        assertFalse(SongNames.wholeTitle("\u093E", "\u093E"))
         assertFalse(SongNames.wholeTitle("", ""))
         assertFalse(SongNames.wholeTitle("", "Fake Song"))
     }
