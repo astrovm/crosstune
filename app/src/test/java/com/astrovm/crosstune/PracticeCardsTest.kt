@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +23,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.yield
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
@@ -30,6 +32,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowLog
@@ -59,7 +62,7 @@ class PracticeCardsTest {
     private fun cards(
         source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS, player: FakeLinePlayer? = this.player,
         now: () -> Long = { System.currentTimeMillis() }, matcher: ExactMatcher = ExactMatcher(sites.client(), "AR"), traitStore: AppTraitsStore = traits, cardScope: CoroutineScope = scope
-    ) = PracticeCards(screen, cardScope, source, matcher, store, traitStore, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
+    ) = PracticeCards(screen, cardScope, source, matcher, store, traitStore, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } }, clockLog = PracticeClockLog(true))
 
     /** YouTube Music having the demo song, 3:20 long, as its video "demo0000000". */
     private fun youTubeHasTheSong() {
@@ -115,6 +118,65 @@ class PracticeCardsTest {
     private fun playing(video: Boolean = false, canSeek: Boolean = true, playing: Boolean = true) {
         playback.access = true
         playback.playing.value = Following(PlaybackClock(10_000, System.currentTimeMillis(), 20f, playing = playing), "Spotify", canSeek = canSeek, appPackage = MusicService.SPOTIFY.packageName, video = video, durationMs = 200_000)
+    }
+
+    @Test
+    fun clockEvidenceKeepsFreshReportsOfTheSamePlaceAndTheSeekTarget() {
+        ShadowLog.setLoggable("CrosstuneClock", Log.DEBUG)
+        replays(ytMusic, start = 43_270, from = 10_000, fromPlaying = true,
+            Said(100, 10_100), Said(1_700, 10_100), Said(2_000, 43_270))
+        cards().start(null, before = null)
+        reached(ytMusic)
+        val evidence = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }
+        val asks = evidence.filter { it.getString("event") == "seek_request" }
+        assertEquals(listOf(43_270L), asks.map { it.getLong("target_ms") }.distinct())
+        val repeats = evidence.filter { it.optString("event") == "card_clock" && it.optLong("position_ms", -1) == 10_100L }
+        assertTrue(repeats.map { it.getLong("updated_ms") }.distinct().size >= 2)
+        assertTrue(repeats.all { it.getString("phase") == "reach" && it.getString("app") == ytMusic })
+        assertTrue(evidence.any { it.getString("event") == "reach_result" && it.getString("result") == "reached" })
+    }
+
+    @Test
+    fun clockEvidenceFollowsTheNativeLineToItsPlayVerdict() {
+        ShadowLog.setLoggable("CrosstuneClock", Log.DEBUG)
+        youTubeHasTheSong()
+        keep(line(), types = hearIt)
+        appPlays(ytMusic, speed = 20f)
+        cards().start(null, before = null)
+        waitFor("the native line ended") { practice?.sound == LineSound.PLAYED }
+        val evidence = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }
+        assertTrue(evidence.any { it.getString("event") == "card_clock" && it.getString("phase") == "play" })
+        val verdict = evidence.single { it.getString("event") == "play_result" }
+        assertEquals("played", verdict.getString("result"))
+        assertEquals("line_end", verdict.getString("reason"))
+    }
+
+    @Test
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    fun clockEvidenceSaysWhenThePendingSeekIsCancelled() = runTest {
+        ShadowLog.setLoggable("CrosstuneClock", Log.DEBUG)
+        replays(ytMusic, start = 43_270, from = 10_000, fromPlaying = false)
+        val requested = CompletableDeferred<Unit>()
+        val previous = playback.onPlay
+        playback.onPlay = { app, play -> previous(app, play); requested.complete(Unit) }
+        val cards = cards(cardScope = this)
+        cards.start(null, before = null)
+        requested.await()
+        assertTrue(playback.seeks.isNotEmpty())
+        cards.stop()
+        runCurrent()
+        val evidence = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }
+        assertTrue(evidence.any { it.getString("event") == "reach_result" && it.getString("result") == "cancelled" })
+        cards.release()
+    }
+
+    @Test
+    fun clockEvidenceIsOffUnlessItsOwnDiagnosticTagIsEnabled() {
+        ShadowLog.setLoggable("CrosstuneClock", Log.INFO)
+        replays(ytMusic, start = 43_270, from = 43_270, fromPlaying = false, Said(270, 43_270))
+        cards().start(null, before = null)
+        reached(ytMusic)
+        assertTrue(ShadowLog.getLogsForTag("CrosstuneClock").isEmpty())
     }
 
     @Test

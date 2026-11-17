@@ -156,6 +156,44 @@ The lint job holds a pull request to the same rules. A pull request that removes
 
 [`old-kana.txt`](app/src/main/resources/com/astrovm/crosstune/old-kana.txt) helps `Readings` read old kana in kana alone, which IPADIC splits: おもひで is おもいで. It lists JMdict's common words in kana with い or う after their first kana, each with the form it's looked up by, and the words in kana written with ひ or ふ today, おひる or くふう, where a ひ or ふ is no old kana. It's from JMdict as well, under the same license, and its header says so. Remake it with `python3 scripts/readingsaudit/readingsaudit.py oldkana`, with `jmdict.json` in the audit folder. Measure a change to old kana with `OldKanaNotes`, which lists every line that gets an old spelling note, with and without UniDic: `./gradlew :app:songCheck -PsongcheckTest=com.astrovm.crosstune.songcheck.OldKanaNotes -PsongcheckDir=FOLDER`, with the audit folder as `FOLDER` so its songs in `found/` count too. Then `diff` its `oldkana/` against a run from before. A note on a modern line is a false note. No line of the audit is in old kana, so neither the golden rows nor `lines` see a change to how old kana is read: `OldKanaNotes` is the check there. Issue #962 asks for old-kana lines in the audit.
 
+## Practice clock evidence
+
+The dev app can record Practice's native playback evidence under the `CrosstuneClock` log tag. It is off by default. A build without Android's debuggable flag ignores the tag even when its level is DEBUG. These records go only to logcat. They do not enter `TimingLog`, song reports, or automatic reports. They contain app package names, process-local session and attempt numbers, positions, times, speeds and capability flags. They contain no song names, artists, media IDs, URLs, metadata, extras or session tokens.
+
+Use the SDK's adb and name the device with `ANDROID_SERIAL`. Set `ANDROID_HOME` to the SDK directory first. Save the previous tag level so it can be restored. In one terminal:
+
+```bash
+: "${ANDROID_HOME:?Set ANDROID_HOME to the Android SDK directory}"
+: "${ANDROID_SERIAL:?Set ANDROID_SERIAL to the test device}"
+adb="$ANDROID_HOME/platform-tools/adb"
+previous_clock_tag=$("$adb" shell getprop log.tag.CrosstuneClock)
+[[ $previous_clock_tag =~ ^[[:alnum:]]*$ ]] || { printf 'Unexpected diagnostic tag value\n' >&2; exit 1; }
+"$adb" shell setprop log.tag.CrosstuneClock DEBUG
+mkdir -p build/practice-clock
+"$adb" logcat -v raw -s CrosstuneClock:D '*:S' > build/practice-clock/device.ndjson
+```
+
+Stop logcat with Ctrl+C, then restore the level in that same terminal:
+
+```bash
+"$adb" shell "setprop log.tag.CrosstuneClock '$previous_clock_tag'"
+```
+
+Keep these device captures out of git. An agent uses the device tools for all app launches, taps, appearance changes and other UI work. The adb commands above only configure the project diagnostic and read its log.
+
+Each line is a JSON record. `observed_ms` uses the app's monotonic clock since boot, as do Android's playback update times. Speed is text so malformed non-finite values remain representable. Match records by `app` and `session`; `attempt` separates native Practice attempts.
+
+| Event | Meaning |
+|---|---|
+| `media_report` | The raw callback argument, before clock correction and flow deduplication. Repeated, null and negative-position reports stay visible. `updated_ms` is the app's own report time. |
+| `followed_clock` | The selected clock after the existing timing corrections. |
+| `media_command` | The session about to receive a seek, play or pause transport call. It is a request, not an acknowledgement. |
+| `card_clock` | The clock Practice actually observes while reaching or playing a line. Polls can repeat; they are not new Android callbacks. `projected_ms` is the clock projected to the observation time. |
+| `seek_request` | Practice's target and requested playing state, with the time used to judge later reports. |
+| `reach_result`, `play_result` | Whether the line was reached or played, and why that phase ended. Cancellation is explicit. |
+
+Issue #929 needs the warm preview-end repeat, a line near that end on both card sides, an unanswered seek, and a stop-short after a session returns. Compare each with a delayed successful seek before changing any timeout or giving up sooner. Issue #939 needs 50 cards in each named music app and confirmation that the rare report sequences still play the line. Issue #984 also needs Spotify's real seek flag during an ad and a Connect session. A successful made-up media session does not satisfy those real-app checks.
+
 ## Reports
 
 **Report a problem** and **Report song problems automatically** send to a Cloudflare Worker in [`report/`](report), at `report.crosstune.cc`. It keeps reports in the D1 database `crosstune-reports` (table in `schema.sql`), and a daily cron deletes those older than 180 days. D1's Time Travel keeps deleted rows up to 30 days more and can't be turned off, so the privacy text says so. It takes them only as JSON, at most 5 a minute from one address (an IPv6 address by its /64). In a day (UTC), each kind (what a person sends, what the app finds live, timings kept by an earlier version) has its own limits: 10, 70 and 200 from one network (an IPv4 /24, an IPv6 /48, a 6to4 address by the IPv4 /24 inside it), room for 3 phones on their busiest day; then 500, 2500 and 3000 in the day, whoever sent them; and 50, 150 and 150 MB in the table, counted in bytes. So a flood of one kind leaves the others their room, the day's rows written stay inside D1's free plan, and the database can't be filled. Its comments, and PR #955, say why those numbers. There is no limit for a wider block or a carrier: one low enough to cost a flood something would turn away the honest phones of one carrier as use grows. A report's day comes from one clock, the Worker's: when it came in (`at`, written by the Worker), its day's share, its network's day and its refusal. Networks are counted under an HMAC-SHA256 of the day, the kind and the network, with the secret `NETWORK_KEY`: without the secret the key can't be traced back to the network, and the cron deletes past days. Without the secret it keeps nothing and answers 503. The counts and the refusals (turned away, each day, why and of what kind) are tables in [`limits.sql`](report/limits.sql), with triggers that keep the counts exact, and the Worker reads every limit in one statement before it writes anything. Then one batch, a single transaction, puts the report in only while its limits have room, counts its network only if it went in, and reads why if it didn't. So reports sent at once can't take a place past a limit, and a network is never counted without its report. Run it on the live database before deploying the Worker that uses it: its top says how. When you edit reports by hand, never use `REPLACE`, which deletes a row without its trigger, and run `limits.sql` again after any edit the triggers don't see. A refused report says why in the `X-Crosstune-Refused` header, which the app doesn't read: it reads the status. So "not now" (a limit, the minute, a missing secret) is always 429 or 503, and a report that is never taken is 400, 413 or 415; a test holds both. A report about timing also carries the player's package, speed, the lead and the last minute of `TimingLog` (columns `app_package`, `speed`, `lead_ms`, `early_ms`, `timing_log`); `schema.sql` lists the `ALTER TABLE`s to run on the live database before deploying a Worker that stores them. Each new report carries its own `id`, a random UUID, in the column `report_id` with a unique index: one sent again, as the box got it but the answer was lost, is answered 204 and kept once, and counted nowhere. A manual song or wrong-reading report reuses its ID and payload on an unchanged retry. Editing it or reopening the dialog makes a new ID. Manual reports have no persistent queue. Older queued automatic reports can still have no ID. Run [`migrations/0001_report_id.sql`](report/migrations/0001_report_id.sql), then `limits.sql` again, on the live database before deploying the Worker that fills it; its top says how. Test it with `node --test report/*.test.mjs`, and deploy with `npx wrangler deploy` from that folder (`cf deploy` finds no dev server there and stops).

@@ -52,6 +52,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import java.time.Duration
 import org.junit.Test
+import org.json.JSONObject
+import org.robolectric.shadows.ShadowLog
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -76,7 +78,7 @@ class PlaybackTest {
     private val modes = FakeModes()
     /** Each app's queue, by its package, as Robolectric shows none. */
     private val queues = mutableMapOf<String, List<MediaSession.QueueItem>>()
-    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes, queueOf = { queues[it.packageName] })
+    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes, queueOf = { queues[it.packageName] }, clockLog = PracticeClockLog(true))
     private val song = MusicMetadata("Blinding Lights", "The Weeknd")
     private val collecting = mutableListOf<Job>()
 
@@ -134,6 +136,73 @@ class PlaybackTest {
         collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.nowPlayingUpdates().collect { seen += it } }
         shadowOf(Looper.getMainLooper()).idle()
         return seen
+    }
+
+    @Test
+    fun clockEvidenceKeepsEveryRawCallbackIncludingRepeatsAndMissingState() {
+        ShadowLog.setLoggable("CrosstuneClock", android.util.Log.DEBUG)
+        allow()
+        val fixture = MusicMetadata("Fixture Track", "Fixture Artist")
+        val controller = player("com.example.fixture", "Fixture", fixture.title, fixture.artist,
+            state = PlaybackState.STATE_PAUSED, position = 29_952, at = 100)
+        shadowOf(sessions).addController(controller)
+        followed(fixture)
+        val report = PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 29_952, 0f, 200)
+            .setActions(PlaybackState.ACTION_SEEK_TO).build()
+        repeat(2) { shadowOf(controller).executeOnPlaybackStateChanged(report) }
+        shadowOf(controller).executeOnPlaybackStateChanged(null)
+        shadowOf(Looper.getMainLooper()).idle()
+        val reports = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }.filter { it.getString("event") == "media_report" }
+        assertEquals(3, reports.size)
+        assertEquals(listOf(29_952L, 29_952L), reports.take(2).map { it.getLong("position_ms") })
+        assertEquals(listOf(200L, 200L), reports.take(2).map { it.getLong("updated_ms") })
+        assertTrue(reports.take(2).all { it.getDouble("speed") == 0.0 && it.getLong("actions") == PlaybackState.ACTION_SEEK_TO })
+        assertTrue(reports.all { it.getString("app") == "com.example.fixture" })
+        assertEquals(1, reports.map { it.getInt("session") }.distinct().size)
+        assertFalse(reports.last().getBoolean("present"))
+        assertTrue(reports.all { !it.has("title") && !it.has("artist") && !it.has("extras") })
+    }
+
+    @Test
+    fun clockEvidenceKeepsALateCallbacksOriginalSession() {
+        ShadowLog.setLoggable("CrosstuneClock", android.util.Log.DEBUG)
+        allow()
+        val fixture = MusicMetadata("Fixture Track", "Fixture Artist")
+        val first = player("com.example.first", "First", fixture.title, fixture.artist)
+        shadowOf(sessions).addController(first)
+        val seen = followed(fixture)
+        val oldCallbacks = shadowOf(first).callbacks.toList()
+        val next = player("com.example.next", "Next", fixture.title, fixture.artist)
+        shadowOf(sessions).clearControllers()
+        shadowOf(sessions).addController(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("com.example.next", seen.last()?.appPackage)
+        val late = PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 29_952, 1f, 200).build()
+        oldCallbacks.forEach { it.onPlaybackStateChanged(late) }
+        shadowOf(Looper.getMainLooper()).idle()
+        val raw = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }.filter { it.getString("event") == "media_report" }
+        assertEquals(listOf("com.example.first"), raw.map { it.getString("app") })
+        assertEquals("com.example.next", seen.last()?.appPackage)
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun clockEvidenceRecordsTheSessionThatGetsEachControl() {
+        ShadowLog.setLoggable("CrosstuneClock", android.util.Log.DEBUG)
+        allow()
+        val fixture = MusicMetadata("Fixture Track", "Fixture Artist")
+        val controller = player("com.example.fixture", "Fixture", fixture.title, fixture.artist)
+        shadowOf(sessions).addController(controller)
+        val target = playback.matching(fixture).single()
+        target.source.seekTo(fixture, 43_270, target.app)
+        target.source.playPause(fixture, true, target.app)
+        target.source.playPause(fixture, false, target.app)
+        target.source.pauseApp(checkNotNull(target.app))
+        val commands = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }.filter { it.getString("event") == "media_command" }
+        assertEquals(listOf("seek", "play", "pause", "pause"), commands.map { it.getString("command") })
+        assertTrue(commands.all { it.getInt("session") == target.session && it.getString("app") == target.app })
+        assertEquals(43_270L, commands.first().getLong("target_ms"))
+        assertEquals(4, asked().size)
     }
 
     @Test
@@ -720,7 +789,7 @@ class PlaybackTest {
     /** What a fresh follow of [asked] sees when [apps], as package to its song's title, play by [RecordingTagPairs.ARTIST]. */
     private fun followsAmong(asked: String, vararg apps: Pair<String, String>): Following? {
         ShadowMediaSessionManager.reset()
-        val fresh = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes, queueOf = { queues[it.packageName] })
+        val fresh = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes, queueOf = { queues[it.packageName] }, clockLog = PracticeClockLog(true))
         apps.forEach { (packageName, title) -> shadowOf(sessions).addController(player(packageName, packageName, title, RecordingTagPairs.ARTIST)) }
         var seen: Following? = null
         val job = CoroutineScope(Dispatchers.Unconfined).launch { fresh.follow(MusicMetadata(asked, RecordingTagPairs.ARTIST)).collect { seen = it } }
@@ -3339,7 +3408,7 @@ class PlaybackTest {
         shadowOf(sessions).addController(youTubeMusic)
         val says = { state: Int -> shadowOf(youTubeMusic).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(state, 0, 1f, PLAYED_AT).build()); shadowOf(Looper.getMainLooper()).idle() }
         // Each failing way is seen by a Crosstune that hasn't learned yet that the app only plays in front.
-        val fresh = { MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes, queueOf = { queues[it.packageName] }) }
+        val fresh = { MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes, queueOf = { queues[it.packageName] }, clockLog = PracticeClockLog(true)) }
         val asks = { by: MediaSessionPlayback -> CoroutineScope(Dispatchers.Unconfined).async { by.playSong(song, music, link, mustStart = true) } }
         // Playing it, it did.
         val plays = asks(playback)

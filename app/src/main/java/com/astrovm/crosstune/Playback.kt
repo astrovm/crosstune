@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import com.astrovm.crosstune.PracticeClockLog.Companion.clock
 import android.app.ActivityOptions
 import android.app.KeyguardManager
 import android.app.NotificationChannel
@@ -371,7 +372,8 @@ internal class MediaSessionPlayback(
     /** How a title and an artist an app says read as a song's; see [MetadataParsers.playerSong]. */
     readSong: (String, String) -> MusicMetadata? = MetadataParsers::playerSong,
     /** What an app calls one of its drawings, by its number there; Robolectric has no other app's. */
-    private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() }
+    private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() },
+    private val clockLog: PracticeClockLog = PracticeClockLog.of(context)
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
     private val covers = PlaybackCovers.shared(context)
@@ -438,7 +440,7 @@ internal class MediaSessionPlayback(
     }
 
     private fun pauseSession(token: MediaSession.Token, app: String?) {
-        runCatching { activeSessions().filter { it.sessionToken == token && (app == null || it.packageName == app) }.forEach { it.transportControls.pause() } }
+        runCatching { activeSessions().filter { it.sessionToken == token && (app == null || it.packageName == app) }.forEach { it.clockCommand("pause") { pause() } } }
     }
 
     override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = followSession(song, app, null)
@@ -447,13 +449,20 @@ internal class MediaSessionPlayback(
         var followed: MediaController? = null
         var modesWatched: () -> Unit = {}
         var watched: List<MediaController> = emptyList()
+        var renamed: List<Pair<MediaController, MediaController.Callback>> = emptyList()
         lateinit var clocks: SteadyClock
         var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
         fun steadily(controller: MediaController) = following(controller, song.lengthMs)?.let {
             // Moved by Crosstune, where the app says next is believed, even a moment back.
             if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
-            it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken))
+            it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
+                clockLog.note("followed_clock", now) { at ->
+                    put("app", controller.packageName)
+                    put("session", seen.session)
+                    clock(seen, at)
+                }
+            }
         }
         val callback = object : MediaController.Callback() {
             // Gone on to another song, as TIDAL does at the end of a preview, it plays this one no longer, even before it's said its new name.
@@ -480,13 +489,30 @@ internal class MediaSessionPlayback(
             trySend(playing?.let(::steadily))
         }
         // An app moving on to another song, e.g. YouTube from an ad to the video, may now play it, or no longer.
-        val renamed = object : MediaController.Callback() {
-            override fun onMetadataChanged(metadata: MediaMetadata?) = pick(watched)
-        }
         fun watch(controllers: List<MediaController>) {
-            watched.forEach { it.unregisterCallback(renamed) }
+            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             watched = controllers
-            controllers.forEach { it.registerCallback(renamed, handler) }
+            renamed = controllers.map { controller ->
+                val callback = object : MediaController.Callback() {
+                    override fun onMetadataChanged(metadata: MediaMetadata?) = pick(watched)
+                    override fun onPlaybackStateChanged(state: PlaybackState?) {
+                        clockLog.note("media_report", now) {
+                            put("app", controller.packageName)
+                            put("session", sessionNumbers.of(controller.sessionToken))
+                            put("present", state != null)
+                            if (state != null) {
+                                put("state", state.state)
+                                put("position_ms", state.position)
+                                put("updated_ms", state.lastPositionUpdateTime)
+                                put("speed", state.playbackSpeed.toString())
+                                put("actions", state.actions)
+                            }
+                        }
+                    }
+                }
+                controller.registerCallback(callback, handler)
+                controller to callback
+            }
             pick(controllers)
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
@@ -498,7 +524,7 @@ internal class MediaSessionPlayback(
         if (!watching) trySend(null)
         awaitClose {
             sessions.removeOnActiveSessionsChangedListener(changed)
-            watched.forEach { it.unregisterCallback(renamed) }
+            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             followed?.unregisterCallback(callback)
             modesWatched()
         }
@@ -555,24 +581,34 @@ internal class MediaSessionPlayback(
             val actions = controller.playbackState?.actions ?: 0L
             if (actions and PlaybackState.ACTION_SEEK_TO == 0L) return
             moves = Any()
-            controller.transportControls.seekTo(positionMs)
+            controller.clockCommand("seek", positionMs) { seekTo(positionMs) }
         }
     }
 
     override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
-        if (play) playIn(song, app, null) else runCatching { appFor(song, app = app)?.transportControls?.pause() }
+        if (play) playIn(song, app, null) else runCatching { appFor(song, app = app)?.clockCommand("pause") { pause() } }
     }
 
     private fun playIn(song: MusicMetadata, app: String?, token: MediaSession.Token?) {
         // Taken back meanwhile, the song just keeps on as it was.
-        runCatching { appFor(song, app = app, token = token)?.transportControls?.play() }
+        runCatching { appFor(song, app = app, token = token)?.clockCommand("play") { play() } }
     }
 
     override fun pauseApp(app: String) {
         // Taken back meanwhile, it plays on.
         runCatching {
-            activeSessions().filter { it.packageName == app && it.playbackState?.state == PlaybackState.STATE_PLAYING }.forEach { it.transportControls.pause() }
+            activeSessions().filter { it.packageName == app && it.playbackState?.state == PlaybackState.STATE_PLAYING }.forEach { it.clockCommand("pause") { pause() } }
         }
+    }
+
+    private fun MediaController.clockCommand(command: String, position: Long? = null, act: MediaController.TransportControls.() -> Unit) {
+        clockLog.note("media_command", now) {
+            put("app", packageName)
+            put("session", sessionNumbers.of(sessionToken))
+            put("command", command)
+            put("target_ms", position ?: org.json.JSONObject.NULL)
+        }
+        transportControls.act()
     }
 
     override fun playApp(app: String) {

@@ -155,7 +155,8 @@ internal class MainViewModel(
     /** The songs, albums and playlists kept for offline; nullable so tests need none. */
     private val offline: OfflineSongs? = null,
     /** Makes the small YouTube player a card's line plays in when its music app can't move to it; nullable so tests need none. */
-    newLinePlayer: (() -> LinePlayer)? = null
+    newLinePlayer: (() -> LinePlayer)? = null,
+    practiceClockLog: PracticeClockLog = PracticeClockLog(false)
 ) : ViewModel() {
     /**
      * An app opened on a song is covered rather than left, once Android lets Crosstune show over other
@@ -378,7 +379,7 @@ internal class MainViewModel(
         private set
 
     /** Kept lines practised as cards. */
-    private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, AppTraitsStore(preferences, wallClock), wallClock, now, reminders, newPlayer = newLinePlayer, readDispatcher = systemDispatcher)
+    private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, AppTraitsStore(preferences, wallClock), wallClock, now, reminders, newPlayer = newLinePlayer, readDispatcher = systemDispatcher, clockLog = practiceClockLog)
 
     /** Shizuku can start or stop at any time, which takes setting up in one tap with it. */
     private val stopWatchingOneTap = oneTap?.watch { uiState = uiState.withOneTap() }
