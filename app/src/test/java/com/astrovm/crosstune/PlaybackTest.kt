@@ -2904,6 +2904,9 @@ class PlaybackTest {
         shadowOf(sessions).addController(full)
         val chosen = playback.matching(song).single { it.following?.durationMs == 200_000L }
         val source = chosen.source
+        source.pauseApp("com.example.other")
+        assertEquals(0L, shadowOf(full.transportControls).lastPerformedAction)
+        assertEquals(0L, shadowOf(preview.transportControls).lastPerformedAction)
         source.seekTo(song, 60_000)
         assertEquals(60_000L, shadowOf(full.transportControls).seekToPositionMs)
         source.playPause(song, true, chosen.app)

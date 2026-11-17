@@ -262,6 +262,7 @@ class PracticeCardsTest {
         assertFalse(row.getBoolean("accepted"))
         assertEquals("outside_recording", row.getString("reason"))
         assertEquals(31_000L, row.getLong("window_start_ms"))
+        assertEquals(36_000L, row.getLong("window_end_ms"))
         assertEquals(30_000L, row.getLong("duration_ms"))
         assertTrue(playback.seeks.isEmpty())
     }
