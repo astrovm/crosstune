@@ -1,6 +1,7 @@
 """notices.py's reading of each kind of source, offline: a page as text, a slice of lines, a file in an archive."""
 import contextlib
 import hashlib
+import html
 import http.client
 import importlib.util
 import io
@@ -259,11 +260,70 @@ class JmdictNoticesTest(unittest.TestCase):
                 self.assertEqual(b"old", (self.texts / self.documentation).read_bytes())
 
     def test_missing_app_attribution_and_distribution_is_rejected(self):
-        lines = NEW_LICENCE.splitlines(keepends=True)
-        shortened = b"".join(lines[:58] + lines[77:])
-        self.assertGreater(len(shortened), 7000)
-        with self.assertRaisesRegex(SystemExit, "Expected EDRDG"):
-            notices.check_jmdict_page(self.licence, shortened)
+        for prefix in (b"", b"An added introduction.\n\n"):
+            data = prefix + NEW_LICENCE
+            start = data.index(b"in the case of a software package,")
+            end = data.index(b"Note that in all cases,", start)
+            shortened = data[:start] + data[end:]
+            self.assertGreater(len(shortened), 7000)
+            with self.assertRaisesRegex(SystemExit, "Expected EDRDG"):
+                notices.check_jmdict_page(self.licence, shortened)
+
+    def test_padding_cannot_hide_removed_liability(self):
+        (self.texts / self.licence).write_bytes(NEW_LICENCE)
+        start = NEW_LICENCE.index(b"5. Warranty and Liability")
+        end = NEW_LICENCE.index(b"6. Copyright", start)
+        damaged = b"Added introduction. " * 300 + NEW_LICENCE[:start] + b"5. Warranty and Liability\n\n" + NEW_LICENCE[end:]
+        self.assertGreater(len(damaged), len(NEW_LICENCE))
+        before = self.jmdict.read_bytes()
+        with (mock.patch.object(notices, "source_bytes", side_effect=[damaged, NEW_DOCUMENTATION]),
+              self.assertRaisesRegex(SystemExit, "shorter")):
+            notices.main(["notices.py", "fetch-jmdict"])
+        self.assertEqual(before, self.jmdict.read_bytes())
+        self.assertEqual(NEW_LICENCE, (self.texts / self.licence).read_bytes())
+        self.assertEqual(b"old", (self.texts / self.documentation).read_bytes())
+
+    def test_padding_cannot_hide_shortening_any_numbered_section(self):
+        (self.texts / self.licence).write_bytes(NEW_LICENCE)
+        sections = notices.licence_sections(NEW_LICENCE)
+        self.assertEqual(set(b"123456789"), {number[0] for number in sections})
+        for number, section in sections.items():
+            with self.subTest(section=number):
+                heading = section.split(b"\n", 1)[0] + b"\n"
+                damaged = b"Extra introduction. " * 500 + NEW_LICENCE.replace(section, heading, 1)
+                with (mock.patch.object(notices, "source_bytes", return_value=damaged),
+                      self.assertRaises(SystemExit)):
+                    notices.main(["notices.py", "fetch-jmdict"])
+                self.assertEqual(NEW_LICENCE, (self.texts / self.licence).read_bytes())
+
+    def test_invalid_utf8_stops_after_three_attempts_without_writes(self):
+        self.jmdict.write_text(entry(self.licence, b"old").replace("https:", "html:https:") + entry(self.documentation, b"old"))
+        before = self.jmdict.read_bytes()
+        answer = mock.MagicMock()
+        answer.__enter__.return_value.read.return_value = b"<p>\xc3"
+        with (mock.patch.object(notices.urllib.request, "urlopen", return_value=answer) as fetch,
+              mock.patch.object(notices.time, "sleep"), contextlib.redirect_stderr(io.StringIO()),
+              self.assertRaisesRegex(SystemExit, "Could not decode EDRDG")):
+            notices.main(["notices.py", "fetch-jmdict"])
+        self.assertEqual(3, fetch.call_count)
+        self.assertEqual(before, self.jmdict.read_bytes())
+        self.assertEqual(b"old", (self.texts / self.licence).read_bytes())
+        self.assertEqual(b"old", (self.texts / self.documentation).read_bytes())
+
+    def test_licence_section_expansion_can_be_refreshed(self):
+        (self.texts / self.licence).write_bytes(NEW_LICENCE)
+        expanded = NEW_LICENCE.replace(b"1. Introduction\n", b"1. Introduction\n\nAn added paragraph.\n", 1)
+        with mock.patch.object(notices, "source_bytes", side_effect=[expanded, NEW_DOCUMENTATION]):
+            self.assertEqual(0, notices.main(["notices.py", "fetch-jmdict"]))
+        self.assertEqual(expanded, (self.texts / self.licence).read_bytes())
+
+    def test_other_html_decode_errors_keep_their_existing_behavior(self):
+        answer = mock.MagicMock()
+        answer.__enter__.return_value.read.return_value = b"<p>\xc3"
+        with mock.patch.object(notices.urllib.request, "urlopen", return_value=answer) as fetch:
+            with self.assertRaises(UnicodeDecodeError):
+                notices.source_bytes("html:https://example.invalid/notice")
+        fetch.assert_called_once()
 
     def test_shorter_complete_pages_do_not_replace_the_snapshot(self):
         for name, original in ((self.licence, NEW_LICENCE), (self.documentation, NEW_DOCUMENTATION)):
@@ -282,7 +342,6 @@ class JmdictNoticesTest(unittest.TestCase):
                                  (self.texts / other).read_bytes())
 
     def test_close_delimited_partial_page_retries_before_writing(self):
-        import html
         def response(data, page=True):
             answer = mock.MagicMock()
             answer.__enter__.return_value.read.return_value = ("".join("<p>" + html.escape(block) + "</p>" for block in data.decode().strip().split("\n\n"))).encode() if page else data
@@ -325,6 +384,38 @@ class JmdictNoticesTest(unittest.TestCase):
                       mock.patch.object(notices.time, "sleep"), contextlib.redirect_stderr(io.StringIO())):
                     self.assertEqual(NEW_DOCUMENTATION, notices.download(url, validate))
                 self.assertEqual([], bodies)
+            finally:
+                server.shutdown()
+                thread.join()
+
+    def test_http_html_mid_utf8_eof_retries_before_writing(self):
+        valid = ("".join("<p>" + html.escape(block) + "</p>" for block in NEW_LICENCE.decode().strip().split("\n\n"))).encode()
+        bodies = [b"<p>\xc3", valid]
+
+        class Handler(socketserver.BaseRequestHandler):
+            def handle(self):
+                self.request.recv(4096)
+                self.request.sendall(b"HTTP/1.0 200 OK\r\nConnection: close\r\n\r\n" + bodies.pop(0))
+
+        self.jmdict.write_text(entry(self.licence, b"old").replace("https:", "html:https:") + entry(self.documentation, b"old"))
+        with socketserver.TCPServer(("127.0.0.1", 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                local = f"http://127.0.0.1:{server.server_address[1]}/"
+                original = notices.urllib.request.urlopen
+                def open_local(request, **kwargs):
+                    if request.full_url.endswith(self.licence):
+                        return original(local, **kwargs)
+                    answer = mock.MagicMock()
+                    answer.__enter__.return_value.read.return_value = NEW_DOCUMENTATION
+                    return answer
+                with (mock.patch.object(notices.urllib.request, "urlopen", side_effect=open_local),
+                      mock.patch.object(notices.time, "sleep"), contextlib.redirect_stderr(io.StringIO())):
+                    self.assertEqual(0, notices.main(["notices.py", "fetch-jmdict"]))
+                self.assertEqual([], bodies)
+                self.assertEqual(NEW_LICENCE, (self.texts / self.licence).read_bytes())
+                self.assertEqual(NEW_DOCUMENTATION, (self.texts / self.documentation).read_bytes())
             finally:
                 server.shutdown()
                 thread.join()

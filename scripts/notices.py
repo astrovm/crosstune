@@ -129,7 +129,14 @@ def source_bytes(source: str, validate=None) -> bytes:
             charset = re.search(rb'charset="?([\w-]+)', raw)
             return page_text(raw, charset.group(1).decode() if charset else "utf-8", source[5:])
 
-        raw = download(source[5:], lambda raw: validate(convert(raw))) if validate else download(source[5:])
+        def validate_html(raw):
+            try:
+                data = convert(raw)
+            except UnicodeDecodeError as error:
+                raise InvalidPage(f"Could not decode EDRDG page: {error}") from error
+            validate(data)
+
+        raw = download(source[5:], validate_html) if validate else download(source[5:])
         data = convert(raw)
     elif "!" in source:
         url, inner = source.split("!", 1)
@@ -216,6 +223,12 @@ def check_jmdict_page(name, data):
     sys.exit(f"Expected EDRDG content in {name}. The snapshot was not changed.")
 
 
+def licence_sections(data):
+    headings = list(re.finditer(rb"(?m)^([1-9])\. [^\n]*\n", data))
+    return {match.group(1): data[match.start():headings[index + 1].start() if index + 1 < len(headings) else len(data)]
+            for index, match in enumerate(headings)}
+
+
 def fetch_texts(manifest, selected):
     # Download all selected texts first, so a failed download cannot change half the snapshot.
     texts = {}
@@ -224,8 +237,15 @@ def fetch_texts(manifest, selected):
             def validate(data, name=name):
                 try:
                     check_jmdict_page(name, data)
-                    if len(data) < (TEXTS / name).stat().st_size:
+                    previous = (TEXTS / name).read_bytes()
+                    if len(data) < len(previous):
                         sys.exit(f"EDRDG content in {name} is shorter than the snapshot. Review it before replacing the snapshot.")
+                    if name == "edrdg-licence.txt":
+                        old_sections = licence_sections(previous)
+                        new_sections = licence_sections(data)
+                        for number, section in old_sections.items():
+                            if number not in new_sections or len(new_sections[number]) < len(section):
+                                sys.exit(f"EDRDG section {number.decode()} in {name} is shorter than the snapshot. Review it before replacing the snapshot.")
                 except SystemExit as error:
                     raise InvalidPage(str(error)) from error
 
