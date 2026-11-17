@@ -3,3 +3,4 @@ Temporary playback problems no longer block a music app from later practice card
 Offline downloads retry when you switch to another unmetered network.
 Live and Cover tags no longer make different song names match.
 The privacy policy explains Apple Music song searches more clearly.
+Players with no artist no longer receive controls for a different song with a similar title.
