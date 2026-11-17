@@ -20,10 +20,10 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
     val unread = mutableListOf<String>()
 
     val found: List<Found> = PatternValues(files, ::literalText, literals, template).let { known ->
-        files.flatMap { (name, source) -> patternsIn(name, source) { key -> known.get(name, key) } }
+        files.flatMap { (name, source) -> patternsIn(name, source, known) }
     }
 
-    private fun patternsIn(name: String, source: String, known: (String) -> String?): List<Found> {
+    private fun patternsIn(name: String, source: String, known: PatternValues): List<Found> {
         fun where(at: Int) = "$name:${source.take(at).count { it == '\n' } + 1}"
         fun line(at: Int) = source.substring(source.lastIndexOf('\n', at - 1) + 1).lineSequence().first().trim()
         // A pattern named in a comment, as main's was, is no pattern of the app's.
@@ -41,11 +41,13 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
             .forEach { unread += "${where(it)} ${line(it)}" }
         return calls.map { found ->
             val where = where(found.range.first)
+            val prefix = source.substring(maxOf(0, found.range.first - HOLDER_REACH), found.range.first)
+            val property = propertyHolder.containsMatchIn(prefix)
             val text = literals.findAll(found.groupValues[1]).joinToString("") { literalText(it.value) }
             val built = template.replace(text) { part ->
                 val key = part.groupValues[2].ifEmpty { part.groupValues[3] }
                 // A letter in a template, as ${'"'} ends a raw string in a quote, is that letter.
-                part.groupValues[1].ifEmpty { known(key) ?: run { unread += "$where \$$key"; part.value } }
+                part.groupValues[1].ifEmpty { known.get(name, key, found.range.first, property) ?: run { unread += "$where \$$key"; part.value } }
             }
             val options = found.groupValues[2]
             // Kotlin's Regex reads every pattern with UNICODE_CASE.
@@ -96,5 +98,6 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         private val escape = Regex("""\\(u[0-9a-fA-F]{4}|.)""")
         /** The value a `Regex(` is given to, right before it: "private val tags = ". */
         private val holder = Regex("""\b(?:val|var)\s+(\w+)(?:\s*:\s*Regex)?\s*=\s*$""")
+        private val propertyHolder = Regex("""\b(?:private|internal|public|protected)\s+val\s+\w+(?:\s*:\s*Regex)?\s*=\s*$""")
     }
 }

@@ -103,6 +103,47 @@ class AppPatternsValuesTest {
     }
 
     @Test
+    fun runtimeParametersDoNotBecomeTheObjectsImmutableValue() {
+        for (body in listOf("Regex(\"${'$'}marks\")", "run { val pattern = Regex(\"${'$'}marks\"); pattern }")) {
+            val source = """
+                object Reader {
+                    private val marks = "kept"
+                    fun read(marks: String) = $body
+                }
+            """.trimIndent()
+            assertEquals(body, 1, AppPatterns(listOf("Reader.kt" to source)).unread.size)
+        }
+    }
+
+    @Test
+    fun constructorParametersDoNotBecomeAnotherObjectsValue() {
+        val source = """
+            object Other { private val marks = "other" }
+            class Reader(private val marks: String) {
+                private val pattern = Regex("${'$'}marks")
+            }
+        """.trimIndent()
+        assertEquals(1, AppPatterns(listOf("Reader.kt" to source)).unread.size)
+    }
+
+    @Test
+    fun separateObjectsKeepTheirOwnImmutableValues() {
+        val source = """
+            object One {
+                private val marks = "one"
+                private val pattern = Regex("${'$'}marks")
+            }
+            object Two {
+                private val marks = "two"
+                private val pattern = Regex("${'$'}marks")
+            }
+        """.trimIndent()
+        val app = AppPatterns(listOf("Reader.kt" to source))
+        assertEquals(emptyList<String>(), app.unread)
+        assertEquals(listOf("one", "two"), app.found.map { it.pattern.pattern() })
+    }
+
+    @Test
     fun everyRecordingPatternHasItsDerivedValues() {
         val app = AppPatterns.ofApp()
         assertEquals(emptyList<String>(), app.unread.filter { it.startsWith("SongNames.kt:") })
