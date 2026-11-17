@@ -54,6 +54,7 @@ MAIN = Path("app/src/main/java/com/astrovm/crosstune")
 OUT = ROOT / "app/src/test/titlefuzz/main.tsv.gz"
 WRITER = "com.astrovm.crosstune.WriteTitlesBaseline"
 DEVICE_JAR = "/data/local/tmp/titles-baseline.jar"
+DEVICE_APP = "/data/local/tmp/titles-baseline-app.apk"
 DEVICE_OUT = "/data/local/tmp/titles-baseline.tsv.gz"
 # The classes the writer runs: the app's, and the tests' that make and read the titles.
 TEST_CLASSES = ("TitleFuzz", "TitleProbes", "WriteTitlesBaseline", "LongTitlesProbe", "LongTitleInputs")
@@ -76,12 +77,16 @@ def on_jvm(checkout):
 
 def on_emulator(checkout, serial, count, long=None):
     serial = regextable.emulator(serial)
+    # The app supplies its actual runtime dependencies, including HttpUrl for shared links.
+    box(checkout, ":app:assembleDebug")
     box(checkout, ":app:compileDebugUnitTestKotlin")
     built = checkout / "app/build/intermediates/built_in_kotlinc"
     tests = built / "debugUnitTest/compileDebugUnitTestKotlin/classes"
     work = checkout.parent
     classes = work / "classes"
-    shutil.copytree(built / "debug/compileDebugKotlin/classes", classes)
+    (classes / "com/astrovm/crosstune").mkdir(parents=True)
+    app_classes = built / "debug/compileDebugKotlin/classes"
+    shutil.make_archive(str(work / "app-classes"), "zip", app_classes)
     for name in TEST_CLASSES:
         for found in (tests / "com/astrovm/crosstune").glob(f"{name}*.class"):
             shutil.copy(found, classes / "com/astrovm/crosstune" / found.name)
@@ -91,18 +96,20 @@ def on_emulator(checkout, serial, count, long=None):
     platform = sorted((regextable.SDK / "platforms").iterdir())[-1] / "android.jar"
     # The app's resource ids, which the readers' enums name.
     ids = next(checkout.glob("app/build/intermediates/*r_class_jar/debug/*/R.jar"))
-    regextable.run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "dex.jar"), str(work / "classes.zip"), str(ids), str(stdlib))
-    regextable.run("adb", "-s", serial, "push", str(work / "dex.jar"), DEVICE_JAR)
+    regextable.run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "dex.jar"), "--classpath", str(work / "app-classes.zip"), "--classpath", str(ids), "--classpath", str(stdlib), str(work / "classes.zip"))
+    app = checkout / "app/build/outputs/apk/debug/app-debug.apk"
     try:
+        regextable.run("adb", "-s", serial, "push", str(app), DEVICE_APP)
+        regextable.run("adb", "-s", serial, "push", str(work / "dex.jar"), DEVICE_JAR)
         if long is not None:
-            subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_JAR} /system/bin {TIMER} {long}"], check=True)
+            subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {TIMER} {long}"], check=True)
             return None
         started = time.monotonic()
-        subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_JAR} /system/bin {WRITER} {DEVICE_OUT} {count}"], check=True)
+        subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {WRITER} {DEVICE_OUT} {count}"], check=True)
         print(f"{count} titles read on {serial} in {time.monotonic() - started:.0f} s")
         regextable.run("adb", "-s", serial, "pull", DEVICE_OUT, str(work / "made.tsv.gz"))
     finally:
-        regextable.run("adb", "-s", serial, "shell", f"rm -f {DEVICE_JAR} {DEVICE_OUT}")
+        regextable.run("adb", "-s", serial, "shell", f"rm -f {DEVICE_APP} {DEVICE_JAR} {DEVICE_OUT}")
     return work / "made.tsv.gz"
 
 
