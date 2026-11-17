@@ -15,7 +15,7 @@ The phone's history is the content, so compare builds on one phone.
 
 With --build, each run installs the builds in turn, keeping the app's data, so they take turns on
 a phone that warms up and cools down, rather than one build getting the cooler phone. The SDK's
-aapt2 checks that every APK is Crosstune Dev before any install. An APK that
+aapt2 checks a private copy of each APK before any install. Each run installs that checked copy. An APK that
 isn't debuggable is then compiled from its baseline profile, as Play has it after an install.
 A debug build runs most of its code in Android's interpreter, so measure a release-like build
 (`-PperfBuild :app:assemblePerf`) for what people's phones do.
@@ -31,7 +31,9 @@ import shutil
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
 PACKAGE = "com.astrovm.crosstune.dev"
@@ -68,14 +70,30 @@ def aapt2_path() -> str:
     return found
 
 
-def check_apk(apk: str) -> None:
-    command = [aapt2_path(), "dump", "packagename", str(Path(apk).resolve())]
+def check_apk(apk: Path, source: Path) -> None:
+    command = [aapt2_path(), "dump", "packagename", str(apk)]
     result = subprocess.run(command, check=False, capture_output=True, text=True)
     package = result.stdout.strip()
     if result.returncode or not package:
-        sys.exit(f"Cannot read the package in {apk}: {result.stderr.strip() or 'no package name'}")
+        sys.exit(f"Cannot read the package in {source}: {result.stderr.strip() or 'no package name'}")
     if package != PACKAGE:
-        sys.exit(f"Cannot install {apk}: expected {PACKAGE}, found {package}")
+        sys.exit(f"Cannot install {source}: expected {PACKAGE}, found {package}")
+
+
+def staged_builds(arguments: list[str], folder: Path) -> list[tuple[str, str]]:
+    builds = []
+    for index, argument in enumerate(arguments):
+        label, filename = argument.split("=", 1)
+        source = Path(filename)
+        staged = folder / str(index) / source.name
+        staged.parent.mkdir()
+        try:
+            shutil.copyfile(source, staged)
+        except OSError as error:
+            sys.exit(f"Cannot copy {source}: {error.strerror}")
+        check_apk(staged, source)
+        builds.append((label, str(staged)))
+    return builds
 
 
 def adb(*args: str) -> str:
@@ -133,7 +151,7 @@ def thermal() -> str:
 
 
 def battery_c() -> float | None:
-    found = re.search(r"^\s*temperature: (\d+)", shell("dumpsys", "battery"), re.MULTILINE)
+    found = re.search(r"^[ \t]*temperature:[ \t]+(-?[0-9]+)[ \t]*$", shell("dumpsys", "battery"), re.MULTILINE)
     return int(found.group(1)) / 10 if found else None
 
 
@@ -164,7 +182,7 @@ def cold_start() -> int:
     shell("am", "force-stop", PACKAGE)
     shell("input", "keyevent", "KEYCODE_WAKEUP")
     out = shell("am", "start", "-W", "-n", ACTIVITY)
-    found = re.search(r"TotalTime: (\d+)", out)
+    found = re.search(r"^TotalTime:[ \t]+([0-9]+)[ \t]*$", out, re.MULTILINE)
     if not found:
         sys.exit("Android did not report TotalTime for the cold start")
     return int(found.group(1))
@@ -234,20 +252,23 @@ def main(argv: list[str] | None = None) -> None:
             one.add_argument("--seconds", type=float, default=20.0)
     args = parser.parse_args(argv)
     measure, keys = MEASURES[args.what]
-    builds = [tuple(build.split("=", 1)) for build in getattr(args, "build", [])] or [(args.label, None)]
-    for _, apk in builds:
-        if apk is not None:
-            check_apk(apk)
-    runs: dict[str, list[dict]] = {label: [] for label, _ in builds}
-    for run in range(args.runs):
-        for label, apk in builds:
-            if apk:
-                install(apk)
-            result = {"label": label, "run": run + 1, **measure(args), "thermal": thermal(), "battery_c": battery_c()}
-            print(json.dumps(result), flush=True)
-            runs[label].append(result)
-    for label, done in runs.items():
-        print(json.dumps(summary(label, done, keys)), flush=True)
+    with ExitStack() as resources:
+        arguments = getattr(args, "build", [])
+        if arguments:
+            folder = Path(resources.enter_context(tempfile.TemporaryDirectory(prefix="crosstune-perf-")))
+            builds = staged_builds(arguments, folder)
+        else:
+            builds = [(args.label, None)]
+        runs: dict[str, list[dict]] = {label: [] for label, _ in builds}
+        for run in range(args.runs):
+            for label, apk in builds:
+                if apk:
+                    install(apk)
+                result = {"label": label, "run": run + 1, **measure(args), "thermal": thermal(), "battery_c": battery_c()}
+                print(json.dumps(result), flush=True)
+                runs[label].append(result)
+        for label, done in runs.items():
+            print(json.dumps(summary(label, done, keys)), flush=True)
 
 
 if __name__ == "__main__":
