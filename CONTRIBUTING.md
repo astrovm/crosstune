@@ -261,3 +261,7 @@ adb logcat -s CrosstuneVisuals
 A visual slower than 40 frames a second on a phone is skipped there from then on, as it makes the words over it stutter.
 
 When a still image comes right before a video in an edit, use a frame of that video instead: browsers, and tools built on them, draw video a little lighter than images, so the screen jumps in brightness.
+
+The growth counter also charges each matcher reset and pattern change for the full input that Android gives its native regex engine. Matcher construction, `reset(input)`, `region` and Kotlin's `find(start)` reach that reset. Repeated matches on a prepared matcher do not copy the input. This keeps a Java matcher that takes constant work per reset from hiding work that grows with the input on Android.
+
+For Issue #991, `python3 scripts/titlefuzz/baseline.py HEAD --long-all --serial SERIAL` measures the shared `LongTitleInputs` on the emulator's native engine. It reports the engine, input count, reader call count, longest reader and longest complete case. It also compares matcher construction, input reset, pattern change and region reset with reuse. `--long-matcher-input` runs only that comparison. Run it on an otherwise idle emulator and keep its version with the results. The 300 ms phone target is checked from those measurements; CI uses deterministic work counts instead of a host wall-clock limit.

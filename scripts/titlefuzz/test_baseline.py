@@ -27,7 +27,7 @@ class BaselineTest(unittest.TestCase):
         checkout = self.checkout()
         baseline.copy_in(checkout)
         tests, main = checkout / baseline.TESTS, checkout / baseline.MAIN
-        for name in ("TitleFuzz.kt", "IcuPattern.kt", "PhoneRegexSets.kt"):
+        for name in ("TitleFuzz.kt", "IcuPattern.kt", "PhoneRegexSets.kt", "LongTitleInputs.kt"):
             self.assertEqual((baseline.ROOT / baseline.TESTS / name).read_bytes(), (tests / name).read_bytes(), name)
         for name in ("PhoneRegex.kt", "PhoneRegexTable.kt"):
             self.assertEqual((baseline.ROOT / baseline.MAIN / name).read_bytes(), (main / name).read_bytes(), name)
@@ -42,11 +42,12 @@ class BaselineTest(unittest.TestCase):
 
     def test_each_timing_asks_the_probe_for_its_own(self):
         def asked(**given):
-            return baseline.timing(argparse.Namespace(**{"long": False, "long_all": False, "long_instrumental": False, **given}))
+            return baseline.timing(argparse.Namespace(**{"long": False, "long_all": False, "long_instrumental": False, "long_matcher_input": False, **given}))
         self.assertIsNone(asked())
         self.assertEqual("", asked(long=True))
         self.assertEqual("all", asked(long_all=True))
         self.assertEqual("instrumental", asked(long_instrumental=True))
+        self.assertEqual("matcher-input", asked(long_matcher_input=True))
 
     def test_the_readings_are_kept_with_the_commit_and_engine_and_the_same_bytes_each_time(self):
         made = self.work / "made.tsv.gz"

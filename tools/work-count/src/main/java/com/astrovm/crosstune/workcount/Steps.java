@@ -183,9 +183,33 @@ public final class Steps implements ClassFileTransformer, Runnable, Supplier<Lis
         ClassNode node = new ClassNode();
         reader.accept(node, 0);
         for (MethodNode method : node.methods) count(method, counts(method));
+        if (node.name.equals("java/util/regex/Matcher")) phoneInputs(node);
         ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS);
         node.accept(writer);
         return writer.toByteArray();
+    }
+
+    /**
+     * Android copies the input when a matcher resets or changes pattern. The JDK keeps its reference.
+     * Count that phone work here, including calls through handles. A region and find(start) call reset.
+     */
+    private static void phoneInputs(ClassNode node) {
+        Set<String> found = new HashSet<>();
+        Set<String> wanted = Set.of("reset()Ljava/util/regex/Matcher;", "usePattern(Ljava/util/regex/Pattern;)Ljava/util/regex/Matcher;");
+        for (MethodNode method : node.methods) {
+            String signature = method.name.concat(method.desc);
+            if (!wanted.contains(signature)) continue;
+            for (AbstractInsnNode instruction : method.instructions.toArray()) {
+                if (instruction.getOpcode() != Opcodes.ARETURN) continue;
+                InsnList input = new InsnList();
+                input.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                input.add(new FieldInsnNode(Opcodes.GETFIELD, node.name, "text", "Ljava/lang/CharSequence;"));
+                input.add(new MethodInsnNode(Opcodes.INVOKESTATIC, WORK, "regexInput", "(Ljava/lang/CharSequence;)V", false));
+                method.instructions.insertBefore(instruction, input);
+                found.add(signature);
+            }
+        }
+        if (!found.equals(wanted)) throw new IllegalStateException("No matcher input-copy count for ".concat(String.valueOf(wanted)));
     }
 
     /**
