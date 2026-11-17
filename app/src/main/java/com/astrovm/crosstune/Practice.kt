@@ -161,7 +161,7 @@ internal class PracticeCards(
 
     /** The controls already sent for this card, even while their answer is pending. */
     private data class NativeTarget(val match: PlaybackMatch, val remember: Boolean) {
-        val clockAttempt = PracticeClockLog.nextAttempt()
+        val clockAttempt = PracticeClockLog.nextId()
         val source get() = match.source
         val app get() = match.app
         val key get() = app to match.session
@@ -234,7 +234,7 @@ internal class PracticeCards(
         for (target in matchingTargets(source, song, line)) {
             var played = false
             var sawState = false
-            inApp(target.source, song, target.app, onStuck = { following ->
+            val there = target.clockPhase("native_result") { inApp(target.source, song, target.app, onStuck = { following ->
                 sawState = following != null
                 following?.let { if (usable(it.appPackage, line)) stuck(target.source, song, it) else leftOut(target.source, song, it) }
             }) { following ->
@@ -244,7 +244,9 @@ internal class PracticeCards(
                 step("trying ${target.app ?: "the app"}")
                 letGoTarget(target.key)
                 played = playLine(target, song, line, explicit, following)
-            }
+            } }
+            target.clockVerdict("native_result", if (played) "used" else "fallback",
+                if (there) "line_attempt" else if (sawState) "not_ready" else "no_state")
             if (played) return true
             if (!sawState) stopIn(target, song)
         }
@@ -265,7 +267,13 @@ internal class PracticeCards(
         // Different sessions can have different capabilities. An app-wide failure cannot identify one of them.
         counts.filterValues { it > 1 }.keys.filterNotNull().forEach(traits::forget)
         val targets = matches.map { NativeTarget(it, counts[it.app] == 1) }
-        val candidates = targets.filter { usable(it.app, line) && fits(it.match.following, line) }
+        val candidates = targets.filter { target ->
+            val allowed = usable(target.app, line)
+            val accepted = allowed && fits(target.match.following, line)
+            val reason = if (!allowed) "service_policy" else if (!accepted) "outside_recording" else "candidate"
+            target.clockCandidate(line, accepted, reason)
+            accepted
+        }
             .sortedWith(compareByDescending<NativeTarget> { it.match.following?.let { state -> state.canSeek && !state.ad } == true }.thenByDescending { it.match.playing })
         pauseOthers(targets, candidates.firstOrNull()?.key, song, line)
         return candidates
@@ -501,6 +509,17 @@ internal class PracticeCards(
             put("session", match.session)
             put("attempt", clockAttempt)
             fields(at)
+        }
+    }
+
+    private fun NativeTarget.clockCandidate(line: SavedLine, accepted: Boolean, reason: String) {
+        clockNote("candidate") { at ->
+            put("accepted", accepted)
+            put("reason", reason)
+            put("window_start_ms", line.startMs ?: JSONObject.NULL)
+            put("window_end_ms", line.endMs ?: JSONObject.NULL)
+            put("lead_ms", line.leadMs)
+            clock(match.following, at)
         }
     }
 

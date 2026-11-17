@@ -164,6 +164,82 @@ class PlaybackTest {
     }
 
     @Test
+    fun clockEvidenceKeepsUnknownPositionsAndNonFiniteSpeedWithoutErrorText() {
+        ShadowLog.setLoggable("CrosstuneClock", android.util.Log.DEBUG)
+        allow()
+        val fixture = MusicMetadata("Fixture Track", "Fixture Artist")
+        val controller = player("com.example.fixture", "Fixture", fixture.title, fixture.artist)
+        shadowOf(sessions).addController(controller)
+        followed(fixture)
+        val error = PlaybackState.Builder().setState(PlaybackState.STATE_ERROR, -1, Float.NaN, 200)
+            .setErrorMessage("Fixture private detail").build()
+        shadowOf(controller).executeOnPlaybackStateChanged(error)
+        shadowOf(Looper.getMainLooper()).idle()
+        val row = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }.single { it.getString("event") == "media_report" }
+        assertEquals(-1L, row.getLong("position_ms"))
+        assertEquals("NaN", row.getString("speed"))
+        assertEquals(PlaybackState.STATE_ERROR, row.getInt("state"))
+        assertFalse(row.toString().contains("Fixture private detail"))
+    }
+
+    @Test
+    fun clockEvidenceSeparatesParallelFollowersWithoutDroppingRepeats() {
+        ShadowLog.setLoggable("CrosstuneClock", android.util.Log.DEBUG)
+        allow()
+        val fixture = MusicMetadata("Fixture Track", "Fixture Artist")
+        val controller = player("com.example.fixture", "Fixture", fixture.title, fixture.artist)
+        shadowOf(sessions).addController(controller)
+        followed(fixture)
+        followed(fixture)
+        val report = PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 29_952, 1f, 200).build()
+        repeat(2) { shadowOf(controller).executeOnPlaybackStateChanged(report) }
+        shadowOf(Looper.getMainLooper()).idle()
+        val raw = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }.filter { it.getString("event") == "media_report" }
+        assertEquals(4, raw.size)
+        val streams = raw.groupBy { it.getInt("observer") }
+        assertEquals(2, streams.size)
+        assertTrue(streams.values.all { it.size == 2 })
+    }
+
+    @Test
+    fun observingACachedValueNeitherReadsNorMakesItMoreRecent() {
+        var reads = 0
+        val cache = KeptReads<String, Int>(2) { ++reads }
+        assertNull(cache.peek("unread"))
+        assertEquals(0, reads)
+        assertEquals(1, cache.of("first"))
+        assertEquals(2, cache.of("second"))
+        assertEquals(1, cache.peek("first"))
+        assertEquals(3, cache.of("third"))
+        assertNull(cache.peek("first"))
+        assertEquals(4, cache.of("first"))
+    }
+
+    @Test
+    fun clockEvidenceDoesNotAllocateControlNumbersForUnrelatedReports() {
+        ShadowLog.setLoggable("CrosstuneClock", android.util.Log.DEBUG)
+        allow()
+        val fixture = MusicMetadata("Fixture Track", "Fixture Artist")
+        val selected = player("com.example.selected", "Selected", fixture.title, fixture.artist)
+        val unrelated = player("com.example.unrelated", "Unrelated", "Other Track", "Other Artist")
+        shadowOf(sessions).addController(selected)
+        shadowOf(sessions).addController(unrelated)
+        followed(fixture)
+        val report = PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 20, 1f, 200).build()
+        shadowOf(unrelated).executeOnPlaybackStateChanged(report)
+        shadowOf(Looper.getMainLooper()).idle()
+        playback.playPause(MusicMetadata("Other Track", "Other Artist"), false, "com.example.unrelated")
+        val unrelatedReports = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }
+            .filter { it.optString("app") == "com.example.unrelated" }
+        assertTrue(unrelatedReports.isNotEmpty())
+        assertTrue(unrelatedReports.all { it.isNull("session") })
+        val next = MusicMetadata("Next Fixture", "Fixture Artist")
+        shadowOf(sessions).addController(player("com.example.next", "Next", next.title, next.artist))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, playback.matching(next).single().session)
+    }
+
+    @Test
     fun clockEvidenceKeepsALateCallbacksOriginalSession() {
         ShadowLog.setLoggable("CrosstuneClock", android.util.Log.DEBUG)
         allow()

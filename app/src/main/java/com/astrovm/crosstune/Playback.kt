@@ -446,6 +446,8 @@ internal class MediaSessionPlayback(
     override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = followSession(song, app, null)
 
     private fun followSession(song: MusicMetadata, app: String?, token: MediaSession.Token?): Flow<Following?> = callbackFlow {
+        val clockObserver = PracticeClockLog.nextId()
+        clockLog.note("follow_begin", now) { put("observer", clockObserver) }
         var followed: MediaController? = null
         var modesWatched: () -> Unit = {}
         var watched: List<MediaController> = emptyList()
@@ -458,6 +460,7 @@ internal class MediaSessionPlayback(
             if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
             it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
                 clockLog.note("followed_clock", now) { at ->
+                    put("observer", clockObserver)
                     put("app", controller.packageName)
                     put("session", seen.session)
                     clock(seen, at)
@@ -497,8 +500,9 @@ internal class MediaSessionPlayback(
                     override fun onMetadataChanged(metadata: MediaMetadata?) = pick(watched)
                     override fun onPlaybackStateChanged(state: PlaybackState?) {
                         clockLog.note("media_report", now) {
+                            put("observer", clockObserver)
                             put("app", controller.packageName)
-                            put("session", sessionNumbers.of(controller.sessionToken))
+                            put("session", sessionNumbers.peek(controller.sessionToken) ?: org.json.JSONObject.NULL)
                             put("present", state != null)
                             if (state != null) {
                                 put("state", state.state)
@@ -527,6 +531,7 @@ internal class MediaSessionPlayback(
             renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             followed?.unregisterCallback(callback)
             modesWatched()
+            clockLog.note("follow_end", now) { put("observer", clockObserver) }
         }
     }.distinctUntilChanged()
 
@@ -604,7 +609,7 @@ internal class MediaSessionPlayback(
     private fun MediaController.clockCommand(command: String, position: Long? = null, act: MediaController.TransportControls.() -> Unit) {
         clockLog.note("media_command", now) {
             put("app", packageName)
-            put("session", sessionNumbers.of(sessionToken))
+            put("session", sessionNumbers.peek(sessionToken) ?: org.json.JSONObject.NULL)
             put("command", command)
             put("target_ms", position ?: org.json.JSONObject.NULL)
         }
@@ -612,12 +617,12 @@ internal class MediaSessionPlayback(
     }
 
     override fun playApp(app: String) {
-        runCatching { activeSessions().filter { it.packageName == app }.sortedWith(nearestFirst).firstOrNull()?.transportControls?.play() }
+        runCatching { activeSessions().filter { it.packageName == app }.sortedWith(nearestFirst).firstOrNull()?.clockCommand("play") { play() } }
     }
 
     override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
         val controller = runCatching { appFor(song, app = app) }.getOrNull() ?: return false
-        return watchStart(controller, mustStart = true) { controller.transportControls.play() }
+        return watchStart(controller, mustStart = true) { controller.clockCommand("play") { play() } }
     }
 
     // Opened as from its icon, which brings back the screen it was on, song and all; a link would start it over.
@@ -636,7 +641,7 @@ internal class MediaSessionPlayback(
             opened = playing.packageName
             // Back in front, YouTube Music puts the song where it was, paused; asked to play before that, it starts it over.
             withTimeoutOrNull(startMs) { back.await() }
-            runCatching { playing.transportControls.play() }
+            runCatching { playing.clockCommand("play") { play() } }
             return true
         } finally {
             playing.unregisterCallback(callback)
@@ -733,8 +738,8 @@ internal class MediaSessionPlayback(
             putString(MediaStore.EXTRA_MEDIA_ARTIST, song.artist)
         }
         // YouTube Music says it plays what's asked for by name, but doesn't; a link of its own it plays.
-        if (link != null && MusicService.ofPackage(asked.packageName) == MusicService.YOUTUBE_MUSIC) asked.transportControls.playFromUri(Uri.parse(link), Bundle())
-        else asked.transportControls.playFromSearch(searchQuery(song), wanted)
+        if (link != null && MusicService.ofPackage(asked.packageName) == MusicService.YOUTUBE_MUSIC) asked.clockCommand("play_from_uri") { playFromUri(Uri.parse(link), Bundle()) }
+        else asked.clockCommand("play_from_search") { playFromSearch(searchQuery(song), wanted) }
     }
 
     // The app may be installed as a build patched from it, under a name of its own, or as its TV app.
@@ -888,7 +893,7 @@ internal class MediaSessionPlayback(
         val asked = runCatching { activeSessions() }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: waker.wake(MusicService.appsFor(app))
             ?: return false
-        return watchStart(asked, mustStart) { asked.transportControls.playFromUri(Uri.parse(link), Bundle()) }
+        return watchStart(asked, mustStart) { asked.clockCommand("play_from_uri") { playFromUri(Uri.parse(link), Bundle()) } }
     }
 
     /** What [read] says, again whenever an app starts, pauses, stops, changes songs or its queue. */
@@ -1124,6 +1129,9 @@ internal class KeptReads<K, V>(private val kept: Int, private val read: (K) -> V
 
     /** What a key read as, even null. */
     private class Read<V>(val value: V)
+
+    /** Observe a retained value without reading a new key or making this one more recent. */
+    fun peek(key: K): V? = synchronized(values) { values.entries.firstOrNull { it.key == key }?.value?.value }
 
     fun of(key: K): V {
         synchronized(values) { values[key] }?.let { return it.value }

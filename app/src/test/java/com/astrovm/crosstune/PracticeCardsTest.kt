@@ -171,6 +171,25 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun clockEvidenceExplainsARejectedPreviewWithoutSeekingIt() {
+        ShadowLog.setLoggable("CrosstuneClock", Log.DEBUG)
+        youTubeHasTheSong()
+        keep(line(start = 31_000))
+        appPlays(ytMusic)
+        val state = playback.appPlaying.getValue(ytMusic)
+        state.value = checkNotNull(state.value).copy(durationMs = 30_000)
+        cards().start(null, before = null)
+        waitForThePlayer()
+        val row = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }
+            .single { it.getString("event") == "candidate" && it.getString("app") == ytMusic }
+        assertFalse(row.getBoolean("accepted"))
+        assertEquals("outside_recording", row.getString("reason"))
+        assertEquals(31_000L, row.getLong("window_start_ms"))
+        assertEquals(30_000L, row.getLong("duration_ms"))
+        assertTrue(playback.seeks.isEmpty())
+    }
+
+    @Test
     fun clockEvidenceIsOffUnlessItsOwnDiagnosticTagIsEnabled() {
         ShadowLog.setLoggable("CrosstuneClock", Log.INFO)
         replays(ytMusic, start = 43_270, from = 43_270, fromPlaying = false, Said(270, 43_270))

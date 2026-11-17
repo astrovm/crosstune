@@ -181,14 +181,16 @@ Stop logcat with Ctrl+C, then restore the level in that same terminal:
 
 Keep these device captures out of git. An agent uses the device tools for all app launches, taps, appearance changes and other UI work. The adb commands above only configure the project diagnostic and read its log.
 
-Each line is a JSON record. `observed_ms` uses the app's monotonic clock since boot, as do Android's playback update times. Speed is text so malformed non-finite values remain representable. Match records by `app` and `session`; `attempt` separates native Practice attempts.
+Each line is a JSON record. `observed_ms` uses the app's monotonic clock since boot, as do Android's playback update times. Speed is text so malformed non-finite values remain representable. Match records by `app` and `session`; `attempt` separates native Practice attempts. `observer` identifies each follower subscription. Several followers can receive the same Android report, so count repeats within one observer. A raw `session` is null until normal playback assigns its number; diagnostics never allocate control-session numbers or update their cache order.
 
 | Event | Meaning |
 |---|---|
+| `follow_begin`, `follow_end` | The lifetime of one follower subscription. A queued late callback keeps its original observer number. |
 | `media_report` | The raw callback argument, before clock correction and flow deduplication. Repeated, null and negative-position reports stay visible. `updated_ms` is the app's own report time. |
 | `followed_clock` | The selected clock after the existing timing corrections. |
 | `media_command` | The session about to receive a seek, play or pause transport call. It is a request, not an acknowledgement. |
 | `card_clock` | The clock Practice actually observes while reaching or playing a line. Polls can repeat; they are not new Android callbacks. `projected_ms` is the clock projected to the observation time. |
+| `candidate`, `native_result` | The native session's initial capability/window decision and the final native attempt outcome. |
 | `seek_request` | Practice's target and requested playing state, with the time used to judge later reports. |
 | `reach_result`, `play_result` | Whether the line was reached or played, and why that phase ended. Cancellation is explicit. |
 

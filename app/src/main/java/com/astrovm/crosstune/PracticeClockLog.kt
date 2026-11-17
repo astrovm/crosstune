@@ -13,7 +13,7 @@ internal class PracticeClockLog(private val debuggable: Boolean) {
     companion object {
         const val TAG = "CrosstuneClock"
         private val attempts = AtomicInteger()
-        fun nextAttempt(): Int = attempts.incrementAndGet()
+        fun nextId(): Int = attempts.incrementAndGet()
         fun of(context: Context) = PracticeClockLog(context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
 
         /** Speed is text so even a malformed non-finite app speed has a valid JSON representation. */
