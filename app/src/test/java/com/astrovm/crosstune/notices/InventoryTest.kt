@@ -27,7 +27,13 @@ internal data class Report(val uncovered: List<String>, val unclaimed: List<Stri
  * inside projectM, needs its own notice, as a line for the outer one names only its files and words.
  */
 internal fun check(notices: List<Notice>, parts: List<String>, marks: Map<String, List<String>>, own: List<String>, notBuilt: List<String>): Report {
-    val lines = notices.flatMap { notice -> coverLines[notice.name].orEmpty() + notice.texts.map { "file $TEXTS$it" } }.distinct()
+    val bundled = parts.toSet()
+    val lines = notices.flatMap { notice ->
+        coverLines[notice.name].orEmpty() + notice.texts.map { name ->
+            val play = "file app/src/play/resources/com/astrovm/crosstune/notices/$name"
+            play.takeIf(bundled::contains) ?: "file $TEXTS$name"
+        }
+    }.distinct()
     val (claims, plain) = (lines + own + notBuilt).partition { " ~ " in it }
     fun claimed(path: String, block: String) = claims.any { it.substringBefore(" ~ ") == "source $path" && it.substringAfter(" ~ ") in block }
     val uncovered = parts.filter { part -> (plain + claims.map { it.substringBefore(" ~ ") }).none { covers(it, part) } }

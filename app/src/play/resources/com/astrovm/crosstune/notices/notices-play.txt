@@ -32,6 +32,3 @@ covers: maven com.google.android.gms:play-services-cast-framework
 covers: maven com.google.android.gms:play-services-cast-tv
 covers: maven com.google.android.gms:play-services-flags
 covers: maven com.google.android.gms:play-services-tasks
-covers: file app/src/play/resources/com/astrovm/crosstune/notices/play-services-cast-framework-notices.txt
-covers: file app/src/play/resources/com/astrovm/crosstune/notices/play-services-cast-tv-notices.txt
-covers: file app/src/play/resources/com/astrovm/crosstune/notices/play-services-flags-notices.txt
