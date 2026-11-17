@@ -155,24 +155,20 @@ class ChordWikiBrowserCheck : Instrumentation() {
         override fun onPageFinished(view: WebView, url: String?) = inner.onPageFinished(view, url)
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-            recording.record {
-                val event = requestEvent("network_error", request) + mapOf("code" to error.errorCode,
+            recording.record({
+                requestEvent("network_error", request) + mapOf("code" to error.errorCode,
                     "t_ms" to SystemClock.elapsedRealtime() - started)
-                inner.onReceivedError(view, request, error)
-                event
-            }
+            }) { inner.onReceivedError(view, request, error) }
         }
 
         override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
-            recording.record {
+            recording.record({
                 val check = response.responseHeaders?.entries?.any {
                     it.key.equals("cf-mitigated", true) && it.value.equals("challenge", true)
                 } == true
-                val event = requestEvent("http_error", request) + mapOf("status" to response.statusCode,
+                requestEvent("http_error", request) + mapOf("status" to response.statusCode,
                     "cloudflare_check" to check, "t_ms" to SystemClock.elapsedRealtime() - started)
-                inner.onReceivedHttpError(view, request, response)
-                event
-            }
+            }) { inner.onReceivedHttpError(view, request, response) }
         }
     }
 

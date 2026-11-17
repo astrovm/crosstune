@@ -85,10 +85,11 @@ class WikiProbeCaptureTest {
         assertTrue(sealed.events.isEmpty())
         assertTrue(sealed.activities.isEmpty())
     }
-    @Test fun anErrorEventFailureCannotClaimACompleteLog() {
+    @Test fun anErrorEventFailureDoesNotReplaceTheProductionCallback() {
         val capture = WikiProbeCapture()
-        val result = runCatching { capture.record { error("fixture") } }
-        assertTrue(result.isFailure)
+        var forwarded = false
+        capture.record({ error("fixture metadata") }) { forwarded = true }
+        assertTrue(forwarded)
         val sealed = capture.close()
         assertTrue(sealed.failed)
         assertEquals(0, sealed.pending)
@@ -99,11 +100,35 @@ class WikiProbeCaptureTest {
         val capture = WikiProbeCapture()
         val sealed = capture.close()
         var forwarded = false
-        capture.record { forwarded = true; mapOf("type" to "http_error") }
+        capture.record({ error("closed metadata must not be read") }) { forwarded = true }
         assertTrue(forwarded)
         assertSame(sealed, capture.close())
         assertTrue(sealed.complete)
         assertTrue(sealed.events.isEmpty())
+    }
+
+    @Test fun aFailedHostDoesNotReplaceTheProductionResponse() {
+        val capture = WikiProbeCapture()
+        val response = capture.resource(1, { error("fixture host") }, { mapOf("decision" to it) }) { "fixture response" }
+        assertEquals("fixture response", response)
+        assertTrue(capture.close().failed)
+        assertFalse(capture.close().complete)
+    }
+
+    @Test fun aFailedEventDoesNotReplaceTheProductionResponse() {
+        val capture = WikiProbeCapture()
+        val response = capture.resource(1, { "fixture" }, { error("fixture event") }) { "fixture response" }
+        assertEquals("fixture response", response)
+        assertTrue(capture.close().failed)
+        assertFalse(capture.close().complete)
+    }
+
+    @Test fun aProductionErrorKeepsItsIdentity() {
+        val capture = WikiProbeCapture()
+        val failure = IllegalStateException("fixture production failure")
+        val result = runCatching { capture.record({ mapOf("type" to "http_error") }) { throw failure } }
+        assertSame(failure, result.exceptionOrNull())
+        assertTrue(capture.close().failed)
     }
 
     @Test fun anErrorCallbackIsCountedBeforeItsEventIsBuilt() {

@@ -27,27 +27,38 @@ internal class WikiProbeCapture(private val limit: Int = 500) {
         val observed = begin()
         var decision: Map<String, Any>? = null
         try {
-            val name = host()
+            val name = if (observed) metadata(host) else null
             if (observed) synchronized(lock) {
                 if (snapshot == null) {
                     activities[owner] = (activities[owner] ?: 0) + 1
-                    hosts[name] = (hosts[name] ?: 0) + 1
+                    if (name != null) hosts[name] = (hosts[name] ?: 0) + 1
                 }
             }
-            return request().also { if (observed) decision = event(it) }
+            return request().also { answer -> if (observed) decision = metadata { event(answer) } }
         } finally {
             if (observed) finish(decision)
         }
     }
 
-    fun record(event: () -> Map<String, Any>) {
+    fun record(event: () -> Map<String, Any>) = record(event) {}
+
+    fun record(event: () -> Map<String, Any>, forward: () -> Unit) {
         val observed = begin()
         var built: Map<String, Any>? = null
         try {
-            built = event()
+            forward()
+            if (observed) built = metadata(event)
         } finally {
             if (observed) finish(built)
         }
+    }
+
+    /** A failed observation marks the capture. It must not change the browser's response or callback. */
+    private fun <T> metadata(read: () -> T): T? = try {
+        read()
+    } catch (_: Exception) {
+        synchronized(lock) { failed = true }
+        null
     }
 
     private fun begin(): Boolean = synchronized(lock) {
