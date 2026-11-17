@@ -6,6 +6,7 @@ import io
 import tarfile
 import tempfile
 import unittest
+import urllib.error
 import zipfile
 from pathlib import Path
 from unittest import mock
@@ -29,6 +30,27 @@ class PageTextTest(unittest.TestCase):
             "Licence\n\nRead the licence <https://www.edrdg.org/edrdg/licence.html> and go up. Twice.\n\nhttps://example.com/\n",
             notices.page_text(page, "utf-8", "https://www.edrdg.org/wiki/").decode(),
         )
+
+
+class DownloadsTest(unittest.TestCase):
+    def test_a_transient_timeout_retries_the_same_source(self):
+        answer = mock.MagicMock()
+        answer.__enter__.return_value.read.return_value = b"notice"
+        url = "https://example.invalid/notice"
+        with (
+            mock.patch.object(notices.urllib.request, "urlopen", side_effect=[urllib.error.URLError(TimeoutError()), answer]) as fetch,
+            mock.patch("time.sleep"),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(b"notice", notices.download(url))
+        self.assertEqual([url, url], [call.args[0].full_url for call in fetch.call_args_list])
+
+    def test_missing_source_is_not_retried(self):
+        url = "https://example.invalid/notice"
+        missing = urllib.error.HTTPError(url, 404, "Not found", {}, None)
+        with mock.patch.object(notices.urllib.request, "urlopen", side_effect=missing) as fetch, self.assertRaises(urllib.error.HTTPError):
+            notices.download(url)
+        fetch.assert_called_once()
 
 
 class SourceBytesTest(unittest.TestCase):

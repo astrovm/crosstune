@@ -29,6 +29,8 @@ import pathlib
 import re
 import sys
 import tarfile
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -90,8 +92,17 @@ def page_text(data: bytes, charset: str, base: str) -> bytes:
 
 def download(url: str) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": "crosstune-notices"})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return response.read()
+    for attempt in range(1, 4):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return response.read()
+        except (TimeoutError, urllib.error.URLError) as error:
+            permanent = isinstance(error, urllib.error.HTTPError) and error.code not in (408, 429) and error.code < 500
+            if permanent or attempt == 3:
+                print(f"Could not fetch {url}: {error}", file=sys.stderr)
+                raise
+            print(f"{url}: attempt {attempt} failed ({error}). Retrying.", file=sys.stderr, flush=True)
+            time.sleep(attempt)
 
 
 def source_bytes(source: str) -> bytes:
