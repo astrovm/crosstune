@@ -3,7 +3,9 @@ name: Promote to production
 # Sends a release from open testing on to Google Play's production, with its English release notes, in an edit
 # of its own: production never goes to Google's review with a testing track. The release is the one on the
 # first track of the PLAY_TRACKS repository variable (beta when it isn't set). A version not on that track is
-# refused with an error, and so is one older than production's. See "Releasing" in CONTRIBUTING.md.
+# refused with an error, and so is one older than production's. So is one with no tag on origin, one while Play
+# has a version code that no tag has, and one whose bundle on Play isn't the App Bundle the Release workflow made:
+# its SHA-256 is in the release's notes. See "Releasing" in CONTRIBUTING.md.
 on:
   workflow_dispatch:
     inputs:
@@ -34,7 +36,8 @@ jobs:
       cancel-in-progress: false
     steps:
       # Only the tools that talk to Google Play and the English release notes, so none of the app's build code
-      # is checked out where the Play key is. Every version's notes are on main.
+      # is checked out where the Play key is. Every version's notes are on main. play.sh lists the tags on origin
+      # itself, with no token.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -54,6 +57,9 @@ jobs:
         env:
           PLAY_KEY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           PLAY_TRACKS: ${{ vars.PLAY_TRACKS }}
+          # Reads the release's notes, which are public. This job has no permissions, so the token can do nothing
+          # else: it only lifts the limit on requests with no token.
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
           if [[ -z "$PLAY_KEY_JSON" ]]; then

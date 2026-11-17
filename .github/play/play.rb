@@ -13,8 +13,15 @@
 #     Else it exits 0 when the first TRACK has AAB itself as CODE: a re-run. 4 when Play has AAB as CODE, but
 #     not there: sent in a run whose commit Play refused. 3 when Play has no bundle as CODE. It stops when Play
 #     has another bundle as CODE (sent by hand, or the same tag built or signed again).
-#   ruby play.rb on-track KEY PACKAGE TRACK CODE
-#     Exits 0 when TRACK has a release with CODE. Else it stops. It only reads.
+#   ruby play.rb promotion KEY PACKAGE FROM TRACK[,TRACK...] CODE TAGS RELEASE TAG NOTES
+#     What a promotion of CODE from the track FROM to production needs, before it sends anything. RELEASE is the
+#     GitHub release of TAG as JSON, TAGS as for plan, and the TRACKs (internal testing first) are the ones plan
+#     reads. NOTES holds the English changelog. It sends CODE only when RELEASE is TAG's, final and not a draft,
+#     and its notes have the SHA-256 of the App
+#     Bundle in a line "App Bundle SHA-256: `...`", which the Release workflow writes; when no version code on
+#     any TRACK or production lacks a tag, as for plan; when FROM has a release with CODE; and when the bundle
+#     Play has as CODE has that SHA-256. Else it stops, and the notes are read before Play is asked anything.
+#     Validation and promotion use the same Play edit, so a Console change cannot replace the checked snapshot.
 #   ruby play.rb edit KEY PACKAGE [[--from TRACK] --code CODE --to TRACK[,TRACK...]]
 #                     [--listing DIR] [--notes DIR] [--check-only]
 #     One edit. With --from, the release CODE on that track goes on to each --to track. With no --from, the
@@ -24,12 +31,16 @@
 #     --check-only only checked. supply can only promote to one track a run, so this drives supply's own client
 #     and uploader in one edit.
 require "digest"
+require "json"
 require "optparse"
 require_relative "review_guard"
 
 module Crosstune
   module Play
     PRODUCTION = "production"
+    # The line in a release's notes that the Release workflow writes, as in release.yml.
+    DIGEST_LINE = "App Bundle SHA-256"
+    DIGEST_FORMAT = /\A#{DIGEST_LINE}: `([0-9A-Fa-f]{64})`\z/
 
     # A plain stop, as an annotation on the job too.
     def self.stop!(message)
@@ -120,13 +131,22 @@ module Crosstune
                    "Console, or push its tag, then re-run this job.")
       end
 
-      # Whether TRACK has CODE, for production: see on-track at the top.
-      def on_track(package, track, code)
-        codes = within(package) { version_codes([track]) }
-        return 0 if codes[track].include?(code.to_i)
+      # What a promotion needs from Play: see promotion at the top.
+      def promotion(from, tracks, to, code, tags, digest, tag)
+        codes = version_codes((tracks + [from, PRODUCTION] + to).uniq)
+        bundles = self.bundles
+        stop_strays(codes, tags)
+        unless codes[from].include?(code.to_i)
+          Play.stop!("Track '#{from}' has no release with version code #{code}. Its tag's release sends it " \
+                     "there: re-run it, then run this again.")
+        end
+        bundle = bundles.find { |b| b.version_code.to_s == code }
+        Play.stop!("Google Play has no bundle as version code #{code}, so nothing was sent") unless bundle
+        return 0 if bundle.sha256.to_s.casecmp?(digest)
 
-        Play.stop!("Track '#{track}' has no release with version code #{code}. Its tag's release sends it " \
-                   "there: re-run it, then run this again.")
+        Play.stop!("Google Play's bundle as version code #{code} isn't the App Bundle the Release workflow made " \
+                   "for #{tag}, so nothing was sent: Play has SHA-256 #{bundle.sha256}, and the release's notes " \
+                   "say #{digest}. Someone sent another bundle by hand, or the release's notes were changed.")
       end
 
       def stop_going_back(to, code)
@@ -170,6 +190,10 @@ module Crosstune
         end
 
         release = releases.first
+        unless release.version_codes.to_a.map(&:to_s) == [code]
+          Play.stop!("Track '#{from}' must contain only version code #{code} in the release being promoted, " \
+                     "so nothing was sent")
+        end
 
         to.each do |name|
           promoted = release.dup
@@ -210,11 +234,50 @@ module Crosstune
       exit(Edit.new(json_key: key, package_name: package).plan(package, tracks.split(","), code, aab, tags))
     end
 
-    def on_track(argv)
-      key, package, track, code = argv
-      abort("usage: play.rb on-track KEY PACKAGE TRACK CODE") unless code
+    # The App Bundle's SHA-256 from the notes of the GitHub release in FILE, when it is TAG's, final and has one.
+    def bundle_digest(file, tag)
+      release = JSON.parse(File.read(file))
+      raise JSON::ParserError, "not a release" unless release.is_a?(Hash)
+
+      release_stop!(release, tag)
+      lines = release["body"].to_s.lines.map(&:strip).select { |line| line.start_with?(DIGEST_LINE) }
+      if lines.empty?
+        stop!("The notes of the release #{tag} have no '#{DIGEST_LINE}' line, so nothing was sent to Google Play. " \
+              "A release made before the notes had one needs the line added by hand, from the .aab the release holds")
+      end
+      if lines.size > 1
+        stop!("The notes of the release #{tag} have more than one '#{DIGEST_LINE}' line, so nothing was sent to " \
+              "Google Play")
+      end
+      DIGEST_FORMAT.match(lines.first)&.captures&.first ||
+        stop!("The notes of the release #{tag} have a '#{DIGEST_LINE}' line that isn't a SHA-256 in backticks, so " \
+              "nothing was sent to Google Play")
+    rescue JSON::ParserError
+      stop!("The release #{tag} couldn't be read, so nothing was sent to Google Play: GitHub's answer isn't a release")
+    end
+
+    def release_stop!(release, tag)
+      if release["tag_name"] != tag
+        stop!("The release GitHub gave for #{tag} is for #{release['tag_name']}, not #{tag}, so nothing was sent " \
+              "to Google Play")
+      end
+      unless [true, false].include?(release["draft"]) && [true, false].include?(release["prerelease"])
+        stop!("The release #{tag} doesn't declare final release status, so nothing was sent to Google Play")
+      end
+      stop!("The release #{tag} is a draft, so nothing was sent to Google Play") if release["draft"]
+      stop!("The release #{tag} is a pre-release, so nothing was sent to Google Play") if release["prerelease"]
+    end
+
+    def promotion(argv)
+      key, package, from, tracks, code, tags, release, tag, notes = argv
+      abort("usage: play.rb promotion KEY PACKAGE FROM TRACK[,TRACK...] CODE TAGS RELEASE TAG NOTES") unless notes
       require_supply
-      exit(Edit.new(json_key: key, package_name: package).on_track(package, track, code))
+      # Parse the release before opening Play. Verify Play in the edit that sends it.
+      digest = bundle_digest(release, tag)
+      proof = { tracks: tracks.split(","), tags: tags.split(",").map { |t| Integer(t, 10) }, digest: digest, tag: tag }
+      options = { key: key, package: package, from: from, to: [PRODUCTION], code: code, notes: notes, promotion: proof }
+      check_edit(options)
+      send_edit(options)
     end
 
     def parse_edit(argv)
@@ -226,6 +289,10 @@ module Crosstune
         parser.on("--to TRACKS", Array) { |value| options[:to] = value.reject(&:empty?) }
         parser.on("--listing DIR") { |value| options[:listing] = value }
         parser.on("--notes DIR") { |value| options[:notes] = value }
+        parser.on("--release FILE") { |value| options[:release] = value }
+        parser.on("--tag TAG") { |value| options[:tag] = value }
+        parser.on("--tags CODES", Array) { |value| options[:tags] = value }
+        parser.on("--tracks TRACKS", Array) { |value| options[:tracks] = value }
         parser.on("--check-only") { options[:check_only] = true }
       end.parse!(rest)
       abort("usage: play.rb edit KEY PACKAGE ...") unless package && rest.empty?
@@ -239,12 +306,31 @@ module Crosstune
       abort("Release notes go to one track at a time") if options[:notes] && to.size != 1
       abort("Release notes and the listing go in separate edits") if options[:notes] && options[:listing]
       abort("Nothing to send") if to.empty? && !options[:listing]
+      production = to.any? { |track| PlayReviewGuard.production?(track) }
+      if production && (!options[:promotion] || !options[:from])
+        abort("Production promotion needs a verified release and source track")
+      end
+      if (proof = options[:promotion])
+        version = /\Av(\d+)\.(\d+)\.(\d+)\z/.match(proof[:tag])
+        code = version && version[1].to_i * 1_000_000 + version[2].to_i * 10_000 + version[3].to_i * 100
+        stop!("The tag #{proof[:tag]} doesn't name version code #{options[:code]}") unless code&.to_s == options[:code]
+      end
     end
 
     def edit(argv)
       options = parse_edit(argv)
-      check_edit(options)
       require_supply
+      if options[:release] && options[:tag] && options[:tags] && options[:tracks]
+        options[:promotion] = {
+          tracks: options[:tracks], tags: options[:tags].map { |tag| Integer(tag, 10) },
+          digest: bundle_digest(options[:release], options[:tag]), tag: options[:tag]
+        }
+      end
+      check_edit(options)
+      send_edit(options)
+    end
+
+    def send_edit(options)
       edit = Edit.new(
         json_key: options[:key],
         package_name: options[:package],
@@ -263,6 +349,11 @@ module Crosstune
 
     def change(edit, options)
       if options[:from]
+        if (proof = options[:promotion])
+          edit.promotion(
+            options[:from], proof[:tracks], options[:to], options[:code], proof[:tags], proof[:digest], proof[:tag]
+          )
+        end
         edit.stop_going_back(options[:to], options[:code])
         edit.promote(options[:from], options[:code], options[:to])
       elsif !options[:to].empty?
@@ -286,11 +377,11 @@ module Crosstune
         argv.unshift("supply")
         load Gem.bin_path("fastlane", "fastlane")
       when "plan" then plan(argv)
-      when "on-track" then on_track(argv)
+      when "promotion" then promotion(argv)
       when "edit" then edit(argv)
       else
         abort("usage: play.rb supply ARGS... | plan KEY PACKAGE TRACK[,TRACK...] CODE AAB TAGS | " \
-              "on-track KEY PACKAGE TRACK CODE | edit KEY PACKAGE ...")
+              "promotion KEY PACKAGE FROM TRACK[,TRACK...] CODE TAGS RELEASE TAG NOTES | edit KEY PACKAGE ...")
       end
     end
   end

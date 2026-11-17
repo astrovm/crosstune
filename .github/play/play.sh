@@ -7,13 +7,18 @@
 #                              release goes to Google's review once.
 #   play.sh production VERSION The release VERSION (2.26.0) on the first track in PLAY_TRACKS goes on to
 #                              production, with its English release notes, in an edit of its own. Any other
-#                              version is refused.
+#                              version is refused. Before anything is sent, its tag v2.26.0 has to be on
+#                              origin, no version code on Play may lack a tag (as for a release), and the bundle
+#                              Play has as that version code has to be the one the Release workflow made: its
+#                              SHA-256 is in the GitHub release's notes, "App Bundle SHA-256: `...`".
 #   play.sh listing            The listing alone. CHECK_ONLY=true only asks Play whether it would take it.
 #   play.sh setup              Bundler and the gems Gemfile.lock pins, in a step before the key is there.
 #
 # It reads PLAY_KEY_JSON (the key), PLAY_TRACKS (testing tracks, with commas or spaces between,
 # default beta), PLAY_LANGUAGES (folders of fastlane/metadata/android, default en-US) and CHECK_ONLY, from the
-# working directory.
+# working directory. production reads GITHUB_REPOSITORY, GITHUB_API_URL (GitHub sets both) and, when it is set,
+# GH_TOKEN, which a job with no permissions can pass: the release of a public repository is public, and a token
+# only lifts the limit on requests with no token.
 #
 # Every commit asks Play to keep a review in progress, and production never shares an edit with another track
 # (review_guard.rb). While a review is in progress, Play refuses the commit, nothing is sent, and the job fails
@@ -120,9 +125,10 @@ version_code() {
 }
 
 # The version code of each tag on origin, with commas between, read now: a re-run of a job sees the tags
-# pushed since. No token: the repository is public, and the job has no permissions.
+# pushed since. No token: the repository is public, and the job has no permissions. With a tag named, it has to
+# be one of them, as a version goes to production only with its tag.
 tag_codes() {
-  local refs ref tag codes=""
+  local required="${1:-}" refs ref tag codes="" found=false
   if ! refs="$(GIT_TERMINAL_PROMPT=0 git ls-remote --tags origin)"; then
     echo "::error::The tags on origin couldn't be listed, so nothing was sent to Google Play" >&2
     exit 1
@@ -131,9 +137,37 @@ tag_codes() {
     tag="${ref#refs/tags/}"
     if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
       codes+="${codes:+,}$(version_code "$tag")"
+      if [[ "$tag" == "$required" ]]; then
+        found=true
+      fi
     fi
   done <<< "$refs"
+  if [[ -n "$required" && "$found" != true ]]; then
+    echo "::error::The tag $required isn't on origin, so nothing was sent to Google Play:" \
+      "a version goes to production only with its tag, from a release on main" >&2
+    exit 1
+  fi
   echo "$codes"
+}
+
+# GitHub's release of a tag, as JSON in the file named. Its notes have the App Bundle's SHA-256, which play.rb
+# compares with the bundle Play has. Public, so with no token it only meets a lower limit on requests.
+fetch_release() {
+  local tag="$1" file="$2" repository="${GITHUB_REPOSITORY:-}" api="${GITHUB_API_URL:-https://api.github.com}"
+  local -a auth=()
+  if [[ -z "$repository" ]]; then
+    echo "::error::GITHUB_REPOSITORY isn't set, so the release of $tag can't be read" >&2
+    exit 1
+  fi
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    auth=(--header "Authorization: Bearer $GH_TOKEN")
+  fi
+  if ! curl --fail --silent --show-error --location --max-time 30 --retry 3 \
+    --header "Accept: application/vnd.github+json" "${auth[@]}" \
+    --output "$file" "$api/repos/$repository/releases/tags/$tag"; then
+    echo "::error::The release $tag couldn't be read from GitHub, so nothing was sent to Google Play" >&2
+    exit 1
+  fi
 }
 
 # Just the English release notes: other folders use F-Droid's language codes, which Play doesn't all accept.
@@ -215,11 +249,15 @@ release() {
 }
 
 production() {
-  local version="${1#v}" code
+  local version="${1#v}" code tag known
   code="$(version_code "$version")"
+  tag="v$version"
+  # Before Play is asked anything: the tag, and the release the workflow made for it.
+  known="$(tag_codes "$tag")"
+  fetch_release "$tag" "$work/release.json"
   copy_notes "$work/notes" "$code"
-  play on-track "$key" "$package" "${tracks[0]}" "$code"
-  play edit "$key" "$package" --from "${tracks[0]}" --code "$code" --to production --notes "$work/notes"
+  play promotion "$key" "$package" "${tracks[0]}" "$(IFS=,; echo "internal,${tracks[*]}")" "$code" "$known" \
+    "$work/release.json" "$tag" "$work/notes"
 }
 
 listing() {

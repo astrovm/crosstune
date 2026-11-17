@@ -3,6 +3,7 @@
 fastlane supply on its own commits with Play's default, which cancels a review in progress. play.sh loads
 review_guard.rb first. .github/play/test/play_test.rb tests play.sh itself.
 """
+import hashlib
 import os
 import re
 import subprocess
@@ -156,11 +157,12 @@ def publish_step():
     return "\n".join(script)
 
 
-# A gh that keeps the arguments of `gh release create`, and lists the releases with FAKE_RELEASES (lines of
-# tag, draft and pre-release, with tabs between), or fails with FAKE_GH_FAILS, as on an outage.
+# A gh that keeps the arguments of `gh release create`, each ended by a NUL, as the notes have lines. It lists the
+# releases with FAKE_RELEASES (lines of tag, draft and pre-release, with tabs between), or fails with
+# FAKE_GH_FAILS, as on an outage.
 FAKE_GH = r"""#!/usr/bin/env bash
 if [[ "$1 $2" == "release create" ]]; then
-  printf '%s\n' "$@" > "$FAKE_GH_CREATE"
+  printf '%s\0' "$@" > "$FAKE_GH_CREATE"
 elif [[ "$*" == "api --paginate repos/$GITHUB_REPOSITORY/releases --jq "* ]]; then
   if [[ -n "${FAKE_GH_FAILS:-}" ]]; then
     echo "gh: Server Error (HTTP 500)" >&2
@@ -178,9 +180,15 @@ def releases(*tags, draft=(), pre=()):
     return "".join(f"{tag}\t{str(tag in draft).lower()}\t{str(tag in pre).lower()}\n" for tag in tags)
 
 
+AAB = b"the signed App Bundle"
+AAB_SHA256 = hashlib.sha256(AAB).hexdigest()
+
+
 class PublishTest(unittest.TestCase):
-    def publish(self, tag, out="", fails=False):
+    def publish(self, tag, out="", fails=False, aab=AAB, digest=AAB_SHA256):
         with tempfile.TemporaryDirectory() as work:
+            if aab is not None:
+                Path(work, f"Crosstune-{tag}.aab").write_bytes(aab)
             gh = Path(work, "gh")
             gh.write_text(FAKE_GH, encoding="utf-8")
             gh.chmod(0o755)
@@ -192,6 +200,7 @@ class PublishTest(unittest.TestCase):
                 "GITHUB_EVENT_NAME": "push",
                 "GITHUB_REPOSITORY": "owner/app",
                 "CERT_SHA256": "00",
+                "AAB_SHA256": digest,
                 "FAKE_GH_CREATE": str(create),
                 "FAKE_RELEASES": out,
                 "FAKE_GH_FAILS": "1" if fails else "",
@@ -199,7 +208,7 @@ class PublishTest(unittest.TestCase):
             # As GitHub runs a step: bash -e, with no pipefail.
             run = subprocess.run(["bash", "-e", "-c", publish_step()], env=env, cwd=work,
                                  capture_output=True, text=True, check=False)
-            sent = create.read_text(encoding="utf-8").split("\n") if create.exists() else None
+            sent = create.read_text(encoding="utf-8").split("\0")[:-1] if create.exists() else None
             return run, sent
 
     def flags(self, sent):
@@ -243,12 +252,64 @@ class PublishTest(unittest.TestCase):
         publish = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))["publish"]
         self.assertIn("name: Crosstune-${{ env.TAG }}-play", publish)
 
+    def notes(self, sent):
+        return sent[sent.index("--notes") + 1]
+
+    def test_the_notes_have_the_signing_certificate_and_the_app_bundles_digest(self):
+        run, sent = self.publish("v2.26.0", releases("v2.25.0"))
+        self.assertEqual(0, run.returncode, run.stderr)
+        # Promote reads this line back from the notes, and compares it with the bundle Play has.
+        lines = self.notes(sent).split("\n")
+        self.assertIn("Signing certificate SHA-256: `00`", lines)
+        self.assertIn(f"App Bundle SHA-256: `{AAB_SHA256}`", lines)
+
+    def test_the_notes_line_is_the_one_promote_reads(self):
+        run, sent = self.publish("v2.26.0")
+        self.assertEqual(0, run.returncode, run.stderr)
+        play_rb = (ROOT / ".github/play/play.rb").read_text(encoding="utf-8")
+        self.assertIn('DIGEST_LINE = "App Bundle SHA-256"', play_rb)
+        self.assertIn("DIGEST_FORMAT = /\\A#{DIGEST_LINE}: `([0-9A-Fa-f]{64})`\\z/", play_rb)
+        self.assertRegex(self.notes(sent).split("\n")[2], r"\AApp Bundle SHA-256: `[0-9a-f]{64}`\Z")
+
+    def test_no_release_is_made_when_the_app_bundle_isnt_the_one_that_was_signed(self):
+        # The sign job's digest and the file the publish job downloaded have to agree: a swapped file stops it.
+        for name, kwargs in (("another bundle", {"aab": b"another App Bundle"}),
+                             ("no bundle", {"aab": None}),
+                             ("no digest", {"digest": ""}),
+                             ("a short digest", {"digest": AAB_SHA256[:63]}),
+                             ("a long digest", {"digest": AAB_SHA256 + "0"}),
+                             ("a digest that isn't hex", {"digest": "g" * 64}),
+                             ("a digest in capitals", {"digest": AAB_SHA256.upper()})):
+            with self.subTest(name):
+                run, sent = self.publish("v2.26.0", releases("v2.25.0"), **kwargs)
+                self.assertNotEqual(0, run.returncode)
+                self.assertIsNone(sent)
+                self.assertIn("::error::", run.stderr + run.stdout)
+
+    def test_the_sign_job_hands_on_the_digest_of_the_bundle_it_signed(self):
+        text = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+        steps = jobs(text)
+        self.assertIn("aab_sha256: ${{ steps.sign.outputs.aab_sha256 }}", steps["sign"])
+        self.assertIn("AAB_SHA256: ${{ needs.sign.outputs.aab_sha256 }}", steps["publish"])
+        # Read from the signed file itself, after the verify, and written as an output.
+        sign = steps["sign"]
+        self.assertLess(sign.index("jarsigner -verify"), sign.index('sha256sum "Crosstune-$TAG.aab"'))
+        self.assertIn('echo "aab_sha256=$aab_sha256" >> "$GITHUB_OUTPUT"', sign)
+
     def test_promote_never_downloads_a_bundle(self):
-        # Production takes only a release already on the first testing track, from Play itself.
+        # Production takes only a release already on the first testing track, from Play itself. It reads the
+        # release's notes from GitHub, never the bundle, and compares the digest there with the bundle Play has.
         play_sh = (ROOT / ".github/play/play.sh").read_text(encoding="utf-8")
-        self.assertNotIn("curl", play_sh)
         self.assertNotIn("releases/download", play_sh)
+        self.assertEqual(1, play_sh.count("curl "))
+        self.assertIn("releases/tags/$tag", play_sh)
         self.assertNotIn("--aab", (ROOT / ".github/play/play.rb").read_text(encoding="utf-8"))
+
+    def test_promote_reads_the_release_notes_with_a_token_that_can_do_nothing(self):
+        text = (WORKFLOWS / "promote.yml").read_text(encoding="utf-8")
+        job = jobs(text)["production"]
+        self.assertIn("permissions: {}", job)
+        self.assertIn("GH_TOKEN: ${{ github.token }}", job)
 
     def test_no_release_is_made_when_github_cant_list_the_releases(self):
         run, sent = self.publish("v2.26.1", fails=True)

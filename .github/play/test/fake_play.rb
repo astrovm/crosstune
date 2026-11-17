@@ -12,6 +12,10 @@ return unless File.basename($PROGRAM_NAME) == "play.rb"
 require "digest"
 require "json"
 require "webmock"
+require "retriable"
+
+# Keep Google's retry attempts, but don't wait between deterministic fake errors.
+Retriable.configure { |config| config.sleep_disabled = true }
 
 module FakePlay
   extend WebMock::API
@@ -85,6 +89,9 @@ module FakePlay
         json({ id: id })
       in [:delete, %r{\A/([^/:]+)\z}]
         @edits.delete(Regexp.last_match(1))
+        # A Console change between a discarded preflight and a later write edit.
+        changed = ENV["FAKE_PLAY_AFTER_DISCARD"]
+        File.write(STATE, File.read(changed)) if changed
         { status: 204, body: "" }
       in [:post, %r{\A/([^/]+):commit\z}]
         id = Regexp.last_match(1)
