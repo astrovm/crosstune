@@ -9,7 +9,7 @@
     python3 scripts/titlefuzz/baseline.py [REF] --long-instrumental [--serial SERIAL]
     python3 scripts/titlefuzz/baseline.py [REF] --long-matcher-input [--serial SERIAL]
 
-REF is the commit to read with, origin/main by default. It's checked out in a temporary worktree, under
+REF is the commit to read with, origin/main by default. It's checked out with its pinned submodules in a temporary worktree, under
 $TITLEFUZZ_TMP if set; TitleFuzz.kt, PhoneRegex.kt, PhoneRegexTable.kt and the tests' pattern writer, IcuPattern.kt
 and PhoneRegexSets.kt, are copied in from this checkout,
 MainTitleProbes.kt as its TitleProbes.kt if it has none of its own, and WriteTitlesBaseline.kt.
@@ -175,6 +175,8 @@ def main():
     checkout = place / "checkout"
     git("worktree", "add", "--detach", str(checkout), commit)
     try:
+        # The native probe loads the complete app APK, including its pinned native dependencies.
+        git("submodule", "update", "--init", "--recursive", cwd=checkout)
         copy_in(checkout)
         long = timing(args)
         if long is not None:
