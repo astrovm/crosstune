@@ -134,6 +134,8 @@ Crosstune is licensed under the [GNU General Public License v3.0 only](LICENSE) 
 
 Crosstune includes, or downloads when it's needed, these works by others. The app lists them in its language, with each license's full text as published, in **Settings** → **About** → **Licenses**, from [`notices.txt`](app/src/main/resources/com/astrovm/crosstune/notices/notices.txt). Rebuild the app from the cloned source to replace projectM with a changed copy.
 
+Google Play services, Firebase Android SDK, and javax.inject are included in the Play build.
+
 | Work | By | License |
 | --- | --- | --- |
 | [JMdict](https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project) | Electronic Dictionary Research and Development Group | CC BY-SA 4.0 |
@@ -168,12 +170,12 @@ Crosstune includes, or downloads when it's needed, these works by others. The ap
 | [Error Prone and J2ObjC annotations](https://github.com/google/error-prone) | Google | Apache License 2.0 |
 | [JSpecify](https://github.com/jspecify/jspecify) | The JSpecify Authors | Apache License 2.0 |
 | [AndroidX, Jetpack Compose and Media3](https://android.googlesource.com/platform/frameworks/support) | The Android Open Source Project | Apache License 2.0 |
-| [Google Play services](https://developer.android.com/studio/terms.html) (Play build) | Google | Android Software Development Kit License |
-| [Firebase Android SDK](https://github.com/firebase/firebase-android-sdk) (Play build) | Google | Apache License 2.0 |
-| [javax.inject](https://github.com/javax-inject/javax-inject) (Play build) | The JSR-330 Expert Group | Apache License 2.0 |
 | [Protocol Buffers](https://github.com/protocolbuffers/protobuf) | Google Inc. | BSD 3-Clause License |
 | [Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform) | JetBrains s.r.o. and the Android Open Source Project | Apache License 2.0 |
 | [Kotlin and kotlinx.coroutines](https://github.com/JetBrains/kotlin) | JetBrains s.r.o. and Kotlin Programming Language contributors | Apache License 2.0 |
 | [Reorderable](https://github.com/Calvin-LL/Reorderable) | Calvin Liang | Apache License 2.0 |
+| [Firebase Android SDK](https://github.com/firebase/firebase-android-sdk) | Google | Apache License 2.0 |
+| [javax.inject](https://github.com/javax-inject/javax-inject) | The JSR-330 Expert Group | Apache License 2.0 |
+| [Google Play services](https://developer.android.com/studio/terms.html) | Google | Android Software Development Kit License |
 
 The Japanese word readings in [`jmdict-readings.txt`](app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt) and the words in kana in [`old-kana.txt`](app/src/main/resources/com/astrovm/crosstune/old-kana.txt) are made from [JMdict](https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project) by the Electronic Dictionary Research and Development Group, under the [Group's licence](https://www.edrdg.org/edrdg/licence.html), and changed. The readings: only words of two kanji or more that JMdict reads one way only, where Crosstune reads them otherwise. The words in kana: only the common ones with い or う after their first kana, each with how it's looked up, and those with ひ or ふ there, which are no old spelling. Both are under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) too.

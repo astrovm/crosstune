@@ -195,7 +195,8 @@ internal class CastPlayback(
     private fun following(target: CastTarget): Following? = target.state?.let {
         Following(
             PlaybackClock(it.positionMs, now(), playing = it.playing),
-            app = target.name,
+            // Reports can include the app name. Keep the TV name in the Cast controls.
+            app = "Crosstune",
             canSeek = it.canSeek,
             canSkipNext = it.canSkipNext,
             canSkipPrevious = it.canSkipPrevious,

@@ -162,7 +162,8 @@ class CastViewModelTest {
         // Until the TV says what plays there's nothing to control.
         cast.target.value = CastTarget("Living room", tv)
         idle()
-        assertEquals("Living room", model.uiState.player?.following?.app)
+        assertEquals("Living room", model.uiState.castingTo)
+        assertEquals("Crosstune", model.uiState.player?.following?.app)
         model.playerPlayPause()
         model.playerSkip(next = true)
         model.playerSkip(next = false)

@@ -116,7 +116,7 @@ class CastTest {
         val following = requireNotNull(runBlocking { playback.follow(song).first() })
         assertEquals(5_000, following.clock.positionAt(1_000))
         assertTrue(following.clock.playing && following.canSeek && following.canSkipNext && !following.canSkipPrevious)
-        assertEquals("Living room", following.app)
+        assertEquals("Crosstune", following.app)
         assertEquals(200_000L, following.durationMs)
 
         // Another song is still the app's.

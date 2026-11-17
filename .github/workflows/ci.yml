@@ -168,6 +168,7 @@ jobs:
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
           node scripts/test-site-apk.cjs
+          node scripts/test-site-apk.cjs
           node --test "report/*.test.mjs"
 
   # What the release, promote and store listing workflows send to Google Play: .github/play/play.sh with the real
