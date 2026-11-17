@@ -134,8 +134,20 @@ internal object SongNames {
         }
         val start = title.spacesStart(maxOf(at, first))
         val (end, places) = title.lettersFrom(start)
+        if (!mayNameEdition(end)) return TagLook(start, null)
         val tag = editionTag.find(end)?.range?.let { places[it.first]..places[it.last] }
         return TagLook(start, tag)
+    }
+
+    /** The ASCII words in [editionTag] start with these letters. Other writing still goes to the full pattern. */
+    private fun mayNameEdition(text: String): Boolean {
+        var wordStart = true
+        for (letter in text) {
+            if (letter.code > 127) return true
+            if (wordStart && letter.lowercaseChar() in "amorst") return true
+            wordStart = letter !in 'a'..'z' && letter !in 'A'..'Z' && letter !in '0'..'9' && letter != '_'
+        }
+        return false
     }
 
     /**
@@ -827,18 +839,20 @@ internal object SongNames {
      * little, but two titles reduced to the same word are the same title with a tag left off.
      */
     fun wordsMatch(one: String, other: String): Boolean {
+        val onePlain = withoutEditionTag(one)
+        val otherPlain = withoutEditionTag(other)
         // Entirely non-Latin titles have no words below. Two empty sets say nothing about
         // whether they name the same song; compare their actual letters first.
-        if (same(one, other) && normalize(one).isNotEmpty()) return true
+        if (normalize(onePlain) == normalize(otherPlain) && normalize(one).isNotEmpty()) return true
         // Nor do they have words for a note in brackets: "小幸运 (电影《我的少女时代》主题曲)" is "小幸运".
         if (words(one).isEmpty() && words(other).isEmpty()) {
             val bare = normalize(bareTitle(one))
             if (bare.isNotEmpty() && bare == normalize(bareTitle(other))) return true
         }
-        val ours = words(withoutEditionTag(one))
-        val theirs = words(withoutEditionTag(other))
+        val ours = words(onePlain)
+        val theirs = words(otherPlain)
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
-        return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter) && titleWordsMatch(one, other)
+        return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter) && titleWordsMatch(one, other, onePlain, otherPlain)
     }
 
     /** Without an artist, require the whole title. A bare word such as Radio can be part of a station's name. */
@@ -857,9 +871,9 @@ internal object SongNames {
     private val titleWordSplit = phoneRegex("""[^\p{L}\p{N}\p{M}]+""")
 
     /** A recording note cannot provide the second word that makes a partial title specific enough. */
-    private fun titleWordsMatch(one: String, other: String): Boolean {
-        val first = titleEvidence(one)
-        val second = titleEvidence(other)
+    private fun titleWordsMatch(one: String, other: String, onePlain: String? = null, otherPlain: String? = null): Boolean {
+        val first = titleEvidence(one, plain = onePlain)
+        val second = titleEvidence(other, plain = otherPlain)
         if (normalize(first).isNotEmpty() && normalize(first) == normalize(second)) return true
         val ours = words(first)
         val theirs = words(second)
@@ -867,13 +881,19 @@ internal object SongNames {
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
     }
 
-    private fun titleEvidence(title: String, bareNotes: Boolean = true): String =
-        MetadataParsers.withoutFileNumber(titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(title)), bareNotes))
+    private fun titleEvidence(title: String, bareNotes: Boolean = true, plain: String? = null): String {
+        val compared = MetadataParsers.comparisonTitle(title)
+        // A caption can change the text, but an unchanged title has already had its edition read.
+        val untagged = if (plain != null && compared == title) plain else withoutEditionTag(compared)
+        return MetadataParsers.withoutFileNumber(titleWithoutNotes(untagged, bareNotes))
+    }
 
     /** The same note grammar reads brackets, dashes, bare suffixes and unfinished notes. */
     private fun titleWithoutNotes(title: String, bareNotes: Boolean): String {
-        val named = withoutBracketNotes(title).trim()
-        val notes = RecordingNotes(named)
+        val original = RecordingNotes(title)
+        val named = withoutBracketNotes(title, original).trim()
+        // Without a cut or a trim, both passes read the same words at the same positions.
+        val notes = if (named == title) original else RecordingNotes(named)
         val start = notes.tokens.firstOrNull { token ->
             token.start > 0 && isPatternSpace(named[token.start - 1]) && (bareNotes || notes.afterDash(token.start)) &&
                 notes.isNote(token.start, named.length, notes.afterDash(token.start))
@@ -882,8 +902,7 @@ internal object SongNames {
     }
 
     /** Keep ordinary title words. Intervals merge once, so nested notes never copy their parents repeatedly. */
-    private fun withoutBracketNotes(title: String): String {
-        val grammar = RecordingNotes(title)
+    private fun withoutBracketNotes(title: String, grammar: RecordingNotes): String {
         val opens = ArrayDeque<Int>()
         val notes = ArrayDeque<IntRange>()
         for (at in title.indices) {
@@ -896,6 +915,7 @@ internal object SongNames {
             }
         }
         opens.firstOrNull { grammar.isNote(it + 1, title.length, true) }?.let { addNote(notes, it, title.length) }
+        if (notes.isEmpty()) return title
         val text = StringBuilder()
         var from = 0
         for (note in notes) {
