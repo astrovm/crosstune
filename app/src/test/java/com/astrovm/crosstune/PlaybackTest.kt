@@ -198,6 +198,14 @@ class PlaybackTest {
         assertEquals(4, raw.size)
         val streams = raw.groupBy { it.getInt("observer") }
         assertEquals(2, streams.size)
+        val began = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }
+            .filter { it.getString("event") == "follow_begin" }.map { it.getInt("observer") }.toSet()
+        assertEquals(streams.keys, began)
+        collecting.forEach(Job::cancel)
+        shadowOf(Looper.getMainLooper()).idle()
+        val ended = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }
+            .filter { it.getString("event") == "follow_end" }.map { it.getInt("observer") }.toSet()
+        assertEquals(began, ended)
         assertTrue(streams.values.all { it.size == 2 })
     }
 
@@ -279,6 +287,52 @@ class PlaybackTest {
         assertTrue(commands.all { it.getInt("session") == target.session && it.getString("app") == target.app })
         assertEquals(43_270L, commands.first().getLong("target_ms"))
         assertEquals(4, asked().size)
+    }
+
+    @Test
+    fun clockEvidenceIncludesTheCorrectedClockTheFollowerUses() {
+        ShadowLog.setLoggable("CrosstuneClock", android.util.Log.DEBUG)
+        allow()
+        val fixture = MusicMetadata("Fixture Track", "Fixture Artist")
+        val controller = player("com.example.fixture", "Fixture", fixture.title, fixture.artist,
+            state = PlaybackState.STATE_PAUSED, position = 1_234, at = 100, duration = 56_789)
+        shadowOf(sessions).addController(controller)
+        val seen = followed(fixture)
+        val state = checkNotNull(seen.last())
+        val row = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }
+            .last { it.getString("event") == "followed_clock" }
+        assertEquals(state.session, row.getInt("session"))
+        assertEquals(state.appPackage, row.getString("app"))
+        assertTrue(row.getBoolean("present"))
+        assertEquals(state.clock.positionMs, row.getLong("position_ms"))
+        assertEquals(state.clock.atMs, row.getLong("updated_ms"))
+        assertEquals(state.clock.positionAt(NOW), row.getLong("projected_ms"))
+        assertEquals(state.clock.speed.toString(), row.getString("speed"))
+        assertEquals(state.clock.playing, row.getBoolean("playing"))
+        assertEquals(state.canSeek, row.getBoolean("can_seek"))
+        assertEquals(state.ad, row.getBoolean("ad"))
+        assertEquals(state.durationMs, row.getLong("duration_ms"))
+        assertEquals(state.session, row.getInt("reported_session"))
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun clockEvidenceRecordsNoPauseForAMismatchedPackageButAllowsAnUnspecifiedOne() {
+        ShadowLog.setLoggable("CrosstuneClock", android.util.Log.DEBUG)
+        allow()
+        val fixture = MusicMetadata("Fixture Track", "Fixture Artist")
+        val controller = player("com.example.fixture", "Fixture", fixture.title, fixture.artist)
+        shadowOf(sessions).addController(controller)
+        val target = playback.matching(fixture).single().source
+        target.playPause(fixture, false, "com.example.other")
+        assertTrue(asked().isEmpty())
+        assertTrue(ShadowLog.getLogsForTag("CrosstuneClock").isEmpty())
+        target.playPause(fixture, false, null)
+        assertEquals(1, asked().size)
+        val row = JSONObject(ShadowLog.getLogsForTag("CrosstuneClock").single().msg)
+        assertEquals("media_command", row.getString("event"))
+        assertEquals("pause", row.getString("command"))
+        assertEquals("com.example.fixture", row.getString("app"))
     }
 
     @Test
@@ -3169,6 +3223,19 @@ class PlaybackTest {
                 .addCustomAction(PlaybackState.CustomAction.Builder("thumbs_up_action", "Like", 1).build()).build()
         )
         assertEquals(AppAction("thumbs_up_action", "Like", 1), followed().last()?.like)
+    }
+
+    @Test
+    @Config(shadows = [FixtureResourceNames::class])
+    fun theDefaultDrawingLookupReadsTheMusicAppsResourceName() {
+        allow()
+        val fixture = MusicMetadata("Fixture Track", "Fixture Artist")
+        val controller = player(app.packageName, "Fixture", fixture.title, fixture.artist, album = "Fixture Album")
+        shadowOf(controller).setPlaybackState(PlaybackState.Builder()
+            .setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT)
+            .addCustomAction(PlaybackState.CustomAction.Builder("thumbs_up_action", "Fixture favorite", R.drawable.ic_thumb_up).build()).build())
+        shadowOf(sessions).addController(controller)
+        assertEquals(true, followed(fixture).last()?.like?.liked)
     }
 
     @Test

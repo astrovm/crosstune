@@ -152,6 +152,32 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun clockEvidenceKeepsRestartsSeparateAndCorrelatesEachAttemptsVerdicts() {
+        ShadowLog.setLoggable("CrosstuneClock", Log.DEBUG)
+        keep(line())
+        appPlays(ytMusic)
+        val cards = cards()
+        repeat(2) { index ->
+            cards.start(null, before = null)
+            waitFor("native attempt ${index + 1} has a final verdict") {
+                ShadowLog.getLogsForTag("CrosstuneClock").count { JSONObject(it.msg).getString("event") == "native_result" } == index + 1
+            }
+            cards.stop()
+        }
+        val evidence = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }
+        val requests = evidence.filter { it.getString("event") == "seek_request" }
+        assertEquals(2, requests.size)
+        assertEquals(2, requests.map { it.getInt("attempt") }.distinct().size)
+        assertTrue(requests.all { it.getInt("attempt") > 0 })
+        for (request in requests) {
+            val attempt = evidence.filter { it.optInt("attempt") == request.getInt("attempt") }
+            assertTrue(attempt.all { it.getString("app") == request.getString("app") && it.getInt("session") == request.getInt("session") })
+            assertEquals("reached", attempt.single { it.getString("event") == "reach_result" }.getString("result"))
+            assertEquals("used", attempt.single { it.getString("event") == "native_result" }.getString("result"))
+        }
+    }
+
+    @Test
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun clockEvidenceSaysWhenThePendingSeekIsCancelled() = runTest {
         ShadowLog.setLoggable("CrosstuneClock", Log.DEBUG)
