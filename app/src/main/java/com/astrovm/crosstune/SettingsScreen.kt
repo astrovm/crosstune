@@ -766,17 +766,23 @@ private fun LicensesPage(cache: LicenseCache?, onBack: () -> Unit) {
     // stays off this pass: the longest text is hundreds of thousands of characters.
     var splitDone by remember { mutableStateOf(Any()) }
     val requesters = remember { mutableMapOf<String, FocusRequester>() }
-    // Keep the last drawn pieces until the page finishes sliding out.
+    // Keep the same layout while the page slides out without its cache.
+    val lastCache = remember { arrayOf(cache) }
+    val layoutCache = cache ?: lastCache[0]
     val lastUnits = remember { arrayOf(emptyMap<String, List<LicenseUnit>>()) }
     val units = remember(cache, open, splitDone) {
         if (cache == null) lastUnits[0] else open.mapNotNull { name -> cache.pieces(name)?.let { name to it } }.toMap()
     }
-    SideEffect { lastUnits[0] = units }
-    // Made again with a licence open after Android stopped the app, its pieces are gone. The list stays
-    // empty until they are split again, below: with fewer rows it would lose where it was scrolled to.
-    // Turned, the pieces are kept, so the page draws at once.
-    var restoring by remember { mutableStateOf(units.size != open.size) }
+    SideEffect {
+        lastCache[0] = layoutCache
+        lastUnits[0] = units
+    }
+    // A new cache may lack the open pieces after a restart or a quick return during the exit.
+    var restoring by remember(layoutCache) { mutableStateOf(units.size != open.size) }
     val words = licenseWords(cache)
+    val shown = words.takeUnless { restoring }
+    // Measuring fewer rows with the reading list's state would reset its scroll position.
+    val pageListState = if (shown == null) rememberLazyListState() else listState
     val look = LicenseLook(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), MaterialTheme.shapes.large)
     // One path for a press and for a remote. The page's own Back still leaves once nothing is open, and
     // while the words are read: nothing is shown to close yet, and the main thread doesn't wait for the notices.
@@ -794,10 +800,9 @@ private fun LicensesPage(cache: LicenseCache?, onBack: () -> Unit) {
                 AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
             }
         },
-        listState = listState
+        listState = pageListState
     ) {
-        val shown = words
-        if (!restoring && shown != null) {
+        if (shown != null) {
             licenseItems(open, units, shown, look, openWebPage, focusing = { key ->
                 Modifier.focusRequester(requesters.getOrPut(key) { FocusRequester() }).onFocusChanged { if (it.isFocused) focusedKey = key }
             }) { name -> open = if (name in open) open - name else open + name }

@@ -406,6 +406,52 @@ class LicensesTest {
     }
 
     @Test
+    fun reopeningLicensesDuringItsExitKeepsThePlaceInAnOpenLicence() {
+        openLicenses()
+        work("JMdict").performClick()
+        val piece = text("An early technical report from 1993")
+        piece.assertIsDisplayed()
+        fun position() = composeRule.onNode(hasScrollToNodeAction()).fetchSemanticsNode()
+            .config[SemanticsProperties.VerticalScrollAxisRange].value()
+        val before = position()
+        val closed = pageCache()
+
+        val reading = CountDownLatch(1)
+        val letGo = CountDownLatch(1)
+        splitsCounted()
+        val countedSplit = LicenseCache.split
+        LicenseCache.split = { notice ->
+            reading.countDown()
+            assertTrue(letGo.await(10, TimeUnit.SECONDS))
+            countedSplit(notice)
+        }
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.onNode(hasContentDescription(string(R.string.back_button))).performClick()
+            composeRule.mainClock.advanceTimeBy(144)
+            piece.assertIsDisplayed()
+            assertNull(cacheOwner().cache)
+            val reopen = composeRule.onNode(hasText(string(R.string.settings_licenses)) and hasClickAction())
+            reopen.assertIsDisplayed().performClick()
+            composeRule.mainClock.autoAdvance = true
+            composeRule.waitForIdle()
+            assertTrue("The reopened page did not split its open licence", reading.await(5, TimeUnit.SECONDS))
+            composeRule.waitForIdle()
+            val reopened = pageCache()
+            assertNotSame(closed, reopened)
+            assertNull(reopened.pieces("JMdict"))
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+            letGo.countDown()
+        }
+        background.submit {}.get(5, TimeUnit.SECONDS)
+        composeRule.waitForIdle()
+        assertEquals(listOf("JMdict"), splitWorks())
+        assertEquals("The licence scroll position changed", before, position(), 0.01f)
+        piece.assertIsDisplayed()
+    }
+
+    @Test
     fun turningDuringAnOuterSettingsExitReleasesTheLicensesCache() {
         openLicenses()
         work("projectM").performClick()
