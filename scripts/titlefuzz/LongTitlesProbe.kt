@@ -70,19 +70,28 @@ object LongTitlesProbe {
         var calls = 0
         var longest = 0L
         var longestTotal = 0L
+        var longestCpu = 0L
+        var longestTotalCpu = 0L
         fun read(group: String, title: String, operations: List<Pair<String, (String) -> Any?>>) {
             var total = 0L
+            var totalCpu = 0L
             for ((name, operation) in operations) {
                 operation(title.take(500))
+                val beforeCpu = android.os.Debug.threadCpuTimeNanos()
                 val start = System.nanoTime()
                 operation(title)
                 val took = System.nanoTime() - start
+                val cpu = android.os.Debug.threadCpuTimeNanos() - beforeCpu
+                check(cpu >= 0) { "Thread CPU time is unavailable" }
+                totalCpu += cpu
+                longestCpu = maxOf(longestCpu, cpu)
                 total += took
                 longest = maxOf(longest, took)
                 calls++
-                if (took > SLOW_MS * 1_000_000L) println("$group case=$cases reader=$name length=${title.length} ns=$took")
+                if (took > SLOW_MS * 1_000_000L) println("$group case=$cases reader=$name length=${title.length} ns=$took cpu_ns=$cpu")
             }
             longestTotal = maxOf(longestTotal, total)
+            longestTotalCpu = maxOf(longestTotalCpu, totalCpu)
             cases++
         }
         LongTitleInputs.titles(LONG).forEach { read("title", it, readers) }
@@ -94,7 +103,7 @@ object LongTitlesProbe {
             read("comparison", title, listOf("wordsMatch" to { text -> SongNames.wordsMatch(text, text.replaceFirst("Hello", "Hello World")) }))
         }
         LongTitleInputs.shares(LONG).forEach { read("share", it, listOf("parse" to MusicLinks::parse)) }
-        println("summary cases=$cases calls=$calls length=$LONG max_reader_ns=$longest max_case_total_ns=$longestTotal")
+        println("summary cases=$cases calls=$calls length=$LONG max_reader_ns=$longest max_case_total_ns=$longestTotal max_reader_cpu_ns=$longestCpu max_case_cpu_ns=$longestTotalCpu")
     }
 
     /** Reproduces native input-copy work that the JDK's matcher preparation omits. No input leaves the device. */
