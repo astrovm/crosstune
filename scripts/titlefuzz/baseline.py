@@ -5,6 +5,7 @@
     python3 scripts/titlefuzz/baseline.py [REF] --jvm [--out FILE]
     python3 scripts/titlefuzz/baseline.py [REF] --long [--serial SERIAL]
     python3 scripts/titlefuzz/baseline.py [REF] --long-all [--serial SERIAL]
+    python3 scripts/titlefuzz/baseline.py [REF] --long-warm [--serial SERIAL]
     python3 scripts/titlefuzz/baseline.py [REF] --long-instrumental [--serial SERIAL]
     python3 scripts/titlefuzz/baseline.py [REF] --long-matcher-input [--serial SERIAL]
 
@@ -27,6 +28,8 @@ line. Make them again when TitleFuzz.kt changes what it makes, or when main's ow
 three lengths. --long-all reads the shared LongTitleInputs at 10,000 letters, including all ten title readers,
 instrumentals, comparisons and shares. It prints case/call counts and the longest reader and whole-case times.
 It also compares native matcher preparation with reuse, as --long-matcher-input does on its own.
+--long-warm runs all 697 title inputs at 20,000 characters through all ten readers after warming each at 2,000.
+It repeats a case once when it exceeds 300 ms and reports the best wall and thread CPU times separately.
 These diagnostic times are not CI wall-clock assertions. The deterministic guard charges the native input copies. --long-instrumental times whether a title says it's an instrumental, at three lengths, on the titles
 whose tags it reads, by an artist named first and by one named in each tag. On a phone each look with a pattern copies the whole title first, so a reader that looks once a pass or
 once a bracket takes time squared there, where the JVM, and so LongTitlesTest, sees none.
@@ -133,6 +136,8 @@ def timing(args):
     """What LongTitlesProbe times, as its argument, or None when the readings are made."""
     if args.long_matcher_input:
         return "matcher-input"
+    if args.long_warm:
+        return "warm"
     if args.long_all:
         return "all"
     if args.long_instrumental:
@@ -158,6 +163,7 @@ def main():
     parser.add_argument("--jvm", action="store_true", help="read on the JVM, not on the emulator")
     parser.add_argument("--long", action="store_true", help="time the readers on long titles on the emulator")
     parser.add_argument("--long-matcher-input", action="store_true", help="compare matcher preparation and reuse on Android")
+    parser.add_argument("--long-warm", action="store_true", help="check the original 20,000-character whole-title budget after warm-up")
     parser.add_argument("--long-all", action="store_true", help="time the readers on each of LongTitlesTest's titles, naming the slow ones")
     parser.add_argument("--long-instrumental", action="store_true", help="time saysInstrumental on long titles of its tags")
     parser.add_argument("--serial")

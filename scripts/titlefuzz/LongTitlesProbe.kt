@@ -39,6 +39,10 @@ object LongTitlesProbe {
             }
             return
         }
+        if (args.firstOrNull() == "warm") {
+            warmTitles(readers)
+            return
+        }
         if (args.firstOrNull() == "all") {
             allInputs(readers)
             matcherInputs()
@@ -54,6 +58,37 @@ object LongTitlesProbe {
             }
         }
     }
+
+    /** The original whole-title budget: warm every title, then repeat a slow case once before counting it. */
+    private fun warmTitles(readers: List<Pair<String, (String) -> Any?>>) {
+        for (title in LongTitleInputs.titles(2_000)) for ((_, read) in readers) read(title)
+        var longest = 0L
+        var longestCpu = 0L
+        var slow = 0
+        val titles = LongTitleInputs.titles(20_000)
+        for ((index, title) in titles.withIndex()) {
+            var best = Long.MAX_VALUE
+            var bestCpu = Long.MAX_VALUE
+            for (round in 0..1) {
+                val beforeCpu = android.os.Debug.threadCpuTimeNanos()
+                val start = System.nanoTime()
+                for ((_, read) in readers) read(title)
+                val wall = System.nanoTime() - start
+                val cpu = android.os.Debug.threadCpuTimeNanos() - beforeCpu
+                best = minOf(best, wall)
+                bestCpu = minOf(bestCpu, cpu)
+                if (wall > WHOLE_TITLE_NS) println("case=$index round=$round wall_ns=$wall cpu_ns=$cpu")
+                if (wall <= WHOLE_TITLE_NS) break
+            }
+            if (best > WHOLE_TITLE_NS) slow++
+            longest = maxOf(longest, best)
+            longestCpu = maxOf(longestCpu, bestCpu)
+        }
+        println("summary title_cases=${titles.size} readers=${readers.size} length=20000 over_300ms_twice=$slow " +
+            "max_best_wall_ns=$longest max_best_cpu_ns=$longestCpu")
+    }
+
+    private const val WHOLE_TITLE_NS = 300_000_000L
 
     private const val LONG = 10_000
     private const val SLOW_MS = 50

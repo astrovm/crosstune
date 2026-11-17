@@ -44,10 +44,11 @@ class BaselineTest(unittest.TestCase):
 
     def test_each_timing_asks_the_probe_for_its_own(self):
         def asked(**given):
-            return baseline.timing(argparse.Namespace(**{"long": False, "long_all": False, "long_instrumental": False, "long_matcher_input": False, **given}))
+            return baseline.timing(argparse.Namespace(**{"long": False, "long_all": False, "long_warm": False, "long_instrumental": False, "long_matcher_input": False, **given}))
         self.assertIsNone(asked())
         self.assertEqual("", asked(long=True))
         self.assertEqual("all", asked(long_all=True))
+        self.assertEqual("warm", asked(long_warm=True))
         self.assertEqual("instrumental", asked(long_instrumental=True))
         self.assertEqual("matcher-input", asked(long_matcher_input=True))
 
