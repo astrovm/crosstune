@@ -93,7 +93,7 @@ It needs these repository secrets:
 
 > Back up the keystore and never replace it. Android only installs an update if it's signed with the same key.
 
-The release APK is reproducible: building the same tag elsewhere gives the same APK, apart from the signature. That's what F-Droid needs to ship it, if it's ever listed there. Google Play installs update GitHub ones only if Play App Signing uses this same key. To check a release locally, build the tag from a fresh clone and run `apksigcopier compare Crosstune-vX.Y.Z.apk --unsigned app/build/outputs/apk/release/app-release-unsigned.apk`.
+The release APK is reproducible: building the same tag elsewhere gives the same APK, apart from the signature. That's what F-Droid needs to ship it, if it's ever listed there. Google Play installs update GitHub ones only if Play App Signing uses this same key. To check a release locally, build the tag from a fresh clone and run `apksigcopier compare Crosstune-vX.Y.Z.apk --unsigned app/build/outputs/apk/release/app-release-unsigned.apk`. The APK uses v2 and v3 signatures. The verification job installs apksigcopier from wheels with recorded SHA-256 hashes.
 
 Store listing text lives in [`fastlane/metadata/android`](fastlane/metadata/android).
 
