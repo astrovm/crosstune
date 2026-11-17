@@ -989,8 +989,7 @@ internal object SongNames {
         private fun location(lead: Int, end: Int) = lead + 2 < end && places[lead + 1]
 
         private fun descriptor(first: Int, end: Int, from: Int, until: Int, explicit: Boolean): Boolean {
-            if (explicit && tokens[first].letters == "from" && quotes[until] > quotes[from]) return true
-            if (explicit && NOTE_CREDITS.any { prefix -> prefix.size < end - first && prefix.indices.all { tokens[first + it].letters == prefix[it] } }) return true
+            if (explicit && credit(first, end, from, until)) return true
             val ending = lastWord[end]
             if (ending <= first || tokens[ending].letters !in NOTE_ENDS) return false
             if (tokens[first].letters in NOTE_DESCRIPTORS && unknown[end] == unknown[first]) return true
@@ -998,6 +997,11 @@ internal object SongNames {
             val bracketed = from > 0 && text[from - 1] in NAME_TAG_OPENS
             return owner > first && (owner == first + 1 || bracketed) && unknown[end] == unknown[owner + 1]
         }
+
+        private fun credit(first: Int, end: Int, from: Int, until: Int): Boolean =
+            (tokens[first].letters == "from" && quotes[until] > quotes[from]) || NOTE_CREDITS.any { prefix ->
+                prefix.size < end - first && prefix.indices.all { tokens[first + it].letters == prefix[it] }
+            }
 
         private fun language(first: Int, end: Int): Boolean {
             val version = lastWord[end]
