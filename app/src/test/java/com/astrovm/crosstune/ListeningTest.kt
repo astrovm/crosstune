@@ -1801,7 +1801,8 @@ class ListeningTest {
     }.also { phone -> MainActivity.playbackFactory = { phone } }
 
     /** The app moves on to [song], which it plays from the start. */
-    private fun FakePlayback.goesOnTo(song: String) = composeRule.runOnIdle {
+    private fun FakePlayback.goesOnTo(song: String) {
+        composeRule.settle(controller?.get())
         playing.value = null
         onThePhone = Heard.Song(MusicMetadata(song, "Band"), null, 0, SystemClock.elapsedRealtime())
     }
@@ -4139,7 +4140,8 @@ class ListeningTest {
 
     private fun ServiceController<FloatingLyricsService>.command(action: String) {
         get().onStartCommand(Intent(app, FloatingLyricsService::class.java).setAction(action), 0, 2)
-        composeRule.waitForIdle()
+        // Compose waits 2 s for a screen to be resumed when none is, as after the words close.
+        if (overlays(get()).isNotEmpty()) composeRule.waitForIdle() else composeRule.settle(controller?.get())
     }
 
     @Test
@@ -6270,7 +6272,8 @@ class ListeningTest {
         composeRule.runOnIdle { controller!!.pause().stop() }
         timing.countDown()
         waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
-        composeRule.runOnIdle { controller!!.destroy() }
+        composeRule.settle(controller!!.get())
+        controller!!.destroy()
         val asked = fake.requestedUrls.size
 
         launch()
@@ -6297,7 +6300,8 @@ class ListeningTest {
         // Kept once they're timed, by a second copy from LRCLIB, which may still be on its way when the app's left.
         composeRule.runOnIdle { controller!!.pause().stop() }
         waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
-        composeRule.runOnIdle { controller!!.destroy() }
+        composeRule.settle(controller!!.get())
+        controller!!.destroy()
         // As an earlier version kept them from NetEase, opening with the song's name and its artist's.
         for (name in listOf("lyrics.json", "kept_words.json")) {
             val file = File(app.cacheDir, name)
@@ -6336,7 +6340,8 @@ class ListeningTest {
         waitForText("Walking down the river road\nSinging to the morning light")
         composeRule.runOnIdle { controller!!.pause().stop() }
         waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
-        composeRule.runOnIdle { controller!!.destroy() }
+        composeRule.settle(controller!!.get())
+        controller!!.destroy()
         // As kept before the fix, with nothing saying where they came from, which only words worked out again have.
         val file = File(app.cacheDir, "kept_words.json")
         val entries = org.json.JSONArray(file.readText())
