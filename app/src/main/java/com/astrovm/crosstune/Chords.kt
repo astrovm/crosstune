@@ -1,7 +1,9 @@
 package com.astrovm.crosstune
 
 import org.json.JSONArray
+import java.text.BreakIterator
 import java.text.Normalizer
+import java.util.Locale
 import kotlin.math.abs
 
 /** A chord played from letter [at] of a line. */
@@ -824,43 +826,52 @@ internal object ChordSheets {
         return line to (ours.char[target] + if (on == null) 1 else 0)
     }
 
-    /**
-     * When [line]'s letter [at] is sung: within the word it's in, for words timed one by one, or that
-     * far through the line, up to when [nextMs] the next one starts.
-     */
-    fun timeOf(line: LyricLine, at: Int, nextMs: Long?): Long {
+    /** When each chord's letter is sung. Use the known times before estimating the last part. */
+    fun timesOf(line: LyricLine, chords: List<Chord>, nextMs: Long?): List<Long> {
+        val endMs = nextMs ?: line.endMs
+        val lastText = line.words.lastOrNull()?.text ?: line.text
+        val estimate = if (endMs == null) estimatedOffsets(lastText) else longArrayOf()
+        return chords.map { timeOf(line, it.at, endMs, estimate) }
+    }
+
+    private fun timeOf(line: LyricLine, at: Int, endMs: Long?, estimate: LongArray): Long {
         if (line.words.isNotEmpty()) {
             var from = 0
             line.words.forEachIndexed { index, word ->
                 val to = from + word.text.length
                 if (at < to || index == line.words.lastIndex) {
-                    val wordEnd = line.words.getOrNull(index + 1)?.timeMs ?: nextMs
-                    return atLetter(word.timeMs, wordEnd, word.text, at - from)
+                    val wordEnd = line.words.getOrNull(index + 1)?.timeMs ?: endMs
+                    return atLetter(word.timeMs, wordEnd, word.text.length, at - from, estimate)
                 }
                 from = to
             }
         }
-        return atLetter(line.timeMs, nextMs, line.text, at)
+        return atLetter(line.timeMs, endMs, line.text.length, at, estimate)
     }
 
-    private fun atLetter(startMs: Long, endMs: Long?, text: String, at: Int): Long {
-        val end = at.coerceIn(0, text.length)
-        if (endMs != null) return startMs + (endMs - startMs) * end / text.length.coerceAtLeast(1)
-        var time = startMs
-        var index = 0
-        while (index < end) {
-            val letter = text.codePointAt(index)
-            val width = Character.charCount(letter)
-            if (index + width > end) break
-            val pace = when (Character.UnicodeScript.of(letter)) {
+    private fun atLetter(startMs: Long, endMs: Long?, length: Int, at: Int, estimate: LongArray): Long {
+        val offset = at.coerceIn(0, length)
+        return startMs + if (endMs == null) estimate[offset] else (endMs - startMs) * offset / length.coerceAtLeast(1)
+    }
+
+    /** One pace per unspaced character, including composed kana and Hangul. Keep the sheet's UTF-16 offsets. */
+    private fun estimatedOffsets(text: String): LongArray {
+        val offsets = LongArray(text.length + 1)
+        val characters = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(text) }
+        var start = characters.first()
+        var end = characters.next()
+        while (end != BreakIterator.DONE) {
+            val unspaced = when (Character.UnicodeScript.of(text.codePointAt(start))) {
                 Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA,
-                Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL -> UNSPACED_LETTER_MS
-                else -> width * LETTER_MS
+                Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL -> true
+                else -> false
             }
-            time += pace
-            index += width
+            for (at in start + 1 until end) offsets[at] = offsets[start] + if (unspaced) 0L else (at - start) * LETTER_MS
+            offsets[end] = offsets[start] + if (unspaced) UNSPACED_LETTER_MS else (end - start) * LETTER_MS
+            start = end
+            end = characters.next()
         }
-        return time
+        return offsets
     }
 
     /** The chord playing at [positionMs], by its place in [times]; -1 before the first. */

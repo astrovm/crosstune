@@ -251,24 +251,27 @@ class ChordSheetsTest {
         assertNull(ChordSheets.place(sheet, listOf("Carry me home by the river tonight", "Sing to me softly till the morning light")))
     }
 
+    private fun timeOf(line: LyricLine, at: Int, nextMs: Long?): Long =
+        ChordSheets.timesOf(line, listOf(Chord(at, "G")), nextMs).single()
+
     @Test
     fun aChordIsPlayedWhenItsLetterIsSung() {
         val byWord = LyricLine(10_000, "Two words", listOf(TimedWord(10_000, "Two "), TimedWord(11_000, "words")))
-        assertEquals(10_000L, ChordSheets.timeOf(byWord, 0, 13_000))
-        assertEquals(11_000L, ChordSheets.timeOf(byWord, 4, 13_000))
+        assertEquals(10_000L, timeOf(byWord, 0, 13_000))
+        assertEquals(11_000L, timeOf(byWord, 4, 13_000))
         // Two letters into the last word, two fifths of the way to the next line.
-        assertEquals(11_800L, ChordSheets.timeOf(byWord, 6, 13_000))
-        assertEquals(13_000L, ChordSheets.timeOf(byWord, 99, 13_000))
+        assertEquals(11_800L, timeOf(byWord, 6, 13_000))
+        assertEquals(13_000L, timeOf(byWord, 99, 13_000))
         // Past the words timed, as for a mark after the last one: at the end of the last word.
-        assertEquals(13_000L, ChordSheets.timeOf(byWord.copy(text = "Two words!"), 9, 13_000))
+        assertEquals(13_000L, timeOf(byWord.copy(text = "Two words!"), 9, 13_000))
         // A line timed as a whole: that far through it, up to the next line, or a moment a letter.
         val whole = LyricLine(10_000, "abcd")
-        assertEquals(12_000L, ChordSheets.timeOf(whole, 2, 14_000))
-        assertEquals(10_300L, ChordSheets.timeOf(whole, 2, null))
-        assertEquals(10_000L, ChordSheets.timeOf(LyricLine(10_000, ""), 0, null))
+        assertEquals(12_000L, timeOf(whole, 2, 14_000))
+        assertEquals(10_300L, timeOf(whole, 2, null))
+        assertEquals(10_000L, timeOf(LyricLine(10_000, ""), 0, null))
 
         val chords = listOf(Chord(0, "G"), Chord(4, "D"))
-        val times = chords.map { ChordSheets.timeOf(byWord, it.at, 13_000) }
+        val times = ChordSheets.timesOf(byWord, chords, 13_000)
         assertEquals(-1, ChordSheets.playing(times, 9_000))
         assertEquals(0, ChordSheets.playing(times, 10_000))
         assertEquals(0, ChordSheets.playing(times, 10_500))
@@ -279,26 +282,35 @@ class ChordSheetsTest {
     fun theLastLineUsesTheSungPaceOfItsWriting() {
         for (text in listOf("君の名前を呼んだ", "今夜我們一起回家", "너의이름을불렀다")) {
             val line = LyricLine(10_000, text)
-            assertEquals(text, 11_120L, ChordSheets.timeOf(line, 4, null))
-            assertEquals(text, 12_240L, ChordSheets.timeOf(line, text.length, null))
-            assertEquals(text, 11_600L, ChordSheets.timeOf(line, 4, 13_200))
+            assertEquals(text, 11_120L, timeOf(line, 4, null))
+            assertEquals(text, 12_240L, timeOf(line, text.length, null))
+            assertEquals(text, 11_600L, timeOf(line, 4, 13_200))
         }
         val mixed = LyricLine(10_000, "星A歌")
-        assertEquals(10_280L, ChordSheets.timeOf(mixed, 1, null))
-        assertEquals(10_430L, ChordSheets.timeOf(mixed, 2, null))
-        assertEquals(10_710L, ChordSheets.timeOf(mixed, 3, null))
+        assertEquals(10_280L, timeOf(mixed, 1, null))
+        assertEquals(10_430L, timeOf(mixed, 2, null))
+        assertEquals(10_710L, timeOf(mixed, 3, null))
         val supplementary = LyricLine(10_000, "𠮷田")
-        assertEquals(10_000L, ChordSheets.timeOf(supplementary, 1, null))
-        assertEquals(10_280L, ChordSheets.timeOf(supplementary, 2, null))
-        assertEquals(10_560L, ChordSheets.timeOf(supplementary, 3, null))
+        assertEquals(10_000L, timeOf(supplementary, 1, null))
+        assertEquals(10_280L, timeOf(supplementary, 2, null))
+        assertEquals(10_560L, timeOf(supplementary, 3, null))
     }
 
     @Test
     fun theLastWordKeepsItsStartWhenThereIsNoNextLine() {
         val line = LyricLine(10_000, "名前を呼んだ", listOf(TimedWord(10_000, "名前を"), TimedWord(12_000, "呼んだ")))
-        assertEquals(12_000L, ChordSheets.timeOf(line, 3, null))
-        assertEquals(12_280L, ChordSheets.timeOf(line, 4, null))
-        assertEquals(12_840L, ChordSheets.timeOf(line, 6, null))
+        assertEquals(12_000L, timeOf(line, 3, null))
+        assertEquals(12_280L, timeOf(line, 4, null))
+        assertEquals(12_840L, timeOf(line, 6, null))
+    }
+
+    @Test
+    fun equivalentJapaneseAndKoreanSpellingsTakeTheSameTime() {
+        for ((whole, parts) in listOf("が" to "か\u3099", "한" to "한")) {
+            assertEquals(10_280L, timeOf(LyricLine(10_000, whole), whole.length, null))
+            assertEquals(10_280L, timeOf(LyricLine(10_000, parts), parts.length, null))
+            assertEquals(10_000L, timeOf(LyricLine(10_000, parts), 1, null))
+        }
     }
 
     @Test

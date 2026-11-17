@@ -1716,8 +1716,8 @@ private fun TimedLyrics(
                     line.text,
                     words = line.words,
                     timeMs = line.timeMs,
-                    // Timed by ear with the next line not heard, the line goes on till it's sung through.
-                    nextMs = lines.getOrNull(index + 1)?.let { next -> if (next.heard) next.timeMs else line.endMs },
+                    // Use the line's end when there is no sung line after it.
+                    nextMs = lines.getOrNull(index + 1)?.takeIf { it.heard }?.timeMs ?: line.endMs,
                     chords = chords.getOrNull(index),
                     following = following,
                     place = following?.let { index.compareTo(active) },
@@ -2118,7 +2118,7 @@ internal fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, fol
     }
     // Only words timed one by one say when a chord's played closely enough to light it.
     // A word sung or a chord played is all that changes it.
-    val chordTimes = remember(line, chords.over, nextMs) { chords.over.map { ChordSheets.timeOf(line, it.at, nextMs) } }
+    val chordTimes = remember(line, chords.over, nextMs) { if (line.words.isEmpty()) emptyList() else ChordSheets.timesOf(line, chords.over, nextMs) }
     val changes = remember(line.words, chordTimes) { line.words.map { it.timeMs } + chordTimes }
     val now = rememberWhilePlaying(following.takeIf { line.words.isNotEmpty() }, changes, { SyncedLyrics.nextAfter(changes, it) }) {
         ChordSheets.playing(chordTimes, it) to SyncedLyrics.wordsSungBy(line.words, it)

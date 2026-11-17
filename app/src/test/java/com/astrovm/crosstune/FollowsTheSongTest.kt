@@ -517,6 +517,19 @@ class FollowsTheSongTest {
     }
 
     @Test
+    fun aChordInTheLastTimedWordUsesTheNetEaseLineEnd() {
+        val line = SyncedLyrics.parseWordByWord("[10000,6200](10000,2000,0)君の名前を(12000,4200,0)呼んだ夜のこと").single()
+        lyricLines = listOf(line)
+        val chords = sheet.copy(lines = listOf(SheetLine(line.text, listOf(Chord(0, "G"), Chord(6, "C")))))
+        following = pausedAt(12_599)
+        words(ChordsState(on = true, sheet = chords))
+        assertEquals(0, chordLit(line.text))
+        following = pausedAt(12_600)
+        settles()
+        assertEquals(1, chordLit(line.text))
+    }
+
+    @Test
     fun wordsTimedAgainLightWithTheirNewTimesUnderChords() {
         following = pausedAt(1_700)
         words(ChordsState(on = true, sheet = sheet))
