@@ -462,7 +462,7 @@ class PlayTest < Minitest::Test
     # Play fails to list the tracks, in each command that reads them.
     tracks("beta" => release(CODE))
     [->(failing) { play("release", TAG, env: failing) }, ->(failing) { play("production", "2.26.0", env: failing) },
-     ->(failing) { play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", "production", env: failing) }]
+     ->(failing) { play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", "alpha", env: failing) }]
       .each do |run|
       File.write(@log, "")
       output, status = run.call({ "FAKE_PLAY_TRACKS_FAIL" => "1" })
