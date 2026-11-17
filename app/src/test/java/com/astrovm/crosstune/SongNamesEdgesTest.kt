@@ -13,6 +13,19 @@ import org.robolectric.annotation.Config
 class SongNamesEdgesTest {
 
     @Test
+    fun recordingNotesUseEveryTitleDelimiterWithoutLosingTheName() {
+        val tags = listOf("(Live)", "[Live]", "【Live】", "「Live」", "〔Live〕", "（Live）", "［Live］", " - Live", " – Live", " — Live")
+        for (tag in tags) {
+            val short = "Hello$tag"
+            val long = "Hello World$tag"
+            assertFalse(tag, SongNames.wordsMatch(short, long))
+            assertFalse(tag, SongNames.wordsMatch(long, short))
+            assertTrue(tag, SongNames.wordsMatch(long, long))
+            assertTrue(tag, SongNames.wordsMatch("Fake Song$tag", "Fake Song"))
+        }
+    }
+
+    @Test
     fun numericUnicodeTitleCharactersKeepTheTwoWordPartialRule() {
         for (number in listOf("Ⅻ", "½")) {
             val one = "Fake Song $number (Live)"

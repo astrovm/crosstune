@@ -30,6 +30,7 @@ READING_SOURCES = (
     "app/src/main/java/com/astrovm/crosstune/PhoneRegexTable.kt",
     "app/src/main/java/com/astrovm/crosstune/Patterns.kt",
     "app/src/main/java/com/astrovm/crosstune/SongNames.kt",
+    "app/src/main/java/com/astrovm/crosstune/TitleDelimiters.kt",
     "app/src/test/java/com/astrovm/crosstune/IcuPattern.kt",
     "app/src/test/java/com/astrovm/crosstune/PhoneRegexSets.kt",
     "app/src/test/java/com/astrovm/crosstune/TestUniDic.kt",
