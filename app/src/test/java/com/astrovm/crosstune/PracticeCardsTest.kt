@@ -1011,7 +1011,7 @@ class PracticeCardsTest {
         assertTrue(held.written.await(60, TimeUnit.SECONDS))
         assertEquals("Other", practice?.line?.title)
         assertEquals(MusicMetadata("Demo", "Band") to false, playback.playedSongs.last() to playback.plays.last())
-        assertFalse(playback.playing.value!!.clock.playing)
+        assertFalse(requireNotNull(playback.playing.value).clock.playing)
     }
 
     @Test
