@@ -610,6 +610,13 @@ internal object MetadataParsers {
         return MusicMetadata(song.replace(paddedTrackRegex, "").removeSurrounding("\"").trim(), left)
     }
 
+    /** Whether the inferred artist is the part before the player's dash, as in "Artist - Song". */
+    internal fun hasInferredDashCredit(title: String, artist: String): Boolean {
+        val text = title.trim().replace(trackNumberRegex, "")
+        val split = artistSeparatorRange(text) ?: return false
+        return text.substring(0, split.first).trim() == artist
+    }
+
     /**
      * The song, when the title says it all again in Japanese after it, artist and all: "Plastic Love
      * 竹内まりや - プラスティック・ラブ 1984" is "Plastic Love".

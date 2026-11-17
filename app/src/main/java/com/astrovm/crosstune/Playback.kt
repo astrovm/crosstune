@@ -383,7 +383,9 @@ internal class MediaSessionPlayback(
      * How each title and artist an app says read as a song's, by [readSong]: read once, as a long one takes a while, and
      * each change is asked of many times over, for what plays first, what it's called, and whether it has a song.
      */
-    private val songsRead = KeptReads<Pair<String, String>, MusicMetadata?>(SONGS_READ_KEPT) { (title, artist) -> readSong(title, artist) }
+    private val songsRead = KeptReads<Pair<String, String>, MusicMetadata?>(SONGS_READ_KEPT) { (title, artist) ->
+        Songless.playerName(title, artist, readSong(title, artist))
+    }
 
     /** How many sessions were numbered; see [sessionNumbers]. */
     private val sessionsNumbered = AtomicInteger()

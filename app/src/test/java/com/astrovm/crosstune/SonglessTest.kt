@@ -24,6 +24,26 @@ class SonglessTest {
     }
 
     @Test
+    fun aStationWithItsBroadcastHoursNamesNoSong() {
+        assertTrue(noSong("Fake FM - Hits 24/7"))
+        assertTrue(noSong("Radio Fake – Música 24/7", "<unknown>"))
+        assertTrue(noSong("Fake AM — 24/7 Music"))
+        assertFalse(noSong("Fake FM - Fake Song"))
+        assertFalse(noSong("Fake FM - 24/7"))
+        assertFalse(noSong("Fake Band - Music 24/7"))
+    }
+
+    @Test
+    fun aRecordingNoteCannotSupplyAnArtistAndTitle() {
+        for (title in listOf("Fake Song - Live", "Fake Song – Explicit", "Fake Song — Remastered", "Fake Song - Live in Paris")) {
+            assertTrue(title, noSong(title))
+            assertFalse(title, noSong(title, "Fake Artist"))
+        }
+        assertFalse(noSong("Fake Artist - Live Forever"))
+        assertFalse(noSong("Fake Artist - Song (Live)"))
+    }
+
+    @Test
     fun noTitleNamesNoSong() {
         assertTrue(noSong("", "Fake Artist"))
         assertTrue(noSong("   ", ""))

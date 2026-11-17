@@ -932,6 +932,9 @@ internal object SongNames {
 
     private data class NoteToken(val start: Int, val end: Int, val letters: String)
 
+    /** Whether the full text describes a recording instead of naming it. */
+    internal fun isRecordingNote(text: String): Boolean = RecordingNotes(text).isNote(0, text.length, true)
+
     /** Unicode words retain the title's script; a later Latin word cannot stand in for the word inspected. */
     private fun noteTokens(text: String): List<NoteToken> {
         val words = mutableListOf<NoteToken>()

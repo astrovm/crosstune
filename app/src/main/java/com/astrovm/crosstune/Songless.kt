@@ -56,13 +56,35 @@ internal object Songless {
      * song, as music apps name theirs, even "Track 10", "Demo 20230415" or one by an artist named as
      * the app is, and so is "Artist - Song" alone. [read] is how they read as a song's, when it's read already.
      */
-    fun namesNoSong(title: String, artist: String, read: MusicMetadata? = MetadataParsers.playerSong(title, artist)): Boolean {
+    fun namesNoSong(title: String, artist: String, read: MusicMetadata? = playerName(title, artist, MetadataParsers.playerSong(title, artist))): Boolean {
         // Read before it's split at a dash, which "AUD-20240101-WA0003" has.
         val bare = title.trim().replace(extension, "")
         if (MetadataParsers.noArtist(artist) && (recording.matches(bare) || path.containsMatchIn(bare))) return true
         val song = read ?: return true
         return song.artist.isBlank()
     }
+
+    /** Keep the whole title when the dash supplies a note or radio caption instead of the song name. */
+    internal fun playerName(title: String, artist: String, read: MusicMetadata?): MusicMetadata? {
+        if (read == null || read.artist.isBlank() || !MetadataParsers.noArtist(artist)) return read
+        if (!MetadataParsers.hasInferredDashCredit(title, read.artist)) return read
+        return if (SongNames.isRecordingNote(read.title) || broadcastCaption(read.artist, read.title)) MusicMetadata(title.trim(), "") else read
+    }
+
+    /** A station can put its format and airtime after its name, such as "Fake FM - Hits 24/7". */
+    private fun broadcastCaption(station: String, caption: String): Boolean {
+        val format = when {
+            caption.endsWith(BROADCAST_HOURS) -> caption.removeSuffix(BROADCAST_HOURS)
+            caption.startsWith(BROADCAST_HOURS) -> caption.removePrefix(BROADCAST_HOURS)
+            else -> return false
+        }
+        val words = SongNames.words(format)
+        return words.isNotEmpty() && broadcastFormats.containsAll(words) && SongNames.words(station).any { it in radioWords }
+    }
+
+    private const val BROADCAST_HOURS = "24/7"
+    private val broadcastFormats = setOf("hits", "music", "musica", "musique", "musik", "exitos", "noticias", "news")
+    private val radioWords = setOf("am", "fm", "radio")
 
     private val extension = phoneRegex("""\.[A-Za-z0-9]{2,4}$""")
 
