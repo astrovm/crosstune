@@ -745,18 +745,77 @@ class PlayTest < Minitest::Test
     end
   end
 
+  def test_promotion_requires_explicit_final_release_status
+    promotable
+    %w[draft prerelease].each do |field|
+      [nil, "false", 0].each do |value|
+        File.write(@log, "")
+        body = JSON.parse(release_json)
+        value.nil? ? body.delete(field) : body[field] = value
+        github_release(body: JSON.generate(body))
+        output, status = play("production", "2.26.0")
+        assert_promotion_stopped(output, status, "doesn't declare final release status", "#{field}=#{value.inspect}")
+        assert_empty requests
+      end
+    end
+  end
+
+  def test_unverified_edits_cannot_reach_any_production_track
+    %w[production tv:production wear:production].each do |target|
+      File.write(@log, "")
+      tracks({ "beta" => release(CODE) }, [bundle])
+      output, status = play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", target)
+      assert_promotion_stopped(output, status, "Production promotion needs a verified release", target)
+      assert_empty requests
+    end
+  end
+
   def play_rb(*args, env: {})
     key = File.join(@dir, "key.json")
     File.write(key, KEY)
     Open3.capture2e(env(env), "bundle", "exec", "ruby", PLAY_RB, args[0], key, PACKAGE, *args[1..], chdir: @dir)
   end
 
+  def verified_edit(to)
+    release_file = File.join(@dir, "github-release.json")
+    File.write(release_file, release_json)
+    play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", to,
+            "--release", release_file, "--tag", TAG, "--tags", (CODE - 10_000).to_s + "," + CODE.to_s,
+            "--tracks", "internal,beta")
+  end
+
+  def test_verified_form_factor_promotion_checks_its_destination_for_strays
+    tracks({ "beta" => release(CODE), "tv:production" => release(CODE - 500) }, [bundle])
+    output, status = verified_edit("tv:production")
+    assert_promotion_stopped(output, status, "version code #{CODE - 500} on tv:production, and no tag has it")
+  end
+
+  def test_release_proof_cannot_bypass_promotion_with_a_direct_put
+    tracks({ "beta" => release(CODE) }, [bundle("a different bundle")])
+    release_file = File.join(@dir, "github-release.json")
+    File.write(release_file, release_json)
+    output, status = play_rb("edit", "--code", CODE.to_s, "--to", "production",
+                             "--release", release_file, "--tag", TAG, "--tags", CODE.to_s, "--tracks", "internal,beta")
+    assert_promotion_stopped(output, status, "Production promotion needs a verified release and source track")
+  end
+
+  def test_release_proof_must_name_the_version_code_being_promoted
+    other = CODE + 10_000
+    tags("v2.27.0")
+    tracks({ "beta" => release(other) }, [{ "versionCode" => other, "sha256" => bundle["sha256"] }])
+    release_file = File.join(@dir, "github-release.json")
+    File.write(release_file, release_json)
+    output, status = play_rb("edit", "--from", "beta", "--code", other.to_s, "--to", "production",
+                             "--release", release_file, "--tag", TAG, "--tags", "#{CODE},#{other}", "--tracks", "internal,beta")
+    assert_promotion_stopped(output, status, "doesn't name version code #{other}")
+  end
+
   def test_production_and_a_testing_track_never_share_an_edit
     { "production,alpha" => "production and alpha", "beta,tv:production" => "tv:production and beta" }
       .each do |to, changed|
         File.write(@log, "")
-        tracks("beta" => release(CODE))
-        output, status = play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", to)
+        tracks({ "beta" => release(CODE) }, [bundle])
+        output, status = verified_edit(to)
         refute status.success?, output
 
         assert_includes output, "This edit changed #{changed}, so it was deleted, and nothing was sent"
@@ -767,8 +826,8 @@ class PlayTest < Minitest::Test
   end
 
   def test_production_tracks_of_two_form_factors_can_share_an_edit
-    tracks("beta" => release(CODE))
-    output, status = play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", "production,tv:production")
+    tracks({ "beta" => release(CODE) }, [bundle])
+    output, status = verified_edit("production,tv:production")
     assert status.success?, output
 
     assert_equal [%w[production tv:production]], committed_tracks

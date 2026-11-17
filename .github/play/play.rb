@@ -132,8 +132,8 @@ module Crosstune
       end
 
       # What a promotion needs from Play: see promotion at the top.
-      def promotion(from, tracks, code, tags, digest, tag)
-        codes = version_codes(tracks + [PRODUCTION])
+      def promotion(from, tracks, to, code, tags, digest, tag)
+        codes = version_codes((tracks + [from, PRODUCTION] + to).uniq)
         bundles = self.bundles
         stop_strays(codes, tags)
         unless codes[from].include?(code.to_i)
@@ -261,6 +261,9 @@ module Crosstune
         stop!("The release GitHub gave for #{tag} is for #{release['tag_name']}, not #{tag}, so nothing was sent " \
               "to Google Play")
       end
+      unless [true, false].include?(release["draft"]) && [true, false].include?(release["prerelease"])
+        stop!("The release #{tag} doesn't declare final release status, so nothing was sent to Google Play")
+      end
       stop!("The release #{tag} is a draft, so nothing was sent to Google Play") if release["draft"]
       stop!("The release #{tag} is a pre-release, so nothing was sent to Google Play") if release["prerelease"]
     end
@@ -286,6 +289,10 @@ module Crosstune
         parser.on("--to TRACKS", Array) { |value| options[:to] = value.reject(&:empty?) }
         parser.on("--listing DIR") { |value| options[:listing] = value }
         parser.on("--notes DIR") { |value| options[:notes] = value }
+        parser.on("--release FILE") { |value| options[:release] = value }
+        parser.on("--tag TAG") { |value| options[:tag] = value }
+        parser.on("--tags CODES", Array) { |value| options[:tags] = value }
+        parser.on("--tracks TRACKS", Array) { |value| options[:tracks] = value }
         parser.on("--check-only") { options[:check_only] = true }
       end.parse!(rest)
       abort("usage: play.rb edit KEY PACKAGE ...") unless package && rest.empty?
@@ -299,13 +306,27 @@ module Crosstune
       abort("Release notes go to one track at a time") if options[:notes] && to.size != 1
       abort("Release notes and the listing go in separate edits") if options[:notes] && options[:listing]
       abort("Nothing to send") if to.empty? && !options[:listing]
-      abort("Production promotion needs a verified release") if to.include?(PRODUCTION) && !options[:promotion]
+      production = to.any? { |track| PlayReviewGuard.production?(track) }
+      if production && (!options[:promotion] || !options[:from])
+        abort("Production promotion needs a verified release and source track")
+      end
+      if (proof = options[:promotion])
+        version = /\Av(\d+)\.(\d+)\.(\d+)\z/.match(proof[:tag])
+        code = version && version[1].to_i * 1_000_000 + version[2].to_i * 10_000 + version[3].to_i * 100
+        stop!("The tag #{proof[:tag]} doesn't name version code #{options[:code]}") unless code&.to_s == options[:code]
+      end
     end
 
     def edit(argv)
       options = parse_edit(argv)
-      check_edit(options)
       require_supply
+      if options[:release] && options[:tag] && options[:tags] && options[:tracks]
+        options[:promotion] = {
+          tracks: options[:tracks], tags: options[:tags].map { |tag| Integer(tag, 10) },
+          digest: bundle_digest(options[:release], options[:tag]), tag: options[:tag]
+        }
+      end
+      check_edit(options)
       send_edit(options)
     end
 
@@ -329,7 +350,7 @@ module Crosstune
     def change(edit, options)
       if options[:from]
         if (proof = options[:promotion])
-          edit.promotion(options[:from], proof[:tracks], options[:code], proof[:tags], proof[:digest], proof[:tag])
+          edit.promotion(options[:from], proof[:tracks], options[:to], options[:code], proof[:tags], proof[:digest], proof[:tag])
         end
         edit.stop_going_back(options[:to], options[:code])
         edit.promote(options[:from], options[:code], options[:to])
