@@ -24,7 +24,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 
@@ -118,8 +117,7 @@ class PracticeClockCheck : Instrumentation() {
             reports.receive()
             session.setPlaybackState(null)
             reports.receive()
-            withContext(Dispatchers.Main) { }
-            val raw = records(started).filter { it.getString("event") == "media_report" }
+            val raw = awaitClockRecords(4) { records(started).filter { it.getString("event") == "media_report" } }
             check(raw.size == 4) { "Expected four raw callbacks, got ${raw.size}" }
             check(raw.map { it.getInt("observer") }.distinct().size == 1)
             check(raw.take(3).all { it.getLong("position_ms") == 29_952L && it.getString("speed") == "0.0" })
@@ -135,7 +133,7 @@ class PracticeClockCheck : Instrumentation() {
             check(commands.receive() == "play")
             target.playPause(fixture, false, context.packageName)
             check(commands.receive() == "pause")
-            val controls = records(started).filter { it.getString("event") == "media_command" }
+            val controls = awaitClockRecords(3) { records(started).filter { it.getString("event") == "media_command" } }
             check(controls.map { it.getString("command") } == listOf("seek", "play", "pause"))
             check(controls.first().getLong("target_ms") == 43_270L)
             check(controls.all { it.getInt("session") == raw.first().getInt("session") })
@@ -147,9 +145,7 @@ class PracticeClockCheck : Instrumentation() {
                 putBoolean("audio_generated", false)
             }
         } finally {
-            following.cancelAndJoin()
-            controller.unregisterCallback(callback)
-            session.release()
+            finishClockProbe({ following.cancelAndJoin() }, { controller.unregisterCallback(callback) }, session::release)
         }
     }
 
