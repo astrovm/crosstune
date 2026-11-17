@@ -141,6 +141,8 @@ internal class ChordWikiBrowser(
     private val screen: () -> ViewGroup? = { host.window?.decorView as? ViewGroup },
     /** Each address the page asks for, so a measurement can see images and fonts. */
     private val onRequest: ((String) -> Unit)? = null,
+    /** Install a measurement client after setup and before the first request. */
+    private val onPageCreated: ((WebView) -> Unit)? = null,
 ) : ChordWikiPages {
     override suspend fun page(url: String): String = withContext(Dispatchers.Main.immediate) {
         pageGate.withLock {
@@ -198,6 +200,7 @@ internal class ChordWikiBrowser(
                 ask(view, started, observation, ::finish)
             }
         }
+        onPageCreated?.invoke(web)
         web.loadUrl(url)
         web.postDelayed({ if (!settled) ask(web, started, observation, ::finish) }, gapMs)
     }

@@ -4,11 +4,8 @@ import android.app.Activity
 import android.app.Application
 import android.app.Instrumentation
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.net.Uri
-import android.view.ViewGroup
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebResourceError
@@ -16,7 +13,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.lifecycle.ViewModelProvider
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -28,16 +24,12 @@ import org.json.JSONArray
 /** Reads the site's public practice editor while a device session drives the real Activity. */
 class ChordWikiBrowserCheck : Instrumentation() {
     @Volatile private var current: MainActivity? = null
-    private val requests = ConcurrentHashMap<Int, AtomicInteger>()
-    private val hosts = ConcurrentHashMap<String, AtomicInteger>()
     private val creations = AtomicInteger()
     private var pages: ChordWikiPages? = null
     @Volatile private var readId = 0
     @Volatile private var pageStarted = 0L
-    @Volatile private var eventsTruncated = false
+    @Volatile private var capture = WikiProbeCapture()
     private val runId = SystemClock.elapsedRealtimeNanos()
-    private val main = Handler(Looper.getMainLooper())
-    private val pageEvents = mutableListOf<JSONObject>()
     private val events = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityResumed(activity: Activity) {
             if (activity is MainActivity) current = activity
@@ -67,14 +59,17 @@ class ChordWikiBrowserCheck : Instrumentation() {
             runOnMainSync {
                 MainActivity.chordWikiFactory = { host ->
                     creations.incrementAndGet()
-                    ChordWikiBrowser(host, screen = {
-                        val root = host.window?.decorView as? ViewGroup
-                        watch(root)
-                        root
-                    }, onRequest = { url ->
-                        requests.getOrPut(System.identityHashCode(host)) { AtomicInteger() }.incrementAndGet()
-                        val name = hostName(Uri.parse(url))
-                        hosts.getOrPut(name) { AtomicInteger() }.incrementAndGet()
+                    ChordWikiBrowser(host, onPageCreated = { web ->
+                        val recording = capture
+                        val started = pageStarted
+                        web.webViewClient = MeasuredClient(web.webViewClient, System.identityHashCode(host), recording, started)
+                        recording.record(mapOf("type" to "settings_before_load",
+                            "t_ms" to SystemClock.elapsedRealtime() - started,
+                            "images" to web.settings.loadsImagesAutomatically,
+                            "network_images_blocked" to web.settings.blockNetworkImage,
+                            "javascript" to web.settings.javaScriptEnabled,
+                            "dom_storage" to web.settings.domStorageEnabled,
+                            "attached" to web.isAttachedToWindow))
                     })
                 }
             }
@@ -88,8 +83,8 @@ class ChordWikiBrowserCheck : Instrumentation() {
                         status.writeText(JSONObject().put("state", "reading").put("run_id", runId).put("request_id", readId).toString())
                         val activity = checkNotNull(current) { "Open MainActivity first" }
                         if (pages == null) runOnMainSync { pages = wikiPages(activity) }
-                        requests.clear(); hosts.clear()
-                        synchronized(pageEvents) { pageEvents.clear(); eventsTruncated = false }
+                        val recording = WikiProbeCapture()
+                        capture = recording
                         val observation = WikiObservation()
                         val started = SystemClock.elapsedRealtime()
                         pageStarted = started
@@ -102,16 +97,22 @@ class ChordWikiBrowserCheck : Instrumentation() {
                                 }
                             }
                         }
+                        val recorded = recording.close()
                         val body = result.getOrNull()
                         val live = System.identityHashCode(current)
                         status.writeText(JSONObject().put("state", "read").put("run_id", runId).put("request_id", readId)
                             .put("elapsed_ms", android.os.SystemClock.elapsedRealtime() - started)
                             .put("activity_creations", creations.get())
-                            .put("live_requests", requests[live]?.get() ?: 0)
-                            .put("old_requests", requests.entries.filter { it.key != live }.sumOf { it.value.get() })
-                            .put("request_hosts", JSONObject(hosts.mapValues { it.value.get() }))
-                            .put("page_events", synchronized(pageEvents) { JSONArray(pageEvents.toList()) })
-                            .put("events_truncated", eventsTruncated)
+                            .put("live_requests", recorded.activities[live] ?: 0)
+                            .put("old_requests", recorded.activities.entries.filter { it.key != live }.sumOf { it.value })
+                            .put("request_hosts", JSONObject(recorded.hosts))
+                            .put("page_events", JSONArray(recorded.events.map { event ->
+                                JSONObject().also { json -> event.forEach { (key, value) -> json.put(key, value) } }
+                            }))
+                            .put("events_truncated", recorded.truncated)
+                            .put("pending_callbacks", recorded.pending)
+                            .put("callback_failed", recorded.failed)
+                            .put("events_complete", recorded.complete)
                             .put("webview_version", WebView.getCurrentWebViewPackage()?.versionName.orEmpty())
                             .put("check", observation.check.name)
                             .put("editor_chars", body?.length ?: 0)
@@ -133,32 +134,19 @@ class ChordWikiBrowserCheck : Instrumentation() {
         finish(code, Bundle())
     }
 
-    /** Wrap the page's existing callbacks after open returns. The settings are observed after loadUrl. */
-    private fun watch(root: ViewGroup?) {
-        main.postAtFrontOfQueue {
-            if (root == null) return@postAtFrontOfQueue
-            for (index in 0 until root.childCount) {
-                val web = root.getChildAt(index) as? WebView ?: continue
-                val inner = web.webViewClient
-                if (inner is MeasuredClient) continue
-                val id = readId
-                web.webViewClient = MeasuredClient(inner, id)
-                record(id, JSONObject().put("type", "settings_after_load")
-                    .put("images", web.settings.loadsImagesAutomatically)
-                    .put("network_images_blocked", web.settings.blockNetworkImage)
-                    .put("javascript", web.settings.javaScriptEnabled)
-                    .put("dom_storage", web.settings.domStorageEnabled)
-                    .put("attached", web.isAttachedToWindow))
-            }
-        }
-    }
-
     /** Decisions come from the production client. This wrapper never changes its policy. */
-    private inner class MeasuredClient(private val inner: WebViewClient, private val id: Int) : WebViewClient() {
+    private inner class MeasuredClient(
+        private val inner: WebViewClient,
+        private val owner: Int,
+        private val recording: WikiProbeCapture,
+        private val started: Long
+    ) : WebViewClient() {
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-            val response = inner.shouldInterceptRequest(view, request)
-            record(id, requestEvent("resource", request).put("decision", if (response == null) "network" else "app_response"))
-            return response
+            return recording.resource(owner, hostName(request.url), { response ->
+                requestEvent("resource", request) + mapOf(
+                    "decision" to if (response == null) "not_intercepted" else "app_response",
+                    "t_ms" to SystemClock.elapsedRealtime() - started)
+            }) { inner.shouldInterceptRequest(view, request) }
         }
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
@@ -167,18 +155,20 @@ class ChordWikiBrowserCheck : Instrumentation() {
         override fun onPageFinished(view: WebView, url: String?) = inner.onPageFinished(view, url)
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-            record(id, requestEvent("network_error", request).put("code", error.errorCode))
+            recording.record(requestEvent("network_error", request) + mapOf("code" to error.errorCode,
+                "t_ms" to SystemClock.elapsedRealtime() - started))
             inner.onReceivedError(view, request, error)
         }
 
         override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
             val check = response.responseHeaders?.entries?.any { it.key.equals("cf-mitigated", true) && it.value.equals("challenge", true) } == true
-            record(id, requestEvent("http_error", request).put("status", response.statusCode).put("cloudflare_check", check))
+            recording.record(requestEvent("http_error", request) + mapOf("status" to response.statusCode,
+                "cloudflare_check" to check, "t_ms" to SystemClock.elapsedRealtime() - started))
             inner.onReceivedHttpError(view, request, response)
         }
     }
 
-    private fun requestEvent(type: String, request: WebResourceRequest): JSONObject {
+    private fun requestEvent(type: String, request: WebResourceRequest): Map<String, Any> {
         val accept = request.requestHeaders.entries.firstOrNull { it.key.equals("Accept", true) }?.value.orEmpty().lowercase()
         val kind = when {
             request.url.host == "challenges.cloudflare.com" && "/ci/" in request.url.path.orEmpty() -> "challenge_image"
@@ -187,16 +177,8 @@ class ChordWikiBrowserCheck : Instrumentation() {
             request.isForMainFrame -> "document"
             else -> "other"
         }
-        return JSONObject().put("type", type).put("host", hostName(request.url)).put("kind", kind)
-            .put("method", request.method).put("main_frame", request.isForMainFrame)
-    }
-
-    private fun record(id: Int, event: JSONObject) {
-        synchronized(pageEvents) {
-            if (id != readId) return
-            if (pageEvents.size >= 500) { eventsTruncated = true; return }
-            pageEvents += event.put("t_ms", SystemClock.elapsedRealtime() - pageStarted)
-        }
+        return mapOf("type" to type, "host" to hostName(request.url), "kind" to kind,
+            "method" to request.method, "main_frame" to request.isForMainFrame)
     }
 
     /** No URL, query, path, cookie or unknown host label is kept. */

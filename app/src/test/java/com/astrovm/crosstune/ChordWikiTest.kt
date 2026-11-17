@@ -351,6 +351,24 @@ class ChordWikiTest {
     }
 
     @Test
+    @Config(shadows = [AssetsBlockedInitiallyWebView::class])
+    fun pageObserverIsInstalledBeforeTheFirstLoad() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val job = CoroutineScope(Dispatchers.Main).launch {
+            ChordWikiBrowser(activity, gapMs = 60_000, onPageCreated = { web ->
+                (shadowOf(web) as AssetsBlockedInitiallyWebView).observerInstalled = true
+            }).page("https://ja.chordwiki.org/")
+        }
+        try {
+            shadowOf(Looper.getMainLooper()).idle()
+            val recorded = shadowOf(findWeb(activity.window.decorView)) as AssetsBlockedInitiallyWebView
+            assertEquals(true, recorded.observerAtLoad)
+        } finally {
+            job.cancel()
+        }
+    }
+
+    @Test
     fun verificationResourcesReachTheAllowedHostsWhateverTheirType() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val job = CoroutineScope(Dispatchers.Main).launch { ChordWikiBrowser(activity, gapMs = 60_000).page("https://ja.chordwiki.org/") }
@@ -776,6 +794,9 @@ class FlushCountingCookies {
 class AssetsBlockedInitiallyWebView : ShadowWebView() {
     var imagesAtLoad: Pair<Boolean, Boolean>? = null
         private set
+    var observerInstalled = false
+    var observerAtLoad = false
+        private set
     private var initialized = false
 
     @Implementation
@@ -793,6 +814,7 @@ class AssetsBlockedInitiallyWebView : ShadowWebView() {
     override fun loadUrl(url: String) {
         val settings = getSettings()
         imagesAtLoad = settings.loadsImagesAutomatically to settings.blockNetworkImage
+        observerAtLoad = observerInstalled
         super.loadUrl(url)
     }
 }
