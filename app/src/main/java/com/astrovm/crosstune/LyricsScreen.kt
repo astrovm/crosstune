@@ -2048,11 +2048,13 @@ internal fun <T> rememberWhilePlaying(following: Following?, of: Any?, changesAt
 internal fun <T> whilePlaying(following: Following, of: Any?, changesAt: (Long) -> Long?, at: (Long) -> T): State<T> {
     val latest by rememberUpdatedState(at)
     val change by rememberUpdatedState(changesAt)
-    fun now() = latest(following.clock.positionAt(SystemClock.elapsedRealtime()))
-    return produceState(now(), following, of) {
+    val clock = following.clock
+    fun now() = latest(clock.positionAt(SystemClock.elapsedRealtime()))
+    val first = remember { now() }
+    return produceState(first, clock, of) {
         value = now()
         while (true) {
-            delay(following.clock.untilMs(SystemClock.elapsedRealtime()) { change(it) } ?: break)
+            delay(clock.untilMs(SystemClock.elapsedRealtime()) { change(it) } ?: break)
             value = now()
         }
     }

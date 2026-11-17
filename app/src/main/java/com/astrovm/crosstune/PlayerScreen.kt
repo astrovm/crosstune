@@ -447,7 +447,7 @@ private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
     // Where it's dragged to, held there until the app says it moved, or a moment passes without it saying.
     var dragged by remember { mutableStateOf<Float?>(null) }
     var seeking by remember { mutableStateOf(false) }
-    LaunchedEffect(following) {
+    LaunchedEffect(following.clock, following.appPackage, following.session) {
         if (seeking) {
             seeking = false
             dragged = null

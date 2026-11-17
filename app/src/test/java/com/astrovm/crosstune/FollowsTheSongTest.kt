@@ -8,7 +8,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -17,7 +19,12 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.text.TextLayoutResult
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
@@ -152,10 +159,10 @@ class FollowsTheSongTest {
     // The player.
 
     /** The player, with [lines] timed by ear as [byEar] says, and the colors of a line sung and of one not. */
-    private fun player(lines: List<LyricLine> = emptyList(), onSeek: (Long) -> Unit = {}) = show {
+    private fun player(lines: List<LyricLine> = emptyList(), phone: Phone = Phone.OTHER, onSeek: (Long) -> Unit = {}) = show {
         sungInk = MaterialTheme.colorScheme.onSurface
         waitingInk = MaterialTheme.colorScheme.onSurfaceVariant
-        PlayerScreen(UiState(canFollowApps = true, linesEarlyMs = 0, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following, lines = lines, linesByEar = byEar)), ScreenActions(onPlayerSeek = onSeek))
+        PlayerScreen(UiState(canFollowApps = true, phone = phone, linesEarlyMs = 0, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following, lines = lines, linesByEar = byEar)), ScreenActions(onPlayerSeek = onSeek))
     }
 
     private var sungInk = Color.Unspecified
@@ -217,6 +224,61 @@ class FollowsTheSongTest {
             assertEquals(target.toFloat(), slider())
         }
         assertEquals(listOf(8_700L, 83_700L), sent)
+    }
+
+    @Test
+    fun draggingTheShortSongKeepsThePositionReportedByTheMusicApp() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(1_000).copy(durationMs = 10_000)
+        player(onSeek = { sent += it })
+        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).performTouchInput {
+            swipe(Offset(width * 0.1f, center.y), Offset(width * 0.87f, center.y))
+        }
+        settles()
+        val target = sent.single()
+        assertTrue(target in 7_000L..9_500L)
+        assertTrue(target % 1_000 != 0L)
+        following = pausedAt(target).copy(durationMs = 10_000)
+        passes(2_000)
+        assertEquals(target.toFloat(), slider())
+    }
+
+    @Test
+    fun shuffleDoesNotMoveTheSliderOrClearAnUnacknowledgedSeek() {
+        following = playingFrom(1_000)
+        player()
+        val first = slider()
+        following = requireNotNull(following).copy(shuffle = true)
+        settles()
+        assertEquals(first, slider())
+
+        seekTo(83_700)
+        following = requireNotNull(following).copy(shuffle = false)
+        settles()
+        assertEquals(83_700f, slider())
+        following = pausedAt(83_700)
+        settles()
+        assertEquals(83_700f, slider())
+    }
+
+    @Test
+    fun theTvPlayersNextSeekStartsAtTheFractionTheMusicAppReports() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(0)
+        player(phone = Phone.TV, onSeek = { sent += it })
+        val sliderNode = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
+        sliderNode.requestFocus()
+        sliderNode.performKeyInput { pressKey(Key.DirectionRight) }
+        settles()
+        val step = sent.single()
+        assertTrue(step > 0)
+
+        seekTo(83_700)
+        following = pausedAt(83_700)
+        settles()
+        sliderNode.performKeyInput { pressKey(Key.DirectionRight) }
+        settles()
+        assertEquals(listOf(step, 83_700L, 83_700L + step), sent)
     }
 
     @Test

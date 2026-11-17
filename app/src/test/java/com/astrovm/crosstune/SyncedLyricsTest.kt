@@ -228,6 +228,8 @@ class SyncedLyricsTest {
         // At double speed it comes in half the time, and at half speed in twice.
         assertEquals(1_500L, clock.copy(speed = 2f).untilMs(50_500) { 5_000 })
         assertEquals(6_000L, clock.copy(speed = 0.5f).untilMs(52_000) { 5_000 })
+        // At 1.5×, 666 ms is still short of the next second.
+        assertEquals(667L, clock.copy(speed = 1.5f).untilMs(50_000) { 2_000 })
         // A change that's due, or just passed, is looked at on the next moment, never in a tight loop.
         assertEquals(1L, clock.untilMs(51_000) { 2_000 })
         assertEquals(1L, clock.untilMs(51_000) { 1_500 })

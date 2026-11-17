@@ -36,6 +36,7 @@ import androidx.core.content.edit
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CompletableDeferred
@@ -64,7 +65,7 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
         if (!playing || speed <= 0f) return null
         val position = positionAt(nowMs)
         val next = changesAt(position) ?: return null
-        return ((next - position) / speed).toLong().coerceAtLeast(1)
+        return ceil((next - position) / speed.toDouble()).toLong().coerceAtLeast(1)
     }
 }
 
