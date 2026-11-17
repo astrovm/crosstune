@@ -19,6 +19,7 @@ an agent's shell calls each run in their own session. --force ends someone
 else's and prints who that was. The holder lets go after N minutes (a fraction is fine).
 """
 import argparse
+import contextlib
 import fcntl
 import json
 import math
@@ -108,7 +109,7 @@ def argv_of(pid):
         if raw:
             return [part.decode(errors="replace") for part in raw.split(b"\x00") if part]
     # macOS has no /proc. args= is accepted by both macOS and Linux ps.
-    listed = subprocess.run(["ps", "-p", str(pid), "-o", "args="], capture_output=True, text=True)
+    listed = subprocess.run(["ps", "-p", str(pid), "-o", "args="], capture_output=True, text=True, check=False)
     return listed.stdout.split()
 
 
@@ -129,9 +130,7 @@ def is_our_holder(argv, device=None):
         return False
     index = argv.index("_hold")
     held = argv[index + 1] if index + 1 < len(argv) else None
-    if device is not None and held != device:
-        return False
-    return True
+    return device is None or held == device
 
 
 def holder_alive(pid, device=None):
@@ -275,10 +274,8 @@ def clear_posix(fd):
     if sys.platform != "darwin":
         return
     data = struct.pack("qqihh", 0, 0, 0, fcntl.F_UNLCK, os.SEEK_SET)
-    try:
+    with contextlib.suppress(OSError):
         fcntl.fcntl(fd, fcntl.F_SETLK, data)
-    except OSError:
-        pass
 
 
 def waiter_dir(device):
@@ -463,10 +460,8 @@ def take(device, who, minutes):
         # The holder is in its own session, so this process exiting would leave it
         # waiting, and it would take the lock with nobody left to release it.
         if not ready:
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 os.kill(proc.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
         raise SystemExit(128 + signum)
 
     signal.signal(signal.SIGINT, cancel)
@@ -534,10 +529,8 @@ def hold(device, who, minutes, session, ready_fd):
             "who": who,
         })
         set_posix_write(fd)
-        try:
+        with contextlib.suppress(OSError):
             os.write(ready_fd, b"ok\n")
-        except OSError:
-            pass
         os.close(ready_fd)
         ready_fd = -1
         deadline = time.monotonic() + minutes * 60
@@ -549,10 +542,8 @@ def hold(device, who, minutes, session, ready_fd):
     except SystemExit:
         raise
     except Exception as error:
-        try:
+        with contextlib.suppress(OSError):
             os.write(ready_fd, f"error: {error}\n".encode())
-        except OSError:
-            pass
         raise SystemExit(1) from None
     finally:
         if waiter is not None:
@@ -586,18 +577,14 @@ def release(device, force, name=None):
     if force and not mine:
         print(f"{device} was held by {who}")
     if holder_alive(pid, device):
-        try:
+        with contextlib.suppress(ProcessLookupError):
             os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
         deadline = time.monotonic() + 5
         while holder_alive(pid, device) and time.monotonic() < deadline:
             time.sleep(0.05)
         if holder_alive(pid, device):
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
             deadline = time.monotonic() + 2
             while pid_alive(pid) and time.monotonic() < deadline:
                 time.sleep(0.05)

@@ -1,10 +1,10 @@
 """Exercise the native library check with libraries that do and don't depend on where they were built."""
 import contextlib
 import io
-from pathlib import Path
 import random
 import tempfile
 import unittest
+from pathlib import Path
 
 import check_native_paths
 

@@ -1,9 +1,9 @@
 """The store text guard against texts at, over and under Google Play's limits."""
 import contextlib
 import io
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import check_store_text
 

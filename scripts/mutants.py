@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent / "mutants-part"))
 from mutants_part import CODE, lived  # noqa: E402  the weekly run lists changes the same way
+
 SOURCES = "app/src/main/java/"
 LINES = ROOT / "app/build/mutants/changed-lines.txt"
 REPORT = ROOT / "app/build/reports/pitest/debug/mutations.xml"

@@ -163,7 +163,7 @@ MARK_SCRIPTS = {"VEDIC": "DEVANAGARI"}
 CONSONANTS = (("LETTER", "KA"), ("LETTER", "BEH"))
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def script_letters():
     """For each script, named by the first word of its letters' names, the letter its marks are measured
     after: its KA or BEH if it has one, else its first letter."""
@@ -223,7 +223,7 @@ def probe_rows(codes, as_entity=()):
 # thousandths of a digit to a hundredth. The letter's own box is not enough: a mark that Chromium draws as
 # part of the letter before it, such as U+FF9E after ｶ, has a box of no width but still moves the next letter on.
 PROBE_JS = """() => {
-  const REPEATS = %d;
+  const REPEATS = {REPEATS};
   const probe = document.createElement('tt'); probe.textContent = '0'; document.body.appendChild(probe);
   const digit = probe.getBoundingClientRect().width;
   const base = {};
@@ -234,7 +234,7 @@ PROBE_JS = """() => {
     read[tt.dataset.c] = tt.querySelector('span').textContent.codePointAt(0);
   }
   return {digit, out, read};
-}""" % REPEATS
+}""".replace("{REPEATS}", str(REPEATS))
 
 
 def platform_fonts(cdp, selector):
@@ -535,14 +535,18 @@ def differences(a, b):
     return [(int(c), wa[c], wb[c]) for c in sorted(wa, key=int) if c in wb and wa[c] != wb[c]]
 
 
+def fonts_of(measurement, code):
+    """The fonts a measurement drew the code point with, or ? where it didn't say."""
+    return "/".join(measurement.get("fonts", {}).get(str(code), [])) or "?"
+
+
 def diff_main(a_path, b_path, show):
     a, b = (json.loads(Path(x).read_text(encoding="utf-8")) for x in (a_path, b_path))
     found = differences(a, b)
     shift_jis = [d for d in found if in_cp932(d[0])]
     print(f"{len(found)} code points differ, {len(shift_jis)} of them in Windows-31J")
     for code, x, y in (shift_jis + [d for d in found if not in_cp932(d[0])])[:show]:
-        fonts = lambda m: "/".join(m.get("fonts", {}).get(str(code), [])) or "?"
-        print(f"U+{code:04X} {chr(code)!r} {x / 1000:.3f} ({fonts(a)}) -> {y / 1000:.3f} ({fonts(b)})")
+        print(f"U+{code:04X} {chr(code)!r} {x / 1000:.3f} ({fonts_of(a, code)}) -> {y / 1000:.3f} ({fonts_of(b, code)})")
     for kind in ("pairs", "first", "later", "last"):
         ta, tb = (json.loads(Path(x).with_name(Path(x).stem + "-trims.json").read_text(encoding="utf-8")) if Path(x).with_name(Path(x).stem + "-trims.json").exists() else None for x in (a_path, b_path))
         if ta is None or tb is None:

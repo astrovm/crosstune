@@ -6,7 +6,14 @@ Stops at --pairs if head is no more than --margin worse, or else goes on to --ma
 Says too how much later head starts and first launches Qobuz than base, pair by pair, with a 95% interval, as an equal rate can hide every song starting late.
 usage: qobuz_compare.py SERIAL BASE_APK HEAD_APK LINK WANT_TITLE --out FILE [--pairs 40] [--max-pairs 80] [--margin 0.05] [--then LINK --then-want TITLE]
 """
-import argparse, hashlib, json, math, statistics, subprocess, sys
+
+import argparse
+import hashlib
+import json
+import math
+import statistics
+import subprocess
+import sys
 from pathlib import Path
 
 APP = "com.astrovm.crosstune.dev"
@@ -68,7 +75,7 @@ def paired(tries, seconds):
     if len(gaps) < 2:
         return None
     mean = statistics.fmean(gaps)
-    half = (Z + (Z ** 3 + Z) / (4 * (len(gaps) - 1))) * statistics.stdev(gaps) / math.sqrt(len(gaps))
+    half = (Z + (Z**3 + Z) / (4 * (len(gaps) - 1))) * statistics.stdev(gaps) / math.sqrt(len(gaps))
     return dict(pairs=len(gaps), median=round(statistics.median(gaps), 3), mean=round(mean, 3), low=round(mean - half, 3), high=round(mean + half, 3))
 
 
@@ -79,8 +86,14 @@ def summary(tries):
     for name, its in arms.items():
         times = [t["right_at"] for t in its if t.get("right_at") is not None]
         launches = [at for at in map(first_launch, its) if at is not None]
-        report[name] = dict(tries=len(its), reached=sum(reached(t) for t in its), blocked=sum(t.get("blocked", 0) for t in its), median_s=statistics.median(times) if times else None,
-                            first_launch_median_s=statistics.median(launches) if launches else None, first_launch_range_s=[min(launches), max(launches)] if launches else None)
+        report[name] = dict(
+            tries=len(its),
+            reached=sum(reached(t) for t in its),
+            blocked=sum(t.get("blocked", 0) for t in its),
+            median_s=statistics.median(times) if times else None,
+            first_launch_median_s=statistics.median(launches) if launches else None,
+            first_launch_range_s=[min(launches), max(launches)] if launches else None,
+        )
     report["start_gap_s"] = paired(kept, lambda t: t.get("right_at"))
     report["first_launch_gap_s"] = paired(kept, first_launch)
     first = arms["head"][:20]
@@ -100,14 +113,24 @@ def enough(report, pairs, max_pairs, margin):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("serial"); p.add_argument("base"); p.add_argument("head"); p.add_argument("link"); p.add_argument("want")
-    p.add_argument("--out", required=True, type=Path); p.add_argument("--pairs", type=int, default=40); p.add_argument("--max-pairs", type=int, default=80)
-    p.add_argument("--margin", type=float, default=0.05); p.add_argument("--then"); p.add_argument("--then-want"); p.add_argument("--then-after", default="3"); p.add_argument("--seconds", default="35")
+    p.add_argument("serial")
+    p.add_argument("base")
+    p.add_argument("head")
+    p.add_argument("link")
+    p.add_argument("want")
+    p.add_argument("--out", required=True, type=Path)
+    p.add_argument("--pairs", type=int, default=40)
+    p.add_argument("--max-pairs", type=int, default=80)
+    p.add_argument("--margin", type=float, default=0.05)
+    p.add_argument("--then")
+    p.add_argument("--then-want")
+    p.add_argument("--then-after", default="3")
+    p.add_argument("--seconds", default="35")
     a = p.parse_args()
     apks = {"base": a.base, "head": a.head}
 
     def adb(*c, timeout=300):
-        return subprocess.run(["adb", "-s", a.serial, *c], capture_output=True, text=True, timeout=timeout)
+        return subprocess.run(["adb", "-s", a.serial, *c], capture_output=True, text=True, timeout=timeout, check=False)
 
     def shell(*c):
         return adb("shell", *c).stdout.strip()
@@ -149,7 +172,7 @@ def main():
             if a.then:
                 command += ["--then", a.then, "--then-want", a.then_want, "--then-after", a.then_after]
             try:
-                run = subprocess.run(command, capture_output=True, text=True, timeout=120)
+                run = subprocess.run(command, capture_output=True, text=True, timeout=120, check=False)
                 result = json.loads(run.stdout.strip().splitlines()[-1])
             except (subprocess.TimeoutExpired, IndexError, json.JSONDecodeError) as problem:
                 result = dict(error=str(problem)[:400])

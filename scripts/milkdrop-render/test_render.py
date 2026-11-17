@@ -1,10 +1,10 @@
 """Regression tests for renderer cleanup with real subprocesses and pipes."""
 import importlib.util
-from pathlib import Path
-import subprocess
 import signal
+import subprocess
 import sys
 import unittest
+from pathlib import Path
 
 spec = importlib.util.spec_from_file_location('milkdrop_render', Path(__file__).with_name('render.py'))
 render = importlib.util.module_from_spec(spec)

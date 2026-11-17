@@ -8,7 +8,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import reports  # noqa: E402
+import reports
 
 
 def row(id, problem="no_lyrics", title="Made Up Song", artist="Some Band", version="1.0.0", android="16 (36)", app=None, comment=None, length_ms=None):

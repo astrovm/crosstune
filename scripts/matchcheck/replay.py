@@ -28,9 +28,8 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import analyze  # noqa: E402 - the same reading of the answers
-import collect  # noqa: E402 - the same cache, so nothing is asked again
-
+import analyze
+import collect
 
 # A name quoted or split off another way than title_names splits it: "Mr.Children 「しるし」 MUSIC VIDEO", "風のLONELY WAY/ Kiyotaka Sugiyama".
 QUOTED = re.compile(r"[「」『』《》【】]|\s*/\s*")
@@ -68,7 +67,7 @@ def right_ids(song, results, videos):
         return analyze.says_another_version_of(row["name"], titles, song["artist"])
 
     # Checked by eye, it's the song, whatever its name says: "(Directors Edit Version)" for "(Director's Edit Version)".
-    ids = {r["id"] for r in results if r["id"] and (by_eye(r) or named(r) and analyze.artists(r["details"][0]) & wanted and not says_another(r))}
+    ids = {r["id"] for r in results if r["id"] and (by_eye(r) or (named(r) and analyze.artists(r["details"][0]) & wanted and not says_another(r)))}
     for v in videos:
         if not v["id"] or not named(v) or says_another(v):
             continue
@@ -78,6 +77,11 @@ def right_ids(song, results, videos):
     return sorted(ids)
 
 
+def read_json(path):
+    with open(path, encoding="utf-8") as kept:
+        return json.load(kept)
+
+
 def prepare(out):
     with open(os.path.join(out, "songs.json"), encoding="utf-8") as kept:
         songs = json.load(kept)
@@ -85,8 +89,8 @@ def prepare(out):
     for song in songs:
         query = song["query"]
         songs_path, videos_path = ytm_path(out, query, collect.YTM_SONGS), ytm_path(out, query, collect.YTM_VIDEOS)
-        results = analyze.rows(json.load(open(songs_path, encoding="utf-8"))) if songs_path else []
-        videos = analyze.rows(json.load(open(videos_path, encoding="utf-8"))) if videos_path else []
+        results = analyze.rows(read_json(songs_path)) if songs_path else []
+        videos = analyze.rows(read_json(videos_path)) if videos_path else []
         names = {r["id"]: f"{r['name']} | {' • '.join(r['details'])}" for r in results + videos if r["id"]}
         native = {}
         for n in song["native"]:
@@ -137,7 +141,7 @@ def verdicts(out, label):
 
 def table(out, label, against=None, verbose=False):
     replay, now = verdicts(out, label)
-    shown = {name: json.load(open(os.path.join(out, f"replay-{name}.json"), encoding="utf-8")).get("shown", {}) for name in filter(None, (label, against))}
+    shown = {name: read_json(os.path.join(out, f"replay-{name}.json")).get("shown", {}) for name in filter(None, (label, against))}
     other = verdicts(out, against)[1] if against else None
     for mode in MODES:
         counts = {}
@@ -152,7 +156,7 @@ def table(out, label, against=None, verbose=False):
         for index, song in enumerate(replay):
             verdict, row = now[(mode, index)]
             was = other[(mode, index)] if other else None
-            if verbose and (verdict == "wrong" or was and was[0] != verdict):
+            if verbose and (verdict == "wrong" or (was and was[0] != verdict)):
                 print(f"  {song['artist']} - {song['title']}: {label} {verdict} {row}" + (f"; {against} {was[0]} {was[1]}" if was else ""))
                 for rows, picked in shown[label][mode][index]:
                     print(f"    shown {len(rows)}, picked {picked}: {rows[:3]}")

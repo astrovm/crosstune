@@ -1,0 +1,2 @@
+# The Python linter CI runs on the scripts (ruff.toml has the rules). Renovate keeps it current.
+ruff==0.17.5

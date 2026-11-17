@@ -64,7 +64,7 @@ def gfxinfo(text: str) -> dict:
         found = re.search(pattern, text)
         return int(found.group(1)) if found else 0
 
-    janky = re.search(r"^Janky frames: (\d+) \(([\d.]+)%\)", text, re.M)
+    janky = re.search(r"^Janky frames: (\d+) \(([\d.]+)%\)", text, re.MULTILINE)
     return {
         "frames": number(r"Total frames rendered: (\d+)"),
         "janky": int(janky.group(1)) if janky else 0,
@@ -104,7 +104,7 @@ def thermal() -> str:
 
 
 def battery_c() -> float:
-    found = re.search(r"^\s*temperature: (\d+)", shell("dumpsys", "battery"), re.M)
+    found = re.search(r"^\s*temperature: (\d+)", shell("dumpsys", "battery"), re.MULTILINE)
     return int(found.group(1)) / 10 if found else 0.0
 
 

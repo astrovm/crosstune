@@ -79,7 +79,7 @@ def mark_found(mark, name):
         if a_word:
             if not goes_on(before) and not goes_on(after):
                 return True
-        elif mark not in WORD_OF_ITS_OWN or not in_katakana(before) and not in_katakana(after):
+        elif mark not in WORD_OF_ITS_OWN or (not in_katakana(before) and not in_katakana(after)):
             return True
     return False
 

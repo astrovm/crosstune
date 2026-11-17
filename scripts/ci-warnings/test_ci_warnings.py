@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-import ci_warnings  # noqa: E402
+import ci_warnings
 
 
 def line(message, job="build"):

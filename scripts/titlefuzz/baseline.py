@@ -84,8 +84,8 @@ def on_emulator(checkout, serial, count, long=None):
             shutil.copy(found, classes / "com/astrovm/crosstune" / found.name)
     shutil.make_archive(str(work / "classes"), "zip", classes)
     stdlib = next(Path.home().glob(".cache/crosstune-gradle-box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/*/*/kotlin-stdlib-*[0-9].jar"))
-    tools = sorted((regextable.SDK / "build-tools").iterdir())[-1]
-    platform = sorted((regextable.SDK / "platforms").iterdir())[-1] / "android.jar"
+    tools = max((regextable.SDK / "build-tools").iterdir())
+    platform = max((regextable.SDK / "platforms").iterdir()) / "android.jar"
     # The app's resource ids, which the readers' enums name.
     ids = next(checkout.glob("app/build/intermediates/*r_class_jar/debug/*/R.jar"))
     regextable.run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "dex.jar"), str(work / "classes.zip"), str(ids), str(stdlib))
@@ -135,7 +135,7 @@ def write_readings(made, out, commit):
     out.parent.mkdir(parents=True, exist_ok=True)
     # No time in the file, so the same commit on the same engine makes the same bytes.
     with open(out, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as written:
-        written.write(f"# {commit} {engine}\n{lines}".encode("utf-8"))
+        written.write(f"# {commit} {engine}\n{lines}".encode())
     return engine, lines.count("\n")
 
 
