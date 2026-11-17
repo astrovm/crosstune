@@ -63,13 +63,13 @@ class ChordWikiBrowserCheck : Instrumentation() {
                         val recording = capture
                         val started = pageStarted
                         web.webViewClient = MeasuredClient(web.webViewClient, System.identityHashCode(host), recording, started)
-                        recording.record(mapOf("type" to "settings_before_load",
+                        recording.record { mapOf("type" to "settings_before_load",
                             "t_ms" to SystemClock.elapsedRealtime() - started,
                             "images" to web.settings.loadsImagesAutomatically,
                             "network_images_blocked" to web.settings.blockNetworkImage,
                             "javascript" to web.settings.javaScriptEnabled,
                             "dom_storage" to web.settings.domStorageEnabled,
-                            "attached" to web.isAttachedToWindow))
+                            "attached" to web.isAttachedToWindow) }
                     })
                 }
             }
@@ -142,7 +142,7 @@ class ChordWikiBrowserCheck : Instrumentation() {
         private val started: Long
     ) : WebViewClient() {
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-            return recording.resource(owner, hostName(request.url), { response ->
+            return recording.resource(owner, { hostName(request.url) }, { response ->
                 requestEvent("resource", request) + mapOf(
                     "decision" to if (response == null) "not_intercepted" else "app_response",
                     "t_ms" to SystemClock.elapsedRealtime() - started)
@@ -155,16 +155,24 @@ class ChordWikiBrowserCheck : Instrumentation() {
         override fun onPageFinished(view: WebView, url: String?) = inner.onPageFinished(view, url)
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-            recording.record(requestEvent("network_error", request) + mapOf("code" to error.errorCode,
-                "t_ms" to SystemClock.elapsedRealtime() - started))
-            inner.onReceivedError(view, request, error)
+            recording.record {
+                val event = requestEvent("network_error", request) + mapOf("code" to error.errorCode,
+                    "t_ms" to SystemClock.elapsedRealtime() - started)
+                inner.onReceivedError(view, request, error)
+                event
+            }
         }
 
         override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
-            val check = response.responseHeaders?.entries?.any { it.key.equals("cf-mitigated", true) && it.value.equals("challenge", true) } == true
-            recording.record(requestEvent("http_error", request) + mapOf("status" to response.statusCode,
-                "cloudflare_check" to check, "t_ms" to SystemClock.elapsedRealtime() - started))
-            inner.onReceivedHttpError(view, request, response)
+            recording.record {
+                val check = response.responseHeaders?.entries?.any {
+                    it.key.equals("cf-mitigated", true) && it.value.equals("challenge", true)
+                } == true
+                val event = requestEvent("http_error", request) + mapOf("status" to response.statusCode,
+                    "cloudflare_check" to check, "t_ms" to SystemClock.elapsedRealtime() - started)
+                inner.onReceivedHttpError(view, request, response)
+                event
+            }
         }
     }
 

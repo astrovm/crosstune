@@ -9,15 +9,15 @@ import org.junit.Test
 class WikiProbeCaptureTest {
     @Test fun aDecisionAndItsCountsAreSealedTogether() {
         val capture = WikiProbeCapture()
-        capture.record(mapOf("type" to "settings_before_load"))
-        val answer = capture.resource(1, "fixture", { mapOf("decision" to it) }) { "not_intercepted" }
+        capture.record { mapOf("type" to "settings_before_load") }
+        val answer = capture.resource(1, { "fixture" }, { mapOf("decision" to it) }) { "not_intercepted" }
         val sealed = capture.close()
         assertEquals("not_intercepted", answer)
         assertEquals(2, sealed.events.size)
         assertEquals(mapOf(1 to 1), sealed.activities)
         assertEquals(mapOf("fixture" to 1), sealed.hosts)
         assertTrue(sealed.complete)
-        capture.record(mapOf("late" to true))
+        capture.record { mapOf("late" to true) }
         assertSame(sealed, capture.close())
         assertEquals(2, sealed.events.size)
     }
@@ -29,7 +29,7 @@ class WikiProbeCaptureTest {
         val executor = Executors.newSingleThreadExecutor()
         try {
             val request = executor.submit<String> {
-                capture.resource(2, "fixture", { mapOf("decision" to it) }) {
+                capture.resource(2, { "fixture" }, { mapOf("decision" to it) }) {
                     entered.countDown()
                     check(release.await(5, TimeUnit.SECONDS))
                     "not_intercepted"
@@ -56,9 +56,9 @@ class WikiProbeCaptureTest {
     @Test fun exceedingTheBoundIsReportedInTheSameSnapshot() {
         val capture = WikiProbeCapture(limit = 1)
         val mutable = mutableMapOf<String, Any>("first" to true)
-        capture.record(mutable)
+        capture.record { mutable }
         mutable["first"] = false
-        capture.record(mapOf("second" to true))
+        capture.record { mapOf("second" to true) }
         val sealed = capture.close()
         assertEquals(listOf(mapOf("first" to true)), sealed.events)
         assertTrue(sealed.truncated)
@@ -68,7 +68,7 @@ class WikiProbeCaptureTest {
     @Test fun aFailedDecisionCannotClaimACompleteLog() {
         val capture = WikiProbeCapture()
         val failure = runCatching {
-            capture.resource<Unit>(1, "fixture", { emptyMap() }) { error("fixture") }
+            capture.resource<Unit>(1, { "fixture" }, { emptyMap() }) { error("fixture") }
         }
         assertTrue(failure.isFailure)
         assertTrue(capture.close().failed)
@@ -79,10 +79,65 @@ class WikiProbeCaptureTest {
         val capture = WikiProbeCapture()
         val sealed = capture.close()
         var called = false
-        capture.resource(1, "fixture", { mapOf("decision" to it) }) { called = true; "not_intercepted" }
+        capture.resource(1, { "fixture" }, { mapOf("decision" to it) }) { called = true; "not_intercepted" }
         assertTrue(called)
         assertTrue(sealed.complete)
         assertTrue(sealed.events.isEmpty())
         assertTrue(sealed.activities.isEmpty())
     }
+    @Test fun anErrorEventFailureCannotClaimACompleteLog() {
+        val capture = WikiProbeCapture()
+        val result = runCatching { capture.record { error("fixture") } }
+        assertTrue(result.isFailure)
+        val sealed = capture.close()
+        assertTrue(sealed.failed)
+        assertEquals(0, sealed.pending)
+        assertFalse(sealed.complete)
+    }
+
+    @Test fun anErrorCallbackAfterCloseStillReachesTheProductionClient() {
+        val capture = WikiProbeCapture()
+        val sealed = capture.close()
+        var forwarded = false
+        capture.record { forwarded = true; mapOf("type" to "http_error") }
+        assertTrue(forwarded)
+        assertSame(sealed, capture.close())
+        assertTrue(sealed.complete)
+        assertTrue(sealed.events.isEmpty())
+    }
+
+    @Test fun anErrorCallbackIsCountedBeforeItsEventIsBuilt() {
+        whileBuilding { capture, hold -> capture.record { hold(); mapOf("type" to "http_error") } }
+    }
+
+    @Test fun aResourceCallbackIsCountedBeforeItsHostIsRead() {
+        whileBuilding { capture, hold ->
+            val answer = capture.resource(1, { hold(); "fixture" }, { mapOf("decision" to it) }) { "not_intercepted" }
+            assertEquals("not_intercepted", answer)
+        }
+    }
+
+    private fun whileBuilding(callback: (WikiProbeCapture, () -> Unit) -> Unit) {
+        val capture = WikiProbeCapture()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            val pending = executor.submit { callback(capture) {
+                entered.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+            } }
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            val sealed = capture.close()
+            assertFalse(sealed.complete)
+            assertEquals(1, sealed.pending)
+            release.countDown()
+            pending.get(5, TimeUnit.SECONDS)
+            assertSame(sealed, capture.close())
+        } finally {
+            release.countDown()
+            executor.shutdownNow()
+        }
+    }
+
 }
