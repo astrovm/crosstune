@@ -3226,16 +3226,18 @@ class PlaybackTest {
     }
 
     @Test
-    @Config(shadows = [FixtureResourceNames::class])
+    @Config(shadows = [FixtureResourceNames::class, FixtureResourceNames.Packages::class])
     fun theDefaultDrawingLookupReadsTheMusicAppsResourceName() {
         allow()
         val fixture = MusicMetadata("Fixture Track", "Fixture Artist")
-        val controller = player(app.packageName, "Fixture", fixture.title, fixture.artist, album = "Fixture Album")
+        val controller = player(FixtureResourceNames.MUSIC_PACKAGE, "Fixture", fixture.title, fixture.artist, album = "Fixture Album")
         shadowOf(controller).setPlaybackState(PlaybackState.Builder()
             .setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT)
             .addCustomAction(PlaybackState.CustomAction.Builder("thumbs_up_action", "Fixture favorite", R.drawable.ic_thumb_up).build()).build())
         shadowOf(sessions).addController(controller)
+        FixtureResourceNames.Packages.requestedPackages.clear()
         assertEquals(true, followed(fixture).last()?.like?.liked)
+        assertEquals(setOf(FixtureResourceNames.MUSIC_PACKAGE), FixtureResourceNames.Packages.requestedPackages.toSet())
     }
 
     @Test
