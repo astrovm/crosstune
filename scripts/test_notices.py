@@ -1,6 +1,7 @@
 """notices.py's reading of each kind of source, offline: a page as text, a slice of lines, a file in an archive."""
 import contextlib
 import hashlib
+import http.client
 import importlib.util
 import io
 import tarfile
@@ -47,10 +48,41 @@ class DownloadsTest(unittest.TestCase):
 
     def test_missing_source_is_not_retried(self):
         url = "https://example.invalid/notice"
-        missing = urllib.error.HTTPError(url, 404, "Not found", {}, None)
-        with mock.patch.object(notices.urllib.request, "urlopen", side_effect=missing) as fetch, self.assertRaises(urllib.error.HTTPError):
-            notices.download(url)
+        with io.BytesIO(b"missing") as body:
+            missing = urllib.error.HTTPError(url, 404, "Not found", {}, body)
+            with mock.patch.object(notices.urllib.request, "urlopen", side_effect=missing) as fetch, self.assertRaises(urllib.error.HTTPError):
+                notices.download(url)
+            self.assertTrue(body.closed)
         fetch.assert_called_once()
+
+    def test_disconnect_and_incomplete_body_retry_without_using_partial_bytes(self):
+        first = mock.MagicMock()
+        first.__enter__.return_value.read.side_effect = http.client.IncompleteRead(b"part", 3)
+        next_answer = mock.MagicMock()
+        next_answer.__enter__.return_value.read.return_value = b"notice"
+        url = "https://example.invalid/notice"
+        with (
+            mock.patch.object(notices.urllib.request, "urlopen", side_effect=[
+                http.client.RemoteDisconnected(), first, next_answer,
+            ]) as fetch,
+            mock.patch.object(notices.time, "sleep") as wait,
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(b"notice", notices.download(url))
+        self.assertEqual([url] * 3, [call.args[0].full_url for call in fetch.call_args_list])
+        self.assertEqual([mock.call(1), mock.call(2)], wait.call_args_list)
+
+    def test_incomplete_body_stops_after_three_attempts(self):
+        answer = mock.MagicMock()
+        answer.__enter__.return_value.read.side_effect = http.client.IncompleteRead(b"part", 3)
+        with (
+            mock.patch.object(notices.urllib.request, "urlopen", return_value=answer) as fetch,
+            mock.patch.object(notices.time, "sleep"),
+            contextlib.redirect_stderr(io.StringIO()),
+            self.assertRaises(http.client.IncompleteRead),
+        ):
+            notices.download("https://example.invalid/notice")
+        self.assertEqual(3, fetch.call_count)
 
 
 class SourceBytesTest(unittest.TestCase):
@@ -150,8 +182,8 @@ def entry(name, data):
     return f"{name} {digest} https://example.invalid/{name}\n"
 
 
-NEW_LICENCE = b"GENERAL DICTIONARY LICENCE STATEMENT\nLicence Conditions\nUpdating Dictionary Versions\nJMdict\n"
-NEW_DOCUMENTATION = b"====== JMdict-EDICT Dictionary Project ======\nXML format\n"
+NEW_LICENCE = (notices.TEXTS / "edrdg-licence.txt").read_bytes()
+NEW_DOCUMENTATION = (notices.TEXTS / "jmdict-documentation.txt").read_bytes()
 
 
 class JmdictNoticesTest(unittest.TestCase):
@@ -202,6 +234,27 @@ class JmdictNoticesTest(unittest.TestCase):
             self.assertEqual(before, self.jmdict.read_bytes())
             self.assertEqual(b"old", (self.texts / self.licence).read_bytes())
             self.assertEqual(b"old", (self.texts / self.documentation).read_bytes())
+
+    def test_cut_off_pages_with_the_initial_headings_leave_the_snapshot_intact(self):
+        before = self.jmdict.read_bytes()
+        cases = [
+            (self.licence, b"GENERAL DICTIONARY LICENCE STATEMENT\nLicence Conditions\nUpdating Dictionary Versions\nJMdict\n", NEW_DOCUMENTATION),
+            (self.licence, NEW_LICENCE.split(b"5. Warranty")[0], NEW_DOCUMENTATION),
+            (self.licence, NEW_LICENCE.rsplit(b"(", 1)[0], NEW_DOCUMENTATION),
+            (self.documentation, NEW_LICENCE, b"====== JMdict-EDICT Dictionary Project ======\nXML format\n"),
+            (self.documentation, NEW_LICENCE, NEW_DOCUMENTATION.split(b"===== PUBLICATIONS =====")[0]),
+            (self.documentation, NEW_LICENCE, NEW_DOCUMENTATION.rstrip().removesuffix(b"]]")),
+        ]
+        for name, licence, documentation in cases:
+            with self.subTest(name=name, sizes=(len(licence), len(documentation))):
+                with (
+                    mock.patch.object(notices, "source_bytes", side_effect=[licence, documentation]),
+                    self.assertRaisesRegex(SystemExit, f"Expected EDRDG content in {name}"),
+                ):
+                    notices.main(["notices.py", "fetch-jmdict"])
+                self.assertEqual(before, self.jmdict.read_bytes())
+                self.assertEqual(b"old", (self.texts / self.licence).read_bytes())
+                self.assertEqual(b"old", (self.texts / self.documentation).read_bytes())
 
     def test_release_checks_the_snapshots_without_requesting_the_live_jmdict_pages(self):
         with mock.patch.object(notices, "source_bytes", return_value=b"pinned") as fetch:

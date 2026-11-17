@@ -14,6 +14,7 @@ echo "$*" >> "$FAKE/all-calls"
 if [ -f "$FAKE/fail-$1-$2" ]; then cat "$FAKE/fail-$1-$2" >&2; rm "$FAKE/fail-$1-$2"; exit 1; fi
 case "$1 $2" in
   "pr list") [ -f "$FAKE/open" ] && cat "$FAKE/open"; exit 0 ;;
+  "pr view") cat "$FAKE/body" ;;
   "pr create") while [ $# -gt 0 ]; do [ "$1" = --body-file ] && cp "$2" "$FAKE/body"; shift; done; echo 7 > "$FAKE/open" ;;
   "pr edit") while [ $# -gt 0 ]; do [ "$1" = --body-file ] && cp "$2" "$FAKE/body"; shift; done ;;
   "workflow run") ;;
@@ -32,7 +33,7 @@ exec "$real_git" "\$@"
 FAKE
 chmod +x "$work/bin/gh" "$work/bin/git"
 export PATH="$work/bin:$PATH" FAKE="$work/gh"
-export BRANCH=jmdict/remake TABLES=lists NOTICE_MANIFEST=jmdict-notice-texts.txt TAG=9.9.9+20000201000000 RUN=https://example.invalid/run/1
+export BRANCH=jmdict/remake TABLES=app/src/main/resources/com/astrovm/crosstune NOTICE_MANIFEST=jmdict-notice-texts.txt TAG=9.9.9+20000201000000 RUN=https://example.invalid/run/1
 # The throwaway repositories get no hooks from the machine, so the test runs the same everywhere.
 mkdir "$work/no-hooks"
 export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=init.defaultBranch GIT_CONFIG_VALUE_0=main GIT_CONFIG_KEY_1=core.hooksPath GIT_CONFIG_VALUE_1="$work/no-hooks"
@@ -42,10 +43,10 @@ person() { git -c user.name=test -c user.email=test@example.invalid "$@"; }
 # (64 KiB), so a reader that leaves a pipe early ends the writer with SIGPIPE.
 awk 'BEGIN { for (i = 0; i < 60000; i++) printf "語%05d\tご%05d\n", i, i }' > "$work/filler"
 list() { printf '# JMdict %s, by the Group\n%s\n' "$1" "$2"; cat "$work/filler"; }
-remade() { list 2000-02-01 "星空	ほしぞら$1" > lists/jmdict-readings.txt; list 2000-02-01 "おもいで	思い出" > lists/old-kana.txt; }
+remade() { list 2000-02-01 "星空	ほしぞら$1" > "$TABLES/jmdict-readings.txt"; list 2000-02-01 "おもいで	思い出" > "$TABLES/old-kana.txt"; }
 # As the workflow's propose job: a fresh checkout of main with all of origin's history and no other
 # local branch, the remade lists put in it, then propose.sh. This repository then fetches what it pushed.
-checkout() { rm -rf "$work/ci" && git clone -q "$work/origin.git" "$work/ci" && cp -R lists/. "$work/ci/lists/" && cp "$NOTICE_MANIFEST" "$work/ci/"; }
+checkout() { rm -rf "$work/ci" && git clone -q "$work/origin.git" "$work/ci" && cp -R "$TABLES/." "$work/ci/$TABLES/" && cp "$NOTICE_MANIFEST" "$work/ci/"; }
 run_propose() {
   local status=0
   (cd "$work/ci" && "$here/propose.sh") > "$work/out" 2>&1 || status=$?
@@ -54,6 +55,7 @@ run_propose() {
 }
 propose() { checkout && run_propose; }
 calls() { cat "$FAKE/calls" 2>/dev/null || true; }
+proof() { PYTHONPATH="$here" python3 -c 'import sys; from check_golden import readings_digest; print(readings_digest(".", *sys.argv[1:]))' origin/main "origin/$BRANCH"; }
 
 # Main is moved in origin by fetching into it, as a hook may refuse any push to a main.
 main_to_origin() {
@@ -65,13 +67,13 @@ git init -q --bare "$work/origin.git"
 git init -q "$work/repo"
 cd "$work/repo"
 git remote add origin "$work/origin.git"
-mkdir -p lists/notices
-printf 'old licence\n' > lists/notices/edrdg-licence.txt
-printf 'old documentation\n' > lists/notices/jmdict-documentation.txt
+mkdir -p "$TABLES/notices"
+printf 'old licence\n' > "$TABLES/notices/edrdg-licence.txt"
+printf 'old documentation\n' > "$TABLES/notices/jmdict-documentation.txt"
 printf 'old digests\n' > "$NOTICE_MANIFEST"
-list 2000-01-01 "星空	ほしぞら" > lists/jmdict-readings.txt
-list 2000-01-01 "おもいで	思い出" > lists/old-kana.txt
-person add lists "$NOTICE_MANIFEST" && person commit -q -m "chore: main" && main_to_origin
+list 2000-01-01 "星空	ほしぞら" > "$TABLES/jmdict-readings.txt"
+list 2000-01-01 "おもいで	思い出" > "$TABLES/old-kana.txt"
+person add "$TABLES" "$NOTICE_MANIFEST" && person commit -q -m "chore: main" && main_to_origin
 
 # The same lists as main: nothing is pushed or asked.
 propose || fail "same lists failed"
@@ -134,7 +136,9 @@ propose && fail "went on after gh pr list failed"
 [ "$(calls)" = "pr list --head $BRANCH --base main --state open --json number --jq .[0].number // empty" ] || fail "asked gh more after it failed"
 
 # Main moved on: the branch is made again from it, and the open pull request edited.
-git checkout -q -- lists && echo readme > README && person add README && person commit -q -m "docs: more" && main_to_origin
+digest=$(proof)
+printf '\ngolden: none\ngolden: lines checked %s\n' "$digest" >> "$FAKE/body"
+git checkout -q -- "$TABLES" && echo readme > README && person add README && person commit -q -m "docs: more" && main_to_origin
 remade "
 月夜	つきよ"
 rm "$FAKE/calls"
@@ -143,16 +147,59 @@ git merge-base --is-ancestor origin/main "origin/$BRANCH" || fail "branch not ma
 [ "$(git rev-list --count "origin/main..origin/$BRANCH")" = 1 ] || fail "old commit kept"
 grep -q "^pr edit 7 " "$FAKE/calls" || fail "open pull request not edited"
 grep -q "^pr create" "$FAKE/calls" && fail "a second pull request opened"
+grep -qxE 'golden: (none|lines checked .*)' "$FAKE/body" && fail "new data inherited an old proof"
 
 # Main moved on again, and the branch already has these lists: it is still made again from the new main.
-git checkout -q -- lists && echo again >> README && person commit -qam "docs: more again" && main_to_origin
+digest=$(proof)
+printf '\ngolden: none\ngolden: lines checked %s\ngolden: accept 月夜 つきよ\ngolden: lines checked 0123456789abcdef\n' "$digest" >> "$FAKE/body"
+made_on=$SOURCE_COMMIT
+git checkout -q -- "$TABLES" && echo again >> README && person commit -qam "docs: more again" && main_to_origin
 remade "
 月夜	つきよ"
 rm "$FAKE/calls"
-propose || { cat "$work/out"; fail "update with the same lists failed"; }
+SOURCE_COMMIT=$made_on propose || { cat "$work/out"; fail "update with the same lists failed"; }
 grep -q "already has the snapshot" "$work/out" && fail "branch with the same lists taken as up to date on an old main"
 git merge-base --is-ancestor origin/main "origin/$BRANCH" || fail "branch with the same lists not made from the new main"
 [ "$(git rev-list --count "origin/main..origin/$BRANCH")" = 1 ] || fail "old commit kept with the same lists"
+[ "$(proof)" = "$digest" ] || fail "the README change changed the readings digest"
+grep -qxF "golden: lines checked $digest" "$FAKE/body" || fail "rebasing the same inputs erased the readings proof"
+grep -qxF 'golden: none' "$FAKE/body" || fail "rebasing the same inputs erased golden: none"
+grep -qxF 'golden: accept 月夜 つきよ' "$FAKE/body" || fail "rebasing the same inputs erased the accepted reading"
+grep -qxF 'golden: lines checked 0123456789abcdef' "$FAKE/body" && fail "rebasing kept an obsolete digest"
+python3 "$here/check_golden.py" --repo . --base origin/main --head "origin/$BRANCH" --body-file "$FAKE/body" ||
+  fail "the locked readings check rejected the rebased proof"
+
+# A newly downloaded notice makes a different snapshot, even though the readings digest is the same.
+printf 'revised licence\n' > "$TABLES/notices/edrdg-licence.txt"
+propose || { cat "$work/out"; fail "update with a changed notice failed"; }
+[ "$(proof)" = "$digest" ] || fail "the notice change changed the readings digest"
+grep -qxE 'golden: (none|accept .*|lines checked .*)' "$FAKE/body" && fail "a changed notice inherited the old proof"
+
+# The snapshot can still be rebased with a fresh remake when main changes a locked input, but its
+# proof used the older input. First change the golden audit, which is not part of the readings digest.
+readings_file=app/src/main/java/com/astrovm/crosstune/Readings.kt
+test_unidic=app/src/test/java/com/astrovm/crosstune/TestUniDic.kt
+golden_file=app/src/test/resources/com/astrovm/crosstune/readings-golden.tsv
+for input in "$golden_file" scripts/readingsaudit/wholelines.py "$readings_file" app/build.gradle.kts; do
+  digest=$(proof)
+  printf '\ngolden: none\ngolden: lines checked %s\n' "$digest" >> "$FAKE/body"
+  mkdir -p "$(dirname "$input")"
+  case "$input" in
+    "$golden_file") printf '# audit: 1 lines, 1 right readings, sha256 0123456789abcdef\n' > "$input" ;;
+    scripts/readingsaudit/wholelines.py) printf 'new audit code\n' > "$input" ;;
+    "$readings_file") printf 'new readings code\n' > "$input" ;;
+    *) printf 'implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.1")\n' > "$input" ;;
+  esac
+  person add "$input" && person commit -qm "fix: change $input" && main_to_origin
+  propose || { cat "$work/out"; fail "fresh remake after $input changed failed"; }
+  grep -qxE 'golden: (none|lines checked .*)' "$FAKE/body" && fail "proof survived a change to $input"
+done
+
+# A stale digest cannot be carried forward even after a README-only change.
+printf '\ngolden: none\ngolden: lines checked 0123456789abcdef\n' >> "$FAKE/body"
+echo more >> README && person commit -qm "docs: more" -- README && main_to_origin
+propose || { cat "$work/out"; fail "update with a stale digest failed"; }
+grep -qxE 'golden: (none|lines checked .*)' "$FAKE/body" && fail "a stale proof survived a rebase"
 
 # Another push reaches the branch between reading it and pushing: the lease refuses, nothing is lost.
 remade "
@@ -179,7 +226,7 @@ git push -q --force origin "origin/main:refs/heads/$BRANCH"
 remade ""
 propose || { cat "$work/out"; fail "proposal before a person's commits failed"; }
 proposed=$(git rev-parse "origin/$BRANCH")
-git checkout -q -- lists
+git checkout -q -- "$TABLES"
 # 3000 empty commits by a person, about 130 KB of addresses from git log.
 many() {
   awk -v from="$proposed" -v branch="refs/heads/$BRANCH" 'BEGIN {
@@ -212,35 +259,40 @@ for how in wrote rebased authored-as-bot committed-as-bot "made many commits"; d
   grep -q "has a commit by a person" "$work/out" || fail "no error for a commit a person $how"
   [ "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$held" ] || fail "a commit a person $how was thrown away"
   [ -z "$(calls)" ] || fail "asked gh over a commit a person $how"
-  git checkout -q -- lists
+  git checkout -q -- "$TABLES"
 done
 # A notice-only change still opens a proposal, with both pages and their digest file.
 git push -q --force origin "origin/main:refs/heads/$BRANCH"
 rm -f "$FAKE/open" "$FAKE/calls"
-printf 'new licence\n' > lists/notices/edrdg-licence.txt
-printf 'new documentation\n' > lists/notices/jmdict-documentation.txt
+printf 'new licence\n' > "$TABLES/notices/edrdg-licence.txt"
+printf 'new documentation\n' > "$TABLES/notices/jmdict-documentation.txt"
 printf 'new digests\n' > "$NOTICE_MANIFEST"
 propose || { cat "$work/out"; fail "notice-only proposal failed"; }
 grep -q "^pr create " "$FAKE/calls" || fail "no pull request for changed notices"
 changed=$(git diff --name-only origin/main "origin/$BRANCH")
-expected=$(printf '%s\n' "$NOTICE_MANIFEST" lists/notices/edrdg-licence.txt lists/notices/jmdict-documentation.txt)
+expected=$(printf '%s\n' "$TABLES/notices/edrdg-licence.txt" "$TABLES/notices/jmdict-documentation.txt" "$NOTICE_MANIFEST")
 [ "$changed" = "$expected" ] || fail "notice-only proposal changed the wrong paths"
 grep -q "3 files changed" "$FAKE/body" || fail "body lacks the notice diff"
 
-# A job that read the previous snapshot may not put its files over a newer one.
-old_commit=$SOURCE_COMMIT
-printf 'newer documentation\n' > lists/notices/jmdict-documentation.txt
-person add lists/notices/jmdict-documentation.txt
-person commit -q -m 'fix(readings): update the notice on main'
-main_to_origin
-SOURCE_COMMIT=$old_commit
-printf 'older documentation from the job\n' > lists/notices/jmdict-documentation.txt
-held=$(git rev-parse "origin/$BRANCH")
-rm -f "$FAKE/calls"
-propose && fail "accepted a snapshot based on older notices"
-grep -q 'changed since the snapshot was made' "$work/out" || fail "missing stale snapshot message"
-[ "$held" = "$(git rev-parse "origin/$BRANCH")" ] || fail "stale job pushed"
-[ -z "$(calls)" ] || fail "stale job asked gh"
+# When main changes an input after remake, reject its artifact before pushing or calling GitHub.
+for input in "$TABLES/notices/jmdict-documentation.txt" "$readings_file" "$test_unidic" app/build.gradle.kts \
+  gradle/libs.versions.toml gradle/wrapper/gradle-wrapper.properties app/src/test/resources/robolectric.properties; do
+  old_commit=$SOURCE_COMMIT
+  mkdir -p "$(dirname "$input")"
+  case "$input" in
+    app/build.gradle.kts) printf 'implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.2")\n' > "$input" ;;
+    gradle/libs.versions.toml) printf '[versions]\nkuromoji = "0.9.2"\n' > "$input" ;;
+    *) printf 'new input on main for %s\n' "$input" >> "$input" ;;
+  esac
+  person add "$input" && person commit -qm "fix: change $input during remake" && main_to_origin
+  printf 'older documentation from the job\n' > "$TABLES/notices/jmdict-documentation.txt"
+  held=$(git rev-parse "origin/$BRANCH")
+  rm -f "$FAKE/calls"
+  SOURCE_COMMIT=$old_commit propose && fail "accepted a stale snapshot after $input changed"
+  grep -q 'changed since the snapshot was made' "$work/out" || fail "missing stale snapshot message for $input"
+  [ "$held" = "$(git rev-parse "origin/$BRANCH")" ] || fail "stale job pushed after $input changed"
+  [ -z "$(calls)" ] || fail "stale job asked gh after $input changed"
+done
 
 # A CI run started with gh workflow run never counts as a pull request's checks (GitHub's docs,
 # "Troubleshooting required status checks"). A person approves the pull request's own runs instead.

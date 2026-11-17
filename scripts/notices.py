@@ -23,6 +23,7 @@ release workflow checks the committed JMdict snapshot. Its source pages have no 
 
 import hashlib
 import html.parser
+import http.client
 import io
 import os
 import pathlib
@@ -96,8 +97,11 @@ def download(url: str) -> bytes:
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
                 return response.read()
-        except (TimeoutError, urllib.error.URLError) as error:
-            permanent = isinstance(error, urllib.error.HTTPError) and error.code not in (408, 429) and error.code < 500
+        except (TimeoutError, ConnectionError, urllib.error.URLError, http.client.IncompleteRead) as error:
+            permanent = False
+            if isinstance(error, urllib.error.HTTPError):
+                error.close()
+                permanent = error.code not in (408, 429) and error.code < 500
             if permanent or attempt == 3:
                 print(f"Could not fetch {url}: {error}", file=sys.stderr)
                 raise
@@ -150,16 +154,50 @@ def entries(manifest):
             yield line.split(maxsplit=2)
 
 
-JMDICT_MARKERS = {
-    "edrdg-licence.txt": (b"general dictionary licence statement", b"licence conditions", b"updating dictionary versions", b"jmdict"),
-    "jmdict-documentation.txt": (b"====== jmdict-edict dictionary project ======", b"xml format"),
+# Check sections through the contact and the final publication. The pages are about 9 and 22 KB.
+# Leave room for edits, but reject responses that contain only the headings and a few words.
+JMDICT_PAGES = {
+    "edrdg-licence.txt": (7000, (
+        rb"general dictionary licence statement",
+        rb"jmdict - japanese-multilingual dictionary file",
+        rb"3\. licence conditions",
+        rb"creative commons attribution-sharealike licence",
+        rb"4\. updating dictionary versions",
+        rb"procedure for regular updating",
+        rb"5\. warranty and liability",
+        rb"6\. copyright",
+        rb"7\. prior permission",
+        rb"8\. special conditions",
+        rb"9\. enquiries",
+        rb"all enquiries to:",
+        rb"\([^\s()@]+@[^\s()@]+\.[^\s()@]+\)",
+    )),
+    "jmdict-documentation.txt": (16000, (
+        rb"====== jmdict-edict dictionary project ======",
+        rb"===== current version & download =====",
+        rb"===== format =====",
+        rb"complete dictionary information in xml format",
+        rb"===== lexicographical details =====",
+        rb"===== related projects =====",
+        rb"===== acknowledgements =====",
+        rb"===== publications =====",
+        rb"ejdic_report1\.pdf\|\(pdf\)\]\]",
+    )),
 }
 
 
 def check_jmdict_page(name, data):
-    content = data.lower()
-    if not all(marker in content for marker in JMDICT_MARKERS[name]):
-        sys.exit(f"Expected EDRDG content in {name}. The snapshot was not changed.")
+    minimum, sections = JMDICT_PAGES[name]
+    if len(data) >= minimum:
+        end = 0
+        for section in sections:
+            found = re.compile(section, re.IGNORECASE).search(data, end)
+            if found is None:
+                break
+            end = found.end()
+        else:
+            return
+    sys.exit(f"Expected EDRDG content in {name}. The snapshot was not changed.")
 
 
 def fetch_texts(manifest, selected):

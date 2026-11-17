@@ -8,12 +8,13 @@ set -euo pipefail
 : "${BRANCH:?}" "${TABLES:?}" "${NOTICE_MANIFEST:?}" "${SOURCE_COMMIT:?}" "${TAG:?}" "${RUN:?}"
 lists=("$TABLES/jmdict-readings.txt" "$TABLES/old-kana.txt")
 snapshot=("${lists[@]}" "$TABLES/notices/edrdg-licence.txt" "$TABLES/notices/jmdict-documentation.txt" "$NOTICE_MANIFEST")
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Compare the committed files before looking at the downloaded files in the working tree.
-inputs=("${snapshot[@]}" .github/workflows/jmdict.yml scripts/readingsaudit scripts/notices.py scripts/kotlinc
-        app/src/test/java/com/astrovm/crosstune/songcheck/JmdictReadings.kt)
+paths=$(python3 "$here/proposal.py" inputs)
+mapfile -t inputs <<< "$paths"
 if ! git merge-base --is-ancestor "$SOURCE_COMMIT" HEAD ||
-   ! git diff --quiet "$SOURCE_COMMIT" HEAD -- "${inputs[@]}"; then
+   ! git diff --quiet "$SOURCE_COMMIT" HEAD -- "${snapshot[@]}" "${inputs[@]}"; then
   echo "::error::JMdict inputs on main changed since the snapshot was made. Run the refresh again."
   exit 1
 fi
@@ -26,7 +27,7 @@ bot="41898282+github-actions[bot]@users.noreply.github.com"
 base=$(git rev-parse HEAD)
 lease=""
 push=true
-head=$BRANCH
+proof_base=
 # Exit code 2 is no such branch. Anything else is a failure, never taken as no branch.
 found=0
 git ls-remote -q --exit-code origin "refs/heads/$BRANCH" > /dev/null || found=$?
@@ -43,10 +44,13 @@ if [ "$found" = 0 ]; then
   lease=$(git rev-parse "origin/$BRANCH")
   # Already on main and made from this JMdict: nothing to push. A run that pushed it may have failed
   # before it opened its pull request, so that is still seen to.
-  if git merge-base --is-ancestor origin/main "origin/$BRANCH" && git diff --quiet "origin/$BRANCH" -- "${snapshot[@]}"; then
-    echo "::notice::$BRANCH already has the snapshot for JMdict $TAG"
-    push=false
-    head=origin/$BRANCH
+  if git diff --quiet "$lease" -- "${snapshot[@]}"; then
+    proof_base=$(git merge-base "$base" "$lease")
+    if [ "$proof_base" = "$base" ]; then
+      echo "::notice::$BRANCH already has the snapshot for JMdict $TAG"
+      push=false
+      head=$lease
+    fi
   fi
 elif [ "$found" != 2 ]; then
   echo "::error::Can't read $BRANCH from origin (git ls-remote exit $found)"
@@ -64,6 +68,7 @@ if $push; then
   git add -- "${snapshot[@]}"
   git -c user.name="github-actions[bot]" -c user.email="$bot" commit -q -m "$title" \
     -m "From jmdict-simplified $TAG, by .github/workflows/jmdict.yml: $RUN"
+  head=$(git rev-parse HEAD)
   # An empty lease: the branch must not be there yet.
   git push -q --force-with-lease="$BRANCH:$lease" origin "$BRANCH"
 fi
@@ -99,6 +104,14 @@ trap 'rm -f "$body"' EXIT
 pr=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
 if [ -n "$pr" ]; then
   if $push; then
+    if [ -n "$proof_base" ]; then
+      # The lists and notices are the same. Keep only marks for the unchanged reading and lock inputs.
+      proof=$(gh pr view "$pr" --json body --jq '.body // ""' |
+        python3 "$here/proposal.py" proof "$proof_base" "$lease" "$base" "$head")
+      if [ -n "$proof" ]; then
+        printf '\n%s\n' "$proof" >> "$body"
+      fi
+    fi
     gh pr edit "$pr" --title "$title" --body-file "$body"
   fi
 else
