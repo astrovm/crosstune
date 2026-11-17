@@ -14,7 +14,8 @@ swipes the same way each run: up the list and back down, a fling each, from the 
 The phone's history is the content, so compare builds on one phone.
 
 With --build, each run installs the builds in turn, keeping the app's data, so they take turns on
-a phone that warms up and cools down, rather than one build getting the cooler phone. An APK that
+a phone that warms up and cools down, rather than one build getting the cooler phone. The SDK's
+aapt2 checks that every APK is Crosstune Dev before any install. An APK that
 isn't debuggable is then compiled from its baseline profile, as Play has it after an install.
 A debug build runs most of its code in Android's interpreter, so measure a release-like build
 (`-PperfBuild :app:assemblePerf`) for what people's phones do.
@@ -39,14 +40,42 @@ PROFILE_RECEIVER = f"{PACKAGE}/androidx.profileinstaller.ProfileInstallReceiver"
 USER_HZ = 100
 
 
+def sdk_roots() -> list[Path]:
+    configured = os.environ.get("ANDROID_HOME")
+    roots = [Path.home() / "Android/Sdk", Path.home() / "Library/Android/sdk"]
+    return [Path(configured), *roots] if configured else roots
+
+
 def adb_path() -> str:
-    for base in (os.environ.get("ANDROID_HOME"), str(Path.home() / "Android/Sdk")):
-        if base and (Path(base) / "platform-tools/adb").exists():
-            return str(Path(base) / "platform-tools/adb")
+    for base in sdk_roots():
+        adb = base / "platform-tools/adb"
+        if adb.exists():
+            return str(adb)
     found = shutil.which("adb")
     if not found:
         sys.exit("adb is missing: install the Android SDK's platform-tools")
     return found
+
+
+def aapt2_path() -> str:
+    for sdk in sdk_roots():
+        tools = sorted(sdk.glob("build-tools/*/aapt2"), reverse=True)
+        if tools:
+            return str(tools[0])
+    found = shutil.which("aapt2")
+    if not found:
+        sys.exit("aapt2 is missing: install Android SDK Build Tools to check each APK")
+    return found
+
+
+def check_apk(apk: str) -> None:
+    command = [aapt2_path(), "dump", "packagename", str(Path(apk).resolve())]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    package = result.stdout.strip()
+    if result.returncode or not package:
+        sys.exit(f"Cannot read the package in {apk}: {result.stderr.strip() or 'no package name'}")
+    if package != PACKAGE:
+        sys.exit(f"Cannot install {apk}: expected {PACKAGE}, found {package}")
 
 
 def adb(*args: str) -> str:
@@ -103,15 +132,22 @@ def thermal() -> str:
     return found.group(1) if found else "?"
 
 
-def battery_c() -> float:
+def battery_c() -> float | None:
     found = re.search(r"^\s*temperature: (\d+)", shell("dumpsys", "battery"), re.MULTILINE)
-    return int(found.group(1)) / 10 if found else 0.0
+    return int(found.group(1)) / 10 if found else None
 
 
 def cool(below_c: float, status: int) -> None:
     """Waits until the phone's thermal status is at most [status] and its battery is under [below_c]:
     a throttled phone drew the same build's frames a third slower."""
-    while not thermal().isdigit() or int(thermal()) > status or battery_c() >= below_c:
+    while True:
+        current = thermal()
+        battery = battery_c()
+        if current.isdigit() and int(current) <= status and battery is not None and battery < below_c:
+            return
+        thermal_note = f"thermal status {current} (at most {status})" if current.isdigit() else "no thermal status"
+        battery_note = f"battery {battery:g} C (below {below_c:g} C)" if battery is not None else "no battery temperature"
+        print(f"Waiting to cool: {thermal_note}, {battery_note}", file=sys.stderr, flush=True)
         time.sleep(10)
 
 
@@ -129,7 +165,9 @@ def cold_start() -> int:
     shell("input", "keyevent", "KEYCODE_WAKEUP")
     out = shell("am", "start", "-W", "-n", ACTIVITY)
     found = re.search(r"TotalTime: (\d+)", out)
-    return int(found.group(1)) if found else -1
+    if not found:
+        sys.exit("Android did not report TotalTime for the cold start")
+    return int(found.group(1))
 
 
 def screen() -> tuple[int, int]:
@@ -197,6 +235,9 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     measure, keys = MEASURES[args.what]
     builds = [tuple(build.split("=", 1)) for build in getattr(args, "build", [])] or [(args.label, None)]
+    for _, apk in builds:
+        if apk is not None:
+            check_apk(apk)
     runs: dict[str, list[dict]] = {label: [] for label, _ in builds}
     for run in range(args.runs):
         for label, apk in builds:
