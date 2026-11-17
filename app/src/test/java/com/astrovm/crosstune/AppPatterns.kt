@@ -5,7 +5,8 @@ import java.util.regex.Pattern
 
 /**
  * The app's patterns, read from its code as the app builds them: each `phoneRegex(` or `Regex(` of literals, raw or quoted and
- * joined with `+`, with the constants and templates in them filled in, and its options. The tests that look at
+ * joined with `+`, with immutable string properties and templates filled in, and its options. Derived delimiter
+ * values use aliases, concatenation, take and the shared regex-class helper. Other operations stay unread. The tests that look at
  * every pattern read them here, so what one of them reads, the others read too.
  */
 internal class AppPatterns(val files: List<Pair<String, String>>) {
@@ -18,16 +19,11 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
      */
     val unread = mutableListOf<String>()
 
-    val found: List<Found> = constants(files.map { it.second }).let { known ->
-        files.flatMap { (name, source) -> patternsIn(name, source, known) }
+    val found: List<Found> = PatternValues(files, ::literalText, literals, template).let { known ->
+        files.flatMap { (name, source) -> patternsIn(name, source) { key -> known.get(name, key) } }
     }
 
-    /** The app's constants, which its patterns are built from. */
-    private fun constants(sources: List<String>): Map<String, String> = sources.flatMap { source ->
-        constant.findAll(source).map { it.groupValues[1] to literalText(it.groupValues[2]) }
-    }.toMap()
-
-    private fun patternsIn(name: String, source: String, known: Map<String, String>): List<Found> {
+    private fun patternsIn(name: String, source: String, known: (String) -> String?): List<Found> {
         fun where(at: Int) = "$name:${source.take(at).count { it == '\n' } + 1}"
         fun line(at: Int) = source.substring(source.lastIndexOf('\n', at - 1) + 1).lineSequence().first().trim()
         // A pattern named in a comment, as main's was, is no pattern of the app's.
@@ -49,7 +45,7 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
             val built = template.replace(text) { part ->
                 val key = part.groupValues[2].ifEmpty { part.groupValues[3] }
                 // A letter in a template, as ${'"'} ends a raw string in a quote, is that letter.
-                part.groupValues[1].ifEmpty { known[key] ?: run { unread += "$where \$$key"; part.value } }
+                part.groupValues[1].ifEmpty { known(key) ?: run { unread += "$where \$$key"; part.value } }
             }
             val options = found.groupValues[2]
             // Kotlin's Regex reads every pattern with UNICODE_CASE.
@@ -96,7 +92,6 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         private val built = Regex("""\b(?:phoneRegex|Regex)\(|\.toRegex\(""")
         /** Where Java builds a pattern: as Kotlin does, or with `Pattern`, or with a String's own methods, which take one. */
         private val javaBuilt = Regex("""\b(?:Pattern\.(?:compile|matches)|Regex|StringsKt\.toRegex)\(|\.(?:matches|split|replaceAll|replaceFirst)\(""")
-        private val constant = Regex("""\bconst val (\w+)\s*=\s*($RAW|$QUOTED)""")
         private val template = Regex("""\$\{'([^'\\])'\}|\$\{(\w+)\}|\$(\w+)""")
         private val escape = Regex("""\\(u[0-9a-fA-F]{4}|.)""")
         /** The value a `Regex(` is given to, right before it: "private val tags = ". */
