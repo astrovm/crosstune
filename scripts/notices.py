@@ -34,6 +34,8 @@ import zipfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "app/src/test/resources/com/astrovm/crosstune/notice-texts.txt"
 TEXTS = ROOT / "app/src/main/resources/com/astrovm/crosstune/notices"
+PLAY_TEXTS = ROOT / "app/src/play/resources/com/astrovm/crosstune/notices"
+PLAY_MANIFEST = MANIFEST.with_name("notice-texts-play.txt")
 BLOCKS = {"p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "ol", "ul", "dl", "dt", "dd", "table", "tr", "center", "pre", "blockquote"}
 
 
@@ -104,7 +106,7 @@ def source_bytes(source: str) -> bytes:
     elif "!" in source:
         url, inner = source.split("!", 1)
         archive = download(url)
-        if url.endswith((".zip", ".jar")):
+        if url.endswith((".zip", ".jar", ".aar")):
             data = zipfile.ZipFile(io.BytesIO(archive)).read(inner.lstrip("/"))
         else:
             with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
@@ -130,8 +132,8 @@ def ndk() -> pathlib.Path:
     return folder
 
 
-def entries():
-    for line in MANIFEST.read_text().splitlines():
+def entries(manifest):
+    for line in manifest.read_text().splitlines():
         if line.strip() and not line.startswith("#"):
             name, sha, source = line.split(maxsplit=2)
             yield name, sha, source
@@ -141,20 +143,27 @@ def main(argv):
     command = argv[1] if len(argv) > 1 else "check"
     only = set(argv[2:])
     failed = False
-    lines = MANIFEST.read_text().splitlines()
-    for name, sha, source in entries():
+    for manifest, folder in ((MANIFEST, TEXTS), (PLAY_MANIFEST, PLAY_TEXTS)):
+        failed |= update(command, only, manifest, folder)
+    return 1 if failed else 0
+
+
+def update(command, only, manifest, folder):
+    failed = False
+    lines = manifest.read_text().splitlines()
+    for name, sha, source in entries(manifest):
         if only and name not in only:
             continue
         try:
             data = source_bytes(source)
-            bundled_path = TEXTS / name
+            bundled_path = folder / name
             bundled_bytes = bundled_path.read_bytes() if command != "fetch" else b""
         except FileNotFoundError as missing:
             # One line, as the other stops do, instead of a traceback.
             sys.exit(f"No {missing.filename}")
         digest = hashlib.sha256(data).hexdigest()
         if command == "fetch":
-            (TEXTS / name).write_bytes(data)
+            bundled_path.write_bytes(data)
             lines = [re.sub(rf"^{re.escape(name)}\s+\S+", f"{name} {digest}", line) for line in lines]
             print(f"wrote {name} {digest[:12]}")
         else:
@@ -163,8 +172,8 @@ def main(argv):
             failed |= not ok
             print(f"{'ok  ' if ok else 'DIFF'} {name}  {source}")
     if command == "fetch":
-        MANIFEST.write_text("\n".join(lines) + "\n")
-    return 1 if failed else 0
+        manifest.write_text("\n".join(lines) + "\n")
+    return failed
 
 
 if __name__ == "__main__":

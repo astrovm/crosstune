@@ -58,13 +58,13 @@ internal class Inventory(private val root: File, libraries: File, cxx: File) {
             .flatMap { listOf("submodule $it") + submodules(File(root, it), "$it/") }
     }
 
-    /** Every file in app/src/main that the APK holds as it is: all but the code, which is compiled. */
-    private fun bundled(): List<String> {
-        val main = File(root, "app/src/main")
-        return main.walkTopDown().onEnter { it == main || it.name !in setOf("java", "cpp") || it.parentFile != main }
-            .filter { it.isFile && it != File(main, "AndroidManifest.xml") }
-            .map { "file " + it.relativeTo(root).invariantSeparatorsPath }.sorted().toList()
-    }
+    /** Resource and asset files of the Play release, including those shared with FOSS. */
+    private fun bundled(): List<String> = listOf("main", "play").flatMap { variant ->
+        val source = File(root, "app/src/$variant")
+        source.walkTopDown().onEnter { it == source || it.name !in setOf("java", "cpp") || it.parentFile != source }
+            .filter { it.isFile && it != File(source, "AndroidManifest.xml") }
+            .map { "file " + it.relativeTo(root).invariantSeparatorsPath }.toList()
+    }.sorted()
 
     /** What the app downloads: the addresses the code hands to fetchChecked, which every download goes through. */
     private fun downloads(): List<String> =

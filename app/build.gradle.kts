@@ -440,7 +440,7 @@ val releaseLibraries = tasks.register("releaseLibraries") {
                 file.isFile -> ZipFile(file).use { zip -> zip.entries().toList().filterNot { it.isDirectory }.map { it.name } }
                 else -> emptyList<String>()
             }
-            names.filter { notice.containsMatchIn(it) }.map { "maven $library!$it" }
+            names.filter { !it.endsWith(".kotlin_module") && notice.containsMatchIn(it) }.map { "maven $library!$it" }
         }
         val lines = libraries.get().map { "maven $it" } + carried + files.get()
         out.get().asFile.writeText(lines.distinct().sorted().joinToString("") { "$it\n" })
@@ -461,6 +461,7 @@ val notices = tasks.register<Test>("notices") {
     systemProperty("notices.libraries", layout.buildDirectory.file("notices/release-libraries.txt").get().asFile.path)
     systemProperty("notices.cxx", layout.projectDirectory.dir(".cxx/RelWithDebInfo").asFile.path)
     inputs.dir(rootProject.layout.projectDirectory.dir("app/src/main"))
+    inputs.dir(rootProject.layout.projectDirectory.dir("app/src/play"))
     outputs.upToDateWhen { false }
 }
 

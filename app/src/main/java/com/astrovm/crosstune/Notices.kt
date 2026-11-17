@@ -31,7 +31,9 @@ internal object Notices {
     private const val FOLDER = "/com/astrovm/crosstune/notices/"
 
     /** Every notice, in the file's order. Read when the page first opens. */
-    val all: List<Notice> by lazy { parse(read("notices.txt")) }
+    val all: List<Notice> by lazy {
+        parse(read("notices.txt")) + parse(open("notices-play.txt").orEmpty())
+    }
 
     /** [notice]'s licence texts and notices, one after the other; some are copied with Windows' line ends. */
     fun text(notice: Notice): String = notice.texts.joinToString("\n\n") { read(it).replace("\r\n", "\n").trimEnd() }

@@ -1,0 +1,37 @@
+Firebase Android SDK
+by: Google
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/firebase/firebase-android-sdk
+translate: none
+covers: maven com.google.android.datatransport:transport-api
+covers: maven com.google.android.datatransport:transport-backend-cct
+covers: maven com.google.android.datatransport:transport-runtime
+covers: maven com.google.firebase:firebase-encoders
+covers: maven com.google.firebase:firebase-encoders-json
+covers: maven com.google.firebase:firebase-encoders-proto
+
+javax.inject
+by: The JSR-330 Expert Group
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/javax-inject/javax-inject
+translate: none
+covers: maven javax.inject:javax.inject
+
+Google Play services
+by: Google
+license: Android Software Development Kit License
+text: play-services-cast-framework-notices.txt play-services-cast-tv-notices.txt play-services-flags-notices.txt
+url: https://developer.android.com/studio/terms.html
+translate: none
+covers: maven com.google.android.gms:play-services-base
+covers: maven com.google.android.gms:play-services-basement
+covers: maven com.google.android.gms:play-services-cast
+covers: maven com.google.android.gms:play-services-cast-framework
+covers: maven com.google.android.gms:play-services-cast-tv
+covers: maven com.google.android.gms:play-services-flags
+covers: maven com.google.android.gms:play-services-tasks
+covers: file app/src/play/resources/com/astrovm/crosstune/notices/play-services-cast-framework-notices.txt
+covers: file app/src/play/resources/com/astrovm/crosstune/notices/play-services-cast-tv-notices.txt
+covers: file app/src/play/resources/com/astrovm/crosstune/notices/play-services-flags-notices.txt

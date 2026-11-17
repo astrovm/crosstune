@@ -11,7 +11,8 @@ import java.io.File
 
 /** Each work's `covers:` lines in notices.txt, by its name. Only these tests read them; the app doesn't. */
 internal val coverLines: Map<String, List<String>> by lazy {
-    Notices.blocks(checkNotNull(Notices.open("notices.txt"))).associate { lines ->
+    val files = listOf("notices.txt", "notices-play.txt")
+    files.flatMap { Notices.blocks(checkNotNull(Notices.open(it))) }.associate { lines ->
         lines.first() to lines.filter { it.startsWith("covers: ") }.map { it.removePrefix("covers: ") }
     }
 }
@@ -77,6 +78,7 @@ class InventoryTest {
         "file app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt",
         "file app/src/main/resources/com/astrovm/crosstune/jtotal-widths-mono.txt",
         "file app/src/main/resources/com/astrovm/crosstune/notices/notices.txt",
+        "file app/src/play/resources/com/astrovm/crosstune/notices/notices-play.txt",
         "file app/src/main/res/values/themes.xml",
         "file app/src/main/res/values-night/themes.xml",
         "file app/src/main/res/values-night-v31/themes.xml",

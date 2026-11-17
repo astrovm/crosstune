@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -10,6 +11,12 @@ import org.robolectric.RobolectricTestRunner
 /** The build without Google Play Services has none of it, and casts to nothing. */
 @RunWith(RobolectricTestRunner::class)
 class FossBuildTest {
+    @Test
+    fun theLicencesPageHasNoPlayOnlyLibrary() {
+        val playNotices = setOf("Google Play services", "Firebase Android SDK", "javax.inject")
+        assertFalse(Notices.all.any { it.name in playNotices })
+    }
+
     @Test
     fun noGoogleCodeIsInTheBuild() {
         assertThrows(ClassNotFoundException::class.java) { Class.forName("com.google.android.gms.cast.framework.CastContext") }

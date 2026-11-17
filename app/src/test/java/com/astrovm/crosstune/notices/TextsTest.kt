@@ -38,6 +38,7 @@ private val ASKS = mapOf(
     "Public domain" to Asks(listOf("public domain")),
     "Public domain, and MIT License" to Asks(listOf("public domain", MIT)),
     "NAIST and ICOT licence" to Asks(listOf("Nara Institute of Science and Technology", "ICOT")),
+    "Android Software Development Kit License" to Asks(emptyList()),
     "None stated" to Asks(emptyList())
 )
 
@@ -72,10 +73,12 @@ internal fun missing(notices: List<Notice>, text: (Notice) -> String = Notices::
 class TextsTest {
 
     private val root = File("..").canonicalFile
-    private val folder = File(root, "app/src/main/resources/com/astrovm/crosstune/notices")
+    private val folders = listOf("main", "play").map { File(root, "app/src/$it/resources/com/astrovm/crosstune/notices") }
+    private fun textFile(name: String) = folders.map { File(it, name) }.single { it.isFile }
 
     /** name to (SHA-256, source). */
-    private val manifest = File(root, "app/src/test/resources/com/astrovm/crosstune/notice-texts.txt").readLines()
+    private val manifest = listOf("notice-texts.txt", "notice-texts-play.txt")
+        .flatMap { File(root, "app/src/test/resources/com/astrovm/crosstune/$it").readLines() }
         .filter { it.isNotBlank() && !it.startsWith("#") }
         .map { it.split(Regex("\\s+"), limit = 3) }
         .associate { (name, sha, source) -> name to (sha to source) }
@@ -85,8 +88,8 @@ class TextsTest {
     @Test
     fun everyTextHasItsSourceAndEveryNoticesTextIsOne() {
         // Crosstune's own words: the notices, and their words in each app language but English.
-        val words = setOf("notices.txt") + AppLanguage.tags.drop(1).map { "notices-$it.txt" }
-        val texts = folder.list().orEmpty().filter { it !in words }.sorted()
+        val words = setOf("notices.txt", "notices-play.txt") + AppLanguage.tags.drop(1).map { "notices-$it.txt" }
+        val texts = folders.flatMap { it.list().orEmpty().asList() }.filter { it !in words }.sorted()
         assertEquals(texts, manifest.keys.sorted())
         assertEquals(texts, Notices.all.flatMap { it.texts }.distinct().sorted())
     }
@@ -122,7 +125,7 @@ class TextsTest {
 
     @Test
     fun everyTextIsTheBytesCopiedFromItsSource() {
-        val changed = manifest.filter { (name, entry) -> sha256(File(folder, name).readBytes()) != entry.first }.keys
+        val changed = manifest.filter { (name, entry) -> sha256(textFile(name).readBytes()) != entry.first }.keys
         assertEquals("Texts that differ from what notice-texts.txt records: copy them again with scripts/notices.py", emptySet<String>(), changed)
     }
 
@@ -137,7 +140,7 @@ class TextsTest {
                 val (first, last) = Regex("\\d+").findAll(span).map { it.value.toInt() }.toList()
                 (String(bytes, Charsets.ISO_8859_1).split("\n").subList(first - 1, last).joinToString("\n") + "\n").toByteArray(Charsets.ISO_8859_1)
             }
-            assertEquals(name, sha256(expected), sha256(File(folder, name).readBytes()))
+            assertEquals(name, sha256(expected), sha256(textFile(name).readBytes()))
         }
     }
 }

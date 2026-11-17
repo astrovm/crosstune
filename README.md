@@ -168,6 +168,9 @@ Crosstune includes, or downloads when it's needed, these works by others. The ap
 | [Error Prone and J2ObjC annotations](https://github.com/google/error-prone) | Google | Apache License 2.0 |
 | [JSpecify](https://github.com/jspecify/jspecify) | The JSpecify Authors | Apache License 2.0 |
 | [AndroidX, Jetpack Compose and Media3](https://android.googlesource.com/platform/frameworks/support) | The Android Open Source Project | Apache License 2.0 |
+| [Google Play services](https://developer.android.com/studio/terms.html) (Play build) | Google | Android Software Development Kit License |
+| [Firebase Android SDK](https://github.com/firebase/firebase-android-sdk) (Play build) | Google | Apache License 2.0 |
+| [javax.inject](https://github.com/javax-inject/javax-inject) (Play build) | The JSR-330 Expert Group | Apache License 2.0 |
 | [Protocol Buffers](https://github.com/protocolbuffers/protobuf) | Google Inc. | BSD 3-Clause License |
 | [Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform) | JetBrains s.r.o. and the Android Open Source Project | Apache License 2.0 |
 | [Kotlin and kotlinx.coroutines](https://github.com/JetBrains/kotlin) | JetBrains s.r.o. and Kotlin Programming Language contributors | Apache License 2.0 |

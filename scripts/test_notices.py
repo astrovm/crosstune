@@ -58,9 +58,14 @@ class SourceBytesTest(unittest.TestCase):
             info = tarfile.TarInfo("jpeg-6b/README")
             info.size = len(data)
             archive.addfile(info, io.BytesIO(data))
-        served = {"https://example.com/a.jar": jar.getvalue(), "https://example.com/b.tar.gz": tarball.getvalue()}
+        served = {
+            "https://example.com/a.jar": jar.getvalue(),
+            "https://example.com/a.aar": jar.getvalue(),
+            "https://example.com/b.tar.gz": tarball.getvalue(),
+        }
         with mock.patch.object(notices, "download", served.__getitem__):
             self.assertEqual(b"notice\n", notices.source_bytes("https://example.com/a.jar!/META-INF/NOTICE.md"))
+            self.assertEqual(b"notice\n", notices.source_bytes("https://example.com/a.aar!/META-INF/NOTICE.md"))
             self.assertEqual(b"b\nc\n", notices.source_bytes("https://example.com/b.tar.gz!jpeg-6b/README#L2-L3"))
 
     def test_an_ndk_file_is_read_from_the_ndk_the_build_names(self):
@@ -90,8 +95,10 @@ class ManifestTest(unittest.TestCase):
             (root / "LICENSE").write_bytes(b"licence\n")
             (root / "texts/mit.txt").write_bytes(b"changed\n")
             manifest = root / "manifest.txt"
+            play = root / "notice-texts-play.txt"
+            play.touch()
             manifest.write_text("# name sha source\nmit.txt 0 LICENSE\n")
-            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, PLAY_MANIFEST=play, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(1, notices.main(["notices.py", "check"]))
                 self.assertEqual(0, notices.main(["notices.py", "fetch", "mit.txt"]))
                 self.assertEqual(0, notices.main(["notices.py", "check"]))
@@ -104,15 +111,17 @@ class ManifestTest(unittest.TestCase):
             (root / "texts").mkdir()
             (root / "LICENSE").write_bytes(b"licence\n")
             manifest = root / "manifest.txt"
+            play = root / "notice-texts-play.txt"
+            play.touch()
             manifest.write_text("mit.txt " + hashlib.sha256(b"licence\n").hexdigest() + " LICENSE\n")
-            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, PLAY_MANIFEST=play, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as stop:
                     notices.main(["notices.py", "check"])
             self.assertIn("mit.txt", str(stop.exception.code))
             self.assertNotIn("\n", str(stop.exception.code))
             (root / "texts/mit.txt").write_bytes(b"licence\n")
             (root / "LICENSE").unlink()
-            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, PLAY_MANIFEST=play, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as stop:
                     notices.main(["notices.py", "check"])
             self.assertIn("LICENSE", str(stop.exception.code))
