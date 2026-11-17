@@ -1067,7 +1067,11 @@ internal class MediaSessionPlayback(
     private fun MediaController.plays(song: MusicMetadata): Boolean {
         val playing = metadata ?: return false
         if (anotherRecording(playing, song)) return false
-        return SongNames.names(playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), song)
+        val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        // A station or untagged file has no artist to support a partial title match.
+        if (Songless.namesNoSong(title, artist, songsRead.of(title to artist))) return SongNames.wholeTitle(calls().first, song.title)
+        return SongNames.names(title, artist, song)
     }
 }
 

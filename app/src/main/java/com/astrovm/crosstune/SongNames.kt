@@ -829,6 +829,12 @@ internal object SongNames {
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter) && titleWordsMatch(one, other)
     }
 
+    /** Without an artist, require the whole title. A bare word such as Radio can be part of a station's name. */
+    fun wholeTitle(one: String, other: String): Boolean {
+        val title = normalize(titleEvidence(one, bareNotes = false))
+        return title.isNotEmpty() && title == normalize(titleEvidence(other, bareNotes = false))
+    }
+
     /** A recording note cannot provide the second word that makes a partial title specific enough. */
     private fun titleWordsMatch(one: String, other: String): Boolean {
         val first = titleEvidence(one)
@@ -840,15 +846,16 @@ internal object SongNames {
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
     }
 
-    private fun titleEvidence(title: String): String =
-        MetadataParsers.withoutFileNumber(titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(title))))
+    private fun titleEvidence(title: String, bareNotes: Boolean = true): String =
+        MetadataParsers.withoutFileNumber(titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(title)), bareNotes))
 
     /** The same note grammar reads brackets, dashes, bare suffixes and unfinished notes. */
-    private fun titleWithoutNotes(title: String): String {
+    private fun titleWithoutNotes(title: String, bareNotes: Boolean): String {
         val named = withoutBracketNotes(title).trim()
         val notes = RecordingNotes(named)
         val start = notes.tokens.firstOrNull { token ->
-            token.start > 0 && isPatternSpace(named[token.start - 1]) && notes.isNote(token.start, named.length, notes.afterDash(token.start))
+            token.start > 0 && isPatternSpace(named[token.start - 1]) && (bareNotes || notes.afterDash(token.start)) &&
+                notes.isNote(token.start, named.length, notes.afterDash(token.start))
         }?.start ?: named.length
         return if (start < named.length) named.substring(0, start).trim().trimEnd { it in NAME_TAG_DASHES }.trim() else named
     }

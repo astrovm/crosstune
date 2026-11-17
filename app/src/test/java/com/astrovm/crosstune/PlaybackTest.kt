@@ -2002,6 +2002,52 @@ class PlaybackTest {
     }
 
     @Test
+    fun anUnknownArtistStillNeedsTheWholeTitleBeforeItsSessionIsSelected() {
+        allow()
+        sounding()
+        for (artist in listOf("", "<unknown>", "Unknown Artist", "Various Artists")) {
+            ShadowMediaSessionManager.reset()
+            val source = MediaSessionPlayback(app, now = { NOW }, modes = modes)
+            shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Fake Song.mp3", artist))
+            assertEquals(artist, "com.example.player", source.appFor(MusicMetadata("Fake Song", "Fake Band"))?.packageName)
+            assertNull(artist, source.appFor(MusicMetadata("Fake Song Two", "Fake Band")))
+        }
+        assertFalse(SongNames.wholeTitle("", ""))
+        assertFalse(SongNames.wholeTitle("", "Fake Song"))
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSessionWithNoArtistCannotBeControlledByWordsItsTitleShares() {
+        allow()
+        sounding()
+        val cases = listOf(
+            "Hotel California Radio" to "Hotel California",
+            "Los 40 Classic" to "Los 40",
+            "Fake Song" to "Fake Song Two",
+            "Fake Song Two" to "Fake Song",
+            "Hello World (Live)" to "Hello (Live)"
+        )
+        for ((title, askedTitle) in cases) {
+            ShadowMediaSessionManager.reset()
+            val source = MediaSessionPlayback(app, now = { NOW }, modes = modes)
+            shadowOf(sessions).addController(player("com.example.player", "Fake Player", title, ""))
+            val song = MusicMetadata(askedTitle, "Fake Band")
+            for (of in listOf("com.example.player", null)) {
+                assertNull("$title is not $askedTitle in $of", source.appFor(song, app = of))
+                val seen = mutableListOf<Following?>()
+                val job = CoroutineScope(Dispatchers.Unconfined).launch { source.follow(song, of).collect { seen += it } }
+                shadowOf(Looper.getMainLooper()).idle()
+                assertEquals("$title is not followed for $askedTitle in $of", listOf<Following?>(null), seen)
+                job.cancel()
+                source.seekTo(song, 10_000, of)
+                source.playPause(song, false, of)
+            }
+        }
+        assertEquals(emptyList<String>(), asked())
+    }
+
+    @Test
     @Config(shadows = [AppAsked::class])
     fun anAppIsAskedToPlayWhateverItHas() {
         allow()
