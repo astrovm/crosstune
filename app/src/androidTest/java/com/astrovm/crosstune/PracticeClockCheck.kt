@@ -29,6 +29,7 @@ import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 
 /** Real framework callbacks and controls, with invented metadata and no audio or network. */
+@RequiresApi(31)
 class PracticeClockCheck : Instrumentation() {
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
@@ -37,7 +38,7 @@ class PracticeClockCheck : Instrumentation() {
 
     override fun onStart() {
         try {
-            check(Build.VERSION.SDK_INT >= 29) { "This test-only permission adapter needs API 29" }
+            check(Build.VERSION.SDK_INT >= 31) { "This test-only shell adapter needs API 31" }
             check(targetContext.packageName == "com.astrovm.crosstune.dev")
             check(targetContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
             finish(0, verifySession())
@@ -46,7 +47,6 @@ class PracticeClockCheck : Instrumentation() {
         }
     }
 
-    @RequiresApi(29)
     private fun verifySession(): Bundle {
         val oldLevel = shell("getprop log.tag.CrosstuneClock").trim()
         check(oldLevel.matches(Regex("[a-zA-Z0-9]*")))
@@ -73,6 +73,7 @@ class PracticeClockCheck : Instrumentation() {
             } finally {
                 try {
                     shell("setprop log.tag.CrosstuneClock '$oldLevel'")
+                    check(shell("getprop log.tag.CrosstuneClock").trim() == oldLevel) { "The diagnostic tag was not restored" }
                 } finally {
                     uiAutomation.dropShellPermissionIdentity()
                 }
@@ -160,6 +161,16 @@ class PracticeClockCheck : Instrumentation() {
         .lineSequence().filter { it.startsWith('{') }.map(::JSONObject)
         .filter { it.getLong("observed_ms") >= since && it.optString("app") == targetContext.packageName }.toList()
 
-    private fun shell(command: String): String = ParcelFileDescriptor.AutoCloseInputStream(uiAutomation.executeShellCommand(command))
-        .bufferedReader().use { it.readText() }
+    private fun shell(command: String): String {
+        // executeShellCommand tokenizes its argument without shell quoting. An explicit shell on
+        // stdin keeps an empty property value empty, instead of storing two literal quote marks.
+        val descriptors = uiAutomation.executeShellCommandRw("sh")
+        return ParcelFileDescriptor.AutoCloseInputStream(descriptors[0]).bufferedReader().use { output ->
+            ParcelFileDescriptor.AutoCloseOutputStream(descriptors[1]).bufferedWriter().use { input ->
+                input.write(command)
+                input.newLine()
+            }
+            output.readText()
+        }
+    }
 }
