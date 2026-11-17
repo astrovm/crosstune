@@ -185,19 +185,15 @@ internal object MetadataParsers {
      * "|Lyrics|HD|" and "|OfficialMusicVisualizer", and a line break after.
      */
     private fun trailingQuality(text: CharSequence) =
-        if (endsOnAWord(text)) findNear(trailingQualityRegex, text, beforeLetters(text, lineEnd(text), QUALITY_LETTERS)) else null
+        if (endsOnOneOf(text, "scdqk|")) findNear(trailingQualityRegex, text, beforeLetters(text, lineEnd(text), QUALITY_LETTERS)) else null
 
     /** A video's noise a title may end on, "Official Video", as [trailingVideoNoiseRegex] finds it. */
     private fun trailingVideoNoise(text: CharSequence) =
-        if (endsOnAWord(text)) findNear(trailingVideoNoiseRegex, text, beforeLetters(text, lineEnd(text), VIDEO_NOISE_LETTERS)) else null
+        if (endsOnOneOf(text, "orpl")) findNear(trailingVideoNoiseRegex, text, beforeLetters(text, lineEnd(text), VIDEO_NOISE_LETTERS)) else null
 
-    /**
-     * Whether [text] ends on a letter or a bar, but for spaces and a line break, as [trailingQualityRegex] and
-     * [trailingVideoNoiseRegex] end: "Lyrics", "4K", "HD |", "Video". A run of dashes is cut one at a time, and isn't
-     * read by them each time.
-     */
-    internal fun endsOnAWord(text: CharSequence): Boolean =
-        text.getOrNull(spacesStart(text, lineEnd(text)) - 1)?.let { isLatinLetterIgnoringCase(it) || it == '|' } == true
+    /** Only a possible final letter enters the full suffix pattern, before spaces and a final line break. */
+    internal fun endsOnOneOf(text: CharSequence, letters: String): Boolean =
+        text.getOrNull(spacesStart(text, lineEnd(text)) - 1)?.let { last -> letters.any { readsAs(last, it) } } == true
     private const val QUALITY_LETTERS = 12
     private const val VIDEO_NOISE_LETTERS = 25
 

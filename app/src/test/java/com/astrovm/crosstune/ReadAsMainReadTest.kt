@@ -95,15 +95,19 @@ class ReadAsMainReadTest {
 
     @Test
     fun noiseIsLookedForOnlyInATitleThatEndsAsItsPatternsEnd() {
-        // Main's patterns end on a letter or a bar, then spaces, then a line break, if any, that ends the text. Each
-        // letter there is read as a pattern reads it in PatternLettersTest; here, the edges and those case folds to ASCII.
-        val endsOnAWord = phoneRegex("""[a-z|]\s*$""", RegexOption.IGNORE_CASE)
-        for (last in "aAzZ|09-@[`{ \n\u212A\u017F\u0130\u0131\u0085\u3000") {
-            for (text in listOf("", " ", "\n", " \r\n", "\u0085", " \u2028", "-").map { "x$last$it" }) {
-                assertEquals(text, endsOnAWord.containsMatchIn(text), MetadataParsers.endsOnAWord(text))
+        for (letters in listOf("scdqk|", "orpl")) {
+            val ending = phoneRegex("[$letters]\\s*$", RegexOption.IGNORE_CASE)
+            for (last in Char.MIN_VALUE..Char.MAX_VALUE) {
+                val text = "x$last"
+                assertEquals("$letters U+%04X".format(last.code), ending.containsMatchIn(text), MetadataParsers.endsOnOneOf(text, letters))
             }
+            for (last in "aAzZscdqkorpl|09-@[`{ \n\u212A\u017F\u0130\u0131\u0085\u3000") {
+                for (text in listOf("", " ", "\n", " \r\n", "\u0085", " \u2028", "-").map { "x$last$it" }) {
+                    assertEquals(text, ending.containsMatchIn(text), MetadataParsers.endsOnOneOf(text, letters))
+                }
+            }
+            for (text in listOf("", " ", "\n", " \n")) assertEquals(text, false, MetadataParsers.endsOnOneOf(text, letters))
         }
-        for (text in listOf("", " ", "\n", " \n", "a")) assertEquals(text, text == "a", MetadataParsers.endsOnAWord(text))
     }
 
     @Test
