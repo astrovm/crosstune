@@ -85,6 +85,9 @@ module FakePlay
         json({ id: id })
       in [:delete, %r{\A/([^/:]+)\z}]
         @edits.delete(Regexp.last_match(1))
+        # A Console change between a discarded preflight and a later write edit.
+        changed = ENV["FAKE_PLAY_AFTER_DISCARD"]
+        File.write(STATE, File.read(changed)) if changed
         { status: 204, body: "" }
       in [:post, %r{\A/([^/]+):commit\z}]
         id = Regexp.last_match(1)

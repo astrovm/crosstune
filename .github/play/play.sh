@@ -257,8 +257,7 @@ production() {
   fetch_release "$tag" "$work/release.json"
   copy_notes "$work/notes" "$code"
   play promotion "$key" "$package" "${tracks[0]}" "$(IFS=,; echo "internal,${tracks[*]}")" "$code" "$known" \
-    "$work/release.json" "$tag"
-  play edit "$key" "$package" --from "${tracks[0]}" --code "$code" --to production --notes "$work/notes"
+    "$work/release.json" "$tag" "$work/notes"
 }
 
 listing() {

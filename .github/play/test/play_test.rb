@@ -576,6 +576,34 @@ class PlayTest < Minitest::Test
     tracks({ "internal" => release(CODE), "beta" => release(CODE), "production" => release(CODE - 10_000) }, [bundle])
   end
 
+  def test_promotion_never_sends_other_codes_from_the_same_release
+    # Both codes have tags. Only CODE's bundle has passed the release digest check.
+    other = CODE + 10_000
+    tags("v2.27.0")
+    mixed = release(CODE)
+    mixed.first["versionCodes"] << other.to_s
+    tracks({ "beta" => mixed }, [bundle, { "versionCode" => other, "sha256" => "0" * 64 }])
+    output, status = play("production", "2.26.0")
+    assert_promotion_stopped(output, status, "must contain only version code #{CODE}")
+    refute saved.key?("production")
+  end
+
+  def test_promotion_keeps_validation_and_writes_in_one_play_snapshot
+    promotable
+    changed = JSON.parse(File.read(@state))
+    changed["tracks"]["beta"].first["versionCodes"] << (CODE + 500).to_s
+    changed_file = File.join(@dir, "console-change.json")
+    File.write(changed_file, JSON.generate(changed))
+    output, status = play("production", "2.26.0", env: { "FAKE_PLAY_AFTER_DISCARD" => changed_file })
+    assert status.success?, output
+    assert_equal release(CODE, [{ "language" => "en-US", "text" => "Fake notes" }]), saved["production"]
+    # A Console change cannot slip between checks and writes when there is one edit.
+    opened = requests.select { |r| r["method"] == "POST" && r["path"].end_with?("/edits") }
+    assert_equal 1, opened.size
+    checked = requests.select { |r| r["method"] == "GET" && r["path"].end_with?("/bundles") }
+    assert_equal [edit_of(commits.fetch(0))], checked.map { |r| edit_of(r) }
+  end
+
   def assert_promotion_stopped(output, status, message, name = nil)
     refute status.success?, "#{name}: #{output}"
     assert_includes output, message, name
