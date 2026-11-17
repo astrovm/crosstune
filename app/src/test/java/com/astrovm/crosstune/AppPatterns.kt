@@ -39,15 +39,21 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         built.findAll(source).filter { it.range.first !in read }.map { it.range.first }
             .filterNot(::inComment)
             .forEach { unread += "${where(it)} ${line(it)}" }
-        return calls.map { found ->
+        return calls.mapNotNull { found ->
             val where = where(found.range.first)
             val prefix = source.substring(maxOf(0, found.range.first - HOLDER_REACH), found.range.first)
             val property = propertyHolder.containsMatchIn(prefix)
-            val built = literals.findAll(found.groupValues[1]).joinToString("") { literal ->
+            val unreadBefore = unread.size
+            val parts = literals.findAll(found.groupValues[1]).map { literal ->
                 expandedLiteral(literal.value) { key ->
-                    known.get(name, key, found.range.first, property) ?: run { unread += "$where \$$key"; "\$$key" }
-                }.orEmpty()
+                    known.get(name, key, found.range.first, property) ?: run { unread += "$where \$$key"; null }
+                }
+            }.toList()
+            if (parts.any { it == null }) {
+                if (unread.size == unreadBefore) unread += "$where unsupported template"
+                return@mapNotNull null
             }
+            val built = parts.joinToString("")
             val options = found.groupValues[2]
             // Kotlin's Regex reads every pattern with UNICODE_CASE.
             val flags = Pattern.UNICODE_CASE or (if ("IGNORE_CASE" in options) Pattern.CASE_INSENSITIVE else 0) or
@@ -80,17 +86,24 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         val text = literal.removeSurrounding(quote)
         val result = StringBuilder()
         var start = 0
-        for (part in template.findAll(text)) {
-            val slashes = text.take(part.range.first).takeLastWhile { it == '\\' }.length
-            if (!raw && slashes % 2 == 1) continue
-            result.append(literalText(quote + text.substring(start, part.range.first) + quote))
-            val replacement = part.groupValues[1].ifEmpty {
-                value(part.groupValues[2].ifEmpty { part.groupValues[3] }) ?: return null
+        var at = 0
+        var complete = true
+        while (at < text.length) {
+            if (!raw && text[at] == '\\') { at += 2; continue }
+            val part = if (text[at] == '$') template.matchAt(text, at) else null
+            if (part == null) {
+                if (text[at] == '$' && text.getOrNull(at + 1) == '{') complete = false
+                at++
+                continue
             }
+            result.append(literalText(quote + text.substring(start, at) + quote))
+            val replacement = part.groupValues[1].ifEmpty { value(part.groupValues[2].ifEmpty { part.groupValues[3] }) }
+            if (replacement == null) complete = false
             result.append(replacement)
             start = part.range.last + 1
+            at = start
         }
-        return result.append(literalText(quote + text.substring(start) + quote)).toString()
+        return result.append(literalText(quote + text.substring(start) + quote)).toString().takeIf { complete }
     }
 
     companion object {

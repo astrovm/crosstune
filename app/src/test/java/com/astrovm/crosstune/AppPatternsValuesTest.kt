@@ -58,7 +58,7 @@ class AppPatternsValuesTest {
         """.trimIndent()
         val app = AppPatterns(listOf("Reader.kt" to source))
         assertEquals(2, app.unread.size)
-        assertEquals(1, app.found.size)
+        assertEquals(0, app.found.size)
     }
 
     @Test
@@ -176,6 +176,32 @@ class AppPatternsValuesTest {
     @Test
     fun aCustomGetterDoesNotResolveToItsInitializer() {
         val source = "private val word = \"x\"\n get() = field.repeat(2)\nprivate val pattern = Regex(\"${'$'}word\")"
+        assertEquals(1, AppPatterns(listOf("Reader.kt" to source)).unread.size)
+    }
+
+    @Test
+    fun runtimeContextsDoNotBorrowAnOuterConstant() {
+        val source = "object Example { const val part = \"outer\"\n fun pattern(): Regex { val part = \"inner\"; return Regex(\"${'$'}part\") } }"
+        assertEquals(1, AppPatterns(listOf("Reader.kt" to source)).unread.size)
+    }
+
+    @Test
+    fun annotationsBeforeAGetterDoNotMakeItsInitializerTheValue() {
+        val source = "object Example { val part = \"initial\"\n @Deprecated(\"Use another value\")\n get() = \"actual\"\n private val pattern = Regex(\"${'$'}part\") }"
+        assertEquals(1, AppPatterns(listOf("Reader.kt" to source)).unread.size)
+    }
+
+    @Test
+    fun anUnsupportedOperatorCannotEndTheExpressionEarly() {
+        for (operator in listOf("==", "!=", "in", "to", "?:")) {
+            val source = "object Example { val part = \"a\"\n $operator \"b\"\n private val pattern = Regex(\"${'$'}part\") }"
+            assertEquals(operator, 1, AppPatterns(listOf("Reader.kt" to source)).unread.size)
+        }
+    }
+
+    @Test
+    fun unsupportedTemplateExpressionsStayUnreadWithoutCompilingThem() {
+        val source = "val part = \"a\"\n val pattern = Regex(\"${'$'}{part.uppercase()}\")"
         assertEquals(1, AppPatterns(listOf("Reader.kt" to source)).unread.size)
     }
 

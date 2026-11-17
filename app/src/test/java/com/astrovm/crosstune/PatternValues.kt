@@ -29,7 +29,8 @@ internal class PatternValues(
 
     fun get(file: String, name: String, at: Int, property: Boolean): String? {
         val scope = scopes.getValue(file).at(at)
-        return lookup(file, scope.owner, name, property && scope.properties && scope.code)
+        if (!property || !scope.properties || !scope.code) return null
+        return lookup(file, scope.owner, name, true)
     }
 
     private fun lookup(file: String, owner: String, name: String, derived: Boolean): String? {
@@ -98,7 +99,7 @@ internal class PatternValues(
                 val end = source.indexOf('\n', at).takeIf { it >= 0 } ?: source.length
                 val before = source.substring(start, at).trimEnd()
                 val after = following(source, end)
-                return before.takeUnless { continued(it, after) || getter.containsMatchIn(after) }
+                return before.takeIf { ended(after) }
             }
             when (source[at]) {
                 '(' -> depth++
@@ -107,8 +108,7 @@ internal class PatternValues(
                 '\n' -> if (depth == 0) {
                     val before = source.substring(start, at).trimEnd()
                     val after = following(source, at + 1)
-                    if (getter.containsMatchIn(after)) return null
-                    if (!continued(before, after)) return before
+                    if (ended(after)) return before
                 }
             }
             at++
@@ -116,7 +116,7 @@ internal class PatternValues(
         return source.substring(start)
     }
 
-    private fun continued(before: String, after: String) = before.endsWith('+') || after.firstOrNull() in listOf('+', '.', '?', '[', '!')
+    private fun ended(after: String) = after.isEmpty() || after.startsWith('}') || nextDeclaration.containsMatchIn(after)
 
     private fun following(source: String, start: Int): String {
         var at = start
@@ -160,7 +160,7 @@ internal class PatternValues(
     private companion object {
         // Keep unknown and mutable fields too. They block a field with the same name in an outer scope.
         val declaration = Regex("""\b(?:(const)\s+)?(val|var)\s+(\w+)(?:\s*:\s*String)?\s*""")
-        val getter = Regex("""^get\s*\(""")
+        val nextDeclaration = Regex("""^(?:(?:private|internal|public|protected|const|override|inline|suspend|tailrec|operator|infix|external|open|final|abstract|data|sealed|enum|annotation)\s+)*(?:val|var|fun|class|object|interface|typealias)\b""")
         val reference = Regex("""(?:\w+\.)*\w+""")
         val take = Regex("""(.+)\.take\((\d+)\)""", RegexOption.DOT_MATCHES_ALL)
         const val CLASS_CALL = "TitleDelimiters.regexClass("
