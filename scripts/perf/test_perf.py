@@ -39,17 +39,26 @@ FAKE_ADB = r"""#!/bin/sh
 echo "$*" >> "$FAKE/asked"
 case "$*" in
   "install -r -d "*.fail) echo "Failure [INSTALL_FAILED_INVALID_APK]" ;;
-  "install -r -d "*) echo Success ;;
+  "install -r -d "*) cat "$4" >> "$FAKE/installed-packages"; echo Success ;;
   "shell wm size") printf 'Physical size: 1080x2316\nOverride size: 720x1544\n' ;;
   "shell dumpsys thermalservice") cat "$FAKE/thermal" ;;
-  "shell dumpsys battery") printf 'Current Battery Service state:\n  temperature: 312\n' ;;
+  "shell dumpsys battery") cat "$FAKE/battery" ;;
   "shell dumpsys package com.astrovm.crosstune.dev") printf 'pkgFlags=[ %s HAS_CODE ]\nx\n' "$(cat "$FAKE/flags")" ;;
   "shell dumpsys gfxinfo com.astrovm.crosstune.dev") cat "$FAKE/gfxinfo" ;;
-  "shell am start -W "*) printf 'Status: ok\nTotalTime: 812\n' ;;
+  "shell am start -W "*) cat "$FAKE/start" ;;
   "shell pidof com.astrovm.crosstune.dev") echo 123 ;;
   "shell cat /proc/123/stat /proc/123/task/123/stat")
     n=$(cat "$FAKE/cats"); echo $((n + 1)) > "$FAKE/cats"
     if [ "$n" = 0 ]; then printf '%s\n%s\n' "$STAT_APP_0" "$STAT_MAIN_0"; else printf '%s\n%s\n' "$STAT_APP_1" "$STAT_MAIN_1"; fi ;;
+esac
+"""
+
+FAKE_AAPT2 = r"""#!/bin/sh
+case "$*" in
+  "dump packagename "*production.apk) echo com.astrovm.crosstune ;;
+  "dump packagename "*unknown.apk) exit 1 ;;
+  "dump packagename "*) cat "$3" ;;
+  *) exit 2 ;;
 esac
 """
 
@@ -63,10 +72,20 @@ class PerfTest(unittest.TestCase):
         adb = tools / "adb"
         adb.write_text(FAKE_ADB)
         adb.chmod(adb.stat().st_mode | stat.S_IEXEC)
+        aapt2 = home / "build-tools/37.0.0/aapt2"
+        aapt2.parent.mkdir(parents=True)
+        aapt2.write_text(FAKE_AAPT2)
+        aapt2.chmod(aapt2.stat().st_mode | stat.S_IEXEC)
         (home / "gfxinfo").write_text(GFXINFO)
         (home / "thermal").write_text("Thermal Status: 0\n")
+        (home / "battery").write_text("Current Battery Service state:\n  temperature: 312\n")
+        (home / "start").write_text("Status: ok\nTotalTime: 812\n")
         (home / "flags").write_text("")
         (home / "cats").write_text("0")
+        for name in ("a.apk", "b.apk", "missing.apk.fail"):
+            (home / name).write_text("com.astrovm.crosstune.dev\n")
+        (home / "production.apk").write_text("com.astrovm.crosstune\n")
+        (home / "unknown.apk").touch()
         self.home_path = home
         self.env = mock.patch.dict(os.environ, {
             "ANDROID_HOME": str(home), "FAKE": str(home),
@@ -84,13 +103,19 @@ class PerfTest(unittest.TestCase):
         self.home.cleanup()
 
     def run_perf(self, *argv):
+        args = list(argv)
+        for index, option in enumerate(args[:-1]):
+            if option == "--build":
+                label, name = args[index + 1].split("=", 1)
+                args[index + 1] = f"{label}={self.home_path / name}"
         out = io.StringIO()
         with redirect_stdout(out):
-            perf.main(list(argv))
+            perf.main(args)
         return [json.loads(line) for line in out.getvalue().splitlines()]
 
     def asked(self):
-        return (self.home_path / "asked").read_text().splitlines()
+        log = self.home_path / "asked"
+        return log.read_text().splitlines() if log.exists() else []
 
     def test_jank_reads_the_frames_since_the_reset_and_sums_up_each_build(self):
         lines = self.run_perf("jank", "--runs", "2", "--label", "main")
@@ -125,7 +150,7 @@ class PerfTest(unittest.TestCase):
         self.assertEqual([{"label": "old", "runs": 2, "total_ms": {"mean": 812, "sd": 0.0, "min": 812, "max": 812}},
                           {"label": "new", "runs": 2, "total_ms": {"mean": 812, "sd": 0.0, "min": 812, "max": 812}}], lines[4:])
         asked = self.asked()
-        self.assertEqual(["install -r -d a.apk", "install -r -d b.apk"] * 2, [line for line in asked if line.startswith("install")])
+        self.assertEqual(["a.apk", "b.apk"] * 2, [Path(line.removeprefix("install -r -d ")).name for line in asked if line.startswith("install")])
         self.assertEqual(4, asked.count("shell cmd package compile -f -m speed-profile com.astrovm.crosstune.dev"))
 
     def test_a_debuggable_build_runs_as_it_is(self):
@@ -137,6 +162,52 @@ class PerfTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as stopped:
             self.run_perf("start", "--runs", "1", "--build", "x=missing.apk.fail")
         self.assertIn("missing.apk.fail", str(stopped.exception))
+
+    def test_only_dev_builds_are_allowed_before_any_install(self):
+        for apk in ("production.apk", "unknown.apk"):
+            with self.subTest(apk=apk), self.assertRaisesRegex(SystemExit, apk):
+                self.run_perf("start", "--runs", "1", "--build", "dev=a.apk", "--build", f"other={apk}")
+        self.assertEqual([], self.asked())
+
+    def test_each_install_reads_the_validated_copy_after_the_source_changes(self):
+        apk = self.home_path / "a.apk"
+        self.sleep.stop()
+
+        def replace_during_run(seconds):
+            self.slept.append(seconds)
+            apk.write_text("com.astrovm.crosstune\n")
+
+        self.sleep = mock.patch.object(perf.time, "sleep", replace_during_run)
+        self.sleep.start()
+        self.run_perf("start", "--runs", "2", "--build", "dev=a.apk")
+        self.assertEqual(
+            ["com.astrovm.crosstune.dev"] * 2,
+            (self.home_path / "installed-packages").read_text().splitlines(),
+        )
+        installs = [Path(line.removeprefix("install -r -d ")) for line in self.asked() if line.startswith("install")]
+        self.assertFalse(any(path.exists() for path in installs))
+
+    def test_a_start_without_a_complete_total_time_line_stops_without_report(self):
+        for output in ("Status: ok\n", "NotTotalTime: 812\n", "TotalTime: 812ms\n"):
+            (self.home_path / "start").write_text(output)
+            report = io.StringIO()
+            with self.subTest(output=output), redirect_stdout(report), self.assertRaisesRegex(SystemExit, "TotalTime"):
+                perf.main(["start", "--runs", "1"])
+            self.assertEqual("", report.getvalue())
+
+    def test_a_subzero_battery_is_cool(self):
+        battery = self.home_path / "battery"
+        battery.write_text("  temperature: -10\n")
+        self.sleep.stop()
+
+        def guard(seconds):
+            self.slept.append(seconds)
+            if seconds == 10:
+                self.fail("A subzero battery triggered a cooling wait")
+
+        self.sleep = mock.patch.object(perf.time, "sleep", guard)
+        self.sleep.start()
+        self.assertEqual(-1.0, self.run_perf("start", "--runs", "1")[0]["battery_c"])
 
     def test_cpu_is_ms_a_second_for_the_main_thread_and_the_whole_app(self):
         run = self.run_perf("cpu", "--runs", "1", "--seconds", "10")[0]
@@ -158,14 +229,41 @@ class PerfTest(unittest.TestCase):
         self.run_perf("start", "--runs", "1", "--settle", "1", "--status", "1")
         self.assertEqual([1], self.slept)
 
+    def test_it_waits_for_a_hot_battery_and_explains_why(self):
+        battery = self.home_path / "battery"
+        battery.write_text("  temperature: 400\n")
+        self.sleep.stop()
+        self.sleep = mock.patch.object(perf.time, "sleep", lambda seconds: (self.slept.append(seconds), battery.write_text("  temperature: 399\n")))
+        self.sleep.start()
+        log = io.StringIO()
+        with mock.patch.object(sys, "stderr", log):
+            self.run_perf("start", "--runs", "1", "--settle", "1")
+        self.assertEqual([10, 1], self.slept)
+        self.assertIn("battery 40 C (below 40 C)", log.getvalue())
+
     def test_it_waits_while_the_phone_says_no_status(self):
         thermal = self.home_path / "thermal"
         thermal.write_text("nothing\n")
         self.sleep.stop()
         self.sleep = mock.patch.object(perf.time, "sleep", lambda seconds: (self.slept.append(seconds), thermal.write_text("Thermal Status: 0\n")))
         self.sleep.start()
-        self.run_perf("start", "--runs", "1", "--settle", "1")
+        log = io.StringIO()
+        with mock.patch.object(sys, "stderr", log):
+            self.run_perf("start", "--runs", "1", "--settle", "1")
         self.assertEqual([10, 1], self.slept)
+        self.assertIn("no thermal status", log.getvalue())
+
+    def test_a_missing_battery_temperature_is_not_treated_as_cool(self):
+        battery = self.home_path / "battery"
+        battery.write_text("Current Battery Service state:\n")
+        self.sleep.stop()
+        self.sleep = mock.patch.object(perf.time, "sleep", lambda seconds: (self.slept.append(seconds), battery.write_text("  temperature: 312\n")))
+        self.sleep.start()
+        log = io.StringIO()
+        with mock.patch.object(sys, "stderr", log):
+            self.run_perf("start", "--runs", "1", "--settle", "1")
+        self.assertEqual([10, 1], self.slept)
+        self.assertIn("no battery temperature", log.getvalue())
 
     def test_adb_comes_from_the_path_without_an_sdk(self):
         with mock.patch.dict(os.environ, {"ANDROID_HOME": ""}), mock.patch.object(perf.Path, "home", return_value=Path("/nowhere")):

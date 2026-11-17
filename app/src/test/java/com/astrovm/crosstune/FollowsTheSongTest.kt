@@ -8,7 +8,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -17,7 +19,12 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.text.TextLayoutResult
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
@@ -152,10 +159,10 @@ class FollowsTheSongTest {
     // The player.
 
     /** The player, with [lines] timed by ear as [byEar] says, and the colors of a line sung and of one not. */
-    private fun player(lines: List<LyricLine> = emptyList()) = show {
+    private fun player(lines: List<LyricLine> = emptyList(), phone: Phone = Phone.OTHER, onSeek: (Long) -> Unit = {}) = show {
         sungInk = MaterialTheme.colorScheme.onSurface
         waitingInk = MaterialTheme.colorScheme.onSurfaceVariant
-        PlayerScreen(UiState(canFollowApps = true, linesEarlyMs = 0, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following, lines = lines, linesByEar = byEar)), ScreenActions())
+        PlayerScreen(UiState(canFollowApps = true, phone = phone, linesEarlyMs = 0, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following, lines = lines, linesByEar = byEar)), ScreenActions(onPlayerSeek = onSeek))
     }
 
     private var sungInk = Color.Unspecified
@@ -193,12 +200,135 @@ class FollowsTheSongTest {
     private fun slider(): Float = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo), useUnmergedTree = true)
         .fetchSemanticsNodes().single().config[SemanticsProperties.ProgressBarRangeInfo].current
 
+    private fun seekTo(ms: Long) {
+        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(ms.toFloat()) }
+        settles()
+    }
+
+    @Test
+    fun thePausedPlayerKeepsFractionalSeeksOnShortAndLongSongs() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(0).copy(durationMs = 10_000)
+        player(onSeek = { sent += it })
+        for ((duration, target, label) in listOf(Triple(10_000L, 8_700L, "0:08"), Triple(200_000L, 83_700L, "1:23"))) {
+            following = pausedAt(0).copy(durationMs = duration)
+            settles()
+            seekTo(target)
+            assertEquals(target.toFloat(), slider())
+            following = pausedAt(target).copy(durationMs = duration)
+            settles()
+            assertEquals(target.toFloat(), slider())
+            assertTrue(exists(label))
+            passes(2_000)
+            assertEquals(target.toFloat(), slider())
+        }
+        assertEquals(listOf(8_700L, 83_700L), sent)
+    }
+
+    @Test
+    fun draggingTheShortSongKeepsThePositionReportedByTheMusicApp() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(1_000).copy(durationMs = 10_000)
+        player(onSeek = { sent += it })
+        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).performTouchInput {
+            swipe(Offset(width * 0.1f, center.y), Offset(width * 0.87f, center.y))
+        }
+        settles()
+        val target = sent.single()
+        assertTrue(target in 7_000L..9_500L)
+        assertTrue(target % 1_000 != 0L)
+        following = pausedAt(target).copy(durationMs = 10_000)
+        passes(2_000)
+        assertEquals(target.toFloat(), slider())
+    }
+
+    @Test
+    fun anEarlierSeekTimeoutDoesNotDiscardTheNextDrag() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(1_000).copy(durationMs = 10_000)
+        player(onSeek = { sent += it })
+        seekTo(3_000)
+        passes(1_000)
+
+        val node = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
+        node.performTouchInput {
+            down(Offset(width * 0.3f, center.y))
+            moveTo(Offset(width * 0.8f, center.y))
+        }
+        settles()
+        val target = slider()
+        assertTrue(target > 7_000)
+        passes(500)
+        assertEquals(target, slider())
+        node.performTouchInput { up() }
+        settles()
+        assertEquals(listOf(3_000L, target.toLong()), sent)
+    }
+
+    @Test
+    fun shuffleDoesNotMoveTheSliderOrClearAnUnacknowledgedSeek() {
+        following = playingFrom(1_000)
+        player()
+        val first = slider()
+        following = requireNotNull(following).copy(shuffle = true)
+        settles()
+        assertEquals(first, slider())
+
+        seekTo(83_700)
+        following = requireNotNull(following).copy(shuffle = false)
+        settles()
+        assertEquals(83_700f, slider())
+        following = pausedAt(83_700)
+        settles()
+        assertEquals(83_700f, slider())
+    }
+
+    @Test
+    fun theTvPlayersNextSeekStartsAtTheFractionTheMusicAppReports() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(0)
+        player(phone = Phone.TV, onSeek = { sent += it })
+        val sliderNode = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
+        sliderNode.requestFocus()
+        sliderNode.performKeyInput { pressKey(Key.DirectionRight) }
+        settles()
+        val step = sent.single()
+        assertTrue(step > 0)
+
+        seekTo(83_700)
+        following = pausedAt(83_700)
+        settles()
+        sliderNode.performKeyInput { pressKey(Key.DirectionRight) }
+        settles()
+        assertEquals(listOf(step, 83_700L, 83_700L + step), sent)
+    }
+
+    @Test
+    fun thePlayingSliderKeepsTheReportedFractionAfterALateSeekAcknowledgment() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(0)
+        player(onSeek = { sent += it })
+        seekTo(83_300)
+        passes(400)
+        assertEquals(83_300f, slider())
+
+        val clock = PlaybackClock(83_300, SystemClock.elapsedRealtime() - 150, speed = 2f)
+        following = pausedAt(0).copy(clock = clock)
+        settles()
+        assertTrue("The acknowledged position was ${slider()}", slider() in 83_600f..83_920f)
+        assertTrue(exists("1:23"))
+        passes(160)
+        assertTrue("The slider did not reach the next second: ${slider()}", slider() in 84_000f..84_080f)
+        assertTrue(exists("1:24"))
+        assertEquals(listOf(83_300L), sent)
+    }
+
     @Test
     fun thePlayersSliderMovesOnOncePerSecondLikeItsClock() {
         following = pausedAt(0)
         player()
         playsFrom(1_050)
-        assertEquals(1_000f, slider())
         // Each frame of 3 s looked at: it moves on once a second, as the clock under it does, not
         // each 100 ms, which composed the player's clock and slider again 10 times a second.
         val seen = mutableListOf(slider())
@@ -206,7 +336,7 @@ class FollowsTheSongTest {
             passes(FRAME_MS)
             slider().takeIf { it != seen.last() }?.let(seen::add)
         }
-        assertEquals(listOf(1_000f, 2_000f, 3_000f, 4_000f), seen)
+        assertEquals(listOf(1L, 2L, 3L, 4L), seen.map { it.toLong() / 1_000 })
     }
 
     private val peekLines = listOf(LyricLine(1_000, "One"), LyricLine(20_000, "Two"), LyricLine(40_000, "Three"))

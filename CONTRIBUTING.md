@@ -47,6 +47,8 @@ ANDROID_SERIAL=emulator-5554 ./gradlew :app:generateBaselineProfile
 
 `scripts/perf/perf.py` measures how smooth the dev app is on a phone, the same way each time: janky frames while the main screen scrolls (`jank`), main-thread and app CPU on what is on screen (`cpu`), and cold starts (`start`). Each run prints a line, and each build a mean and spread. With `--build LABEL=APK` given twice, it installs the two builds in turns, so both get the same phone as it warms up. A debug build runs most of its code in Android's interpreter, so measure a release-like one: `-PperfBuild :app:assemblePerf` builds the minified release as "Crosstune Dev", signed with the debug key.
 
+With `--build`, install Android SDK Build Tools for `aapt2`. The script checks a private copy of each APK before installing any build. It installs only the copies confirmed as Crosstune Dev. Cooling messages go to stderr. If Android gives no cold-start time, the run stops without including a value in the report.
+
 ```bash
 ANDROID_SERIAL=SERIAL python3 scripts/perf/perf.py jank --runs 10 --build main=main.apk --build branch=branch.apk
 ```

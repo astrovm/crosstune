@@ -2048,23 +2048,25 @@ internal fun <T> rememberWhilePlaying(following: Following?, of: Any?, changesAt
 internal fun <T> whilePlaying(following: Following, of: Any?, changesAt: (Long) -> Long?, at: (Long) -> T): State<T> {
     val latest by rememberUpdatedState(at)
     val change by rememberUpdatedState(changesAt)
-    fun now() = latest(following.clock.positionAt(SystemClock.elapsedRealtime()))
-    return produceState(now(), following, of) {
+    val clock = following.clock
+    fun now() = latest(clock.positionAt(SystemClock.elapsedRealtime()))
+    val first = remember { now() }
+    return produceState(first, clock, of) {
         value = now()
         while (true) {
-            delay(following.clock.untilMs(SystemClock.elapsedRealtime()) { change(it) } ?: break)
+            delay(clock.untilMs(SystemClock.elapsedRealtime()) { change(it) } ?: break)
             value = now()
         }
     }
 }
 
 /**
- * Where the song is while [following] it, to the second, as the player's clock shows it; null while
- * not. Finer, the player's clock and slider were composed again 10 times a second for one new second.
+ * Where the song is when the player starts following a clock, then at each whole second. The slider
+ * keeps the milliseconds from the app's clock so it does not move back when a seek is confirmed.
  */
 @Composable
-internal fun rememberSecond(following: Following?): Long? =
-    rememberWhilePlaying(following, null, { it - it % SECOND_MS + SECOND_MS }) { it - it % SECOND_MS }
+internal fun rememberPlayerPosition(following: Following): Long =
+    whilePlaying(following, null, { it - it % SECOND_MS + SECOND_MS }) { it }.value
 
 /** A second, the step the player's clock and slider move in. */
 private const val SECOND_MS = 1_000L
