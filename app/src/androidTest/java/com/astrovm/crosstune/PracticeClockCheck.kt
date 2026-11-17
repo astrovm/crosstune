@@ -18,6 +18,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.RequiresApi
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
@@ -85,29 +86,31 @@ class PracticeClockCheck : Instrumentation() {
         val session = MediaSession(context, "ClockFixture")
         val reports = Channel<Unit>(Channel.UNLIMITED)
         val commands = Channel<String>(Channel.UNLIMITED)
-        val controller = MediaController(context, session.sessionToken)
+        var controller: MediaController? = null
+        var following: Job? = null
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) { reports.trySend(Unit) }
         }
-        session.setCallback(object : MediaSession.Callback() {
-            override fun onSeekTo(pos: Long) { commands.trySend("seek:$pos") }
-            override fun onPlay() { commands.trySend("play") }
-            override fun onPause() { commands.trySend("pause") }
-        }, Handler(Looper.getMainLooper()))
-        session.setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, fixture.title)
-            .putString(MediaMetadata.METADATA_KEY_ARTIST, fixture.artist)
-            .putString(MediaMetadata.METADATA_KEY_ALBUM, "Fixture Album")
-            .putLong(MediaMetadata.METADATA_KEY_DURATION, 200_000).build())
-        session.setPlaybackState(state(started, PlaybackState.ACTION_SEEK_TO))
-        session.isActive = true
-        val source = MediaSessionPlayback(context)
-        val ready = CompletableDeferred<Unit>()
-        val following = launch(Dispatchers.Main) {
-            source.follow(fixture, context.packageName).collect { if (it != null) ready.complete(Unit) }
-        }
         try {
+            val observed = MediaController(context, session.sessionToken).also { controller = it }
+            session.setCallback(object : MediaSession.Callback() {
+                override fun onSeekTo(pos: Long) { commands.trySend("seek:$pos") }
+                override fun onPlay() { commands.trySend("play") }
+                override fun onPause() { commands.trySend("pause") }
+            }, Handler(Looper.getMainLooper()))
+            session.setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, fixture.title)
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, fixture.artist)
+                .putString(MediaMetadata.METADATA_KEY_ALBUM, "Fixture Album")
+                .putLong(MediaMetadata.METADATA_KEY_DURATION, 200_000).build())
+            session.setPlaybackState(state(started, PlaybackState.ACTION_SEEK_TO))
+            session.isActive = true
+            val source = MediaSessionPlayback(context)
+            val ready = CompletableDeferred<Unit>()
+            following = launch(Dispatchers.Main) {
+                source.follow(fixture, context.packageName).collect { if (it != null) ready.complete(Unit) }
+            }
             ready.await()
-            controller.registerCallback(callback, Handler(Looper.getMainLooper()))
+            observed.registerCallback(callback, Handler(Looper.getMainLooper()))
             val at = SystemClock.elapsedRealtime()
             repeat(2) {
                 session.setPlaybackState(state(at, PlaybackState.ACTION_SEEK_TO))
@@ -124,7 +127,8 @@ class PracticeClockCheck : Instrumentation() {
             check(raw.take(2).all { it.getLong("updated_ms") == at && it.getLong("actions") == PlaybackState.ACTION_SEEK_TO })
             check(raw[2].getLong("updated_ms") == at + 1 && raw[2].getLong("actions") == 0L)
             check(!raw.last().getBoolean("present"))
-            session.setPlaybackState(state(SystemClock.elapsedRealtime(), PlaybackState.ACTION_SEEK_TO))
+            session.setPlaybackState(state(SystemClock.elapsedRealtime(),
+                PlaybackState.ACTION_SEEK_TO or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE))
             reports.receive()
             val target = source.matching(fixture).single { it.app == context.packageName }.source
             target.seekTo(fixture, 43_270, context.packageName)
@@ -145,7 +149,7 @@ class PracticeClockCheck : Instrumentation() {
                 putBoolean("audio_generated", false)
             }
         } finally {
-            finishClockProbe({ following.cancelAndJoin() }, { controller.unregisterCallback(callback) }, session::release)
+            finishClockProbe({ following?.cancelAndJoin() }, { controller?.unregisterCallback(callback) }, session::release)
         }
     }
 
