@@ -367,6 +367,42 @@ class LicensesTest {
         assertNull(LicenseSplits.of("projectM"))
     }
 
+    @Test
+    fun anotherActivityLeavingKeepsTheOpenPagesCachesUntilItsOwnerFinishes() {
+        splitsCounted()
+        Notices.letGoOfWords()
+        openLicenses()
+        work("JMdict").performClick()
+        waitForText("Attribution-ShareAlike 4.0 International")
+        val first = checkNotNull(controller)
+        val pieces = checkNotNull(LicenseSplits.of("JMdict"))
+        val words = checkNotNull(Notices.wordsRead("en"))
+        first.pause().stop()
+        controller = null
+        try {
+            openLicenses()
+            checkNotNull(controller).destroyAndSettle()
+            controller = null
+            assertTrue(pieces === LicenseSplits.of("JMdict"))
+            assertTrue(words === Notices.wordsRead("en"))
+            first.start().resume()
+            controller = first.recreate()
+            composeRule.waitForIdle()
+            assertTrue(pieces === LicenseSplits.of("JMdict"))
+            assertTrue(words === Notices.wordsRead("en"))
+            work("JMdict").performClick()
+            work("JMdict").performClick()
+            waitForText("Attribution-ShareAlike 4.0 International")
+            assertEquals(listOf("JMdict"), splitWorks())
+            checkNotNull(controller).destroyAndSettle()
+            controller = null
+            assertNull(LicenseSplits.of("JMdict"))
+            assertNull(Notices.wordsRead("en"))
+        } finally {
+            runCatching { first.destroyAndSettle() }
+        }
+    }
+
     /** A phone, as a TV: Back from inside a long licence closes it and returns to its row, and the next Back leaves. */
     @OptIn(ExperimentalTestApi::class)
     @Test

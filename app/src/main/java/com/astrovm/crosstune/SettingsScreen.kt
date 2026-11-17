@@ -4,6 +4,9 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.VisibleForTesting
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CornerBasedShape
@@ -758,6 +761,14 @@ private const val LICENSES_PAGE = "licenses"
  */
 @Composable
 private fun LicensesPage(onBack: () -> Unit) {
+    val activity = LocalActivity.current
+    val cacheOwner = remember(activity) {
+        (activity as? ComponentActivity)?.let { ViewModelProvider(it)[LicenseCacheOwner::class.java] } ?: LicenseCacheOwner()
+    }
+    DisposableEffect(cacheOwner) {
+        cacheOwner.enter()
+        onDispose { if (activity !is ComponentActivity || !activity.isChangingConfigurations) cacheOwner.leave() }
+    }
     val openWebPage = rememberWebOpener()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -803,17 +814,6 @@ private fun LicensesPage(onBack: () -> Unit) {
             licenseItems(open, units, shown, look, openWebPage, focusing = { key ->
                 Modifier.focusRequester(requesters.getOrPut(key) { FocusRequester() }).onFocusChanged { if (it.isFocused) focusedKey = key }
             }) { name -> open = if (name in open) open - name else open + name }
-        }
-    }
-    // The pieces and the words are kept for as long as the page is shown, and while it turns, not for as long as the app runs:
-    // it stays up for days behind its notification access, and one text alone is about half a million characters.
-    val activity = LocalActivity.current
-    DisposableEffect(Unit) {
-        onDispose {
-            if (activity?.isChangingConfigurations != true) {
-                LicenseSplits.clear()
-                Notices.letGoOfWords()
-            }
         }
     }
     LaunchedEffect(open) {
@@ -962,6 +962,28 @@ private fun LicensePiece(unit: LicenseUnit, endsTheText: Boolean, modifier: Modi
 
 /** A piece of a licence's paragraph, and whether it [starts] or [ends] the paragraph, which is spaced from the next. */
 internal data class LicenseUnit(val text: String, val starts: Boolean, val ends: Boolean)
+
+/** Holds one activity's claim on the shared texts across a configuration change. */
+internal class LicenseCacheOwner : ViewModel() {
+    fun enter() {
+        synchronized(owners) { owners.add(this) }
+    }
+
+    fun leave() {
+        synchronized(owners) {
+            if (owners.remove(this) && owners.isEmpty()) {
+                LicenseSplits.clear()
+                Notices.letGoOfWords()
+            }
+        }
+    }
+
+    override fun onCleared() = leave()
+
+    private companion object {
+        val owners = mutableSetOf<LicenseCacheOwner>()
+    }
+}
 
 /**
  * Each work's licence, split once and kept. Opening another work must not split this one again, and
