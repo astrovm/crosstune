@@ -9,8 +9,54 @@ require "digest"
 require "json"
 require "open3"
 require "openssl"
+require "socket"
 require "tmpdir"
 require "fileutils"
+
+# GitHub's API, as curl asks it for a release by its tag, answered on a port of this machine. A path with no answer
+# is a 404, as for a tag with no release.
+class FakeGitHub
+  attr_reader :requests
+
+  def initialize
+    @answers = {}
+    @requests = []
+    @server = TCPServer.new("127.0.0.1", 0)
+    @thread = Thread.new { serve }
+  end
+
+  def url
+    "http://127.0.0.1:#{@server.addr[1]}"
+  end
+
+  def answer(path, status, body)
+    @answers[path] = [status, body]
+  end
+
+  def close
+    @thread.kill
+    @server.close
+  end
+
+  private
+
+  def serve
+    loop do
+      client = @server.accept
+      path = client.gets.to_s.split[1]
+      headers = {}
+      while (line = client.gets) && line != "\r\n"
+        name, value = line.chomp.split(": ", 2)
+        headers[name.downcase] = value
+      end
+      @requests << { "path" => path, "headers" => headers }
+      status, body = @answers.fetch(path, [404, JSON.generate(message: "Not Found")])
+      client.write("HTTP/1.1 #{status} Fake\r\nContent-Type: application/json\r\n" \
+                   "Content-Length: #{body.bytesize}\r\nConnection: close\r\n\r\n#{body}")
+      client.close
+    end
+  end
+end
 
 class PlayTest < Minitest::Test
   PLAY_SH = File.expand_path("../play.sh", __dir__)
@@ -59,9 +105,12 @@ class PlayTest < Minitest::Test
     @state = File.join(@dir, "play.json")
     File.write(@log, "")
     tracks({})
+    @github = FakeGitHub.new
+    github_release
   end
 
   def teardown
+    @github.close
     FileUtils.rm_rf(@dir)
     FileUtils.rm_rf(@origin)
   end
@@ -78,6 +127,22 @@ class PlayTest < Minitest::Test
 
   def tracks(tracks, bundles = [])
     File.write(@state, JSON.generate(tracks: tracks, bundles: bundles))
+  end
+
+  CERT = "ab" * 32
+
+  # What the Release workflow writes in a release's notes, and GitHub adds what changed after it.
+  def release_notes(digest = bundle["sha256"])
+    "Signing certificate SHA-256: `#{CERT}`\n\nApp Bundle SHA-256: `#{digest}`\n\n## What's Changed\n* A change"
+  end
+
+  def release_json(tag: TAG, notes: release_notes, draft: false, prerelease: false)
+    JSON.generate(tag_name: tag, draft: draft, prerelease: prerelease, body: notes)
+  end
+
+  # GitHub's answer for the release of a tag: the right one, unless the test says what else.
+  def github_release(tag = TAG, status: 200, body: release_json(tag: tag))
+    @github.answer("/repos/owner/app/releases/tags/#{tag}", status, body)
   end
 
   def bundle(content = "fake bundle")
@@ -100,6 +165,9 @@ class PlayTest < Minitest::Test
       "PLAY_LANGUAGES" => nil,
       "CHECK_ONLY" => nil,
       "GITHUB_ACTIONS" => "true",
+      "GITHUB_REPOSITORY" => "owner/app",
+      "GITHUB_API_URL" => @github.url,
+      "GH_TOKEN" => nil,
       "RUNNER_TEMP" => @dir,
       # The test group too, for WebMock.
       "BUNDLE_WITHOUT" => "",
@@ -342,8 +410,9 @@ class PlayTest < Minitest::Test
   end
 
   def test_production_never_goes_back_to_an_older_version
+    tags("v2.27.0")
     play_had = { "beta" => release(CODE), "production" => release(NEWER) }
-    tracks(play_had)
+    tracks(play_had, [bundle, newer_bundle])
     output, status = play("production", "2.26.0")
     refute status.success?, output
 
@@ -367,6 +436,7 @@ class PlayTest < Minitest::Test
 
   def test_promote_refuses_a_version_only_newer_tracks_hide
     # Testing has 2.27.0, production 2.25.0, and Play has no 2.26.0: production never gets it.
+    tags("v2.27.0")
     play_had = { "beta" => release(NEWER), "alpha" => release(NEWER), "production" => release(CODE - 10_000) }
     tracks(play_had, [newer_bundle])
     output, status = play("production", "2.26.0", env: { "PLAY_TRACKS" => "beta,alpha" })
@@ -392,13 +462,16 @@ class PlayTest < Minitest::Test
     # Play fails to list the tracks, in each command that reads them.
     tracks("beta" => release(CODE))
     [->(failing) { play("release", TAG, env: failing) }, ->(failing) { play("production", "2.26.0", env: failing) },
-     ->(failing) { play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", "production", env: failing) }]
+     ->(failing) { play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", "alpha", env: failing) }]
       .each do |run|
       File.write(@log, "")
       output, status = run.call({ "FAKE_PLAY_TRACKS_FAIL" => "1" })
       refute status.success?, output
 
       assert_includes output, "Backend Error"
+      # Supply sets five retries. The fake skips their waits, not their requests.
+      reads = requests.select { |request| request["method"] == "GET" && request["path"].end_with?("/tracks") }
+      assert_equal 6, reads.size
       opened = requests.select { |r| r["method"] == "POST" && r["path"].end_with?("/edits") }
       deleted = requests.select { |r| r["method"] == "DELETE" }
       refute_empty opened
@@ -480,7 +553,7 @@ class PlayTest < Minitest::Test
   end
 
   def test_a_version_code_in_two_releases_stops_the_promotion
-    tracks("beta" => release(CODE) + release(CODE))
+    tracks({ "beta" => release(CODE) + release(CODE) }, [bundle])
     output, status = play("production", "2.26.0")
     refute status.success?, output
 
@@ -489,7 +562,7 @@ class PlayTest < Minitest::Test
   end
 
   def test_production_goes_on_its_own_with_the_english_notes
-    tracks("beta" => release(CODE), "alpha" => release(CODE))
+    tracks({ "beta" => release(CODE), "alpha" => release(CODE) }, [bundle])
     output, status = play("production", "2.26.0", env: { "PLAY_TRACKS" => "beta,alpha" })
     assert status.success?, output
 
@@ -500,18 +573,253 @@ class PlayTest < Minitest::Test
     assert_equal release(CODE), saved["beta"]
   end
 
+  # What a promotion has to see before it sends anything: the version's tag on origin, no version code on Play that
+  # no tag has, and on Play the very bundle the Release workflow made, by the SHA-256 in its notes.
+  def promotable
+    tracks({ "internal" => release(CODE), "beta" => release(CODE), "production" => release(CODE - 10_000) }, [bundle])
+  end
+
+  def test_promotion_never_sends_other_codes_from_the_same_release
+    # Both codes have tags. Only CODE's bundle has passed the release digest check.
+    other = CODE + 10_000
+    tags("v2.27.0")
+    mixed = release(CODE)
+    mixed.first["versionCodes"] << other.to_s
+    tracks({ "beta" => mixed }, [bundle, { "versionCode" => other, "sha256" => "0" * 64 }])
+    output, status = play("production", "2.26.0")
+    assert_promotion_stopped(output, status, "must contain only version code #{CODE}")
+    refute saved.key?("production")
+  end
+
+  def test_promotion_keeps_validation_and_writes_in_one_play_snapshot
+    promotable
+    changed = JSON.parse(File.read(@state))
+    changed["tracks"]["beta"].first["versionCodes"] << (CODE + 500).to_s
+    changed_file = File.join(@dir, "console-change.json")
+    File.write(changed_file, JSON.generate(changed))
+    output, status = play("production", "2.26.0", env: { "FAKE_PLAY_AFTER_DISCARD" => changed_file })
+    assert status.success?, output
+    assert_equal release(CODE, [{ "language" => "en-US", "text" => "Fake notes" }]), saved["production"]
+    # A Console change cannot slip between checks and writes when there is one edit.
+    opened = requests.select { |r| r["method"] == "POST" && r["path"].end_with?("/edits") }
+    assert_equal 1, opened.size
+    checked = requests.select { |r| r["method"] == "GET" && r["path"].end_with?("/bundles") }
+    assert_equal [edit_of(commits.fetch(0))], checked.map { |r| edit_of(r) }
+  end
+
+  def assert_promotion_stopped(output, status, message, name = nil)
+    refute status.success?, "#{name}: #{output}"
+    assert_includes output, message, name
+    assert_empty writes, name
+    assert_empty commits, name
+  end
+
+  def test_promote_needs_the_versions_tag_on_origin
+    # A version code with no tag sits on beta, and someone promotes that version: production never gets it.
+    stray = CODE + 20_000
+    tracks({ "beta" => release(stray) }, [{ "versionCode" => stray, "sha256" => bundle["sha256"] }])
+    github_release("v2.28.0")
+    [[], ["v2.28.0-rc.1"]].each do |more|
+      tags(*more)
+      output, status = play("production", "2.28.0")
+      refute status.success?, output
+
+      assert_includes output, "::error::The tag v2.28.0 isn't on origin, so nothing was sent to Google Play"
+      # Neither Play nor GitHub was asked anything.
+      assert_empty requests
+      assert_empty @github.requests
+    end
+  end
+
+  def test_promote_stops_when_the_tags_cant_be_listed
+    git(@dir, "remote", "set-url", "origin", File.join(@dir, "no-such-origin"))
+    promotable
+    output, status = play("production", "2.26.0")
+    refute status.success?, output
+
+    assert_includes output, "::error::The tags on origin couldn't be listed, so nothing was sent to Google Play"
+    assert_empty requests
+    assert_empty @github.requests
+  end
+
+  def test_a_version_code_no_tag_has_stops_every_promotion
+    # The same stray check as the release job's, on every track it reads, at any height.
+    { "internal" => %w[beta], "alpha" => %w[beta alpha], "beta" => %w[beta], "production" => %w[beta] }
+      .each do |track, testing|
+      [CODE + 20_000, CODE - 500, CODE + 500].each do |stray|
+        File.write(@log, "")
+        play_had = { "internal" => release(CODE), "beta" => release(CODE), "alpha" => release(CODE),
+                     "production" => release(CODE - 10_000) }
+        # A testing track has the stray next to the release, or the track has nothing else.
+        play_had[track] = (%w[beta alpha].include?(track) ? play_had[track] : []) + release(stray)
+        tracks(play_had, [bundle])
+        output, status = play("production", "2.26.0", env: { "PLAY_TRACKS" => testing.join(",") })
+        assert_promotion_stopped(output, status,
+                                 "::error::Google Play has version code #{stray} on #{track}, and no tag has it")
+        assert_equal play_had, saved
+      end
+    end
+  end
+
+  def test_a_bundle_made_by_hand_with_the_right_code_stops_the_promotion
+    # The version code and the signature are right, so Play takes it: only the SHA-256 in the notes tells.
+    tracks({ "internal" => release(CODE), "beta" => release(CODE) }, [bundle("a bundle made by hand")])
+    output, status = play("production", "2.26.0")
+    assert_promotion_stopped(output, status, "::error::Google Play's bundle as version code #{CODE} isn't the App " \
+                                              "Bundle the Release workflow made for v2.26.0")
+    assert_includes output, bundle("a bundle made by hand")["sha256"]
+    assert_includes output, bundle["sha256"]
+    assert_equal({ "internal" => release(CODE), "beta" => release(CODE) }, saved)
+  end
+
+  def test_a_release_whose_bundle_play_doesnt_list_stops_the_promotion
+    tracks({ "beta" => release(CODE) }, [newer_bundle])
+    output, status = play("production", "2.26.0")
+    assert_promotion_stopped(output, status, "::error::Google Play has no bundle as version code #{CODE}")
+  end
+
+  def test_the_notes_digest_is_read_in_any_case_and_with_windows_line_ends
+    promotable
+    github_release(body: release_json(notes: release_notes(bundle["sha256"].upcase).gsub("\n", "\r\n")))
+    output, status = play("production", "2.26.0")
+    assert status.success?, output
+
+    assert_equal [["production"]], committed_tracks
+  end
+
+  def test_promote_asks_github_for_the_release_of_the_tag_only
+    promotable
+    output, status = play("production", "2.26.0")
+    assert status.success?, output
+    assert_equal ["/repos/owner/app/releases/tags/v2.26.0"], @github.requests.map { |r| r["path"] }
+    assert_nil @github.requests.first["headers"]["authorization"]
+
+    output, status = play("production", "2.26.0", env: { "GH_TOKEN" => "a-token" })
+    assert status.success?, output
+    assert_equal "Bearer a-token", @github.requests.last["headers"]["authorization"]
+  end
+
+  def test_promote_stops_when_github_has_no_release_of_the_tag
+    promotable
+    [[404, "{}"], [500, "oops"], [403, "{}"]].each do |code, body|
+      github_release(status: code, body: body)
+      output, status = play("production", "2.26.0")
+      refute status.success?, output
+
+      assert_includes output, "::error::The release v2.26.0 couldn't be read from GitHub, so nothing was sent to " \
+                              "Google Play"
+      assert_empty requests
+    end
+  end
+
+  def test_promote_stops_on_notes_it_cant_trust
+    promotable
+    digest = bundle["sha256"]
+    wrong = release_json(notes: release_notes("0" * 64))
+    notes = {
+      "not JSON" => ["<html>", "couldn't be read"],
+      "no body" => [release_json(notes: nil), "no 'App Bundle SHA-256'"],
+      "a list" => ["[]", "couldn't be read"],
+      "another tag" => [release_json(tag: "v2.25.0"), "is for v2.25.0, not #{TAG}"],
+      "a draft" => [release_json(draft: true), "is a draft"],
+      "a pre-release" => [release_json(prerelease: true), "is a pre-release"],
+      "no digest" => [release_json(notes: "Signing certificate SHA-256: `#{CERT}`\n## What's Changed"),
+                      "no 'App Bundle SHA-256'"],
+      "an empty digest" => [release_json(notes: "App Bundle SHA-256: ``"), "isn't a SHA-256"],
+      "a short digest" => [release_json(notes: release_notes(digest[0, 63])), "isn't a SHA-256"],
+      "a long digest" => [release_json(notes: release_notes("#{digest}a")), "isn't a SHA-256"],
+      "a digest that isn't hex" => [release_json(notes: release_notes("g" * 64)), "isn't a SHA-256"],
+      "a prefixed digest" => [release_json(notes: release_notes("sha256:#{digest}")), "isn't a SHA-256"],
+      "no backticks" => [release_json(notes: "App Bundle SHA-256: #{digest}"), "isn't a SHA-256"],
+      "a digest in the middle of a line" => [release_json(notes: "See App Bundle SHA-256: `#{digest}`"),
+                                             "no 'App Bundle SHA-256'"],
+      "two digests" => [release_json(notes: "#{release_notes}\nApp Bundle SHA-256: `#{digest}`"), "more than one"],
+      "two different digests" => [release_json(notes: "#{release_notes}\nApp Bundle SHA-256: `#{'0' * 64}`"),
+                                  "more than one"],
+      "another bundle's digest" => [wrong, "isn't the App Bundle the Release workflow made"]
+    }
+    notes.each do |name, (body, message)|
+      File.write(@log, "")
+      github_release(body: body)
+      output, status = play("production", "2.26.0")
+      assert_promotion_stopped(output, status, message, name)
+      # The notes are read before Play is asked for anything, except to compare the bundle itself.
+      assert_empty requests, name if message != "isn't the App Bundle the Release workflow made"
+    end
+  end
+
+  def test_promotion_requires_explicit_final_release_status
+    promotable
+    %w[draft prerelease].each do |field|
+      [nil, "false", 0].each do |value|
+        File.write(@log, "")
+        body = JSON.parse(release_json)
+        value.nil? ? body.delete(field) : body[field] = value
+        github_release(body: JSON.generate(body))
+        output, status = play("production", "2.26.0")
+        assert_promotion_stopped(output, status, "doesn't declare final release status", "#{field}=#{value.inspect}")
+        assert_empty requests
+      end
+    end
+  end
+
+  def test_unverified_edits_cannot_reach_any_production_track
+    %w[production tv:production wear:production].each do |target|
+      File.write(@log, "")
+      tracks({ "beta" => release(CODE) }, [bundle])
+      output, status = play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", target)
+      assert_promotion_stopped(output, status, "Production promotion needs a verified release", target)
+      assert_empty requests
+    end
+  end
+
   def play_rb(*args, env: {})
     key = File.join(@dir, "key.json")
     File.write(key, KEY)
     Open3.capture2e(env(env), "bundle", "exec", "ruby", PLAY_RB, args[0], key, PACKAGE, *args[1..], chdir: @dir)
   end
 
+  def verified_edit(to)
+    release_file = File.join(@dir, "github-release.json")
+    File.write(release_file, release_json)
+    play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", to,
+            "--release", release_file, "--tag", TAG, "--tags", (CODE - 10_000).to_s + "," + CODE.to_s,
+            "--tracks", "internal,beta")
+  end
+
+  def test_verified_form_factor_promotion_checks_its_destination_for_strays
+    tracks({ "beta" => release(CODE), "tv:production" => release(CODE - 500) }, [bundle])
+    output, status = verified_edit("tv:production")
+    assert_promotion_stopped(output, status, "version code #{CODE - 500} on tv:production, and no tag has it")
+  end
+
+  def test_release_proof_cannot_bypass_promotion_with_a_direct_put
+    tracks({ "beta" => release(CODE) }, [bundle("a different bundle")])
+    release_file = File.join(@dir, "github-release.json")
+    File.write(release_file, release_json)
+    output, status = play_rb("edit", "--code", CODE.to_s, "--to", "production",
+                             "--release", release_file, "--tag", TAG, "--tags", CODE.to_s, "--tracks", "internal,beta")
+    assert_promotion_stopped(output, status, "Production promotion needs a verified release and source track")
+  end
+
+  def test_release_proof_must_name_the_version_code_being_promoted
+    other = CODE + 10_000
+    tags("v2.27.0")
+    tracks({ "beta" => release(other) }, [{ "versionCode" => other, "sha256" => bundle["sha256"] }])
+    release_file = File.join(@dir, "github-release.json")
+    File.write(release_file, release_json)
+    output, status = play_rb("edit", "--from", "beta", "--code", other.to_s, "--to", "production",
+                             "--release", release_file, "--tag", TAG, "--tags", "#{CODE},#{other}",
+                             "--tracks", "internal,beta")
+    assert_promotion_stopped(output, status, "doesn't name version code #{other}")
+  end
+
   def test_production_and_a_testing_track_never_share_an_edit
     { "production,alpha" => "production and alpha", "beta,tv:production" => "tv:production and beta" }
       .each do |to, changed|
         File.write(@log, "")
-        tracks("beta" => release(CODE))
-        output, status = play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", to)
+        tracks({ "beta" => release(CODE) }, [bundle])
+        output, status = verified_edit(to)
         refute status.success?, output
 
         assert_includes output, "This edit changed #{changed}, so it was deleted, and nothing was sent"
@@ -522,8 +830,8 @@ class PlayTest < Minitest::Test
   end
 
   def test_production_tracks_of_two_form_factors_can_share_an_edit
-    tracks("beta" => release(CODE))
-    output, status = play_rb("edit", "--from", "beta", "--code", CODE.to_s, "--to", "production,tv:production")
+    tracks({ "beta" => release(CODE) }, [bundle])
+    output, status = verified_edit("production,tv:production")
     assert status.success?, output
 
     assert_equal [%w[production tv:production]], committed_tracks
@@ -569,7 +877,7 @@ class PlayTest < Minitest::Test
   end
 
   def test_production_takes_a_plain_version_only
-    tracks("beta" => release(CODE))
+    tracks({ "beta" => release(CODE) }, [bundle])
     output, status = play("production", "2.26.0-rc.1")
     refute status.success?, output
 
@@ -599,7 +907,7 @@ class PlayTest < Minitest::Test
   end
 
   def test_a_review_in_progress_stops_each_job_with_a_plain_message
-    tracks("beta" => release(CODE))
+    tracks({ "beta" => release(CODE) }, [bundle])
     [%w[release] + [TAG], %w[production 2.26.0], %w[listing]].each do |args|
       File.write(@log, "")
       output, status = play(*args, env: { "FAKE_PLAY_IN_REVIEW" => "1" })
