@@ -4,15 +4,21 @@ import android.app.Instrumentation
 import android.app.Activity
 import android.app.Application
 import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import androidx.lifecycle.ViewModelProvider
 import kotlinx.coroutines.Job
 import android.content.Context
+import android.content.ComponentName
+import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.runBlocking
@@ -30,6 +36,8 @@ class OfflineChordCheck : Instrumentation() {
     private val counts = ConcurrentHashMap<String, AtomicInteger>()
     private val filesLock = Any()
     private var closed = false
+    private var realNetwork = false
+    private val networkEvents = CopyOnWriteArrayList<String>()
     private lateinit var status: File
     private lateinit var control: File
     @Volatile private var recovered = false
@@ -61,14 +69,25 @@ class OfflineChordCheck : Instrumentation() {
 
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
+        realNetwork = arguments?.getString("network") == "real"
         start()
     }
 
     override fun onStart() {
         val oldHttp = MainActivity.httpClientFactory
         val oldConnection = MainActivity.connectionFactory
+        val oldWiki = MainActivity.chordWikiFactory
         val result = Bundle()
         val application = targetContext.applicationContext as Application
+        val connectivity = targetContext.getSystemService(ConnectivityManager::class.java)
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = event("available $network")
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) =
+                event("capabilities $network internet=${caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)} unmetered=${caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)}")
+            override fun onLost(network: Network) = event("lost $network")
+        }
+        var watchingNetwork = false
+        var usingVpn = false
         var code = 0
         try {
             require(targetContext.packageName == "com.astrovm.crosstune.dev") { "This fixture needs the dev app" }
@@ -80,14 +99,24 @@ class OfflineChordCheck : Instrumentation() {
             control = File(targetContext.cacheDir, "chordcheck-control")
             control.delete()
             val network = FixtureConnection()
+            val connection = if (realNetwork) object : Connection {
+                private val native = AndroidConnection(targetContext)
+                override fun online() = native.online()
+                override fun unmetered() = native.unmetered().onEach { event("unmetered $it default=${connectivity.activeNetwork}") }
+            } else network
             val client = OkHttpClient.Builder().addInterceptor { chain -> answer(chain.request()) }.build()
             runOnMainSync {
                 MainActivity.httpClientFactory = { client }
-                MainActivity.connectionFactory = { network }
+                MainActivity.connectionFactory = { connection }
+                MainActivity.chordWikiFactory = { ChordWikiPages { "" } }
             }
             seed()
+            if (realNetwork) {
+                connectivity.registerDefaultNetworkCallback(callback)
+                watchingNetwork = true
+            }
             writeStatus()
-            val end = SystemClock.elapsedRealtime() + 180_000
+            val end = SystemClock.elapsedRealtime() + if (realNetwork) 900_000 else 180_000
             while (SystemClock.elapsedRealtime() < end && state != "done") {
                 observeOfflineFetch()
                 writeStatus()
@@ -96,8 +125,14 @@ class OfflineChordCheck : Instrumentation() {
                         check(failedFetchComplete) { "Wait for offline_failed_complete before recovery" }
                         recovered = true
                         state = "recovered"
-                        runBlocking { network.recover() }
+                        if (!realNetwork) runBlocking { network.recover() }
                         writeStatus()
+                    }
+                    "vpn" -> {
+                        check(realNetwork && recovered) { "Recover the backend before switching the real network" }
+                        control.delete()
+                        vpn(true)
+                        usingVpn = true
                     }
                     "done" -> state = "done"
                 }
@@ -109,11 +144,14 @@ class OfflineChordCheck : Instrumentation() {
             code = 1
             result.putString("error", error.toString())
         } finally {
+            if (watchingNetwork) connectivity.unregisterNetworkCallback(callback)
+            if (usingVpn) vpn(false)
             runOnMainSync {
                 application.unregisterActivityLifecycleCallbacks(activityEvents)
                 resetObservation()
                 MainActivity.httpClientFactory = oldHttp
                 MainActivity.connectionFactory = oldConnection
+                MainActivity.chordWikiFactory = oldWiki
             }
             synchronized(filesLock) {
                 closed = true
@@ -125,6 +163,15 @@ class OfflineChordCheck : Instrumentation() {
             }
         }
         finish(code, result)
+    }
+
+    private fun event(what: String) {
+        networkEvents += "${SystemClock.elapsedRealtime()} $what"
+    }
+
+    private fun vpn(start: Boolean) {
+        targetContext.sendBroadcast(Intent(if (start) FixtureVpnControl.START else FixtureVpnControl.STOP)
+            .setComponent(ComponentName("${targetContext.packageName}.test", FixtureVpnControl::class.java.name)))
     }
 
     private fun seed() {
@@ -188,7 +235,7 @@ class OfflineChordCheck : Instrumentation() {
         .put("offline_pending", offlinePending).put("offline_idle", offlineIdle).put("offline_failed_complete", failedFetchComplete)
         .put("status", state).put("recovered", recovered).put("requests", JSONObject().apply {
         counts.toSortedMap().forEach { (host, count) -> put(host, count.get()) }
-    })
+    }).put("network_events", JSONArray(networkEvents.toList()))
 
     private fun writeStatus() = synchronized(filesLock) {
         if (closed) return@synchronized

@@ -2,6 +2,9 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Looper
 import android.os.SystemClock
 import androidx.test.core.app.ApplicationProvider
@@ -41,6 +44,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowSystemClock
+import org.robolectric.shadows.ShadowNetworkCapabilities
+import org.robolectric.util.ReflectionHelpers
 
 /**
  * The view model on its own, with only the parts a test hands it: what it does when a part is
@@ -229,6 +234,59 @@ class MainViewModelTest {
         model.unmeteredChanged(true)
         idle()
         assertEquals(listOf(true), model.uiState.keptOffline.map { it.done })
+        dir.deleteRecursively()
+        Unit
+    }
+
+    @Test
+    fun handoverDuringAFailedOfflineRoundStartsOneMoreRound() = runBlocking {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        val dir = File(app.cacheDir, "kept-handover").apply { deleteRecursively() }
+        val kept = OfflineSongs(File(dir, "songs.json"), emptyList(), null, Dispatchers.Unconfined)
+        kept.keep(MusicMetadata("Hush", "Band", lengthMs = 60_000))
+        val connectivity = app.getSystemService(ConnectivityManager::class.java)
+        val first = checkNotNull(connectivity.activeNetwork)
+        val second = ReflectionHelpers.callConstructor(Network::class.java, ReflectionHelpers.ClassParameter.from(Int::class.javaPrimitiveType, 987))
+        val free = ShadowNetworkCapabilities.newInstance().also {
+            shadowOf(it).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            shadowOf(it).addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        }
+        val lyrics = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val release = CompletableDeferred<Unit>()
+        var pages = 0
+        val chords = ChordFinder(fake.inlineClient(), Dispatchers.Unconfined, chordWiki = ChordWikiPages {
+            pages++
+            if (pages == 1) {
+                release.await()
+                throw ChordWikiStopped(ChordWikiCheck.AUTOMATIC)
+            }
+            ""
+        }, chordWikiPauseMs = 0)
+        val model = model(offline = kept, lyricsFinder = lyrics, chordFinder = chords)
+        val watching = CoroutineScope(Dispatchers.Unconfined).launch { AndroidConnection(app).unmetered().collect(model::unmeteredChanged) }
+        val callback = shadowOf(connectivity).networkCallbacks.single()
+        fake.handler = { request ->
+            when (request.url.host) {
+                "lrclib.net" -> FakeSpotify.html(request, """[{"trackName":"Hush","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 川の道を歩いていく\n[00:10.00] 朝の光に歌っている"}]""")
+                "music.163.com" -> FakeSpotify.html(request, """{"result":{}}""")
+                "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                else -> FakeSpotify.html(request, "")
+            }
+        }
+        val firstRound = model.keptOfflineRounds + 1
+        callback.onCapabilitiesChanged(first, free)
+        idle()
+        assertEquals(1, pages)
+        assertEquals(firstRound, model.keptOfflineRounds)
+        callback.onCapabilitiesChanged(second, free)
+        callback.onCapabilitiesChanged(second, free)
+        idle()
+        assertEquals(firstRound, model.keptOfflineRounds)
+        release.complete(Unit)
+        idle()
+        assertEquals(firstRound + 1, model.keptOfflineRounds)
+        assertEquals(listOf(true), model.uiState.keptOffline.map { it.done })
+        watching.cancel()
         dir.deleteRecursively()
         Unit
     }
