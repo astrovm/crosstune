@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -68,7 +69,7 @@ class ArtistlessPlaybackCheck : Instrumentation() {
                     source.seekTo(song, 10_000L, targetContext.packageName)
                     source.playPause(song, false, targetContext.packageName)
                     runBlocking {
-                        if (fixture.matches) withTimeout(3_000L) {
+                        if (fixture.matches) withTimeoutOrNull(3_000L) {
                             while (commands.size < 2) delay(20L)
                         } else delay(200L)
                     }
@@ -96,6 +97,9 @@ class ArtistlessPlaybackCheck : Instrumentation() {
     private companion object {
         val fixtures = listOf(
             Fixture("Glass Lantern Radio", "", "Glass Lantern", false),
+            Fixture("Fixture Artist - Glass Lantern Radio", "", "Glass Lantern", false),
+            Fixture("Other Artist - Glass Lantern", "", "Glass Lantern", false),
+            Fixture("Apart", "", "A Part", false),
             Fixture("Glass Lantern Meadow", "", "Glass Lantern", false),
             Fixture("Glass Lantern", "", "Glass Lantern Meadow", false),
             Fixture("Paperkite (Live)", "", "Paperkite", false),

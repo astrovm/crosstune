@@ -2002,6 +2002,49 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
+    fun anArtistInTheTitleDoesNotSupportAPartialSongOrAnotherArtist() {
+        allow()
+        sounding()
+        for ((title, artist) in listOf("Fake Band - Fake Song Two" to "Fake Band", "Other Band - Fake Song" to "Fake Band")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.example.player", "Fake Player", title, ""))
+            val wanted = MusicMetadata("Fake Song", artist)
+            assertNull(title, playback.appFor(wanted))
+            playback.seekTo(wanted, 10_000)
+            playback.playPause(wanted, false)
+        }
+        assertEquals(emptyList<String>(), asked())
+    }
+
+    @Test
+    fun aWholePlayerTitleKeepsItsWordBoundaries() {
+        allow()
+        sounding()
+        for ((title, asked) in listOf("Apart" to "A Part", "A Part" to "Apart", "Glass Lantern" to "Glasslantern", "ガラス" to "カラス")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.example.player", "Fake Player", title, ""))
+            assertNull(title, playback.appFor(MusicMetadata(asked, "Fake Band")))
+        }
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aBoundSongPauseDoesNotReachANewTitleInTheSameSession() {
+        allow()
+        val wanted = MusicMetadata("Fake Song", "Fake Band")
+        val controller = player("com.example.player", "Fake Player", wanted.title, wanted.artist)
+        shadowOf(sessions).addController(controller)
+        val chosen = playback.matching(wanted).single()
+        shadowOf(controller).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Fake Song Radio").putString(MediaMetadata.METADATA_KEY_ARTIST, "").build())
+        chosen.source.playPause(wanted, false, chosen.app)
+        assertEquals(emptyList<String>(), asked())
+        // An explicit app pause still reaches that session regardless of its song.
+        chosen.source.pauseApp(requireNotNull(chosen.app))
+        assertEquals(listOf("pause"), asked())
+    }
+
+    @Test
     fun aMissingArtistDoesNotEraseAOneWordTitlesRecording() {
         allow()
         sounding()
@@ -2023,6 +2066,12 @@ class PlaybackTest {
             assertEquals(artist, "com.example.player", source.appFor(MusicMetadata("Fake Song", "Fake Band"))?.packageName)
             assertNull(artist, source.appFor(MusicMetadata("Fake Song Two", "Fake Band")))
         }
+        assertTrue(SongNames.wholeTitle("Canción Azul", "Cancion Azul"))
+        assertTrue(SongNames.wholeTitle("ガラス", "カ\u3099ラス"))
+        assertTrue(SongNames.wholeTitle("Fake-Song", "Fake Song"))
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Fake Band - Fake Song", ""))
+        assertEquals("com.example.player", playback.appFor(MusicMetadata("Fake Band - Fake Song", ""))?.packageName)
         assertFalse(SongNames.wholeTitle("", ""))
         assertFalse(SongNames.wholeTitle("", "Fake Song"))
     }

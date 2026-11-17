@@ -432,7 +432,7 @@ internal class MediaSessionPlayback(
         override fun follow(song: MusicMetadata, app: String?) = followSession(song, app, token)
         override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) = seekIn(song, positionMs, app, token)
         override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
-            if (play) playIn(song, app, token) else pauseSession(token, app)
+            if (play) playIn(song, app, token) else pauseIn(song, app, token)
         }
         override fun pauseApp(app: String) = pauseSession(token, app)
     }
@@ -560,7 +560,11 @@ internal class MediaSessionPlayback(
     }
 
     override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
-        if (play) playIn(song, app, null) else runCatching { appFor(song, app = app)?.transportControls?.pause() }
+        if (play) playIn(song, app, null) else pauseIn(song, app, null)
+    }
+
+    private fun pauseIn(song: MusicMetadata, app: String?, token: MediaSession.Token?) {
+        runCatching { appFor(song, app = app, token = token)?.transportControls?.pause() }
     }
 
     private fun playIn(song: MusicMetadata, app: String?, token: MediaSession.Token?) {
@@ -1070,8 +1074,10 @@ internal class MediaSessionPlayback(
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
         // A station or untagged file has no artist to support a partial title match.
-        if (Songless.namesNoSong(title, artist, songsRead.of(title to artist))) {
-            return SongNames.names(title, "", song) && SongNames.wholeTitle(calls().first, song.title)
+        if (MetadataParsers.noArtist(artist)) {
+            if (SongNames.wholeTitle(title, song.title) && SongNames.names(title, "", song)) return true
+            val named = songsRead.of(title to artist) ?: return false
+            return named.artist.isNotBlank() && SongNames.names(named.title, named.artist, song) && SongNames.wholeTitle(named.title, song.title)
         }
         return SongNames.names(title, artist, song)
     }

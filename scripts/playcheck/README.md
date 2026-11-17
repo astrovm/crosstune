@@ -17,7 +17,7 @@
      com.astrovm.crosstune.dev.test/com.astrovm.crosstune.ArtistlessPlaybackCheck
    ```
 
-6. Read each JSON case. `selected`, `followed` and `controls` must agree with `expected`. Require all nine `passed` fields and `INSTRUMENTATION_CODE: 0`. A baseline run that selects a partial title must fail.
+6. Read each JSON case. `selected`, `followed` and `controls` must agree with `expected`. Require all twelve `passed` fields and `INSTRUMENTATION_CODE: 0`. A baseline run that selects a partial title must fail.
 7. The runner releases every session in `finally`. Remove the test APK, close the Device panel, stop the emulator, restore and verify the AVD, delete the private backup and release the lock.
 
 The runner tests Android's session APIs. It does not prove how each music app fills its metadata fields.

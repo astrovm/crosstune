@@ -831,9 +831,16 @@ internal object SongNames {
 
     /** Without an artist, require the whole title. A bare word such as Radio can be part of a station's name. */
     fun wholeTitle(one: String, other: String): Boolean {
-        val title = normalize(titleEvidence(one, bareNotes = false))
-        return title.isNotEmpty() && title == normalize(titleEvidence(other, bareNotes = false))
+        val title = wholeTitleWords(one)
+        return title.isNotEmpty() && title == wholeTitleWords(other)
     }
+
+    /** Keep word boundaries and non-Latin marks, such as the voicing in ガラス and カラス. */
+    private fun wholeTitleWords(title: String): List<String> =
+        Normalizer.normalize(titleEvidence(title, bareNotes = false), Normalizer.Form.NFC).lowercase(Locale.ROOT)
+            .split(lettersAndDigits).filter { it.isNotEmpty() }.map { word ->
+                if (word.codePoints().allMatch { Character.isDigit(it) || Character.UnicodeScript.of(it) == Character.UnicodeScript.LATIN }) normalize(word) else word
+            }
 
     /** A recording note cannot provide the second word that makes a partial title specific enough. */
     private fun titleWordsMatch(one: String, other: String): Boolean {
