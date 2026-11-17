@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -166,8 +167,10 @@ internal class MainViewModel(
     newLinePlayer: (() -> LinePlayer)? = null,
     practiceClockLog: PracticeClockLog = PracticeClockLog(false)
 ) : ViewModel() {
-    /** [playback] with the TV in the place of the app, for a song cast to it; see [castSong]. */
-    private val casting: CastPlayback? = playback?.let { CastPlayback(it, cast, now) }
+    private val phonePlayback = playback
+
+    /** Playback with the TV in the place of the app, for a song cast to it. */
+    private val casting: CastPlayback? = playback?.let { CastPlayback(it, cast, viewModelScope, now) }
 
     /**
      * An app opened on a song is covered rather than left, once Android lets Crosstune show over other
@@ -1105,7 +1108,7 @@ internal class MainViewModel(
         followedNow = null
         liveUnnamed = null
         followedUnnamed = null
-        val source = playback?.takeIf { it.hasAccess() }
+        val source = phonePlayback?.takeIf { it.hasAccess() }
         if (source == null) {
             uiState = uiState.copy(playingNow = null, playingUnnamed = null)
             return
@@ -1446,12 +1449,12 @@ internal class MainViewModel(
     /** Pauses the song playing now, or plays it again: as its button shows, playing when its app doesn't say where it is. */
     fun playingNowPlayPause() {
         val (song, following, app) = onTheBar() ?: return
-        playback?.playPause(song, following?.clock?.playing == false, app)
+        phonePlayback?.playPause(song, following?.clock?.playing == false, app)
     }
 
     fun playingNowSkip() {
         val (song, _, app) = onTheBar() ?: return
-        playback?.skip(song, true, app)
+        phonePlayback?.skip(song, true, app)
         movedOn(app)
     }
 
@@ -1964,8 +1967,7 @@ internal class MainViewModel(
     /** The song the user asked to cast before a TV was picked, handed over once one is. */
     private var castWhenConnected: MusicMetadata? = null
 
-    /** The song cast to the TV last. */
-    private var castSong: MusicMetadata? = null
+    private var castJob: Job? = null
 
     /**
      * The Cast button: the song the screen is about goes to the TV, which asks first which one when none is cast
@@ -1976,7 +1978,7 @@ internal class MainViewModel(
         if (cast.target.value == null) {
             castWhenConnected = song
             effectChannel.trySend(Effect.ChooseTv)
-        } else if (castSong?.let { sameSong(it, song) } == true) {
+        } else if (casting?.isCasting(song) == true) {
             effectChannel.trySend(Effect.ShowTv)
         } else {
             castTo(song)
@@ -1985,22 +1987,34 @@ internal class MainViewModel(
 
     private fun castTargetChanged(target: CastTarget?) {
         uiState = uiState.copy(castingTo = target?.name)
-        val song = castWhenConnected ?: return
-        if (target != null) castTo(song).also { castWhenConnected = null }
+        if (target == null) {
+            castJob?.cancel()
+            return
+        }
+        castWhenConnected?.let { song ->
+            castWhenConnected = null
+            castTo(song)
+        }
     }
 
     /** Hands [song] to the TV, and stops it in the phone's app: from now on the phone's player is the TV's remote. */
     private fun castTo(song: MusicMetadata) {
+        val tv = cast.target.value?.name ?: return
         val link = uiState.linkToCast(song)
-        // Not the TV's yet: the phone's app is asked first.
-        casting?.casting(null)
-        viewModelScope.launch {
-            val source = playback?.takeIf { it.hasAccess() }
-            if (source?.follow(song)?.first()?.clock?.playing == true) source.playPause(song, false)
-            castSong = song
+        castJob?.cancel()
+        castJob = viewModelScope.launch {
+            val source = phonePlayback?.takeIf { it.hasAccess() }
+            val local = withTimeoutOrNull(APP_ASKED_MS) { source?.follow(song)?.firstOrNull() }
+            if (cast.target.value?.name != tv) return@launch
+            if (local?.clock?.playing == true) source?.playPause(song, false)
             casting?.casting(song)
             cast.load(CastSong(song.title, song.artist, link, song.artworkUrl, song.lengthMs))
             openPlayer(song, app = null, link = link, played = true)
+            // The TV can supply a clock even when Android has not allowed notification access.
+            uiState.lyricsFor?.takeIf { sameSong(song, it) }?.let { shown ->
+                if (followJob == null && !uiState.isLoadingLyrics) follow(shown)
+                if (nextJob == null) watchNext(shown)
+            }
         }
     }
 
@@ -2100,10 +2114,10 @@ internal class MainViewModel(
         playerJob = null
         val opened = uiState.player ?: return
         val song = opened.song
-        val source = playback?.takeIf { it.hasAccess() } ?: return
+        val source = casting?.takeIf { it.hasAccess() } ?: return
         playerJob = viewModelScope.launch {
             // What names no song is only told apart by the app that plays it.
-            combine(source.follow(song, opened.askedOf), source.nowPlayingUpdates(), source.unnamedUpdates(), ::Triple).collect { (following, playing, unnamed) ->
+            source.track(song, opened.askedOf).observation(includeUnnamed = true).collect { (following, playing, unnamed) ->
                 val player = uiState.player ?: return@collect
                 val played = player.played || following?.clock?.playing == true
                 // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
@@ -2500,6 +2514,9 @@ internal class MainViewModel(
     /** Set while Crosstune is out of sight with no words floating, when the words don't go on to the next song. */
     private var nextPaused = false
 
+    /** Kept while the words are out of sight, so they can catch up with their TV when shown again. */
+    private var lyricsTrack: CastPlayback.Track? = null
+
     /**
      * Fetches the shown song's words and shows them. A song with no words of its own says so
      * rather than showing nothing, so it isn't read as a lookup that hasn't answered. Timed words
@@ -2545,6 +2562,7 @@ internal class MainViewModel(
         leaveWords()
         keepShown()
         lyricsJob?.cancel()
+        lyricsTrack = casting?.track(song)
         stopLearning()
         stopFollowing()
         foundLines = emptyList()
@@ -3633,9 +3651,9 @@ internal class MainViewModel(
         leadSpeeds.clear()
         placeHeard()
         uiState = uiState.copy(following = heardFollowing(song))
-        val source = playback?.takeIf { it.hasAccess() } ?: return
+        val track = lyricsTrack?.takeIf { playback?.hasAccess() == true } ?: return
         followJob = viewModelScope.launch {
-            source.follow(song).collect { playing ->
+            track.following().collect { playing ->
                 if (playing?.clock?.playing == true && appFollowing?.clock?.playing != true) appPlaysAgain.tryEmit(Unit)
                 // The app stopped it, was closed or went on to another song: the words stop where it left
                 // them, rather than run on from where the song was heard before, until it's heard again.
@@ -3684,9 +3702,9 @@ internal class MainViewModel(
     private fun watchNext(song: MusicMetadata) {
         nextJob?.cancel()
         nextJob = null
-        val source = playback?.takeIf { it.hasAccess() && !nextPaused } ?: return
+        val track = lyricsTrack?.takeIf { playback?.hasAccess() == true && !nextPaused } ?: return
         nextJob = viewModelScope.launch {
-            combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).collect { (app, playing) ->
+            track.observation().collect { (app, playing) ->
                 if (app?.clock?.playing == true) shownPlayed = true
                 // Practice moves the music app from song to song, which the words stay out of.
                 if (uiState.practice != null) return@collect
@@ -4332,6 +4350,7 @@ internal class MainViewModel(
         lyricsJob = null
         nextJob?.cancel()
         nextJob = null
+        lyricsTrack = null
         shownPlayed = false
         uiState = uiState.copy(canSkipNext = false, canSkipPrevious = false)
         stopLearning()

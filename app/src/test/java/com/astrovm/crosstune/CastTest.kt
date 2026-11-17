@@ -4,9 +4,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.produceIn
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -21,6 +27,12 @@ import org.robolectric.Shadows.shadowOf
 @RunWith(RobolectricTestRunner::class)
 class CastTest {
     private val tv = CastTvState("Hush", "Band", playing = true, positionMs = 5_000, durationMs = 200_000, canSeek = true, canSkipNext = true)
+    private val scope = CoroutineScope(Dispatchers.Unconfined)
+
+    @After
+    fun stopWatching() {
+        scope.cancel()
+    }
 
     @Test
     fun aSongSurvivesTheTripAsJsonWithOnlyWhatItHas() {
@@ -88,7 +100,7 @@ class CastTest {
     private val song = MusicMetadata("Hush", "Band")
     private val other = MusicMetadata("Another", "Band")
 
-    private fun castPlayback(cast: FakeCast, source: FakePlayback): CastPlayback = CastPlayback(source, cast) { 1_000 }
+    private fun castPlayback(cast: FakeCast, source: FakePlayback): CastPlayback = CastPlayback(source, cast, scope) { 1_000 }
 
     @Test
     fun theTvIsWhereTheSongPlaysOnceItIsCastAndTheAppsIsEverythingElse() {
@@ -176,6 +188,37 @@ class CastTest {
         assertEquals(listOf(true), source.plays)
         assertEquals(listOf(song to app), source.songsAsked)
         assertTrue(cast.sent.isEmpty())
+    }
+
+    @Test
+    fun aRemoteNextHasItsOwnClockAndControlsWhileThePhonesAppStaysIndependent() {
+        val app = "com.spotify.music"
+        val local = Following(PlaybackClock(3_000, 0, playing = false), "Spotify", canSeek = true, appPackage = app)
+        val source = FakePlayback().apply { playing.value = local }
+        val cast = FakeCast().apply { target.value = CastTarget("Living room", tv) }
+        val playback = castPlayback(cast, source)
+        playback.casting(song)
+        runBlocking {
+            withTimeout(1_000) {
+                val old = playback.follow(song).produceIn(this)
+                assertEquals(5_000L, old.receive()?.clock?.positionAt(1_000))
+                playback.skip(song, next = true)
+                cast.target.value = CastTarget("Living room", tv.copy(title = other.title, artist = other.artist, positionMs = 8_000))
+                assertNull(old.receive())
+                old.cancel()
+            }
+        }
+
+        val next = requireNotNull(runBlocking { playback.follow(other).first() })
+        assertEquals(8_000L, next.clock.positionAt(1_000))
+        assertEquals(local, runBlocking { playback.follow(song).first() })
+        assertEquals(local, runBlocking { playback.follow(other, app).first() })
+        playback.seekTo(other, 9_000)
+        playback.seekTo(other, 4_000, app)
+        assertTrue(runBlocking { playback.playSong(other, app, orLastPlayed = false) })
+        assertEquals(listOf(CastCommand.Next, CastCommand.Seek(9_000)), cast.sent)
+        assertEquals(listOf(4_000L), source.seeks)
+        assertEquals(listOf(other to app), source.songsAsked)
     }
 
     @Test

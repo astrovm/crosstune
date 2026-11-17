@@ -2,11 +2,18 @@ package com.astrovm.crosstune
 
 import android.content.Context
 import android.content.Intent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /*
@@ -164,35 +171,97 @@ internal object NoCast : CastSender, CastReceiver {
 }
 
 /**
- * [source] with the TV in the place of the app that played [castSong] on the phone, while it is cast: where it
+ * [source] with the TV in the place of the app that played the song on the phone, while it is cast: where it
  * is, and play, pause, move and skip, are the TV's. Everything else, and every other song, is [source]'s.
  */
 internal class CastPlayback(
     private val source: PlaybackSource,
     private val cast: CastSender,
+    scope: CoroutineScope,
     private val now: () -> Long
 ) : PlaybackSource by source {
-    @Volatile
-    private var casting: MusicMetadata? = null
+    /** One handoff, through all the songs the TV plays after it. */
+    private class Handoff
+
+    private data class Route(
+        val handoff: Handoff,
+        val song: MusicMetadata,
+        val target: CastTarget? = null,
+        val waiting: Boolean = true
+    ) {
+        fun reported(target: CastTarget?): Route {
+            val state = target?.state?.takeIf {
+                it.title.isNotBlank() && (!waiting || sameSong(it.metadata(), song))
+            }
+            return copy(
+                song = state?.metadata() ?: song,
+                target = target?.copy(state = state),
+                waiting = target == null || waiting && state == null
+            )
+        }
+    }
+
+    private val route = MutableStateFlow<Route?>(null)
+
+    init {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            cast.target.collect { target -> route.value = route.value?.reported(target) }
+        }
+    }
 
     /** The song handed to the TV, whose controls are the TV's from now on; null for none. */
     fun casting(song: MusicMetadata?) {
-        casting = song
+        // The TV can still report its old song until the load reaches it.
+        route.value = song?.let { Route(Handoff(), it).reported(cast.target.value) }
     }
 
-    private fun tv(song: MusicMetadata, app: String? = null): CastTarget? =
-        cast.target.value?.takeIf { app == null && casting?.let { c -> sameSong(c, song) } == true }
+    fun isCasting(song: MusicMetadata, app: String? = null): Boolean =
+        app == null && cast.target.value != null && route.value?.let { sameSong(it.song, song) } == true
 
     // Cast to a TV, what plays is known without Android's say.
-    override fun hasAccess() = source.hasAccess() || (casting != null && cast.target.value != null)
+    override fun hasAccess() = source.hasAccess() || (route.value != null && cast.target.value != null)
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = cast.target.flatMapLatest {
-        val target = tv(song, app)
-        if (target == null) source.follow(song, app) else flowOf(following(target))
+    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = track(song, app).following()
+
+    fun track(song: MusicMetadata, app: String? = null) = Track(song, app)
+
+    data class Observation(val following: Following?, val playing: Heard.Song?, val unnamed: Unnamed? = null)
+
+    /** The song a screen follows. When the TV moves on, this keeps watching the same handoff. */
+    inner class Track(private val song: MusicMetadata, private val app: String?) {
+        private var followed = route.value?.takeIf { app == null && it.target != null && sameSong(it.song, song) }?.handoff
+
+        fun following(): Flow<Following?> = updates(
+            local = { source.follow(song, app) },
+            remote = { target -> followingOnTv(target, song) }
+        )
+
+        fun observation(includeUnnamed: Boolean = false): Flow<Observation> = updates(
+            local = {
+                val unnamed = if (includeUnnamed) source.unnamedUpdates() else flowOf(null)
+                combine(source.follow(song, app), source.nowPlayingUpdates(), unnamed, ::Observation)
+            },
+            remote = { target ->
+                val playing = target.state?.let { Heard.Song(it.metadata(), null) }
+                Observation(followingOnTv(target, song), playing)
+            }
+        )
+
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+        private fun <T> updates(local: () -> Flow<T>, remote: (CastTarget) -> T): Flow<T> {
+            if (app != null) return local()
+            return route.map { open ->
+                val target = open?.target ?: return@map null
+                if (followed !== open.handoff && !sameSong(open.song, song)) return@map null
+                followed = open.handoff
+                target
+            }.distinctUntilChanged().flatMapLatest { target ->
+                if (target == null) local() else flowOf(remote(target))
+            }.buffer(0)
+        }
     }
 
-    private fun following(target: CastTarget): Following? = target.state?.let {
+    private fun followingOnTv(target: CastTarget, song: MusicMetadata): Following? = target.state?.takeIf { sameSong(it.metadata(), song) }?.let {
         Following(
             PlaybackClock(it.positionMs, now(), playing = it.playing),
             // Reports can include the app name. Keep the TV name in the Cast controls.
@@ -205,24 +274,26 @@ internal class CastPlayback(
     }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) =
-        if (tv(song, app) != null) cast.send(CastCommand.Seek(positionMs)) else source.seekTo(song, positionMs, app)
+        if (isCasting(song, app)) cast.send(CastCommand.Seek(positionMs)) else source.seekTo(song, positionMs, app)
 
     override fun playPause(song: MusicMetadata, play: Boolean, app: String?) =
-        if (tv(song, app) != null) cast.send(if (play) CastCommand.Play else CastCommand.Pause) else source.playPause(song, play, app)
+        if (isCasting(song, app)) cast.send(if (play) CastCommand.Play else CastCommand.Pause) else source.playPause(song, play, app)
 
     override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
-        if (tv(song, app) == null) return source.resume(song, app)
+        if (!isCasting(song, app)) return source.resume(song, app)
         cast.send(CastCommand.Play)
         return true
     }
 
     override fun skip(song: MusicMetadata, next: Boolean, app: String?) =
-        if (tv(song, app) != null) cast.send(if (next) CastCommand.Next else CastCommand.Previous) else source.skip(song, next, app)
+        if (isCasting(song, app)) cast.send(if (next) CastCommand.Next else CastCommand.Previous) else source.skip(song, next, app)
 
     // The song is the TV's: asked to play, the phone's app must not start it again.
     override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean) =
-        (orLastPlayed && tv(song) != null) || source.playSong(song, app, link, mustStart, orLastPlayed)
+        (orLastPlayed && isCasting(song)) || source.playSong(song, app, link, mustStart, orLastPlayed)
 }
+
+private fun CastTvState.metadata() = MusicMetadata(title, artist, lengthMs = durationMs)
 
 /** Use a link only when it belongs to the song being handed over, preferring its open player. */
 internal fun UiState.linkToCast(song: MusicMetadata): String? =

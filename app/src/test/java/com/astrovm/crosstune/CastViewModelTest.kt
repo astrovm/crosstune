@@ -6,6 +6,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.junit.After
@@ -55,7 +56,7 @@ class CastViewModelTest {
         }
     }
 
-    private fun model(playback: PlaybackSource?, cast: CastSender, phone: Phone = Phone.OTHER): MainViewModel {
+    private fun model(playback: PlaybackSource?, cast: CastSender, phone: Phone = Phone.OTHER, lyricsFinder: LyricsFinder? = null): MainViewModel {
         val client = fake.client()
         return MainViewModel(
             LinkResolver(client, Dispatchers.Unconfined),
@@ -65,6 +66,7 @@ class CastViewModelTest {
             interception = LinkInterception(app),
             artwork = ArtworkLoader(client, Dispatchers.Unconfined),
             listener = SongHearing { Heard.Nothing },
+            lyricsFinder = lyricsFinder,
             systemDispatcher = Dispatchers.Unconfined,
             phone = phone,
             cast = cast,
@@ -76,11 +78,11 @@ class CastViewModelTest {
         Following(PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = playing), "Spotify", canSeek = true, appPackage = "com.spotify", canSkipNext = true, canSkipPrevious = true)
 
     /** A model whose music app plays [song], with the player open on it. */
-    private fun playingModel(playback: FakePlayback, cast: FakeCast, playing: Boolean = true): MainViewModel {
+    private fun playingModel(playback: FakePlayback, cast: FakeCast, playing: Boolean = true, lyricsFinder: LyricsFinder? = null): MainViewModel {
         playback.access = true
         playback.onThePhone = Heard.Song(song, null, app = "com.spotify")
         playback.playing.value = following(playing)
-        val model = model(playback, cast)
+        val model = model(playback, cast, lyricsFinder = lyricsFinder)
         model.viewModelScope.launch { model.watchPlayingNow() }
         idle()
         model.peekPlayingNow()
@@ -89,6 +91,18 @@ class CastViewModelTest {
     }
 
     private fun effects(model: MainViewModel): List<Effect> = mutableListOf<Effect>().also { list -> model.viewModelScope.launch { model.effects.collect { list += it } } }
+
+    private fun lyricsFinder(): LyricsFinder {
+        fake.handler = { request ->
+            val title = request.url.queryParameter("track_name")
+            val duration = if (title == "Next") 130 else 200
+            val answer = if (request.url.host == "lrclib.net" && title != null) {
+                """[{"trackName":"$title","artistName":"Band","duration":$duration,"syncedLyrics":"[00:00.00] First words of $title\n[00:10.00] Second line\n[00:20.00] Third line"}]"""
+            } else ""
+            FakeSpotify.html(request, answer)
+        }
+        return LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+    }
 
     @Test
     fun theCastButtonIsThereOnlyWithATvAroundAndASongToHandIt() {
@@ -315,6 +329,119 @@ class CastViewModelTest {
         assertEquals(listOf(false, false), playback.plays.toList())
         assertTrue(cast.sent.isEmpty())
         assertEquals(another, model.uiState.player?.song)
+        assertNull(model.uiState.player?.following)
+        cast.target.value = CastTarget("Living room", tv.copy(positionMs = 28_000))
+        idle()
+        assertNull(model.uiState.player?.following)
+        model.playerPlayPause()
+        idle()
+        assertTrue(cast.sent.isEmpty())
+        assertTrue(playback.songsAsked.isEmpty())
+        cast.target.value = CastTarget("Living room", tv.copy(title = another.title, positionMs = 2_000))
+        idle()
+        assertEquals(2_000L, model.uiState.player?.following?.clock?.positionMs)
+    }
+
+    @Test
+    fun aNewSongOnTheTvAdvancesThePlayerAndTheWordsUseOnlyItsClock() {
+        val playback = FakePlayback()
+        val cast = FakeCast().apply { target.value = CastTarget("Living room", tv) }
+        val model = playingModel(playback, cast, lyricsFinder = lyricsFinder())
+        val effects = effects(model)
+        model.cast()
+        idle()
+        model.playerLyrics()
+        idle()
+        assertEquals(song, model.uiState.lyricsFor)
+        assertEquals("First words of Hush", model.uiState.lyricLines.first().text)
+        assertEquals(5_000L, model.uiState.following?.clock?.positionMs)
+
+        val local = MusicMetadata("Local", "Band")
+        playback.onThePhone = Heard.Song(local, null, app = "com.spotify")
+        playback.playing.value = following()
+        idle()
+        assertEquals(local, model.uiState.playingNow?.song)
+        assertEquals(song, model.uiState.player?.song)
+        model.playingNowPlayPause()
+        assertEquals(listOf(false, false), playback.plays)
+
+        model.skipSong(next = true)
+        val next = tv.copy(title = "Next", positionMs = 8_000, durationMs = 130_000)
+        cast.target.value = CastTarget("Living room", next)
+        idle()
+        assertEquals("Next", model.uiState.player?.song?.title)
+        assertEquals("Next", model.uiState.lyricsFor?.title)
+        assertEquals("First words of Next", model.uiState.lyricLines.first().text)
+        assertEquals(8_000L, model.uiState.player?.following?.clock?.positionMs)
+        assertEquals(8_000L, model.uiState.following?.clock?.positionMs)
+        playback.onThePhone = Heard.Song(MusicMetadata("Next", "Band"), null, app = "com.spotify")
+        playback.playing.value = following()
+        idle()
+        assertEquals(1_000L, model.uiState.playingNow?.following?.clock?.positionMs)
+        model.playingNowPlayPause()
+        model.seekLyrics(9_000)
+        model.playerPlayPause()
+        model.cast()
+        idle()
+        assertEquals(listOf(false, false, false), playback.plays)
+        assertEquals(listOf(CastCommand.Next, CastCommand.Seek(9_000), CastCommand.Pause), cast.sent)
+        assertEquals(listOf(Effect.ShowTv), effects.filterIsInstance<Effect.ShowTv>())
+        assertEquals(1, cast.loaded.size)
+        assertEquals("Living room", model.uiState.castingTo)
+
+        model.pauseFollowingNext()
+        cast.target.value = CastTarget("Living room", tv.copy(title = "Later", positionMs = 6_000))
+        idle()
+        assertEquals("Later", model.uiState.player?.song?.title)
+        assertEquals("Next", model.uiState.lyricsFor?.title)
+        assertNull(model.uiState.following?.app)
+        model.resumeFollowingNext()
+        idle()
+        assertEquals("Later", model.uiState.lyricsFor?.title)
+        assertEquals(6_000L, model.uiState.following?.clock?.positionMs)
+    }
+
+    @Test
+    fun castingFromOpenWordsStartsFollowingWithoutNotificationAccess() {
+        val playback = FakePlayback()
+        val cast = FakeCast().apply { target.value = CastTarget("Living room", tv) }
+        val model = playingModel(playback, cast, lyricsFinder = lyricsFinder())
+        playback.access = false
+        model.playerLyrics()
+        idle()
+        assertNull(model.uiState.following)
+        model.cast()
+        idle()
+        assertEquals(5_000L, model.uiState.following?.clock?.positionMs)
+
+        cast.target.value = CastTarget("Living room", tv.copy(title = "Next", positionMs = 8_000, durationMs = 130_000))
+        idle()
+        assertEquals("Next", model.uiState.lyricsFor?.title)
+        assertEquals(8_000L, model.uiState.following?.clock?.positionMs)
+        assertTrue(playback.plays.isEmpty())
+    }
+
+    @Test
+    fun disconnectingWhileThePhoneAppIsSlowCancelsTheHandoff() {
+        val playback = FakePlayback()
+        val cast = FakeCast().apply { target.value = CastTarget("Living room", tv) }
+        val model = playingModel(playback, cast)
+        val ready = CompletableDeferred<Unit>()
+        playback.said = ready
+        model.cast()
+        idle()
+        assertTrue(cast.loaded.isEmpty())
+
+        cast.target.value = null
+        idle()
+        cast.target.value = CastTarget("Bedroom", tv)
+        idle()
+        ready.complete(Unit)
+        idle()
+
+        assertTrue(cast.loaded.isEmpty())
+        assertTrue(playback.plays.isEmpty())
+        assertEquals("Bedroom", model.uiState.castingTo)
     }
 
     @Test
