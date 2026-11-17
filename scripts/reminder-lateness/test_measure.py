@@ -22,6 +22,7 @@ class PreferencesTest(unittest.TestCase):
     def test_seeds_a_due_fake_card_and_the_picked_minute(self):
         import json
         import xml.etree.ElementTree as ET
+
         from measure import prepare_preferences
 
         original = b'<map><string name="unrelated">keep</string><int name="practice_reminder_ignored" value="3" /><long name="practice_reminder_armed_for" value="1772579100000" /></map>'
@@ -225,6 +226,7 @@ class PreferenceTransactionTest(unittest.TestCase):
 class PhoneCommandTest(unittest.TestCase):
     def test_error_does_not_expose_device_address(self):
         from unittest.mock import patch
+
         from measure import Phone
 
         class Failure:
@@ -241,6 +243,7 @@ class PhoneCommandTest(unittest.TestCase):
     def test_timeout_does_not_expose_device_address(self):
         import subprocess
         from unittest.mock import patch
+
         from measure import Phone
 
         timeout = subprocess.TimeoutExpired(['adb', '-s', 'fake-address'], 30)
@@ -426,11 +429,9 @@ class NotificationRestoreTest(unittest.TestCase):
         from measure import Phone
 
         class FakePhone(Phone):
-            granted = False
-            flags = {'USER_SET', 'USER_FIXED', 'REVOKED_COMPAT'}
-
             def __init__(self):
-                pass
+                self.granted = False
+                self.flags = {'USER_SET', 'USER_FIXED', 'REVOKED_COMPAT'}
 
             def notification_state(self):
                 return self.granted, frozenset(self.flags)
@@ -465,6 +466,7 @@ class ScreenTest(unittest.TestCase):
 class RunTest(unittest.TestCase):
     def test_a_complete_run_restores_state_and_reports_post_time(self):
         from unittest.mock import patch
+
         from measure import run_measurement, target_time
 
         clock = [1_700_000_000.0]
@@ -621,6 +623,7 @@ class ScreenRestoreTest(unittest.TestCase):
 
     def test_reports_screen_restoration_failure(self):
         from unittest.mock import patch
+
         from measure import restore_screen
 
         class StuckPhone:
@@ -640,6 +643,7 @@ class ScreenRestoreTest(unittest.TestCase):
 class LockTest(unittest.TestCase):
     def test_requires_our_lock_with_enough_time(self):
         import datetime
+
         from measure import lock_seconds_left
 
         now = datetime.datetime.fromisoformat('2026-11-11T03:00:00-03:00')
@@ -735,6 +739,7 @@ class BatteryStateTest(unittest.TestCase):
 class RecoveryJournalTest(unittest.TestCase):
     def test_journal_is_private_exclusive_and_has_no_device_address(self):
         import json
+
         from measure import write_journal
 
         state = {'exact': 'default', 'notifications': [False, ['USER_FIXED']], 'battery': False}
@@ -893,6 +898,7 @@ class AnyAlarmTest(unittest.TestCase):
 class ResultTest(unittest.TestCase):
     def test_writes_lateness_in_seconds_and_none_where_unseen(self):
         from types import SimpleNamespace
+
         from measure import run_result
 
         args = SimpleNamespace(label='exact', exact=True, force_idle=False, minutes=3, wait_minutes=2)

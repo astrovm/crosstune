@@ -1,19 +1,20 @@
 import argparse
-from array import array
-from concurrent.futures import ThreadPoolExecutor
-import importlib.util
 import contextlib
-import io
 import hashlib
+import importlib.util
+import io
 import json
 import os
-from pathlib import Path
 import random
 import subprocess
 import tempfile
 import threading
-from types import SimpleNamespace
 import unittest
+from array import array
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from types import SimpleNamespace
+from typing import ClassVar
 from unittest.mock import MagicMock, Mock, patch
 
 # A shared folder set for real replays (SYNCREPLAY_DIR) would have the tests read and write the real ones.
@@ -114,7 +115,7 @@ class WordsForTheRecordingTest(unittest.TestCase):
 class PartTest(unittest.TestCase):
     """--part takes a part of the songs, fixed by each song's ID, so a change tuned on some is checked on the rest."""
 
-    songs = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    songs: ClassVar[list[str]] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
 
     def test_each_song_is_in_one_part_by_its_id(self):
         parts = [r.part(self.songs, r.part_arg(f'{k}/3')) for k in (1, 2, 3)]
@@ -564,12 +565,13 @@ class HeardWhenAskedTest(unittest.TestCase):
         self.assertEqual(self.replays(r.run, self.run_args(model='base-q5_1'), []), (1, 0))
 
     def test_a_phone_checks_answers_are_placed_on_the_players_clock(self):
-        log = "\n".join((
+        lines = [
             "11-04 17:57:54.887 7559 7559 D CrosstuneTiming: said 23891 at 2341106216 playing true, kept 23891 at 2341106216",
             "11-04 17:57:55.088 7559 7559 D CrosstuneTiming: recognized 177000 at 2341106000 match 40 received 2341106417 speed 0.5 length 294000",
             "11-04 17:57:58.048 7559 7559 D CrosstuneTiming: fingerprint 50155 at 2341105307 match 40 app Following(clock=x) lead null guessed null",
             "11-04 17:58:11.108 7559 7559 D CrosstuneTiming: fingerprint 23906 at 2341118482 match 31 received 2341122437 speed 0.997 length null app x",
-        ))
+        ]
+        log = "\n".join(lines)
         answers = r.phone_answers(log, 294000, 309000)
         zero = 2341106216 - 23891
         self.assertEqual(dict(at=2341106000 - zero, receivedAt=24092, songMs=177000, matchId='40', speed=0.5), answers['initial'])
@@ -580,11 +582,12 @@ class HeardWhenAskedTest(unittest.TestCase):
         self.assertEqual((294000, 309000), (answers['wordsLength'], answers['videoLength']))
 
     def test_an_older_phone_check_starts_from_the_first_line_lit(self):
-        log = "\n".join((
+        lines = [
             "11-04 17:57:54.887 7559 7559 D CrosstuneTiming: said 23891 at 2341106216 playing true, kept 23891 at 2341106216",
             "11-04 17:57:55.088 7559 7559 D CrosstuneTiming: lit 11 at 2341106423 pos 177755",
             "11-04 17:57:58.048 7559 7559 D CrosstuneTiming: fingerprint 50155 at 2341105307 match 40 app x",
-        ))
+        ]
+        log = "\n".join(lines)
         answers = r.phone_answers(log, 294000, 309000)
         self.assertEqual(dict(at=24098, receivedAt=24098, songMs=177755, matchId='40', speed=1.0), answers['initial'])
 
@@ -883,7 +886,7 @@ class PhoneTest(unittest.TestCase):
         for prefs, edits in (('', 0), ('./shared_prefs/crosstune_preferences.xml\n', len(r.LEARNT))):
             said = []
 
-            def phone(*command):
+            def phone(*command, said=said, prefs=prefs):
                 said.append(command)
                 return prefs if 'find' in command and '-path' in command else ''
             with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
@@ -900,7 +903,7 @@ class PhoneTest(unittest.TestCase):
             said = []
             answers = iter(allowed)
 
-            def phone(*command):
+            def phone(*command, said=said, answers=answers, allowed=allowed):
                 said.append(command)
                 return 'other/Listener:' + next(answers, allowed[-1]) if command[:2] == ('settings', 'get') else ''
             with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \

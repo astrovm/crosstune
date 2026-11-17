@@ -4,9 +4,9 @@ F-Droid builds each tag on its own server, in other folders, and only ships the 
 build matches it byte for byte. The libraries are checked before stripping: the build ID in the
 shipped library hashes their debug info, so a path in there changes the APK too.
 """
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 LIBRARIES = "app/build/intermediates/cxx/RelWithDebInfo/*/obj/*/libmilkdrop.so"

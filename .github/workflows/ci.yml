@@ -55,7 +55,7 @@ jobs:
           files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename')
           printf '%s\n' "$files"
           # Any file outside these makes it the app's change.
-          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|report/|extension/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/|gradle-box/|reports/|ci-warnings/|perf/))' <<< "$files" > /dev/null; then
+          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|report/|extension/|ruff\.toml$|scripts/(ruff-requirements\.txt$|build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/|gradle-box/|reports/|ci-warnings/|perf/))' <<< "$files" > /dev/null; then
             echo "app=true" >> "$GITHUB_OUTPUT"
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
@@ -70,6 +70,22 @@ jobs:
           else
             echo "matcher=false" >> "$GITHUB_OUTPUT"
           fi
+
+  # Every tracked Python file, against the rules in ruff.toml. The version is pinned in scripts/ruff-requirements.txt,
+  # so a new ruff never fails a pull request that didn't touch Python; Renovate proposes the bump as its own.
+  python:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Lint the Python scripts
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ruff"
+          "$RUNNER_TEMP/ruff/bin/pip" install --disable-pip-version-check --quiet -r scripts/ruff-requirements.txt
+          "$RUNNER_TEMP/ruff/bin/ruff" check --output-format github
 
   site:
     runs-on: ubuntu-26.04
@@ -510,6 +526,7 @@ jobs:
     if: ${{ always() && github.event_name == 'pull_request' }}
     needs:
       - changes
+      - python
       - site
       - extension
       - test

@@ -5,7 +5,8 @@ import java.util.regex.Pattern
 
 /**
  * The app's patterns, read from its code as the app builds them: each `phoneRegex(` or `Regex(` of literals, raw or quoted and
- * joined with `+`, with the constants and templates in them filled in, and its options. The tests that look at
+ * joined with `+`, with immutable string properties and templates filled in, and its options. Derived delimiter
+ * values use aliases, concatenation, take and the shared regex-class helper. Other operations stay unread. The tests that look at
  * every pattern read them here, so what one of them reads, the others read too.
  */
 internal class AppPatterns(val files: List<Pair<String, String>>) {
@@ -18,16 +19,11 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
      */
     val unread = mutableListOf<String>()
 
-    val found: List<Found> = constants(files.map { it.second }).let { known ->
+    val found: List<Found> = PatternValues(files, ::expandedLiteral, literals).let { known ->
         files.flatMap { (name, source) -> patternsIn(name, source, known) }
     }
 
-    /** The app's constants, which its patterns are built from. */
-    private fun constants(sources: List<String>): Map<String, String> = sources.flatMap { source ->
-        constant.findAll(source).map { it.groupValues[1] to literalText(it.groupValues[2]) }
-    }.toMap()
-
-    private fun patternsIn(name: String, source: String, known: Map<String, String>): List<Found> {
+    private fun patternsIn(name: String, source: String, known: PatternValues): List<Found> {
         fun where(at: Int) = "$name:${source.take(at).count { it == '\n' } + 1}"
         fun line(at: Int) = source.substring(source.lastIndexOf('\n', at - 1) + 1).lineSequence().first().trim()
         // A pattern named in a comment, as main's was, is no pattern of the app's.
@@ -43,14 +39,21 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         built.findAll(source).filter { it.range.first !in read }.map { it.range.first }
             .filterNot(::inComment)
             .forEach { unread += "${where(it)} ${line(it)}" }
-        return calls.map { found ->
+        return calls.mapNotNull { found ->
             val where = where(found.range.first)
-            val text = literals.findAll(found.groupValues[1]).joinToString("") { literalText(it.value) }
-            val built = template.replace(text) { part ->
-                val key = part.groupValues[2].ifEmpty { part.groupValues[3] }
-                // A letter in a template, as ${'"'} ends a raw string in a quote, is that letter.
-                part.groupValues[1].ifEmpty { known[key] ?: run { unread += "$where \$$key"; part.value } }
+            val prefix = source.substring(maxOf(0, found.range.first - HOLDER_REACH), found.range.first)
+            val property = propertyHolder.containsMatchIn(prefix)
+            val unreadBefore = unread.size
+            val parts = literals.findAll(found.groupValues[1]).map { literal ->
+                expandedLiteral(literal.value) { key ->
+                    known.get(name, key, found.range.first, property) ?: run { unread += "$where \$$key"; null }
+                }
+            }.toList()
+            if (parts.any { it == null }) {
+                if (unread.size == unreadBefore) unread += "$where unsupported template"
+                return@mapNotNull null
             }
+            val built = parts.joinToString("")
             val options = found.groupValues[2]
             // Kotlin's Regex reads every pattern with UNICODE_CASE.
             val flags = Pattern.UNICODE_CASE or (if ("IGNORE_CASE" in options) Pattern.CASE_INSENSITIVE else 0) or
@@ -76,6 +79,35 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
             }
         }
 
+    /** Expand each template once, before decoding escapes. A value's dollars and backslashes stay values. */
+    private fun expandedLiteral(literal: String, value: (String) -> String?): String? {
+        val raw = literal.startsWith("\"\"\"")
+        val quote = if (raw) "\"\"\"" else "\""
+        val text = literal.removeSurrounding(quote)
+        val result = StringBuilder()
+        var start = 0
+        var at = 0
+        var complete = true
+        while (at < text.length) {
+            if (!raw && text[at] == '\\') { at += 2; continue }
+            val part = if (text[at] == '$') template.matchAt(text, at) else null
+            if (part == null) {
+                val next = text.getOrNull(at + 1)
+                if (text[at] == '$' && next != null &&
+                    (next in "{`_" || Character.isUnicodeIdentifierStart(text.codePointAt(at + 1)))) complete = false
+                at++
+                continue
+            }
+            result.append(literalText(quote + text.substring(start, at) + quote))
+            val replacement = part.groupValues[1].ifEmpty { value(part.groupValues[2].ifEmpty { part.groupValues[3] }) }
+            if (replacement == null) complete = false
+            result.append(replacement)
+            start = part.range.last + 1
+            at = start
+        }
+        return result.append(literalText(quote + text.substring(start) + quote)).toString().takeIf { complete }
+    }
+
     companion object {
         /** The app's own patterns, from its code. */
         fun ofApp() = AppPatterns(sources("src/main/java").map { it.name to it.readText() })
@@ -96,10 +128,10 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         private val built = Regex("""\b(?:phoneRegex|Regex)\(|\.toRegex\(""")
         /** Where Java builds a pattern: as Kotlin does, or with `Pattern`, or with a String's own methods, which take one. */
         private val javaBuilt = Regex("""\b(?:Pattern\.(?:compile|matches)|Regex|StringsKt\.toRegex)\(|\.(?:matches|split|replaceAll|replaceFirst)\(""")
-        private val constant = Regex("""\bconst val (\w+)\s*=\s*($RAW|$QUOTED)""")
-        private val template = Regex("""\$\{'([^'\\])'\}|\$\{(\w+)\}|\$(\w+)""")
+        private val template = Regex("""\$\{'([^'\\])'\}|\$\{([\p{L}_][\p{L}\p{M}\p{N}_]*)\}|\$([\p{L}_][\p{L}\p{M}\p{N}_]*)""")
         private val escape = Regex("""\\(u[0-9a-fA-F]{4}|.)""")
         /** The value a `Regex(` is given to, right before it: "private val tags = ". */
         private val holder = Regex("""\b(?:val|var)\s+(\w+)(?:\s*:\s*Regex)?\s*=\s*$""")
+        private val propertyHolder = Regex("""\bval\s+\w+(?:\s*:\s*Regex)?\s*=\s*$""")
     }
 }

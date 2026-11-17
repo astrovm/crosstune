@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import invented  # noqa: E402
+import invented
 
 
 class InventedTest(unittest.TestCase):

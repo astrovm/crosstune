@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import compare_sheets as c  # noqa: E402
+import compare_sheets as c
 
 
 def char(letter, left, right):
@@ -43,7 +43,7 @@ class NamesTest(unittest.TestCase):
 class CleanTest(unittest.TestCase):
     def test_a_link_with_no_name_draws_no_chord_and_an_empty_line_goes(self):
         cleaned = c.clean(page(line(chords=[chord(" \n ", 0)]), line(words("ab"), [chord("C", 0)])))
-        self.assertEqual([[x["name"] for x in l["chords"]] for l in cleaned["lines"]], [["C"]])
+        self.assertEqual([[x["name"] for x in row["chords"]] for row in cleaned["lines"]], [["C"]])
 
 
 class LetterAtTest(unittest.TestCase):
@@ -90,7 +90,7 @@ class ComparePageTest(unittest.TestCase):
         self.assertEqual(wrong, [("abc", [2, "G"], [1, "G"])])
 
     def test_other_words_are_counted_on_their_own(self):
-        counts, wrong = c.compare_page(self.drawn(), [{"text": "xyz", "chords": [[0, "C"], [2, "G"]]}, {"text": "q", "chords": [[0, "A"]]}])
+        counts, _ = c.compare_page(self.drawn(), [{"text": "xyz", "chords": [[0, "C"], [2, "G"]]}, {"text": "q", "chords": [[0, "A"]]}])
         self.assertEqual(counts["chord lines the app reads as other words or chords"], 1)
         self.assertEqual(counts["chords on those lines"], 2)
         self.assertEqual(counts["app chord lines the browser does not draw"], 2)

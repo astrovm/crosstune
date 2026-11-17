@@ -80,7 +80,7 @@ def prefs_for(saved, names, preset, shade=None, theme=None, pure_black=False):
     xml = saved.decode()
     for removed in (r'<set name="visuals_off">.*?</set>', r'<set name="visuals_off"\s*/>', r'<long name="visuals_change_ms"[^>]*/>', r'<float name="visuals_shade"[^>]*/>',
                     r'<boolean name="visuals_skip_heavy"[^>]*/>', r'<string name="theme">[^<]*</string>', r'<boolean name="pure_black"[^>]*/>'):
-        xml = re.sub(removed, "", xml, flags=re.S)
+        xml = re.sub(removed, "", xml, flags=re.DOTALL)
     off = "".join(f"<string>{escaped(name)}</string>" for name in names if name != preset)
     added = f'<set name="visuals_off">{off}</set><long name="visuals_change_ms" value="{2**63 - 1}" /><boolean name="visuals_skip_heavy" value="false" />'
     if shade is not None:

@@ -54,7 +54,7 @@ class RecordingSetupTest(unittest.TestCase):
 
     def run_script(self, *args):
         env = dict(os.environ, PATH=f"{self.fake}:{os.environ['PATH']}", FAKE=str(self.fake), ANDROID_SERIAL="emulator-5580")
-        return subprocess.run(["bash", str(SCRIPT), *args], capture_output=True, text=True, env=env, timeout=60)
+        return subprocess.run(["bash", str(SCRIPT), *args], capture_output=True, text=True, env=env, timeout=60, check=False)
 
     def asked(self):
         return (self.fake / "asked").read_text().splitlines()
@@ -111,7 +111,7 @@ esac
     def test_the_clock_is_set_in_the_devices_own_time_zone(self):
         (self.fake / "zone").write_text("-0300\n")
         self.run_script("setup", "es-AR", "01:46")
-        millis = int([a for a in self.asked() if "cmd alarm set-time" in a][0].split()[-1])
+        millis = int(next(a for a in self.asked() if "cmd alarm set-time" in a).split()[-1])
         self.assertEqual(millis % 86_400_000, (4 * 3600 + 46 * 60) * 1000)
 
     def test_setup_takes_every_notification_off_the_status_bar(self):

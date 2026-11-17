@@ -107,7 +107,8 @@ def source_bytes(source: str) -> bytes:
         if url.endswith((".zip", ".jar")):
             data = zipfile.ZipFile(io.BytesIO(archive)).read(inner.lstrip("/"))
         else:
-            data = tarfile.open(fileobj=io.BytesIO(archive)).extractfile(inner).read()
+            with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+                data = tar.extractfile(inner).read()
     elif source.startswith("https://"):
         data = download(source)
     elif source.startswith("ndk:"):
@@ -154,7 +155,7 @@ def main(argv):
         digest = hashlib.sha256(data).hexdigest()
         if command == "fetch":
             (TEXTS / name).write_bytes(data)
-            lines = [re.sub(rf"^{re.escape(name)}\s+\S+", f"{name} {digest}", l) for l in lines]
+            lines = [re.sub(rf"^{re.escape(name)}\s+\S+", f"{name} {digest}", line) for line in lines]
             print(f"wrote {name} {digest[:12]}")
         else:
             bundled = hashlib.sha256(bundled_bytes).hexdigest()

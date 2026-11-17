@@ -42,6 +42,7 @@ internal object SongNames {
     private fun guestInBrackets(title: CutTitle, open: Int): Int? {
         if (open >= title.end || title[open] !in TAG_OPENS) return null
         val start = title.spacesEnd(open + 1)
+        if (!title.beginsWith(start, 'f')) return null
         val word = featuringWord.matchAt(title.letters(start, LONGEST_WORD), 0) ?: return null
         val close = title.nextBracket(title.after(start, word.value.length))
         return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
@@ -49,7 +50,7 @@ internal object SongNames {
 
     /** " ft. A", from the spaces at [at] before [word]: up to the spaces before the next tag, or to the end. Where it ends, or null. */
     private fun guestWrittenOut(title: CutTitle, at: Int, word: Int): Int? {
-        if (title.afterDigit(at)) return null
+        if (!title.beginsWith(word, 'f') || title.afterDigit(at)) return null
         val said = featuringSaid.matchAt(title.letters(word, LONGEST_WORD), 0) ?: return null
         val guest = title.spacesEnd(title.after(word, said.value.length - 1))
         val bracket = title.nextBracket(guest)
@@ -66,8 +67,11 @@ internal object SongNames {
 
     /** The most letters [featuringWord] and [featuringSaid] read: "featuring" and the one after it. */
     private const val LONGEST_WORD = 10
-    private const val TAG_OPENS = "(["
-    private const val TAG_CLOSES = ")]"
+    private val TAG_OPENS = TitleDelimiters.tagOpens
+    private val TAG_CLOSES = TitleDelimiters.tagCloses
+
+    /** Skip native matcher setup and word copies when the required first letter is absent. */
+    private fun CutTitle.beginsWith(at: Int, letter: Char) = at < end && readsAs(this[at], letter)
 
     /**
      * Where what marks [title] as a music video's from [at] ends, [mark] being where the spaces from there end, or null:
@@ -75,11 +79,12 @@ internal object SongNames {
      * \s+M/V\b` read it.
      */
     private fun markEnd(title: CutTitle, at: Int, mark: Int): Int? = markInBrackets(title, mark)
-        ?: if (mark > at && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
+        ?: if (mark > at && title.beginsWith(mark, 'm') && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
 
     private fun markInBrackets(title: CutTitle, open: Int): Int? {
         if (open >= title.end || title[open] !in TAG_OPENS) return null
         val mark = title.spacesEnd(open + 1)
+        if (!title.beginsWith(mark, 'm')) return null
         val letters = title.letters(mark, VIDEO_MARK.length)
         if (letters.length < VIDEO_MARK.length || !VIDEO_MARK.indices.all { readsAs(letters[it], VIDEO_MARK[it]) }) return null
         val close = title.spacesEnd(title.after(mark, VIDEO_MARK.length))
@@ -89,7 +94,13 @@ internal object SongNames {
     private const val VIDEO_MARK = "m/v"
     private val videoMarkAt = phoneRegex("""M/V\b""", RegexOption.IGNORE_CASE)
 
-    private val guestCredit = phoneRegex("""[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]""", RegexOption.IGNORE_CASE)
+    private val tagOpenClass = TitleDelimiters.regexClass(TitleDelimiters.tagOpens)
+    private val tagCloseClass = TitleDelimiters.regexClass(TitleDelimiters.tagCloses)
+    private val tagBracketClass = TitleDelimiters.regexClass(TitleDelimiters.tagBrackets)
+    private val tagDashClass = TitleDelimiters.regexClass(TitleDelimiters.tagDashes)
+    private val inTag = """(?:(?!\s[$tagDashClass]\s)[^$tagBracketClass])"""
+
+    private val guestCredit = phoneRegex("""[$tagOpenClass]\s*(?:feat|ft|featuring)\b\.?\s*([^$tagBracketClass]*)[$tagCloseClass]""", RegexOption.IGNORE_CASE)
 
     /**
      * A trailing tag that names no other recording: "Remastered 2012" and "Mono" anywhere in
@@ -97,8 +108,8 @@ internal object SongNames {
      * "(電影《我的少女時代》主題曲)". "Live", "Acoustic" or "Remix" are other recordings, so they stay.
      */
     private val editionTag = phoneRegex(
-        """(?<!\s)(?:\s++[-–]\s++|\s*+[(\[]\s*+)(?=$IN_TAG*+\s*+[)\]]?$)""" +
-            """(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$IN_TAG*+|$IN_TAG*(?:$TIE_IN)$IN_TAG*+)\s*+[)\]]?$""",
+        """(?<!\s)(?:\s++[$tagDashClass]\s++|\s*+[$tagOpenClass]\s*+)(?=$inTag*+\s*+[$tagCloseClass]?$)""" +
+            """(?:$EDITION_WORDS|$inTag*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$inTag*+|$inTag*(?:$TIE_IN)$inTag*+)\s*+[$tagCloseClass]?$""",
         RegexOption.IGNORE_CASE
     )
 
@@ -115,7 +126,7 @@ internal object SongNames {
         while (at > first) {
             val char = title[at]
             val next = title.next(at + 1)
-            val spacedDash = (char == '-' || char == '–') && next < title.end && isPatternSpace(title[title.previous(at - 1)]) && isPatternSpace(title[next])
+            val spacedDash = char in TitleDelimiters.tagDashes && next < title.end && isPatternSpace(title[title.previous(at - 1)]) && isPatternSpace(title[next])
             // A tag holds no bracket but the one that opens it and the one that closes it at the end.
             val bracket = char in TAG_OPENS || char in TAG_CLOSES && at != lastCloser
             if (bracket || spacedDash && ++dashes == 2) break
@@ -138,9 +149,6 @@ internal object SongNames {
 
     /** The song a film or show opens, ends or plays it in, in Chinese, Japanese or English, or its soundtrack, as K-pop says. */
     private const val TIE_IN = """主[題题][曲歌]|挿入歌|插曲|片[頭头尾]曲|\bOST\b|\btheme\s+song\b"""
-
-    /** A letter of a tag: none of a bracket, nor the dash before another part of the name, "Band - Song - Remastered". */
-    private const val IN_TAG = """(?:(?!\s[-–]\s)[^()\[\]])"""
 
     /**
      * The small words a title may say either way, "de" or "del", "el" or "la": articles and
@@ -562,15 +570,17 @@ internal object SongNames {
     private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"""
     private val coverWords = phoneRegex("""(?:$COVER_WORDS)""", RegexOption.IGNORE_CASE)
 
-    private const val COVER_OPENS = "([【"
-    private const val COVER_CLOSES = ")]】"
-    private const val DASHES = "-–"
+    private val COVER_OPENS = TitleDelimiters.OPENS.take(3)
+    private val COVER_CLOSES = TitleDelimiters.CLOSES.take(3)
+    private val DASHES = TitleDelimiters.tagDashes
 
     /** Whose song it is, up to the end of the tag. */
-    private val coverBy = phoneRegex("""(?:$COVER_BY)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
+    private val coverCloseClass = TitleDelimiters.regexClass(COVER_CLOSES)
+    private val coverBracketClass = TitleDelimiters.regexClass(COVER_OPENS + COVER_CLOSES)
+    private val coverBy = phoneRegex("""(?:$COVER_BY)\s+([^$coverCloseClass]+)""", RegexOption.IGNORE_CASE)
 
     /** The same, up to the start of a tag inside it too, "(In the Style of Artist (Live))". */
-    private val coverByOwnName = phoneRegex("""(?:$COVER_BY)\s+([^(\[【)\]】]+)""", RegexOption.IGNORE_CASE)
+    private val coverByOwnName = phoneRegex("""(?:$COVER_BY)\s+([^$coverBracketClass]+)""", RegexOption.IGNORE_CASE)
     private const val COVER_BY = """in the style of|originally (?:performed )?by|made famous by|cover of"""
 
     /**
@@ -602,7 +612,7 @@ internal object SongNames {
      * place, as it reads no letter: one after a tag names a singer after it. A tag starts with a bracket, a dash or a
      * tilde, which no singer's word is, so one isn't named at the start of what follows it.
      */
-    private val singerAfter = phoneRegex("""(?=[\s(\[](?:feat\.?|ft\.?|featuring|with|x|×)\s+\S)""", RegexOption.IGNORE_CASE)
+    private val singerAfter = phoneRegex("""(?=[\s$tagOpenClass](?:feat\.?|ft\.?|featuring|with|x|×)\s+\S)""", RegexOption.IGNORE_CASE)
 
     /** An album of tracks to sing over, "(Karaoke Version)", "(Backing Tracks)", "(Minus One)". */
     private val accompaniment = phoneRegex("""karaoke|カラオケ|\bbacking tracks?\b|\bminus ones?\b""", RegexOption.IGNORE_CASE)
@@ -612,10 +622,12 @@ internal object SongNames {
     private val SAYS_VERSION = setOf("ver", "version", "versao")
 
     /** What's in brackets, of any kind Chinese and Japanese titles use, once full-width ones are written as others. */
-    private val bracketTag = phoneRegex("""[(\[【「〔]([^()\[\]【】「」〔〕]*)[)\]】」〕]""")
+    private val normalizedOpenClass = TitleDelimiters.regexClass(TitleDelimiters.normalizedOpens)
+    private val normalizedCloseClass = TitleDelimiters.regexClass(TitleDelimiters.normalizedCloses)
+    private val bracketTag = phoneRegex("""[$normalizedOpenClass]([^$normalizedOpenClass$normalizedCloseClass]*)[$normalizedCloseClass]""")
 
     /** What follows a dash, or a tilde, which a Japanese title may put right after its name: "曲〜伴奏〜". */
-    private val dashTag = phoneRegex("""(?:(?<=\s)[-–]\s?|[~〜])([^-–~〜]*)""")
+    private val dashTag = phoneRegex("""(?:(?<=\s)[$tagDashClass]\s?|[~〜])([^$tagDashClass~〜]*)""")
 
     /**
      * "Off vocal" ending the title with nothing around it, after a name in Chinese, Japanese or Korean, "曲 Off Vocal",
@@ -680,7 +692,7 @@ internal object SongNames {
             for (at in text.indices) {
                 lastBracket[at] = bracket
                 lastDash[at] = dash
-                if (text[at] in "()[]") bracket = at
+                if (text[at] in TitleDelimiters.tagBrackets) bracket = at
                 if (text[at] in DASHES) dash = at
             }
             lastBracket[text.length] = bracket
@@ -829,6 +841,21 @@ internal object SongNames {
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter) && titleWordsMatch(one, other)
     }
 
+    /** Without an artist, require the whole title. A bare word such as Radio can be part of a station's name. */
+    fun wholeTitle(one: String, other: String): Boolean {
+        val title = wholeTitleWords(one)
+        return title.isNotEmpty() && title == wholeTitleWords(other)
+    }
+
+    /** Keep word boundaries and non-Latin marks, such as the voicing in ガラス and カラス. */
+    private fun wholeTitleWords(title: String): List<String> =
+        Normalizer.normalize(titleEvidence(title, bareNotes = false), Normalizer.Form.NFC).lowercase(Locale.ROOT)
+            .split(titleWordSplit).filter { word -> word.codePoints().anyMatch(Character::isLetterOrDigit) }.map { word ->
+                if (word.codePoints().filter(Character::isLetter).allMatch { Character.UnicodeScript.of(it) == Character.UnicodeScript.LATIN }) normalize(word) else word
+            }
+
+    private val titleWordSplit = phoneRegex("""[^\p{L}\p{N}\p{M}]+""")
+
     /** A recording note cannot provide the second word that makes a partial title specific enough. */
     private fun titleWordsMatch(one: String, other: String): Boolean {
         val first = titleEvidence(one)
@@ -840,15 +867,16 @@ internal object SongNames {
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
     }
 
-    private fun titleEvidence(title: String): String =
-        MetadataParsers.withoutFileNumber(titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(title))))
+    private fun titleEvidence(title: String, bareNotes: Boolean = true): String =
+        MetadataParsers.withoutFileNumber(titleWithoutNotes(withoutEditionTag(MetadataParsers.comparisonTitle(title)), bareNotes))
 
     /** The same note grammar reads brackets, dashes, bare suffixes and unfinished notes. */
-    private fun titleWithoutNotes(title: String): String {
+    private fun titleWithoutNotes(title: String, bareNotes: Boolean): String {
         val named = withoutBracketNotes(title).trim()
         val notes = RecordingNotes(named)
         val start = notes.tokens.firstOrNull { token ->
-            token.start > 0 && isPatternSpace(named[token.start - 1]) && notes.isNote(token.start, named.length, notes.afterDash(token.start))
+            token.start > 0 && isPatternSpace(named[token.start - 1]) && (bareNotes || notes.afterDash(token.start)) &&
+                notes.isNote(token.start, named.length, notes.afterDash(token.start))
         }?.start ?: named.length
         return if (start < named.length) named.substring(0, start).trim().trimEnd { it in NAME_TAG_DASHES }.trim() else named
     }
@@ -1064,9 +1092,9 @@ internal object SongNames {
     private val NOTE_DESCRIPTORS = setOf("alternate", "akustik", "acustica", "club", "studio")
     private val NOTE_CREDITS = listOf(listOf("in", "the", "style", "of"), listOf("made", "famous", "by"), listOf("originally", "performed", "by"), listOf("originally", "by"), listOf("made", "popular", "by"), listOf("cover", "of"))
 
-    private const val NAME_TAG_OPENS = "([【「〔（［"
-    private const val NAME_TAG_CLOSES = ")]】」〕）］"
-    private const val NAME_TAG_DASHES = "-–—"
+    private const val NAME_TAG_OPENS = TitleDelimiters.OPENS
+    private const val NAME_TAG_CLOSES = TitleDelimiters.CLOSES
+    private const val NAME_TAG_DASHES = TitleDelimiters.DASHES
     private const val YEAR_DIGITS = 4
 
     /**

@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 """Trim the oldest idle cache parts while respecting gradle-box slot locks."""
+import contextlib
 import fcntl
 import os
-from pathlib import Path
 import shutil
 import sys
+from pathlib import Path
 
 state = Path(sys.argv[1])
 own_slot = int(sys.argv[2])
-limit = int(os.environ.get("GRADLE_BOX_CACHE_BYTES", 40 * 1024**3))
+limit = int(os.environ.get("GRADLE_BOX_CACHE_BYTES", str(40 * 1024**3)))
 
 
 def size(path):
     total = 0
     for root, dirs, files in os.walk(path):
         for name in dirs + files:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 total += os.lstat(Path(root) / name).st_blocks * 512
-            except FileNotFoundError:
-                pass
     return total
 
 

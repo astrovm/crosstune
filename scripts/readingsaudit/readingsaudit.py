@@ -261,7 +261,7 @@ def with_tries(what, call):
             # Its body is the answer's connection, left open unless closed here.
             error.close()
             if error.code < 500 and error.code != 429:
-                raise SystemExit(f"{what}: {error.code} {error.reason}")
+                raise SystemExit(f"{what}: {error.code} {error.reason}") from error
             failed = error
         except (urllib.error.URLError, OSError, http.client.HTTPException, CutOff) as error:
             failed = error
@@ -584,7 +584,7 @@ def changed(folder, before):
         broke = [new[k] for k in keys if old[k][0] and not new[k][0]]
         mended = [new[k] for k in keys if not old[k][0] and new[k][0]]
         print(f"{reader}: {len(mended)} wrong before and right now, {len(broke)} right before and wrong now, of {len(keys)} words in both")
-        for ok, word, shown, right in broke:
+        for _, word, shown, right in broke:
             print(f"  now wrong: {word} {shown}→{right}")
 
 
@@ -631,7 +631,7 @@ def compare(folder, words, before=None):
                 continue
             units = truth_units(line["text"], line["truth"])
             for reader in ("builtIn", "uniDic", "shown"):
-                for word, shown, right, ok, at in compare_line(line["text"], line[reader], units):
+                for word, shown, right, ok, _ in compare_line(line["text"], line[reader], units):
                     totals[(kind, reader)]["words"] += 1
                     if not ok:
                         totals[(kind, reader)]["wrong"] += 1

@@ -103,6 +103,10 @@ internal fun songLines(lines: List<String>, words: List<String>): List<SongLine>
  */
 internal class PracticeCards(
     screen: MutableState<UiState>,
+    /**
+     * Where a card's work runs: on the thread every ask comes on, the main thread in the app. The work reads the card and
+     * writes it back, so an ask made on another thread could come between, and a grade be written over with the card before it.
+     */
     private val scope: CoroutineScope,
     private val playback: PlaybackSource?,
     private val matcher: ExactMatcher,

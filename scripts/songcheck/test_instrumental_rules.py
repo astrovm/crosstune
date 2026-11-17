@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import instrumental_rules  # noqa: E402
+import instrumental_rules
 
 
 def copy(instrumental, exact=True, title=None, artist="Fake Band", seconds=200.0):

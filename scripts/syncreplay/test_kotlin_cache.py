@@ -1,12 +1,12 @@
 """Compiler inputs and published classes stay correct across overlapping replay runs."""
-from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import importlib.util
-from pathlib import Path
-import tempfile
 import subprocess
+import tempfile
 import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location('cache_replay', Path(__file__).with_name('syncreplay.py'))

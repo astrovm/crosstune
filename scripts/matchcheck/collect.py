@@ -59,7 +59,7 @@ def fetch(out, url, body=None, pause=0.0):
             with urllib.request.urlopen(request, timeout=30) as response:
                 answer = json.load(response)
             break
-        except Exception as error:  # noqa: BLE001 - any failure is retried, then reported
+        except Exception as error:  # any failure is retried, then reported
             print(f"  retry {attempt + 1} {url[:80]}: {error}", file=sys.stderr)
             time.sleep(10 * (attempt + 1))
     else:

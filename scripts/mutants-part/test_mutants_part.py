@@ -1,5 +1,7 @@
 import contextlib
 import io
+import itertools
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,7 +36,7 @@ class Parts(unittest.TestCase):
         )
         for n in (1, 4, 6, 9):
             parts = [mutants_part.part(lines, k, n) for k in range(n)]
-            self.assertEqual(sum(parts, []), lines, n)
+            self.assertEqual(list(itertools.chain.from_iterable(parts)), lines, n)
             self.assertLessEqual(max(map(len, parts)) - min(map(len, parts)), 1, n)
 
     def test_a_part_out_of_range_is_refused(self):
@@ -95,7 +97,7 @@ class Branch(unittest.TestCase):
 
     def test_a_memory_error_is_listed_and_fails_the_run(self):
         root = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)]))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
         (root / "gradle.sh").write_text(
             f"mkdir -p {root}/r && cat > {root}/r/mutations.xml <<'EOF'\n"
             "<mutations><mutation status='MEMORY_ERROR'><sourceFile>M.kt</sourceFile><lineNumber>741</lineNumber><description>oom</description></mutation></mutations>\nEOF\n"
@@ -116,7 +118,7 @@ class Branch(unittest.TestCase):
 
     def test_changed_lines_of_kotlin_and_java_are_listed(self):
         root = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)]))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
         code = root / "app/src/main/java/com/astrovm/crosstune"
         code.mkdir(parents=True)
         files = {"A.kt": "a1\na2\n", "J.java": "j1\nj2\n", "notes.txt": "n1\n"}

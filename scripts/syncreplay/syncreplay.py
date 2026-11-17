@@ -69,31 +69,34 @@ and a replay hears the rest it asks for, keeping it, so a change to the app's ti
 Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
-from array import array
-import fcntl
 import errno
+import fcntl
+import functools
 import hashlib
 import html
+import itertools
 import json
-from datetime import datetime
 import os
-import shutil
 import re
 import shlex
+import shutil
 import statistics
 import subprocess
 import sys
-import threading
 import tempfile
+import threading
 import time
 import unicodedata
+from array import array
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(os.environ.get("SYNCREPLAY_DIR") or ROOT / "build" / "syncreplay")
 sys.path.insert(0, str(ROOT / "scripts" / "kotlinc"))
 import kotlinc  # noqa: E402  the compiler jars the readings guard parses with too
+
 HEARD = OUT / "heard"
 HEARD_BUILT = threading.Lock()
 # The app's speech model; others can be tried with `hear --model` and `run --model`.
@@ -327,7 +330,7 @@ def line_starts(heard, lines):
         else:
             j += 1
     starts = {}
-    for n, line in enumerate(lines):
+    for n in range(len(lines)):
         words = [j for j, (_, i) in enumerate(lyric) if i == n]
         if words and words[0] in at and sum(j in at for j in words) * 2 > len(words):
             starts[n] = at[words[0]]
@@ -397,7 +400,7 @@ def prep(args):
         measured(args.id, "demucs", lambda: separated_voice(args.id, wav))
         measured(args.id, "truth", lambda: truth(args.id, wav, [text for _, text in lyrics if text.strip()]))
     for length in LENGTHS:
-        measured(args.id, f"heard{length // 1000}", lambda: windows(args.id, wav, length, wanted=seed))
+        measured(args.id, f"heard{length // 1000}", functools.partial(windows, args.id, wav, length, wanted=seed))
 
 
 def hear_asked(song, replays):
@@ -440,7 +443,7 @@ def run(args):
     while True:
         asked.write_text(json.dumps(replay))
         try:
-            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True, check=False)
         finally:
             asked.unlink()
         if done.returncode:
@@ -465,7 +468,7 @@ def like_phone(args):
     args.behind = round(args.behind)
     # Each while is heard right after the last is worked out, so the gaps between them are the working out.
     whiles = sorted((int(re.search(r"heard-(\d+)", f.name).group(1)), f.stat().st_size // 2 * 1000 // 16000) for f in kept.glob("heard-*.pcm"))
-    gaps = [after - (start + ms) for (start, ms), (after, _) in zip(whiles, whiles[1:])]
+    gaps = [after - (start + ms) for (start, ms), (after, _) in itertools.pairwise(whiles)]
     # The shortest is the working out alone. The rest also wait for what's still being worked out from before,
     # so the phone took 3.8 s over one while and 27 s over the next, and each is replayed as it went.
     args.work = min(gaps) if gaps else args.work
@@ -844,7 +847,7 @@ def lit_pace(log):
     them, as a step with a jump in it isn't a pace. None with too few lines to say."""
     lit = [tuple(map(int, row)) for row in re.findall(r"lit -?\d+ at (\d+) pos (-?\d+)", log)]
     settled = lit[len(lit) // 2:]
-    steps = [(pos - before) / (at - then) for (then, before), (at, pos) in zip(settled, settled[1:]) if at > then]
+    steps = [(pos - before) / (at - then) for (then, before), (at, pos) in itertools.pairwise(settled) if at > then]
     return statistics.median(steps) if steps else None
 
 
@@ -959,7 +962,7 @@ def find_words(gradle):
     asked = own() / "set.asked"
     asked.write_text("")
     try:
-        done = subprocess.run(shlex.split(gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncSetTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+        done = subprocess.run(shlex.split(gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncSetTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True, check=False)
     finally:
         asked.unlink()
     if done.returncode:
@@ -1005,7 +1008,7 @@ def complete(song):
     duration = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration",
                                                "-of", "default=nw=1:nk=1", str(OUT / f"{song}.wav")]))
     # The visualizer discards the last incomplete mixer block, as windows() does.
-    milliseconds = int(round(duration * 48000)) // BLOCK * (BLOCK // 48)
+    milliseconds = round(duration * 48000) // BLOCK * (BLOCK // 48)
     for length in LENGTHS:
         path = heard_file(song, length, APP_MODEL)
         if not path.exists():
@@ -1034,7 +1037,7 @@ def run_all(args):
         asked.write_text(wanted)
         names.write_text("\n".join(songs) + "\n")
         try:
-            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True, check=False)
         finally:
             asked.unlink()
             names.unlink()
@@ -1121,7 +1124,7 @@ def replay_container(*mounts):
         previous = by_target.get(target)
         if previous is not None and previous[0] != source:
             raise ValueError(f"conflicting mount sources for {target}")
-        access = "rw" if mode == "rw" or previous is not None and previous[1] == "rw" else "ro"
+        access = "rw" if mode == "rw" or (previous is not None and previous[1] == "rw") else "ro"
         by_target[target] = source, access
     for target, (source, mode) in by_target.items():
         command += ["-v", f"{source}:{target}:{mode}"]
@@ -1308,14 +1311,14 @@ def timing_copied(timing, sources):
         if copy.read_bytes() != data:
             raise ValueError(f"changed immutable timing input: {copy}")
     else:
-        output = tempfile.NamedTemporaryFile(dir=folder, prefix=".SungTiming-", delete=False)
-        temporary = Path(output.name)
-        try:
-            with output:
+        with tempfile.NamedTemporaryFile(dir=folder, prefix=".SungTiming-", delete=False) as output:
+            temporary = Path(output.name)
+            try:
                 output.write(data)
-            temporary.replace(copy)
-        finally:
-            temporary.unlink(missing_ok=True)
+                output.flush()
+                temporary.replace(copy)
+            finally:
+                temporary.unlink(missing_ok=True)
     return [copy, *sources[1:]]
 
 

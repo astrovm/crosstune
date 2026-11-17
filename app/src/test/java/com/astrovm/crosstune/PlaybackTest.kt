@@ -2202,6 +2202,130 @@ class PlaybackTest {
 
     @Test
     @Config(shadows = [AppAsked::class])
+    fun anArtistInTheTitleDoesNotSupportAPartialSongOrAnotherArtist() {
+        allow()
+        sounding()
+        for ((title, artist) in listOf("Fake Band - Fake Song Two" to "Fake Band", "Other Band - Fake Song" to "Fake Band")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.example.player", "Fake Player", title, ""))
+            val wanted = MusicMetadata("Fake Song", artist)
+            assertNull(title, playback.appFor(wanted))
+            playback.seekTo(wanted, 10_000)
+            playback.playPause(wanted, false)
+        }
+        assertEquals(emptyList<String>(), asked())
+    }
+
+    @Test
+    fun aParsedArtistCannotBeTakenFromTheSongsOwnTitle() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Other Band - Fake Band Song", ""))
+        assertNull(playback.appFor(MusicMetadata("Fake Band Song", "Fake Band")))
+    }
+
+    @Test
+    fun aWholePlayerTitleKeepsNonLatinVowels() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "काला", ""))
+        assertNull(playback.appFor(MusicMetadata("किला", "Fake Band")))
+        assertFalse(SongNames.wholeTitle("काला", "किला"))
+    }
+
+    @Test
+    fun aWholePlayerTitleKeepsItsWordBoundaries() {
+        allow()
+        sounding()
+        for ((title, asked) in listOf("Apart" to "A Part", "A Part" to "Apart", "Glass Lantern" to "Glasslantern", "ガラス" to "カラス")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.example.player", "Fake Player", title, ""))
+            assertNull(title, playback.appFor(MusicMetadata(asked, "Fake Band")))
+        }
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aBoundSongPauseDoesNotReachANewTitleInTheSameSession() {
+        allow()
+        val wanted = MusicMetadata("Fake Song", "Fake Band")
+        val controller = player("com.example.player", "Fake Player", wanted.title, wanted.artist)
+        shadowOf(sessions).addController(controller)
+        val chosen = playback.matching(wanted).single()
+        shadowOf(controller).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Fake Song Radio").putString(MediaMetadata.METADATA_KEY_ARTIST, "").build())
+        chosen.source.playPause(wanted, false, chosen.app)
+        assertEquals(emptyList<String>(), asked())
+        // An explicit app pause still reaches that session regardless of its song.
+        chosen.source.pauseApp(requireNotNull(chosen.app))
+        assertEquals(listOf("pause"), asked())
+    }
+
+    @Test
+    fun aMissingArtistDoesNotEraseAOneWordTitlesRecording() {
+        allow()
+        sounding()
+        for ((title, asked) in listOf("Hello (Live)" to "Hello", "Hello" to "Hello (Live)")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.example.player", "Fake Player", title, ""))
+            assertNull("$title is not $asked", playback.appFor(MusicMetadata(asked, "Fake Band")))
+        }
+    }
+
+    @Test
+    fun anUnknownArtistStillNeedsTheWholeTitleBeforeItsSessionIsSelected() {
+        allow()
+        sounding()
+        for (artist in listOf("", "<unknown>", "Unknown Artist", "Various Artists")) {
+            ShadowMediaSessionManager.reset()
+            val source = MediaSessionPlayback(app, now = { NOW }, modes = modes)
+            shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Fake Song.mp3", artist))
+            assertEquals(artist, "com.example.player", source.appFor(MusicMetadata("Fake Song", "Fake Band"))?.packageName)
+            assertNull(artist, source.appFor(MusicMetadata("Fake Song Two", "Fake Band")))
+        }
+        assertTrue(SongNames.wholeTitle("Canción Azul", "Cancion Azul"))
+        assertTrue(SongNames.wholeTitle("ガラス", "カ\u3099ラス"))
+        assertTrue(SongNames.wholeTitle("Fake-Song", "Fake Song"))
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Fake Band - Fake Song", ""))
+        assertEquals("com.example.player", playback.appFor(MusicMetadata("Fake Band - Fake Song", ""))?.packageName)
+        assertFalse(SongNames.wholeTitle("\u093E", "\u093E"))
+        assertFalse(SongNames.wholeTitle("", ""))
+        assertFalse(SongNames.wholeTitle("", "Fake Song"))
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSessionWithNoArtistCannotBeControlledByWordsItsTitleShares() {
+        allow()
+        sounding()
+        val cases = listOf(
+            "Hotel California Radio" to "Hotel California",
+            "Los 40 Classic" to "Los 40",
+            "Fake Song" to "Fake Song Two",
+            "Fake Song Two" to "Fake Song",
+            "Hello World (Live)" to "Hello (Live)"
+        )
+        for ((title, askedTitle) in cases) {
+            ShadowMediaSessionManager.reset()
+            val source = MediaSessionPlayback(app, now = { NOW }, modes = modes)
+            shadowOf(sessions).addController(player("com.example.player", "Fake Player", title, ""))
+            val song = MusicMetadata(askedTitle, "Fake Band")
+            for (of in listOf("com.example.player", null)) {
+                assertNull("$title is not $askedTitle in $of", source.appFor(song, app = of))
+                val seen = mutableListOf<Following?>()
+                val job = CoroutineScope(Dispatchers.Unconfined).launch { source.follow(song, of).collect { seen += it } }
+                shadowOf(Looper.getMainLooper()).idle()
+                assertEquals("$title is not followed for $askedTitle in $of", listOf<Following?>(null), seen)
+                job.cancel()
+                source.seekTo(song, 10_000, of)
+                source.playPause(song, false, of)
+            }
+        }
+        assertEquals(emptyList<String>(), asked())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
     fun anAppIsAskedToPlayWhateverItHas() {
         allow()
         shadowOf(sessions).addController(player("com.example.player", "Fake Player", "Fake Song.mp3", "<unknown>", state = PlaybackState.STATE_PAUSED))

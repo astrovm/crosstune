@@ -1,6 +1,6 @@
 """Keep the Play Store texts within Google Play's limits, which reject a longer one at upload."""
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 METADATA = "fastlane/metadata/android"
