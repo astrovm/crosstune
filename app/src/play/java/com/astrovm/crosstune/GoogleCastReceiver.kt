@@ -24,13 +24,16 @@ internal class GoogleCastReceiver(private val context: Context) : CastReceiver {
         val receiver = CastReceiverContext.getInstance()
         val mediaSession = MediaSessionCompat(context, "CrosstuneCast").apply { isActive = true }
         session = mediaSession
+        fun post(action: () -> Unit) {
+            main.post { if (session === mediaSession) action() }
+        }
         receiver.setMessageReceivedListener(CAST_NAMESPACE) { _, _, message ->
-            CastCommand.fromMessage(message)?.let { main.post { onCommand(it) } }
+            CastCommand.fromMessage(message)?.let { post { onCommand(it) } }
         }
         receiver.mediaManager.apply {
             setSessionCompatToken(mediaSession.sessionToken)
-            setMediaLoadCommandCallback(castLoadCallback(onLoad) { main.post(it) })
-            setMediaCommandCallback(castCommandCallback(onCommand) { main.post(it) })
+            setMediaLoadCommandCallback(castLoadCallback(onLoad, ::post))
+            setMediaCommandCallback(castCommandCallback(onCommand, ::post))
         }
 
         receiver.start()
@@ -48,8 +51,18 @@ internal class GoogleCastReceiver(private val context: Context) : CastReceiver {
 
     override fun stop() {
         val mediaSession = session ?: return
-        CastReceiverContext.getInstance().stop()
-        mediaSession.release()
         session = null
+        val receiver = CastReceiverContext.getInstance()
+        try {
+            receiver.removeMessageReceivedListener(CAST_NAMESPACE)
+            receiver.mediaManager.apply {
+                setMediaLoadCommandCallback(null)
+                setMediaCommandCallback(null)
+                setSessionCompatToken(null)
+            }
+            receiver.stop()
+        } finally {
+            mediaSession.release()
+        }
     }
 }

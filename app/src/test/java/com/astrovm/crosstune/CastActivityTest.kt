@@ -14,11 +14,14 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -30,6 +33,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSettings
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** Casting through the screens: the phone's Cast button and its player as the remote, and Crosstune on a TV answering. */
 @RunWith(RobolectricTestRunner::class)
@@ -197,6 +202,92 @@ class CastActivityTest {
         app.mainExecutor.execute { requireNotNull(cast.onCommand)(CastCommand.Pause) }
         waitUntil { playback.plays.isNotEmpty() }
         assertEquals(listOf(false), playback.plays.toList())
+    }
+
+    @Test
+    fun recreatingTheTvKeepsOneReceiverUntilTheActivityFinishes() {
+        phone = Phone.TV
+        val original = Robolectric.buildActivity(MainActivity::class.java).setup().also { controller = it }
+        composeRule.waitForIdle()
+        assertEquals(1, cast.started)
+
+        val recreated = original.recreate().also { controller = it }
+        composeRule.waitForIdle()
+        assertEquals(1, cast.started)
+        assertEquals(0, cast.stopped)
+        val model = ViewModelProvider(recreated.get())[MainViewModel::class.java]
+        app.mainExecutor.execute { requireNotNull(cast.onCommand)(CastCommand.Translation(true)) }
+        waitUntil { model.uiState.learning.translation }
+
+        recreated.get().finish()
+        recreated.destroyAndSettle()
+        assertEquals(1, cast.stopped)
+        controller = null
+    }
+
+    @Test
+    fun aStoppedLookupCannotPublishOrPlayAfterItsAnswerArrives() {
+        phone = Phone.TV
+        val reading = CountDownLatch(1)
+        val answer = CountDownLatch(1)
+        val answered = CountDownLatch(1)
+        val normal = fake.handler
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/oembed") {
+                reading.countDown()
+                check(answer.await(TIMEOUT_MS, TimeUnit.MILLISECONDS))
+                normal(request).also { answered.countDown() }
+            } else normal(request)
+        }
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().also { controller = it }.get()
+        val model = ViewModelProvider(activity)[MainViewModel::class.java]
+        try {
+            app.mainExecutor.execute { requireNotNull(cast.onLoad)(CastSong("Demo", "Band", link)) }
+            waitUntil { reading.count == 0L }
+            assertTrue(model.uiState.isLoading)
+            app.mainExecutor.execute { requireNotNull(cast.onCommand)(CastCommand.Stop) }
+            composeRule.waitForIdle()
+
+            answer.countDown()
+            waitUntil { answered.count == 0L && !model.uiState.isLoading }
+            assertNull(model.uiState.result)
+            assertTrue(cast.published.all { it == null })
+            assertTrue(playback.songsAsked.isEmpty() && playback.opened.isEmpty())
+        } finally {
+            answer.countDown()
+        }
+
+        // The next LOAD can still play.
+        app.mainExecutor.execute { requireNotNull(cast.onLoad)(CastSong("Demo", "Band", link)) }
+        waitUntil { playback.opened.isNotEmpty() }
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageName to link, playback.opened.single())
+    }
+
+    @Test
+    fun aReplacementCastCanUseThePermissionTheStoppedCastWasWaitingFor() {
+        phone = Phone.TV
+        ShadowSettings.setCanDrawOverlays(false)
+        val shell = FakeShell { command ->
+            if ("SYSTEM_ALERT_WINDOW" in command) ShadowSettings.setCanDrawOverlays(true)
+            true
+        }.apply { answer = CompletableDeferred() }
+        MainActivity.shellFactory = { listOf(shell) }
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().also { controller = it }.get()
+        val model = ViewModelProvider(activity)[MainViewModel::class.java]
+        app.mainExecutor.execute { requireNotNull(cast.onLoad)(CastSong("Demo", "Band", link)) }
+        waitUntil { model.uiState.fixingInOneTap == OneTapFix.FLOAT }
+        app.mainExecutor.execute { requireNotNull(cast.onCommand)(CastCommand.Stop) }
+        waitUntil { model.uiState.result == null }
+
+        val replacement = "https://music.youtube.com/watch?v=castDemo123"
+        app.mainExecutor.execute { requireNotNull(cast.onLoad)(CastSong("Another", "Band", replacement)) }
+        waitUntil { model.uiState.link?.url == replacement }
+        assertTrue(playback.opened.isEmpty())
+        shell.answer.complete(Unit)
+
+        waitUntil { playback.opened.isNotEmpty() }
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageName to replacement, playback.opened.single())
+        assertEquals(1, shell.ran.count { "SYSTEM_ALERT_WINDOW" in it })
     }
 
     @Test

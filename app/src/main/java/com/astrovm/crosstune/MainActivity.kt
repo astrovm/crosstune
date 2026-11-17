@@ -620,9 +620,7 @@ class MainActivity : ComponentActivity() {
         // Before the intent is handled, as it may be a phone's cast, which only a receiver that has started takes.
         // A TV answers the phones that cast to it, and tells them what it plays.
         if (phoneFactory(applicationContext) == Phone.TV) {
-            val receiver = castReceiver(applicationContext)
-            receiver.start(viewModel::castLoad, viewModel::castCommand)
-            lifecycleScope.launch { snapshotFlow { viewModel.castTv }.collect(receiver::publish) }
+            viewModel.startCastReceiver(castReceiver(applicationContext))
         }
         pendingClipboardRead = savedInstanceState?.getBoolean(STATE_PENDING_CLIPBOARD_READ) == true
         savedInstanceState?.getString(STATE_MICROPHONE_FOR)?.let { kept -> MicrophoneFor.entries.firstOrNull { it.name == kept } }?.let { afterMicrophone = it }
@@ -1138,7 +1136,6 @@ class MainActivity : ComponentActivity() {
         if (!isChangingConfigurations && FloatingLyricsService.host === floatingHost) FloatingLyricsService.stop(this)
         // The guide's host is this screen, which mustn't outlive it.
         if (isFinishing && GuideActivity.host === guideHost) GuideActivity.host = null
-        if (isFinishing) castReceiver(applicationContext).stop()
     }
 
     private fun listen() = withMicrophone(MicrophoneFor.LISTEN)

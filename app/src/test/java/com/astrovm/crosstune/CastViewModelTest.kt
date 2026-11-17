@@ -631,6 +631,67 @@ class CastViewModelTest {
     }
 
     @Test
+    fun stoppingACastDiscardsAnAppOpeningThatWasWaitingForTheActivity() {
+        val service = MusicService.YOUTUBE_MUSIC
+        shadowOf(app.packageManager).installPackage(installedApp(service.packageName, "YouTube Music"))
+        prefs().edit().putString("default_target", service.name).commit()
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Hush","author_name":"Band"}""") }
+        val model = model(null, FakeCast(), Phone.TV)
+        model.refreshSystemState()
+        model.setCanFloatOverApps(true)
+        val link = "https://music.youtube.com/watch?v=castDemo123"
+
+        // No screen is collecting effects yet. Wait until the app has queued the open.
+        model.castLoad(CastSong("Hush", "Band", link))
+        until("finished casting the first song") { model.uiState.canPlayResult && !model.uiState.playingResult }
+        model.castCommand(CastCommand.Stop)
+        val effects = effects(model)
+        idle()
+        assertTrue(effects.isEmpty())
+
+        // The same cast still opens the app when it runs through without a Stop.
+        model.castLoad(CastSong("Hush", "Band", link))
+        until("opened the next cast") { effects.isNotEmpty() }
+        assertEquals(link, effects.filterIsInstance<Effect.Open>().single().url)
+    }
+
+    @Test
+    fun stoppingACastWhileItResumesAnAppPreventsTheFallbackOpening() {
+        val service = MusicService.YOUTUBE_MUSIC
+        shadowOf(app.packageManager).installPackage(installedApp(service.packageName, "YouTube Music"))
+        prefs().edit().putString("default_target", service.name).commit()
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Hush","author_name":"Band"}""") }
+        val playback = FakePlayback().apply {
+            access = true
+            playing.value = following(playing = false).copy(app = "YouTube Music", appPackage = service.packageName)
+        }
+        val holding = CompletableDeferred<Unit>()
+        val answer = CompletableDeferred<Boolean>()
+        val source = object : PlaybackSource by playback {
+            override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
+                holding.complete(Unit)
+                return answer.await()
+            }
+        }
+        val model = model(source, FakeCast(), Phone.TV)
+        model.refreshSystemState()
+        model.setCanFloatOverApps(true)
+        val incoming = CastSong("Hush", "Band", "https://music.youtube.com/watch?v=castDemo123")
+
+        model.castLoad(incoming)
+        until("asked the app to resume") { holding.isCompleted }
+        model.castCommand(CastCommand.Stop)
+        answer.complete(false)
+        idle()
+        assertNull(model.castTv)
+        assertTrue(playback.broughtToFront.isEmpty())
+
+        model.castLoad(incoming)
+        until("brought the app forward for the next cast") { playback.broughtToFront.isNotEmpty() }
+        assertEquals(listOf(song), playback.broughtToFront.toList())
+    }
+
+    @Test
     fun withNothingPlayingTheTvHasNothingToTell() {
         val model = model(null, FakeCast(), Phone.TV)
         assertNull(model.castTv)
