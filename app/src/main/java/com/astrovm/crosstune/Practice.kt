@@ -1,10 +1,14 @@
 package com.astrovm.crosstune
 
+import com.astrovm.crosstune.PracticeClockLog.Companion.clock
+import org.json.JSONObject
+
 import android.util.Log
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -116,7 +120,8 @@ internal class PracticeCards(
     /** Makes the small YouTube player a line plays in when no music app has its song open, once it's wanted; nullable so tests need none. */
     private val newPlayer: (() -> LinePlayer)? = null,
     /** Where a card's line is read again: the dictionary loads the first time, and the screen would freeze meanwhile. */
-    private val readDispatcher: CoroutineDispatcher = Dispatchers.Default
+    private val readDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val clockLog: PracticeClockLog = PracticeClockLog(false)
 ) {
     private var uiState by screen
     private var soundJob: Job? = null
@@ -160,6 +165,7 @@ internal class PracticeCards(
 
     /** The controls already sent for this card, even while their answer is pending. */
     private data class NativeTarget(val match: PlaybackMatch, val remember: Boolean) {
+        val clockAttempt = PracticeClockLog.nextId()
         val source get() = match.source
         val app get() = match.app
         val key get() = app to match.session
@@ -232,7 +238,7 @@ internal class PracticeCards(
         for (target in matchingTargets(source, song, line)) {
             var played = false
             var sawState = false
-            inApp(target.source, song, target.app, onStuck = { following ->
+            val there = target.clockPhase("native_result") { inApp(target.source, song, target.app, onStuck = { following ->
                 sawState = following != null
                 following?.let { if (usable(it.appPackage, line)) stuck(target.source, song, it) else leftOut(target.source, song, it) }
             }) { following ->
@@ -242,7 +248,9 @@ internal class PracticeCards(
                 step("trying ${target.app ?: "the app"}")
                 letGoTarget(target.key)
                 played = playLine(target, song, line, explicit, following)
-            }
+            } }
+            target.clockVerdict("native_result", if (played) "used" else "fallback",
+                if (there) "line_attempt" else if (sawState) "not_ready" else "no_state")
             if (played) return true
             if (!sawState) stopIn(target, song)
         }
@@ -263,7 +271,13 @@ internal class PracticeCards(
         // Different sessions can have different capabilities. An app-wide failure cannot identify one of them.
         counts.filterValues { it > 1 }.keys.filterNotNull().forEach(traits::forget)
         val targets = matches.map { NativeTarget(it, counts[it.app] == 1) }
-        val candidates = targets.filter { usable(it.app, line) && fits(it.match.following, line) }
+        val candidates = targets.filter { target ->
+            val allowed = usable(target.app, line)
+            val accepted = allowed && fits(target.match.following, line)
+            val reason = if (!allowed) "service_policy" else if (!accepted) "outside_recording" else "candidate"
+            target.clockCandidate(line, accepted, reason)
+            accepted
+        }
             .sortedWith(compareByDescending<NativeTarget> { it.match.following?.let { state -> state.canSeek && !state.ad } == true }.thenByDescending { it.match.playing })
         pauseOthers(targets, candidates.firstOrNull()?.key, song, line)
         return candidates
@@ -350,7 +364,7 @@ internal class PracticeCards(
         val source = target.source
         val app = target.app
         setSound(line, LineSound.PLAYING)
-        val kept = playsThrough(window, following)
+        val kept = playsThrough(target, window, following)
         if (kept) source.playPause(song, false, app) else stopIn(target, song)
         nativeSound = null
         if (kept) rememberControl(target, playing = true, works = true)
@@ -364,11 +378,12 @@ internal class PracticeCards(
      * [LineWindow.SEEK_WAIT_MS], or says it stopped short of it, see [LineWindow.stoppedShort]: TIDAL at its preview's
      * end has nowhere else to go. One that falls out on the way, as YouTube Music errs, and comes back is asked once more.
      */
-    private suspend fun reach(target: NativeTarget, song: MusicMetadata, window: LineWindow, play: Boolean, following: () -> Following?): Long? {
+    private suspend fun reach(target: NativeTarget, song: MusicMetadata, window: LineWindow, play: Boolean, following: () -> Following?): Long? = target.clockPhase("reach_result") {
         val source = target.source
         val app = target.app
         val sent = sentPlaces.getOrPut(target.key) { SentPlaces() }
-        return withTimeoutOrNull(LineWindow.SEEK_WAIT_MS) {
+        var reason = "timeout"
+        val result = withTimeoutOrNull(LineWindow.SEEK_WAIT_MS) {
             var asks = 0
             var wasReady = false
             var at: Long? = null
@@ -377,12 +392,18 @@ internal class PracticeCards(
             val was = mutableListOf<PlaybackClock>()
             while (at == null) {
                 val latest = following()
+                target.clockSample("reach", window, latest)
                 val ready = latest?.takeIf { it.canSeek && !it.ad }
                 if (ready != null && !wasReady && asks < ASKS) {
                     sentAt = now()
                     was += sent.lately(app, sentAt) + ready.clock
                     sent.note(app, window.start, sentAt)
                     nativeSound = NativeSound(song, target)
+                    target.clockNote("seek_request") {
+                        put("target_ms", window.start)
+                        put("requested_ms", sentAt)
+                        put("play", play)
+                    }
                     source.seekTo(song, window.start, app)
                     currentCoroutineContext().ensureActive()
                     source.playPause(song, play, app)
@@ -390,6 +411,7 @@ internal class PracticeCards(
                 } else if (asks > 0) {
                     if (ready != null && ready.clock.atMs >= sentAt && window.stoppedShort(ready.clock, was)) {
                         step("${app ?: "the app"} stopped at ${ready.clock.positionMs} ms, short of the line")
+                        reason = "stopped_short"
                         return@withTimeoutOrNull null
                     }
                     // Said again every look while nothing changes: kept once.
@@ -399,8 +421,11 @@ internal class PracticeCards(
                 wasReady = ready != null
                 delay(SOUND_CHECK_MS)
             }
+            reason = "at_line"
             at
         }
+        target.clockVerdict("reach_result", if (result != null) "reached" else "not_reached", reason)
+        result
     }
 
     /**
@@ -408,23 +433,29 @@ internal class PracticeCards(
      * for a moment, as YouTube Music without Premium pauses itself behind Crosstune, or errs; at once when it goes on to
      * another song or plays somewhere else in it; or when the line hasn't ended in its time.
      */
-    private suspend fun playsThrough(window: LineWindow, following: () -> Following?): Boolean {
+    private suspend fun playsThrough(target: NativeTarget, window: LineWindow, following: () -> Following?): Boolean = target.clockPhase("play_result") {
         var over = false
+        var reason = "timeout"
         withTimeoutOrNull(window.patience) {
             var offSince: Long? = null
             while (!lasted(offSince, now(), PAUSED_FOR_MS)) {
                 // Gone from the song, as to the next one, it's stopped now rather than heard a moment: no pause comes back from that.
-                val clock = (following() ?: break).clock
+                val state = following()
+                target.clockSample("play", window, state)
+                if (state == null) { reason = "missing_session"; break }
+                val clock = state.clock
                 val at = clock.positionAt(now())
                 over = window.over(at)
-                if (over) break
+                if (over) { reason = "line_end"; break }
                 // Playing somewhere else, as TIDAL's next song once its 30 s preview ends under a song it says is whole, is heard: stopped now, without a pause's grace.
-                if (clock.playing && !window.holds(at)) break
+                if (clock.playing && !window.holds(at)) { reason = "outside_line"; break }
                 offSince = if (clock.playing && window.holds(at)) null else offSince ?: now()
                 delay(SOUND_CHECK_MS)
             }
+            if (reason == "timeout") reason = "paused"
         }
-        return over
+        target.clockVerdict("play_result", if (over) "played" else "not_played", reason)
+        over
     }
 
     /** Stops [app] once a line asked of it didn't play: the song, or one it went on into; the app playing the song when it didn't say which it is. */
@@ -468,6 +499,46 @@ internal class PracticeCards(
 
     /** [ms] with its sign, as an offset from the line reads. */
     private fun signed(ms: Long) = if (ms > 0) "+$ms" else "$ms"
+
+    private suspend fun <T> NativeTarget.clockPhase(event: String, read: suspend () -> T): T = try {
+        read()
+    } catch (cancelled: CancellationException) {
+        clockVerdict(event, "cancelled", "cancelled")
+        throw cancelled
+    }
+
+    private fun NativeTarget.clockNote(event: String, fields: JSONObject.(Long) -> Unit) {
+        clockLog.note(event, now) { at ->
+            put("app", app.orEmpty())
+            put("session", match.session)
+            put("attempt", clockAttempt)
+            fields(at)
+        }
+    }
+
+    private fun NativeTarget.clockCandidate(line: SavedLine, accepted: Boolean, reason: String) {
+        clockNote("candidate") { at ->
+            put("accepted", accepted)
+            put("reason", reason)
+            put("window_start_ms", line.startMs ?: JSONObject.NULL)
+            put("window_end_ms", line.endMs ?: JSONObject.NULL)
+            put("lead_ms", line.leadMs)
+            clock(match.following, at)
+        }
+    }
+
+    private fun NativeTarget.clockSample(phase: String, window: LineWindow, state: Following?) {
+        clockNote("card_clock") { at ->
+            put("phase", phase)
+            put("window_start_ms", window.start)
+            put("window_end_ms", window.end)
+            clock(state, at)
+        }
+    }
+
+    private fun NativeTarget.clockVerdict(event: String, result: String, reason: String) {
+        clockNote(event) { put("result", result); put("reason", reason) }
+    }
 
     /** One step of a card finding its sound, to the log when it's asked for: `adb shell setprop log.tag.$CHAIN_LOG DEBUG`. */
     private fun step(what: String) {

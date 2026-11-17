@@ -166,7 +166,8 @@ class MainActivity : ComponentActivity() {
                     sleepTimer = sleepTimer(applicationContext),
                     qobuzNumbers = qobuzNumbers(applicationContext, matcher),
                     offline = OfflineSongs(File(noBackupFilesDir, "$KEPT_OFFLINE_DIR/songs.json"), caches, artwork, lookupDispatcher),
-                    newLinePlayer = { linePlayerFactory(applicationContext) }
+                    newLinePlayer = { linePlayerFactory(applicationContext) },
+                    practiceClockLog = PracticeClockLog.of(applicationContext)
                 )
             }
         }

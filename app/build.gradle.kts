@@ -24,6 +24,10 @@ android {
     namespace = "com.astrovm.crosstune"
     compileSdk = 37
 
+    // The framework fixture and its JVM failure-path tests use the same cleanup and wait code.
+    sourceSets.named("test") { kotlin.directories += "src/sharedTest/kotlin" }
+    sourceSets.named("androidTest") { kotlin.directories += "src/sharedTest/kotlin" }
+
     defaultConfig {
         applicationId = "com.astrovm.crosstune"
         minSdk = 26

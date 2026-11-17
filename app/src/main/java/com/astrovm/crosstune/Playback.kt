@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import com.astrovm.crosstune.PracticeClockLog.Companion.clock
 import android.app.ActivityOptions
 import android.app.KeyguardManager
 import android.app.NotificationChannel
@@ -371,7 +372,8 @@ internal class MediaSessionPlayback(
     /** How a title and an artist an app says read as a song's; see [MetadataParsers.playerSong]. */
     readSong: (String, String) -> MusicMetadata? = MetadataParsers::playerSong,
     /** What an app calls one of its drawings, by its number there; Robolectric has no other app's. */
-    private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() }
+    private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() },
+    private val clockLog: PracticeClockLog = PracticeClockLog.of(context)
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
     private val covers = PlaybackCovers.shared(context)
@@ -438,22 +440,32 @@ internal class MediaSessionPlayback(
     }
 
     private fun pauseSession(token: MediaSession.Token, app: String?) {
-        runCatching { activeSessions().filter { it.sessionToken == token && (app == null || it.packageName == app) }.forEach { it.transportControls.pause() } }
+        runCatching { activeSessions().filter { it.sessionToken == token && (app == null || it.packageName == app) }.forEach { it.clockCommand("pause") { pause() } } }
     }
 
     override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = followSession(song, app, null)
 
     private fun followSession(song: MusicMetadata, app: String?, token: MediaSession.Token?): Flow<Following?> = callbackFlow {
+        val clockObserver = PracticeClockLog.nextId()
+        clockLog.note("follow_begin", now) { put("observer", clockObserver) }
         var followed: MediaController? = null
         var modesWatched: () -> Unit = {}
         var watched: List<MediaController> = emptyList()
+        var renamed: List<Pair<MediaController, MediaController.Callback>> = emptyList()
         lateinit var clocks: SteadyClock
         var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
         fun steadily(controller: MediaController) = following(controller, song.lengthMs)?.let {
             // Moved by Crosstune, where the app says next is believed, even a moment back.
             if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
-            it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken))
+            it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
+                clockLog.note("followed_clock", now) { at ->
+                    put("observer", clockObserver)
+                    put("app", controller.packageName)
+                    put("session", seen.session)
+                    clock(seen, at)
+                }
+            }
         }
         val callback = object : MediaController.Callback() {
             // Gone on to another song, as TIDAL does at the end of a preview, it plays this one no longer, even before it's said its new name.
@@ -480,13 +492,31 @@ internal class MediaSessionPlayback(
             trySend(playing?.let(::steadily))
         }
         // An app moving on to another song, e.g. YouTube from an ad to the video, may now play it, or no longer.
-        val renamed = object : MediaController.Callback() {
-            override fun onMetadataChanged(metadata: MediaMetadata?) = pick(watched)
-        }
         fun watch(controllers: List<MediaController>) {
-            watched.forEach { it.unregisterCallback(renamed) }
+            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             watched = controllers
-            controllers.forEach { it.registerCallback(renamed, handler) }
+            renamed = controllers.map { controller ->
+                val callback = object : MediaController.Callback() {
+                    override fun onMetadataChanged(metadata: MediaMetadata?) = pick(watched)
+                    override fun onPlaybackStateChanged(state: PlaybackState?) {
+                        clockLog.note("media_report", now) {
+                            put("observer", clockObserver)
+                            put("app", controller.packageName)
+                            put("session", sessionNumbers.peek(controller.sessionToken) ?: org.json.JSONObject.NULL)
+                            put("present", state != null)
+                            if (state != null) {
+                                put("state", state.state)
+                                put("position_ms", state.position)
+                                put("updated_ms", state.lastPositionUpdateTime)
+                                put("speed", state.playbackSpeed.toString())
+                                put("actions", state.actions)
+                            }
+                        }
+                    }
+                }
+                controller.registerCallback(callback, handler)
+                controller to callback
+            }
             pick(controllers)
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
@@ -498,9 +528,10 @@ internal class MediaSessionPlayback(
         if (!watching) trySend(null)
         awaitClose {
             sessions.removeOnActiveSessionsChangedListener(changed)
-            watched.forEach { it.unregisterCallback(renamed) }
+            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             followed?.unregisterCallback(callback)
             modesWatched()
+            clockLog.note("follow_end", now) { put("observer", clockObserver) }
         }
     }.distinctUntilChanged()
 
@@ -555,7 +586,7 @@ internal class MediaSessionPlayback(
             val actions = controller.playbackState?.actions ?: 0L
             if (actions and PlaybackState.ACTION_SEEK_TO == 0L) return
             moves = Any()
-            controller.transportControls.seekTo(positionMs)
+            controller.clockCommand("seek", positionMs) { seekTo(positionMs) }
         }
     }
 
@@ -564,28 +595,38 @@ internal class MediaSessionPlayback(
     }
 
     private fun pauseIn(song: MusicMetadata, app: String?, token: MediaSession.Token?) {
-        runCatching { appFor(song, app = app, token = token)?.transportControls?.pause() }
+        runCatching { appFor(song, app = app, token = token)?.clockCommand("pause") { pause() } }
     }
 
     private fun playIn(song: MusicMetadata, app: String?, token: MediaSession.Token?) {
         // Taken back meanwhile, the song just keeps on as it was.
-        runCatching { appFor(song, app = app, token = token)?.transportControls?.play() }
+        runCatching { appFor(song, app = app, token = token)?.clockCommand("play") { play() } }
     }
 
     override fun pauseApp(app: String) {
         // Taken back meanwhile, it plays on.
         runCatching {
-            activeSessions().filter { it.packageName == app && it.playbackState?.state == PlaybackState.STATE_PLAYING }.forEach { it.transportControls.pause() }
+            activeSessions().filter { it.packageName == app && it.playbackState?.state == PlaybackState.STATE_PLAYING }.forEach { it.clockCommand("pause") { pause() } }
         }
     }
 
+    private fun MediaController.clockCommand(command: String, position: Long? = null, act: MediaController.TransportControls.() -> Unit) {
+        clockLog.note("media_command", now) {
+            put("app", packageName)
+            put("session", sessionNumbers.peek(sessionToken) ?: org.json.JSONObject.NULL)
+            put("command", command)
+            put("target_ms", position ?: org.json.JSONObject.NULL)
+        }
+        transportControls.act()
+    }
+
     override fun playApp(app: String) {
-        runCatching { activeSessions().filter { it.packageName == app }.sortedWith(nearestFirst).firstOrNull()?.transportControls?.play() }
+        runCatching { activeSessions().filter { it.packageName == app }.sortedWith(nearestFirst).firstOrNull()?.clockCommand("play") { play() } }
     }
 
     override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
         val controller = runCatching { appFor(song, app = app) }.getOrNull() ?: return false
-        return watchStart(controller, mustStart = true) { controller.transportControls.play() }
+        return watchStart(controller, mustStart = true) { controller.clockCommand("play") { play() } }
     }
 
     // Opened as from its icon, which brings back the screen it was on, song and all; a link would start it over.
@@ -604,7 +645,7 @@ internal class MediaSessionPlayback(
             opened = playing.packageName
             // Back in front, YouTube Music puts the song where it was, paused; asked to play before that, it starts it over.
             withTimeoutOrNull(startMs) { back.await() }
-            runCatching { playing.transportControls.play() }
+            runCatching { playing.clockCommand("play") { play() } }
             return true
         } finally {
             playing.unregisterCallback(callback)
@@ -701,8 +742,8 @@ internal class MediaSessionPlayback(
             putString(MediaStore.EXTRA_MEDIA_ARTIST, song.artist)
         }
         // YouTube Music says it plays what's asked for by name, but doesn't; a link of its own it plays.
-        if (link != null && MusicService.ofPackage(asked.packageName) == MusicService.YOUTUBE_MUSIC) asked.transportControls.playFromUri(Uri.parse(link), Bundle())
-        else asked.transportControls.playFromSearch(searchQuery(song), wanted)
+        if (link != null && MusicService.ofPackage(asked.packageName) == MusicService.YOUTUBE_MUSIC) asked.clockCommand("play_from_uri") { playFromUri(Uri.parse(link), Bundle()) }
+        else asked.clockCommand("play_from_search") { playFromSearch(searchQuery(song), wanted) }
     }
 
     // The app may be installed as a build patched from it, under a name of its own, or as its TV app.
@@ -856,7 +897,7 @@ internal class MediaSessionPlayback(
         val asked = runCatching { activeSessions() }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: waker.wake(MusicService.appsFor(app))
             ?: return false
-        return watchStart(asked, mustStart) { asked.transportControls.playFromUri(Uri.parse(link), Bundle()) }
+        return watchStart(asked, mustStart) { asked.clockCommand("play_from_uri") { playFromUri(Uri.parse(link), Bundle()) } }
     }
 
     /** What [read] says, again whenever an app starts, pauses, stops, changes songs or its queue. */
@@ -1101,6 +1142,9 @@ internal class KeptReads<K, V>(private val kept: Int, private val read: (K) -> V
 
     /** What a key read as, even null. */
     private class Read<V>(val value: V)
+
+    /** Observe a retained value without reading a new key or making this one more recent. */
+    fun peek(key: K): V? = synchronized(values) { values.entries.firstOrNull { it.key == key }?.value?.value }
 
     fun of(key: K): V {
         synchronized(values) { values[key] }?.let { return it.value }
