@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Make invented local media for RecordingNameCheck. Use VLC at media volume zero."""
 import argparse
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 
 
 def main():

@@ -7,9 +7,9 @@ JVM before three measured calls. --timing can measure an older SungTiming.kt wit
 the same inputs.
 """
 import argparse
-from pathlib import Path
 import random
 import subprocess
+from pathlib import Path
 
 import syncreplay as replay
 

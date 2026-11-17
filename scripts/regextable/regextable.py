@@ -111,7 +111,7 @@ def ranges(found):
         end = at
         while end + 1 < len(found) and found[end + 1] == found[end] + 1:
             end += 1
-        runs.append("%x" % found[at] if at == end else "%x-%x" % (found[at], found[end]))
+        runs.append(f"{found[at]:x}" if at == end else f"{found[at]:x}-{found[end]:x}")
         at = end + 1
     return ",".join(runs)
 
@@ -203,8 +203,8 @@ def probe(serial):
     env = dict(os.environ, GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
     subprocess.run(["nice", "-n", "10", "scripts/gradle-box/gradle-box.sh", "--max-workers=2", ":app:compileDebugUnitTestKotlin"], cwd=ROOT, env=env, check=True)
     stdlib = next(Path.home().glob(".cache/crosstune-gradle-box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/*/*/kotlin-stdlib-*[0-9].jar"))
-    tools = sorted((SDK / "build-tools").iterdir())[-1]
-    platform = sorted((SDK / "platforms").iterdir())[-1] / "android.jar"
+    tools = max((SDK / "build-tools").iterdir())
+    platform = max((SDK / "platforms").iterdir()) / "android.jar"
     probe_classes = sorted(str(path) for path in (CLASSES / "com/astrovm/crosstune").glob("RegexTableProbe*.class"))
     work = Path(tempfile.mkdtemp(prefix="regextable-", dir=os.environ.get("REGEXTABLE_TMP")))
     try:
@@ -229,8 +229,8 @@ def compiled():
     env = dict(os.environ, GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
     subprocess.run(["nice", "-n", "10", "scripts/gradle-box/gradle-box.sh", "--max-workers=2", ":app:compileDebugUnitTestKotlin"], cwd=ROOT, env=env, check=True)
     stdlib = next(Path.home().glob(".cache/crosstune-gradle-box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/*/*/kotlin-stdlib-*[0-9].jar"))
-    tools = sorted((SDK / "build-tools").iterdir())[-1]
-    platform = sorted((SDK / "platforms").iterdir())[-1] / "android.jar"
+    tools = max((SDK / "build-tools").iterdir())
+    platform = max((SDK / "platforms").iterdir()) / "android.jar"
     return stdlib, tools, platform
 
 

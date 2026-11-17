@@ -1,6 +1,6 @@
 """The release workflow checks the App Bundle against the upload key."""
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
 

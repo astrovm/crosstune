@@ -3,9 +3,9 @@ import contextlib
 import importlib.util
 import io
 import subprocess
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 spec = importlib.util.spec_from_file_location('shots', Path(__file__).with_name('shots.py'))
 shots = importlib.util.module_from_spec(spec)

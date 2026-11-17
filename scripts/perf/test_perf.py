@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent))
-import perf  # noqa: E402
+import perf
 
 GFXINFO = """Applications Graphics Acceleration Info:
 Total frames rendered: 1000

@@ -71,7 +71,7 @@ def image_in_avd(name):
     config = avd_dir(name) / "config.ini"
     if not config.exists():
         return None
-    found = re.search(r"^image\.sysdir\.1=(.+?)/?\s*$", config.read_text(), re.M)
+    found = re.search(r"^image\.sysdir\.1=(.+?)/?\s*$", config.read_text(), re.MULTILINE)
     return found.group(1) if found else ""
 
 
@@ -80,7 +80,7 @@ def serial_of(name):
 
 
 def adb(*args, timeout=30):
-    return subprocess.run([tool("platform-tools/adb"), *args], capture_output=True, text=True, timeout=timeout).stdout
+    return subprocess.run([tool("platform-tools/adb"), *args], capture_output=True, text=True, timeout=timeout, check=False).stdout
 
 
 def shell(name, *args):
@@ -88,7 +88,7 @@ def shell(name, *args):
 
 
 def running(name):
-    return re.search(rf"^{serial_of(name)}\s+device\s*$", adb("devices"), re.M) is not None
+    return re.search(rf"^{serial_of(name)}\s+device\s*$", adb("devices"), re.MULTILINE) is not None
 
 
 def installed(name, package):
@@ -132,14 +132,14 @@ def create(name, replace):
     if not (sdk() / image_path(image)).exists():
         print(f"{name}: installing {image}")
         answer = subprocess.run([tool("cmdline-tools/latest/bin/sdkmanager"), "--install", image],
-                                input="y\n" * 20, capture_output=True, text=True)
+                                input="y\n" * 20, capture_output=True, text=True, check=False)
         if answer.returncode != 0 or not (sdk() / image_path(image)).exists():
             die(f"Couldn't install {image}:\n{answer.stdout[-800:]}{answer.stderr[-800:]}")
     if current is None:
         avd_home().mkdir(parents=True, exist_ok=True)
         answer = subprocess.run(
             [tool("cmdline-tools/latest/bin/avdmanager"), "create", "avd", "-n", name, "-k", image, "-d", DECLARED[name]["device"]],
-            input="no\n", capture_output=True, text=True)
+            input="no\n", capture_output=True, text=True, check=False)
         if answer.returncode != 0 or image_in_avd(name) is None:
             die(f"Couldn't create {name}:\n{answer.stdout[-800:]}{answer.stderr[-800:]}")
         print(f"{name}: created")
@@ -152,9 +152,12 @@ def sound_options(window):
     """Nothing plays out loud: on Linux both the speaker and the mic go through a private sink."""
     hide = [] if window else ["-qt-hide-window"]
     if platform.system() == "Linux" and shutil.which("pactl"):
-        sinks = subprocess.run(["pactl", "list", "short", "sinks"], capture_output=True, text=True).stdout
+        sinks = subprocess.run(["pactl", "list", "short", "sinks"], capture_output=True, text=True, check=False).stdout
         if QUIET_SINK not in sinks:
-            subprocess.run(["pactl", "load-module", "module-null-sink", f"sink_name={QUIET_SINK}"], capture_output=True)
+            made = subprocess.run(["pactl", "load-module", "module-null-sink", f"sink_name={QUIET_SINK}"], capture_output=True, text=True, check=False)
+            # Without the sink PulseAudio plays on the default one, which is the room's speakers.
+            if made.returncode != 0:
+                die(f"Couldn't make the private sound sink {QUIET_SINK}, so the emulator would play out loud:\n{made.stderr.strip()}")
         return hide + ["-audio", "pa", "-allow-host-audio"], {"PULSE_SINK": QUIET_SINK, "PULSE_SOURCE": f"{QUIET_SINK}.monitor"}
     return hide + ["-no-audio"], {}
 

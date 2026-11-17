@@ -2,12 +2,15 @@
 
 python3 scripts/tv-banner.py Roboto.ttf app/src/main/res/drawable/ic_launcher_foreground.xml > app/src/main/res/drawable/tv_banner.xml
 """
+
 import sys
+
+from fontTools.pens.boundsPen import BoundsPen
+from fontTools.pens.svgPathPen import SVGPathPen
+from fontTools.pens.transformPen import TransformPen
 from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
-from fontTools.pens.svgPathPen import SVGPathPen
-from fontTools.pens.boundsPen import BoundsPen
-from fontTools.pens.transformPen import TransformPen
+
 font = instantiateVariableFont(TTFont(sys.argv[1]), {"wght": 700, "wdth": 100})
 glyphs, cmap = font.getGlyphSet(), font.getBestCmap()
 upm = font["head"].unitsPerEm
@@ -15,13 +18,15 @@ text = "Crosstune"
 size = 40.0  # dp, the name's height in the 320x180 banner
 scale = size / upm
 # Lay the glyphs out, then place the name so logo and name sit centered together.
-pen = SVGPathPen(glyphs); bounds = BoundsPen(glyphs)
+pen = SVGPathPen(glyphs)
+bounds = BoundsPen(glyphs)
 x = 0
 hmtx = font["hmtx"]
 for ch in text:
     name = cmap[ord(ch)]
     t = (scale, 0, 0, -scale, x * scale, 0)
-    glyphs[name].draw(TransformPen(pen, t)); glyphs[name].draw(TransformPen(bounds, t))
+    glyphs[name].draw(TransformPen(pen, t))
+    glyphs[name].draw(TransformPen(bounds, t))
     x += hmtx[name][0]
 xmin, ymin, xmax, ymax = bounds.bounds
 logo = 96.0  # the 108 viewport's foreground drawn this big
@@ -33,7 +38,8 @@ left = (320 - width) / 2
 logo_x = left - 31 * s
 name_x = left + 47 * s + gap - xmin
 name_y = 90 - (ymin + ymax) / 2
-fg = open(sys.argv[2]).read()
+with open(sys.argv[2]) as foreground:
+    fg = foreground.read()
 inner = fg.split('android:viewportHeight="108">', 1)[1].rsplit("</vector>", 1)[0]
 print(f'''<?xml version="1.0" encoding="utf-8"?>
 <!-- The TV home screen's tile: the launcher logo and the app's name, made by scripts/tv-banner.py from Roboto Bold. -->

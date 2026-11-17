@@ -5,9 +5,9 @@ Uses the Kotlin compiler and JUnit jars already in the Gradle box cache.
 SYNCREPLAY_DIR has the same meaning as in syncreplay.py. All outputs stay ignored.
 """
 import argparse
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 
 import syncreplay as replay
 

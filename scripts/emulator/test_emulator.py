@@ -8,8 +8,13 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from subprocess import CompletedProcess
+from unittest import mock
+
+import emulator as the_script
 
 HERE = Path(__file__).parent
+
 SCRIPT = HERE / "emulator.py"
 ROOT = HERE.parents[1]
 DECLARED = json.loads((HERE / "emulators.json").read_text())
@@ -61,7 +66,7 @@ class EmulatorScriptTest(unittest.TestCase):
             ANDROID_HOME=str(sdk or self.sdk), ANDROID_AVD_HOME=str(self.avds), FAKE=str(self.fake),
             EMULATOR_ABI="x86_64", EMULATOR_APP_WAIT="0",
         )
-        return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env, timeout=60)
+        return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env, timeout=60, check=False)
 
     def asked(self):
         path = self.fake / "asked"
@@ -351,6 +356,38 @@ class DeclarationTest(unittest.TestCase):
 
     def test_this_public_repo_names_no_account(self):
         self.assertNotIn("@", (HERE / "emulators.json").read_text())
+
+
+class SoundOptionsTest(unittest.TestCase):
+    """The private sound sink, with `pactl` stood in for."""
+
+    def options(self, listed, made):
+        asked = []
+
+        def pactl(command, **kwargs):
+            asked.append(command[1])
+            return listed if command[1] == "list" else made
+
+        with mock.patch.object(the_script.platform, "system", return_value="Linux"), \
+                mock.patch.object(the_script.shutil, "which", return_value="/usr/bin/pactl"), \
+                mock.patch.object(the_script.subprocess, "run", side_effect=pactl):
+            return the_script.sound_options(False), asked
+
+    def test_a_sink_that_is_there_is_used_and_not_made_again(self):
+        (options, env), asked = self.options(CompletedProcess([], 0, "1\tcrosstune_quiet\n"), None)
+        self.assertEqual(["list"], asked)
+        self.assertEqual("crosstune_quiet", env["PULSE_SINK"])
+        self.assertIn("pa", options)
+
+    def test_a_sink_that_is_missing_is_made(self):
+        (_, env), asked = self.options(CompletedProcess([], 0, ""), CompletedProcess([], 0, "7\n", ""))
+        self.assertEqual(["list", "load-module"], asked)
+        self.assertEqual("crosstune_quiet.monitor", env["PULSE_SOURCE"])
+
+    def test_a_sink_that_cant_be_made_stops_the_start_rather_than_playing_out_loud(self):
+        with self.assertRaises(SystemExit), mock.patch("sys.stderr") as said:
+            self.options(CompletedProcess([], 1, ""), CompletedProcess([], 1, "", "Connection refused\n"))
+        self.assertIn("Connection refused", "".join(call.args[0] for call in said.write.call_args_list))
 
 
 if __name__ == "__main__":

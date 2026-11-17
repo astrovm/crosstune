@@ -1,9 +1,10 @@
 """Runs gradle-box.sh for real, with a stand-in podman that says what it was asked and waits when told."""
-import hashlib
+import contextlib
 import gzip
+import hashlib
 import os
-import shutil
 import shlex
+import shutil
 import signal
 import stat
 import subprocess
@@ -14,6 +15,12 @@ import unittest
 from pathlib import Path
 
 BOX = Path(__file__).with_name("gradle-box.sh")
+RESET_SIGNALS_AND_RUN = (
+    "import os, signal, sys\n"
+    "for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):\n"
+    "    signal.signal(sig, signal.SIG_DFL)\n"
+    "os.execv(sys.argv[1], sys.argv[1:])"
+)
 FAKE_PODMAN = """#!/bin/sh
 if [ "$1" = "info" ]; then
     echo "$*" >> "$FAKE_DIR/info"
@@ -453,11 +460,14 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
                          (self.dir / "ran").read_text().splitlines())
 
     def start_script(self, script, *args, interruptible=False, **extra):
-        def reset_signals():
-            for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
-                signal.signal(sig, signal.SIG_DFL)
-        process = subprocess.Popen([str(script), *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                   start_new_session=interruptible, preexec_fn=reset_signals if interruptible else None,
+        # A shell that starts the test in the background leaves these signals ignored, and the script would inherit that.
+        # The launcher puts them back and then becomes the script. (`preexec_fn` does it between fork and exec, where
+        # a lock another thread of the test holds stays held for good.)
+        command = [str(script), *args]
+        if interruptible:
+            command = [sys.executable, "-c", RESET_SIGNALS_AND_RUN, *command]
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                   start_new_session=interruptible,
                                    env={**os.environ, "PATH": f"{self.dir / 'bin'}:{os.environ['PATH']}",
                                         "HOME": str(self.home), "FAKE_DIR": str(self.dir), **extra})
         self.addCleanup(self.stop, process)
@@ -687,10 +697,8 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
             with self.assertRaises(ProcessLookupError):
                 os.kill(recorder, 0)
         finally:
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 os.kill(recorder, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
 
     def test_memory_tickets_stay_readable_to_older_checkouts(self):
         self.hold("first")

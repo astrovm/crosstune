@@ -12,11 +12,11 @@ import argparse
 import fcntl
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import time
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 APP = 'com.astrovm.crosstune.dev'
 SERVICES = {
@@ -35,7 +35,7 @@ DEEZER_SOURCES = ['https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT', 'http
 
 
 def run(command, **kwargs):
-    result = subprocess.run(command, capture_output=True, text=True, timeout=60, **kwargs)
+    result = subprocess.run(command, capture_output=True, text=True, timeout=60, check=False, **kwargs)
     if result.returncode:
         raise RuntimeError(f'{command[0]} exited {result.returncode}: {result.stdout}{result.stderr}')
     return result.stdout
@@ -150,7 +150,7 @@ def main():
                         adb('shell', 'am', 'force-stop', APP)
                         prefs = ET.fromstring(saved)
                         for key, value in [('default_target', target), ('links_in_crosstune', str(card).lower()), ('play_right_away', str(not card).lower())]:
-                            entry = prefs.find("*[@name='%s']" % key)
+                            entry = prefs.find(f"*[@name='{key}']")
                             if entry is None:
                                 entry = ET.SubElement(prefs, 'string' if key == 'default_target' else 'boolean', name=key)
                             if key == 'default_target':

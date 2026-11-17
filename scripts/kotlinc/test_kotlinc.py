@@ -8,13 +8,13 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import kotlinc  # noqa: E402  the module next to this test
+import kotlinc
 
 POM = '<project xmlns="http://maven.apache.org/POM/4.0.0"><dependencies>{}</dependencies></project>'
 
 
 def dependency(group, artifact, version, scope=None, optional=False):
-    return ("<dependency>" f"<groupId>{group}</groupId><artifactId>{artifact}</artifactId><version>{version}</version>"
+    return (f"<dependency><groupId>{group}</groupId><artifactId>{artifact}</artifactId><version>{version}</version>"
             + (f"<scope>{scope}</scope>" if scope else "") + ("<optional>true</optional>" if optional else "") + "</dependency>")
 
 
@@ -87,7 +87,9 @@ class ResolveTest(unittest.TestCase):
             files = {"kotlin-compiler-embeddable/9.9/kotlin-compiler-embeddable-9.9.pom": POM.format("").encode(),
                      "kotlin-compiler-embeddable/9.9/kotlin-compiler-embeddable-9.9.jar": b"compiler"}
 
-            def read(url, sha1=hashlib.sha1(b"compiler").hexdigest()):
+            compiler_sha1 = hashlib.sha1(b"compiler").hexdigest()
+
+            def read(url, sha1=compiler_sha1):
                 if url.endswith(".sha1"):
                     return f"{sha1}  file\n".encode()
                 return next(content for name, content in files.items() if url.endswith(name))

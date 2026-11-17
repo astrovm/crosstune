@@ -7,6 +7,7 @@ import unittest
 import urllib.error
 import urllib.parse
 from pathlib import Path
+from typing import ClassVar
 
 sys.modules.setdefault("anyascii", types.SimpleNamespace(anyascii=lambda text: text))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -23,7 +24,7 @@ def host(url):
 class FakeServices(listenbrainz.Web):
     """The services' answers, in the shapes they have, for a few made-up artists and songs."""
 
-    RECORDINGS = {
+    RECORDINGS: ClassVar[dict] = {
         "a-us": [
             {"id": "r-us-1", "title": "Big Hit", "artist-credit": [{"name": "Fake Band", "joinphrase": " feat. "}, {"name": "Guest", "joinphrase": ""}]},
             {"id": "r-us-2", "title": "Big Hit", "disambiguation": "live", "artist-credit": [{"name": "Fake Band", "joinphrase": " feat. "}, {"name": "Guest", "joinphrase": ""}]},
@@ -34,8 +35,8 @@ class FakeServices(listenbrainz.Web):
         "a-ng": [{"id": "r-ng-1", "title": "Lagos Night", "artist-credit": [{"name": "Naija Star"}]}],
         "a-zz": [{"id": "r-zz-1", "title": "Nobody", "artist-credit": [{"name": "Nobody"}]}],
     }
-    USERS = {"r-us-1": (900, 1_000), "r-us-2": (40, 50), "r-us-4": (500, 600), "r-us-5": (30, 9_000_000), "r-ng-1": (70, 80), "r-zz-1": (0, 0)}
-    APPLE_IDS = {"r-us-1": ["101", "102"], "r-us-2": ["103"], "r-us-5": ["105"], "r-ng-1": ["201"]}
+    USERS: ClassVar[dict] = {"r-us-1": (900, 1_000), "r-us-2": (40, 50), "r-us-4": (500, 600), "r-us-5": (30, 9_000_000), "r-ng-1": (70, 80), "r-zz-1": (0, 0)}
+    APPLE_IDS: ClassVar[dict] = {"r-us-1": ["101", "102"], "r-us-2": ["103"], "r-us-5": ["105"], "r-ng-1": ["201"]}
 
     def __init__(self):
         super().__init__(tempfile.mkdtemp())

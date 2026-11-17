@@ -17,11 +17,11 @@ anyascii, from scripts/lyrics/requirements.txt. `hear --device cuda` wants opena
 import argparse
 import difflib
 import json
+import re
 import shlex
 import statistics
 import subprocess
 import sys
-import re
 import time
 import unicodedata
 import urllib.parse
@@ -29,7 +29,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import listenbrainz  # noqa: E402
+import listenbrainz
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build" / "songcheck"

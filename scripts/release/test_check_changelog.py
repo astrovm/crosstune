@@ -1,12 +1,12 @@
 """Exercise the release guard against version bumps and real metadata files."""
 import contextlib
 import io
-from pathlib import Path
 import random
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import check_changelog
 
@@ -91,12 +91,12 @@ class ChangelogTest(unittest.TestCase):
         script.parent.mkdir(parents=True)
         script.write_text(Path(check_changelog.__file__).read_text(encoding="utf-8"), encoding="utf-8")
         result = subprocess.run([sys.executable, str(script)], cwd=self.folder,
-                                capture_output=True, text=True)
+                                capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 1)
         self.assertIn("::error::Missing Play Store changelog", result.stderr)
         self.notes.write_text("Cleaner song titles.", encoding="utf-8")
         result = subprocess.run([sys.executable, str(script)], cwd=self.folder,
-                                capture_output=True, text=True)
+                                capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(str(self.notes), result.stdout)
 

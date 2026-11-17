@@ -8,7 +8,6 @@ from unittest import mock
 
 import source_calls
 
-
 MAIN = "app/src/main/java/com/astrovm/crosstune/"
 TEST = "app/src/test/java/com/astrovm/crosstune/"
 
@@ -411,8 +410,8 @@ class InitializationAndImportedLoads(unittest.TestCase):
             walk(files)
 
     def test_java_method_references_to_loaders_fail_closed(self):
-        fields = ('interface Loader { Class<?> load(String name) throws ClassNotFoundException; }\n'
-                  'class Adapter { static Loader value = Class::forName; static Object read() { return value; } }',
+        fields = (('interface Loader { Class<?> load(String name) throws ClassNotFoundException; }\n'
+                   'class Adapter { static Loader value = Class::forName; static Object read() { return value; } }'),
                   'class Adapter { static java.util.function.Function<Class<Runnable>, java.util.ServiceLoader<Runnable>> value = java.util.ServiceLoader::load; static Object read() { return value; } }',
                   'class Adapter { static java.util.function.Consumer<String> value = System::load; static Object read() { return value; } }',
                   'class Adapter { static java.util.function.Function<String, java.net.URL> value = ClassLoader::getSystemResource; static Object read() { return value; } }')

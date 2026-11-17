@@ -70,7 +70,7 @@ def compiled(javac, jars):
     part = base / f"{key}.{os.getpid()}"
     shutil.rmtree(part, ignore_errors=True)
     built = subprocess.run([str(javac), "--release", "17", "-Xlint:all,-classfile", "-Werror", "-encoding", "UTF-8", "-d", str(part),
-                            "-cp", os.pathsep.join(map(str, jars)), str(SOURCE_TREE)], capture_output=True, text=True)
+                            "-cp", os.pathsep.join(map(str, jars)), str(SOURCE_TREE)], capture_output=True, text=True, check=False)
     if built.returncode:
         shutil.rmtree(part, ignore_errors=True)
         raise RuntimeError(f"javac could not compile {SOURCE_TREE.name}; it needs a JDK 17 or newer:\n{built.stdout}{built.stderr}")
@@ -345,13 +345,13 @@ class Walk:
     def candidates(self, source, ref):
         """The other files' declarations a use can be: (path, decl, the member names left)."""
         name, form = ref["n"], ref["f"]
-        types_only = ref["c"] == 2 or source.language == "java" and form != "type"
+        types_only = ref["c"] == 2 or (source.language == "java" and form != "type")
         found = []
         for path, decl in self.top.get((source.package, name), []):
             kind = self.sources[path].decls[decl]["kind"]
             if not self.visible(source, name, path, decl):
                 continue
-            if form == "type" and kind not in TYPES or form in ("name", "recv") and kind == "function":
+            if (form == "type" and kind not in TYPES) or (form in ("name", "recv") and kind == "function"):
                 continue
             if types_only and kind not in TYPES:
                 continue
@@ -409,7 +409,7 @@ class Walk:
         """A selector or an operator: an extension the file sees, or a member of a class the file reaches."""
         for path, decl in table.get(name, []):
             other = self.sources[path]
-            seen = path == source.path or other.package == source.package and path in self.names.get(name, {})
+            seen = path == source.path or (other.package == source.package and path in self.names.get(name, {}))
             if seen and fits(other.decls[decl], arguments):
                 self.select(path, decl)
         for path, decl, rest in self.imported(source, name):

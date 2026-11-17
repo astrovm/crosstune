@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Measure daily practice reminder delivery on a test phone."""
 
-from contextlib import contextmanager
 import datetime
 import json
 import math
 import os
 import re
-import xml.etree.ElementTree as ET
-from zoneinfo import ZoneInfo
 import statistics
+import xml.etree.ElementTree as ET
+from contextlib import contextmanager
+from zoneinfo import ZoneInfo
 
 
 def summarize(lateness):
@@ -194,8 +194,8 @@ class Phone:
 
         try:
             result = subprocess.run(
-                [self.adb, '-s', self.serial, *args], input=data, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, timeout=30, check=False,
+                [self.adb, '-s', self.serial, *args], input=data, capture_output=True,
+                timeout=30, check=False,
             )
         except subprocess.TimeoutExpired:
             raise RuntimeError('ADB command timed out') from None
