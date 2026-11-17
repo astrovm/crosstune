@@ -123,7 +123,7 @@ stamp=$(python3 "$here/proposal.py" marker "$base" "$head")
 } > "$body"
 pr=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
 if [ -n "$pr" ]; then
-  old_body=$(gh pr view "$pr" --json body --jq '.body // ""')
+  old_body=$(gh pr view "$pr" --json body --jq '.body // ""' | sed 's/\r$//')
   # A branch push and a PR edit are separate. Repair the body if an earlier edit failed.
   if ! grep -qxF -- "$stamp" <<< "$old_body"; then
     proof=$(python3 "$here/proposal.py" proof "$base" "$head" "$legacy_context" <<< "$old_body")

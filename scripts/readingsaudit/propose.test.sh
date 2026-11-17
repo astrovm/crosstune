@@ -111,6 +111,14 @@ grep -q "2 files changed" "$FAKE/body" || fail "body lacks the diff of origin's 
 grep -q "^pr edit " "$FAKE/calls" && fail "same snapshot replaced the body"
 grep -qx 'golden: lines checked 0123456789abcdef' "$FAKE/body" || fail "same snapshot erased the readings proof"
 
+# GitHub bodies may use CRLF, even if the generated stamp had LF.
+sed -i 's/$/\r/' "$FAKE/body"
+cp "$FAKE/body" "$work/crlf-body"
+rm "$FAKE/calls"
+propose || { cat "$work/out"; fail "same snapshot with a CRLF body failed"; }
+cmp "$FAKE/body" "$work/crlf-body" || fail "same snapshot rewrote the CRLF body"
+grep -q '^pr edit ' "$FAKE/calls" && fail "CRLF body caused an edit"
+
 # A run pushed the branch, then gh failed: the next run with the same lists opens the pull request,
 # without a push.
 rm "$FAKE/open" "$FAKE/calls"
@@ -172,6 +180,7 @@ python3 "$here/check_golden.py" --repo . --base origin/main --head "origin/$BRAN
   fail "the locked readings check rejected the rebased proof"
 
 # A newly downloaded notice makes a different snapshot, even though the readings digest is the same.
+sed -i 's/$/\r/' "$FAKE/body"
 printf 'revised licence\n' > "$TABLES/notices/edrdg-licence.txt"
 propose || { cat "$work/out"; fail "update with a changed notice failed"; }
 [ "$(proof)" = "$digest" ] || fail "the notice change changed the readings digest"

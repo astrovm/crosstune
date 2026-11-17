@@ -65,7 +65,7 @@ def marker(repo, base, head):
 
 
 def body_proof(body):
-    shown = PROPOSAL_MARK.findall(body)
+    shown = PROPOSAL_MARK.findall(body.replace("\r\n", "\n"))
     return shown[0] if len(shown) == 1 else None
 
 
