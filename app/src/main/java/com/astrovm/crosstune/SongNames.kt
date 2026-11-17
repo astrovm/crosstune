@@ -42,6 +42,7 @@ internal object SongNames {
     private fun guestInBrackets(title: CutTitle, open: Int): Int? {
         if (open >= title.end || title[open] !in TAG_OPENS) return null
         val start = title.spacesEnd(open + 1)
+        if (!title.beginsWith(start, 'f')) return null
         val word = featuringWord.matchAt(title.letters(start, LONGEST_WORD), 0) ?: return null
         val close = title.nextBracket(title.after(start, word.value.length))
         return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
@@ -49,7 +50,7 @@ internal object SongNames {
 
     /** " ft. A", from the spaces at [at] before [word]: up to the spaces before the next tag, or to the end. Where it ends, or null. */
     private fun guestWrittenOut(title: CutTitle, at: Int, word: Int): Int? {
-        if (title.afterDigit(at)) return null
+        if (!title.beginsWith(word, 'f') || title.afterDigit(at)) return null
         val said = featuringSaid.matchAt(title.letters(word, LONGEST_WORD), 0) ?: return null
         val guest = title.spacesEnd(title.after(word, said.value.length - 1))
         val bracket = title.nextBracket(guest)
@@ -69,17 +70,21 @@ internal object SongNames {
     private const val TAG_OPENS = "(["
     private const val TAG_CLOSES = ")]"
 
+    /** Skip native matcher setup and word copies when the required first letter is absent. */
+    private fun CutTitle.beginsWith(at: Int, letter: Char) = at < end && readsAs(this[at], letter)
+
     /**
      * Where what marks [title] as a music video's from [at] ends, [mark] being where the spaces from there end, or null:
      * "M/V" or "(M/V)", as K-pop has it, which no store has it under. Read in code as the pattern `\s*[(\[]\s*M/V\s*[)\]]|
      * \s+M/V\b` read it.
      */
     private fun markEnd(title: CutTitle, at: Int, mark: Int): Int? = markInBrackets(title, mark)
-        ?: if (mark > at && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
+        ?: if (mark > at && title.beginsWith(mark, 'm') && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
 
     private fun markInBrackets(title: CutTitle, open: Int): Int? {
         if (open >= title.end || title[open] !in TAG_OPENS) return null
         val mark = title.spacesEnd(open + 1)
+        if (!title.beginsWith(mark, 'm')) return null
         val letters = title.letters(mark, VIDEO_MARK.length)
         if (letters.length < VIDEO_MARK.length || !VIDEO_MARK.indices.all { readsAs(letters[it], VIDEO_MARK[it]) }) return null
         val close = title.spacesEnd(title.after(mark, VIDEO_MARK.length))
