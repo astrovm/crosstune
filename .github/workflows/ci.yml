@@ -421,9 +421,10 @@ jobs:
           proposal="${checker%/*}/proposal.py"
           if [ "${JMDICT_BOT:-false}" = true ] && [ -f "$proposal" ]; then
             # Check the generation against both the CI merge base and current main.
-            git fetch --no-tags --depth=1 origin refs/heads/main
-            for base in HEAD^1 FETCH_HEAD; do
-              python3 -E -s "$proposal" verify "$base" "$(git rev-parse HEAD^2)" \
+            head=$(git rev-parse HEAD^2)
+            git fetch --unshallow --no-tags origin '+refs/heads/main:refs/remotes/origin/main' "$head"
+            for base in HEAD^1 origin/main; do
+              python3 -E -s "$proposal" verify "$base" "$head" \
                 app/src/main/resources/com/astrovm/crosstune \
                 app/src/test/resources/com/astrovm/crosstune/jmdict-notice-texts.txt "$RUNNER_TEMP/pr-body.md"
             done

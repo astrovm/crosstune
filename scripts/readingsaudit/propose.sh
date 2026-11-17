@@ -39,7 +39,7 @@ bot="41898282+github-actions[bot]@users.noreply.github.com"
 base=$(git rev-parse HEAD)
 lease=""
 push=true
-previous_proof=
+legacy_context=
 # Exit code 2 is no such branch. Anything else is a failure, never taken as no branch.
 found=0
 git ls-remote -q --exit-code origin "refs/heads/$BRANCH" > /dev/null || found=$?
@@ -57,9 +57,13 @@ if [ "$found" = 0 ]; then
   # Already on main and made from this JMdict: nothing to push. A run that pushed it may have failed
   # before it opened its pull request, so that is still seen to.
   prior_base=$(git merge-base "$base" "$lease")
-  previous_proof=$(python3 "$here/proposal.py" context "$prior_base" "$lease")
-  if [ "$prior_base" = "$base" ] && git diff --quiet "$lease" -- "${snapshot[@]}" &&
-     [ "$(git show -s --format='%(trailers:key=JMdict-Inputs,valueonly)' "$lease")" = "$source_inputs" ]; then
+  prior_inputs=$(git show -s --format='%(trailers:key=JMdict-Inputs,valueonly)' "$lease")
+  if [ -z "$prior_inputs" ]; then
+    # An unstamped body can only describe the old workflow's branch on its first upgrade.
+    legacy_context=$(python3 "$here/proposal.py" context "$prior_base" "$lease")
+  fi
+  if [ "$prior_base" = "$base" ] && [ "$prior_inputs" = "$source_inputs" ] &&
+     git diff --quiet "$lease" -- "${snapshot[@]}"; then
     echo "::notice::$BRANCH already has the snapshot for JMdict $TAG"
     push=false
     head=$lease
@@ -80,8 +84,7 @@ if $push; then
   git add -- "${snapshot[@]}"
   git -c user.name="github-actions[bot]" -c user.email="$bot" commit -q -m "$title" \
     -m "From jmdict-simplified $TAG, by .github/workflows/jmdict.yml: $RUN" \
-    -m "JMdict-Inputs: $source_inputs
-JMdict-Previous-Proof: ${previous_proof:-none}"
+    -m "JMdict-Inputs: $source_inputs"
   head=$(git rev-parse HEAD)
   main_is_fresh
   # An empty lease: the branch must not be there yet.
@@ -123,7 +126,7 @@ if [ -n "$pr" ]; then
   old_body=$(gh pr view "$pr" --json body --jq '.body // ""')
   # A branch push and a PR edit are separate. Repair the body if an earlier edit failed.
   if ! grep -qxF -- "$stamp" <<< "$old_body"; then
-    proof=$(python3 "$here/proposal.py" proof "$base" "$head" <<< "$old_body")
+    proof=$(python3 "$here/proposal.py" proof "$base" "$head" "$legacy_context" <<< "$old_body")
     if [ -n "$proof" ]; then
       printf '\n%s\n' "$proof" >> "$body"
     fi

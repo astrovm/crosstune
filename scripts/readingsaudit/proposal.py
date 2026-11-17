@@ -1,6 +1,7 @@
 """The inputs and readings proof used when propose.sh remakes the JMdict branch."""
 
 import hashlib
+import re
 import sys
 from pathlib import Path
 
@@ -40,8 +41,7 @@ PROOF_INPUTS = (
 
 
 INPUT_TRAILER = "JMdict-Inputs"
-PREVIOUS_PROOF = "JMdict-Previous-Proof"
-MARKER_PREFIX = "<!-- JMdict proposal "
+PROPOSAL_MARK = re.compile(r"^<!-- JMdict proposal ([0-9a-f]{40}) ([0-9a-f]{64}) -->$", re.MULTILINE)
 
 
 def tree_inputs(repo, commit, *paths):
@@ -61,27 +61,25 @@ def proof_inputs(repo, base, head):
 
 
 def marker(repo, base, head):
-    return f"{MARKER_PREFIX}{head} {proof_inputs(repo, base, head)} -->"
+    return f"<!-- JMdict proposal {head} {proof_inputs(repo, base, head)} -->"
 
 
-def previous_proof_inputs(repo, head, body):
-    # Use the proof inputs held by the body. The trailer covers a legacy body without a marker.
-    shown = [line.removeprefix(MARKER_PREFIX).removesuffix(" -->").split()
-             for line in body.splitlines() if line.startswith(MARKER_PREFIX)]
-    if shown:
-        return shown[0][1] if len(shown) == 1 and len(shown[0]) == 2 else ""
-    return trailer(repo, head, PREVIOUS_PROOF)
+def body_proof(body):
+    shown = PROPOSAL_MARK.findall(body)
+    return shown[0] if len(shown) == 1 else None
 
 
 def trailer(repo, head, name):
     return git(repo, "show", "-s", f"--format=%(trailers:key={name},valueonly)", head).strip()
 
 
-def carried_marks(repo, base, head, body):
+def carried_marks(repo, base, head, legacy_context, body):
     """Keep the author's proof only for the same readings and the same golden lock."""
     none, accepted, _, checked, _ = marks(body)
     digest = readings_digest(repo, base, head)
-    if digest not in checked or previous_proof_inputs(repo, head, body) != proof_inputs(repo, base, head):
+    stamp = body_proof(body)
+    context = stamp[1] if stamp else legacy_context
+    if digest not in checked or context != proof_inputs(repo, base, head):
         return []
     return [
         *([NONE] if none else []),
@@ -91,9 +89,22 @@ def carried_marks(repo, base, head, body):
 
 
 def verify(repo, base, head, tables, manifest, body):
-    if trailer(repo, head, INPUT_TRAILER) != snapshot_inputs(repo, base, tables, manifest):
+    stamp = body_proof(body)
+    if stamp is None:
+        sys.exit("::error::The JMdict proposal body is stale. Run the refresh again before verifying readings.")
+    snapshot, context = stamp
+    if git(repo, "merge-base", snapshot, head).strip() != snapshot:
+        sys.exit("::error::The JMdict proposal body is stale. Run the refresh again before verifying readings.")
+    if not trailer(repo, head, INPUT_TRAILER) and snapshot != head:
+        # A human commit may extend the snapshot with the golden file.
+        edited = git(repo, "diff", "--name-only", snapshot, head, "--", ".", f":(exclude){GOLDEN_REL}")
+        if edited:
+            sys.exit("::error::The JMdict proposal changed outside the golden file. Refresh the snapshot before merging.")
+    elif snapshot != head:
+        sys.exit("::error::The JMdict proposal body is stale. Run the refresh again before verifying readings.")
+    if trailer(repo, snapshot, INPUT_TRAILER) != snapshot_inputs(repo, base, tables, manifest):
         sys.exit("::error::JMdict inputs on main differ from the snapshot. Run the refresh again.")
-    if marker(repo, base, head) not in body.splitlines():
+    if context != proof_inputs(repo, base, snapshot):
         sys.exit("::error::The JMdict proposal body is stale. Run the refresh again before verifying readings.")
 
 
