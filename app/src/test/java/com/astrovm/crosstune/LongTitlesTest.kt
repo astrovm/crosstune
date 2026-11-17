@@ -24,6 +24,21 @@ class LongTitlesTest {
         assertEquals(emptyList<String>(), slow)
     }
 
+    @Test
+    fun comparingRecordingNotesTakesWorkInStepWithTheTitle() {
+        val titles = { length: Int ->
+            listOf("unknown ", "wordwordwordwordword ", "【Live】", "((Live))", "[").map { piece ->
+                "Hello " + piece.repeat(length / piece.length) + " (Live)"
+            } + listOf(
+                "Hello - " + "English ".repeat(length / 8) + "Version",
+                "Hello " + "(".repeat(length / 4) + "2".repeat(length / 2) + " Live" + ")".repeat(length / 4)
+            )
+        }
+        assertEquals(emptyList<String>(), Growth.outOfStep(titles, LENGTH, ::named) { title ->
+            SongNames.wordsMatch(title, title.replaceFirst("Hello", "Hello World"))
+        })
+    }
+
     /** How a title is named when it's out of step: how it starts and ends. */
     private fun named(title: String) = "${title.take(20).replace("\n", "\\n")}…${title.takeLast(2).replace("\n", "\\n")}"
 

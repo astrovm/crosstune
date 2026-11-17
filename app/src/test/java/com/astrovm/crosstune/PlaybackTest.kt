@@ -717,6 +717,40 @@ class PlaybackTest {
         assertEquals("Spotify", seen.last()?.app)
     }
 
+    /** What a fresh follow of [asked] sees when [apps], as package to its song's title, play by [RecordingTagPairs.ARTIST]. */
+    private fun followsAmong(asked: String, vararg apps: Pair<String, String>): Following? {
+        ShadowMediaSessionManager.reset()
+        val fresh = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes, queueOf = { queues[it.packageName] })
+        apps.forEach { (packageName, title) -> shadowOf(sessions).addController(player(packageName, packageName, title, RecordingTagPairs.ARTIST)) }
+        var seen: Following? = null
+        val job = CoroutineScope(Dispatchers.Unconfined).launch { fresh.follow(MusicMetadata(asked, RecordingTagPairs.ARTIST)).collect { seen = it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        job.cancel()
+        return seen
+    }
+
+    @Test
+    fun onlyTheExactTaggedNameIsFollowedNeverAnotherBaseNameWithTheSameTag() {
+        allow()
+        sounding()
+        val wrong = mutableListOf<String>()
+        for ((asked, other) in RecordingTagPairs.wrongPicks) {
+            followsAmong(asked, "com.fake.other" to other)?.let { wrong += "$asked followed $other in ${it.app}" }
+            // Both playing: the one named exactly as asked is followed.
+            val both = followsAmong(asked, "com.fake.other" to other, "com.fake.exact" to asked)?.app
+            if (both != "com.fake.exact") wrong += "both: $asked followed $both, wanted its own"
+        }
+        for (name in RecordingTagPairs.exactNames) {
+            val app = followsAmong(name, "com.fake.exact" to name)?.app
+            if (app != "com.fake.exact") wrong += "exact: $name followed $app"
+        }
+        for ((asked, playing) in RecordingTagPairs.same) {
+            val app = followsAmong(asked, "com.fake.exact" to playing)?.app
+            if (app != "com.fake.exact") wrong += "same: $asked followed $app, wanted $playing"
+        }
+        assertEquals("${wrong.size} wrong follows", emptyList<String>(), wrong)
+    }
+
     @Test
     fun aJapaneseVideoIsFollowedAndNamedAsTheSongInItsBrackets() {
         allow()

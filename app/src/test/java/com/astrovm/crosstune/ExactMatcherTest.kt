@@ -1259,6 +1259,91 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun appleMusicTakesTheExactTaggedNameAndNeverAnotherBaseNameWithTheSameTag() {
+        val wrong = mutableListOf<String>()
+        fun apple(name: String, link: String) = """{"trackName":"$name","artistName":"${RecordingTagPairs.ARTIST}","trackViewUrl":"https://music.apple.com/$link"}"""
+        for ((asked, other) in RecordingTagPairs.wrongPicks) {
+            val song = MusicMetadata(asked, RecordingTagPairs.ARTIST)
+            // Only the other song: none is taken for it.
+            respond("""{"results":[${apple(other, "wrong")}]}""")
+            runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) }?.let { wrong += "only: $asked took $other: $it" }
+            // The other song first, then its own: the own one.
+            respond("""{"results":[${apple(other, "wrong")},${apple(asked, "exact")}]}""")
+            val found = runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) }
+            if (found != "https://music.apple.com/exact") wrong += "first: $asked found $found, wanted its own"
+        }
+        for (name in RecordingTagPairs.exactNames) {
+            respond("""{"results":[${apple(name, "exact")}]}""")
+            val found = runBlocking { matcher().find(MusicService.APPLE_MUSIC, MusicMetadata(name, RecordingTagPairs.ARTIST)) }
+            if (found != "https://music.apple.com/exact") wrong += "exact: $name found $found"
+        }
+        assertEquals("${wrong.size} wrong Apple Music picks", emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun youTubeMusicOpensTheExactTaggedNameAndNeverAnotherBaseNameWithTheSameTag() {
+        val wrong = mutableListOf<String>()
+        for ((asked, other) in RecordingTagPairs.wrongPicks) {
+            findsVideo(asked, RecordingTagPairs.ARTIST, other, RecordingTagPairs.ARTIST)?.let { wrong += "$asked took $other: $it" }
+            // The other song first, then its own: the own one, whatever its place.
+            respond(
+                youTubeMusicPage(
+                    youTubeMusicRow(other, "${RecordingTagPairs.ARTIST} • Album • 3:00", videoId = "wrong000000"),
+                    youTubeMusicRow(asked, "${RecordingTagPairs.ARTIST} • Album • 3:00", videoId = "video000000")
+                )
+            )
+            val found = runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata(asked, RecordingTagPairs.ARTIST)) }
+            if (found != video) wrong += "first: $asked found $found, wanted its own"
+        }
+        for (name in RecordingTagPairs.exactNames) {
+            val found = findsVideo(name, RecordingTagPairs.ARTIST, name, RecordingTagPairs.ARTIST)
+            if (found != video) wrong += "exact: $name found $found"
+        }
+        assertEquals("${wrong.size} wrong YouTube Music picks", emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun anotherSongsNameFromAppleCannotOpenItsVideoOnYouTubeMusic() {
+        val wrong = mutableListOf<String>()
+        val artist = RecordingTagPairs.ARTIST
+        for ((asked, other) in RecordingTagPairs.wrongPicks) {
+            // Apple, and YouTube Music, only know the other song: Apple's name for it is no name for this one.
+            namesAndTabs(songs = listOf(youTubeMusicRow(other, "$artist • Album • 5:12", videoId = "wrong000000")), apple = mapOf("AR" to appleSong(other, artist)))
+            runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata(asked, artist)) }?.let { wrong += "only: $asked opened $other: $it" }
+            // Apple knows both, in either order: the video of the one asked for opens.
+            for (apple in listOf(appleSong(other, artist) + "," + appleSong(asked, artist, id = 8), appleSong(asked, artist, id = 8) + "," + appleSong(other, artist))) {
+                namesAndTabs(
+                    songs = listOf(
+                        youTubeMusicRow(other, "$artist • Album • 5:12", videoId = "wrong000000"),
+                        youTubeMusicRow(asked, "$artist • Album • 5:12", videoId = "video000000")
+                    ),
+                    apple = mapOf("AR" to apple)
+                )
+                val found = runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata(asked, artist)) }
+                if (found != video) wrong += "both: $asked opened $found, wanted its own"
+            }
+        }
+        assertEquals("${wrong.size} wrong YouTube Music opens", emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun aQueueTakesTheExactTaggedNameAndNeverAnotherBaseNameWithTheSameTag() {
+        val wrong = mutableListOf<String>()
+        for ((asked, other) in RecordingTagPairs.wrongPicks) {
+            queueFinds(asked, RecordingTagPairs.ARTIST, other, RecordingTagPairs.ARTIST)?.let { wrong += "$asked queued $other: $it" }
+        }
+        for (name in RecordingTagPairs.exactNames) {
+            val found = queueFinds(name, RecordingTagPairs.ARTIST, name, RecordingTagPairs.ARTIST)
+            if (found != video) wrong += "exact: $name queued $found"
+        }
+        for ((asked, found) in RecordingTagPairs.same) {
+            val url = queueFinds(asked, RecordingTagPairs.ARTIST, found, RecordingTagPairs.ARTIST)
+            if (url != video) wrong += "same: $asked queued $url, wanted $found"
+        }
+        assertEquals("${wrong.size} wrong queue picks", emptyList<String>(), wrong)
+    }
+
+    @Test
     fun aLeadingTheIsIgnoredInArtistsButOnlyAsAWord() {
         assertEquals(video, findsVideo("Song", "The Smashing Pumpkins", "Song", "Smashing Pumpkins"))
         assertEquals(video, findsVideo("Song", "Smashing Pumpkins", "Song", "THE SMASHING PUMPKINS"))

@@ -150,6 +150,10 @@ internal object MetadataParsers {
     private val musicTagWords = phoneRegex("""(?:$MUSIC_TAG_WORDS)""", RegexOption.IGNORE_CASE)
     private val videoNoiseWords = phoneRegex("""$MUSIC_TAG_WORDS|\b(?:video|subtitulado|sub\.?\s*esp\w*|sub\.?\s+español|hd|hq|4k)\b""", RegexOption.IGNORE_CASE)
 
+    /** Reuse the supported caption words without treating arbitrary words beside them as captions. */
+    internal fun videoCaptionWord(word: String): Boolean =
+        musicTagWords.containsMatchIn(word) || trailingVideoNoiseRegex.containsMatchIn("x $word")
+
     /** The brackets of a tag, "(Official Video [4K])", which [bracketTags] reads. Its words are looked for in it after. */
     private const val TAG_OPENS = "(["
     private const val TAG_CLOSES = ")]"
@@ -462,6 +466,29 @@ internal object MetadataParsers {
 
     private val audioExtension = phoneRegex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
 
+    /** Keep title words when reading a file's name. Recording captions are classified separately. */
+    internal fun comparisonTitle(title: String): String = withoutSubtitlesTag(title).replace(audioExtension, "")
+
+    /** Read the track prefix after captions, so a song named "01 (Audio)" keeps its numeric title. */
+    internal fun withoutFileNumber(title: String): String {
+        var at = 0
+        var digits = 0
+        while (at < title.length && Character.isDigit(title.codePointAt(at))) {
+            digits++
+            at += Character.charCount(title.codePointAt(at))
+        }
+        if (digits !in 1..MAX_FILE_TRACK_DIGITS) return title
+        val punctuation = title.getOrNull(at) in listOf('.', ')', '-')
+        val padded = digits > 1 && Character.digit(title.codePointAt(0), 10) == 0
+        val after = if (punctuation) at + 1 else at
+        if ((!punctuation && !padded) || title.getOrNull(after)?.let(::isPatternSpace) != true) return title
+        var start = spacesEnd(title, after)
+        if (padded && title.getOrNull(start) == '-' && title.getOrNull(start + 1)?.let(::isPatternSpace) == true) start = spacesEnd(title, start + 1)
+        return title.substring(start)
+    }
+
+    private const val MAX_FILE_TRACK_DIGITS = 3
+
     /** A browser playing a bare file names it by its address, under its site, e.g. "example.com/song.mp3" by "example.com". */
     private fun namesAFile(song: MusicMetadata) = '.' in song.artist && song.title.startsWith("${song.artist}/")
 
@@ -559,6 +586,11 @@ internal object MetadataParsers {
         // noise, which can leave a song's brackets blank, "Band - Song 『[HD] 』".
         var rawTitle = withoutBlankSong(withoutTrailingNoise(withoutVideoNoise(withoutSubtitlesTag(withoutBlankSong(title))).trim())).trim()
         rawTitle = rawTitle.replace(trackNumberRegex, "").ifEmpty { return null }
+        return videoName(rawTitle, channel)
+    }
+
+    /** Split an artist credit without first discarding the title's bracketed words. */
+    internal fun videoName(rawTitle: String, channel: String): MusicMetadata {
         val author = channel.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
         // Japanese videos name the song in brackets after the artist, whatever follows them:
         // "YOASOBI「アイドル」 Official Music Video".

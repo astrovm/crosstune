@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import java.util.zip.GZIPInputStream
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -8,9 +9,9 @@ import org.robolectric.RobolectricTestRunner
 
 /**
  * What Crosstune takes for one song, against what `main` took (names-golden.tsv.gz, written by scripts/namescheck/golden.sh
- * from 2c24d2d4): a session with no artist, or "<unknown>" for one, as it's followed for a song by an artist or by none, a
- * title with the artist named, and titles by their words. Each pair must answer as `main` did. No change is meant: this
- * branch keeps the names as they were.
+ * from dea6ebc1): a session with no artist, or "<unknown>" for one, as it's followed for a song by an artist or by none, a
+ * title with the artist named, and titles by their words. A recording note must no longer supply a title's missing
+ * words. The fixture declares the base titles separately, so this allowance does not depend on the new tag reader.
  */
 @RunWith(RobolectricTestRunner::class)
 class NamesGoldenTest {
@@ -39,12 +40,34 @@ class NamesGoldenTest {
     }
 
     @Test
-    fun everyPairAnswersAsMain() {
+    fun everyPairAnswersAsMainExceptTagsThatSuppliedMissingTitleWords() {
         val wrong = mutableListOf<String>()
+        val differences = mutableListOf<String>()
         for (way in listOf("follow", "unknown", "follow-blank", "unknown-blank", "artist", "words")) for (pair in pairs) {
             val now = now(way, pair)
-            if (now != main(way, pair)) wrong += "${if (now) "TAKES" else "MISSES"}\t$way\t${pair.title}\t${pair.song}"
+            val was = main(way, pair)
+            val row = "${if (now) "TAKES" else "MISSES"}\t$way\t${pair.title}\t${pair.song}"
+            if (now != was) differences += row
+            if (now != (was && !tagSuppliedTitleWords(pair))) wrong += row
         }
-        assertEquals(emptyList<String>(), wrong)
+        File("build/name-tag-differences.tsv").writeText(differences.joinToString("\n", postfix = "\n"))
+        File("build/name-tag-unexpected.tsv").writeText(wrong.joinToString("\n", postfix = "\n"))
+        assertEquals("${wrong.size} unexpected changes; full list in build/name-tag-unexpected.tsv", emptyList<String>(), wrong.take(30))
+    }
+
+    /** These whole-title rows predate the fixture's separate base and tag fields. Both directions are explicit. */
+    private val writtenCorrections = listOf(
+        "愛【Cover】" to "恋【Cover】", "Hello【Live】" to "Hello World【Live】", "Hello（Live）" to "Hello World（Live）",
+        "Hello (Live)" to "Hello World (Live)", "Hello – Live" to "Hello World – Live", "Hello — Live" to "Hello World — Live"
+    ).flatMap { (one, other) -> listOf(one to other, other to one) }.toSet()
+
+    private fun tagSuppliedTitleWords(pair: NamePair): Boolean {
+        if (pair.title to pair.song in writtenCorrections) return true
+        if (pair.titleTag.isBlank() && pair.songTag.isBlank()) return false
+        if (SongNames.normalize(pair.titleBase) == SongNames.normalize(pair.songBase)) return false
+        val one = SongNames.words(pair.titleBase)
+        val other = SongNames.words(pair.songBase)
+        val shorter = if (one.size <= other.size) one else other
+        return shorter.isEmpty() || shorter.size == 1 && one != other
     }
 }
