@@ -13,6 +13,30 @@ import org.robolectric.annotation.Config
 class SongNamesEdgesTest {
 
     @Test
+    fun numericUnicodeTitleCharactersKeepTheTwoWordPartialRule() {
+        for (number in listOf("Ⅻ", "½")) {
+            val one = "Fake Song $number (Live)"
+            val other = "Fake Song $number Two (Live)"
+            assertTrue(number, SongNames.wordsMatch(one, other))
+            assertTrue(number, SongNames.wordsMatch(other, one))
+            assertTrue(number, SongNames.names(one, "Fake Band", MusicMetadata(other, "Fake Band")))
+        }
+    }
+
+    @Test
+    fun nestedNotesStillRequireTheOriginalRecordingToMatch() {
+        val one = "Hello World (Part One [Remix])"
+        val other = "Hello World (Part Two [Remix])"
+        for ((title, asked) in listOf(one to other, other to one)) {
+            assertFalse(SongNames.wordsMatch(title, asked))
+            for (artist in listOf("", "Fake Band")) for (requestedArtist in listOf("", "Fake Band")) {
+                assertFalse(SongNames.names(title, artist, MusicMetadata(asked, requestedArtist)))
+            }
+            assertTrue(SongNames.wordsMatch(title, title))
+        }
+    }
+
+    @Test
     fun namedRecordingsAndCaptionsCannotSubstituteForTheTitle() {
         val wrong = mutableListOf<String>()
         for (note in listOf("Cyberpunk Shamisen Cover", "Tiësto Remix", "English Version2024")) {
