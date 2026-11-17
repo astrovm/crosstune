@@ -92,7 +92,9 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
             if (!raw && text[at] == '\\') { at += 2; continue }
             val part = if (text[at] == '$') template.matchAt(text, at) else null
             if (part == null) {
-                if (text[at] == '$' && text.getOrNull(at + 1) == '{') complete = false
+                val next = text.getOrNull(at + 1)
+                if (text[at] == '$' && next != null &&
+                    (next in "{`_" || Character.isUnicodeIdentifierStart(text.codePointAt(at + 1)))) complete = false
                 at++
                 continue
             }
@@ -126,10 +128,10 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         private val built = Regex("""\b(?:phoneRegex|Regex)\(|\.toRegex\(""")
         /** Where Java builds a pattern: as Kotlin does, or with `Pattern`, or with a String's own methods, which take one. */
         private val javaBuilt = Regex("""\b(?:Pattern\.(?:compile|matches)|Regex|StringsKt\.toRegex)\(|\.(?:matches|split|replaceAll|replaceFirst)\(""")
-        private val template = Regex("""\$\{'([^'\\])'\}|\$\{(\w+)\}|\$(\w+)""")
+        private val template = Regex("""\$\{'([^'\\])'\}|\$\{([\p{L}_][\p{L}\p{M}\p{N}_]*)\}|\$([\p{L}_][\p{L}\p{M}\p{N}_]*)""")
         private val escape = Regex("""\\(u[0-9a-fA-F]{4}|.)""")
         /** The value a `Regex(` is given to, right before it: "private val tags = ". */
         private val holder = Regex("""\b(?:val|var)\s+(\w+)(?:\s*:\s*Regex)?\s*=\s*$""")
-        private val propertyHolder = Regex("""\b(?:private|internal|public|protected)\s+val\s+\w+(?:\s*:\s*Regex)?\s*=\s*$""")
+        private val propertyHolder = Regex("""\bval\s+\w+(?:\s*:\s*Regex)?\s*=\s*$""")
     }
 }

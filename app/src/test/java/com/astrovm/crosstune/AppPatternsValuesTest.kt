@@ -37,6 +37,14 @@ class AppPatternsValuesTest {
     }
 
     @Test
+    fun aTopLevelPropertyDoesNotNeedAnExplicitVisibilityModifier() {
+        val source = "const val START = \"<b>\"\nconst val END = \"</b>\"\nval pattern = Regex(\"${'$'}START(x)${'$'}END\")"
+        val app = AppPatterns(listOf("Reader.kt" to source))
+        assertEquals(emptyList<String>(), app.unread)
+        assertEquals("<b>(x)</b>", app.found.single().pattern.pattern())
+    }
+
+    @Test
     fun localValuesCannotReplaceTheReadersConstant() {
         val source = """
             private const val WORD = "kept"
@@ -203,6 +211,22 @@ class AppPatternsValuesTest {
     fun unsupportedTemplateExpressionsStayUnreadWithoutCompilingThem() {
         val source = "val part = \"a\"\n val pattern = Regex(\"${'$'}{part.uppercase()}\")"
         assertEquals(1, AppPatterns(listOf("Reader.kt" to source)).unread.size)
+    }
+
+    @Test
+    fun unsupportedUnicodeIdentifiersAreReportedRatherThanTreatedAsPatternText() {
+        for (name in listOf("é", "音", "क", "𝛂", "parté", "part音")) {
+            val definitions = "val $name = \"actual\""
+            val source = "private const val part = \"wrong\"\n private val pattern = Regex(\"${'$'}$name\")"
+            assertEquals(name, 1, AppPatterns(listOf("Definitions.kt" to definitions, "Reader.kt" to source)).unread.size)
+        }
+    }
+
+    @Test
+    fun aDollarBeforeADigitIsLiteralPatternText() {
+        val app = AppPatterns(listOf("Reader.kt" to "private val pattern = Regex(\"${'$'}1\")"))
+        assertEquals(emptyList<String>(), app.unread)
+        assertEquals("${'$'}1", app.found.single().pattern.pattern())
     }
 
     @Test
