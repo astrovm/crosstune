@@ -268,10 +268,37 @@ class ChordSheetsTest {
         assertEquals(10_000L, ChordSheets.timeOf(LyricLine(10_000, ""), 0, null))
 
         val chords = listOf(Chord(0, "G"), Chord(4, "D"))
-        assertEquals(-1, ChordSheets.playing(byWord, chords, 13_000, 9_000))
-        assertEquals(0, ChordSheets.playing(byWord, chords, 13_000, 10_000))
-        assertEquals(0, ChordSheets.playing(byWord, chords, 13_000, 10_500))
-        assertEquals(1, ChordSheets.playing(byWord, chords, 13_000, 11_500))
+        val times = chords.map { ChordSheets.timeOf(byWord, it.at, 13_000) }
+        assertEquals(-1, ChordSheets.playing(times, 9_000))
+        assertEquals(0, ChordSheets.playing(times, 10_000))
+        assertEquals(0, ChordSheets.playing(times, 10_500))
+        assertEquals(1, ChordSheets.playing(times, 11_500))
+    }
+
+    @Test
+    fun theLastLineUsesTheSungPaceOfItsWriting() {
+        for (text in listOf("君の名前を呼んだ", "今夜我們一起回家", "너의이름을불렀다")) {
+            val line = LyricLine(10_000, text)
+            assertEquals(text, 11_120L, ChordSheets.timeOf(line, 4, null))
+            assertEquals(text, 12_240L, ChordSheets.timeOf(line, text.length, null))
+            assertEquals(text, 11_600L, ChordSheets.timeOf(line, 4, 13_200))
+        }
+        val mixed = LyricLine(10_000, "星A歌")
+        assertEquals(10_280L, ChordSheets.timeOf(mixed, 1, null))
+        assertEquals(10_430L, ChordSheets.timeOf(mixed, 2, null))
+        assertEquals(10_710L, ChordSheets.timeOf(mixed, 3, null))
+        val supplementary = LyricLine(10_000, "𠮷田")
+        assertEquals(10_000L, ChordSheets.timeOf(supplementary, 1, null))
+        assertEquals(10_280L, ChordSheets.timeOf(supplementary, 2, null))
+        assertEquals(10_560L, ChordSheets.timeOf(supplementary, 3, null))
+    }
+
+    @Test
+    fun theLastWordKeepsItsStartWhenThereIsNoNextLine() {
+        val line = LyricLine(10_000, "名前を呼んだ", listOf(TimedWord(10_000, "名前を"), TimedWord(12_000, "呼んだ")))
+        assertEquals(12_000L, ChordSheets.timeOf(line, 3, null))
+        assertEquals(12_280L, ChordSheets.timeOf(line, 4, null))
+        assertEquals(12_840L, ChordSheets.timeOf(line, 6, null))
     }
 
     @Test

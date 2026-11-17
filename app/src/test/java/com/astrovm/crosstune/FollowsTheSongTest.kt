@@ -463,10 +463,10 @@ class FollowsTheSongTest {
         .let { nodes -> nodes.firstOrNull { it.config.contains(ChordsShown) } ?: nodes.first() }
 
     /** Which of the first line's chords is lit, once they're placed over it, which happens off the main thread. */
-    private fun chordLit(): Int {
-        fun placed() = lineOf(lines[0].text).config.contains(ChordsShown)
+    private fun chordLit(text: String = lines[0].text): Int {
+        fun placed() = lineOf(text).config.contains(ChordsShown)
         compose.waitUntil(5_000) { placed() || run { settles(); placed() } }
-        return lineOf(lines[0].text).config[ChordLit]
+        return lineOf(text).config[ChordLit]
     }
 
     /** How many of [text]'s letters are lit as sung, before the dimmed ones; all of them when none are dimmed. */
@@ -501,6 +501,19 @@ class FollowsTheSongTest {
         passesAskingRarely(800)
         assertEquals(2, chordLit())
         assertEquals("Walking down the river ".length, litLetters(lines[0].text))
+    }
+
+    @Test
+    fun aChordInTheLastJapaneseWordLightsAfterThatWordStarts() {
+        val line = LyricLine(10_000, "君の名前を呼んだ夜のこと", listOf(TimedWord(10_000, "君の名前を"), TimedWord(12_000, "呼んだ夜のこと")))
+        lyricLines = listOf(line)
+        val chords = sheet.copy(lines = listOf(SheetLine(line.text, listOf(Chord(0, "G"), Chord(6, "C")))))
+        following = pausedAt(12_279)
+        words(ChordsState(on = true, sheet = chords))
+        assertEquals(0, chordLit(line.text))
+        following = pausedAt(12_280)
+        settles()
+        assertEquals(1, chordLit(line.text))
     }
 
     @Test

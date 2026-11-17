@@ -79,6 +79,8 @@ internal object ChordSheets {
 
     /** How long a line with nothing after it takes per letter, to time its chords. */
     private const val LETTER_MS = 150L
+    // The measured pace of unspaced writing in scripts/syncreplay/measurements.md.
+    private const val UNSPACED_LETTER_MS = 280L
 
 
     /** A reading in brackets right after a kanji: kana, and the dashes that hold a sound. */
@@ -827,25 +829,42 @@ internal object ChordSheets {
      * far through the line, up to when [nextMs] the next one starts.
      */
     fun timeOf(line: LyricLine, at: Int, nextMs: Long?): Long {
-        val endMs = nextMs ?: (line.timeMs + line.text.length * LETTER_MS)
         if (line.words.isNotEmpty()) {
             var from = 0
             line.words.forEachIndexed { index, word ->
                 val to = from + word.text.length
                 if (at < to || index == line.words.lastIndex) {
-                    val wordEnd = line.words.getOrNull(index + 1)?.timeMs ?: endMs
-                    val into = (at - from).coerceIn(0, word.text.length)
-                    return word.timeMs + (wordEnd - word.timeMs) * into / word.text.length.coerceAtLeast(1)
+                    val wordEnd = line.words.getOrNull(index + 1)?.timeMs ?: nextMs
+                    return atLetter(word.timeMs, wordEnd, word.text, at - from)
                 }
                 from = to
             }
         }
-        return line.timeMs + (endMs - line.timeMs) * at.coerceIn(0, line.text.length) / line.text.length.coerceAtLeast(1)
+        return atLetter(line.timeMs, nextMs, line.text, at)
     }
 
-    /** The chord being played at [positionMs] among [line]'s, by its place in them; -1 before the first. */
-    fun playing(line: LyricLine, chords: List<Chord>, nextMs: Long?, positionMs: Long): Int =
-        chords.indexOfLast { timeOf(line, it.at, nextMs) <= positionMs }
+    private fun atLetter(startMs: Long, endMs: Long?, text: String, at: Int): Long {
+        val end = at.coerceIn(0, text.length)
+        if (endMs != null) return startMs + (endMs - startMs) * end / text.length.coerceAtLeast(1)
+        var time = startMs
+        var index = 0
+        while (index < end) {
+            val letter = text.codePointAt(index)
+            val width = Character.charCount(letter)
+            if (index + width > end) break
+            val pace = when (Character.UnicodeScript.of(letter)) {
+                Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA,
+                Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL -> UNSPACED_LETTER_MS
+                else -> width * LETTER_MS
+            }
+            time += pace
+            index += width
+        }
+        return time
+    }
+
+    /** The chord playing at [positionMs], by its place in [times]; -1 before the first. */
+    fun playing(times: List<Long>, positionMs: Long): Int = times.indexOfLast { it <= positionMs }
 
     /** The letters of some lines, each with the line and place it's at, as they're compared: in lower case, full width as half. */
     private class Letters(texts: List<String>) {

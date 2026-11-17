@@ -2118,9 +2118,10 @@ internal fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, fol
     }
     // Only words timed one by one say when a chord's played closely enough to light it.
     // A word sung or a chord played is all that changes it.
-    val changes = remember(line, chords, nextMs) { line.words.map { it.timeMs } + chords.over.map { ChordSheets.timeOf(line, it.at, nextMs) } }
+    val chordTimes = remember(line, chords.over, nextMs) { chords.over.map { ChordSheets.timeOf(line, it.at, nextMs) } }
+    val changes = remember(line.words, chordTimes) { line.words.map { it.timeMs } + chordTimes }
     val now = rememberWhilePlaying(following.takeIf { line.words.isNotEmpty() }, changes, { SyncedLyrics.nextAfter(changes, it) }) {
-        ChordSheets.playing(line, chords.over, nextMs, it) to SyncedLyrics.wordsSungBy(line.words, it)
+        ChordSheets.playing(chordTimes, it) to SyncedLyrics.wordsSungBy(line.words, it)
     }
     // Read only where it's drawn, so a new chord played just draws it again.
     val playing = remember { mutableIntStateOf(-1) }
