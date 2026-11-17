@@ -1,4 +1,4 @@
-# JMdict 2026-11-09, by the Electronic Dictionary Research and Development Group, https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project
+# JMdict 2026-11-16, by the Electronic Dictionary Research and Development Group, https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project
 # through jmdict-simplified 3.6.2. Licensed under CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
 # as the Group's licence asks, https://www.edrdg.org/edrdg/licence.html
 # Changed: only the common words in kana with い or う after their first kana, each with how it's looked up,
@@ -317,7 +317,7 @@
 うんめい	運命
 うんゆしょう	運輸省
 うんよう	運用
-えい	英
+えい	えい
 えいえん	永遠
 えいかいわ	英会話
 えいかく	鋭角
@@ -3474,6 +3474,7 @@
 せいざ	せいざ
 せいざん	青山
 せいし	せいし
+せいしが	静止画
 せいしき	正式
 せいしきめいしょう	正式名称
 せいしつ	性質
@@ -5612,6 +5613,7 @@
 ひふびょう	皮膚病
 ひへい	疲弊
 ひぼう	誹謗
+ひぼうちゅうしょう	誹謗中傷
 ひめい	悲鳴
 ひゃくしょう	百姓
 ひゃくじゅうきゅうばん	１１９番
