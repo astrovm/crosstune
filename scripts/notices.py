@@ -13,10 +13,12 @@ app/src/main/resources/com/astrovm/crosstune/notices/, its SHA-256 and its sourc
 
   python3 scripts/notices.py check          fetch every source again and compare it to the bundled bytes
   python3 scripts/notices.py fetch [FILE]   write the bundled texts from their sources, and their SHA-256
+  python3 scripts/notices.py fetch-jmdict   refresh both EDRDG pages with the JMdict data
+  python3 scripts/notices.py check-release  check the versioned sources and the bundled JMdict snapshot
 
 TextsTest (in :app:notices) checks the bundled bytes against the SHA-256 and the files in this
 checkout, offline. This script checks the web sources: run `check` after changing a line. The
-release workflow runs it too, so a text its work changed since is found before a release.
+release workflow checks the committed JMdict snapshot. Its source pages have no version.
 """
 
 import hashlib
@@ -33,6 +35,7 @@ import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "app/src/test/resources/com/astrovm/crosstune/notice-texts.txt"
+JMDICT_MANIFEST = MANIFEST.with_name("jmdict-notice-texts.txt")
 TEXTS = ROOT / "app/src/main/resources/com/astrovm/crosstune/notices"
 BLOCKS = {"p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "ol", "ul", "dl", "dt", "dd", "table", "tr", "center", "pre", "blockquote"}
 
@@ -130,41 +133,53 @@ def ndk() -> pathlib.Path:
     return folder
 
 
-def entries():
-    for line in MANIFEST.read_text().splitlines():
+def entries(manifest):
+    for line in manifest.read_text().splitlines():
         if line.strip() and not line.startswith("#"):
-            name, sha, source = line.split(maxsplit=2)
-            yield name, sha, source
+            yield line.split(maxsplit=2)
+
+
+def fetch_texts(manifest, selected):
+    # Download all selected texts first, so a failed download cannot change half the snapshot.
+    texts = {name: source_bytes(source) for name, _, source in selected}
+    lines = manifest.read_text().splitlines()
+    for name, data in texts.items():
+        (TEXTS / name).write_bytes(data)
+        digest = hashlib.sha256(data).hexdigest()
+        lines = [re.sub(rf"^{re.escape(name)}\s+\S+", f"{name} {digest}", line) for line in lines]
+        print(f"wrote {name} {digest[:12]}")
+    manifest.write_text("\n".join(lines) + "\n")
+
+
+def check_texts(selected, snapshot):
+    passed = True
+    for name, digest, source in selected:
+        bundled = hashlib.sha256((TEXTS / name).read_bytes()).hexdigest()
+        expected = digest if snapshot else hashlib.sha256(source_bytes(source)).hexdigest()
+        ok = bundled == digest == expected
+        passed &= ok
+        location = "bundled JMdict snapshot" if snapshot else source
+        print(f"{'ok  ' if ok else 'DIFF'} {name}  {location}")
+    return passed
 
 
 def main(argv):
     command = argv[1] if len(argv) > 1 else "check"
     only = set(argv[2:])
-    failed = False
-    lines = MANIFEST.read_text().splitlines()
-    for name, sha, source in entries():
-        if only and name not in only:
+    manifests = [JMDICT_MANIFEST] if command == "fetch-jmdict" else [MANIFEST, JMDICT_MANIFEST]
+    passed = True
+    for manifest in manifests:
+        selected = [entry for entry in entries(manifest) if not only or entry[0] in only]
+        if not selected:
             continue
         try:
-            data = source_bytes(source)
-            bundled_path = TEXTS / name
-            bundled_bytes = bundled_path.read_bytes() if command != "fetch" else b""
+            if command in ("fetch", "fetch-jmdict"):
+                fetch_texts(manifest, selected)
+            else:
+                passed &= check_texts(selected, snapshot=command == "check-release" and manifest == JMDICT_MANIFEST)
         except FileNotFoundError as missing:
-            # One line, as the other stops do, instead of a traceback.
             sys.exit(f"No {missing.filename}")
-        digest = hashlib.sha256(data).hexdigest()
-        if command == "fetch":
-            (TEXTS / name).write_bytes(data)
-            lines = [re.sub(rf"^{re.escape(name)}\s+\S+", f"{name} {digest}", line) for line in lines]
-            print(f"wrote {name} {digest[:12]}")
-        else:
-            bundled = hashlib.sha256(bundled_bytes).hexdigest()
-            ok = digest == sha == bundled
-            failed |= not ok
-            print(f"{'ok  ' if ok else 'DIFF'} {name}  {source}")
-    if command == "fetch":
-        MANIFEST.write_text("\n".join(lines) + "\n")
-    return 1 if failed else 0
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

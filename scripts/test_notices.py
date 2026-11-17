@@ -90,8 +90,10 @@ class ManifestTest(unittest.TestCase):
             (root / "LICENSE").write_bytes(b"licence\n")
             (root / "texts/mit.txt").write_bytes(b"changed\n")
             manifest = root / "manifest.txt"
+            jmdict = root / "jmdict-notice-texts.txt"
+            jmdict.touch()
             manifest.write_text("# name sha source\nmit.txt 0 LICENSE\n")
-            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, JMDICT_MANIFEST=jmdict, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(1, notices.main(["notices.py", "check"]))
                 self.assertEqual(0, notices.main(["notices.py", "fetch", "mit.txt"]))
                 self.assertEqual(0, notices.main(["notices.py", "check"]))
@@ -104,19 +106,73 @@ class ManifestTest(unittest.TestCase):
             (root / "texts").mkdir()
             (root / "LICENSE").write_bytes(b"licence\n")
             manifest = root / "manifest.txt"
+            jmdict = root / "jmdict-notice-texts.txt"
+            jmdict.touch()
             manifest.write_text("mit.txt " + hashlib.sha256(b"licence\n").hexdigest() + " LICENSE\n")
-            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, JMDICT_MANIFEST=jmdict, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as stop:
                     notices.main(["notices.py", "check"])
             self.assertIn("mit.txt", str(stop.exception.code))
             self.assertNotIn("\n", str(stop.exception.code))
             (root / "texts/mit.txt").write_bytes(b"licence\n")
             (root / "LICENSE").unlink()
-            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, JMDICT_MANIFEST=jmdict, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as stop:
                     notices.main(["notices.py", "check"])
             self.assertIn("LICENSE", str(stop.exception.code))
             self.assertNotIn("Traceback", str(stop.exception.code))
+
+
+def entry(name, data):
+    digest = hashlib.sha256(data).hexdigest()
+    return f"{name} {digest} https://example.invalid/{name}\n"
+
+
+class JmdictNoticesTest(unittest.TestCase):
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        folder = Path(scratch.name)
+        self.texts = folder / "texts"
+        self.texts.mkdir()
+        self.manifest = folder / "notice-texts.txt"
+        self.jmdict = folder / "jmdict-notice-texts.txt"
+        self.pinned = "pinned.txt"
+        self.licence = "edrdg-licence.txt"
+        self.documentation = "jmdict-documentation.txt"
+        self.manifest.write_text(entry(self.pinned, b"pinned"))
+        self.jmdict.write_text(entry(self.licence, b"old") + entry(self.documentation, b"old"))
+        for name, data in ((self.pinned, b"pinned"), (self.licence, b"old"), (self.documentation, b"old")):
+            (self.texts / name).write_bytes(data)
+        self.enterContext(mock.patch.multiple(
+            notices, MANIFEST=self.manifest, JMDICT_MANIFEST=self.jmdict, TEXTS=self.texts,
+        ))
+
+    def test_the_dictionary_refresh_keeps_both_new_texts_and_their_digests(self):
+        with mock.patch.object(notices, "source_bytes", side_effect=[b"new licence", b"new documentation"]) as fetch:
+            self.assertEqual(0, notices.main(["notices.py", "fetch-jmdict"]))
+        self.assertEqual(2, fetch.call_count)
+        self.assertEqual(b"new licence", (self.texts / self.licence).read_bytes())
+        self.assertEqual(b"new documentation", (self.texts / self.documentation).read_bytes())
+        self.assertEqual(entry(self.licence, b"new licence") + entry(self.documentation, b"new documentation"), self.jmdict.read_text())
+        self.assertEqual(entry(self.pinned, b"pinned"), self.manifest.read_text())
+
+    def test_a_failed_documentation_download_does_not_change_the_licence_snapshot(self):
+        before = self.jmdict.read_bytes()
+        with mock.patch.object(notices, "source_bytes", side_effect=[b"new licence", OSError("offline")]), self.assertRaises(OSError):
+            notices.main(["notices.py", "fetch-jmdict"])
+        self.assertEqual(before, self.jmdict.read_bytes())
+        self.assertEqual(b"old", (self.texts / self.licence).read_bytes())
+
+    def test_release_checks_the_snapshots_without_requesting_the_live_jmdict_pages(self):
+        with mock.patch.object(notices, "source_bytes", return_value=b"pinned") as fetch:
+            self.assertEqual(0, notices.main(["notices.py", "check-release"]))
+            (self.texts / self.licence).write_bytes(b"changed locally")
+            self.assertEqual(1, notices.main(["notices.py", "check-release"]))
+        self.assertEqual(
+            [f"https://example.invalid/{self.pinned}"] * 2,
+            [call.args[0] for call in fetch.call_args_list],
+        )
 
 
 if __name__ == "__main__":

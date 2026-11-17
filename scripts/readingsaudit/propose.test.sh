@@ -32,7 +32,7 @@ exec "$real_git" "\$@"
 FAKE
 chmod +x "$work/bin/gh" "$work/bin/git"
 export PATH="$work/bin:$PATH" FAKE="$work/gh"
-export BRANCH=jmdict/remake TABLES=lists TAG=9.9.9+20000201000000 RUN=https://example.invalid/run/1
+export BRANCH=jmdict/remake TABLES=lists NOTICE_MANIFEST=jmdict-notice-texts.txt TAG=9.9.9+20000201000000 RUN=https://example.invalid/run/1
 # The throwaway repositories get no hooks from the machine, so the test runs the same everywhere.
 mkdir "$work/no-hooks"
 export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=init.defaultBranch GIT_CONFIG_VALUE_0=main GIT_CONFIG_KEY_1=core.hooksPath GIT_CONFIG_VALUE_1="$work/no-hooks"
@@ -45,7 +45,7 @@ list() { printf '# JMdict %s, by the Group\n%s\n' "$1" "$2"; cat "$work/filler";
 remade() { list 2000-02-01 "星空	ほしぞら$1" > lists/jmdict-readings.txt; list 2000-02-01 "おもいで	思い出" > lists/old-kana.txt; }
 # As the workflow's propose job: a fresh checkout of main with all of origin's history and no other
 # local branch, the remade lists put in it, then propose.sh. This repository then fetches what it pushed.
-checkout() { rm -rf "$work/ci" && git clone -q "$work/origin.git" "$work/ci" && cp lists/*.txt "$work/ci/lists/"; }
+checkout() { rm -rf "$work/ci" && git clone -q "$work/origin.git" "$work/ci" && cp -R lists/. "$work/ci/lists/" && cp "$NOTICE_MANIFEST" "$work/ci/"; }
 run_propose() {
   local status=0
   (cd "$work/ci" && "$here/propose.sh") > "$work/out" 2>&1 || status=$?
@@ -61,14 +61,17 @@ git init -q --bare "$work/origin.git"
 git init -q "$work/repo"
 cd "$work/repo"
 git remote add origin "$work/origin.git"
-mkdir lists
+mkdir -p lists/notices
+printf 'old licence\n' > lists/notices/edrdg-licence.txt
+printf 'old documentation\n' > lists/notices/jmdict-documentation.txt
+printf 'old digests\n' > "$NOTICE_MANIFEST"
 list 2000-01-01 "星空	ほしぞら" > lists/jmdict-readings.txt
 list 2000-01-01 "おもいで	思い出" > lists/old-kana.txt
-person add lists && person commit -q -m "chore: main" && main_to_origin
+person add lists "$NOTICE_MANIFEST" && person commit -q -m "chore: main" && main_to_origin
 
 # The same lists as main: nothing is pushed or asked.
 propose || fail "same lists failed"
-grep -q "already what JMdict" "$work/out" || fail "no notice for the same lists"
+grep -q "already current for JMdict" "$work/out" || fail "no notice for the same lists"
 [ -z "$(calls)" ] || fail "asked gh with nothing to propose"
 git ls-remote --exit-code origin "$BRANCH" > /dev/null && fail "pushed with nothing to propose"
 
@@ -93,7 +96,7 @@ grep -qF "add the \`golden: lines checked\` line it prints" "$FAKE/body" || fail
 remade "" && rm "$FAKE/calls"
 pushed=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
 propose || { cat "$work/out"; fail "second run failed"; }
-grep -q "already has the word lists" "$work/out" || fail "no notice for a branch already up to date"
+grep -q "already has the snapshot" "$work/out" || fail "no notice for a branch already up to date"
 grep -q "2 files changed" "$FAKE/body" || fail "body lacks the diff of origin's branch"
 [ "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$pushed" ] || fail "pushed a branch already up to date"
 grep -q "^pr edit 7 " "$FAKE/calls" || fail "open pull request not kept up to date"
@@ -141,7 +144,7 @@ remade "
 月夜	つきよ"
 rm "$FAKE/calls"
 propose || { cat "$work/out"; fail "update with the same lists failed"; }
-grep -q "already has the word lists" "$work/out" && fail "branch with the same lists taken as up to date on an old main"
+grep -q "already has the snapshot" "$work/out" && fail "branch with the same lists taken as up to date on an old main"
 git merge-base --is-ancestor origin/main "origin/$BRANCH" || fail "branch with the same lists not made from the new main"
 [ "$(git rev-list --count "origin/main..origin/$BRANCH")" = 1 ] || fail "old commit kept with the same lists"
 
@@ -205,6 +208,19 @@ for how in wrote rebased authored-as-bot committed-as-bot "made many commits"; d
   [ -z "$(calls)" ] || fail "asked gh over a commit a person $how"
   git checkout -q -- lists
 done
+# A notice-only change still opens a proposal, with both pages and their digest file.
+git push -q --force origin "origin/main:refs/heads/$BRANCH"
+rm -f "$FAKE/open" "$FAKE/calls"
+printf 'new licence\n' > lists/notices/edrdg-licence.txt
+printf 'new documentation\n' > lists/notices/jmdict-documentation.txt
+printf 'new digests\n' > "$NOTICE_MANIFEST"
+propose || { cat "$work/out"; fail "notice-only proposal failed"; }
+grep -q "^pr create " "$FAKE/calls" || fail "no pull request for changed notices"
+changed=$(git diff --name-only origin/main "origin/$BRANCH")
+expected=$(printf '%s\n' "$NOTICE_MANIFEST" lists/notices/edrdg-licence.txt lists/notices/jmdict-documentation.txt)
+[ "$changed" = "$expected" ] || fail "notice-only proposal changed the wrong paths"
+grep -q "3 files changed" "$FAKE/body" || fail "body lacks the notice diff"
+
 # A CI run started with gh workflow run never counts as a pull request's checks (GitHub's docs,
 # "Troubleshooting required status checks"). A person approves the pull request's own runs instead.
 grep -q "^workflow run" "$FAKE/all-calls" && fail "propose.sh started a workflow by gh workflow run"

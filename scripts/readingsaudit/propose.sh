@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
-# Opens the JMdict workflow's one pull request with the word lists it remade, or brings the open one up
-# to date. Run from a checkout of main whose $TABLES hold the remade lists.
-#
-#   BRANCH=jmdict/remake TABLES=app/src/main/resources/com/astrovm/crosstune TAG=3.6.2+20261109214828 RUN=URL \
-#     scripts/readingsaudit/propose.sh
+# Proposes the refreshed lists and EDRDG notices from a checkout of main.
+# The JMdict workflow sets the paths, the branch, the upstream tag and the run URL.
 #
 # It needs git, with origin able to push, and gh with a token that can write pull requests.
 # propose.test.sh runs it on a local repository and a fake gh.
 set -euo pipefail
-: "${BRANCH:?}" "${TABLES:?}" "${TAG:?}" "${RUN:?}"
+: "${BRANCH:?}" "${TABLES:?}" "${NOTICE_MANIFEST:?}" "${TAG:?}" "${RUN:?}"
 lists=("$TABLES/jmdict-readings.txt" "$TABLES/old-kana.txt")
+snapshot=("${lists[@]}" "$TABLES/notices/edrdg-licence.txt" "$TABLES/notices/jmdict-documentation.txt" "$NOTICE_MANIFEST")
 
-if git diff --quiet -- "${lists[@]}"; then
-  echo "::notice::The word lists are already what JMdict $TAG makes"
+if git diff --quiet -- "${snapshot[@]}"; then
+  echo "::notice::The snapshot is already current for JMdict $TAG"
   exit 0
 fi
 bot="41898282+github-actions[bot]@users.noreply.github.com"
@@ -36,8 +34,8 @@ if [ "$found" = 0 ]; then
   lease=$(git rev-parse "origin/$BRANCH")
   # Already on main and made from this JMdict: nothing to push. A run that pushed it may have failed
   # before it opened its pull request, so that is still seen to.
-  if git merge-base --is-ancestor origin/main "origin/$BRANCH" && git diff --quiet "origin/$BRANCH" -- "${lists[@]}"; then
-    echo "::notice::$BRANCH already has the word lists JMdict $TAG makes"
+  if git merge-base --is-ancestor origin/main "origin/$BRANCH" && git diff --quiet "origin/$BRANCH" -- "${snapshot[@]}"; then
+    echo "::notice::$BRANCH already has the snapshot for JMdict $TAG"
     push=false
     head=origin/$BRANCH
   fi
@@ -54,7 +52,7 @@ after=$(jmdict_date < "${lists[0]}")
 title="chore(readings): remake the JMdict word lists from JMdict $after"
 if $push; then
   git switch -q -C "$BRANCH"
-  git add -- "${lists[@]}"
+  git add -- "${snapshot[@]}"
   git -c user.name="github-actions[bot]" -c user.email="$bot" commit -q -m "$title" \
     -m "From jmdict-simplified $TAG, by .github/workflows/jmdict.yml: $RUN"
   # An empty lease: the branch must not be there yet.
@@ -71,6 +69,8 @@ trap 'rm -f "$body"' EXIT
   echo "## Change"
   echo
   echo "\`readingsaudit.py table\` and \`oldkana\` again, from jmdict-simplified \`$TAG\` (JMdict $after), checked against the size and SHA-256 its release gives. [Run]($RUN)."
+  echo
+  echo "The bundled licence and documentation are copied from EDRDG with this refresh."
   echo
   echo '```'
   git diff --stat "$base" "$head"

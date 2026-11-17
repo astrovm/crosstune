@@ -75,7 +75,8 @@ class TextsTest {
     private val folder = File(root, "app/src/main/resources/com/astrovm/crosstune/notices")
 
     /** name to (SHA-256, source). */
-    private val manifest = File(root, "app/src/test/resources/com/astrovm/crosstune/notice-texts.txt").readLines()
+    private val manifest = listOf("notice-texts.txt", "jmdict-notice-texts.txt")
+        .flatMap { File(root, "app/src/test/resources/com/astrovm/crosstune/$it").readLines() }
         .filter { it.isNotBlank() && !it.startsWith("#") }
         .map { it.split(Regex("\\s+"), limit = 3) }
         .associate { (name, sha, source) -> name to (sha to source) }
