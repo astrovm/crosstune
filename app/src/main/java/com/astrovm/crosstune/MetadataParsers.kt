@@ -155,8 +155,8 @@ internal object MetadataParsers {
         musicTagWords.containsMatchIn(word) || trailingVideoNoiseRegex.containsMatchIn("x $word")
 
     /** The brackets of a tag, "(Official Video [4K])", which [bracketTags] reads. Its words are looked for in it after. */
-    private const val TAG_OPENS = "(["
-    private const val TAG_CLOSES = ")]"
+    private val TAG_OPENS = TitleDelimiters.tagOpens
+    private val TAG_CLOSES = TitleDelimiters.tagCloses
 
     /** The same said without brackets at the end, "Song Official Music Video", maybe after a "|" or a dash. */
     private val trailingVideoNoiseRegex = phoneRegex(
@@ -459,7 +459,7 @@ internal object MetadataParsers {
     private fun withoutPlayerSeparators(title: String): String {
         var kept = Kept(title, title.length, "")
         while (true) {
-            val dash = danglingDash(kept, "-–—") ?: return kept.toString()
+            val dash = danglingDash(kept, TitleDelimiters.DASHES) ?: return kept.toString()
             kept = kept.without(dash)
         }
     }
@@ -577,7 +577,7 @@ internal object MetadataParsers {
         return if (start < dash) start until spacesEnd(text, dash + 1) else null
     }
 
-    private const val DASHES = "-–"
+    private val DASHES = TitleDelimiters.tagDashes
 
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
     fun youtubeVideo(title: String, channel: String): MusicMetadata? {
