@@ -76,7 +76,7 @@ def playing_wait(want=None, secs=25):
 # Quiet, and nothing in front.
 prefs = PREFS.format(right_away="true" if a.path == "straight" else "false", in_crosstune="false" if a.path == "straight" else "true")
 adb("shell", "am", "force-stop", APP)
-subprocess.run(["adb", "-s", a.serial, "shell", "run-as", APP, "sh", "-c", "'mkdir -p shared_prefs; cat > shared_prefs/crosstune_preferences.xml'"], input=prefs, text=True, capture_output=True, timeout=20, check=False)
+subprocess.run(["adb", "-s", a.serial, "shell", "run-as", APP, "sh", "-c", "'mkdir -p shared_prefs; cat > shared_prefs/crosstune_preferences.xml'"], input=prefs, text=True, capture_output=True, timeout=20, check=True)
 adb("shell", "cmd", "audio", "set-volume", "3", "0")
 adb("shell", "am", "force-stop", APP)
 if a.pre == "other":

@@ -384,6 +384,13 @@ class SoundOptionsTest(unittest.TestCase):
         self.assertEqual(["list", "load-module"], asked)
         self.assertEqual("crosstune_quiet.monitor", env["PULSE_SOURCE"])
 
+    def test_only_the_exact_sink_name_prevents_creation(self):
+        for listed in ("1\tcrosstune_quiet_old\tmodule-null-sink.c\n", "1\tother\tcrosstune_quiet\n"):
+            with self.subTest(listed=listed):
+                (_, env), asked = self.options(CompletedProcess([], 0, listed), CompletedProcess([], 0, "7\n", ""))
+                self.assertEqual(["list", "load-module"], asked)
+                self.assertEqual("crosstune_quiet", env["PULSE_SINK"])
+
     def test_a_sink_that_cant_be_made_stops_the_start_rather_than_playing_out_loud(self):
         with self.assertRaises(SystemExit), mock.patch("sys.stderr") as said:
             self.options(CompletedProcess([], 1, ""), CompletedProcess([], 1, "", "Connection refused\n"))

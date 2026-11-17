@@ -153,7 +153,7 @@ def sound_options(window):
     hide = [] if window else ["-qt-hide-window"]
     if platform.system() == "Linux" and shutil.which("pactl"):
         sinks = subprocess.run(["pactl", "list", "short", "sinks"], capture_output=True, text=True, check=False).stdout
-        if QUIET_SINK not in sinks:
+        if not any(len(fields) > 1 and fields[1] == QUIET_SINK for line in sinks.splitlines() if (fields := line.split())):
             made = subprocess.run(["pactl", "load-module", "module-null-sink", f"sink_name={QUIET_SINK}"], capture_output=True, text=True, check=False)
             # Without the sink PulseAudio plays on the default one, which is the room's speakers.
             if made.returncode != 0:
