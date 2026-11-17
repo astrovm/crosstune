@@ -139,9 +139,24 @@ def entries(manifest):
             yield line.split(maxsplit=2)
 
 
+JMDICT_MARKERS = {
+    "edrdg-licence.txt": (b"general dictionary licence statement", b"licence conditions", b"updating dictionary versions", b"jmdict"),
+    "jmdict-documentation.txt": (b"====== jmdict-edict dictionary project ======", b"xml format"),
+}
+
+
+def check_jmdict_page(name, data):
+    content = data.lower()
+    if not all(marker in content for marker in JMDICT_MARKERS[name]):
+        sys.exit(f"Expected EDRDG content in {name}. The snapshot was not changed.")
+
+
 def fetch_texts(manifest, selected):
     # Download all selected texts first, so a failed download cannot change half the snapshot.
     texts = {name: source_bytes(source) for name, _, source in selected}
+    if manifest == JMDICT_MANIFEST:
+        for name, data in texts.items():
+            check_jmdict_page(name, data)
     lines = manifest.read_text().splitlines()
     for name, data in texts.items():
         (TEXTS / name).write_bytes(data)

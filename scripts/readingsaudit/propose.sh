@@ -5,9 +5,18 @@
 # It needs git, with origin able to push, and gh with a token that can write pull requests.
 # propose.test.sh runs it on a local repository and a fake gh.
 set -euo pipefail
-: "${BRANCH:?}" "${TABLES:?}" "${NOTICE_MANIFEST:?}" "${TAG:?}" "${RUN:?}"
+: "${BRANCH:?}" "${TABLES:?}" "${NOTICE_MANIFEST:?}" "${SOURCE_COMMIT:?}" "${TAG:?}" "${RUN:?}"
 lists=("$TABLES/jmdict-readings.txt" "$TABLES/old-kana.txt")
 snapshot=("${lists[@]}" "$TABLES/notices/edrdg-licence.txt" "$TABLES/notices/jmdict-documentation.txt" "$NOTICE_MANIFEST")
+
+# Compare the committed files before looking at the downloaded files in the working tree.
+inputs=("${snapshot[@]}" .github/workflows/jmdict.yml scripts/readingsaudit scripts/notices.py scripts/kotlinc
+        app/src/test/java/com/astrovm/crosstune/songcheck/JmdictReadings.kt)
+if ! git merge-base --is-ancestor "$SOURCE_COMMIT" HEAD ||
+   ! git diff --quiet "$SOURCE_COMMIT" HEAD -- "${inputs[@]}"; then
+  echo "::error::JMdict inputs on main changed since the snapshot was made. Run the refresh again."
+  exit 1
+fi
 
 if git diff --quiet -- "${snapshot[@]}"; then
   echo "::notice::The snapshot is already current for JMdict $TAG"
@@ -89,7 +98,9 @@ trap 'rm -f "$body"' EXIT
 } > "$body"
 pr=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
 if [ -n "$pr" ]; then
-  gh pr edit "$pr" --title "$title" --body-file "$body"
+  if $push; then
+    gh pr edit "$pr" --title "$title" --body-file "$body"
+  fi
 else
   if ! said=$(gh pr create --head "$BRANCH" --base main --title "$title" --body-file "$body" 2>&1); then
     echo "$said" >&2

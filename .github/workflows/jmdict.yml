@@ -49,10 +49,15 @@ jobs:
     timeout-minutes: 30
     outputs:
       tag: ${{ steps.fetch.outputs.tag }}
+      source_commit: ${{ steps.snapshot-base.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Record the snapshot base
+        id: snapshot-base
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Gradle builds with this JDK, and the readings guard's tests parse with the Kotlin compiler on it.
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
@@ -143,5 +148,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.remake.outputs.tag }}
+          SOURCE_COMMIT: ${{ needs.remake.outputs.source_commit }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: scripts/readingsaudit/propose.sh

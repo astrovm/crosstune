@@ -56,7 +56,11 @@ propose() { checkout && run_propose; }
 calls() { cat "$FAKE/calls" 2>/dev/null || true; }
 
 # Main is moved in origin by fetching into it, as a hook may refuse any push to a main.
-main_to_origin() { git -C "$work/origin.git" fetch -q "$work/repo" main:main && git fetch -q origin; }
+main_to_origin() {
+  git -C "$work/origin.git" fetch -q "$work/repo" main:main && git fetch -q origin
+  SOURCE_COMMIT=$(git rev-parse origin/main)
+  export SOURCE_COMMIT
+}
 git init -q --bare "$work/origin.git"
 git init -q "$work/repo"
 cd "$work/repo"
@@ -94,12 +98,14 @@ grep -qF "add the \`golden: lines checked\` line it prints" "$FAKE/body" || fail
 # The same lists again, branch already on main: nothing pushed, the open pull request kept up to date
 # with origin's branch, as the checkout has no local one.
 remade "" && rm "$FAKE/calls"
+printf '\ngolden: none\ngolden: lines checked 0123456789abcdef\n' >> "$FAKE/body"
 pushed=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
 propose || { cat "$work/out"; fail "second run failed"; }
 grep -q "already has the snapshot" "$work/out" || fail "no notice for a branch already up to date"
 grep -q "2 files changed" "$FAKE/body" || fail "body lacks the diff of origin's branch"
 [ "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$pushed" ] || fail "pushed a branch already up to date"
-grep -q "^pr edit 7 " "$FAKE/calls" || fail "open pull request not kept up to date"
+grep -q "^pr edit " "$FAKE/calls" && fail "same snapshot replaced the body"
+grep -qx 'golden: lines checked 0123456789abcdef' "$FAKE/body" || fail "same snapshot erased the readings proof"
 
 # A run pushed the branch, then gh failed: the next run with the same lists opens the pull request,
 # without a push.
@@ -220,6 +226,21 @@ changed=$(git diff --name-only origin/main "origin/$BRANCH")
 expected=$(printf '%s\n' "$NOTICE_MANIFEST" lists/notices/edrdg-licence.txt lists/notices/jmdict-documentation.txt)
 [ "$changed" = "$expected" ] || fail "notice-only proposal changed the wrong paths"
 grep -q "3 files changed" "$FAKE/body" || fail "body lacks the notice diff"
+
+# A job that read the previous snapshot may not put its files over a newer one.
+old_commit=$SOURCE_COMMIT
+printf 'newer documentation\n' > lists/notices/jmdict-documentation.txt
+person add lists/notices/jmdict-documentation.txt
+person commit -q -m 'fix(readings): update the notice on main'
+main_to_origin
+SOURCE_COMMIT=$old_commit
+printf 'older documentation from the job\n' > lists/notices/jmdict-documentation.txt
+held=$(git rev-parse "origin/$BRANCH")
+rm -f "$FAKE/calls"
+propose && fail "accepted a snapshot based on older notices"
+grep -q 'changed since the snapshot was made' "$work/out" || fail "missing stale snapshot message"
+[ "$held" = "$(git rev-parse "origin/$BRANCH")" ] || fail "stale job pushed"
+[ -z "$(calls)" ] || fail "stale job asked gh"
 
 # A CI run started with gh workflow run never counts as a pull request's checks (GitHub's docs,
 # "Troubleshooting required status checks"). A person approves the pull request's own runs instead.

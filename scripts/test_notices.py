@@ -128,6 +128,10 @@ def entry(name, data):
     return f"{name} {digest} https://example.invalid/{name}\n"
 
 
+NEW_LICENCE = b"GENERAL DICTIONARY LICENCE STATEMENT\nLicence Conditions\nUpdating Dictionary Versions\nJMdict\n"
+NEW_DOCUMENTATION = b"====== JMdict-EDICT Dictionary Project ======\nXML format\n"
+
+
 class JmdictNoticesTest(unittest.TestCase):
     def setUp(self):
         scratch = tempfile.TemporaryDirectory()
@@ -149,20 +153,33 @@ class JmdictNoticesTest(unittest.TestCase):
         ))
 
     def test_the_dictionary_refresh_keeps_both_new_texts_and_their_digests(self):
-        with mock.patch.object(notices, "source_bytes", side_effect=[b"new licence", b"new documentation"]) as fetch:
+        with mock.patch.object(notices, "source_bytes", side_effect=[NEW_LICENCE, NEW_DOCUMENTATION]) as fetch:
             self.assertEqual(0, notices.main(["notices.py", "fetch-jmdict"]))
         self.assertEqual(2, fetch.call_count)
-        self.assertEqual(b"new licence", (self.texts / self.licence).read_bytes())
-        self.assertEqual(b"new documentation", (self.texts / self.documentation).read_bytes())
-        self.assertEqual(entry(self.licence, b"new licence") + entry(self.documentation, b"new documentation"), self.jmdict.read_text())
+        self.assertEqual(NEW_LICENCE, (self.texts / self.licence).read_bytes())
+        self.assertEqual(NEW_DOCUMENTATION, (self.texts / self.documentation).read_bytes())
+        self.assertEqual(entry(self.licence, NEW_LICENCE) + entry(self.documentation, NEW_DOCUMENTATION), self.jmdict.read_text())
         self.assertEqual(entry(self.pinned, b"pinned"), self.manifest.read_text())
 
     def test_a_failed_documentation_download_does_not_change_the_licence_snapshot(self):
         before = self.jmdict.read_bytes()
-        with mock.patch.object(notices, "source_bytes", side_effect=[b"new licence", OSError("offline")]), self.assertRaises(OSError):
+        with mock.patch.object(notices, "source_bytes", side_effect=[NEW_LICENCE, OSError("offline")]), self.assertRaises(OSError):
             notices.main(["notices.py", "fetch-jmdict"])
         self.assertEqual(before, self.jmdict.read_bytes())
         self.assertEqual(b"old", (self.texts / self.licence).read_bytes())
+
+    def test_empty_or_error_responses_leave_both_texts_and_digests_intact(self):
+        for responses in ((b"", NEW_DOCUMENTATION), (NEW_LICENCE, b"<html>Service unavailable</html>")):
+            before = self.jmdict.read_bytes()
+            with (
+                self.subTest(responses=responses),
+                mock.patch.object(notices, "source_bytes", side_effect=responses),
+                self.assertRaisesRegex(SystemExit, "Expected EDRDG"),
+            ):
+                notices.main(["notices.py", "fetch-jmdict"])
+            self.assertEqual(before, self.jmdict.read_bytes())
+            self.assertEqual(b"old", (self.texts / self.licence).read_bytes())
+            self.assertEqual(b"old", (self.texts / self.documentation).read_bytes())
 
     def test_release_checks_the_snapshots_without_requesting_the_live_jmdict_pages(self):
         with mock.patch.object(notices, "source_bytes", return_value=b"pinned") as fetch:
