@@ -100,18 +100,22 @@ internal class UniDic(
  * which reads the same files whole.
  */
 internal class MappedUniDic(private val dir: File) : Tokenizer.Builder() {
-    init {
-        resolver = ResourceResolver { File(dir, it).inputStream() }
-    }
-
     override fun loadDictionaries() {
         doubleArrayTrie = MappedTrie(mapped(DoubleArrayTrie.DOUBLE_ARRAY_TRIE_FILENAME))
         connectionCosts = mapped(ConnectionCosts.CONNECTION_COSTS_FILENAME).let { ConnectionCosts(it.getInt(0), it.from(8).asShortBuffer()) }
         tokenInfoDictionary = MappedWords(dir)
-        characterDefinitions = CharacterDefinitions.newInstance(resolver)
-        unknownDictionary = UnknownDictionary.newInstance(resolver, characterDefinitions, totalFeatures)
+        characterDefinitions = readDictionary(CharacterDefinitions.CHARACTER_DEFINITIONS_FILENAME) {
+            CharacterDefinitions.newInstance(it)
+        }
+        unknownDictionary = readDictionary(UnknownDictionary.UNKNOWN_DICTIONARY_FILENAME) {
+            UnknownDictionary.newInstance(it, characterDefinitions, totalFeatures)
+        }
         insertedDictionary = InsertedDictionary(totalFeatures)
     }
+
+    // Kuromoji reads these files through a resolver and leaves their streams open.
+    private fun <T> readDictionary(name: String, read: (ResourceResolver) -> T): T =
+        File(dir, name).inputStream().use { input -> read(ResourceResolver { input }) }
 
     private fun mapped(name: String) = map(File(dir, name))
 }
@@ -127,7 +131,7 @@ private class MappedWords(dir: File) : TokenInfoDictionary() {
         // Each but the parts of speech, a few hundred names, is a buffer of bytes after its size.
         tokenInfoBuffer = MappedEntries(map(File(dir, TOKEN_INFO_DICTIONARY_FILENAME)).from(4))
         stringValues = MappedStrings(map(File(dir, FEATURE_MAP_FILENAME)).from(4))
-        posValues = StringValueMapBuffer(File(dir, POS_MAP_FILENAME).inputStream())
+        posValues = File(dir, POS_MAP_FILENAME).inputStream().use(::StringValueMapBuffer)
         wordIdMap = MappedWordIds(map(File(dir, TARGETMAP_FILENAME)))
     }
 }
