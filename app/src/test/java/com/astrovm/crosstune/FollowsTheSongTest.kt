@@ -121,13 +121,20 @@ class FollowsTheSongTest {
 
     @Test
     @Config(qualifiers = "de-w320dp-h891dp-xxhdpi", fontScale = 2f)
-    fun theNearbySourceIsVisibleAtTheLargestFontOnANarrowPhone() {
+    fun theGermanNearbySourceIsVisibleAtTheLargestFontOnANarrowPhone() =
+        assertNearbySourceIsVisible("In der Nähe gehört")
+
+    @Test
+    @Config(qualifiers = "it-w320dp-h891dp-xxhdpi", fontScale = 2f)
+    fun theLongestNearbySourceIsVisibleAtTheLargestFontOnANarrowPhone() =
+        assertNearbySourceIsVisible("Sentito nelle vicinanze")
+
+    private fun assertNearbySourceIsVisible(label: String) {
         val station = Unnamed("com.example.radio", "Fixture Radio", "Fixture FM")
         val song = MusicMetadata("Fixture Song", "Fixture Artist")
         show {
             CrosstuneScreen(UiState(playingUnnamed = PlayingUnnamed(station, Heard.Song(song, null, inRoom = true))), ScreenActions())
         }
-        val label = "In der Nähe gehört"
         val layouts = mutableListOf<TextLayoutResult>()
         val bar = hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
         compose.onNode(bar and hasText("$label · Fixture Artist"), useUnmergedTree = true)
