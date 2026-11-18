@@ -3333,8 +3333,10 @@ internal class MainViewModel(
         val heard = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
         if (abs(shift) >= WORDS_OFF_MS) {
             // The words kept so for the first time are a problem found, as those heard off with the clock sure are.
-            if (syncPoints.isEmpty()) problemFound(SongProblem.SUNG_OFF)
-            return setSync(song, heard)
+            val first = syncPoints.isEmpty()
+            setSync(song, heard)
+            if (first) problemFound(SongProblem.SUNG_OFF)
+            return
         }
         heardPoints = heard
         showPoints()
@@ -3346,9 +3348,9 @@ internal class MainViewModel(
      * enough singing left to hear.
      */
     private fun placeForGood(song: MusicMetadata, lines: List<LyricLine>, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long, first: Boolean): Boolean {
-        if (first && abs(shift) >= SUNG_OFF_MS) problemFound(SongProblem.SUNG_OFF)
         val wholeMs = shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L
         placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, wholeMs))
+        if (first && abs(shift) >= SUNG_OFF_MS) problemFound(SongProblem.SUNG_OFF)
         val done = untilSung(LyricsSync.adjust(lines, shownPoints, pace), clock, clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L) == null
         liningUp = !done
         if (done) sungStore.save(song, lines)
@@ -3838,7 +3840,8 @@ internal class MainViewModel(
 
     /** A report on the words shown, [song]'s: how they're timed, and each line put in time by hand. */
     private fun reportOn(sender: ReportSender, song: MusicMetadata?, comment: String = "", problem: SongProblem? = null): Report {
-        val byHand = handTiming()
+        // Corrections heard by ear belong in the timing log, without the text of the lines.
+        val byHand = if (problem == SongProblem.SUNG_OFF) emptyList() else handTiming()
         return Report(
             sender.version, song, timed = uiState.lyricLines.isNotEmpty() && !uiState.lyricsTimedByEar, synced = uiState.lyricsSynced, app = timingAtCorrection?.takeIf { timedByHand }?.first ?: playedIn, comment = comment,
             sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = byHand, problem = problem, source = found?.source,

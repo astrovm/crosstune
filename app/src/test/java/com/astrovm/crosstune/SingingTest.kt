@@ -606,6 +606,7 @@ class SingingTest {
 
     @Test
     fun wordsHeardOffAreReportedWhenProblemsAreAllowedWithoutAsking() {
+        TimingLog.clear()
         prefs().edit().putBoolean("auto_reports", true).commit()
         // A second off is already off.
         singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
@@ -742,12 +743,18 @@ class SingingTest {
 
     @Test
     fun pickedUpPartwayWordsHeardFarOffAreReportedOnceWhenAllowed() {
+        TimingLog.clear()
         prefs().edit().putBoolean("auto_reports", true).commit()
         singing.answer = { sung(FAR_MS) }
         openLyrics()
         plays(positionMs = 3_000)
         waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
-        assertEquals("sung_off", org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)]).getString("problem"))
+        val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
+        assertEquals("sung_off", sent.getString("problem"))
+        val song = sent.getJSONObject("song")
+        assertFalse(song.has("timing"))
+        val log = song.getString("log")
+        assertTrue(log, log.contains("lines in time"))
         // Kept by then, so placing them again from the same while sends nothing more.
         waitUntil { prefs().contains("lyrics_sync") }
         composeRule.waitForIdle()
