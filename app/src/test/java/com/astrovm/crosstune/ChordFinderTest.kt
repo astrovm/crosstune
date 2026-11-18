@@ -1849,6 +1849,32 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun aMissingLocalizedTitleIsCachedOnlyWhenBothCatalogsAnswer() {
+        val song = MusicMetadata("Kawa no Michi", "歩く人")
+        for (badHost in listOf(null, "music.163.com", "itunes.apple.com")) {
+            noOtherChordSites()
+            val sites = fake.handler
+            var catalogReady = false
+            fake.handler = { request ->
+                when {
+                    !catalogReady && request.url.host == badHost -> FakeSpotify.html(request, "<html>bad</html>")
+                    catalogReady && request.url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""")
+                    else -> sites(request)
+                }
+            }
+            val cacheFile = File.createTempFile("chords-catalogs", ".json").apply { delete(); deleteOnExit() }
+            val cache = LookupCache(cacheFile, Dispatchers.Unconfined)
+            val finder = withWiki(ChordWikiPages { url -> if (url == chordWikiEditUrl("川の道")) chordPro else "" }, cache)
+            assertEquals(badHost, ChordFinder.Chords.None, chords(song, japanese, finder))
+            assertEquals(badHost, badHost == null, runBlocking { cache.entries().any { it.first.startsWith("wiki-miss:") } })
+
+            catalogReady = true
+            val found = chords(song, japanese, finder) as? ChordFinder.Chords.Found
+            assertEquals(badHost, chordWikiViewUrl("川の道").takeIf { badHost != null }, found?.sheet?.url)
+        }
+    }
+
+    @Test
     fun aWikiMissSurvivesReloadButNotChangedLyricsOrAClockRollback() {
         noOtherChordSites()
         val file = File.createTempFile("wiki-miss", ".json").apply { delete(); deleteOnExit() }

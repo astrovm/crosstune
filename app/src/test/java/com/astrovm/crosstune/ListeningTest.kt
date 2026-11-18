@@ -120,13 +120,36 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h2000dp")
 class ListeningTest {
-    private fun wikiPages(activity: MainActivity): ChordWikiPages {
-        fun field(owner: Any, name: String): Any? = owner.javaClass.getDeclaredField(name).let {
-            it.isAccessible = true
-            it.get(owner)
+    private fun field(owner: Any, name: String): Any? = owner.javaClass.getDeclaredField(name).let {
+        it.isAccessible = true
+        it.get(owner)
+    }
+
+    private fun chordFinder(activity: MainActivity): ChordFinder =
+        field(ViewModelProvider(activity)[MainViewModel::class.java], "chordFinder") as ChordFinder
+
+    private fun wikiPages(activity: MainActivity): ChordWikiPages = field(chordFinder(activity), "chordWiki") as ChordWikiPages
+
+    @Test
+    fun chordDiagnosticsDoNotLogSongNamesInNonDebuggableBuilds() {
+        val debuggable = android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE
+        val originalFlags = app.applicationInfo.flags
+        ShadowLog.setLoggable(ChordFinder.CHORD_LOG, android.util.Log.INFO)
+        fake.handler = { FakeSpotify.html(it, "{}") }
+        try {
+            for ((debug, title) in listOf(false to "Release fixture", true to "Debug fixture")) {
+                app.applicationInfo.flags = if (debug) originalFlags or debuggable else originalFlags and debuggable.inv()
+                val activity = launch()
+                assertEquals(debug, activity.applicationInfo.flags and debuggable != 0)
+                val finder = chordFinder(activity)
+                runBlocking { finder.chordsOf(MusicMetadata(title, "Fixture artist"), listOf("Fixture line"), timeoutMs = 100) }
+                assertEquals(debug, ShadowLog.getLogsForTag(ChordFinder.CHORD_LOG).any { it.msg.contains("lookup title=$title ") })
+                controller?.destroyAndSettle()
+                controller = null
+            }
+        } finally {
+            app.applicationInfo.flags = originalFlags
         }
-        val finder = requireNotNull(field(ViewModelProvider(activity)[MainViewModel::class.java], "chordFinder"))
-        return field(finder, "chordWiki") as ChordWikiPages
     }
 
     private fun wikiWeb(view: android.view.View): android.webkit.WebView? = when (view) {
