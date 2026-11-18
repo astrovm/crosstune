@@ -5,6 +5,8 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runTest
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -871,7 +873,7 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun theOfficialSongBeatsAnUploadWhenAppleKnowsALongerEditionOfIt() {
+    fun theOfficialSongBeatsAnUploadWhenAppleKnowsALongerEditionOfIt() = runTest {
         // Recorded: Apple's US store names Full Moon's take (4:41) first, but YouTube Music has the single's (4:11),
         // while a fan's upload with the lyrics runs 4:42.
         val song = MusicMetadata("tasogare no bay city", "JUNKO YAGAMI")
@@ -884,11 +886,12 @@ class ExactMatcherTest {
             youTubeMusicRow("Lady-Ready", "八神純子 • 黄昏のBAY CITY • 4:15", videoId = "5_YotH_2o-M")
         )
         val videos = listOf(youTubeMusicRow("Junko Yagami (八神純子) - 黄昏のBay City [Lyrics Eng/Rom/Kan]", "Reidhaha • 1.5M views • 4:42", videoId = "TwSWeSQAm-g"))
+        val finder = ExactMatcher(fake.inlineClient(), "US", ioDispatcher = StandardTestDispatcher(testScheduler))
         namesAndTabs(songs = songs, videos = videos, apple = mapOf("US" to us), elsewhere = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 281_200, id = 74904069)))
-        assertEquals("https://music.youtube.com/watch?v=QLHMhVonF-s", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals("https://music.youtube.com/watch?v=QLHMhVonF-s", finder.find(MusicService.YOUTUBE_MUSIC, song))
         // Not an edition Apple has, it's still another recording, and the upload that matches is what plays.
         namesAndTabs(songs = songs.drop(1), videos = videos, apple = mapOf("US" to us), elsewhere = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 281_200, id = 74904069)))
-        assertEquals("https://music.youtube.com/watch?v=TwSWeSQAm-g", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals("https://music.youtube.com/watch?v=TwSWeSQAm-g", finder.find(MusicService.YOUTUBE_MUSIC, song))
     }
 
     @Test
