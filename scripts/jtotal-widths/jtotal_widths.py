@@ -509,12 +509,13 @@ def default_fonts():
 RUNS = {"main": STACK, "mono": MONO_STACK}
 
 
-def in_container(work):
+def in_container(work, font_size):
     """Measures both stacks and the trimming in the table's container, into `work`."""
     for name in RUNS:
         mono = ["--mono"] if name == "mono" else []
-        run_in_container(work, ["/script/jtotal_widths.py", "measure", f"/work/{name}.json", *mono])
-        run_in_container(work, ["/script/jtotal_widths.py", "trims", f"/work/{name}-trims.json", *mono])
+        options = ["--font-size", str(font_size), *mono]
+        run_in_container(work, ["/script/jtotal_widths.py", "measure", f"/work/{name}.json", *options])
+        run_in_container(work, ["/script/jtotal_widths.py", "trims", f"/work/{name}-trims.json", *options])
 
 
 def table_text(raw, source):
@@ -566,24 +567,27 @@ def main(argv):
     parser.add_argument("--browser", default="chromium")
     parser.add_argument("--lang")
     parser.add_argument("--fonts", type=Path)
-    parser.add_argument("--font-size", type=int, choices=(15, 40), default=40, help="measure or trims: J-Total's size or the 40px reference")
+    parser.add_argument("--font-size", type=int, choices=(15, 40), help="measure, trims or container: J-Total's size or the 40px reference")
     parser.add_argument("--show", type=int, default=50)
     parser.add_argument("--stack", help="another font stack than the page's, such as one naming MS PGothic")
     parser.add_argument("--cp932", action="store_true", help="only the letters a Shift_JIS page holds")
     args = parser.parse_args(argv)
+    if args.font_size is not None and args.command not in ("measure", "trims", "container"):
+        parser.error("--font-size applies only to measure, trims or container")
+    font_size = args.font_size or 40
     stack = args.stack or (MONO_STACK if args.mono else STACK)
     if args.command == "measure":
         codes = [c for c in spans_codes() if in_cp932(c)] if args.cp932 else None
-        measure(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang, codes, font_size=args.font_size)
+        measure(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang, codes, font_size=font_size)
         return 0
     if args.command == "trims":
-        trims(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang, font_size=args.font_size)
+        trims(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang, font_size=font_size)
         return 0
     if args.command == "container":
         work = Path(args.paths[0]).resolve()
         work.mkdir(parents=True, exist_ok=True)
-        in_container(work)
-        (work / "SOURCE.txt").write_text("Measured in the Containerfile's container\n", encoding="utf-8")
+        in_container(work, font_size)
+        (work / "SOURCE.txt").write_text(f"Measured at {font_size}px in the Containerfile's container\n", encoding="utf-8")
         return 0
     if args.command == "diff":
         diff_main(args.paths[0], args.paths[1], args.show)

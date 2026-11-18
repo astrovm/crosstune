@@ -68,6 +68,15 @@ class ProbeTest(unittest.TestCase):
                 self.assertEqual(w.main([command, "out.json", "--fonts", ".", "--font-size", "15"]), 0)
                 self.assertEqual(probe.call_args.kwargs["font_size"], 15)
 
+    def test_container_passes_the_size_to_both_stacks_and_records_it(self):
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(w, "run_in_container") as run:
+            self.assertEqual(w.main(["container", folder, "--font-size", "15"]), 0)
+            self.assertEqual(run.call_count, 4)
+            for call in run.call_args_list:
+                flags = call.args[1]
+                self.assertEqual(flags[flags.index("--font-size") + 1], "15")
+            self.assertIn("15px", (Path(folder) / "SOURCE.txt").read_text(encoding="utf-8"))
+
     def test_a_letter_shift_jis_holds_is_written_as_itself(self):
         self.assertEqual(w.written(0x3042), "あ")
         self.assertEqual(w.written(0xFF9E), "ﾞ")

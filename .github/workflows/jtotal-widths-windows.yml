@@ -66,18 +66,19 @@ jobs:
           chrome="C:/Program Files/Google/Chrome/Application/chrome.exe"
           for b in edge chrome; do
             path=$([ $b = edge ] && echo "$edge" || echo "$chrome")
-            $w measure $out/$b-main.json --lang ja --cp932 --browser "$path"
-            $w measure $out/$b-mono.json --mono --lang ja --cp932 --browser "$path"
-            $w trims $out/$b-main-trims.json --lang ja --browser "$path"
-            $w trims $out/$b-mono-trims.json --mono --lang ja --browser "$path"
+            $w measure $out/$b-main.json --lang ja --cp932 --browser "$path" --font-size "$REFERENCE_FONT_SIZE"
+            $w measure $out/$b-mono.json --mono --lang ja --cp932 --browser "$path" --font-size "$REFERENCE_FONT_SIZE"
+            $w trims $out/$b-main-trims.json --lang ja --browser "$path" --font-size "$REFERENCE_FONT_SIZE"
+            $w trims $out/$b-mono-trims.json --mono --lang ja --browser "$path" --font-size "$REFERENCE_FONT_SIZE"
           done
           # MS PGothic in MS Gothic's place, and an English browser, for how much those would move.
-          $w measure $out/pgothic.json --lang ja --cp932 --stack '"Inconsolata","MS PGothic","Hiragino Kaku Gothic","Monaco",sans-serif'
-          $w trims $out/pgothic-trims.json --lang ja --stack '"Inconsolata","MS PGothic","Hiragino Kaku Gothic","Monaco",sans-serif'
-          $w measure $out/en-main.json --cp932
-          $w measure $out/en-mono.json --mono --cp932
-          $w trims $out/en-main-trims.json
-          $w trims $out/en-mono-trims.json --mono
+          p='"Inconsolata","MS PGothic","Hiragino Kaku Gothic","Monaco",sans-serif'
+          $w measure $out/pgothic.json --lang ja --cp932 --stack "$p" --font-size "$REFERENCE_FONT_SIZE"
+          $w trims $out/pgothic-trims.json --lang ja --stack "$p" --font-size "$REFERENCE_FONT_SIZE"
+          $w measure $out/en-main.json --cp932 --font-size "$REFERENCE_FONT_SIZE"
+          $w measure $out/en-mono.json --mono --cp932 --font-size "$REFERENCE_FONT_SIZE"
+          $w trims $out/en-main-trims.json --font-size "$REFERENCE_FONT_SIZE"
+          $w trims $out/en-mono-trims.json --mono --font-size "$REFERENCE_FONT_SIZE"
       - name: Draw the tests' sheets
         shell: bash
         run: |
