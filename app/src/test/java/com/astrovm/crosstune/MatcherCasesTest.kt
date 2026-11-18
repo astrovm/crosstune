@@ -553,6 +553,18 @@ class MatcherCasesTest {
     }
 
     @Test
+    fun theTimeAndTheAlbumPartAloneCannotNameARecording() {
+        val remix = Case("same-length remix", "song0", lengthMs = 210_000, linkMs = 240_000,
+            editions = listOf("Another Album" to 240_000), japan = japanese("偽の歌"), songs = listOf(
+                row("偽の歌", length = "3:30"), row("偽の歌 (Remix)", length = "4:00")
+            ))
+        val unrelatedAlbum = Case("album number", null, title = "Fake Song (Part 2)",
+            songs = listOf(row("Fake Song", "Unrelated Album (Part 2)")), picked = 0)
+        assertEquals(listOf("song0", null), listOf(find(remix), find(unrelatedAlbum)))
+        assertEquals(false, found(unrelatedAlbum).asked)
+    }
+
+    @Test
     fun theNamesTheReviewsTriedReadAsMainReadThemOrBetter() {
         // The first review, 3: a sign is no letter, and 4: many songs in one, with a word run on.
         assertEquals(true, SongNames.same("Fake Song™", "Fake Song"))

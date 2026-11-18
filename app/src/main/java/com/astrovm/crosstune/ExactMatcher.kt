@@ -668,7 +668,7 @@ internal class ExactMatcher(
         val rows = items.map(::row)
         val named = rows.firstOrNull { isTheSong(it, names) && keepsRequestedRecording(recording, it) }
         val abroad = rows.filter { isTheSongInAnotherScript(it, names) }
-        val song = named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedLengthMs) ?: it }
+        val song = named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedEdition) ?: it }
             ?: anotherScriptRecording(abroad, recording, names)
         song?.let { return Answer(watchUrl + it.id) }
         videos.map(::row).firstOrNull { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
@@ -695,7 +695,8 @@ internal class ExactMatcher(
         val title = text.trim()
         val base = SongNames.bareTitle(title)
         val note = title.removePrefix(base).ifEmpty { title }.trim { !it.isLetterOrDigit() }.lowercase(Locale.ROOT)
-        return liveAtEnd(title) || liveAtEnd(base) || note in liveLabels
+        val quoted = title.substringAfterLast('«', "").substringBefore('»', "").trim()
+        return quoted.equals("live", ignoreCase = true) || liveAtEnd(title) || liveAtEnd(base) || note in liveLabels
     }
 
     private fun liveAlbum(text: String): Boolean {
@@ -762,9 +763,12 @@ internal class ExactMatcher(
 
     private fun keepsRequestedRecording(wanted: RequestedRecording, name: String, album: String): Boolean {
         val part = wanted.part?.number
-        val keepsPart = part == null || part == (numberedPartBeforeNotes(name) ?: numberedPartBeforeNotes(album))?.number
+        val keepsPart = part == null || part == (numberedPartBeforeNotes(name) ?: partOnAlbum(name, album))?.number
         return keepsPart && (!wanted.live || saysLive(name) || liveAlbum(album))
     }
+
+    private fun partOnAlbum(name: String, album: String): NumberedPart? =
+        numberedPartBeforeNotes(album)?.takeIf { SongNames.same(it.title, SongNames.bareTitle(name)) }
 
     private fun keepsRequestedRecording(wanted: RequestedRecording, row: Row, video: Boolean = false): Boolean =
         if (video) SongNames.titleNames(row.name).any { keepsRequestedRecording(wanted, it, "") }
@@ -781,7 +785,7 @@ internal class ExactMatcher(
             val base = SongNames.bareTitle(first.name)
             return rows.singleOrNull { keepsRequestedRecording(recording, it) && SongNames.bareTitle(it.name) == base }
         }
-        return linkedEditionInAnotherScript(first, rows, names.linkedLengthMs) ?: first
+        return linkedEditionInAnotherScript(first, rows, names.linkedEdition) ?: first
     }
 
     /** Keep an explicit title ahead of any inference from the length. */
@@ -792,14 +796,18 @@ internal class ExactMatcher(
     }
 
     /** Compare the matched row with one alternate take of its own title, at the other known recording's time. */
-    private fun linkedEditionInAnotherScript(first: Row, rows: List<Row>, length: Long?): Row? {
-        if (length == null || first !in rows || sameRecordingLength(first.lengthMs, length)) return null
+    private fun linkedEditionInAnotherScript(first: Row, rows: List<Row>, edition: LinkedEdition?): Row? {
+        if (edition == null || first !in rows || sameRecordingLength(first.lengthMs, edition.lengthMs)) return null
         val base = SongNames.bareTitle(first.name)
         val other = rows.singleOrNull { it !== first && SongNames.same(SongNames.bareTitle(it.name), base) } ?: return null
-        if (!sameRecordingLength(other.lengthMs, length)) return null
-        val marked = SongNames.saysAnotherVersion(first.name, base, "")
-        return other.takeIf { marked != SongNames.saysAnotherVersion(it.name, base, "") }
+        if (!sameRecordingLength(other.lengthMs, edition.lengthMs)) return null
+        val live = rowIsLive(other)
+        val otherMarked = live || SongNames.saysAnotherVersion(other.name, base, "")
+        val firstMarked = rowIsLive(first) || SongNames.saysAnotherVersion(first.name, base, "")
+        return other.takeIf { firstMarked != otherMarked && if (edition.live) live else !otherMarked }
     }
+
+    private fun rowIsLive(row: Row): Boolean = saysLive(row.name) || liveAlbum(row.details.getOrNull(1).orEmpty())
 
     /**
      * The one among [rows] that [pick] says the song is, each shown as "title | details". Their titles
@@ -809,9 +817,12 @@ internal class ExactMatcher(
     private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row>, watchUrl: String, videos: Boolean, lengthsMs: List<Long>): String? {
         val recording = requestedRecording(metadata.title)
         val part = recording.part
-        val offered = rows.filter { keepsRequestedRecording(recording, it, video = videos) && (part == null || namesThePickedPart(part, it, videos)) }
-        if (offered.isEmpty()) return null
-        val index = pick(metadata, offered.map { "${it.name} | ${it.details.joinToString(" • ")}" }, videos) ?: return null
+        // Keep the row numbers while omitting any names that local evidence already rules out.
+        val offered = rows.map { it.takeIf { row -> keepsRequestedRecording(recording, row, video = videos) &&
+            (part == null || namesThePickedPart(part, row, videos)) } }
+        if (offered.none { it != null }) return null
+        val shown = offered.map { it?.let { row -> "${row.name} | ${row.details.joinToString(" • ")}" }.orEmpty() }
+        val index = pick(metadata, shown, videos) ?: return null
         val row = offered.getOrNull(index) ?: return null
         val off = row.lengthMs?.let { length -> lengthsMs.minOfOrNull { kotlin.math.abs(it - length) } } ?: 0L
         return (watchUrl + row.id).takeIf { off <= if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS }
@@ -820,7 +831,7 @@ internal class ExactMatcher(
     private fun namesThePickedPart(part: NumberedPart, row: Row, video: Boolean): Boolean {
         val names = if (video) SongNames.titleNames(row.name) else listOf(row.name)
         return names.any { samePart(part, numberedPartBeforeNotes(it)) } ||
-            !video && SongNames.same(part.title, row.name) && part.number == numberedPartBeforeNotes(row.details.getOrNull(1).orEmpty())?.number
+            !video && samePart(part, partOnAlbum(row.name, row.details.getOrNull(1).orEmpty()))
     }
 
     /**
@@ -862,7 +873,9 @@ internal class ExactMatcher(
      * there, so its Japanese, Korean and Chinese stores give 終わらない歌 for Owaranai Uta, 봄날 for
      * Spring Day and 松原みき for Miki Matsubara. Deezer gives its length when Apple doesn't have it.
      */
-    private class Names(val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, val linkedLengthMs: Long?)
+    private class Names(val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, val linkedEdition: LinkedEdition?)
+
+    private class LinkedEdition(val lengthMs: Long, val live: Boolean)
 
     private suspend fun namesOf(metadata: MusicMetadata): Names {
         val titles = mutableSetOf(metadata.title)
@@ -887,8 +900,7 @@ internal class ExactMatcher(
                     ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
             }?.let(lengthsMs::add)
         }
-        val linkedLength = linkedAppleLength(metadata, found?.editions.orEmpty())
-        return Names(titles, artists, lengthsMs, linkedLength)
+        return Names(titles, artists, lengthsMs, linkedAppleEdition(metadata, found?.editions.orEmpty()))
     }
 
     /**
@@ -908,12 +920,13 @@ internal class ExactMatcher(
     /** The [song] Apple has, and all its [editions] in the same store: its album's take, its single's, its remasters. */
     private class AppleSong(val song: JSONObject, val editions: List<JSONObject>)
 
-    private fun linkedAppleLength(metadata: MusicMetadata, editions: List<JSONObject>): Long? {
+    private fun linkedAppleEdition(metadata: MusicMetadata, editions: List<JSONObject>): LinkedEdition? {
         val length = metadata.lengthMs ?: return null
         if (editions.size < 2 || !plainLinkedTitle(metadata)) return null
-        val times = editions.filter { matches(metadata, it.optString("trackName"), it.optString("artistName")) }
-            .map { it.optLong("trackTimeMillis") }.filter { it > 0 }
-        return times.singleOrNull { sameRecordingLength(it, length) }.takeIf { times.size > 1 }
+        val timed = editions.filter { it.optLong("trackTimeMillis") > 0 && matches(metadata, it.optString("trackName"), it.optString("artistName")) }
+        if (timed.size < 2) return null
+        val chosen = timed.singleOrNull { sameRecordingLength(it.optLong("trackTimeMillis"), length) } ?: return null
+        return LinkedEdition(chosen.optLong("trackTimeMillis"), saysLive(chosen.optString("trackName")) || liveAlbum(chosen.optString("collectionName")))
     }
 
     private suspend fun appleSong(metadata: MusicMetadata, store: String?): AppleSong? = answering {
