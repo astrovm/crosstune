@@ -374,8 +374,9 @@ internal fun interface SongHearing {
 
 /**
  * Names the song a phone app plays or casts straight from that app. Uses [hearing] for nearby
- * sound when the phone only shows another device's playback or has no song named. An app that can't say where in the song it is, as
- * for a video, is still listened to for that, through [played], the phone's own sound, which the
+ * sound when no song is named or KDE Connect only shows a computer's playback. An app that can't
+ * say where in the song it is, as for a video, is still listened to for that, through [played],
+ * the phone's own sound, which the
  * microphone hears poorly, and not at all through headphones; with the microphone only when the
  * phone won't share its sound. Nothing heard, it's named as the app does.
  */
@@ -385,9 +386,8 @@ internal class PlayingFirst(
     private val played: SongHearing = hearing
 ) : SongHearing {
     override suspend fun listen(): Heard {
-        // A computer's media session can name a browser tab while music plays in it.
-        val playing = (playback.whatPlays() as? WhatPlays.Named)?.takeUnless { it.where == Place.ELSEWHERE }?.song
-            ?: return hearing.listen()
+        // KDE Connect can name the computer's browser tab while music plays in it.
+        val playing = playback.nowPlaying()?.takeUnless { it.app == KDE_CONNECT } ?: return hearing.listen()
         if (playing.clock != null) return playing
         return listenToPlaying() as? Heard.Song ?: playing
     }
@@ -411,6 +411,7 @@ internal class PlayingFirst(
     }
 
     companion object {
+        private const val KDE_CONNECT = "org.kde.kdeconnect_tp"
         const val ALOUD_CHECK_MS = 1_000L
     }
 }

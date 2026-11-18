@@ -810,7 +810,7 @@ internal class MediaSessionPlayback(
 
     override fun whatPlays(): WhatPlays? =
         playingApps().minWithOrNull(compareBy(playsFirst) { Rank(said(it) != null, it.place(), it.playbackState?.lastPositionUpdateTime ?: 0L) })
-            ?.let { app -> playing(app)?.let { WhatPlays.Named(it, app.place()) } ?: WhatPlays.Nameless(app.unnamed()) }
+            ?.let { app -> playing(app)?.let(WhatPlays::Named) ?: WhatPlays.Nameless(app.unnamed()) }
 
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
 

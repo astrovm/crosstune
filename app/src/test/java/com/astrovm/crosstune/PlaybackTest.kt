@@ -1968,6 +1968,17 @@ class PlaybackTest {
     }
 
     @Test
+    fun aMusicAppWithARemoteSpeakerCanStillNameItsSong() {
+        allow()
+        sounding(false)
+        val music = elsewhere(player("com.example.player", "Music Player", "Demo", "Fake Band", album = "Fake Album"))
+        shadowOf(sessions).addController(music)
+        val playing = checkNotNull(playback.nowPlaying())
+        val listener = PlayingFirst(playback, SongHearing { Heard.Nothing })
+        assertEquals(playing, runBlocking { listener.listen() })
+    }
+
+    @Test
     fun whatPlaysFirstIsRankedNamedOrNotOnThePhoneOrNot() {
         allow()
         // A station cast to a speaker plays, and has the bar, though the phone has nothing of it to hear.
