@@ -27,8 +27,8 @@ class ChordWikiBrowserCheck : Instrumentation() {
     private val creations = AtomicInteger()
     private var pages: ChordWikiPages? = null
     @Volatile private var readId = 0
-    @Volatile private var pageStarted = 0L
-    @Volatile private var capture = WikiProbeCapture()
+    private class ProbeRead(val observation: WikiObservation, val capture: WikiProbeCapture, val started: Long)
+    @Volatile private var probeRead: ProbeRead? = null
     private val runId = SystemClock.elapsedRealtimeNanos()
     private val events = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityResumed(activity: Activity) {
@@ -59,9 +59,10 @@ class ChordWikiBrowserCheck : Instrumentation() {
             runOnMainSync {
                 MainActivity.chordWikiFactory = { host ->
                     creations.incrementAndGet()
-                    ChordWikiBrowser(host, onPageCreated = { web ->
-                        val recording = capture
-                        val started = pageStarted
+                    ChordWikiBrowser(host, onPageCreated = page@ { web, observation ->
+                        val probe = probeRead?.takeIf { it.observation === observation } ?: return@page
+                        val recording = probe.capture
+                        val started = probe.started
                         web.webViewClient = MeasuredClient(web.webViewClient, System.identityHashCode(host), recording, started)
                         recording.record { mapOf("type" to "settings_before_load",
                             "t_ms" to SystemClock.elapsedRealtime() - started,
@@ -84,10 +85,9 @@ class ChordWikiBrowserCheck : Instrumentation() {
                         val activity = checkNotNull(current) { "Open MainActivity first" }
                         if (pages == null) runOnMainSync { pages = wikiPages(activity) }
                         val recording = WikiProbeCapture()
-                        capture = recording
                         val observation = WikiObservation()
                         val started = SystemClock.elapsedRealtime()
-                        pageStarted = started
+                        probeRead = ProbeRead(observation, recording, started)
                         val result = runCatching {
                             runBlocking {
                                 withTimeout(20_000L) {
@@ -97,6 +97,7 @@ class ChordWikiBrowserCheck : Instrumentation() {
                                 }
                             }
                         }
+                        probeRead = null
                         val recorded = recording.close()
                         val body = result.getOrNull()
                         val live = System.identityHashCode(current)

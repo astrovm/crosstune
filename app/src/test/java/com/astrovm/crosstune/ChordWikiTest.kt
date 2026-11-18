@@ -354,11 +354,17 @@ class ChordWikiTest {
     @Config(shadows = [AssetsBlockedInitiallyWebView::class])
     fun pageObserverIsInstalledBeforeTheFirstLoad() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
-        val job = CoroutineScope(Dispatchers.Main).launch {
-            ChordWikiBrowser(activity, gapMs = 60_000, onPageCreated = { web ->
-                (shadowOf(web) as AssetsBlockedInitiallyWebView).observerInstalled = true
-            }).page("https://ja.chordwiki.org/")
+        val probe = WikiObservation()
+        val browser = ChordWikiBrowser(activity, gapMs = 60_000, onPageCreated = { web, observation ->
+            (shadowOf(web) as AssetsBlockedInitiallyWebView).observerInstalled = observation === probe
+        })
+        val other = CoroutineScope(Dispatchers.Main + WikiObservation()).launch {
+            browser.page("https://ja.chordwiki.org/other")
         }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(false, (shadowOf(findWeb(activity.window.decorView)) as AssetsBlockedInitiallyWebView).observerAtLoad)
+        other.cancel()
+        val job = CoroutineScope(Dispatchers.Main + probe).launch { browser.page("https://ja.chordwiki.org/") }
         try {
             shadowOf(Looper.getMainLooper()).idle()
             val recorded = shadowOf(findWeb(activity.window.decorView)) as AssetsBlockedInitiallyWebView

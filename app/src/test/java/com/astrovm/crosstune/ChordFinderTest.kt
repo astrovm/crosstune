@@ -1827,6 +1827,28 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun aWikiMissCanBeRetriedAfterTheLocalizedNameLookupRecovers() {
+        noOtherChordSites()
+        val sites = fake.handler
+        var catalogReady = false
+        fake.handler = { request ->
+            if (request.url.host != "music.163.com") sites(request)
+            else if (catalogReady) FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""")
+            else FakeSpotify.html(request, "Temporarily unavailable", code = 503)
+        }
+        val cacheFile = File.createTempFile("chords-names", ".json").apply { delete(); deleteOnExit() }
+        val finder = withWiki(
+            ChordWikiPages { url -> if (url == chordWikiEditUrl("川の道")) chordPro else "" },
+            LookupCache(cacheFile, Dispatchers.Unconfined)
+        )
+        val song = MusicMetadata("Kawa no Michi", "歩く人")
+        assertFalse(chords(song, japanese, finder) is ChordFinder.Chords.Found)
+        catalogReady = true
+        val found = chords(song, japanese, finder) as? ChordFinder.Chords.Found
+        assertEquals(chordWikiViewUrl("川の道"), found?.sheet?.url)
+    }
+
+    @Test
     fun aWikiMissSurvivesReloadButNotChangedLyricsOrAClockRollback() {
         noOtherChordSites()
         val file = File.createTempFile("wiki-miss", ".json").apply { delete(); deleteOnExit() }

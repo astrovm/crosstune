@@ -207,7 +207,7 @@ internal class ChordFinder(
     private enum class WikiMiss { TIMED_OUT, CHECK }
 
     /** One site's try: the sheet it found, whether a site wouldn't answer, and ChordWiki's own miss. */
-    private class Tried(val sheet: ChordSheet?, val unavailable: Boolean, val wiki: WikiMiss? = null)
+    private class Tried(val sheet: ChordSheet?, val unavailable: Boolean, val wiki: WikiMiss? = null, val incompleteTitle: Boolean = false)
 
     /** A site asked in order, by the short name the lookup log uses. */
     private class Site(val name: String, val read: suspend ((ChordSheet) -> Boolean) -> ChordSheet?)
@@ -264,7 +264,7 @@ internal class ChordFinder(
         val observation = WikiObservation()
         val looked = withTimeoutOrNull(timeoutMs) {
             try {
-                Result.success(withContext(observation) { readChordWiki(song, otherNames, fits) })
+                Result.success(withContext(observation) { lookupWiki(song, otherNames, fits) })
             } catch (e: IOException) {
                 Result.failure(e)
             } catch (e: JSONException) {
@@ -283,13 +283,20 @@ internal class ChordFinder(
             }
             return Tried(null, true, wiki)
         }
-        val found = looked.getOrNull()
-        if (found == null) {
+        val tried = looked.getOrThrow()
+        if (tried.sheet == null && !tried.incompleteTitle) {
             note("wiki none")
             cache?.put(key, now().toString())
             cache?.save()
         }
-        return Tried(found, false)
+        return tried
+    }
+
+    /** A fallback sheet can still win, but an incomplete title lookup cannot prove a miss. */
+    private suspend fun lookupWiki(song: MusicMetadata, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean): Tried {
+        val title = chordWikiTitle(song, otherNames)
+        val sheet = readChordWiki(song, title ?: song.title, fits)
+        return Tried(sheet, false, incompleteTitle = title == null)
     }
 
     private suspend fun hasWikiMiss(key: String): Boolean {
@@ -307,7 +314,7 @@ internal class ChordFinder(
             digest.update(0)
             digest.update(bytes)
         }
-        return "wiki-miss:$CACHE_VERSION:" + digest.digest().joinToString("") { "%02x".format(it) }
+        return "wiki-miss:$WIKI_MISS_VERSION:" + digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     /** One line for logcat: the letter match, and the chord names [align] did not draw. No lyric text. */
@@ -348,9 +355,8 @@ internal class ChordFinder(
      * one more sheet, no faster than a person would open them. An empty page is tried again under
      * the name with a trailing tag taken off, and with its punctuation written the other width.
      */
-    private suspend fun readChordWiki(song: MusicMetadata, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean): ChordSheet? {
+    private suspend fun readChordWiki(song: MusicMetadata, known: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
         val pages = chordWiki ?: return null
-        val known = chordWikiTitle(song, otherNames)
         openChordWiki(pages, known, fits)?.let { return it }
         // The Japanese name a search lists can be a different song. This one's own page is still its sheet.
         if (song.title.isNotBlank() && known != song.title) {
@@ -432,13 +438,14 @@ internal class ChordFinder(
     // delay() of nothing returns at once, so a pause of none needs no check of its own.
     private suspend fun chordWikiPause() = delay(chordWikiPauseMs)
 
-    /** [song]'s title, or the Japanese one it's known by when the one given isn't. */
-    private suspend fun chordWikiTitle(song: MusicMetadata, otherNames: suspend () -> OtherNames): String {
+    /** The Japanese title when known; null when a catalog failure left the lookup incomplete. */
+    private suspend fun chordWikiTitle(song: MusicMetadata, otherNames: suspend () -> OtherNames): String? {
         if (japanese(song.title)) return song.title
         return try {
-            otherNames().titles.firstOrNull(::japanese) ?: song.title
+            val names = otherNames()
+            names.titles.firstOrNull(::japanese) ?: song.title.takeIf { names.complete }
         } catch (e: IOException) {
-            song.title
+            null
         }
     }
 
@@ -721,7 +728,7 @@ internal class ChordFinder(
         title.split(titleBreak).map { it.trim() }.flatMap { listOf(it, SongNames.bareTitle(it)) }.filter { it.length >= 2 && it != title }.distinct()
 
     /** A song's names in Japanese, and its artists' names, as NetEase or Japan's Apple Music store has them. */
-    private class OtherNames(val titles: List<String>, val artists: List<String>)
+    private class OtherNames(val titles: List<String>, val artists: List<String>, val complete: Boolean = true)
 
     /**
      * [ask]'s answer, asked for the first time it's wanted and kept for the rest. One that failed isn't
@@ -740,10 +747,12 @@ internal class ChordFinder(
      * so then by the names Japan's Apple Music store has it by: "残酷な天使のテーゼ", by "高橋洋子".
      */
     private suspend fun otherNames(song: MusicMetadata): OtherNames {
-        val netEase = try { netEaseNames(song) } catch (e: JSONException) { OtherNames(emptyList(), emptyList()) }
-        if (netEase.titles.isNotEmpty()) return netEase
-        val inJapan = try { namesInJapan(song) } catch (e: JSONException) { emptyList() }
-        return OtherNames(inJapan.map { it.first }.distinct().take(MAX_NAMES), (netEase.artists + inJapan.map { it.second }).distinct())
+        val netEase = try { netEaseNames(song) } catch (e: JSONException) { null }
+        if (netEase != null && netEase.titles.isNotEmpty()) return netEase
+        val inJapan = try { namesInJapan(song) } catch (e: JSONException) { null }
+        val titles = inJapan.orEmpty().map { it.first }.distinct().take(MAX_NAMES)
+        val artists = (netEase?.artists.orEmpty() + inJapan.orEmpty().map { it.second }).distinct()
+        return OtherNames(titles, artists, complete = netEase != null && inJapan != null)
     }
 
     /**
@@ -836,6 +845,7 @@ internal class ChordFinder(
     internal companion object {
         /** Raised when sheets are read differently, so ones kept before are looked up again. */
         const val CACHE_VERSION = 2
+        private const val WIKI_MISS_VERSION = 3
 
         /** Per site; looking a song up by its other names takes a few more requests. */
         const val TIMEOUT_MS = 20_000L
