@@ -1,10 +1,13 @@
 package com.astrovm.crosstune
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runTest
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -19,7 +22,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit.SECONDS
 import java.util.concurrent.atomic.AtomicInteger
 import java.io.IOException
 
@@ -301,6 +306,27 @@ class ExactMatcherTest {
         respond("""{"data":[{"title":"Song","artist":{"name":"Band"},"link":"https://www.deezer.com/track/1"}]}""")
         val matcher = ExactMatcher(fake.client(), "AR", kotlinx.coroutines.Dispatchers.Unconfined, cache)
         assertEquals("https://www.deezer.com/track/1", matcher.find(MusicService.DEEZER, MusicMetadata("Song", "Band")))
+    }
+
+    @Test
+    fun aWrongAccentedLatinMatchKeptByVersionFiveIsLookedForAgain() = runBlocking {
+        val directory = kotlin.io.path.createTempDirectory("lookups").toFile()
+        try {
+            val cache = LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined)
+            val track = MusicMetadata("Fake Song", "Fake Singer", lengthMs = 245_000)
+            val wrong = "wrong000000"
+            cache.put("find@5|YOUTUBE_MUSIC|TRACK|Fake Song|Fake Singer||245000", "https://music.youtube.com/watch?v=$wrong")
+            cache.save()
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow("Canción Falsa", "Fake Singer • Otro Álbum • 4:06", videoId = wrong)),
+                apple = mapOf("AR" to appleSong(track.title, track.artist, lengthMs = 245_000))
+            )
+            val matcher = ExactMatcher(fake.client(), "AR", Dispatchers.Unconfined, LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined))
+            assertNull(matcher.find(MusicService.YOUTUBE_MUSIC, track))
+            assertTrue(fake.requestedUrls.any { it.contains("music.youtube.com/youtubei/v1/search") })
+        } finally {
+            directory.deleteRecursively()
+        }
     }
 
     @Test
@@ -871,7 +897,7 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun theOfficialSongBeatsAnUploadWhenAppleKnowsALongerEditionOfIt() {
+    fun theOfficialSongBeatsAnUploadWhenAppleKnowsALongerEditionOfIt() = runTest {
         // Recorded: Apple's US store names Full Moon's take (4:41) first, but YouTube Music has the single's (4:11),
         // while a fan's upload with the lyrics runs 4:42.
         val song = MusicMetadata("tasogare no bay city", "JUNKO YAGAMI")
@@ -884,11 +910,12 @@ class ExactMatcherTest {
             youTubeMusicRow("Lady-Ready", "八神純子 • 黄昏のBAY CITY • 4:15", videoId = "5_YotH_2o-M")
         )
         val videos = listOf(youTubeMusicRow("Junko Yagami (八神純子) - 黄昏のBay City [Lyrics Eng/Rom/Kan]", "Reidhaha • 1.5M views • 4:42", videoId = "TwSWeSQAm-g"))
+        val finder = ExactMatcher(fake.inlineClient(), "US", ioDispatcher = StandardTestDispatcher(testScheduler))
         namesAndTabs(songs = songs, videos = videos, apple = mapOf("US" to us), elsewhere = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 281_200, id = 74904069)))
-        assertEquals("https://music.youtube.com/watch?v=QLHMhVonF-s", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals("https://music.youtube.com/watch?v=QLHMhVonF-s", finder.find(MusicService.YOUTUBE_MUSIC, song))
         // Not an edition Apple has, it's still another recording, and the upload that matches is what plays.
         namesAndTabs(songs = songs.drop(1), videos = videos, apple = mapOf("US" to us), elsewhere = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 281_200, id = 74904069)))
-        assertEquals("https://music.youtube.com/watch?v=TwSWeSQAm-g", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals("https://music.youtube.com/watch?v=TwSWeSQAm-g", finder.find(MusicService.YOUTUBE_MUSIC, song))
     }
 
     @Test
@@ -1956,11 +1983,35 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun qobuzsOtherStoreTakesTheFirstTrysAnswerWhenItComesBeforeTheSecondsAndDoesntWaitForTheSecond() {
-        val (matcher, _) = slowQobuz(200, qobuzAfter(600), qobuzAfter(4_000))
-        val started = System.nanoTime()
-        assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) })
-        assertTrue((System.nanoTime() - started) / 1_000_000 < 2_500)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun qobuzsOtherStoreTakesTheFirstTrysAnswerWhenItComesBeforeTheSecondsAndDoesntWaitForTheSecond() = runTest {
+        val firstStarted = CountDownLatch(1)
+        val retryStarted = CountDownLatch(1)
+        val firstMayAnswer = CountDownLatch(1)
+        val retryMayAnswer = CountDownLatch(1)
+        val asked = AtomicInteger()
+        fake.handler = { request ->
+            val first = asked.getAndIncrement() == 0
+            (if (first) firstStarted else retryStarted).countDown()
+            (if (first) firstMayAnswer else retryMayAnswer).await()
+            FakeSpotify.html(request, qobuzItem("Song", "Band • Album", if (first) "625089" else "625090"))
+        }
+        val retryAfter = 200L
+        val matcher = ExactMatcher(fake.client(), "US", timeoutMs = retryAfter, ioDispatcher = StandardTestDispatcher(testScheduler))
+        val lookup = async { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) }
+        try {
+            testScheduler.runCurrent()
+            assertTrue("The first request reached the store", firstStarted.await(30, SECONDS))
+            testScheduler.advanceTimeBy(retryAfter)
+            testScheduler.runCurrent()
+            assertTrue("The retry reached the store", retryStarted.await(30, SECONDS))
+            firstMayAnswer.countDown()
+            // The retry cannot answer until cleanup. The first answer must finish the lookup.
+            assertEquals("https://play.qobuz.com/track/625089", lookup.await())
+        } finally {
+            firstMayAnswer.countDown()
+            retryMayAnswer.countDown()
+        }
     }
 
     @Test

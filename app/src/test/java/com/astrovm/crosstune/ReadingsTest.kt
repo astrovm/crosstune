@@ -514,6 +514,35 @@ class ReadingsTest {
     }
 
     @Test
+    fun aSmallKanaStaysInTheWordThatSaysIt() {
+        val text = "かいしゃのけいひ"
+        fun words() = Readings.words(text, Script.JAPANESE).map { it.text to it.lookup }
+        val expected = listOf("かいしゃ" to "会社", "の" to "の", "けいひ" to "経費")
+        assertEquals(listOf(expected, expected), listOf(words(), TestUniDic.reading { words() }))
+        fun line() = Readings.of(listOf(text), Script.JAPANESE).single().typed
+        assertEquals("kaisha no keihi", line())
+        assertEquals("kaisha no keihi", TestUniDic.reading { line() })
+    }
+
+    @Test
+    fun smallKanaRecoveryNeedsBothNounsAndTheirReadings() {
+        val text = "かいしゃのけいひ"
+        val cached = Readings.oldKanaRead
+        val vocabulary = Readings.oldKana
+        val unsure = listOf("かいし", "ゃのけいひ")
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        try {
+            for (today in listOf(vocabulary.today - "かいしゃ", vocabulary.today - "けいひ", vocabulary.today + ("けいひ" to "携帯"))) {
+                Readings.oldKanaRead = Readings.OldKana(today, vocabulary.modern)
+                assertEquals(unsure, words(text))
+            }
+        } finally {
+            Readings.oldKanaRead = cached
+        }
+        assertEquals(listOf("ちいさな", "ゃ"), words("ちいさなゃ"))
+    }
+
+    @Test
     fun aWordInOldKanaIsLookedUpAsTheWordItsSpellingTodayIs() {
         fun lookups(line: String) = Readings.words(line, Script.JAPANESE).map { it.lookup }
         // A translator knows 云う and 思い出, and takes 云ふ for a name and 思ふ for another word than 思ひ出: what's asked for is the word the card names.
@@ -543,6 +572,18 @@ class ReadingsTest {
         inBoth(listOf("思い出"), "思い出")
         inBoth(listOf("ひとり"), "ひとり")
         TestUniDic.reading { assertEquals(listOf("言う", "ふたり"), lookups("言う ふたり")) }
+    }
+
+    @Test
+    fun theOldSpellingOfBeingKeepsItsVerbWhenTheLineIsShort() {
+        fun reading(line: String) = Readings.words(line, Script.JAPANESE).filter { it.modern != null }
+            .map { listOf(it.text, it.modern, it.lookup) }
+        val lines = listOf("ゐたんだ", "「ゐたんだ」", "待つてゐたんだよ")
+        val wanted = List(lines.size) { listOf(listOf("ゐたんだ", "いたんだ", "いる")) }
+        val builtIn = lines.map(::reading)
+        val uniDic = TestUniDic.reading { lines.map(::reading) }
+        assertEquals(listOf(wanted, wanted), listOf(builtIn, uniDic))
+        assertTrue(reading("いたんだ").isEmpty())
     }
 
     @Test
@@ -637,6 +678,43 @@ class ReadingsTest {
         }
         noWordInOldKana()
         TestUniDic.reading { noWordInOldKana() }
+    }
+
+    @Test
+    fun aKanaWordAlreadySpelledAsItIsTodayDoesNotGetAnOldSpellingNote() {
+        val modern = listOf("はいひん", "ばいひん", "ちひき", "ふひ").flatMap { word ->
+            listOf(word, "「$word」", "${word}がある")
+        }
+        val historical = listOf("いふ", "おもひで")
+        fun notes(words: List<String>) = words.associateWith { text ->
+            Readings.words(text, Script.JAPANESE).mapNotNull { it.modern }
+        }
+        val builtIn = notes(modern)
+        val uniDic = TestUniDic.reading { notes(modern) }
+        val noNotes = modern.associateWith { emptyList<String>() }
+        assertEquals(listOf(noNotes, noNotes), listOf(builtIn, uniDic))
+        val expected = mapOf("いふ" to listOf("いう"), "おもひで" to listOf("おもいで"))
+        fun checkReadings() {
+            assertEquals(expected, notes(historical))
+            val lines = Readings.of(listOf("はいひん", "ばいひん"), Script.JAPANESE)
+            assertEquals(listOf("haihin", "baihin"), lines.map { it.romanized })
+        }
+        checkReadings()
+        TestUniDic.reading {
+            checkReadings()
+            assertEquals(mapOf("こふ" to listOf("こう")), notes(listOf("こふ")))
+        }
+    }
+
+    @Test
+    fun aRareKanaSpellingDoesNotReachAcrossTheEndOfAnOldVerb() {
+        val text = "いふひと"
+        fun check() {
+            assertEquals(listOf("いう"), Readings.words(text, Script.JAPANESE).mapNotNull { it.modern })
+            assertEquals("iu hito", Readings.of(listOf(text), Script.JAPANESE).single().romanized)
+        }
+        check()
+        TestUniDic.reading { check() }
     }
 
     @Test

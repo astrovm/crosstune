@@ -6,6 +6,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -32,6 +33,8 @@ import org.robolectric.shadows.ShadowAudioRecord
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 
 /** Listening for a song: the microphone, Shazam's answers, and when to ask it. Robolectric for org.json and AudioRecord. */
@@ -299,6 +302,35 @@ class SongListenerTest {
         microphone.play(3.0)
         fake.handler = { microphone.end(); throw java.io.IOException("offline") }
         assertTrue(runBlocking { listener.listen() } is Heard.Unsent)
+    }
+
+    @Test
+    fun goingBackOnlineSendsTheHeldFingerprintWithoutMakingItAgain() = runBlocking {
+        val computes = AtomicInteger()
+        val counting = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) {
+                computes.incrementAndGet()
+                Dispatchers.Default.dispatch(context, block)
+            }
+        }
+        var time = 1_000L
+        var id = 0L
+        val naming = Shazam(fake.client(), computeDispatcher = counting, now = { time }, newId = { UUID(0, ++id) })
+        microphone.play(3.0)
+        fake.handler = { microphone.end(); throw IOException("offline") }
+        val held = SongListener(microphone, naming).listen() as Heard.Unsent
+        assertEquals(1, computes.get())
+        val first = JSONObject(fake.requestBodies.single()).getJSONObject("signature")
+        val firstUrl = fake.requestedUrls.single()
+
+        time += 60_000
+        answer(MATCH)
+        assertTrue(held.send() is Heard.Song)
+        assertEquals(1, computes.get())
+        val resent = JSONObject(fake.requestBodies[1]).getJSONObject("signature")
+        assertEquals(first.getString("uri"), resent.getString("uri"))
+        assertEquals(time, resent.getLong("timestamp"))
+        assertFalse(firstUrl == fake.requestedUrls[1])
     }
 
     @Test

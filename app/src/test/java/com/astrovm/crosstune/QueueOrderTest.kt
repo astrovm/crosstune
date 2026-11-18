@@ -80,6 +80,18 @@ class QueueOrderTest {
         passes(200_000)
         assertEquals(listOf(3L, 1L, 2L), phone.queuedPlayed)
         assertEquals(listOf(Queued("D", "Band", 4)), shown())
+        assertEquals(0, phone.inApp(music).subscriptionCount.value)
+    }
+
+    @Test
+    fun turningOffTheOrderCancelsAnAlreadyScheduledSong() {
+        plays(10, listOf(a, b))
+        order.move(following(), 1, 0)
+        passes(200_000 - SleepTimer.SONG_END_EARLY_MS - 1)
+        order.off()
+        passes(1)
+        assertTrue(phone.queuedPlayed.isEmpty())
+        assertEquals(listOf(a, b), shown())
     }
 
     @Test
