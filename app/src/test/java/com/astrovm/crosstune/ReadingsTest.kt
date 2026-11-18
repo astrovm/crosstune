@@ -514,6 +514,17 @@ class ReadingsTest {
     }
 
     @Test
+    fun aSmallKanaStaysInTheWordThatSaysIt() {
+        val text = "かいしゃのけいひ"
+        fun words() = Readings.words(text, Script.JAPANESE).map { it.text to it.lookup }
+        val expected = listOf("かいしゃ" to "会社", "の" to "の", "けいひ" to "経費")
+        assertEquals(listOf(expected, expected), listOf(words(), TestUniDic.reading { words() }))
+        fun line() = Readings.of(listOf(text), Script.JAPANESE).single().typed
+        assertEquals("kaisha no keihi", line())
+        assertEquals("kaisha no keihi", TestUniDic.reading { line() })
+    }
+
+    @Test
     fun aWordInOldKanaIsLookedUpAsTheWordItsSpellingTodayIs() {
         fun lookups(line: String) = Readings.words(line, Script.JAPANESE).map { it.lookup }
         // A translator knows 云う and 思い出, and takes 云ふ for a name and 思ふ for another word than 思ひ出: what's asked for is the word the card names.
