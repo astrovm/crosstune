@@ -611,6 +611,32 @@ class ReadingsTest {
     }
 
     @Test
+    fun aKanaWordAlreadySpelledAsItIsTodayDoesNotGetAnOldSpellingNote() {
+        val modern = listOf("はいひん", "ばいひん", "ちひき", "ふひ").flatMap { word ->
+            listOf(word, "「$word」", "${word}がある")
+        }
+        val historical = listOf("いふ", "おもひで")
+        fun notes(words: List<String>) = words.associateWith { text ->
+            Readings.words(text, Script.JAPANESE).mapNotNull { it.modern }
+        }
+        val builtIn = notes(modern)
+        val uniDic = TestUniDic.reading { notes(modern) }
+        val noNotes = modern.associateWith { emptyList<String>() }
+        assertEquals(listOf(noNotes, noNotes), listOf(builtIn, uniDic))
+        val expected = mapOf("いふ" to listOf("いう"), "おもひで" to listOf("おもいで"))
+        fun checkReadings() {
+            assertEquals(expected, notes(historical))
+            val lines = Readings.of(listOf("はいひん", "ばいひん"), Script.JAPANESE)
+            assertEquals(listOf("haihin", "baihin"), lines.map { it.romanized })
+        }
+        checkReadings()
+        TestUniDic.reading {
+            checkReadings()
+            assertEquals(mapOf("こふ" to listOf("こう")), notes(listOf("こふ")))
+        }
+    }
+
+    @Test
     fun aFuOrHiAfterKanaAloneIsNotAnOldEnding() {
         // ふ and ひ say う and い only after a kanji: ふふ is a laugh, not ふ and an old ending.
         listOf("ふふ" to "fufu", "ひふ" to "hifu").forEach { (text, romaji) ->
