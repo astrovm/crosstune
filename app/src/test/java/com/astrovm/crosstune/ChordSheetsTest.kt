@@ -298,6 +298,13 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun theLastLineKeepsEachLatinLetterOffsetEvenInsideACombiningSequence() {
+        val line = LyricLine(10_000, "Ae\u0301x")
+        val chords = (0..line.text.length).map { Chord(it, "G") }
+        assertEquals(listOf(10_000L, 10_150L, 10_300L, 10_450L, 10_600L), ChordSheets.timesOf(line, chords, null))
+    }
+
+    @Test
     fun theLastWordKeepsItsStartWhenThereIsNoNextLine() {
         val line = LyricLine(10_000, "名前を呼んだ", listOf(TimedWord(10_000, "名前を"), TimedWord(12_000, "呼んだ")))
         assertEquals(12_000L, timeOf(line, 3, null))
