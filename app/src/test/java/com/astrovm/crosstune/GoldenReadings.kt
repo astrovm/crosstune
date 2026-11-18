@@ -53,8 +53,9 @@ internal object GoldenReadings {
         val dictionary = fields[FIELDS - 1]
         check(dictionary in DICTIONARIES) { "A golden row's dictionary is ipadic, unidic or both: $raw" }
         check(index.isEmpty() || index.all(Char::isDigit)) { "A golden row's index is empty or a number: $raw" }
+        check(word.isNotEmpty() && word in line) { "A golden row's line has to contain its word: $raw" }
         if (ruby.isEmpty()) {
-            check(sheet.isNotEmpty() && shown.isEmpty() && word.isNotEmpty() && kana.isNotEmpty()) {
+            check(sheet.isNotEmpty() && shown.isEmpty() && kana.isNotEmpty()) {
                 "A golden row without ruby has to lock a word sheet reading: $raw"
             }
         } else {

@@ -140,6 +140,7 @@ class ReadingsGoldenTest {
         assertEquals("sheet=omoide|omoide got=", GoldenReadings.broken(row, parts, listOf(Word("おもひで"))))
         assertThrows(IllegalStateException::class.java) { rows("おもひでの\tおもひで\t\tおもいで\t\t\t\tboth") }
         assertThrows(IllegalStateException::class.java) { rows("おもひでの\tおもひで\t\tおもいで\t\tomoide|omoide\tおもひで=おもいで\tboth") }
+        assertThrows(IllegalStateException::class.java) { rows("おもいでの\tおもひで\t\tおもいで\t\tomoide|omoide\t\tboth") }
     }
 
     @Test

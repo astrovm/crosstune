@@ -618,12 +618,14 @@ def compare(folder, words, before=None):
             missing["no lyrics"].append(name)
             found[kind]["no lyrics"] += 1
             continue
-        if not song.get("timed"):
-            missing["no timing"].append(name)
-            found[kind]["no timing"] += 1
-        if song.get("chords") != "found":
-            missing["no chords"].append(name)
-            found[kind]["no chords"] += 1
+        # Pinned references only measure the readings of the text UtaTen gives us.
+        if not song.get("utatenPage"):
+            if not song.get("timed"):
+                missing["no timing"].append(name)
+                found[kind]["no timing"] += 1
+            if song.get("chords") != "found":
+                missing["no chords"].append(name)
+                found[kind]["no chords"] += 1
         if song.get("script") != "JAPANESE":
             found[kind]["not Japanese"] += 1
             continue
