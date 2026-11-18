@@ -373,8 +373,8 @@ internal fun interface SongHearing {
 }
 
 /**
- * Names the song an app on the phone is playing straight from that app, which is instant and exact,
- * and only listens with [hearing] when none is. An app that can't say where in the song it is, as
+ * Names the song a phone app plays or casts straight from that app. Uses [hearing] for nearby
+ * sound when the phone only shows another device's playback or has no song named. An app that can't say where in the song it is, as
  * for a video, is still listened to for that, through [played], the phone's own sound, which the
  * microphone hears poorly, and not at all through headphones; with the microphone only when the
  * phone won't share its sound. Nothing heard, it's named as the app does.
@@ -385,9 +385,9 @@ internal class PlayingFirst(
     private val played: SongHearing = hearing
 ) : SongHearing {
     override suspend fun listen(): Heard {
-        // With no song named, even while an app plays one it doesn't name, the microphone names one
-        // nearby: naming what the phone plays is the bar's to do.
-        val playing = playback.nowPlaying() ?: return hearing.listen()
+        // A computer's media session can name a browser tab while music plays in it.
+        val playing = (playback.whatPlays() as? WhatPlays.Named)?.takeUnless { it.where == Place.ELSEWHERE }?.song
+            ?: return hearing.listen()
         if (playing.clock != null) return playing
         return listenToPlaying() as? Heard.Song ?: playing
     }

@@ -43,7 +43,7 @@ internal data class Unnamed(
  * the bar shows, a sleep timer pauses, and practice goes back to.
  */
 internal sealed interface WhatPlays {
-    data class Named(val song: Heard.Song) : WhatPlays
+    data class Named(val song: Heard.Song, val where: Place) : WhatPlays
     data class Nameless(val playing: Unnamed) : WhatPlays
 }
 

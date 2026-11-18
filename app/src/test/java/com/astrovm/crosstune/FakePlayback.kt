@@ -196,7 +196,7 @@ internal class FakePlayback : PlaybackSource {
 
     // Ranked as the real source ranks them, by [playsFirst]; the song first when they tie.
     private fun ranked(song: Heard.Song?): WhatPlays? {
-        val named = song?.let { WhatPlays.Named(it) to Rank(true, songWhere, songAt) }
+        val named = song?.let { WhatPlays.Named(it, songWhere) to Rank(true, songWhere, songAt) }
         val nameless = playingOnly(unnamed.value, flowOf(unnamed.value?.app).value)?.let {
             WhatPlays.Nameless(it) to Rank(it.said, it.where, unnamedAt)
         }

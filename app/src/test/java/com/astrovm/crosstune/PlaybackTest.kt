@@ -1957,6 +1957,17 @@ class PlaybackTest {
     }
 
     @Test
+    fun aMirroredBrowserTitleCanHaveTheBarWhileRecognitionListensToTheRoom() {
+        allow()
+        sounding(false)
+        shadowOf(sessions).addController(elsewhere(player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Streamer - Twitch", null)))
+        assertEquals("Twitch", playback.nowPlaying()?.metadata?.title)
+        val nearby = Heard.Song(MusicMetadata("Demo", "Fake Band"), null)
+        val listener = PlayingFirst(playback, SongHearing { nearby }, SongHearing { error("The phone is quiet") })
+        assertEquals(nearby, runBlocking { listener.listen() })
+    }
+
+    @Test
     fun whatPlaysFirstIsRankedNamedOrNotOnThePhoneOrNot() {
         allow()
         // A station cast to a speaker plays, and has the bar, though the phone has nothing of it to hear.

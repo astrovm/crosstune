@@ -259,6 +259,40 @@ class ListeningTest {
     }
 
     @Test
+    fun theMicAndItsRetryListenPastAComputerStreamShownByKdeConnect() {
+        MainActivity.playbackFactory = {
+            FakePlayback().apply {
+                access = true
+                songWhere = Place.ELSEWHERE
+                onThePhone = Heard.Song(
+                    MusicMetadata("Twitch", "Fake Streamer"), null, 42_000, SystemClock.elapsedRealtime(),
+                    app = "org.kde.kdeconnect_tp"
+                )
+            }
+        }
+        shazamAnswers(NO_MATCH)
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        microphone.play(1.0)
+        microphone.end()
+        recognize()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.let { it.error != null || it.result != null } }
+        assertEquals(1, microphone.opened)
+        waitForText(string(R.string.error_no_match))
+        assertEquals(1, shazamRequests())
+
+        shazamAnswers(MATCH)
+        microphone.play(1.0)
+        microphone.end()
+        click(string(R.string.retry_button))
+        waitForText("Iris")
+        composeRule.onNodeWithTag(RESULT_TAG).assertExists()
+        assertEquals(2, microphone.opened)
+        assertEquals(listOf("Iris"), HistoryStore(prefs()).load().map { it.metadata.title })
+    }
+
+    @Test
     fun aRadioStationKeepsItsButtonsAndPlayerAsItIsUntilItsSongIsHeardAndThenATapShowsTheSong() {
         // VRadio names only the station (#998).
         val radio = FakePlayback().apply {
