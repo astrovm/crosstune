@@ -579,7 +579,8 @@ class ReadingsTest {
         fun reading(line: String) = Readings.words(line, Script.JAPANESE).filter { it.modern != null }
             .map { listOf(it.text, it.modern, it.lookup) }
         val lines = listOf("ゐたんだ", "「ゐたんだ」", "待つてゐたんだよ")
-        val wanted = List(lines.size) { listOf(listOf("ゐたんだ", "いたんだ", "いる")) }
+        val being = listOf("ゐたんだ", "いたんだ", "いる")
+        val wanted = listOf(listOf(being), listOf(being), listOf(listOf("待つて", "待って", "待つ"), being))
         val builtIn = lines.map(::reading)
         val uniDic = TestUniDic.reading { lines.map(::reading) }
         assertEquals(listOf(wanted, wanted), listOf(builtIn, uniDic))
@@ -628,8 +629,37 @@ class ReadingsTest {
         assertEquals("omoide", line("思ひ出").romanized)
         TestUniDic.reading { assertEquals(omoide, line("思ひ出").parts) }
         // The lyric's words are the ones it has, as the dictionary splits what is around them.
-        assertEquals("matsute itanda yo", line("待つてゐたんだよ").romanized)
+        assertEquals("matte itanda yo", line("待つてゐたんだよ").romanized)
         assertEquals(listOf("kyoo", "ame"), line("けふ 雨").romanized.split(" ").map { it.replace("kyou", "kyoo") }.take(2))
+    }
+
+    @Test
+    fun oldVerbEndingsWrittenWithABigTsuReadAsSmallTsu() {
+        val historical = listOf(
+            "待つて" to listOf("待つて", "待って", "待つ", "matte"),
+            "「放つて」" to listOf("放つて", "放って", "放つ", "hanatte"),
+            "立つてから" to listOf("立つて", "立って", "立つ", "tatte")
+        )
+        fun readings() = historical.map { (line, _) ->
+            Readings.words(line, Script.JAPANESE).filter { it.modern != null }.map { listOf(it.text, it.modern, it.lookup, it.romanized) }
+        }
+        val ipadic = readings()
+        val unidic = TestUniDic.reading { readings() }
+        val expected = historical.map { listOf(it.second) }
+        assertEquals("IPADIC", expected, ipadic)
+        assertEquals("UniDic", expected, unidic)
+        val controls = listOf("かつて", "つてがある", "一つていねいに置く", "つてを探す", "待っている", "行つて")
+        fun remaining() {
+            controls.forEach { line ->
+                assertEquals(line, emptyList<String>(), Readings.words(line, Script.JAPANESE).mapNotNull { it.modern })
+            }
+            val line = "待つてゐたんだよ"
+            assertEquals("まっていたんだよ", Readings.of(listOf(line), Script.JAPANESE).single().reading)
+            val noted = Readings.words(line, Script.JAPANESE).filter { it.modern != null }
+            assertEquals(listOf("待って" to "待つ", "いたんだ" to "いる"), noted.map { it.modern to it.lookup })
+        }
+        remaining()
+        TestUniDic.reading { remaining() }
     }
 
     @Test
@@ -731,7 +761,6 @@ class ReadingsTest {
             "手をとりあふ" to listOf("とりあふ", "とりあう", "とりあう"),
             "あひたい" to listOf("あひたい", "あいたい", "あう"),
             "きのふ" to listOf("きのふ", "きのう", "きのう"),
-            "待つてゐたんだよ" to listOf("ゐたんだ", "いたんだ", "いる"),
             // Its first kana is never an old ending: ひろふ is ひろう, not いろう.
             "ひろふ" to listOf("ひろふ", "ひろう", "ひろう"),
             "ひきあふ" to listOf("ひきあふ", "ひきあう", "ひきあう"),
