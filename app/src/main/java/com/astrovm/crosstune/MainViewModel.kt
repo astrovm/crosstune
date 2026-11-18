@@ -2347,7 +2347,8 @@ internal class MainViewModel(
         val likelyInstrumental: Boolean,
         val tries: Int = 0,
         val held: LyricsFinder.Lyrics.Found? = null,
-        val final: Boolean = true
+        val final: Boolean = true,
+        val heldUntilMs: Long? = null
     )
 
     private var unsung: Unsung? = null
@@ -3109,15 +3110,22 @@ internal class MainViewModel(
         }
         TimingLog.note("LRCLIB or the title says no one sings in it: a voice is listened for before its words show")
         uiState = uiState.copy(lyricsInstrumental = true)
-        unsung = waiting
+        val listening = waiting.copy(heldUntilMs = SystemClock.elapsedRealtime() + HELD_MS)
+        unsung = listening
+        holdUntil(listening)
+        hearVoice()
+    }
+
+    private fun holdUntil(waiting: Unsung) {
+        val deadline = waiting.heldUntilMs ?: return
+        heldJob?.cancel()
         heldJob = viewModelScope.launch {
-            delay(HELD_MS)
-            unsung?.takeIf { it.held === words }?.let {
+            delay((deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+            unsung?.takeIf { it.held === waiting.held }?.let {
                 voiceJob?.cancel()
                 settleLate(it, Listen.TIMED_OUT)
             }
         }
-        hearVoice()
     }
 
     /** [heard]'s held words, by what the listen came to, [listen]: shown unless [hidesHeldWords] says. Whether they show. */
@@ -3156,13 +3164,18 @@ internal class MainViewModel(
             var heard = waiting
             while (heard.tries < VOICE_TRIES) {
                 if (heard.tries > 0) delay(VOICE_PAUSE_MS)
+                val started = SystemClock.elapsedRealtime()
                 val sung = hearing.hear(null, null)
                 TimingLog.note("voice while ${heard.tries + 1}: ${if (sung == null) "nothing heard, model missing ${hearing.missesModel}, no sound ${hearing.heardNoSound}" else "sings ${sung.sings}"}")
                 // Stopped: heard again once it plays, or, for held words, shown if it isn't in time.
                 if (unsung !== heard || uiState.following?.clock?.playing != true) return@launch
                 voiceIn(hearing, sung, held = heard.held != null)?.let { return@launch heardOut(heard, it) }
-                heard = heard.copy(tries = heard.tries + 1)
+                // On a slow phone, decoding a window takes time that its recording does not.
+                val previous = heard.heldUntilMs
+                val extra = (SystemClock.elapsedRealtime() - started - VOICE_CAPTURE_MS).coerceAtLeast(0)
+                heard = heard.copy(tries = heard.tries + 1, heldUntilMs = previous?.plus(extra))
                 unsung = heard
+                if (heard.heldUntilMs != previous && heard.tries < VOICE_TRIES) holdUntil(heard)
             }
             heardOut(heard, Listen.NO_VOICE)
         }
@@ -3333,8 +3346,10 @@ internal class MainViewModel(
         val heard = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
         if (abs(shift) >= WORDS_OFF_MS) {
             // The words kept so for the first time are a problem found, as those heard off with the clock sure are.
-            if (syncPoints.isEmpty()) problemFound(SongProblem.SUNG_OFF)
-            return setSync(song, heard)
+            val first = syncPoints.isEmpty()
+            setSync(song, heard)
+            if (first) problemFound(SongProblem.SUNG_OFF)
+            return
         }
         heardPoints = heard
         showPoints()
@@ -3346,9 +3361,9 @@ internal class MainViewModel(
      * enough singing left to hear.
      */
     private fun placeForGood(song: MusicMetadata, lines: List<LyricLine>, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long, first: Boolean): Boolean {
-        if (first && abs(shift) >= SUNG_OFF_MS) problemFound(SongProblem.SUNG_OFF)
         val wholeMs = shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L
         placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, wholeMs))
+        if (first && abs(shift) >= SUNG_OFF_MS) problemFound(SongProblem.SUNG_OFF)
         val done = untilSung(LyricsSync.adjust(lines, shownPoints, pace), clock, clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L) == null
         liningUp = !done
         if (done) sungStore.save(song, lines)
@@ -3838,7 +3853,8 @@ internal class MainViewModel(
 
     /** A report on the words shown, [song]'s: how they're timed, and each line put in time by hand. */
     private fun reportOn(sender: ReportSender, song: MusicMetadata?, comment: String = "", problem: SongProblem? = null): Report {
-        val byHand = handTiming()
+        // Corrections heard by ear belong in the timing log, without the text of the lines.
+        val byHand = if (problem == SongProblem.SUNG_OFF) emptyList() else handTiming()
         return Report(
             sender.version, song, timed = uiState.lyricLines.isNotEmpty() && !uiState.lyricsTimedByEar, synced = uiState.lyricsSynced, app = timingAtCorrection?.takeIf { timedByHand }?.first ?: playedIn, comment = comment,
             sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = byHand, problem = problem, source = found?.source,
@@ -3893,8 +3909,8 @@ internal class MainViewModel(
         val previous = manualReportJob
         manualReportJob = viewModelScope.launch {
             previous?.join()
-            val sent = sender.send(draft.report) == Delivery.SENT
-            if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+            val delivery = sender.send(draft.report)
+            if (manualReport === draft) uiState = uiState.copy(report = delivery.manualStatus)
         }
     }
 
@@ -3916,8 +3932,8 @@ internal class MainViewModel(
         val previous = manualReportJob
         manualReportJob = viewModelScope.launch {
             previous?.join()
-            val sent = sender.send(draft.report) == Delivery.SENT
-            if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+            val delivery = sender.send(draft.report)
+            if (manualReport === draft) uiState = uiState.copy(report = delivery.manualStatus)
         }
     }
 
@@ -4031,7 +4047,7 @@ internal class MainViewModel(
                     // Past the day's share, or gone another way meanwhile, as the words it's for were left: it's skipped.
                     val delivery = deliver(sender, owed) ?: continue
                     // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
-                    if (delivery == Delivery.FAILED) break
+                    if (delivery == Delivery.FAILED || delivery == Delivery.RATE_LIMITED) break
                     // Paced under the box's 5 a minute from one phone, with room left for what's found meanwhile.
                     delay(reportPaceMs)
                 }
@@ -5764,12 +5780,14 @@ internal class MainViewModel(
 
         /** The pause between them, so they're heard across the song, a verse apart, rather than all in its intro. */
         const val VOICE_PAUSE_MS = 20_000L
+        private const val VOICE_CAPTURE_MS = SingingListener.SECONDS * 1_000L
 
         /**
          * How long words held for a listen wait for it to settle them before they show: the time one listen takes,
          * [VOICE_TRIES] whiles heard [VOICE_PAUSE_MS] apart, and a while more for the speech model to hear the last.
+         * A finished window adds any time the model took beyond its recording.
          */
-        const val HELD_MS = (VOICE_TRIES + 1) * SingingListener.SECONDS * 1_000L + (VOICE_TRIES - 1) * VOICE_PAUSE_MS
+        const val HELD_MS = (VOICE_TRIES + 1) * VOICE_CAPTURE_MS + (VOICE_TRIES - 1) * VOICE_PAUSE_MS
 
         /** How long the music apps are asked whether one plays a song before a listen for a voice in it starts: they say at once. */
         const val APP_ASKED_MS = 1_000L

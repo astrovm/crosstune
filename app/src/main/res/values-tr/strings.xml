@@ -318,6 +318,7 @@
     <string name="report_send">Gönder</string>
     <string name="report_sent">Gönderildi. Teşekkürler!</string>
     <string name="report_failed">Gönderilemedi. Bağlantını kontrol edip tekrar dene.</string>
+    <string name="report_rate_limited">Şu anda çok fazla bildirim var. Daha sonra tekrar dene.</string>
     <string name="reading_wrong">Yanlış okunuş</string>
     <string name="reading_right">Doğru okunuş (isteğe bağlı)</string>
     <string name="reading_what_goes">Kelimeyi, gösterilen okunuşu ve nereden geldiğini, satırını ve yazısını, yazdığın okunuşu, şarkının adını ve sanatçısını, sözlerin nereden geldiğini, uygulama ve Android sürümlerini gönderir. Yalnızca Crosstune\'un geliştiricisi okur.</string>

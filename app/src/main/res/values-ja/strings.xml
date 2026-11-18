@@ -319,6 +319,7 @@
     <string name="report_send">送信</string>
     <string name="report_sent">送信しました。ありがとうございます！</string>
     <string name="report_failed">送信できませんでした。接続を確認して、もう一度お試しください。</string>
+    <string name="report_rate_limited">現在、報告が多すぎます。しばらくしてからお試しください。</string>
     <string name="reading_wrong">読みが違う</string>
     <string name="reading_right">正しい読み（任意）</string>
     <string name="reading_what_goes">単語、表示された読みとその出どころ、その行と文字、入力した読み、曲名とアーティスト、歌詞の取得元、アプリと Android のバージョンを送信します。読むのは Crosstune の開発者だけです。</string>

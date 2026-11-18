@@ -318,6 +318,7 @@
     <string name="report_send">Отправить</string>
     <string name="report_sent">Отправлено. Спасибо!</string>
     <string name="report_failed">Не удалось отправить. Проверьте подключение и попробуйте снова.</string>
+    <string name="report_rate_limited">Сейчас слишком много сообщений. Попробуйте позже.</string>
     <string name="reading_wrong">Неверное чтение</string>
     <string name="reading_right">Правильное чтение (необязательно)</string>
     <string name="reading_what_goes">Отправляет слово, показанное чтение и его источник, его строку и письменность, чтение, которое вы вводите, название и исполнителя песни, откуда взят текст, и версии приложения и Android. Читает только разработчик Crosstune.</string>

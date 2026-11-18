@@ -18,7 +18,7 @@ internal object GoldenReadings {
 
     /**
      * A locked reading. [sheet] is the word sheet's `romanized|typed` for the word, and [shown] the parts shown over it once a
-     * fix reads it [kana]; each is empty when the row doesn't lock it.
+     * fix reads it [kana]; each is empty when the row doesn't lock it. When only [sheet] is locked, [ruby] is empty.
      */
     data class Row(
         val line: String,
@@ -53,8 +53,15 @@ internal object GoldenReadings {
         val dictionary = fields[FIELDS - 1]
         check(dictionary in DICTIONARIES) { "A golden row's dictionary is ipadic, unidic or both: $raw" }
         check(index.isEmpty() || index.all(Char::isDigit)) { "A golden row's index is empty or a number: $raw" }
-        check(spelled(ruby) == word) { "A golden row's ruby has to spell its word: $raw" }
-        check(read(ruby) == kana) { "A golden row's ruby has to read as its kana: $raw" }
+        check(word.isNotEmpty() && word in line) { "A golden row's line has to contain its word: $raw" }
+        if (ruby.isEmpty()) {
+            check(sheet.isNotEmpty() && shown.isEmpty() && kana.isNotEmpty()) {
+                "A golden row without ruby has to lock a word sheet reading: $raw"
+            }
+        } else {
+            check(spelled(ruby) == word) { "A golden row's ruby has to spell its word: $raw" }
+            check(read(ruby) == kana) { "A golden row's ruby has to read as its kana: $raw" }
+        }
         check(sheet.isEmpty() || sheet.split('|').let { it.size == 2 && it.all(String::isNotEmpty) }) {
             "A golden row's sheet is empty or romanized|typed: $raw"
         }
@@ -81,7 +88,7 @@ internal object GoldenReadings {
         val sheet = sheetAt(words, row.line, row.word, row.index, row.kana)
         val shown = shownAt(parts, row.line, row.word, row.index, row.kana)
         return listOfNotNull(
-            "ruby=${row.ruby} got=${ruby ?: parts.joinToString("|") { it.text }}".takeIf { ruby != row.ruby },
+            "ruby=${row.ruby} got=${ruby ?: parts.joinToString("|") { it.text }}".takeIf { row.ruby.isNotEmpty() && ruby != row.ruby },
             "sheet=${row.sheet} got=$sheet".takeIf { row.sheet.isNotEmpty() && sheet != row.sheet },
             "shown=${row.shown} got=$shown".takeIf { row.shown.isNotEmpty() && shown != row.shown }
         ).joinToString(" ").ifEmpty { null }
