@@ -641,7 +641,8 @@ internal class ExactMatcher(
             // A song's album may say what version it is, "Song" on "… Remix".
             val album = if (isSong) details.getOrNull(1).orEmpty() else ""
             if (!keepsRequestedRecording(recording, name, album)) return null
-            val same = if (loose) looselyMatches(metadata, name, artist) else matches(metadata, name, artist.ifEmpty { name }, album)
+            val named = if (isSong && metadata.lengthMs != null) keepNotesAfterGuests(name) else name
+            val same = if (loose) looselyMatches(metadata, named, artist) else matches(metadata, named, artist.ifEmpty { named }, album)
             if (!same) return null
             return when (metadata.type) {
                 ItemType.TRACK -> item.optJSONObject("playlistItemData")?.let { it.optString("videoId").ifBlank { null } }
@@ -677,6 +678,14 @@ internal class ExactMatcher(
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
     }
 
+    /** Keep a recording note separate when an unbracketed guest credit runs up to it. */
+    private fun keepNotesAfterGuests(name: String): String {
+        val title = name.trim()
+        val base = SongNames.bareTitle(title)
+        if (base == title || !title.startsWith(base)) return name
+        return SongNames.withoutFeaturing(base).trimEnd() + title.substring(base.length)
+    }
+
     /** The songs or videos among [items] that play. */
     private fun playable(items: List<JSONObject>): List<Row> = items.map(::row).filter { it.id != null }
 
@@ -687,7 +696,7 @@ internal class ExactMatcher(
         return playable(items).singleOrNull {
             sameRecordingLength(it.lengthMs, link) &&
                 sameArtist(metadata, it.details.first()) && SongNames.same(metadata.title, SongNames.bareTitle(it.name)) &&
-                saysLive(it.name) && liveAlbum(it.details.getOrNull(1).orEmpty()) && hasOnlyRecordingNote(it.name, live = true)
+                takeSaysLive(it.name) == true && liveAlbum(it.details.getOrNull(1).orEmpty())
         }
     }
 
@@ -801,17 +810,56 @@ internal class ExactMatcher(
         val base = SongNames.bareTitle(first.name)
         val other = rows.singleOrNull { it !== first && SongNames.same(SongNames.bareTitle(it.name), base) } ?: return null
         if (!sameRecordingLength(other.lengthMs, edition.lengthMs)) return null
-        if (rowIsLive(other) != edition.live || !hasOnlyRecordingNote(other.name, edition.live)) return null
+        val titleSaysLive = takeSaysLive(other.name) ?: return null
+        if ((titleSaysLive || liveAlbum(other.details.getOrNull(1).orEmpty())) != edition.live) return null
         val firstMarked = rowIsLive(first) || SongNames.saysAnotherVersion(SongNames.withoutFeaturing(first.name), base, "")
         return other.takeIf { firstMarked != edition.live }
     }
 
-    /** A live album can name the take if the track title has no conflicting note. */
-    private fun hasOnlyRecordingNote(name: String, live: Boolean): Boolean {
-        val title = SongNames.withoutFeaturing(name).trim()
-        val note = title.removePrefix(SongNames.bareTitle(title)).trim { !it.isLetterOrDigit() }.lowercase(Locale.ROOT)
-        return note.isEmpty() || live && note in liveLabels
+    /** Read each note on its own so a guest credit cannot hide a later recording label. */
+    private fun takeSaysLive(name: String): Boolean? {
+        val title = name.trim()
+        val base = SongNames.bareTitle(title)
+        if (!title.startsWith(base)) return null
+        var at = base.length
+        var live = false
+        while (at < title.length) {
+            if (title[at].isWhitespace()) {
+                at++
+                continue
+            }
+            val bracket = TitleDelimiters.OPENS.indexOf(title[at])
+            val end = takeNoteEnd(title, at, bracket) ?: return null
+            val note = title.substring(at, end)
+            val label = note.trim { !it.isLetterOrDigit() }.lowercase(Locale.ROOT)
+            when {
+                label in liveLabels -> live = true
+                bracket >= 0 && SongNames.withGuests("", note).isNotBlank() && (at + 1 until end).none { takeDash(title, it) } -> Unit
+                neutralTakeNote(label) -> Unit
+                else -> return null
+            }
+            at = end
+        }
+        return live
     }
+
+    private fun takeNoteEnd(title: String, at: Int, bracket: Int): Int? {
+        if (bracket >= 0) return title.indexOf(TitleDelimiters.CLOSES[bracket], at + 1).takeIf { it >= 0 }?.plus(1)
+        if (!takeDash(title, at)) return null
+        return (at + 1 until title.length).firstOrNull { takeDash(title, it) || title[it] in TitleDelimiters.OPENS } ?: title.length
+    }
+
+    private fun takeDash(title: String, at: Int): Boolean = title[at] in TitleDelimiters.DASHES &&
+        title.getOrNull(at - 1)?.isWhitespace() == true && title.getOrNull(at + 1)?.isWhitespace() == true
+
+    private fun neutralTakeNote(label: String): Boolean {
+        if (label in neutralTakeLabels) return true
+        val words = SongNames.words(label)
+        return words.any { it in remasterLabels } && words.all { it in remasterLabels || it.length == 4 && it.all(Char::isDigit) }
+    }
+
+    private val neutralTakeLabels = setOf("mono", "stereo", "original", "album version")
+    private val remasterLabels = setOf("remaster", "remastered", "remasterizado", "remasterizada")
 
     private fun rowIsLive(row: Row): Boolean = saysLive(row.name) || liveAlbum(row.details.getOrNull(1).orEmpty())
 

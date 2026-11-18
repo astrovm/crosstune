@@ -584,6 +584,18 @@ class MatcherCasesTest {
     }
 
     @Test
+    fun takeNotesKeepTheRemasterAndRejectARemixAfterAGuestCredit() {
+        val remaster = Case("studio remaster", "song1", lengthMs = 240_000, linkMs = 210_000, album = "Live at Budokan",
+            editions = listOf("Fake Album" to 210_000), songs = listOf(
+                row("偽の歌 (ライブ)", "Live at Budokan", length = "4:00"), row("偽の歌 (2012 Remaster)", length = "3:30")
+            ))
+        val guest = Case("remix after guest credit", "song0", linkMs = 240_000, songs = listOf(
+            row("Fake Song", length = "3:30"), row("Fake Song ft. Guest - Remix - Live Version", "Live at Budokan", length = "4:00")
+        ))
+        assertEquals(listOf("song1", "song0"), listOf(find(remaster), find(guest)))
+    }
+
+    @Test
     fun theNamesTheReviewsTriedReadAsMainReadThemOrBetter() {
         // The first review, 3: a sign is no letter, and 4: many songs in one, with a word run on.
         assertEquals(true, SongNames.same("Fake Song™", "Fake Song"))
