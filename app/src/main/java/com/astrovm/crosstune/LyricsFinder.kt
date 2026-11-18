@@ -586,14 +586,18 @@ internal class LyricsFinder(
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
-        val kept = cache?.get(cacheKey(metadata))?.let(::fromCache)
-            ?: cache?.get(cacheKey(metadata, BEFORE_NETEASE_ARTIST_CHECK))?.let(::fromCache)
-                ?.takeUnless { (words) -> words.source?.startsWith(NETEASE) == true }
-        kept?.let { (words, provisional) -> return FirstLook(asKept(words, metadata), final = !provisional) }
+        cache?.get(cacheKey(metadata))?.let(::fromCache)?.let { (words, provisional) -> return FirstLook(asKept(words, metadata), final = !provisional) }
+        val previousKey = cacheKey(metadata, BEFORE_NETEASE_ARTIST_CHECK)
+        val previousText = cache?.get(previousKey)
+        val previous = previousText?.let(::fromCache)
+        val checkCredit = previous?.first?.source?.startsWith(NETEASE) == true
+        previous?.takeUnless { checkCredit }?.let { (words, provisional) -> return FirstLook(asKept(words, metadata), final = !provisional) }
         val lookup = Answers()
         val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { withContext(lookup + matching) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs).orNamedInTitle(metadata, timeoutMs) } } ?: Best(Lyrics.Unavailable)
         val found = (best as? Lyrics.Found)?.let { cleaned(it, metadata, lookup.copies.toList()) } ?: best
         if (found == Lyrics.Unavailable) keptUnderName(metadata)?.let { return FirstLook(asKept(it, metadata), final = true) }
+        // Once this recording is confirmed instrumental, its old lyrics must not return offline.
+        if (checkCredit && found == Lyrics.Instrumental) cache.discard(previousKey, previousText)
         return settled(metadata, found, own, lookup)
     }
 

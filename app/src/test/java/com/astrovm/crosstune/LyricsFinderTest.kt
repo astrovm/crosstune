@@ -1969,8 +1969,16 @@ class LyricsFinderTest {
             runBlocking {
                 for (source in listOf(LyricsFinder.NETEASE, LyricsFinder.NETEASE + LyricsFinder.OF_THE_ORIGINAL)) {
                     cache.put(key, """{"words":"The original recording has words","lines":[[9000,"The original recording has words"]],"source":${quote(source)}}""")
+                    cache.save()
                     assertEquals(Lyrics.Instrumental, finder.lyricsOf(cover))
                 }
+
+                val online = fake.handler
+                fake.handler = { throw IOException("offline") }
+                assertEquals(Lyrics.Unavailable, finder.lyricsOf(cover))
+                val reopened = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
+                assertEquals(Lyrics.Unavailable, reopened.lyricsOf(cover))
+                fake.handler = online
 
                 val asked = fake.requestedUrls.size
                 cache.put(key, """{"words":"A different saved sheet","lines":[],"source":"lrclib"}""")
