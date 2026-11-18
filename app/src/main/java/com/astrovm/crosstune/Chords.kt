@@ -324,9 +324,9 @@ internal object ChordSheets {
 
     /**
      * J-Total's sheet, as written into its page: a line of chords over the line of words they're
-     * played on, each over its letter. Japanese takes two columns, and the Latin font the page names
-     * first takes one. A full-width bracket or stop is two as well, beside another or not: a Japanese
-     * reader's browser on Windows trims none. A letter in neither font is as wide as the browser's
+     * played on, each over its letter. Inconsolata's digit is 7.5 px and common full-width Japanese
+     * glyphs are 16 px. Adjacent brackets and stops keep their widths in the Windows drawing.
+     * A letter in neither font is as wide as the browser's
      * fallback draws it, and a chord goes over the letter that starts nearest where it is. Only a <br>
      * ends a line, and spaces count as a browser counts them, as its source wraps anywhere. Tags are not
      * drawn: an empty link adds no column, and a link split by a <br> names the chord on the line its
@@ -373,8 +373,8 @@ internal object ChordSheets {
     /**
      * How wide [text] is in the font the page asks for, as a Japanese reader's browser on Windows draws
      * it, in thousandths of a column ([JTotalWidths]). A letter takes the width of the font it is drawn
-     * from: Inconsolata's own at one column, MS Gothic's at one or two, and any other from a proportional
-     * font, at whatever it measures. MS Gothic has no narrow forms, so the browser trims no full-width
+     * from: Inconsolata's at one column, MS Gothic's at about one or two, and other fallbacks at
+     * their measured widths. MS Gothic has no narrow forms, so the browser trims no full-width
      * bracket or stop beside another. A letter outside the Basic Multilingual Plane is one letter, not two halves.
      */
     private fun columns(text: String, monospace: Boolean): Int {
