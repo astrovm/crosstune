@@ -53,7 +53,7 @@
   }
   :root[data-theme="light"] { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); }
+  body { margin: 0; background: var(--bg); color: var(--text); overflow-wrap: anywhere; }
   a { color: var(--brand); }
   .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
   header { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
@@ -85,7 +85,7 @@
   nav { display: flex; align-items: center; }
   section { padding: 48px 0; border-top: 1px solid var(--line); }
   h2 { font-size: 1.7rem; margin: 0 0 28px; letter-spacing: -.01em; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px 32px; }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px 32px; }
   /* Flat, like the app's own lesser tools: an icon, a name and a line, with no box. */
   .card { display: flex; gap: 14px; align-items: flex-start; }
   .card svg { flex: none; width: 28px; height: 28px; color: var(--brand); fill: currentColor; }
@@ -111,14 +111,14 @@
   footer .links a { padding: 8px 0; }
   @media (max-width: 820px) {
     .hero { grid-template-columns: 1fr; padding-top: 24px; }
-    }
-  @media (max-width: 560px) {
-    .hero { gap: 32px; padding-bottom: 40px; }
     .grid { grid-template-columns: 1fr; gap: 22px; }
-    .buttons { flex-direction: column; }
-    .btn { justify-content: center; }
     .big .card { flex-direction: row; gap: 14px; }
     .big .card svg { width: 28px; height: 28px; }
+  }
+  @media (max-width: 560px) {
+    .hero { gap: 32px; padding-bottom: 40px; }
+    .buttons { flex-direction: column; }
+    .btn { justify-content: center; }
     section { padding: 36px 0; }
   }
 </style>
