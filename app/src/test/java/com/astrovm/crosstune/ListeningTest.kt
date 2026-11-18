@@ -307,6 +307,31 @@ class ListeningTest {
     }
 
     @Test
+    fun aStationWithoutPlaybackStateOpensItsAppInsteadOfOfferingPlay() {
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
+        }
+        MainActivity.playbackFactory = { radio }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertFalse(described(string(R.string.lyrics_pause)))
+        assertFalse(described(string(R.string.lyrics_next_song)))
+        composeRule.runOnIdle {
+            controllerModel().playingNowPlayPause()
+            controllerModel().playingNowSkip()
+        }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitForDescription(string(R.string.open_app_button, "Simple Radio"))
+        assertFalse(described(string(R.string.lyrics_play)))
+        assertFalse(described(string(R.string.lyrics_pause)))
+        composeRule.runOnIdle { controllerModel().playerPlayPause() }
+        assertTrue(radio.appsPlayed.isEmpty())
+        assertTrue(radio.plays.isEmpty())
+        assertTrue(radio.skips.isEmpty())
+    }
+
+    @Test
     fun aStationIsListenedToOnlyWhileItsBarIsInSightNotUnderItsPlayer() {
         val radio = FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "Fake FM") }
         MainActivity.playbackFactory = { radio }

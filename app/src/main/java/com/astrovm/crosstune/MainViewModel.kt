@@ -1404,7 +1404,7 @@ internal class MainViewModel(
     /** The player on what an app plays with no song named, as the app names it, with its buttons, as a swipe up from the bar opens it. */
     fun peekPlayingUnnamed() {
         val unnamed = uiState.playingUnnamed?.playing ?: return
-        openPlayer(unnamed.played, unnamed.app, played = true, songless = true)
+        openPlayer(unnamed.played, unnamed.app, played = true, unnamed = unnamed)
     }
 
     private fun showPlayingNow() {
@@ -1447,7 +1447,8 @@ internal class MainViewModel(
      * names it, asked of that app by package, so they reach it whatever it calls it, even nothing.
      */
     private fun onTheBar(): Triple<MusicMetadata, Following?, String?>? =
-        uiState.playingNow?.let { Triple(it.song, it.following, null) } ?: uiState.playingUnnamed?.let { Triple(it.playing.played, it.following, it.playing.app) }
+        uiState.playingNow?.let { Triple(it.song, it.following, null) }
+            ?: uiState.playingUnnamed?.takeIf { it.canControl }?.let { Triple(it.playing.played, it.following, it.playing.app) }
 
     /**
      * Shows [song] as a result, like a pasted link, by the Shazam page [appleMusicId] names when it's
@@ -1946,11 +1947,15 @@ internal class MainViewModel(
 
     private var playerJob: Job? = null
 
-    /** Opens the player on [song], asked of [app] at [link], and follows it there as it plays; [songless] when it names no song, see [PlayerState.songless]. */
-    private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false, songless: Boolean = false) {
+    /** Opens the player on [song], asked of [app] at [link], and follows it there as it plays; [unnamed] when it names no song. */
+    private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false, unnamed: Unnamed? = null) {
         // The app may be on another song as it's asked, which isn't the one it goes on to play.
         val over = playback?.takeIf { !played && it.hasAccess() }?.nowPlaying()?.takeIf { sameApp(app, it.app, interception::isInstalled) }?.metadata
-        uiState = uiState.copy(player = PlayerState(song, app, link, played = played, over = over, songless = songless), canFollowApps = playback?.hasAccess() == true)
+        val stationApp = unnamed?.takeUnless { it.reportsState }?.let { it.label ?: it.app }
+        uiState = uiState.copy(
+            player = PlayerState(song, app, link, played = played, over = over, songless = unnamed != null, stationAppLabel = stationApp),
+            canFollowApps = playback?.hasAccess() == true
+        )
         followPlayer()
         peekWords()
     }
@@ -2033,7 +2038,7 @@ internal class MainViewModel(
     private fun tookUpUnnamed(unnamed: Unnamed?, playing: Heard.Song?, following: Following?, played: Boolean, song: MusicMetadata): Boolean {
         val app = uiState.player?.let { it.following?.appPackage ?: it.app }
         val next = unnamed?.takeIf { playing == null && following == null && played && uiState.practice == null && it.played.copy(artworkUrl = song.artworkUrl) != song && it.app == app } ?: return false
-        openPlayer(next.played, next.app, played = true, songless = true)
+        openPlayer(next.played, next.app, played = true, unnamed = next)
         return true
     }
 
@@ -2084,6 +2089,7 @@ internal class MainViewModel(
      */
     fun playerPlayPause() {
         val player = uiState.player ?: return
+        if (player.stationOnly) return
         val following = player.following ?: return run {
             if (player.songless) {
                 player.app?.let { playback?.playApp(it) }
@@ -4507,7 +4513,7 @@ internal class MainViewModel(
         val before = uiState.lyricsFor?.let { shown -> playing?.let { Before(shown, inApp(it.clock.positionAt(now())), it.appPackage) } }
             ?: when (val first = playback?.whatPlays()) {
                 is WhatPlays.Named -> first.song.clock?.let { Before(first.song.metadata, it.positionAt(now()), app = first.song.app) }
-                is WhatPlays.Nameless -> Before(first.playing.played, 0, first.playing.app, songless = true)
+                is WhatPlays.Nameless -> first.playing.takeIf { it.reportsState }?.let { Before(it.played, 0, it.app, songless = true) }
                 null -> null
             }
         cards.start(song, before)

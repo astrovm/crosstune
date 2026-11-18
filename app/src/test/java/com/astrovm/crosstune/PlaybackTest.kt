@@ -30,6 +30,7 @@ import android.os.Build
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationManagerCompat
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +39,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -79,7 +81,9 @@ class PlaybackTest {
     private val modes = FakeModes()
     /** Each app's queue, by its package, as Robolectric shows none. */
     private val queues = mutableMapOf<String, List<MediaSession.QueueItem>>()
-    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes, queueOf = { queues[it.packageName] }, clockLog = PracticeClockLog(true))
+    private val radioNotices = MutableStateFlow<Set<MediaSession.Token>>(emptySet())
+    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes,
+        queueOf = { queues[it.packageName] }, clockLog = PracticeClockLog(true), radioNotices = radioNotices)
     private val song = MusicMetadata("Blinding Lights", "The Weeknd")
     private val collecting = mutableListOf<Job>()
 
@@ -1062,20 +1066,112 @@ class PlaybackTest {
     }
 
     @Test
-    fun aLoneStationWithNoPlaybackStateIsShownOnlyWhileThePhonePlays() {
+    fun aLoneStationWithNoPlaybackStateNeedsSoundAndItsOwnMediaNotice() {
         allow()
         val station = player("com.streema.simpleradio", "Simple Radio", "Fixture FM", null)
         shadowOf(station).setPlaybackState(null)
         shadowOf(sessions).addController(station)
+        radioNotices.value = setOf(station.sessionToken)
         assertNull(playback.whatPlays())
 
         sounding()
         shadowOf(sessions).addController(player("com.brave.browser", "Brave", "Old Fixture", "Old Artist", at = NOW - LEFT_BEHIND_MS - 1, position = -1))
-        assertEquals(Unnamed("com.streema.simpleradio", "Simple Radio", "Fixture FM"), playback.playingUnnamed())
+        assertEquals(Unnamed("com.streema.simpleradio", "Simple Radio", "Fixture FM", reportsState = false), playback.playingUnnamed())
         assertNull(playback.nowPlaying())
 
         sounding(false)
         assertNull(playback.whatPlays())
+    }
+
+    @Test
+    fun aStoppedRadioSessionDoesNotBorrowAnotherAppsSound() {
+        allow()
+        sounding()
+        val station = player(RadioNotice.PACKAGE, "Simple Radio", "Blue 100.7 FM", null)
+        val old = player(RadioNotice.PACKAGE, "Simple Radio", "Other FM", null)
+        shadowOf(station).setPlaybackState(null)
+        shadowOf(sessions).addController(station)
+        assertNull(playback.whatPlays())
+        radioNotices.value = setOf(old.sessionToken)
+        assertNull(playback.whatPlays())
+        radioNotices.value = setOf(station.sessionToken)
+        assertEquals("Blue 100.7 FM", playback.playingUnnamed()?.name)
+
+        // The session and global audio stay active. Only the notification for Blue went away.
+        radioNotices.value = emptySet()
+        assertNull(playback.whatPlays())
+    }
+
+    @Test
+    fun radioNoticeKeepsOnlyOngoingForegroundMediaSessionTokensFromSimpleRadio() {
+        val station = player(RadioNotice.PACKAGE, "Simple Radio", "Blue 100.7 FM", null)
+        val listener = org.robolectric.Robolectric.buildService(NowPlayingListener::class.java).create().get()
+        fun notice(pkg: String, ongoing: Boolean = true, service: Boolean = true, media: Boolean = true, token: Boolean = true): StatusBarNotification {
+            val notification = Notification().apply {
+                category = if (media) Notification.CATEGORY_TRANSPORT else Notification.CATEGORY_MESSAGE
+                if (ongoing) flags = flags or Notification.FLAG_ONGOING_EVENT
+                if (service) flags = flags or Notification.FLAG_FOREGROUND_SERVICE
+                if (token) extras.putParcelable(Notification.EXTRA_MEDIA_SESSION, station.sessionToken)
+            }
+            listener.cancelAllNotifications()
+            shadowOf(listener).addActiveNotification(pkg, 1, notification)
+            return listener.activeNotifications.single()
+        }
+        try {
+            RadioNotice.refresh(arrayOf(notice("other.app"), notice(RadioNotice.PACKAGE, ongoing = false),
+                notice(RadioNotice.PACKAGE, service = false), notice(RadioNotice.PACKAGE, media = false), notice(RadioNotice.PACKAGE, token = false)))
+            assertEquals(emptySet<MediaSession.Token>(), RadioNotice.tokens.value)
+            RadioNotice.refresh(arrayOf(notice(RadioNotice.PACKAGE)))
+            assertEquals(setOf(station.sessionToken), RadioNotice.tokens.value)
+        } finally {
+            RadioNotice.refresh(emptyArray())
+        }
+        assertEquals(emptySet<MediaSession.Token>(), RadioNotice.tokens.value)
+    }
+
+    @Test
+    fun aRadioNotificationChangesTheStationUntilItIsRemovedOrAccessIsLost() {
+        val station = player(RadioNotice.PACKAGE, "Simple Radio", "Blue 100.7 FM", null)
+        val service = org.robolectric.Robolectric.buildService(NowPlayingListener::class.java).create().get()
+        val notice = Notification().apply {
+            category = Notification.CATEGORY_TRANSPORT
+            flags = Notification.FLAG_ONGOING_EVENT or Notification.FLAG_FOREGROUND_SERVICE
+            extras.putParcelable(Notification.EXTRA_MEDIA_SESSION, station.sessionToken)
+        }
+        val shadow = shadowOf(service)
+        val key = shadow.addActiveNotification(RadioNotice.PACKAGE, 1, notice)
+        val posted = service.activeNotifications.single()
+        try {
+            service.onNotificationPosted(posted)
+            assertEquals(setOf(station.sessionToken), RadioNotice.tokens.value)
+            service.cancelNotification(key)
+            service.onNotificationRemoved(posted)
+            assertEquals(emptySet<MediaSession.Token>(), RadioNotice.tokens.value)
+            shadow.addActiveNotification(RadioNotice.PACKAGE, 1, notice)
+            service.onNotificationPosted(service.activeNotifications.single())
+            assertEquals(setOf(station.sessionToken), RadioNotice.tokens.value)
+        } finally {
+            service.onListenerDisconnected()
+        }
+        assertEquals(emptySet<MediaSession.Token>(), RadioNotice.tokens.value)
+    }
+
+    @Test
+    fun radioWithoutPlaybackStateDoesNotOfferASongOrTransport() {
+        allow()
+        sounding()
+        val station = player(RadioNotice.PACKAGE, "Simple Radio", song.title, song.artist)
+        shadowOf(station).setPlaybackState(null)
+        shadowOf(sessions).addController(station)
+        radioNotices.value = setOf(station.sessionToken)
+        assertNull(playback.nowPlaying())
+        assertEquals(false, playback.playingUnnamed()?.reportsState)
+        assertNull(playback.appFor(song, app = RadioNotice.PACKAGE))
+        assertNull(playback.appFor(song))
+        val paused = player("com.example.music", "Music", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(paused)
+        assertEquals(paused, playback.appFor(song))
+        assertNull(playback.nowPlaying())
     }
 
     @Test

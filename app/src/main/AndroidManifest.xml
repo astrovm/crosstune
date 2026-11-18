@@ -582,7 +582,7 @@
             </intent-filter>
         </service>
 
-        <!-- Lets lyrics follow the song a music app plays, once the user allows it; no notification is read. -->
+        <!-- Follows media sessions with the user's permission. For Simple Radio, checks only the media notification marker and session token. -->
         <service
             android:name=".NowPlayingListener"
             android:exported="true"

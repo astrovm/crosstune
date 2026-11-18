@@ -852,7 +852,8 @@ private fun UnnamedBar(now: PlayingUnnamed, actions: ScreenActions) {
     PlayingBar(
         name, credit.joinToString(" · "),
         song?.artworkUrl ?: now.playing.artworkUrl, now.following, now.following?.durationMs, actions.onOpenPlayingUnnamed, actions,
-        byLineMaxLines = if (heardNearby) 3 else 1
+        byLineMaxLines = if (heardNearby) 3 else 1,
+        transport = now.canControl
     )
 }
 
@@ -869,7 +870,8 @@ private fun PlayingBar(
     duration: Long?,
     onOpen: () -> Unit,
     actions: ScreenActions,
-    byLineMaxLines: Int = 1
+    byLineMaxLines: Int = 1,
+    transport: Boolean = true
 ) {
     val playing = following?.clock?.playing != false
     // The buttons sit inside the bar's own tap target, where a remote's search from the bar never looks.
@@ -879,7 +881,7 @@ private fun PlayingBar(
         onClick = onOpen,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG).swipeLayers()
-            .focusRequester(bar).focusProperties { right = playPause }
+            .focusRequester(bar).then(if (transport) Modifier.focusProperties { right = playPause } else Modifier)
     ) {
         Column(modifier = Modifier.navigationBarsPadding()) {
             Row(
@@ -897,17 +899,19 @@ private fun PlayingBar(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                IconButton(
-                    onClick = actions.onPlayingNowPlayPause,
-                    modifier = Modifier.size(52.dp).focusRequester(playPause).focusProperties { left = bar }
-                ) {
-                    AppIcon(
-                        if (playing) R.drawable.ic_pause else R.drawable.ic_play,
-                        contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play)
-                    )
-                }
-                IconButton(onClick = actions.onPlayingNowSkip, enabled = following?.canSkipNext != false, modifier = Modifier.size(52.dp)) {
-                    AppIcon(R.drawable.ic_skip_next, contentDescription = stringResource(R.string.lyrics_next_song))
+                if (transport) {
+                    IconButton(
+                        onClick = actions.onPlayingNowPlayPause,
+                        modifier = Modifier.size(52.dp).focusRequester(playPause).focusProperties { left = bar }
+                    ) {
+                        AppIcon(
+                            if (playing) R.drawable.ic_pause else R.drawable.ic_play,
+                            contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play)
+                        )
+                    }
+                    IconButton(onClick = actions.onPlayingNowSkip, enabled = following?.canSkipNext != false, modifier = Modifier.size(52.dp)) {
+                        AppIcon(R.drawable.ic_skip_next, contentDescription = stringResource(R.string.lyrics_next_song))
+                    }
                 }
             }
             if (following != null && duration != null) PlayedSoFar(following, duration)

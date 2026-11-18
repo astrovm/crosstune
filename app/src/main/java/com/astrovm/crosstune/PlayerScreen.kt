@@ -258,7 +258,13 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                 !player.played && app != null -> PlayerWaiting(app)
             }
         }
-        PlayerButtons(following, actions, Modifier.moves("buttons", moving))
+        if (player.stationOnly) {
+            Box(Modifier.fillMaxWidth().moves("buttons", moving).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                FilledIconButton(onClick = actions.onPlayerOpenApp, modifier = Modifier.size(72.dp)) {
+                    AppIcon(R.drawable.ic_open_in_new, contentDescription = stringResource(R.string.open_app_button, player.byLine))
+                }
+            }
+        } else PlayerButtons(following, actions, Modifier.moves("buttons", moving))
     }
     // The lesser tools, small, under the buttons: where it plays on one side, the rest on the other.
     val tools: @Composable () -> Unit = {
@@ -274,7 +280,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             if (hasWords && words.isEmpty()) IconButton(onClick = actions.onPlayerLyrics) {
                 AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
             }
-            SleepButton(state.sleep, songEnds = following?.durationMs != null, actions)
+            if (!player.stationOnly) SleepButton(state.sleep, songEnds = following?.durationMs != null, actions)
             if (listed != null) IconButton(onClick = { openUpNext(false) }, modifier = Modifier.focusRequester(fromTools)) {
                 AppIcon(R.drawable.ic_queue_music, contentDescription = stringResource(R.string.player_up_next))
             }

@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import com.astrovm.crosstune.PracticeClockLog.Companion.clock
 import android.app.ActivityOptions
 import android.app.KeyguardManager
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -30,9 +31,11 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.edit
+import androidx.core.os.BundleCompat
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import kotlin.math.abs
@@ -42,6 +45,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withTimeoutOrNull
@@ -357,8 +362,7 @@ internal interface PlaybackSource {
 
 /**
  * What music apps tell Android they're playing, through their media sessions. Android only shows
- * those to an app that may read notifications, so [NowPlayingListener] is that app's part; nothing
- * of the notifications themselves is read.
+ * those to an app that may read notifications, so [NowPlayingListener] is that app's part.
  */
 internal class MediaSessionPlayback(
     private val context: Context,
@@ -376,7 +380,8 @@ internal class MediaSessionPlayback(
     },
     /** What an app calls one of its drawings, by its number there; Robolectric has no other app's. */
     private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() },
-    private val clockLog: PracticeClockLog = PracticeClockLog.of(context)
+    private val clockLog: PracticeClockLog = PracticeClockLog.of(context),
+    private val radioNotices: StateFlow<Set<MediaSession.Token>> = RadioNotice.tokens
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
     private val covers = PlaybackCovers.shared(context)
@@ -554,7 +559,8 @@ internal class MediaSessionPlayback(
      */
     @VisibleForTesting
     internal fun appFor(song: MusicMetadata, controllers: List<MediaController> = activeSessions(), app: String? = null, token: MediaSession.Token? = null): MediaController? =
-        controllers.filter { (app == null || it.packageName == app) && (token == null || it.sessionToken == token) && it.has(song, app) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
+        controllers.filter { it.playbackState != null && (app == null || it.packageName == app) && (token == null || it.sessionToken == token) && it.has(song, app) }
+            .maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
 
     /**
      * Whether it has [song], by its name. What names no song, asked for as [Unnamed.played], e.g. a station or a
@@ -585,7 +591,7 @@ internal class MediaSessionPlayback(
         val (title, artist) = calls()
         val named = said(this)
         return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let { coverOf(it, sessionToken) }, artist,
-            where = place(), said = named != null, caption = named?.unnamed == true)
+            where = place(), said = named != null, caption = named?.unnamed == true, reportsState = playbackState != null)
     }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) = seekIn(song, positionMs, app, null)
@@ -810,7 +816,10 @@ internal class MediaSessionPlayback(
 
     override fun whatPlays(): WhatPlays? =
         playingApps().minWithOrNull(compareBy(playsFirst) { Rank(said(it) != null, it.place(), it.playbackState?.lastPositionUpdateTime ?: 0L) })
-            ?.let { app -> playing(app)?.let(WhatPlays::Named) ?: WhatPlays.Nameless(app.unnamed()) }
+            ?.let { app ->
+                // Without playback state this is a station, not a song whose transport can be followed.
+                app.playbackState?.let { playing(app) }?.let(WhatPlays::Named) ?: WhatPlays.Nameless(app.unnamed())
+            }
 
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
 
@@ -834,9 +843,14 @@ internal class MediaSessionPlayback(
         val eligible = all.orEmpty().filter { it.packageName != context.packageName && !it.leftBehind() }
         val playing = eligible.filter { it.playbackState?.state == PlaybackState.STATE_PLAYING && (sounding || it.remote()) }
         if (playing.isNotEmpty() || !sounding) return playing
-        // Some radios report metadata without a state. The phone's sound can support only one such session.
-        val unknown = eligible.singleOrNull { it.playbackState == null && !it.remote() }
-        return listOfNotNull(unknown?.takeIf { !it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).isNullOrBlank() })
+        // The phone's sound does not identify its source. Simple Radio puts up a foreground media
+        // notification for the exact session and takes it down at pause, even when the title stays.
+        val notices = radioNotices.value
+        val radio = eligible.singleOrNull {
+            it.packageName == RadioNotice.PACKAGE && it.playbackState == null && !it.remote() && it.sessionToken in notices &&
+                !it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).isNullOrBlank()
+        }
+        return listOfNotNull(radio)
     }
 
     /** What the app [packageName] is called, as Android shows it. */
@@ -951,6 +965,7 @@ internal class MediaSessionPlayback(
         val sounding = object : AudioManager.AudioPlaybackCallback() {
             override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>) = update()
         }
+        val noticeChanges = launch { radioNotices.collect { update() } }
         val watching = runCatching {
             sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
             audio.registerAudioPlaybackCallback(sounding, handler)
@@ -959,6 +974,7 @@ internal class MediaSessionPlayback(
         if (!watching) update()
         awaitClose {
             coverChanges.cancel()
+            noticeChanges.cancel()
             handler.removeCallbacks(refreshCover)
             sessions.removeOnActiveSessionsChangedListener(changed)
             audio.unregisterAudioPlaybackCallback(sounding)
@@ -1335,10 +1351,39 @@ private fun Context.noticeToReturn(back: Intent) {
 }
 
 /**
- * Only here so Android shows Crosstune what music apps are playing, which it does for an app the
- * user lets read notifications. The notifications themselves are never looked at.
+ * Only Simple Radio's foreground media notification marker and session token are kept, never its content.
  */
+internal object RadioNotice {
+    const val PACKAGE = "com.streema.simpleradio"
+    private val current = MutableStateFlow<Set<MediaSession.Token>>(emptySet())
+    val tokens: StateFlow<Set<MediaSession.Token>> = current
+
+    fun refresh(notices: Array<out StatusBarNotification>) {
+        current.value = notices.asSequence().filter { it.packageName == PACKAGE }.mapNotNull { notice ->
+            val notification = notice.notification
+            val flags = Notification.FLAG_ONGOING_EVENT or Notification.FLAG_FOREGROUND_SERVICE
+            if (notification.category != Notification.CATEGORY_TRANSPORT || notification.flags and flags != flags) null
+            else BundleCompat.getParcelable(notification.extras, Notification.EXTRA_MEDIA_SESSION, MediaSession.Token::class.java)
+        }.toSet()
+    }
+}
+
 class NowPlayingListener : NotificationListenerService() {
     // Android starts Crosstune again for this after stopping it, so a playlist it played through carries on.
-    override fun onListenerConnected() = MainActivity.playQueue(applicationContext).resume()
+    override fun onListenerConnected() {
+        refreshRadio()
+        MainActivity.playQueue(applicationContext).resume()
+    }
+
+    override fun onListenerDisconnected() = RadioNotice.refresh(emptyArray())
+
+    override fun onNotificationPosted(sbn: StatusBarNotification) {
+        if (sbn.packageName == RadioNotice.PACKAGE) refreshRadio()
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        if (sbn.packageName == RadioNotice.PACKAGE) refreshRadio()
+    }
+
+    private fun refreshRadio() = RadioNotice.refresh(runCatching { activeNotifications.orEmpty() }.getOrDefault(emptyArray()))
 }
