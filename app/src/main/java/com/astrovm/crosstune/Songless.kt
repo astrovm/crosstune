@@ -20,7 +20,8 @@ internal data class Unnamed(
     val artworkUrl: String? = null,
     private val artist: String = "",
     val where: Place = Place.PHONE,
-    val said: Boolean = name != null
+    val said: Boolean = name != null,
+    private val caption: Boolean = false
 ) {
     /** What it plays as the app names it, which its buttons and the player follow it there by, never as a song. */
     val played: MusicMetadata get() = MusicMetadata(name.orEmpty(), artist, artworkUrl = artworkUrl, unnamed = true)
@@ -33,7 +34,7 @@ internal data class Unnamed(
      * station's name: opened as that when a tap asks for it and it can't be named by ear. Null when it says
      * nothing a song could be read from.
      */
-    val asSong: MusicMetadata? get() = name?.takeIf { said }?.let { MusicMetadata(it, "", artworkUrl = artworkUrl) }
+    val asSong: MusicMetadata? get() = name?.takeIf { said && !caption }?.let { MusicMetadata(it, "", artworkUrl = artworkUrl) }
 }
 
 /**
@@ -56,7 +57,7 @@ internal object Songless {
      * song, as music apps name theirs, even "Track 10", "Demo 20230415" or one by an artist named as
      * the app is, and so is "Artist - Song" alone. [read] is how they read as a song's, when it's read already.
      */
-    fun namesNoSong(title: String, artist: String, read: MusicMetadata? = playerName(title, artist, MetadataParsers.playerSong(title, artist))): Boolean {
+    fun namesNoSong(title: String, artist: String, read: MusicMetadata? = MetadataParsers.sessionSong(title, artist)): Boolean {
         // Read before it's split at a dash, which "AUD-20240101-WA0003" has.
         val bare = title.trim().replace(extension, "")
         if (MetadataParsers.noArtist(artist) && (recording.matches(bare) || path.containsMatchIn(bare))) return true
@@ -64,12 +65,9 @@ internal object Songless {
         return song.artist.isBlank()
     }
 
-    /** Keep the whole title when the dash supplies a note or radio caption instead of the song name. */
-    internal fun playerName(title: String, artist: String, read: MusicMetadata?): MusicMetadata? {
-        if (read == null || read.artist.isBlank() || !MetadataParsers.noArtist(artist)) return read
-        if (!MetadataParsers.hasInferredDashCredit(title, read.artist)) return read
-        return if (SongNames.isRecordingNote(read.title) || broadcastCaption(read.artist, read.title)) MusicMetadata(title.trim(), "") else read
-    }
+    /** The part after the dash supplies a recording label or radio caption. */
+    internal fun isCaption(prefix: String, suffix: String): Boolean =
+        SongNames.isRecordingLabel(suffix) || broadcastCaption(prefix, suffix)
 
     /** A station can put its format and airtime after its name, such as "Fake FM - Hits 24/7". */
     private fun broadcastCaption(station: String, caption: String): Boolean {

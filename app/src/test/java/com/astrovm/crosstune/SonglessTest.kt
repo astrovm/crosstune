@@ -35,12 +35,25 @@ class SonglessTest {
 
     @Test
     fun aRecordingNoteCannotSupplyAnArtistAndTitle() {
-        for (title in listOf("Fake Song - Live", "Fake Song – Explicit", "Fake Song — Remastered", "Fake Song - Live in Paris")) {
+        for (title in listOf("Fake Song - Live", "Fake Song – Explicit", "Fake Song — Remastered", "Fake Song - Live 2024")) {
             assertTrue(title, noSong(title))
             assertFalse(title, noSong(title, "Fake Artist"))
         }
         assertFalse(noSong("Fake Artist - Live Forever"))
+        assertFalse(noSong("Fake Artist - Live in a Cave"))
         assertFalse(noSong("Fake Artist - Song (Live)"))
+    }
+
+    @Test
+    fun cleanedCaptionsStillNameNoSong() {
+        assertTrue(noSong("Fake Song (Official Video) - Live"))
+        assertTrue(noSong("Fake FM (Official Audio) - Hits 24/7"))
+    }
+
+    @Test
+    fun aFileCanNameASongWithWordsThatLookLikeANote() {
+        assertFalse(noSong("Fake Artist - Live in a Cave.mp3"))
+        assertFalse(noSong("Fake Artist - Live.mp3"))
     }
 
     @Test

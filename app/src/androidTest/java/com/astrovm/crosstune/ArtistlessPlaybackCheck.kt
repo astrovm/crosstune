@@ -103,7 +103,10 @@ class ArtistlessPlaybackCheck : Instrumentation() {
     private companion object {
         val fixtures = listOf(
             Fixture("Fixture FM - Hits 24/7", "", "Hits 24/7", false, askedArtist = "Fixture FM"),
+            Fixture("Fixture FM - Hits 24/7", "", "Fixture FM - Hits 24/7", false),
             Fixture("Fixture Artist - Live", "", "Live", false),
+            Fixture("Fixture Artist (Official Video) - Live", "", "Live", false),
+            Fixture("Fixture Artist - Live.mp3", "", "Live", true),
             Fixture("Fixture FM - Glass Lantern", "", "Glass Lantern", true, askedArtist = "Fixture FM"),
             Fixture("Glass Lantern Radio", "", "Glass Lantern", false),
             Fixture("Fixture Artist - Glass Lantern Radio", "", "Glass Lantern", false),

@@ -1766,7 +1766,7 @@ class PlaybackTest {
         val app = "com.ilv.vradio"
         shadowOf(sessions).addController(player(app, "VRadio", title, "", album = "VRadio", actions = PlaybackState.ACTION_SEEK_TO))
         assertNull(playback.nowPlaying())
-        val station = Unnamed(app, "VRadio", title)
+        val station = Unnamed(app, "VRadio", title, caption = true)
         assertEquals(WhatPlays.Nameless(station), playback.whatPlays())
         val wrong = MusicMetadata("Hits 24/7", "Fake FM")
         playback.seekTo(wrong, 10_000, app)
@@ -1774,6 +1774,35 @@ class PlaybackTest {
         assertEquals(emptyList<String>(), asked())
         playback.playPause(station.played, false, app)
         assertEquals(listOf("pause"), asked())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aBroadcastCaptionCannotOpenOrControlASongWithItsFullName() {
+        allow()
+        sounding()
+        val title = "Fake FM - Hits 24/7"
+        val app = "com.ilv.vradio"
+        shadowOf(sessions).addController(player(app, "VRadio", title, "", album = "VRadio", actions = PlaybackState.ACTION_SEEK_TO))
+        val song = MusicMetadata(title, "Fake Artist")
+        playback.seekTo(song, 10_000, app)
+        playback.playPause(song, false, app)
+        assertEquals(emptyList<String>(), asked())
+        val station = checkNotNull(playback.playingUnnamed())
+        assertNull(station.asSong)
+        assertTrue(station.said)
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun anArtistlessRecordingLabelCannotControlTheTitleWithoutItsTag() {
+        allow()
+        sounding()
+        val app = "com.other.player"
+        shadowOf(sessions).addController(player(app, "Other", "Fake Song - Remastered", "", album = "Fake Album"))
+        playback.playPause(MusicMetadata("Fake Song", "Fake Artist"), false, app)
+        assertEquals(emptyList<String>(), asked())
+        assertNull(checkNotNull(playback.playingUnnamed()).asSong)
     }
 
     @Test

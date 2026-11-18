@@ -932,8 +932,8 @@ internal object SongNames {
 
     private data class NoteToken(val start: Int, val end: Int, val letters: String)
 
-    /** Whether the full text describes a recording instead of naming it. */
-    internal fun isRecordingNote(text: String): Boolean = RecordingNotes(text).isNote(0, text.length, true)
+    /** A recording label with only known words, such as "Live 2024" or "Radio Edit". */
+    internal fun isRecordingLabel(text: String): Boolean = RecordingNotes(text).isLabel()
 
     /** Unicode words retain the title's script; a later Latin word cannot stand in for the word inspected. */
     private fun noteTokens(text: String): List<NoteToken> {
@@ -1015,6 +1015,8 @@ internal object SongNames {
         private fun known(at: Int) = marks[at] || numeric[at] || qualifiers[at]
 
         fun afterDash(at: Int): Boolean = nonspace[at].let { it >= 0 && text[it] in NAME_TAG_DASHES }
+
+        fun isLabel(): Boolean = tokens.isNotEmpty() && unknown.last() == 0 && lead(0, tokens.size) != null
 
         fun isNote(from: Int, until: Int, explicit: Boolean): Boolean {
             val first = before[from]
