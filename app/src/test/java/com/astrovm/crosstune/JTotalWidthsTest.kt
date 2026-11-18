@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.charset.Charset
 
@@ -24,24 +25,26 @@ class JTotalWidthsTest {
 
     @Test
     fun theMonospaceStackHasItsOwnWidths() {
-        // Kana is two columns on both stacks, as MS Gothic draws it. ۰ comes from another fallback on each.
-        assertEquals(2000, JTotalWidths.of('あ'.code, monospace = true))
+        // MS Gothic draws common full-width kana at 16 px on each page. A digit takes 7.5 px.
+        assertEquals(2133, JTotalWidths.of('あ'.code))
+        assertEquals(2133, JTotalWidths.of('あ'.code, monospace = true))
         assertEquals(1144, JTotalWidths.of(0x6F0))
         assertEquals(1200, JTotalWidths.of(0x6F0, monospace = true))
         val kana = "${"x".repeat(41)}${jTotal("C")}<br>${"あ".repeat(22)}"
-        assertEquals(21, ChordSheets.fromJTotal(kana).single().chords.single().at)
-        assertEquals(21, ChordSheets.fromJTotal(kana, monospace = true).single().chords.single().at)
+        assertEquals(19, ChordSheets.fromJTotal(kana).single().chords.single().at)
+        assertEquals(19, ChordSheets.fromJTotal(kana, monospace = true).single().chords.single().at)
     }
 
     @Test
-    fun everyShiftJisLetterIsOneColumnOrTwo() {
-        // J-Total's pages are Shift_JIS, and MS Gothic draws each letter that can hold at one column or two.
+    fun shiftJisLettersUseTheMeasuredOneAndTwoCellWidths() {
+        // Inconsolata and other fallbacks usually draw each cell at 7.5 px, MS Gothic at 8 px.
+        val measured = setOf(1000, 1067, 2000, 2133)
         val shiftJis = Charset.forName("windows-31j").newEncoder()
         for (code in 0x80..0xFFFF) {
             if (Character.isSurrogate(code.toChar()) || !shiftJis.canEncode(code.toChar())) continue
             for (monospace in listOf(false, true)) {
                 val width = JTotalWidths.of(code, monospace)
-                assert(width == 1000 || width == 2000) { "U+%04X is %d".format(code, width) }
+                assertTrue("U+%04X is %d".format(code, width), width in measured)
             }
         }
     }
@@ -49,7 +52,7 @@ class JTotalWidthsTest {
     @Test
     fun aLetterInInconsolataIsOneColumnAndOneAbsentFromItIsWhatTheFallbackDraws() {
         assertEquals(1000, JTotalWidths.of(0xC5))
-        assertEquals(1000, JTotalWidths.of(0x132))
+        assertEquals(1067, JTotalWidths.of(0x132))
         assertEquals(1000, JTotalWidths.of(0x134))
         assertEquals(1557, JTotalWidths.of(0x531))
         assertEquals(851, JTotalWidths.of(0x10D0))
@@ -70,7 +73,6 @@ class JTotalWidthsTest {
     @Test
     fun aLetterThatIsNotListedIsTwoColumns() {
         // Between runs, and past the last one.
-        assertEquals(2000, JTotalWidths.of('あ'.code))
         assertEquals(2000, JTotalWidths.of(0x20BB7))
         assertEquals(2000, JTotalWidths.of(0x10FFFF))
     }
@@ -83,10 +85,10 @@ class JTotalWidthsTest {
     }
 
     @Test
-    fun aHalfwidthSoundMarkIsAColumn() {
-        // It draws over the kana before it, and still moves the line on by a column.
-        assertEquals(1000, JTotalWidths.of(0xFF9E))
-        assertEquals(1000, JTotalWidths.of(0xFF9F, monospace = true))
+    fun aHalfwidthSoundMarkMovesOnByEightPixels() {
+        // It draws over the kana before it, and still moves the line on by 8 px.
+        assertEquals(1067, JTotalWidths.of(0xFF9E))
+        assertEquals(1067, JTotalWidths.of(0xFF9F, monospace = true))
     }
 
     @Test
@@ -102,13 +104,13 @@ class JTotalWidthsTest {
     }
 
     @Test
-    fun lettersTheContainerDrewAtFractionsAreAColumnOnWindows() {
-        // Ĳ, ĳ, ŉ and the half-width Hangul filler: four columns are over the a after them.
+    fun fallbackLatinAndHangulWidthsPutTheChordOnTheDrawnLetter() {
+        // Ĳ, ĳ, ŉ and the half-width Hangul filler: at page size, four columns are over the a after them.
         assertEquals(4, landsOn("abcd", "Ĳĳŉﾠab"))
     }
 
     @Test
-    fun greekCyrillicAndHangulAreTwoColumns() {
+    fun greekCyrillicAndHangulUseTheirWindowsWidths() {
         assertEquals(2, landsOn("abcd", "αααααb"))
         assertEquals(5, landsOn("abcdefghij", "аааааааааb"))
         assertEquals(5, landsOn("abcdefghij", "가가가가가bc"))
@@ -130,11 +132,22 @@ class JTotalWidthsTest {
 
     @Test
     fun aChordInTheMiddleOfAWideLetterGoesOverTheNextAndOneNearerTheLetterGoesOverIt() {
-        assertEquals(1, landsOn("a", "あいう"))
+        // A column is short of the midpoint of a kana. Two columns are near the next kana.
+        assertEquals(0, landsOn("a", "あいう"))
+        assertEquals(1, landsOn("ab", "あいう"))
+        // Exactly halfway across a glyph of two columns, the chord goes on the next letter.
+        assertEquals(2, landsOn("a", "𠮷b"))
         // Two columns are nearer where the second Ա starts (1.557) than where b does (3.114).
         assertEquals(1, landsOn("ab", "ԱԱb"))
         // One column is nearer where the second ა starts (0.851) than where b does (1.702).
         assertEquals(1, landsOn("a", "ააb"))
+    }
+
+    @Test
+    fun aChordThatIsVisuallyHalfwayUsesTheNextLetter() {
+        // Five half-width kana end at 40 px. The next pair of starts is 40 and 56 px.
+        // Three full-width spaces put the chord at 48 px, in the middle on the page.
+        assertEquals(6, landsOn("　".repeat(3), "ｶ".repeat(5) + "あい"))
     }
 
     @Test

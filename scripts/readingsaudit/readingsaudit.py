@@ -99,12 +99,24 @@ SONGS = {
         ("TSUNAMI", "サザンオールスターズ"), ("ロビンソン", "スピッツ"), ("春よ、来い", "松任谷由実"), ("雪の華", "中島美嘉"),
         ("ライラック", "Mrs. GREEN APPLE"), ("晩餐歌", "tuki."), ("アイネクライネ", "米津玄師"),
     ],
+    # Use these UtaTen pages as the text as well as the ruby. Other services may write the kana in their modern form.
+    "oldkana": [
+        ("ふるさとの山に向ひて", "新井満", "jb10704025"),
+        ("我れは梔子", "林原めぐみ", "ya16020389"),
+        ("都会の夏の夜", "サンタラ", "yb16072004"),
+        ("春さんゑ", "真壁寂室", "mi23083032"),
+    ],
 }
 
 
 def songs(folder):
-    out = [{"id": f"{kind}-{i + 1:02d}", "kind": kind, "title": title, "artist": artist}
-           for kind, listed in SONGS.items() for i, (title, artist) in enumerate(listed)]
+    out = []
+    for kind, listed in SONGS.items():
+        for number, (title, artist, *page) in enumerate(listed, 1):
+            song = {"id": f"{kind}-{number:02d}", "kind": kind, "title": title, "artist": artist}
+            if page:
+                song["utatenPage"] = page[0]
+            out.append(song)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "songs.json").write_text(json.dumps(out, ensure_ascii=False, indent=1))
     print(f"{len(out)} songs in {folder / 'songs.json'}: " + ", ".join(f"{k} {len(v)}" for k, v in SONGS.items()))
@@ -606,12 +618,14 @@ def compare(folder, words, before=None):
             missing["no lyrics"].append(name)
             found[kind]["no lyrics"] += 1
             continue
-        if not song.get("timed"):
-            missing["no timing"].append(name)
-            found[kind]["no timing"] += 1
-        if song.get("chords") != "found":
-            missing["no chords"].append(name)
-            found[kind]["no chords"] += 1
+        # Pinned references only measure the readings of the text UtaTen gives us.
+        if not song.get("utatenPage"):
+            if not song.get("timed"):
+                missing["no timing"].append(name)
+                found[kind]["no timing"] += 1
+            if song.get("chords") != "found":
+                missing["no chords"].append(name)
+                found[kind]["no chords"] += 1
         if song.get("script") != "JAPANESE":
             found[kind]["not Japanese"] += 1
             continue

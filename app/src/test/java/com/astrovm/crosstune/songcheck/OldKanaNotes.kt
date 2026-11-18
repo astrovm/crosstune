@@ -59,6 +59,7 @@ class OldKanaNotes {
     }.filter { line -> line.any { it in '぀'..'ヿ' } }.distinct()
 
     private companion object {
-        val STRING = Regex(""""((?:[^"\\\n]|\\.)*)${'"'}""")
+        // A long test string stays on the matcher loop, even when it contains escapes.
+        val STRING = Regex(""""((?:[^"\\\n]++|\\.)*+)${'"'}""")
     }
 }

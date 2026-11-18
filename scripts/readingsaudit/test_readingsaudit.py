@@ -462,6 +462,23 @@ class TheirReading(unittest.TestCase):
         self.assertEqual("にちようは", readingsaudit.their_reading("日曜は", (0, 3), (0, 2), [], "にちよう"))
 
 
+class Compare(unittest.TestCase):
+    def test_pinned_lyrics_are_compared_without_counting_unmeasured_timing_or_chords(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            found = folder / "audit"
+            found.mkdir()
+            ordinary = {"kind": "other", "title": "Title", "artist": "Artist", "lyrics": "found",
+                        "script": "JAPANESE", "utaten": "ordinary", "timed": False, "lines": []}
+            pinned = {**ordinary, "kind": "oldkana", "title": "Historical title", "utatenPage": "pinned"}
+            for name, report in (("ordinary", ordinary), ("pinned", pinned)):
+                (found / f"{name}.json").write_text(json.dumps(report))
+            with mock.patch("builtins.print"):
+                readingsaudit.compare(folder, words=False)
+            self.assertEqual({"no timing": ["Title / Artist"], "no chords": ["Title / Artist"]},
+                             json.loads((folder / "missing.json").read_text()))
+
+
 class Age(unittest.TestCase):
 
     def setUp(self):

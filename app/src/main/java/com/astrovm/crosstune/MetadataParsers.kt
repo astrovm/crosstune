@@ -442,9 +442,19 @@ internal object MetadataParsers {
      * or many, as a compilation's "Various Artists", may name it in the title, "Artist - Song", as a video does.
      * A title alone still identifies what is playing, even if it cannot say who made it.
      */
-    fun playerSong(said: String, artist: String): MusicMetadata? {
+    fun playerSong(said: String, artist: String): MusicMetadata? = playerSong(said, artist, session = false)
+
+    /** A media session also uses the title for station captions and recording notes. */
+    fun sessionSong(said: String, artist: String): MusicMetadata? = playerSong(said, artist, session = true)
+
+    private fun playerSong(said: String, artist: String, session: Boolean): MusicMetadata? {
         val title = withoutBlankSong(said)
-        return (spotifyPageSplitAtItsDash(songLine(title), artist) ?: if (noArtist(artist)) youtubeVideo(title.replace(audioExtension, ""), "") else MusicMetadata(title, artist))
+        val known = spotifyPageSplitAtItsDash(songLine(title), artist)
+        val named = known ?: if (noArtist(artist)) {
+            val fileName = withoutAudioExtension(title)
+            youtubeVideo(fileName, "", sessionCaption = session && fileName == title)
+        } else MusicMetadata(title, artist)
+        return named
             ?.let { it.copy(title = withoutPlayerSeparators(it.title), artist = if (noArtist(it.artist)) "" else it.artist) }
             ?.takeIf { it.title.isNotBlank() && !namesAFile(it) }
     }
@@ -462,8 +472,10 @@ internal object MetadataParsers {
 
     private val audioExtension = phoneRegex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
 
+    internal fun withoutAudioExtension(title: String): String = title.replace(audioExtension, "")
+
     /** Keep title words when reading a file's name. Recording captions are classified separately. */
-    internal fun comparisonTitle(title: String): String = withoutSubtitlesTag(title).replace(audioExtension, "")
+    internal fun comparisonTitle(title: String): String = withoutAudioExtension(withoutSubtitlesTag(title))
 
     /** Read the track prefix after captions, so a song named "01 (Audio)" keeps its numeric title. */
     internal fun withoutFileNumber(title: String): String {
@@ -576,17 +588,19 @@ internal object MetadataParsers {
     private val DASHES = TitleDelimiters.tagDashes
 
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
-    fun youtubeVideo(title: String, channel: String): MusicMetadata? {
+    fun youtubeVideo(title: String, channel: String): MusicMetadata? = youtubeVideo(title, channel, sessionCaption = false)
+
+    private fun youtubeVideo(title: String, channel: String, sessionCaption: Boolean): MusicMetadata? {
         // Removing one suffix can expose another: "Song Official Video HD" or "Song HD (Lyrics)".
         // A blank song goes wherever the title is cut down to one: as it's read, then once trimmed and cut of its
         // noise, which can leave a song's brackets blank, "Band - Song 『[HD] 』".
         var rawTitle = withoutBlankSong(withoutTrailingNoise(withoutVideoNoise(withoutSubtitlesTag(withoutBlankSong(title))).trim())).trim()
         rawTitle = rawTitle.replace(trackNumberRegex, "").ifEmpty { return null }
-        return videoName(rawTitle, channel)
+        return videoName(rawTitle, channel, sessionCaption)
     }
 
     /** Split an artist credit without first discarding the title's bracketed words. */
-    internal fun videoName(rawTitle: String, channel: String): MusicMetadata {
+    internal fun videoName(rawTitle: String, channel: String, sessionCaption: Boolean = false): MusicMetadata {
         val author = channel.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
         // Japanese videos name the song in brackets after the artist, whatever follows them:
         // "YOASOBI「アイドル」 Official Music Video".
@@ -595,10 +609,16 @@ internal object MetadataParsers {
         // anywhere, a dash before only such a tag is.
         val untagged = SongNames.withoutEditionTag(rawTitle)
         val tagOnly = untagged != rawTitle && " - " !in untagged
-        val separator = if (channel.endsWith(" - Topic") || tagOnly) null else artistSeparatorRange(rawTitle)
+        val separator = if (channel.endsWith(" - Topic") || tagOnly && !sessionCaption) null else artistSeparatorRange(rawTitle)
         if (separator == null) return MusicMetadata(rawTitle, author)
         val left = rawTitle.substring(0, separator.first).trim()
         val right = rawTitle.substring(separator.last + 1).trim()
+        if (sessionCaption && Songless.isCaption(left, right)) return MusicMetadata(rawTitle, "", unnamed = true)
+        if (tagOnly) return MusicMetadata(rawTitle, author)
+        return creditedVideoName(rawTitle, author, left, right)
+    }
+
+    private fun creditedVideoName(rawTitle: String, author: String, left: String, right: String): MusicMetadata {
         // One song by two names, as YouTube Music titles Japanese ones, "プラスティック・ラブ - Plastic Love": by the channel.
         // Two sounds are enough here, as "アイドル - Idol", since a dash pairing them is already a sign.
         if (SongNames.soundsAlike(right, left, TWO_NAMES_SOUNDS) || SongNames.soundsAlike(left, right, TWO_NAMES_SOUNDS)) return MusicMetadata(rawTitle, author)

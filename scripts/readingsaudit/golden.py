@@ -61,6 +61,7 @@ GOLDEN_HEADER = [
     "# sheet is the word sheet's romaji for the word, as said and as typed, joined by |, when the sheet has the word",
     "# there with this kana. shown is the word's parts once the song's words put its reading right (Readings.corrected),",
     "# written as ruby is, when they read as the kana. Each is empty when the row does not lock it.",
+    "# A word with only a sheet reading has empty ruby and shown fields. Its kana is the word sheet's reading.",
     "# dictionary is ipadic, unidic or both.",
     "# Regenerate: python3 scripts/readingsaudit/readingsaudit.py golden",
     "# The command adds rows. It does not remove or change a row.",
@@ -161,11 +162,11 @@ def check_fields(row):
     if len(row) != FIELDS or any(set(part) & LINE_ENDS for part in row) or not row[0] or row[0].startswith("#"):
         raise SystemExit(f"a golden row can't be written: {row!r}")
     line, word, field, kana, ruby, sheet, shown, tag = row
-    if (tag not in DICTIONARIES or (field and not field.isdigit()) or ruby_text(ruby) != (word, kana) or word not in line
+    ruby_valid = ruby_text(ruby) == (word, kana) if ruby else bool(sheet and not shown)
+    if (tag not in DICTIONARIES or (field and not field.isdigit()) or not ruby_valid or not word or not kana or word not in line
             or (sheet and not (sheet.count("|") == 1 and all(sheet.split("|"))))
             or (shown and (ruby_text(shown)[0] != word or audit.hiragana(ruby_text(shown)[1]) != audit.hiragana(kana)))):
-        raise SystemExit(f"a golden row needs a dictionary, an index, ruby that spells its word as its kana, and a sheet "
-                         f"and shown parts that are empty or say the same: {row!r}")
+        raise SystemExit(f"a golden row needs a dictionary, an index and a reading that the ruby or the word sheet locks: {row!r}")
 
 
 def row_sort_key(row):

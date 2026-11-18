@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -251,27 +252,103 @@ class ChordSheetsTest {
         assertNull(ChordSheets.place(sheet, listOf("Carry me home by the river tonight", "Sing to me softly till the morning light")))
     }
 
+    private fun timeOf(line: LyricLine, at: Int, nextMs: Long?): Long =
+        ChordSheets.timesOf(line, listOf(Chord(at, "G")), nextMs).single()
+
     @Test
     fun aChordIsPlayedWhenItsLetterIsSung() {
         val byWord = LyricLine(10_000, "Two words", listOf(TimedWord(10_000, "Two "), TimedWord(11_000, "words")))
-        assertEquals(10_000L, ChordSheets.timeOf(byWord, 0, 13_000))
-        assertEquals(11_000L, ChordSheets.timeOf(byWord, 4, 13_000))
+        assertEquals(10_000L, timeOf(byWord, 0, 13_000))
+        assertEquals(11_000L, timeOf(byWord, 4, 13_000))
         // Two letters into the last word, two fifths of the way to the next line.
-        assertEquals(11_800L, ChordSheets.timeOf(byWord, 6, 13_000))
-        assertEquals(13_000L, ChordSheets.timeOf(byWord, 99, 13_000))
+        assertEquals(11_800L, timeOf(byWord, 6, 13_000))
+        assertEquals(13_000L, timeOf(byWord, 99, 13_000))
         // Past the words timed, as for a mark after the last one: at the end of the last word.
-        assertEquals(13_000L, ChordSheets.timeOf(byWord.copy(text = "Two words!"), 9, 13_000))
+        assertEquals(13_000L, timeOf(byWord.copy(text = "Two words!"), 9, 13_000))
         // A line timed as a whole: that far through it, up to the next line, or a moment a letter.
         val whole = LyricLine(10_000, "abcd")
-        assertEquals(12_000L, ChordSheets.timeOf(whole, 2, 14_000))
-        assertEquals(10_300L, ChordSheets.timeOf(whole, 2, null))
-        assertEquals(10_000L, ChordSheets.timeOf(LyricLine(10_000, ""), 0, null))
+        assertEquals(12_000L, timeOf(whole, 2, 14_000))
+        assertEquals(10_300L, timeOf(whole, 2, null))
+        assertEquals(10_000L, timeOf(LyricLine(10_000, ""), 0, null))
 
         val chords = listOf(Chord(0, "G"), Chord(4, "D"))
-        assertEquals(-1, ChordSheets.playing(byWord, chords, 13_000, 9_000))
-        assertEquals(0, ChordSheets.playing(byWord, chords, 13_000, 10_000))
-        assertEquals(0, ChordSheets.playing(byWord, chords, 13_000, 10_500))
-        assertEquals(1, ChordSheets.playing(byWord, chords, 13_000, 11_500))
+        val times = ChordSheets.timesOf(byWord, chords, 13_000)
+        assertEquals(-1, ChordSheets.playing(times, 9_000))
+        assertEquals(0, ChordSheets.playing(times, 10_000))
+        assertEquals(0, ChordSheets.playing(times, 10_500))
+        assertEquals(1, ChordSheets.playing(times, 11_500))
+    }
+
+    @Test
+    fun theLastLineUsesTheSungPaceOfItsWriting() {
+        for (text in listOf("君の名前を呼んだ", "今夜我們一起回家", "너의이름을불렀다")) {
+            val line = LyricLine(10_000, text)
+            assertEquals(text, 11_120L, timeOf(line, 4, null))
+            assertEquals(text, 12_240L, timeOf(line, text.length, null))
+            assertEquals(text, 11_600L, timeOf(line, 4, 13_200))
+        }
+        val mixed = LyricLine(10_000, "星A歌")
+        assertEquals(10_280L, timeOf(mixed, 1, null))
+        assertEquals(10_430L, timeOf(mixed, 2, null))
+        assertEquals(10_710L, timeOf(mixed, 3, null))
+        val supplementary = LyricLine(10_000, "𠮷田")
+        assertEquals(10_000L, timeOf(supplementary, 1, null))
+        assertEquals(10_280L, timeOf(supplementary, 2, null))
+        assertEquals(10_560L, timeOf(supplementary, 3, null))
+    }
+
+    @Test
+    fun theLastLineKeepsEachLatinLetterOffsetEvenInsideACombiningSequence() {
+        val line = LyricLine(10_000, "Ae\u0301x")
+        val chords = (0..line.text.length).map { Chord(it, "G") }
+        assertEquals(listOf(10_000L, 10_150L, 10_300L, 10_450L, 10_600L), ChordSheets.timesOf(line, chords, null))
+    }
+
+    @Test
+    fun theLastWordKeepsItsStartWhenThereIsNoNextLine() {
+        val line = LyricLine(10_000, "名前を呼んだ", listOf(TimedWord(10_000, "名前を"), TimedWord(12_000, "呼んだ")))
+        assertEquals(12_000L, timeOf(line, 3, null))
+        assertEquals(12_280L, timeOf(line, 4, null))
+        assertEquals(12_840L, timeOf(line, 6, null))
+    }
+
+    @Test
+    fun equivalentJapaneseAndKoreanSpellingsTakeTheSameTime() {
+        for ((whole, parts) in listOf("が" to "か\u3099", "한" to "한")) {
+            assertEquals(10_280L, timeOf(LyricLine(10_000, whole), whole.length, null))
+            assertEquals(10_280L, timeOf(LyricLine(10_000, parts), parts.length, null))
+            assertEquals(10_000L, timeOf(LyricLine(10_000, parts), 1, null))
+        }
+    }
+
+    @Test
+    fun aChordUsesTheKnownEndWhenTheNextLineStartsMuchLater() {
+        val line = SyncedLyrics.parseWordByWord("[10000,4000](10000,2000,0)前(12000,2000,0)後半").single()
+        assertEquals(13_000L, timeOf(line, 2, 30_000))
+    }
+
+    @Test
+    fun aBadReportedEndDoesNotMakeChordsGoBackwards() {
+        val line = SyncedLyrics.parseWordByWord("[10000,1000](10000,2000,0)前(12000,2000,0)後半").single()
+        assertEquals(12_280L, timeOf(line, 2, null))
+        assertEquals(13_000L, timeOf(line, 2, 14_000))
+    }
+
+    @Test
+    fun buildingAChordScheduleReadsEachTimedWordOnlyAFewTimes() {
+        val count = 4_096
+        var reads = 0
+        val words = object : AbstractList<TimedWord>() {
+            override val size = count
+            override fun get(index: Int): TimedWord {
+                reads++
+                return TimedWord(index * 280L, "歌")
+            }
+        }
+        val line = LyricLine(0, "歌".repeat(count), words)
+        val times = ChordSheets.timesOf(line, (0 until count).map { Chord(it, "G") }, count * 280L)
+        assertEquals((0 until count).map { it * 280L }, times)
+        assertTrue("Read $reads words for $count chords", reads <= count * 4)
     }
 
     @Test
@@ -316,8 +393,8 @@ class ChordSheetsTest {
     private fun jTotal(name: String) = """<a href="JavaScript:jump_1('../../../cd/$name.html');">$name</a>"""
 
     @Test
-    fun jTotalsChordsLandOnTheLetterAtTheirColumnInAFontWhereJapaneseTakesTwo() {
-        // E, six wide spaces and a space put Am 14 columns in: letter 7 of the words, as each of theirs takes two.
+    fun jTotalsChordsLandOnTheLetterAtTheirColumnInThePageFont() {
+        // E, six wide spaces and a space put Am 14.798 columns in, nearest the eighth kana start.
         val sheet = "${jTotal("E")}\u3000\u3000\u3000\u3000\u3000\u3000 ${jTotal("Am")}<br>\n  川の道を歩いていく"
         assertEquals(
             listOf(SheetLine("川の道を歩いていく", listOf(Chord(0, "E"), Chord(7, "Am")))),
@@ -440,18 +517,17 @@ class ChordSheetsTest {
     }
 
     @Test
-    fun jTotalsReferenceMarkIsTwoColumnsInBothStacks() {
-        // Drawn in Chromium on both stacks. At 1.650 columns, the first chord would land on the second a.
+    fun jTotalsReferenceMarkHasItsPageWidthInBothStacks() {
+        // Each mark is 16 px. The two lines put the chord nearest different letter starts.
         for (monospace in listOf(false, true)) {
             assertEquals(4, at("abcdefgh${jTotal("C")}<br>※※※※aaaa", monospace))
-            assertEquals(4, at("abcdef${jTotal("C")}<br>※A\u3000ああ", monospace))
+            assertEquals(3, at("abcdef${jTotal("C")}<br>※A\u3000ああ", monospace))
         }
     }
 
     @Test
-    fun jTotalsHalfwidthSoundMarksTakeAColumnEach() {
-        // Drawn in Chromium on both stacks: ﾞ and ﾟ draw as part of the kana before them, and still move the line on
-        // by a column. With no width, each chord would land one letter later, on い.
+    fun jTotalsHalfwidthSoundMarksKeepTheirMeasuredWidth() {
+        // Drawn in Chromium on both stacks: ﾞ and ﾟ draw over the prior kana and add 8 px to the line. With no width, each chord would land one letter later, on い.
         for (monospace in listOf(false, true)) {
             assertEquals(2, at("xx${jTotal("C")}<br>ｶﾞあい", monospace))
             assertEquals(2, at("xx${jTotal("C")}<br>ﾊﾟあい", monospace))
@@ -460,8 +536,8 @@ class ChordSheetsTest {
     }
 
     @Test
-    fun jTotalsGreekCyrillicAndOtherShiftJisSymbolsAreTwoColumns() {
-        // Drawn on Windows: MS Gothic has these, at two columns. Narrower, each chord would land a letter later.
+    fun jTotalsGreekCyrillicAndOtherShiftJisSymbolsKeepTheirMeasuredWidth() {
+        // MS Gothic draws these full-width glyphs at 16 px. With narrow widths the chords would land later.
         for (monospace in listOf(false, true)) {
             assertEquals(3, at("xxxxxx${jTotal("C")}<br>αβγδεあ", monospace))
             assertEquals(3, at("xxxxxx${jTotal("C")}<br>жизньあ", monospace))
