@@ -40,6 +40,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.net.URI
 import org.junit.After
@@ -508,6 +509,8 @@ class PlaybackTest {
         val lengths = SteadyLengths(prefs)
         repeat(501) { lengths.of("Song $it", "Band", 200_000) }
         val again = SteadyLengths(prefs)
+        // The 500th newest entry is still there after reopening the stored lengths.
+        assertEquals(listOf(200_000L), again.known("Song 1", "Band"))
         // The first is gone, so it's taken as said; the last is kept.
         assertEquals(201_000L, again.of("Song 0", "Band", 201_000))
         assertEquals(200_000L, again.of("Song 500", "Band", 201_000))
@@ -1758,6 +1761,87 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
+    fun aRadioStationWithABroadcastCaptionKeepsItsWholeName() {
+        allow()
+        sounding()
+        val title = "Fake FM - Hits 24/7"
+        val app = "com.ilv.vradio"
+        shadowOf(sessions).addController(player(app, "VRadio", title, "", album = "VRadio", actions = PlaybackState.ACTION_SEEK_TO))
+        assertNull(playback.nowPlaying())
+        val station = Unnamed(app, "VRadio", title, caption = true)
+        assertEquals(WhatPlays.Nameless(station), playback.whatPlays())
+        val wrong = MusicMetadata("Hits 24/7", "Fake FM")
+        playback.seekTo(wrong, 10_000, app)
+        playback.playPause(wrong, false, app)
+        assertEquals(emptyList<String>(), asked())
+        playback.playPause(station.played, false, app)
+        assertEquals(listOf("pause"), asked())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aBroadcastCaptionCannotOpenOrControlASongWithItsFullName() {
+        allow()
+        sounding()
+        val title = "Fake FM - Hits 24/7"
+        val app = "com.ilv.vradio"
+        shadowOf(sessions).addController(player(app, "VRadio", title, "", album = "VRadio", actions = PlaybackState.ACTION_SEEK_TO))
+        val song = MusicMetadata(title, "Fake Artist")
+        playback.seekTo(song, 10_000, app)
+        playback.playPause(song, false, app)
+        assertEquals(emptyList<String>(), asked())
+        val station = checkNotNull(playback.playingUnnamed())
+        assertNull(station.asSong)
+        assertTrue(station.said)
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aCreditedAudioFilenameCanBeFollowedAndControlled() {
+        allow()
+        val packageName = "com.example.player"
+        for (name in listOf("Live.mp3", "Paperkite.flac", "Acoustic.OPUS")) {
+            ShadowMediaSessionManager.reset()
+            val session = player(packageName, "Player", "Fixture Artist - $name", "", duration = 200_000L)
+            shadowOf(sessions).addController(session)
+            val song = MusicMetadata(name.substringBeforeLast('.'), "Fixture Artist")
+            assertNull(name, playback.appFor(song.copy(artist = "Wrong Artist"), app = packageName))
+            assertNull(name, playback.appFor(MusicMetadata("Fixture Artist", ""), app = packageName))
+            val prefix = MusicMetadata("Fixture Artist", "Wrong Artist")
+            assertNull(name, playback.appFor(prefix, app = packageName))
+            playback.seekTo(prefix, 10_000, packageName)
+            playback.playPause(prefix, false, packageName)
+            assertEquals(name, emptyList<String>(), asked())
+            assertEquals(name, session, playback.appFor(song, app = packageName))
+            playback.seekTo(song, 10_000, packageName)
+            playback.playPause(song, false, packageName)
+            assertEquals(name, listOf("seekTo 10000", "pause"), asked())
+            assertEquals(name, session, playback.appFor(song.copy(artist = ""), app = packageName))
+            val fullTitle = MusicMetadata("Fixture Artist - ${song.title}", "")
+            assertEquals(name, session, playback.appFor(fullTitle, app = packageName))
+            val fullBy = fullTitle.copy(title = "Fixture Artist – ${song.title}", artist = "Fixture Artist")
+            assertEquals(name, session, playback.appFor(fullBy, app = packageName))
+            assertNull(name, playback.appFor(fullBy.copy(artist = "Wrong Artist"), app = packageName))
+            if (name == "Paperkite.flac") {
+                assertNull(name, playback.appFor(song.copy(title = "Paperkite (Live)"), app = packageName))
+            }
+        }
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun anArtistlessRecordingLabelCannotControlTheTitleWithoutItsTag() {
+        allow()
+        sounding()
+        val app = "com.other.player"
+        shadowOf(sessions).addController(player(app, "Other", "Fake Song - Remastered", "", album = "Fake Album"))
+        playback.playPause(MusicMetadata("Fake Song", "Fake Artist"), false, app)
+        assertEquals(emptyList<String>(), asked())
+        assertNull(checkNotNull(playback.playingUnnamed()).asSong)
+    }
+
+    @Test
     fun whatPlayedLastOnThePhoneComesFirstNamedOrNot() {
         allow()
         sounding()
@@ -1940,6 +2024,38 @@ class PlaybackTest {
         shadowOf(sessions).addController(vlog())
         assertNull(playback.nowPlaying())
         assertEquals(Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel", said = false), playback.playingUnnamed())
+    }
+
+    @Test
+    fun anArtistlessVideoWithARecordingLabelDoesNotHideASong() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Fake Song", "Fake Band", album = "Fake Album"))
+        val video = player("com.google.android.youtube", "YouTube", "Fake Show - Live", "", at = PLAYED_AT + 5)
+        shadowOf(sessions).addController(video)
+        assertEquals("Fake Song", playback.nowPlaying()?.metadata?.title)
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(video)
+        assertEquals(Unnamed("com.google.android.youtube", "YouTube", "Fake Show - Live", said = false), playback.playingUnnamed())
+    }
+
+    @Test
+    fun aMusicVideoKeepsItsCreditEvenWhenItsSongIsCalledLive() {
+        allow()
+        sounding()
+        val title = "Fake Artist - Live"
+        val video = player("com.google.android.youtube", "YouTube", title, "")
+        shadowOf(sessions).addController(video)
+        assertNull(playback.nowPlaying())
+        ShadowMediaSessionManager.reset()
+        val musicApp = "com.google.android.apps.youtube.music"
+        shadowOf(sessions).addController(player(musicApp, "YouTube Music", title, ""))
+        val song = MusicMetadata("Live", "Fake Artist")
+        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertNotNull(playback.appFor(song, app = musicApp))
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(video)
+        assertNull(playback.nowPlaying())
     }
 
     @Test
@@ -2131,7 +2247,7 @@ class PlaybackTest {
         allow()
         sounding()
         val reads = mutableListOf<Pair<String, String>>()
-        val playback = MediaSessionPlayback(app, now = { NOW }, waker = { null }, modes = modes, queueOf = { queues[it.packageName] }, readSong = { title, artist ->
+        val playback = MediaSessionPlayback(app, now = { NOW }, waker = { null }, modes = modes, queueOf = { queues[it.packageName] }, readSong = { title, artist, _ ->
             reads += title to artist
             MetadataParsers.playerSong(title, artist)
         })
@@ -2562,7 +2678,6 @@ class PlaybackTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(shadows = [CoverBitmap::class])
     fun collectingATemporaryTokenCannotDiscardAnActiveSessionsCover() {
         val controller = aBitmapCover()
         shadowOf(sessions).addController(controller)
@@ -2576,6 +2691,7 @@ class PlaybackTest {
         // Collect the temporary token and bitmap, while retaining this test's cache itself.
         val writer = PlaybackCovers(File(app.cacheDir, "temporary-session-cover"))
         val (cover, bitmap) = saveThroughATemporaryToken(writer, controller, token)
+        assertEquals(1L, runBlocking { withTimeout(5_000L) { writer.updates.first { it > 0 } } })
         val end = System.nanoTime() + 5_000_000_000L
         while (bitmap.get() != null && System.nanoTime() < end) {
             System.gc()
@@ -2587,11 +2703,11 @@ class PlaybackTest {
         val name = listOf("Fake Song", "Fake Artist", "Fake Album", null, null)
         writer.retainSessions(setOf(token))
         assertEquals(cover, writer.of(original, token, name))
-        assertEquals(1, CoverBitmap.encodes.get())
+        assertEquals(1L, writer.updates.value)
         writer.retainSessions(emptySet())
         assertNull(writer.of(original, token, name))
         assertEquals(cover, coverWhenReady { writer.of(original, token, name) })
-        assertEquals(2, CoverBitmap.encodes.get())
+        assertEquals(2L, runBlocking { withTimeout(5_000L) { writer.updates.first { it >= 2 } } })
     }
 
     @Test
@@ -2748,7 +2864,7 @@ class PlaybackTest {
         allow()
         sounding()
         val reads = java.util.concurrent.atomic.AtomicInteger()
-        val source = MediaSessionPlayback(app, readSong = { title, artist ->
+        val source = MediaSessionPlayback(app, readSong = { title, artist, _ ->
             reads.incrementAndGet()
             MusicMetadata(title, artist)
         })

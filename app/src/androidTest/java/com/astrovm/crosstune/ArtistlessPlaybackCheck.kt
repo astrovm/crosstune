@@ -59,7 +59,7 @@ class ArtistlessPlaybackCheck : Instrumentation() {
                         }
                     }
                     val source = MediaSessionPlayback(targetContext)
-                    val song = MusicMetadata(fixture.asked, "Fixture Artist")
+                    val song = MusicMetadata(fixture.asked, fixture.askedArtist)
                     val selected = source.appFor(song, app = targetContext.packageName) != null
                     val followed = runBlocking {
                         withTimeout(3_000L) {
@@ -92,10 +92,29 @@ class ArtistlessPlaybackCheck : Instrumentation() {
         finish(code, Bundle().apply { putString("cases", results.toString()) })
     }
 
-    private data class Fixture(val title: String, val artist: String, val asked: String, val matches: Boolean)
+    private data class Fixture(
+        val title: String,
+        val artist: String,
+        val asked: String,
+        val matches: Boolean,
+        val askedArtist: String = "Fixture Artist"
+    )
 
     private companion object {
         val fixtures = listOf(
+            Fixture("Fixture FM - Hits 24/7", "", "Hits 24/7", false, askedArtist = "Fixture FM"),
+            Fixture("Fixture FM - Hits 24/7", "", "Fixture FM - Hits 24/7", false),
+            Fixture("Fixture Artist - Live", "", "Live", false),
+            Fixture("Fixture Artist (Official Video) - Live", "", "Live", false),
+            Fixture("Fixture Artist - Live.mp3", "", "Live", true),
+            Fixture("Fixture Artist - Live.mp3", "", "Fixture Artist", false, askedArtist = "Wrong Artist"),
+            Fixture("Fixture Artist - Live.mp3", "", "Live", false, askedArtist = "Wrong Artist"),
+            Fixture("Fixture Artist - Live.mp3", "", "Live", true, askedArtist = ""),
+            Fixture("Fixture Artist - Live.mp3", "", "Fixture Artist - Live", true, askedArtist = ""),
+            Fixture("Fixture Artist - Paperkite.flac", "", "Fixture Artist - Paperkite", true),
+            Fixture("Fixture Artist - Paperkite.flac", "", "Fixture Artist – Paperkite", true, askedArtist = ""),
+            Fixture("Fixture Artist - Paperkite.flac", "", "Paperkite (Live)", false),
+            Fixture("Fixture FM - Glass Lantern", "", "Glass Lantern", true, askedArtist = "Fixture FM"),
             Fixture("Glass Lantern Radio", "", "Glass Lantern", false),
             Fixture("Fixture Artist - Glass Lantern Radio", "", "Glass Lantern", false),
             Fixture("Other Artist - Glass Lantern", "", "Glass Lantern", false),

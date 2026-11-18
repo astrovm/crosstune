@@ -1,7 +1,9 @@
 package com.astrovm.crosstune
 
 import org.json.JSONArray
+import java.text.BreakIterator
 import java.text.Normalizer
+import java.util.Locale
 import kotlin.math.abs
 
 /** A chord played from letter [at] of a line. */
@@ -79,6 +81,8 @@ internal object ChordSheets {
 
     /** How long a line with nothing after it takes per letter, to time its chords. */
     private const val LETTER_MS = 150L
+    // The measured pace of unspaced writing in scripts/syncreplay/measurements.md.
+    private const val UNSPACED_LETTER_MS = 280L
 
 
     /** A reading in brackets right after a kanji: kana, and the dashes that hold a sound. */
@@ -826,30 +830,73 @@ internal object ChordSheets {
         return line to (ours.char[target] + if (on == null) 1 else 0)
     }
 
-    /**
-     * When [line]'s letter [at] is sung: within the word it's in, for words timed one by one, or that
-     * far through the line, up to when [nextMs] the next one starts.
-     */
-    fun timeOf(line: LyricLine, at: Int, nextMs: Long?): Long {
-        val endMs = nextMs ?: (line.timeMs + line.text.length * LETTER_MS)
-        if (line.words.isNotEmpty()) {
-            var from = 0
-            line.words.forEachIndexed { index, word ->
-                val to = from + word.text.length
-                if (at < to || index == line.words.lastIndex) {
-                    val wordEnd = line.words.getOrNull(index + 1)?.timeMs ?: endMs
-                    val into = (at - from).coerceIn(0, word.text.length)
-                    return word.timeMs + (wordEnd - word.timeMs) * into / word.text.length.coerceAtLeast(1)
-                }
-                from = to
-            }
+    /** When each chord's letter is sung. Use the known times before estimating the last part. */
+    fun timesOf(line: LyricLine, chords: List<Chord>, nextMs: Long?): List<Long> {
+        val endMs = knownEnd(line, nextMs)
+        val lastText = line.words.lastOrNull()?.text ?: line.text
+        val estimate = if (endMs == null) estimatedOffsets(lastText) else longArrayOf()
+        if (line.words.isEmpty()) {
+            return chords.map { atLetter(line.timeMs, endMs, line.text.length, it.at, estimate) }
         }
-        return line.timeMs + (endMs - line.timeMs) * at.coerceIn(0, line.text.length) / line.text.length.coerceAtLeast(1)
+        val ends = IntArray(line.words.size)
+        var length = 0
+        line.words.forEachIndexed { index, word ->
+            length += word.text.length
+            ends[index] = length
+        }
+        return chords.map { chord ->
+            val index = wordAt(ends, chord.at)
+            val word = line.words[index]
+            val from = if (index > 0) ends[index - 1] else 0
+            val wordEnd = line.words.getOrNull(index + 1)?.timeMs ?: endMs
+            atLetter(word.timeMs, wordEnd, word.text.length, chord.at - from, estimate)
+        }
     }
 
-    /** The chord being played at [positionMs] among [line]'s, by its place in them; -1 before the first. */
-    fun playing(line: LyricLine, chords: List<Chord>, nextMs: Long?, positionMs: Long): Int =
-        chords.indexOfLast { timeOf(line, it.at, nextMs) <= positionMs }
+    /** The earlier usable mark, before the gap to the next line if the service gives an end. */
+    fun knownEnd(line: LyricLine, nextMs: Long?): Long? {
+        val start = line.words.lastOrNull()?.timeMs ?: line.timeMs
+        return listOfNotNull(line.endMs, nextMs).filter { it >= start }.minOrNull()
+    }
+
+    /** First word ending after the chord, or the last word for a chord past the text. */
+    private fun wordAt(ends: IntArray, at: Int): Int {
+        var first = 0
+        var last = ends.lastIndex
+        while (first < last) {
+            val middle = first + (last - first) / 2
+            if (at < ends[middle]) last = middle else first = middle + 1
+        }
+        return first
+    }
+
+    private fun atLetter(startMs: Long, endMs: Long?, length: Int, at: Int, estimate: LongArray): Long {
+        val offset = at.coerceIn(0, length)
+        return startMs + if (endMs == null) estimate[offset] else (endMs - startMs) * offset / length.coerceAtLeast(1)
+    }
+
+    /** One pace per unspaced character, including composed kana and Hangul. Keep the sheet's UTF-16 offsets. */
+    private fun estimatedOffsets(text: String): LongArray {
+        val offsets = LongArray(text.length + 1)
+        val characters = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(text) }
+        var start = characters.first()
+        var end = characters.next()
+        while (end != BreakIterator.DONE) {
+            val unspaced = when (Character.UnicodeScript.of(text.codePointAt(start))) {
+                Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA,
+                Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL -> true
+                else -> false
+            }
+            for (at in start + 1 until end) offsets[at] = offsets[start] + if (unspaced) 0L else (at - start) * LETTER_MS
+            offsets[end] = offsets[start] + if (unspaced) UNSPACED_LETTER_MS else (end - start) * LETTER_MS
+            start = end
+            end = characters.next()
+        }
+        return offsets
+    }
+
+    /** The chord playing at [positionMs], by its place in [times]; -1 before the first. */
+    fun playing(times: List<Long>, positionMs: Long): Int = times.indexOfLast { it <= positionMs }
 
     /** The letters of some lines, each with the line and place it's at, as they're compared: in lower case, full width as half. */
     private class Letters(texts: List<String>) {
