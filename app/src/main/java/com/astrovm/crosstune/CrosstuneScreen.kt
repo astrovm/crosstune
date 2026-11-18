@@ -844,8 +844,12 @@ private fun UnnamedBar(now: PlayingUnnamed, actions: ScreenActions) {
     // The app's name as following it has it too, as both are from its package.
     val app = now.playing.label
     val name = song?.title ?: now.playing.name ?: app.orEmpty()
+    val artist = song?.artist?.takeIf { it.isNotBlank() && it != name }
+    val credit = if (now.heard?.inRoom == true) {
+        listOfNotNull(stringResource(R.string.player_heard_nearby), artist)
+    } else listOfNotNull(artist, app?.takeIf { it.isNotBlank() && it != name })
     PlayingBar(
-        name, listOfNotNull(song?.artist, app).filter { it.isNotBlank() && it != name }.joinToString(" · "),
+        name, credit.joinToString(" · "),
         song?.artworkUrl ?: now.playing.artworkUrl, now.following, now.following?.durationMs, actions.onOpenPlayingUnnamed, actions
     )
 }

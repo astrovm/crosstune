@@ -119,6 +119,19 @@ class FollowsTheSongTest {
         CrosstuneScreen(UiState(playingNow = following?.let { NowPlaying(MusicMetadata("Song", "Band", lengthMs = lengthMs), it) }), ScreenActions())
     }
 
+    @Test
+    fun aSongHeardByTheMicrophoneSaysItWasHeardNearby() {
+        val station = Unnamed("com.example.radio", "Fixture Radio", "Fixture FM")
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        show {
+            CrosstuneScreen(UiState(playingUnnamed = PlayingUnnamed(station, Heard.Song(song, null, inRoom = true))), ScreenActions())
+        }
+        val bar = hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
+        compose.onNode(bar and hasText("Fixture Song"), useUnmergedTree = true).assertExists()
+        compose.onNode(bar and hasText("Heard nearby · Fixture Artist"), useUnmergedTree = true).assertExists()
+        compose.onNode(bar and hasText("Fixture Radio", substring = true), useUnmergedTree = true).assertDoesNotExist()
+    }
+
     private val playedSoFar = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo) and hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
 
     /** How far along the bar's line is, or null when it has none. */
