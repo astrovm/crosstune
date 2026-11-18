@@ -514,6 +514,35 @@ class ReadingsTest {
     }
 
     @Test
+    fun aSmallKanaStaysInTheWordThatSaysIt() {
+        val text = "かいしゃのけいひ"
+        fun words() = Readings.words(text, Script.JAPANESE).map { it.text to it.lookup }
+        val expected = listOf("かいしゃ" to "会社", "の" to "の", "けいひ" to "経費")
+        assertEquals(listOf(expected, expected), listOf(words(), TestUniDic.reading { words() }))
+        fun line() = Readings.of(listOf(text), Script.JAPANESE).single().typed
+        assertEquals("kaisha no keihi", line())
+        assertEquals("kaisha no keihi", TestUniDic.reading { line() })
+    }
+
+    @Test
+    fun smallKanaRecoveryNeedsBothNounsAndTheirReadings() {
+        val text = "かいしゃのけいひ"
+        val cached = Readings.oldKanaRead
+        val vocabulary = Readings.oldKana
+        val unsure = listOf("かいし", "ゃのけいひ")
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        try {
+            for (today in listOf(vocabulary.today - "かいしゃ", vocabulary.today - "けいひ", vocabulary.today + ("けいひ" to "携帯"))) {
+                Readings.oldKanaRead = Readings.OldKana(today, vocabulary.modern)
+                assertEquals(unsure, words(text))
+            }
+        } finally {
+            Readings.oldKanaRead = cached
+        }
+        assertEquals(listOf("ちいさな", "ゃ"), words("ちいさなゃ"))
+    }
+
+    @Test
     fun aWordInOldKanaIsLookedUpAsTheWordItsSpellingTodayIs() {
         fun lookups(line: String) = Readings.words(line, Script.JAPANESE).map { it.lookup }
         // A translator knows 云う and 思い出, and takes 云ふ for a name and 思ふ for another word than 思ひ出: what's asked for is the word the card names.
@@ -543,6 +572,19 @@ class ReadingsTest {
         inBoth(listOf("思い出"), "思い出")
         inBoth(listOf("ひとり"), "ひとり")
         TestUniDic.reading { assertEquals(listOf("言う", "ふたり"), lookups("言う ふたり")) }
+    }
+
+    @Test
+    fun theOldSpellingOfBeingKeepsItsVerbWhenTheLineIsShort() {
+        fun reading(line: String) = Readings.words(line, Script.JAPANESE).filter { it.modern != null }
+            .map { listOf(it.text, it.modern, it.lookup) }
+        val lines = listOf("ゐたんだ", "「ゐたんだ」", "待つてゐたんだよ")
+        val being = listOf("ゐたんだ", "いたんだ", "いる")
+        val wanted = listOf(listOf(being), listOf(being), listOf(listOf("待つて", "待って", "待つ"), being))
+        val builtIn = lines.map(::reading)
+        val uniDic = TestUniDic.reading { lines.map(::reading) }
+        assertEquals(listOf(wanted, wanted), listOf(builtIn, uniDic))
+        assertTrue(reading("いたんだ").isEmpty())
     }
 
     @Test
@@ -587,8 +629,37 @@ class ReadingsTest {
         assertEquals("omoide", line("思ひ出").romanized)
         TestUniDic.reading { assertEquals(omoide, line("思ひ出").parts) }
         // The lyric's words are the ones it has, as the dictionary splits what is around them.
-        assertEquals("matsute itanda yo", line("待つてゐたんだよ").romanized)
+        assertEquals("matte itanda yo", line("待つてゐたんだよ").romanized)
         assertEquals(listOf("kyoo", "ame"), line("けふ 雨").romanized.split(" ").map { it.replace("kyou", "kyoo") }.take(2))
+    }
+
+    @Test
+    fun oldVerbEndingsWrittenWithABigTsuReadAsSmallTsu() {
+        val historical = listOf(
+            "待つて" to listOf("待つて", "待って", "待つ", "matte"),
+            "「放つて」" to listOf("放つて", "放って", "放つ", "hanatte"),
+            "立つてから" to listOf("立つて", "立って", "立つ", "tatte")
+        )
+        fun readings() = historical.map { (line, _) ->
+            Readings.words(line, Script.JAPANESE).filter { it.modern != null }.map { listOf(it.text, it.modern, it.lookup, it.romanized) }
+        }
+        val ipadic = readings()
+        val unidic = TestUniDic.reading { readings() }
+        val expected = historical.map { listOf(it.second) }
+        assertEquals("IPADIC", expected, ipadic)
+        assertEquals("UniDic", expected, unidic)
+        val controls = listOf("かつて", "つてがある", "一つていねいに置く", "つてを探す", "待っている", "行つて")
+        fun remaining() {
+            controls.forEach { line ->
+                assertEquals(line, emptyList<String>(), Readings.words(line, Script.JAPANESE).mapNotNull { it.modern })
+            }
+            val line = "待つてゐたんだよ"
+            assertEquals("まっていたんだよ", Readings.of(listOf(line), Script.JAPANESE).single().reading)
+            val noted = Readings.words(line, Script.JAPANESE).filter { it.modern != null }
+            assertEquals(listOf("待って" to "待つ", "いたんだ" to "いる"), noted.map { it.modern to it.lookup })
+        }
+        remaining()
+        TestUniDic.reading { remaining() }
     }
 
     @Test
@@ -608,6 +679,43 @@ class ReadingsTest {
         }
         noWordInOldKana()
         TestUniDic.reading { noWordInOldKana() }
+    }
+
+    @Test
+    fun aKanaWordAlreadySpelledAsItIsTodayDoesNotGetAnOldSpellingNote() {
+        val modern = listOf("はいひん", "ばいひん", "ちひき", "ふひ").flatMap { word ->
+            listOf(word, "「$word」", "${word}がある")
+        }
+        val historical = listOf("いふ", "おもひで")
+        fun notes(words: List<String>) = words.associateWith { text ->
+            Readings.words(text, Script.JAPANESE).mapNotNull { it.modern }
+        }
+        val builtIn = notes(modern)
+        val uniDic = TestUniDic.reading { notes(modern) }
+        val noNotes = modern.associateWith { emptyList<String>() }
+        assertEquals(listOf(noNotes, noNotes), listOf(builtIn, uniDic))
+        val expected = mapOf("いふ" to listOf("いう"), "おもひで" to listOf("おもいで"))
+        fun checkReadings() {
+            assertEquals(expected, notes(historical))
+            val lines = Readings.of(listOf("はいひん", "ばいひん"), Script.JAPANESE)
+            assertEquals(listOf("haihin", "baihin"), lines.map { it.romanized })
+        }
+        checkReadings()
+        TestUniDic.reading {
+            checkReadings()
+            assertEquals(mapOf("こふ" to listOf("こう")), notes(listOf("こふ")))
+        }
+    }
+
+    @Test
+    fun aRareKanaSpellingDoesNotReachAcrossTheEndOfAnOldVerb() {
+        val text = "いふひと"
+        fun check() {
+            assertEquals(listOf("いう"), Readings.words(text, Script.JAPANESE).mapNotNull { it.modern })
+            assertEquals("iu hito", Readings.of(listOf(text), Script.JAPANESE).single().romanized)
+        }
+        check()
+        TestUniDic.reading { check() }
     }
 
     @Test
@@ -653,7 +761,6 @@ class ReadingsTest {
             "手をとりあふ" to listOf("とりあふ", "とりあう", "とりあう"),
             "あひたい" to listOf("あひたい", "あいたい", "あう"),
             "きのふ" to listOf("きのふ", "きのう", "きのう"),
-            "待つてゐたんだよ" to listOf("ゐたんだ", "いたんだ", "いる"),
             // Its first kana is never an old ending: ひろふ is ひろう, not いろう.
             "ひろふ" to listOf("ひろふ", "ひろう", "ひろう"),
             "ひきあふ" to listOf("ひきあふ", "ひきあう", "ひきあう"),
@@ -695,6 +802,8 @@ class ReadingsTest {
         val cases = listOf(
             "こふ" to emptyList(),
             "あるひは" to emptyList(),
+            "ちひき" to emptyList(),
+            "ふひ" to emptyList(),
             "きのふれる" to emptyList(),
             "きのふ" to listOf("きのう"),
             "ふるふ" to listOf("ふるう"),
@@ -702,6 +811,8 @@ class ReadingsTest {
         )
         cases.forEach { (text, modern) ->
             assertEquals(text, modern, Readings.words(text, Script.JAPANESE).mapNotNull { it.modern })
+            val line = Readings.of(listOf(text), Script.JAPANESE).single()
+            assertEquals(text, text, line.parts.joinToString("") { it.text })
         }
         TestUniDic.reading {
             assertNull(Readings.words("さそふ", Script.JAPANESE).single().reading)
@@ -857,6 +968,51 @@ class ReadingsTest {
         assertEquals(emptyList<Int>(), kyou.plain)
         assertEquals(listOf(2), kyou.contracted)
         assertEquals(2, kyou.first)
+    }
+
+    @Test
+    fun aHoInAnOldKanaWordGetsItsModernSpellingWithoutChangingModernWords() {
+        fun checkSpelling() {
+            val old = mapOf("とほい" to "とおい", "おほぜい" to "おおぜい", "こほり" to "こおり", "なほさら" to "なおさら", "うるほふ" to "うるおう")
+            for ((text, modern) in old) {
+                assertEquals(text, modern, Readings.words(text, Script.JAPANESE).singleOrNull()?.modern)
+            }
+            for (text in listOf("ほほ", "まほう", "ほほえむ", "えてにほをあげる", "しりにほをかける")) {
+                assertNull(text, Readings.words(text, Script.JAPANESE).firstNotNullOfOrNull(Word::modern))
+            }
+            // The dictionary's long vowel is still heard in a modern word that contains ほ.
+            assertEquals("goohoo", Readings.words("あんごうほう", Script.JAPANESE).last().romanized)
+        }
+        checkSpelling()
+        TestUniDic.reading(::checkSpelling)
+    }
+
+    @Test
+    fun aModernWordAcrossTheEndOfAnOldSpellingCandidateKeepsItsKana() {
+        fun checkSpelling() {
+            for (text in listOf("とほいどう", "うるほふく", "こほりのふかい")) {
+                assertEquals(text, text, Readings.of(listOf(text), Script.JAPANESE).single().reading)
+                assertNull(text, Readings.words(text, Script.JAPANESE).firstNotNullOfOrNull(Word::modern))
+            }
+        }
+        checkSpelling()
+        TestUniDic.reading(::checkSpelling)
+    }
+
+    @Test
+    fun repeatedOldKanaPairsSplitTheDictionaryPieceBetweenThem() {
+        fun checkReading() {
+            val text = "けふけふ"
+            val reading = Readings.of(listOf(text), Script.JAPANESE).single()
+            assertEquals("きょうきょう", reading.reading)
+            val today = Word("けふ", "きょう", "kyoo", "きょう", "kyou", by = listOf(Reader.IPADIC), modern = "きょう")
+            assertEquals(listOf(today, today), Readings.words(text, Script.JAPANESE))
+            // A longer modern word at the pair's boundary must stay whole.
+            assertEquals(listOf("け", "ふたり"), Readings.words("けふたり", Script.JAPANESE).map { it.text })
+            assertNull(Readings.words("けふたり", Script.JAPANESE).firstNotNullOfOrNull(Word::modern))
+        }
+        checkReading()
+        TestUniDic.reading(::checkReading)
     }
 
     @Test

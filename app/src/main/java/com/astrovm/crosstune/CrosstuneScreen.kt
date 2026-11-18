@@ -844,9 +844,15 @@ private fun UnnamedBar(now: PlayingUnnamed, actions: ScreenActions) {
     // The app's name as following it has it too, as both are from its package.
     val app = now.playing.label
     val name = song?.title ?: now.playing.name ?: app.orEmpty()
+    val artist = song?.artist?.takeIf { it.isNotBlank() && it != name }
+    val heardNearby = now.heard?.inRoom == true
+    val credit = if (heardNearby) {
+        listOfNotNull(stringResource(R.string.player_heard_nearby), artist)
+    } else listOfNotNull(artist, app?.takeIf { it.isNotBlank() && it != name })
     PlayingBar(
-        name, listOfNotNull(song?.artist, app).filter { it.isNotBlank() && it != name }.joinToString(" · "),
-        song?.artworkUrl ?: now.playing.artworkUrl, now.following, now.following?.durationMs, actions.onOpenPlayingUnnamed, actions
+        name, credit.joinToString(" · "),
+        song?.artworkUrl ?: now.playing.artworkUrl, now.following, now.following?.durationMs, actions.onOpenPlayingUnnamed, actions,
+        byLineMaxLines = if (heardNearby) 3 else 1
     )
 }
 
@@ -855,7 +861,16 @@ private fun UnnamedBar(now: PlayingUnnamed, actions: ScreenActions) {
  * and how far it is when [duration] is known. A tap does [onOpen]; swiped up, it opens the player.
  */
 @Composable
-private fun PlayingBar(title: String, byLine: String, cover: String?, following: Following?, duration: Long?, onOpen: () -> Unit, actions: ScreenActions) {
+private fun PlayingBar(
+    title: String,
+    byLine: String,
+    cover: String?,
+    following: Following?,
+    duration: Long?,
+    onOpen: () -> Unit,
+    actions: ScreenActions,
+    byLineMaxLines: Int = 1
+) {
     val playing = following?.clock?.playing != false
     // The buttons sit inside the bar's own tap target, where a remote's search from the bar never looks.
     val bar = remember { FocusRequester() }
@@ -878,7 +893,7 @@ private fun PlayingBar(title: String, byLine: String, cover: String?, following:
                         byLine,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = byLineMaxLines,
                         overflow = TextOverflow.Ellipsis
                     )
                 }

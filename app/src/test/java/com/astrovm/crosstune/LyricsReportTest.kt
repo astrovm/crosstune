@@ -276,6 +276,21 @@ class LyricsReportTest {
     }
 
     @Test
+    fun aReportTurnedAwayByALimitKeepsItOpenAndSaysSo() {
+        answerTo = { 429 }
+        report()
+        click(string(R.string.report_send))
+        waitUntil { model().uiState.report?.let { it != ReportStatus.SENDING } == true }
+        assertTrue(shown("Too many reports right now. Try again later."))
+        assertFalse(shown(string(R.string.report_failed)))
+        val first = sentReport().toString()
+        answerTo = { null }
+        click(string(R.string.report_send))
+        waitUntil { !shown(string(R.string.report_what_goes)) }
+        assertEquals(listOf(first, first), sentReports().map { it.toString() })
+    }
+
+    @Test
     fun aManualSongReportKeepsItsPayloadOnRetryAndEditsOrAnotherDialogStartANewOne() {
         reportsDown = true
         openLyrics()
@@ -302,12 +317,14 @@ class LyricsReportTest {
     @Test
     fun aManualReadingReportKeepsItsIdOnRetryAndAnEditOrAnotherKindStartsANewOne() {
         reportsDown = true
+        answerTo = { 429 }
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 花の空"}]""")
         openLyrics { model().uiState.learning.lines.isNotEmpty() }
         val word = Word("花", "か", "ka")
         composeRule.runOnIdle { model().reportReading(word, 0, "はな") }
-        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        waitUntil { model().uiState.report == ReportStatus.RATE_LIMITED }
         val first = sentReport()
+        answerTo = { null }
         composeRule.runOnIdle { model().reportReading(word, 0, "はな") }
         waitUntil { sentReports().size == 2 && model().uiState.report == ReportStatus.FAILED }
         assertEquals(first.toString(), sentReport().toString())

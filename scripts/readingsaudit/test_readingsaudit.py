@@ -127,6 +127,18 @@ class OldKana(unittest.TestCase):
         ]
         self.assertEqual(["おひる", "くふう"], readingsaudit.old_kana(words)[1])
 
+    def test_includes_o_readings_and_protects_modern_ho(self):
+        words = [
+            word([("氷", [], True)], [("こおり", [], True, ["*"])], [(["n"], [])]),
+            word([("徒歩", [], True)], [("とほ", [], False, ["*"])], [(["n"], [])]),
+            word([], [("けほ", [], False, [])], [(["n"], ["arch"])]),
+        ]
+        today, modern = readingsaudit.old_kana(words)
+        with self.subTest("modern reading"):
+            self.assertEqual({"こおり": "氷"}, today)
+        with self.subTest("current spelling"):
+            self.assertEqual(["とほ"], modern)
+
     def test_writes_the_table_with_where_it_comes_from(self):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
@@ -448,6 +460,23 @@ class TheirReading(unittest.TestCase):
 
     def test_the_letters_after_the_kanji_follow_it(self):
         self.assertEqual("にちようは", readingsaudit.their_reading("日曜は", (0, 3), (0, 2), [], "にちよう"))
+
+
+class Compare(unittest.TestCase):
+    def test_pinned_lyrics_are_compared_without_counting_unmeasured_timing_or_chords(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            found = folder / "audit"
+            found.mkdir()
+            ordinary = {"kind": "other", "title": "Title", "artist": "Artist", "lyrics": "found",
+                        "script": "JAPANESE", "utaten": "ordinary", "timed": False, "lines": []}
+            pinned = {**ordinary, "kind": "oldkana", "title": "Historical title", "utatenPage": "pinned"}
+            for name, report in (("ordinary", ordinary), ("pinned", pinned)):
+                (found / f"{name}.json").write_text(json.dumps(report))
+            with mock.patch("builtins.print"):
+                readingsaudit.compare(folder, words=False)
+            self.assertEqual({"no timing": ["Title / Artist"], "no chords": ["Title / Artist"]},
+                             json.loads((folder / "missing.json").read_text()))
 
 
 class Age(unittest.TestCase):

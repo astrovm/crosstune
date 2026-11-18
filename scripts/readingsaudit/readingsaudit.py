@@ -99,12 +99,24 @@ SONGS = {
         ("TSUNAMI", "サザンオールスターズ"), ("ロビンソン", "スピッツ"), ("春よ、来い", "松任谷由実"), ("雪の華", "中島美嘉"),
         ("ライラック", "Mrs. GREEN APPLE"), ("晩餐歌", "tuki."), ("アイネクライネ", "米津玄師"),
     ],
+    # Use these UtaTen pages as the text as well as the ruby. Other services may write the kana in their modern form.
+    "oldkana": [
+        ("ふるさとの山に向ひて", "新井満", "jb10704025"),
+        ("我れは梔子", "林原めぐみ", "ya16020389"),
+        ("都会の夏の夜", "サンタラ", "yb16072004"),
+        ("春さんゑ", "真壁寂室", "mi23083032"),
+    ],
 }
 
 
 def songs(folder):
-    out = [{"id": f"{kind}-{i + 1:02d}", "kind": kind, "title": title, "artist": artist}
-           for kind, listed in SONGS.items() for i, (title, artist) in enumerate(listed)]
+    out = []
+    for kind, listed in SONGS.items():
+        for number, (title, artist, *page) in enumerate(listed, 1):
+            song = {"id": f"{kind}-{number:02d}", "kind": kind, "title": title, "artist": artist}
+            if page:
+                song["utatenPage"] = page[0]
+            out.append(song)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "songs.json").write_text(json.dumps(out, ensure_ascii=False, indent=1))
     print(f"{len(out)} songs in {folder / 'songs.json'}: " + ", ".join(f"{k} {len(v)}" for k, v in SONGS.items()))
@@ -145,9 +157,9 @@ def table_header(date, version):
 
 
 def old_kana(words):
-    """The words in kana a word in old kana may be today, {kana: lookup}, and the words in kana with a ひ or ふ after their first kana.
+    """The words in kana a word in old kana may be today, {kana: lookup}, and the words in kana with ひ, ふ or ほ after their first kana.
 
-    The first are JMdict's common words with an い or う after their first kana, おもいで, but adjectives, each looked up as its usual form,
+    The first are JMdict's common words with い, う or お after their first kana, おもいで, but adjectives, each looked up as its usual form,
     思い出, or as its kana when it's usually written so or JMdict has more than one common word for it. The second are
     every word JMdict has that's written so today, おひる or くふう, not archaic: written there, it's no old spelling.
     """
@@ -161,11 +173,11 @@ def old_kana(words):
             text = kana["text"]
             if set(kana["tags"]) & ODD_KANA or not text or not all("ぁ" <= c <= "ゖ" for c in text):
                 continue
-            if any(c in "ひふ" for c in text[1:]) and not archaic:
+            if any(c in "ひふほ" for c in text[1:]) and not archaic:
                 modern.add(text)
             # An adjective's い was never ひ, 古い is ふるし: ふるひ is 降る日.
             adjective = any("adj-i" in sense.get("partOfSpeech", []) for sense in senses)
-            if kana.get("common") and any(c in "いう" for c in text[1:]) and not adjective:
+            if kana.get("common") and any(c in "いうお" for c in text[1:]) and not adjective:
                 forms = [k["text"] for k in entry["kanji"] if not set(k["tags"]) & ODD_FORMS
                          and ("*" in kana["appliesToKanji"] or k["text"] in kana["appliesToKanji"])]
                 common = [k["text"] for k in entry["kanji"] if k.get("common") and k["text"] in forms]
@@ -178,8 +190,8 @@ def old_kana_header(date, version):
     return [f"# JMdict {date}, by the Electronic Dictionary Research and Development Group, {JMDICT_URL}",
             f"# through jmdict-simplified {version}. Licensed under CC BY-SA 4.0, {CC_BY_SA_URL}",
             f"# as the Group's licence asks, {EDRDG_LICENCE_URL}",
-            "# Changed: only the common words in kana with い or う after their first kana, each with how it's looked up,",
-            "# then the words in kana with ひ or ふ after their first kana, which are no old spelling.",
+            "# Changed: only the common words in kana with い, う or お after their first kana, each with how it's looked up,",
+            "# then the words in kana with ひ, ふ or ほ after their first kana, which are no old spelling.",
             "# Made by scripts/readingsaudit/readingsaudit.py oldkana."]
 
 
@@ -606,12 +618,14 @@ def compare(folder, words, before=None):
             missing["no lyrics"].append(name)
             found[kind]["no lyrics"] += 1
             continue
-        if not song.get("timed"):
-            missing["no timing"].append(name)
-            found[kind]["no timing"] += 1
-        if song.get("chords") != "found":
-            missing["no chords"].append(name)
-            found[kind]["no chords"] += 1
+        # Pinned references only measure the readings of the text UtaTen gives us.
+        if not song.get("utatenPage"):
+            if not song.get("timed"):
+                missing["no timing"].append(name)
+                found[kind]["no timing"] += 1
+            if song.get("chords") != "found":
+                missing["no chords"].append(name)
+                found[kind]["no chords"] += 1
         if song.get("script") != "JAPANESE":
             found[kind]["not Japanese"] += 1
             continue

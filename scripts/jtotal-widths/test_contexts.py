@@ -171,7 +171,7 @@ class HelpersTest(unittest.TestCase):
                 mock.patch.object(w, "cache", return_value=Path(folder)), \
                 mock.patch.object(w.urllib.request, "urlopen") as urlopen, \
                 mock.patch.object(w.subprocess, "run") as run:
-            urlopen.return_value.read.return_value = b"font"
+            urlopen.side_effect = [io.BytesIO(b"font") for _ in range(3)]
             w.run_in_container(Path("/work-here"), ["/script/x.py"])
             self.assertEqual(urlopen.call_count, 3)
             w.container_fonts()

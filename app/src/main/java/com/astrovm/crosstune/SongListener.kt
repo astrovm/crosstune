@@ -65,8 +65,8 @@ internal sealed interface Heard {
     data class Failed(val error: AppError) : Heard
 
     /**
-     * Heard, but Shazam couldn't be reached, e.g. offline. [send] asks it again about the same sound,
-     * which is kept until then, as the song may be over by the time the phone is back online.
+     * Heard, but Shazam couldn't be reached, e.g. offline. [send] reuses the fingerprint, as the song
+     * may be over by the time the phone is back online.
      */
     class Unsent(val send: suspend () -> Heard) : Heard
 }
@@ -80,9 +80,14 @@ internal class Shazam(
     private val newId: () -> UUID = UUID::randomUUID,
     private val now: () -> Long = System::currentTimeMillis
 ) {
-    /** The first [count] of [samples], mono 16 kHz. */
-    suspend fun recognize(samples: ShortArray, count: Int): Heard {
+    /** The first [count] of [samples], mono 16 kHz. [keepIfOffline] allows one retry of the fingerprint. */
+    suspend fun recognize(samples: ShortArray, count: Int, keepIfOffline: Boolean = false): Heard {
         val uri = withContext(computeDispatcher) { Busy.during { ShazamSignature.uri(samples, count) } }
+        val heard = send(uri)
+        return if (keepIfOffline && heard == Heard.Failed(AppError.NETWORK)) Heard.Unsent { send(uri) } else heard
+    }
+
+    private suspend fun send(uri: String): Heard {
         val request = Request.Builder()
             .url(
                 "https://amp.shazam.com/discovery/v5/en/US/android/-/tag/${newId().toString().uppercase()}/${newId()}" +
@@ -454,7 +459,7 @@ internal class SongListener(
         var tried = 0
         var heard: Heard? = null
         // The network failing for a moment is asked again with more sound, but not twice in a row.
-        var offline: Heard.Failed? = null
+        var offline: Heard.Unsent? = null
         while (heard == null) {
             // Asked again once there's another step's worth, or whatever's left when recording ends.
             val now = progress.first { it.done || it.recorded >= tried + STEP }
@@ -467,18 +472,18 @@ internal class SongListener(
                 tried = now.recorded
                 // Not named yet, it's asked again with more, and what the last ask says is the
                 // answer; Shazam saying it's busy is believed at once.
-                val answer = shazam.recognize(audio.copyOf(tried), tried)
-                val failedAgain = answer is Heard.Failed && answer.error == AppError.NETWORK && offline != null
-                offline = (answer as? Heard.Failed)?.takeIf { it.error == AppError.NETWORK }
-                answer.takeIf { it is Heard.Song || (it is Heard.Failed && (it.error != AppError.NETWORK || failedAgain)) || tried == audio.size }
+                val answer = shazam.recognize(audio.copyOf(tried), tried, keepIfOffline = true)
+                val failedAgain = answer is Heard.Unsent && offline != null
+                offline = answer as? Heard.Unsent
+                answer.takeIf { it is Heard.Song || it is Heard.Failed || failedAgain || tried == audio.size }
             }
         }
         recorder.cancelAndJoin()
         // What's sent starts where the recording did.
         fun started(heard: Heard) = if (heard is Heard.Song) heard.copy(startedAtMs = startedAt) else heard
-        if (heard == Heard.Failed(AppError.NETWORK)) {
-            val sound = audio.copyOf(tried)
-            Heard.Unsent { started(shazam.recognize(sound, sound.size)) }
+        if (heard is Heard.Unsent) {
+            val send = heard.send
+            Heard.Unsent { started(send()) }
         } else {
             started(heard)
         }
