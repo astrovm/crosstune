@@ -97,9 +97,10 @@ sdk=${asked_sdk:-$HOME/Android/Sdk}
 key=$HOME/.android/debug.keystore
 
 if [[ ! -d $sdk ]]; then
-    echo "gradle-box: no Android SDK at $sdk, set ANDROID_HOME" >&2
+    echo "gradle-box: no Android SDK at $sdk. Check GRADLE_BOX_ANDROID_HOME or ANDROID_HOME." >&2
     exit 1
 fi
+sdk=$(cd "$sdk" && pwd -P)
 if [[ $host == Darwin ]]; then
     for tool in "$sdk"/build-tools/*/aapt2 "$sdk"/cmake/*/bin/cmake; do
         [[ -f $tool ]] || continue
@@ -209,7 +210,8 @@ mv "$state/checkouts.$$" "$checkout_ticket"
 echo "$memory" > "$state/ticket.$$"
 mv "$state/ticket.$$" "$ticket"
 exec 7>&-
-trap 'rm -f "$ticket" "$checkout_ticket"' EXIT
+sdk_properties=
+trap 'rm -f "$ticket" "$checkout_ticket"; if [[ -n $sdk_properties ]]; then rm -f "$sdk_properties"; fi' EXIT
 
 # How many asked before this build and aren't done, and the memory they asked for, added up. A ticket
 # with nothing in it is from a checkout whose script doesn't write it: that one asked for 16 or less.
@@ -330,6 +332,15 @@ fi
 for dir in ${also[@]+"${also[@]}"}; do
     box+=(-v "$dir:$dir")
 done
+# AGP reads local.properties before the environment. The checkout may name an SDK, NDK or CMake
+# from the host. The box uses its own SDK settings, including for each extra checkout.
+if [[ $host == Darwin || -n ${GRADLE_BOX_ANDROID_HOME:-} ]]; then
+    for dir in "${checkouts[@]}"; do
+        [[ -f $dir/local.properties ]] || continue
+        [[ -n $sdk_properties ]] || sdk_properties=$(mktemp "$state/local-properties.XXXXXXXX")
+        box+=(-v "$sdk_properties:$dir/local.properties:ro")
+    done
+fi
 # The same key as builds outside the box, so its APKs install over theirs.
 [[ -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
 

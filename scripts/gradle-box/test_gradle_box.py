@@ -976,6 +976,27 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
         self.assertIn(f"ANDROID_HOME={linux_sdk}", run)
         self.assertNotIn(f"-v {self.sdk}:", run)
 
+    def test_the_sdk_override_applies_when_each_checkout_names_a_host_sdk(self):
+        roots = (self.checkout("a"), self.checkout("b"))
+        properties = b"sdk.dir=/host/sdk\ncmake.dir=/host/cmake\n"
+        for root in roots:
+            (root / "local.properties").write_bytes(properties)
+        box = self.start("a", f"--also={roots[1]}", "help", GRADLE_BOX_ANDROID_HOME=str(self.sdk))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        command = self.asked()[0]
+        for root in roots:
+            self.assertIn(f":{root}/local.properties:ro", command)
+            self.assertEqual((root / "local.properties").read_bytes(), properties)
+        self.assertEqual(list((self.dir / "state").glob("local-properties.*")), [])
+
+    def test_a_missing_override_names_the_variable_that_selected_it(self):
+        box = self.start("a", "help", GRADLE_BOX_ANDROID_HOME=str(self.dir / "missing"))
+        output, _ = box.communicate(timeout=20)
+        self.assertNotEqual(box.returncode, 0, output)
+        self.assertIn("GRADLE_BOX_ANDROID_HOME", output)
+        self.assertEqual(self.asked(), [])
+
     def test_the_mac_reports_a_native_sdk_before_starting_a_box(self):
         self.tool("uname", 'case "$1" in -s) echo Darwin;; -m) echo x86_64;; esac\n')
         self.tool("sysctl", 'test "$*" = "-n hw.optional.arm64" && echo 1\n')
