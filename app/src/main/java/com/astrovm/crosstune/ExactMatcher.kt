@@ -708,7 +708,6 @@ internal class ExactMatcher(
         "live", "live ver", "live version", "en vivo", "ao vivo", "ライブ", "ライヴ", "ライブバージョン", "ライヴバージョン",
         "现场版", "現場版", "라이브", "라이브버전"
     )
-    private val liveVersionWords = liveLabels.joinToString(" ")
     private val liveAlbumStarts = listOf("live at ", "live in ", "live from ")
 
     private fun sameRecordingLength(time: Long?, wanted: Long): Boolean =
@@ -802,11 +801,13 @@ internal class ExactMatcher(
         val base = SongNames.bareTitle(first.name)
         val other = rows.singleOrNull { it !== first && SongNames.same(SongNames.bareTitle(it.name), base) } ?: return null
         if (!sameRecordingLength(other.lengthMs, edition.lengthMs)) return null
+        val title = SongNames.withoutEditionTag(other.name).trim()
+        val note = title.removePrefix(SongNames.bareTitle(title)).trim { !it.isLetterOrDigit() }.lowercase(Locale.ROOT)
         val live = rowIsLive(other)
-        val otherMarked = live || SongNames.saysAnotherVersion(other.name, base, "")
-        val firstMarked = rowIsLive(first) || SongNames.saysAnotherVersion(first.name, base, "")
-        val matchesEdition = if (edition.live) live && !SongNames.saysAnotherVersion(other.name, "$base $liveVersionWords", "") else !otherMarked
-        return other.takeIf { firstMarked != otherMarked && matchesEdition }
+        val matchesEdition = if (edition.live) live && (note.isEmpty() || note in liveLabels) else !live && note.isEmpty()
+        if (!matchesEdition) return null
+        val firstMarked = rowIsLive(first) || SongNames.saysAnotherVersion(SongNames.withoutFeaturing(first.name), base, "")
+        return other.takeIf { firstMarked != edition.live }
     }
 
     private fun rowIsLive(row: Row): Boolean = saysLive(row.name) || liveAlbum(row.details.getOrNull(1).orEmpty())

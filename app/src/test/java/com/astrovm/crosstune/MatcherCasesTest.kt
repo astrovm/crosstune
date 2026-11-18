@@ -566,11 +566,14 @@ class MatcherCasesTest {
 
     @Test
     fun aLiveAlbumDoesNotMakeARemixTheLinkedLiveTake() {
-        val live = Case("live-album remix", "song0", lengthMs = 210_000, linkMs = 240_000,
-            editions = listOf("Live at Budokan" to 240_000), japan = japanese("偽の歌"), songs = listOf(
-                row("偽の歌", length = "3:30"), row("偽の歌 (Remix)", "Live at Budokan", length = "4:00")
-            ))
-        assertEquals("song0", find(live))
+        val live = Case("live-album takes", "song0", lengthMs = 210_000, linkMs = 240_000,
+            editions = listOf("Live at Budokan" to 240_000), japan = japanese("偽の歌"))
+        fun withAlternate(title: String) = find(live.copy(songs = listOf(
+            row("偽の歌", length = "3:30"), row(title, "Live at Budokan", length = "4:00")
+        )))
+        assertEquals(listOf("song0", "song0", "song1"), listOf(
+            withAlternate("偽の歌 (Remix)"), withAlternate("偽の歌 (リミックス)"), withAlternate("偽の歌 (feat. Piano Man)")
+        ))
     }
 
     @Test
