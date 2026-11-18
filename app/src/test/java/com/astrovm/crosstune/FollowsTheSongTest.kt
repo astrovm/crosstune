@@ -120,6 +120,24 @@ class FollowsTheSongTest {
     }
 
     @Test
+    @Config(qualifiers = "de-w320dp-h891dp-xxhdpi", fontScale = 2f)
+    fun theNearbySourceIsVisibleAtTheLargestFontOnANarrowPhone() {
+        val station = Unnamed("com.example.radio", "Fixture Radio", "Fixture FM")
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        show {
+            CrosstuneScreen(UiState(playingUnnamed = PlayingUnnamed(station, Heard.Song(song, null, inRoom = true))), ScreenActions())
+        }
+        val label = "In der Nähe gehört"
+        val layouts = mutableListOf<TextLayoutResult>()
+        val bar = hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
+        compose.onNode(bar and hasText("$label · Fixture Artist"), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        val visibleEnd = layout.getLineEnd(layout.lineCount - 1, visibleEnd = true)
+        assertTrue("Only $visibleEnd of ${label.length} source characters are visible", visibleEnd >= label.length)
+    }
+
+    @Test
     fun aSongHeardByTheMicrophoneSaysItWasHeardNearby() {
         val station = Unnamed("com.example.radio", "Fixture Radio", "Fixture FM")
         val song = MusicMetadata("Fixture Song", "Fixture Artist")
