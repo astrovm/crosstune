@@ -1613,8 +1613,10 @@ internal class LyricsFinder(
      */
     /** A same-length cover can still be by someone else. Check the reading of an alternate credit. */
     private fun sameArtistInLatin(one: String, other: String): Boolean {
-        if (one.hasLatin() == other.hasLatin()) return false
-        val (latin, original) = if (one.hasLatin()) one to other else other to one
+        val first = Normalizer.normalize(one, Normalizer.Form.NFKC)
+        val second = Normalizer.normalize(other, Normalizer.Form.NFKC)
+        if (first.hasLatin() == second.hasLatin()) return false
+        val (latin, original) = if (first.hasLatin()) first to second else second to first
         val reading = when {
             original == "パイパー" -> "Piper" // NetEase uses the Japanese spelling of the band's name.
             original.hasHangul() -> Readings.romaja(original)

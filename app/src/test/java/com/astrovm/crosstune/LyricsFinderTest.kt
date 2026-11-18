@@ -1967,13 +1967,20 @@ class LyricsFinderTest {
             val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
             val key = "17\u0000${RecordingKey.of(cover)}"
             runBlocking {
-                cache.put(key, """{"words":"The original recording has words","lines":[[9000,"The original recording has words"]],"source":"netease"}""")
-                assertEquals(Lyrics.Instrumental, finder.lyricsOf(cover))
+                for (source in listOf(LyricsFinder.NETEASE, LyricsFinder.NETEASE + LyricsFinder.OF_THE_ORIGINAL)) {
+                    cache.put(key, """{"words":"The original recording has words","lines":[[9000,"The original recording has words"]],"source":${quote(source)}}""")
+                    assertEquals(Lyrics.Instrumental, finder.lyricsOf(cover))
+                }
 
                 val asked = fake.requestedUrls.size
                 cache.put(key, """{"words":"A different saved sheet","lines":[],"source":"lrclib"}""")
                 assertEquals(Lyrics.Found("A different saved sheet", source = LyricsFinder.LRCLIB), finder.lyricsOf(cover))
                 assertEquals(asked, fake.requestedUrls.size)
+
+                val offline = MusicMetadata("Sunshine Kiz", "Piper", lengthMs = 187_000)
+                cache.put("17\u0000${RecordingKey.of(offline)}", """{"words":"Offline words","lines":[],"source":"netease"}""")
+                fake.handler = { throw IOException("offline") }
+                assertEquals(Lyrics.Found("Offline words", source = LyricsFinder.NETEASE), finder.lyricsOf(offline))
             }
         } finally {
             file.delete()
@@ -2009,7 +2016,7 @@ class LyricsFinderTest {
                 url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
                 url.encodedPath == "/search" -> FakeSpotify.html(request, """{"results":[{"trackId":5,"trackName":"Sunshine Kiz","artistName":"Piper","trackTimeMillis":187000}]}""")
                 url.encodedPath == "/lookup" -> FakeSpotify.html(request, """{"results":[]}""")
-                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":8,"name":"Sunshine Kiz","artists":[{"name":"パイパー"}],"duration":$lengthMs}]}}""")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":8,"name":"Sunshine Kiz","artists":[{"name":"パイパー"}],"duration":$lengthMs}]}}""")
                 else -> FakeSpotify.html(request, """{"lrc":{"lyric":"[00:01.531]Sunroofを開けて"}}""")
             }
         }
