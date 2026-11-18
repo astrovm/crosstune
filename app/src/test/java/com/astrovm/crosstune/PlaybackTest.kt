@@ -1062,6 +1062,55 @@ class PlaybackTest {
     }
 
     @Test
+    fun aLoneStationWithNoPlaybackStateIsShownOnlyWhileThePhonePlays() {
+        allow()
+        val station = player("com.streema.simpleradio", "Simple Radio", "Fixture FM", null)
+        shadowOf(station).setPlaybackState(null)
+        shadowOf(sessions).addController(station)
+        assertNull(playback.whatPlays())
+
+        sounding()
+        shadowOf(sessions).addController(player("com.brave.browser", "Brave", "Old Fixture", "Old Artist", at = NOW - LEFT_BEHIND_MS - 1, position = -1))
+        assertEquals(Unnamed("com.streema.simpleradio", "Simple Radio", "Fixture FM"), playback.playingUnnamed())
+        assertNull(playback.nowPlaying())
+
+        sounding(false)
+        assertNull(playback.whatPlays())
+    }
+
+    @Test
+    fun audioAloneDoesNotPickBetweenUnknownSessionsOrHideAReportedSong() {
+        allow()
+        sounding()
+        val station = player("com.streema.simpleradio", "Simple Radio", "Fixture FM", null)
+        val other = player("com.example.radio", "Other Radio", "Other FM", null)
+        for (controller in listOf(station, other)) {
+            shadowOf(controller).setPlaybackState(null)
+            shadowOf(sessions).addController(controller)
+        }
+        assertNull(playback.whatPlays())
+
+        shadowOf(sessions).addController(player("com.example.music", "Music", song.title, song.artist, album = "Fixture Album"))
+        assertEquals(song, playback.nowPlaying()?.metadata)
+    }
+
+    @Test
+    fun localSoundDoesNotPromoteAStatelessRemoteOrAPlayerWithoutATitle() {
+        allow()
+        sounding()
+        val remote = player("com.example.remote", "Remote", "Remote FM", null)
+        shadowOf(remote).setPlaybackState(null)
+        shadowOf(remote).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE).build())
+        shadowOf(sessions).addController(remote)
+        assertNull(playback.whatPlays())
+
+        val local = player("com.example.local", "Local", " ", null)
+        shadowOf(local).setPlaybackState(null)
+        shadowOf(sessions).addController(local)
+        assertNull(playback.whatPlays())
+    }
+
+    @Test
     fun aTabLeftBehindWithoutAPlaceIsNoSong() {
         allow()
         sounding()

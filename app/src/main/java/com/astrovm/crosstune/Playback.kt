@@ -831,8 +831,12 @@ internal class MediaSessionPlayback(
     private fun playingApps(): List<MediaController> {
         val sounding = audio.isMusicActive
         val all = if (hasAccess()) runCatching { activeSessions() }.getOrNull() else null
-        return all.orEmpty()
-            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() && (sounding || it.remote()) }
+        val eligible = all.orEmpty().filter { it.packageName != context.packageName && !it.leftBehind() }
+        val playing = eligible.filter { it.playbackState?.state == PlaybackState.STATE_PLAYING && (sounding || it.remote()) }
+        if (playing.isNotEmpty() || !sounding) return playing
+        // Some radios report metadata without a state. The phone's sound can support only one such session.
+        val unknown = eligible.singleOrNull { it.playbackState == null && !it.remote() }
+        return listOfNotNull(unknown?.takeIf { !it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).isNullOrBlank() })
     }
 
     /** What the app [packageName] is called, as Android shows it. */
