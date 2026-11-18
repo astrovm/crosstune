@@ -7,11 +7,15 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.NoSuchFileException
+import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -52,6 +56,26 @@ class UniDicTest {
         // Read once, it's the same one after.
         val kept = uniDic(fake, mayFetch = false)
         assertSame(kept.tokenizer(fetch = false), kept.tokenizer(fetch = true))
+    }
+
+    @Test
+    fun itClosesTheDictionaryFilesAfterMappingThem() = runBlocking {
+        val descriptors = Path.of("/proc/self/fd")
+        assumeTrue("This check reads the test process's Linux file descriptors", Files.isDirectory(descriptors))
+        val dictionary = checkNotNull(uniDic(serving()).tokenizer(fetch = true))
+        val files = dir.toPath().toRealPath()
+        val openFiles = Files.newDirectoryStream(descriptors).use { entries ->
+            entries.mapNotNull { entry ->
+                try {
+                    Files.readSymbolicLink(entry).takeIf { it.startsWith(files) }
+                } catch (_: NoSuchFileException) {
+                    // An unrelated descriptor can close while this directory is read.
+                    null
+                }
+            }.sorted()
+        }
+        assertEquals("Open UniDic files", emptyList<Path>(), openFiles)
+        assertEquals("コボシ", dictionary.tokenize("溢した").first().pronunciation)
     }
 
     @Test
