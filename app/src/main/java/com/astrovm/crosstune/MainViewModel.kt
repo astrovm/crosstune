@@ -3176,16 +3176,20 @@ internal class MainViewModel(
                 // Stopped: heard again once it plays, or, for held words, shown if it isn't in time.
                 if (unsung !== heard || uiState.following?.clock?.playing != true) return@launch
                 voiceIn(hearing, sung, held = heard.held != null)?.let { return@launch heardOut(heard, it) }
-                // On a slow phone, decoding a window takes time that its recording does not.
-                val previous = heard.heldUntilMs
-                val extra = (SystemClock.elapsedRealtime() - started - VOICE_CAPTURE_MS).coerceAtLeast(0)
-                heard = heard.copy(tries = heard.tries + 1, heldUntilMs = previous?.plus(extra))
-                unsung = heard
-                if (heard.heldUntilMs != previous && heard.tries < VOICE_TRIES) holdUntil(heard)
+                heard = voiceWindowFinished(heard, started)
             }
             if (waiting.tries < VOICE_TRIES) heardOut(heard, Listen.NO_VOICE)
             if (heard.held != null) hearLater(hearing, heard)
         }
+    }
+
+    /** Count a completed window and give the next window the time the phone spent decoding this one. */
+    private fun voiceWindowFinished(heard: Unsung, startedAtMs: Long): Unsung {
+        val extra = (SystemClock.elapsedRealtime() - startedAtMs - VOICE_CAPTURE_MS).coerceAtLeast(0)
+        val next = heard.copy(tries = heard.tries + 1, heldUntilMs = heard.heldUntilMs?.plus(extra))
+        unsung = next
+        if (next.heldUntilMs != heard.heldUntilMs && next.tries < VOICE_TRIES) holdUntil(next)
+        return next
     }
 
     /** Hidden words can still belong to a song that starts singing later, e.g. after a long intro. */
