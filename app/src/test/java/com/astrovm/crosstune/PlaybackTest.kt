@@ -2004,6 +2004,25 @@ class PlaybackTest {
     }
 
     @Test
+    fun aMusicVideoKeepsItsCreditEvenWhenItsSongIsCalledLive() {
+        allow()
+        sounding()
+        val title = "Fake Artist - Live"
+        val video = player("com.google.android.youtube", "YouTube", title, "")
+        shadowOf(sessions).addController(video)
+        assertNull(playback.nowPlaying())
+        ShadowMediaSessionManager.reset()
+        val musicApp = "com.google.android.apps.youtube.music"
+        shadowOf(sessions).addController(player(musicApp, "YouTube Music", title, ""))
+        val song = MusicMetadata("Live", "Fake Artist")
+        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertNotNull(playback.appFor(song, app = musicApp))
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(video)
+        assertNull(playback.nowPlaying())
+    }
+
+    @Test
     @Config(shadows = [AppAsked::class])
     fun aStationCastToASpeakerIsReachedThereByItsApp() {
         allow()
@@ -2192,7 +2211,7 @@ class PlaybackTest {
         allow()
         sounding()
         val reads = mutableListOf<Pair<String, String>>()
-        val playback = MediaSessionPlayback(app, now = { NOW }, waker = { null }, modes = modes, queueOf = { queues[it.packageName] }, readSong = { title, artist ->
+        val playback = MediaSessionPlayback(app, now = { NOW }, waker = { null }, modes = modes, queueOf = { queues[it.packageName] }, readSong = { title, artist, _ ->
             reads += title to artist
             MetadataParsers.playerSong(title, artist)
         })
@@ -2809,7 +2828,7 @@ class PlaybackTest {
         allow()
         sounding()
         val reads = java.util.concurrent.atomic.AtomicInteger()
-        val source = MediaSessionPlayback(app, readSong = { title, artist ->
+        val source = MediaSessionPlayback(app, readSong = { title, artist, _ ->
             reads.incrementAndGet()
             MusicMetadata(title, artist)
         })
