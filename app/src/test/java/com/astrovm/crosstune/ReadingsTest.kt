@@ -666,6 +666,9 @@ class ReadingsTest {
         assertEquals(listOf(noNotes, noNotes), listOf(builtIn, uniDic))
         val expected = mapOf("いふ" to listOf("いう"), "おもひで" to listOf("おもいで"))
         fun checkReadings() {
+            modern.zip(Readings.of(modern, Script.JAPANESE)).forEach { (text, line) ->
+                assertEquals(text, text, line.parts.joinToString("") { it.text })
+            }
             assertEquals(expected, notes(historical))
             val lines = Readings.of(listOf("はいひん", "ばいひん"), Script.JAPANESE)
             assertEquals(listOf("haihin", "baihin"), lines.map { it.romanized })
