@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -21,7 +22,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit.SECONDS
 import java.util.concurrent.atomic.AtomicInteger
 import java.io.IOException
 
@@ -1959,11 +1962,35 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun qobuzsOtherStoreTakesTheFirstTrysAnswerWhenItComesBeforeTheSecondsAndDoesntWaitForTheSecond() {
-        val (matcher, _) = slowQobuz(200, qobuzAfter(600), qobuzAfter(4_000))
-        val started = System.nanoTime()
-        assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) })
-        assertTrue((System.nanoTime() - started) / 1_000_000 < 2_500)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun qobuzsOtherStoreTakesTheFirstTrysAnswerWhenItComesBeforeTheSecondsAndDoesntWaitForTheSecond() = runTest {
+        val firstStarted = CountDownLatch(1)
+        val retryStarted = CountDownLatch(1)
+        val firstMayAnswer = CountDownLatch(1)
+        val retryMayAnswer = CountDownLatch(1)
+        val asked = AtomicInteger()
+        fake.handler = { request ->
+            val first = asked.getAndIncrement() == 0
+            (if (first) firstStarted else retryStarted).countDown()
+            (if (first) firstMayAnswer else retryMayAnswer).await()
+            FakeSpotify.html(request, qobuzItem("Song", "Band • Album", if (first) "625089" else "625090"))
+        }
+        val retryAfter = 200L
+        val matcher = ExactMatcher(fake.client(), "US", timeoutMs = retryAfter, ioDispatcher = StandardTestDispatcher(testScheduler))
+        val lookup = async { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) }
+        try {
+            testScheduler.runCurrent()
+            assertTrue("The first request reached the store", firstStarted.await(30, SECONDS))
+            testScheduler.advanceTimeBy(retryAfter)
+            testScheduler.runCurrent()
+            assertTrue("The retry reached the store", retryStarted.await(30, SECONDS))
+            firstMayAnswer.countDown()
+            // The retry cannot answer until cleanup. The first answer must finish the lookup.
+            assertEquals("https://play.qobuz.com/track/625089", lookup.await())
+        } finally {
+            firstMayAnswer.countDown()
+            retryMayAnswer.countDown()
+        }
     }
 
     @Test
