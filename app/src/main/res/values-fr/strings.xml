@@ -202,6 +202,7 @@
     <string name="lyrics_pause">Pause</string>
     <string name="lyrics_next_song">Chanson suivante</string>
     <string name="lyrics_previous_song">Chanson précédente</string>
+    <string name="player_heard_nearby">Entendu à proximité</string>
     <string name="player_playing_in">Lecture dans %1$s</string>
     <string name="player_waiting">En attente de %1$s</string>
     <string name="player_follow_allow">Laissez Crosstune voir et contrôler le morceau en cours dans votre app de musique.</string>
@@ -317,6 +318,7 @@
     <string name="report_send">Envoyer</string>
     <string name="report_sent">Envoyé. Merci !</string>
     <string name="report_failed">Échec de l\'envoi. Vérifiez votre connexion et réessayez.</string>
+    <string name="report_rate_limited">Trop de signalements pour le moment. Réessayez plus tard.</string>
     <string name="reading_wrong">Lecture erronée</string>
     <string name="reading_right">Bonne lecture (facultatif)</string>
     <string name="reading_what_goes">Envoie le mot, la lecture affichée et ce qui l\'a donnée, sa ligne et son écriture, la lecture que vous tapez, le titre et l\'artiste du morceau, la source des paroles et les versions de l\'app et d\'Android. Seul le développeur de Crosstune le lit.</string>

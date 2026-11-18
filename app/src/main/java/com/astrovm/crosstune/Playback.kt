@@ -36,6 +36,7 @@ import androidx.core.content.edit
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CompletableDeferred
@@ -64,7 +65,7 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
         if (!playing || speed <= 0f) return null
         val position = positionAt(nowMs)
         val next = changesAt(position) ?: return null
-        return ((next - position) / speed).toLong().coerceAtLeast(1)
+        return ceil((next - position) / speed.toDouble()).toLong().coerceAtLeast(1)
     }
 }
 
@@ -369,8 +370,10 @@ internal class MediaSessionPlayback(
     /** An app's queue; Robolectric shows a test none. */
     private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue,
     private val lengths: SteadyLengths = SteadyLengths(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)),
-    /** How a title and an artist an app says read as a song's; see [MetadataParsers.playerSong]. */
-    readSong: (String, String) -> MusicMetadata? = MetadataParsers::playerSong,
+    /** How a title and artist read in a media session. */
+    readSong: (String, String, Boolean) -> MusicMetadata? = { title, artist, musicVideo ->
+        if (musicVideo) MetadataParsers.playerSong(title, artist) else MetadataParsers.sessionSong(title, artist)
+    },
     /** What an app calls one of its drawings, by its number there; Robolectric has no other app's. */
     private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() },
     private val clockLog: PracticeClockLog = PracticeClockLog.of(context)
@@ -382,7 +385,14 @@ internal class MediaSessionPlayback(
      * How each title and artist an app says read as a song's, by [readSong]: read once, as a long one takes a while, and
      * each change is asked of many times over, for what plays first, what it's called, and whether it has a song.
      */
-    private val songsRead = KeptReads<Pair<String, String>, MusicMetadata?>(SONGS_READ_KEPT) { (title, artist) -> readSong(title, artist) }
+    private val songsRead = KeptReads<Triple<String, String, Boolean>, MusicMetadata?>(SONGS_READ_KEPT) { (title, artist, musicVideo) ->
+        readSong(title, artist, musicVideo)
+    }
+
+    private fun MediaController.songName(title: String, artist: String): MusicMetadata? {
+        val musicVideo = MusicService.ofPackage(packageName) == MusicService.YOUTUBE_MUSIC
+        return songsRead.of(Triple(title, artist, musicVideo))
+    }
 
     /** How many sessions were numbered; see [sessionNumbers]. */
     private val sessionsNumbered = AtomicInteger()
@@ -557,7 +567,7 @@ internal class MediaSessionPlayback(
         if (!song.unnamed) return plays(song)
         val (title, artist) = calls()
         val said = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
-        return app != null && title == song.title && (artist == song.artist || !Songless.namesNoSong(said, artist, songsRead.of(said to artist)))
+        return app != null && title == song.title && (artist == song.artist || !Songless.namesNoSong(said, artist, songName(said, artist)))
     }
 
     /**
@@ -573,7 +583,9 @@ internal class MediaSessionPlayback(
     /** What it plays, as what names no song is shown. */
     private fun MediaController.unnamed(): Unnamed {
         val (title, artist) = calls()
-        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let { coverOf(it, sessionToken) }, artist, where = place(), said = said(this) != null)
+        val named = said(this)
+        return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let { coverOf(it, sessionToken) }, artist,
+            where = place(), said = named != null, caption = named?.unnamed == true)
     }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) = seekIn(song, positionMs, app, null)
@@ -955,7 +967,7 @@ internal class MediaSessionPlayback(
         val metadata = controller.metadata ?: return null
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
-        if (Songless.namesNoSong(title, artist, songsRead.of(title to artist))) return null
+        if (Songless.namesNoSong(title, artist, controller.songName(title, artist))) return null
         val named = said(controller, asked) ?: return null
         val artwork = coverOf(metadata, controller.sessionToken)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
@@ -978,7 +990,9 @@ internal class MediaSessionPlayback(
      */
     private fun said(controller: MediaController, asked: Long? = null): MusicMetadata? {
         val metadata = controller.metadata ?: return null
-        val (title, artist) = songsRead.of(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty() to metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
+        val named = controller.songName(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
+        if (named.unnamed) return named.takeUnless { controller.isVideo() }
+        val (title, artist) = named
         // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
         // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
         // YouTube Music plays videos with no album too, all of them music, "Queen - Bohemian Rhapsody (Lyrics)" by "7clouds".
@@ -1114,15 +1128,28 @@ internal class MediaSessionPlayback(
         if (anotherRecording(playing, song)) return false
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
-        // A station or untagged file has no artist to support a partial title match.
-        if (MetadataParsers.noArtist(artist)) {
-            if (!SongNames.names(title, "", song)) return false
-            if (SongNames.wholeTitle(title, song.title)) return true
-            val named = songsRead.of(title to artist) ?: return false
-            return named.artist.isNotBlank() && SongNames.sameArtist(named.artist, song.artist) && SongNames.wholeTitle(named.title, song.title)
-        }
+        if (MetadataParsers.noArtist(artist)) return playsWithNoArtist(title, artist, song)
         return SongNames.names(title, artist, song)
     }
+
+    /** A station or untagged file has no artist to support a partial title match. */
+    private fun MediaController.playsWithNoArtist(title: String, artist: String, song: MusicMetadata): Boolean {
+        val named = songName(title, artist)
+        if (named?.unnamed == true) return false
+        val fileTitle = MetadataParsers.withoutAudioExtension(title)
+        if (fileTitle != title && named != null && named.artist.isNotBlank()) {
+            if (!SongNames.sameArtist(named.artist, song.artist)) return false
+            // Files can be asked for by the track or by their whole literal title, including both sides of the dash.
+            val requested = MetadataParsers.withoutAudioExtension(song.title)
+            return (SongNames.names(named.title, "", song) && SongNames.wholeTitle(named.title, song.title)) ||
+                SongNames.wholeTitle(fileTitle, requested, keepNotes = true)
+        }
+        if (!SongNames.names(title, "", song)) return false
+        return SongNames.wholeTitle(title, song.title) || named?.creditMatches(song) == true
+    }
+
+    private fun MusicMetadata.creditMatches(song: MusicMetadata): Boolean =
+        artist.isNotBlank() && SongNames.sameArtist(artist, song.artist) && SongNames.wholeTitle(title, song.title)
 }
 
 /** Installed from a file rather than by an app store, which Android 13 and later restrict settings for. */

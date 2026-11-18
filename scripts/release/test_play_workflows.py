@@ -32,6 +32,58 @@ def play_jobs():
 
 
 class PlayWorkflowsTest(unittest.TestCase):
+    def test_release_keeps_the_supported_signature_and_uses_checked_verifier_wheels(self):
+        release = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
+        self.assertIn("--alignment-preserved", release["sign"])
+        self.assertIn("--v1-signing-enabled false", release["sign"])
+        self.assertIn("--v2-signing-enabled true", release["sign"])
+        self.assertIn("--require-hashes", release["verify"])
+        self.assertIn("scripts/release/apksigcopier-requirements.txt", release["verify"])
+        self.assertIn('apksigcopier" compare', release["verify"])
+        self.assertNotIn("apt-get", release["verify"])
+
+    def test_both_apks_use_the_reproducible_signing_flags_and_verifier(self):
+        release = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work)
+            binary = root / "bin"
+            binary.mkdir()
+            calls = root / "calls"
+            fake = '#!/bin/bash\nprintf "%s\\n" "$*" >> "$CALLS"\n[[ -z "$FAIL" || "$*" != *"$FAIL"* ]]\n'
+            for name in ("apksigner", "apksigcopier"):
+                path = binary / name
+                path.write_text(fake, encoding="utf-8")
+                path.chmod(0o755)
+            env = dict(os.environ, TAG="v1.2.3", CALLS=str(calls), FAIL="", apksigner=str(binary / "apksigner"),
+                       verifier=str(root), keystore="key", RELEASE_KEY_ALIAS="alias")
+
+            def loop(job):
+                start = job.index("          for flavor in play foss; do")
+                end = job.index("\n          done", start) + len("\n          done")
+                return job[start:end]
+
+            sign = loop(release["sign"])
+            verify = loop(release["verify"])
+            for script, paths in (
+                (sign, ("apk/play/release/app-play-release-unsigned.apk", "apk/foss/release/app-foss-release-unsigned.apk")),
+                (verify, ("app/build/outputs/apk/play/release/app-play-release-unsigned.apk", "app/build/outputs/apk/foss/release/app-foss-release-unsigned.apk")),
+            ):
+                calls.write_text("")
+                run = subprocess.run(["bash", "-e", "-c", script], env=env, capture_output=True, text=True, check=False)
+                self.assertEqual(0, run.returncode, run.stderr)
+                lines = calls.read_text().splitlines()
+                self.assertEqual(2, len(lines))
+                for line, path, output in zip(lines, paths, ("Crosstune-v1.2.3.apk", "Crosstune-v1.2.3-foss.apk")):
+                    self.assertIn(path, line)
+                    self.assertIn(output, line)
+                    if script == sign:
+                        for flag in ("-J-enable-native-access=ALL-UNNAMED", "--alignment-preserved", "--v1-signing-enabled false", "--v2-signing-enabled true"):
+                            self.assertIn(flag, line)
+                for path in paths:
+                    calls.write_text("")
+                    failed = subprocess.run(["bash", "-e", "-c", script], env={**env, "FAIL": path}, capture_output=True, text=True, check=False)
+                    self.assertNotEqual(0, failed.returncode, path)
+
     def test_the_play_key_is_in_the_three_play_jobs_only(self):
         found = sorted((workflow, job) for workflow, job, _ in play_jobs())
         self.assertEqual(

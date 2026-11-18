@@ -77,7 +77,7 @@ class TextsTest {
     private fun textFile(name: String) = folders.map { File(it, name) }.single { it.isFile }
 
     /** name to (SHA-256, source). */
-    private val manifest = listOf("notice-texts.txt", "notice-texts-play.txt")
+    private val manifest = listOf("notice-texts.txt", "jmdict-notice-texts.txt", "notice-texts-play.txt")
         .flatMap { File(root, "app/src/test/resources/com/astrovm/crosstune/$it").readLines() }
         .filter { it.isNotBlank() && !it.startsWith("#") }
         .map { it.split(Regex("\\s+"), limit = 3) }

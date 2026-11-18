@@ -20,7 +20,8 @@ internal data class Unnamed(
     val artworkUrl: String? = null,
     private val artist: String = "",
     val where: Place = Place.PHONE,
-    val said: Boolean = name != null
+    val said: Boolean = name != null,
+    private val caption: Boolean = false
 ) {
     /** What it plays as the app names it, which its buttons and the player follow it there by, never as a song. */
     val played: MusicMetadata get() = MusicMetadata(name.orEmpty(), artist, artworkUrl = artworkUrl, unnamed = true)
@@ -33,7 +34,7 @@ internal data class Unnamed(
      * station's name: opened as that when a tap asks for it and it can't be named by ear. Null when it says
      * nothing a song could be read from.
      */
-    val asSong: MusicMetadata? get() = name?.takeIf { said }?.let { MusicMetadata(it, "", artworkUrl = artworkUrl) }
+    val asSong: MusicMetadata? get() = name?.takeIf { said && !caption }?.let { MusicMetadata(it, "", artworkUrl = artworkUrl) }
 }
 
 /**
@@ -56,13 +57,32 @@ internal object Songless {
      * song, as music apps name theirs, even "Track 10", "Demo 20230415" or one by an artist named as
      * the app is, and so is "Artist - Song" alone. [read] is how they read as a song's, when it's read already.
      */
-    fun namesNoSong(title: String, artist: String, read: MusicMetadata? = MetadataParsers.playerSong(title, artist)): Boolean {
+    fun namesNoSong(title: String, artist: String, read: MusicMetadata? = MetadataParsers.sessionSong(title, artist)): Boolean {
         // Read before it's split at a dash, which "AUD-20240101-WA0003" has.
         val bare = title.trim().replace(extension, "")
         if (MetadataParsers.noArtist(artist) && (recording.matches(bare) || path.containsMatchIn(bare))) return true
         val song = read ?: return true
         return song.artist.isBlank()
     }
+
+    /** The part after the dash supplies a recording label or radio caption. */
+    internal fun isCaption(prefix: String, suffix: String): Boolean =
+        SongNames.isRecordingLabel(suffix) || broadcastCaption(prefix, suffix)
+
+    /** A station can put its format and airtime after its name, such as "Fake FM - Hits 24/7". */
+    private fun broadcastCaption(station: String, caption: String): Boolean {
+        val format = when {
+            caption.endsWith(BROADCAST_HOURS) -> caption.removeSuffix(BROADCAST_HOURS)
+            caption.startsWith(BROADCAST_HOURS) -> caption.removePrefix(BROADCAST_HOURS)
+            else -> return false
+        }
+        val words = SongNames.words(format)
+        return words.isNotEmpty() && broadcastFormats.containsAll(words) && SongNames.words(station).any { it in radioWords }
+    }
+
+    private const val BROADCAST_HOURS = "24/7"
+    private val broadcastFormats = setOf("hits", "music", "musica", "musique", "musik", "exitos", "noticias", "news")
+    private val radioWords = setOf("am", "fm", "radio")
 
     private val extension = phoneRegex("""\.[A-Za-z0-9]{2,4}$""")
 

@@ -202,6 +202,7 @@
     <string name="lyrics_pause">रोकें</string>
     <string name="lyrics_next_song">अगला गाना</string>
     <string name="lyrics_previous_song">पिछला गाना</string>
+    <string name="player_heard_nearby">पास में सुना गया</string>
     <string name="player_playing_in">%1$s में चल रहा है</string>
     <string name="player_waiting">%1$s का इंतज़ार</string>
     <string name="player_follow_allow">Crosstune को अपने म्यूज़िक ऐप में चल रहा गाना देखने और कंट्रोल करने दें।</string>
@@ -317,6 +318,7 @@
     <string name="report_send">भेजें</string>
     <string name="report_sent">भेज दिया। धन्यवाद!</string>
     <string name="report_failed">भेजा नहीं जा सका। अपना कनेक्शन जाँचें और फिर कोशिश करें।</string>
+    <string name="report_rate_limited">अभी बहुत ज़्यादा रिपोर्ट आ रही हैं। बाद में फिर कोशिश करें।</string>
     <string name="reading_wrong">गलत उच्चारण</string>
     <string name="reading_right">सही उच्चारण (वैकल्पिक)</string>
     <string name="reading_what_goes">शब्द, दिखाया गया उच्चारण और वह कहाँ से आया, उसकी पंक्ति और लिपि, आपका लिखा उच्चारण, गाने का नाम और कलाकार, बोल कहाँ से आए, और ऐप व Android के वर्ज़न भेजता है। इसे सिर्फ़ Crosstune का डेवलपर पढ़ता है।</string>

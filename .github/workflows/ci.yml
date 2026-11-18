@@ -60,7 +60,7 @@ jobs:
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
           fi
-          if grep -qE '^extension/' <<< "$files"; then
+          if grep -qE '^(extension/|\.github/workflows/ci\.yml$)' <<< "$files"; then
             echo "extension=true" >> "$GITHUB_OUTPUT"
           else
             echo "extension=false" >> "$GITHUB_OUTPUT"
@@ -137,6 +137,9 @@ jobs:
       - name: Fetch the locked Kotlin compiler
         run: python3 scripts/kotlinc/kotlinc.py fetch
 
+      - name: Read the pinned Whisper headers for the JNI test
+        run: git submodule update --init --depth 1 -- third_party/whisper.cpp
+
       # The committed site has to be what build-site.py makes, new pages included.
       - name: Test site and media scripts
         run: |
@@ -168,7 +171,6 @@ jobs:
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
           node scripts/test-site-apk.cjs
-          node scripts/test-site-apk.cjs
           node --test "report/*.test.mjs"
 
   # What the release, promote and store listing workflows send to Google Play: .github/play/play.sh with the real
@@ -196,7 +198,7 @@ jobs:
           .github/play/play.sh setup
           bundle exec ruby .github/play/test/play_test.rb
 
-  # The browser extension in extension/, built and tested only when its files change. Its lyrics panel's browser test answers everything itself; the two that follow real links need the network, so they run by hand (see CONTRIBUTING.md).
+  # The panel test uses a local fixture. The tests that follow real links run by hand (see CONTRIBUTING.md).
   extension:
     needs: changes
     if: needs.changes.outputs.extension == 'true'
@@ -222,10 +224,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run package
       - run: npm test
-      # The browser comes from Playwright's own host. What it needs from apt is mostly on the runner
-      # already, so apt gets two minutes and the test then says whether anything was missing.
+      # The runner supplies Chromium's libraries. Playwright reports a missing library before the test.
       - run: npx playwright install chromium
-      - run: timeout 120 npx playwright install-deps chromium || echo "::notice::Playwright's apt packages were not installed"
       - run: npm run e2e:panel
 
   # Unit tests with the 100% line coverage gate. They draw no visuals, so projectM isn't built.
@@ -399,6 +399,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           BASE_REF: ${{ github.base_ref }}
+          JMDICT_BOT: ${{ github.event.pull_request.head.ref == 'jmdict/remake' &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.user.login == 'github-actions[bot]' }}
         run: |
           set -euo pipefail
           # HEAD^1 is the base the pull request merges into. The lock is main's, so a pull request into another
@@ -418,6 +421,17 @@ jobs:
             checker="$RUNNER_TEMP/golden-base/$checker"
           fi
           # -E and -s: no PYTHONPATH and no user site, so Python finds the golden code next to the checker only.
+          proposal="${checker%/*}/proposal.py"
+          if [ "${JMDICT_BOT:-false}" = true ] && [ -f "$proposal" ]; then
+            # Check the generation against both the CI merge base and current main.
+            head=$(git rev-parse HEAD^2)
+            git fetch --unshallow --no-tags origin '+refs/heads/main:refs/remotes/origin/main' "$head"
+            for base in HEAD^1 origin/main; do
+              python3 -E -s "$proposal" verify "$base" "$head" \
+                app/src/main/resources/com/astrovm/crosstune \
+                app/src/test/resources/com/astrovm/crosstune/jmdict-notice-texts.txt "$RUNNER_TEMP/pr-body.md"
+            done
+          fi
           python3 -E -s "$checker" --repo "$GITHUB_WORKSPACE" --base HEAD^1 --head HEAD --body-file "$RUNNER_TEMP/pr-body.md"
 
       # Tangled new code is split up, never listed in detekt's baseline to pass.

@@ -8,7 +8,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -17,7 +19,12 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.text.TextLayoutResult
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
@@ -112,6 +119,44 @@ class FollowsTheSongTest {
         CrosstuneScreen(UiState(playingNow = following?.let { NowPlaying(MusicMetadata("Song", "Band", lengthMs = lengthMs), it) }), ScreenActions())
     }
 
+    @Test
+    @Config(qualifiers = "de-w320dp-h891dp-xxhdpi", fontScale = 2f)
+    fun theGermanNearbySourceIsVisibleAtTheLargestFontOnANarrowPhone() =
+        assertNearbySourceIsVisible("In der Nähe gehört")
+
+    @Test
+    @Config(qualifiers = "it-w320dp-h891dp-xxhdpi", fontScale = 2f)
+    fun theLongestNearbySourceIsVisibleAtTheLargestFontOnANarrowPhone() =
+        assertNearbySourceIsVisible("Sentito nelle vicinanze")
+
+    private fun assertNearbySourceIsVisible(label: String) {
+        val station = Unnamed("com.example.radio", "Fixture Radio", "Fixture FM")
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        show {
+            CrosstuneScreen(UiState(playingUnnamed = PlayingUnnamed(station, Heard.Song(song, null, inRoom = true))), ScreenActions())
+        }
+        val layouts = mutableListOf<TextLayoutResult>()
+        val bar = hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
+        compose.onNode(bar and hasText("$label · Fixture Artist"), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        val visibleEnd = layout.getLineEnd(layout.lineCount - 1, visibleEnd = true)
+        assertTrue("Only $visibleEnd of ${label.length} source characters are visible", visibleEnd >= label.length)
+    }
+
+    @Test
+    fun aSongHeardByTheMicrophoneSaysItWasHeardNearby() {
+        val station = Unnamed("com.example.radio", "Fixture Radio", "Fixture FM")
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        show {
+            CrosstuneScreen(UiState(playingUnnamed = PlayingUnnamed(station, Heard.Song(song, null, inRoom = true))), ScreenActions())
+        }
+        val bar = hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
+        compose.onNode(bar and hasText("Fixture Song"), useUnmergedTree = true).assertExists()
+        compose.onNode(bar and hasText("Heard nearby · Fixture Artist"), useUnmergedTree = true).assertExists()
+        compose.onNode(bar and hasText("Fixture Radio", substring = true), useUnmergedTree = true).assertDoesNotExist()
+    }
+
     private val playedSoFar = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo) and hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
 
     /** How far along the bar's line is, or null when it has none. */
@@ -152,10 +197,10 @@ class FollowsTheSongTest {
     // The player.
 
     /** The player, with [lines] timed by ear as [byEar] says, and the colors of a line sung and of one not. */
-    private fun player(lines: List<LyricLine> = emptyList()) = show {
+    private fun player(lines: List<LyricLine> = emptyList(), phone: Phone = Phone.OTHER, onSeek: (Long) -> Unit = {}) = show {
         sungInk = MaterialTheme.colorScheme.onSurface
         waitingInk = MaterialTheme.colorScheme.onSurfaceVariant
-        PlayerScreen(UiState(canFollowApps = true, linesEarlyMs = 0, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following, lines = lines, linesByEar = byEar)), ScreenActions())
+        PlayerScreen(UiState(canFollowApps = true, phone = phone, linesEarlyMs = 0, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following, lines = lines, linesByEar = byEar)), ScreenActions(onPlayerSeek = onSeek))
     }
 
     private var sungInk = Color.Unspecified
@@ -193,12 +238,135 @@ class FollowsTheSongTest {
     private fun slider(): Float = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo), useUnmergedTree = true)
         .fetchSemanticsNodes().single().config[SemanticsProperties.ProgressBarRangeInfo].current
 
+    private fun seekTo(ms: Long) {
+        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(ms.toFloat()) }
+        settles()
+    }
+
+    @Test
+    fun thePausedPlayerKeepsFractionalSeeksOnShortAndLongSongs() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(0).copy(durationMs = 10_000)
+        player(onSeek = { sent += it })
+        for ((duration, target, label) in listOf(Triple(10_000L, 8_700L, "0:08"), Triple(200_000L, 83_700L, "1:23"))) {
+            following = pausedAt(0).copy(durationMs = duration)
+            settles()
+            seekTo(target)
+            assertEquals(target.toFloat(), slider())
+            following = pausedAt(target).copy(durationMs = duration)
+            settles()
+            assertEquals(target.toFloat(), slider())
+            assertTrue(exists(label))
+            passes(2_000)
+            assertEquals(target.toFloat(), slider())
+        }
+        assertEquals(listOf(8_700L, 83_700L), sent)
+    }
+
+    @Test
+    fun draggingTheShortSongKeepsThePositionReportedByTheMusicApp() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(1_000).copy(durationMs = 10_000)
+        player(onSeek = { sent += it })
+        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).performTouchInput {
+            swipe(Offset(width * 0.1f, center.y), Offset(width * 0.87f, center.y))
+        }
+        settles()
+        val target = sent.single()
+        assertTrue(target in 7_000L..9_500L)
+        assertTrue(target % 1_000 != 0L)
+        following = pausedAt(target).copy(durationMs = 10_000)
+        passes(2_000)
+        assertEquals(target.toFloat(), slider())
+    }
+
+    @Test
+    fun anEarlierSeekTimeoutDoesNotDiscardTheNextDrag() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(1_000).copy(durationMs = 10_000)
+        player(onSeek = { sent += it })
+        seekTo(3_000)
+        passes(1_000)
+
+        val node = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
+        node.performTouchInput {
+            down(Offset(width * 0.3f, center.y))
+            moveTo(Offset(width * 0.8f, center.y))
+        }
+        settles()
+        val target = slider()
+        assertTrue(target > 7_000)
+        passes(500)
+        assertEquals(target, slider())
+        node.performTouchInput { up() }
+        settles()
+        assertEquals(listOf(3_000L, target.toLong()), sent)
+    }
+
+    @Test
+    fun shuffleDoesNotMoveTheSliderOrClearAnUnacknowledgedSeek() {
+        following = playingFrom(1_000)
+        player()
+        val first = slider()
+        following = requireNotNull(following).copy(shuffle = true)
+        settles()
+        assertEquals(first, slider())
+
+        seekTo(83_700)
+        following = requireNotNull(following).copy(shuffle = false)
+        settles()
+        assertEquals(83_700f, slider())
+        following = pausedAt(83_700)
+        settles()
+        assertEquals(83_700f, slider())
+    }
+
+    @Test
+    fun theTvPlayersNextSeekStartsAtTheFractionTheMusicAppReports() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(0)
+        player(phone = Phone.TV, onSeek = { sent += it })
+        val sliderNode = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
+        sliderNode.requestFocus()
+        sliderNode.performKeyInput { pressKey(Key.DirectionRight) }
+        settles()
+        val step = sent.single()
+        assertTrue(step > 0)
+
+        seekTo(83_700)
+        following = pausedAt(83_700)
+        settles()
+        sliderNode.performKeyInput { pressKey(Key.DirectionRight) }
+        settles()
+        assertEquals(listOf(step, 83_700L, 83_700L + step), sent)
+    }
+
+    @Test
+    fun thePlayingSliderKeepsTheReportedFractionAfterALateSeekAcknowledgment() {
+        val sent = mutableListOf<Long>()
+        following = pausedAt(0)
+        player(onSeek = { sent += it })
+        seekTo(83_300)
+        passes(400)
+        assertEquals(83_300f, slider())
+
+        val clock = PlaybackClock(83_300, SystemClock.elapsedRealtime() - 150, speed = 2f)
+        following = pausedAt(0).copy(clock = clock)
+        settles()
+        assertTrue("The acknowledged position was ${slider()}", slider() in 83_600f..83_920f)
+        assertTrue(exists("1:23"))
+        passes(160)
+        assertTrue("The slider did not reach the next second: ${slider()}", slider() in 84_000f..84_080f)
+        assertTrue(exists("1:24"))
+        assertEquals(listOf(83_300L), sent)
+    }
+
     @Test
     fun thePlayersSliderMovesOnOncePerSecondLikeItsClock() {
         following = pausedAt(0)
         player()
         playsFrom(1_050)
-        assertEquals(1_000f, slider())
         // Each frame of 3 s looked at: it moves on once a second, as the clock under it does, not
         // each 100 ms, which composed the player's clock and slider again 10 times a second.
         val seen = mutableListOf(slider())
@@ -206,7 +374,7 @@ class FollowsTheSongTest {
             passes(FRAME_MS)
             slider().takeIf { it != seen.last() }?.let(seen::add)
         }
-        assertEquals(listOf(1_000f, 2_000f, 3_000f, 4_000f), seen)
+        assertEquals(listOf(1L, 2L, 3L, 4L), seen.map { it.toLong() / 1_000 })
     }
 
     private val peekLines = listOf(LyricLine(1_000, "One"), LyricLine(20_000, "Two"), LyricLine(40_000, "Three"))
@@ -333,10 +501,10 @@ class FollowsTheSongTest {
         .let { nodes -> nodes.firstOrNull { it.config.contains(ChordsShown) } ?: nodes.first() }
 
     /** Which of the first line's chords is lit, once they're placed over it, which happens off the main thread. */
-    private fun chordLit(): Int {
-        fun placed() = lineOf(lines[0].text).config.contains(ChordsShown)
+    private fun chordLit(text: String = lines[0].text): Int {
+        fun placed() = lineOf(text).config.contains(ChordsShown)
         compose.waitUntil(5_000) { placed() || run { settles(); placed() } }
-        return lineOf(lines[0].text).config[ChordLit]
+        return lineOf(text).config[ChordLit]
     }
 
     /** How many of [text]'s letters are lit as sung, before the dimmed ones; all of them when none are dimmed. */
@@ -371,6 +539,32 @@ class FollowsTheSongTest {
         passesAskingRarely(800)
         assertEquals(2, chordLit())
         assertEquals("Walking down the river ".length, litLetters(lines[0].text))
+    }
+
+    @Test
+    fun aChordInTheLastJapaneseWordLightsAfterThatWordStarts() {
+        val line = LyricLine(10_000, "君の名前を呼んだ夜のこと", listOf(TimedWord(10_000, "君の名前を"), TimedWord(12_000, "呼んだ夜のこと")))
+        lyricLines = listOf(line)
+        val chords = sheet.copy(lines = listOf(SheetLine(line.text, listOf(Chord(0, "G"), Chord(6, "C")))))
+        following = pausedAt(12_279)
+        words(ChordsState(on = true, sheet = chords))
+        assertEquals(0, chordLit(line.text))
+        following = pausedAt(12_280)
+        settles()
+        assertEquals(1, chordLit(line.text))
+    }
+
+    @Test
+    fun aChordInTheLastTimedWordUsesTheNetEaseLineEnd() {
+        val line = SyncedLyrics.parseWordByWord("[10000,6200](10000,2000,0)君の名前を(12000,4200,0)呼んだ夜のこと").single()
+        lyricLines = listOf(line)
+        val chords = sheet.copy(lines = listOf(SheetLine(line.text, listOf(Chord(0, "G"), Chord(6, "C")))))
+        following = pausedAt(12_599)
+        words(ChordsState(on = true, sheet = chords))
+        assertEquals(0, chordLit(line.text))
+        following = pausedAt(12_600)
+        settles()
+        assertEquals(1, chordLit(line.text))
     }
 
     @Test

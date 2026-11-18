@@ -2,8 +2,6 @@
 # A path is a file in this checkout, at the submodule's commit; a URL names its version. See scripts/notices.py.
 apache-2.0.txt cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30 https://www.apache.org/licenses/LICENSE-2.0.txt
 cc-by-sa-4.0.txt 28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5 https://creativecommons.org/licenses/by-sa/4.0/legalcode.txt
-edrdg-licence.txt e82b726e6c094bd6f3b5d7cd4d2784faeba55bf74b17d6e5767c478cf6179430 html:https://www.edrdg.org/edrdg/licence.html
-jmdict-documentation.txt 81d6e6ad1bf610dfa20cc71c52b7f08fc15c309e295b0a1a92646f7d5042bc4f https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project&do=export_raw
 kuromoji-notice.txt df5afcd055e5d6642fa9e1ab8a6535bbc9a2f6a6dfbc243c6c88c1a82e49d736 https://raw.githubusercontent.com/atilika/kuromoji/0.9.0/NOTICE.md
 kuromoji-contributors.txt 91ce6dfc891ce91d38ea1531e6e5ccc14811fd2a1c92fe6aeff469dffd10da07 https://repo1.maven.org/maven2/com/atilika/kuromoji/kuromoji-core/0.9.0/kuromoji-core-0.9.0.jar!META-INF/CONTRIBUTORS.md
 ipadic.txt c408a3e8e875434560dbb9ab8d4a78b6e3abc90bd3a57d12d0b41cac99d287bf https://repo1.maven.org/maven2/com/atilika/kuromoji/kuromoji-ipadic/0.9.0/kuromoji-ipadic-0.9.0.jar!META-INF/NOTICE.md

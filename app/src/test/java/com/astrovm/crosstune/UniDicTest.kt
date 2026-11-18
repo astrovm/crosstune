@@ -7,11 +7,17 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayOutputStream
+import java.io.EOFException
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.NoSuchFileException
+import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -52,6 +58,46 @@ class UniDicTest {
         // Read once, it's the same one after.
         val kept = uniDic(fake, mayFetch = false)
         assertSame(kept.tokenizer(fetch = false), kept.tokenizer(fetch = true))
+    }
+
+    @Test
+    fun itClosesTheDictionaryFilesAfterMappingThem() = runBlocking {
+        val files = dictionaryFilesForDescriptorCheck()
+        val dictionary = checkNotNull(uniDic(FakeSpotify()).tokenizer(fetch = false))
+        assertNoOpenFiles(files)
+        assertEquals("コボシ", dictionary.tokenize("溢した").first().pronunciation)
+    }
+
+    @Test
+    fun itClosesAStreamWhenTheDictionaryFileEndsEarly() {
+        val files = dictionaryFilesForDescriptorCheck()
+        for (name in listOf("characterDefinitions.bin", "tokenInfoPartOfSpeechMap.bin", "unknownDictionary.bin")) {
+            val file = File(files, name)
+            file.writeBytes(byteArrayOf())
+            assertThrows(name, EOFException::class.java) { MappedUniDic(files).build() }
+            assertNoOpenFiles(files)
+            File(TestUniDic.files, name).copyTo(file, overwrite = true)
+        }
+    }
+
+    private fun dictionaryFilesForDescriptorCheck(): File {
+        assumeTrue("This check reads the test process's Linux file descriptors", Files.isDirectory(descriptors))
+        return File(dir, "files").also { check(TestUniDic.files.copyRecursively(it)) }
+    }
+
+    private fun assertNoOpenFiles(dictionaryFiles: File) {
+        val files = dictionaryFiles.toPath().toRealPath()
+        val openFiles = Files.newDirectoryStream(descriptors).use { entries ->
+            entries.mapNotNull { entry ->
+                try {
+                    Files.readSymbolicLink(entry).takeIf { it.startsWith(files) }
+                } catch (_: NoSuchFileException) {
+                    // An unrelated descriptor can close while this directory is read.
+                    null
+                }
+            }.sorted()
+        }
+        assertEquals("Open UniDic files", emptyList<Path>(), openFiles)
     }
 
     @Test
@@ -107,6 +153,7 @@ class UniDicTest {
     }
 
     private companion object {
+        val descriptors: Path = Path.of("/proc/self/fd")
         val jar: ByteArray by lazy { TestUniDic.jar.readBytes() }
         val NAMES = listOf(
             "characterDefinitions.bin", "connectionCosts.bin", "doubleArrayTrie.bin", "tokenInfoDictionary.bin",

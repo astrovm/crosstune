@@ -58,33 +58,8 @@ internal object Notices {
     /**
      * Each notice's words in [tag], one of the app's languages, by the notice's name: from
      * `notices-TAG.txt`, a block for each work with the words it translates, and English for the rest.
-     * Read once for each language, and outside the lock: the main thread takes it, in [wordsRead] and
-     * [letGoOfWords], and never waits for a read.
      */
-    fun words(tag: String): Map<String, NoticeWords> {
-        val asked = synchronized(translated) { translated[tag]?.let { return it }; kept }
-        val made = translate(tag)
-        synchronized(translated) { if (kept === asked) translated[tag] = made }
-        return made
-    }
-
-    /** The words in [tag] if they're read already, so a page that turns shows them at once; else null. */
-    fun wordsRead(tag: String): Map<String, NoticeWords>? = synchronized(translated) { translated[tag] }
-
-    private val translated = HashMap<String, Map<String, NoticeWords>>()
-
-    /** A new one at each [letGoOfWords], so words read for a page that was left aren't kept. */
-    private var kept = Any()
-
-    /** Lets go of the words read, once the licences page is left: it keeps them while it shows and while it turns. */
-    fun letGoOfWords() {
-        synchronized(translated) {
-            translated.clear()
-            kept = Any()
-        }
-    }
-
-    private fun translate(tag: String): Map<String, NoticeWords> {
+    fun translate(tag: String): Map<String, NoticeWords> {
         val found = open("notices-$tag.txt")?.let(::translations).orEmpty()
         return all.associate { notice ->
             val words = found[notice.name].orEmpty()

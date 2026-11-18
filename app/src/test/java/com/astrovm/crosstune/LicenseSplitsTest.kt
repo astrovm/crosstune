@@ -5,7 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
@@ -16,7 +15,8 @@ import java.util.concurrent.atomic.AtomicInteger
 /** The licences' pieces, kept while Settings → About → Licenses is shown: each read and split once. */
 class LicenseSplitsTest {
 
-    private val split = LicenseSplits.split
+    private val cache = LicenseCache()
+    private val split = LicenseCache.split
     private val jmdict = Notices.all.first { it.name == "JMdict" }
     private val pieces = listOf(LicenseUnit("The licence.", starts = true, ends = true))
 
@@ -33,16 +33,13 @@ class LicenseSplitsTest {
         }
     }
 
-    @Before
-    fun setUp() = LicenseSplits.clear()
-
     @After
     fun tearDown() {
         // Each read a test held is let go by then. It ends on its own: interrupted, it would end in a failure of its own.
         threads.shutdown()
         assertTrue("A read still runs after the test", threads.awaitTermination(10, TimeUnit.SECONDS))
-        LicenseSplits.split = split
-        LicenseSplits.clear()
+        LicenseCache.split = split
+        cache.close()
     }
 
     @Test
@@ -50,17 +47,17 @@ class LicenseSplitsTest {
         val reads = AtomicInteger()
         val reading = CountDownLatch(1)
         val letGo = CountDownLatch(1)
-        LicenseSplits.split = {
+        LicenseCache.split = {
             reads.incrementAndGet()
             reading.countDown()
             assertTrue(letGo.await(5, TimeUnit.SECONDS))
             pieces
         }
         try {
-            val first = threads.submit { LicenseSplits.make(jmdict) }
+            val first = threads.submit { cache.make(jmdict) }
             assertTrue(reading.await(5, TimeUnit.SECONDS))
             // The second asks while the first is still reading, and waits for it rather than reading again.
-            val second = threads.submit { LicenseSplits.make(jmdict) }
+            val second = threads.submit { cache.make(jmdict) }
             waitsForALock(started[1])
             letGo.countDown()
             first.get(5, TimeUnit.SECONDS)
@@ -69,7 +66,7 @@ class LicenseSplitsTest {
             letGo.countDown()
         }
         assertEquals(1, reads.get())
-        assertSame(pieces, LicenseSplits.of("JMdict"))
+        assertSame(pieces, cache.pieces("JMdict"))
     }
 
     @Test
@@ -77,17 +74,17 @@ class LicenseSplitsTest {
         val reads = AtomicInteger()
         val reading = CountDownLatch(1)
         val letGo = CountDownLatch(1)
-        LicenseSplits.split = {
+        LicenseCache.split = {
             reads.incrementAndGet()
             reading.countDown()
             assertTrue(letGo.await(5, TimeUnit.SECONDS))
             pieces
         }
         try {
-            val first = threads.submit { LicenseSplits.make(jmdict) }
+            val first = threads.submit { cache.make(jmdict) }
             assertTrue(reading.await(5, TimeUnit.SECONDS))
             // An equal copy, not the same object: the same work all the same.
-            val second = threads.submit { LicenseSplits.make(jmdict.copy()) }
+            val second = threads.submit { cache.make(jmdict.copy()) }
             waitsForALock(started[1])
             letGo.countDown()
             first.get(5, TimeUnit.SECONDS)
@@ -100,26 +97,65 @@ class LicenseSplitsTest {
 
     @Test
     fun aSplitThatEndsAfterThePageWasLeftIsNotKept() {
-        LicenseSplits.split = {
+        LicenseCache.split = {
             // The page is left while the text is read.
-            LicenseSplits.clear()
+            cache.close()
             pieces
         }
-        LicenseSplits.make(jmdict)
-        assertNull(LicenseSplits.of("JMdict"))
+        cache.make(jmdict)
+        assertNull(cache.pieces("JMdict"))
         // Opened again on the next visit, it is read again and kept.
-        LicenseSplits.split = { pieces }
-        LicenseSplits.make(jmdict)
-        assertEquals(pieces, LicenseSplits.of("JMdict"))
+        LicenseCache.split = { pieces }
+        val next = LicenseCache()
+        next.make(jmdict)
+        assertEquals(pieces, next.pieces("JMdict"))
+    }
+
+    @Test
+    fun aSplitWaitingForItsWorkLockCannotReadAfterItsCacheCloses() {
+        val reads = AtomicInteger()
+        val reading = CountDownLatch(1)
+        val letGo = CountDownLatch(1)
+        val newPieces = listOf(LicenseUnit("The next licence.", starts = true, ends = true))
+        LicenseCache.split = {
+            if (reads.incrementAndGet() == 1) {
+                reading.countDown()
+                assertTrue(letGo.await(5, TimeUnit.SECONDS))
+                pieces
+            } else {
+                newPieces
+            }
+        }
+        try {
+            val first = threads.submit { cache.make(jmdict) }
+            assertTrue(reading.await(5, TimeUnit.SECONDS))
+            val waiting = threads.submit { cache.make(jmdict) }
+            waitsForALock(started[1])
+            cache.close()
+
+            // The next visit can split the same work while the old split is still held.
+            val next = LicenseCache()
+            next.make(jmdict)
+            assertSame(newPieces, next.pieces("JMdict"))
+
+            letGo.countDown()
+            first.get(5, TimeUnit.SECONDS)
+            waiting.get(5, TimeUnit.SECONDS)
+            assertEquals(2, reads.get())
+            assertNull(cache.pieces("JMdict"))
+            assertSame(newPieces, next.pieces("JMdict"))
+        } finally {
+            letGo.countDown()
+        }
     }
 
     @Test
     fun aKeptWorkIsNotReadAgain() {
         val reads = AtomicInteger()
-        LicenseSplits.split = { reads.incrementAndGet(); pieces }
-        LicenseSplits.make(jmdict)
-        LicenseSplits.make(jmdict)
+        LicenseCache.split = { reads.incrementAndGet(); pieces }
+        cache.make(jmdict)
+        cache.make(jmdict)
         assertEquals(1, reads.get())
-        assertEquals(pieces, LicenseSplits.of("JMdict"))
+        assertEquals(pieces, cache.pieces("JMdict"))
     }
 }
