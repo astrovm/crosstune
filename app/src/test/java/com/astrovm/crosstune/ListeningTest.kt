@@ -259,14 +259,15 @@ class ListeningTest {
     }
 
     @Test
-    fun theMicAndItsRetryListenPastAComputerStreamShownByKdeConnect() {
+    fun theMicAndItsRetryHearTheSongWhenASessionOnlySuppliesAStreamTitle() {
         MainActivity.playbackFactory = {
             FakePlayback().apply {
                 access = true
                 songWhere = Place.ELSEWHERE
+                artistReadFromTitle = true
                 onThePhone = Heard.Song(
                     MusicMetadata("Twitch", "Fake Streamer"), null, 42_000, SystemClock.elapsedRealtime(),
-                    app = "org.kde.kdeconnect_tp"
+                    app = "com.example.desktop"
                 )
             }
         }

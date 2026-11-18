@@ -373,10 +373,9 @@ internal fun interface SongHearing {
 }
 
 /**
- * Names the song a phone app plays or casts straight from that app. Uses [hearing] for nearby
- * sound when no song is named or KDE Connect only shows a computer's playback. An app that can't
- * say where in the song it is, as for a video, is still listened to for that, through [played],
- * the phone's own sound, which the
+ * Names the song from the playing app when it gives a song and artist. Uses [hearing] for nearby
+ * sound when the app gives no song and artist. An app that can't say where in the song it is,
+ * as for a video, is still listened to for that, through [played], the phone's own sound, which the
  * microphone hears poorly, and not at all through headphones; with the microphone only when the
  * phone won't share its sound. Nothing heard, it's named as the app does.
  */
@@ -386,8 +385,7 @@ internal class PlayingFirst(
     private val played: SongHearing = hearing
 ) : SongHearing {
     override suspend fun listen(): Heard {
-        // KDE Connect can name the computer's browser tab while music plays in it.
-        val playing = playback.nowPlaying()?.takeUnless { it.app == KDE_CONNECT } ?: return hearing.listen()
+        val playing = playback.songForRecognition() ?: return hearing.listen()
         if (playing.clock != null) return playing
         return listenToPlaying() as? Heard.Song ?: playing
     }
@@ -399,7 +397,7 @@ internal class PlayingFirst(
         val room = (if (whileAloud) aloud() else hearing.listen()) ?: return heard
         // The microphone hears the room too: another song playing there isn't the one the phone plays.
         // With no song named to tell, the one heard may be either.
-        val playing = playback.nowPlaying()?.metadata ?: return (room as? Heard.Song)?.copy(inRoom = true) ?: room
+        val playing = playback.songForRecognition()?.metadata ?: return (room as? Heard.Song)?.copy(inRoom = true) ?: room
         return room.takeIf { it !is Heard.Song || SongNames.names(playing.title, playing.artist, it.metadata) } ?: Heard.Nothing
     }
 
@@ -411,7 +409,6 @@ internal class PlayingFirst(
     }
 
     companion object {
-        private const val KDE_CONNECT = "org.kde.kdeconnect_tp"
         const val ALOUD_CHECK_MS = 1_000L
     }
 }
