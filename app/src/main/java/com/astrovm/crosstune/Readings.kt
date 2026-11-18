@@ -99,9 +99,9 @@ internal object Readings {
      * and the dictionary's common misreadings, as 君 after a pause; 4 for counters, minutes, classical
      * verbs, the nouns IPADIC takes for suffixes, and the words JMdict reads one way only; 5 for words in old kana
      * alone that IPADIC splits, とりあふ and おもひで, modern words in kana that only looked old, さいふ said as written, 何分 as なんぷん,
-     * 洒落る, and numbers that start a longer word, 一重項.
+     * 洒落る, and numbers that start a longer word, 一重項; 6 for a kana noun split before a small kana.
      */
-    const val VERSION = 5
+    const val VERSION = 6
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -176,9 +176,50 @@ internal object Readings {
     // counting something, as 2 in 2人, as its kanji, 二人 ふたり, not a number on its own: they stay as written.
     private fun pieces(line: String): List<Piece> {
         val text = line.mapIndexed { at, c -> NEW_FORMS[c] ?: KANJI_DIGITS[c]?.takeIf { counts(line, at) } ?: c }.joinToString("")
-        val known = okurigana(line, text, ipadicPieces(line, text))
+        val known = withSmallKana(okurigana(line, text, ipadicPieces(line, text)))
         return saidAsWritten(modernPieces(uniDic?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known))
     }
+
+    /** Keep the small kana with its noun where the dictionaries can read both nouns around の. */
+    private fun withSmallKana(pieces: List<Piece>): List<Piece> {
+        if (pieces.none(Piece::startsWithUnreadSmallKana)) return pieces
+        val words = mutableListOf<Piece>()
+        for (piece in pieces) {
+            val pair = words.lastOrNull()?.let { before -> nounsWithSmallKana(before, piece) }
+            if (pair == null) {
+                words += piece
+            } else {
+                words.removeAt(words.lastIndex)
+                words += pair
+            }
+        }
+        return words
+    }
+
+    /** Kana alone can look like a verb and an unknown word, as かいし and ゃのけいひ. */
+    private fun nounsWithSmallKana(before: Piece, after: Piece): List<Piece>? {
+        if (!after.startsWithUnreadSmallKana || before.surface.any { it !in 'ぁ'..'ゖ' }) return null
+        val small = after.surface.takeWhile { it in SMALL_HIRAGANA }
+        val rest = after.surface.drop(small.length)
+        if (!rest.startsWith('の')) return null
+        val first = before.surface + small
+        val last = rest.drop(1)
+        val head = oldKana.today[first] ?: return null
+        val tail = oldKana.today[last] ?: return null
+        val tokens = tokenizer.tokenize("${head}の$tail")
+        val written = listOf(first, "の", last)
+        if (tokens.map { it.surface } != listOf(head, "の", tail) ||
+            tokens.map { it.partOfSpeechLevel1 } != listOf("名詞", "助詞", "名詞") ||
+            tokens.map { hiragana(it.reading.orEmpty()) } != written) return null
+        var end = before.end - before.surface.length
+        return tokens.zip(written) { token, kana ->
+            end += kana.length
+            Piece(kana, kana, token.partOfSpeechLevel1, token.partOfSpeechLevel2, token.baseForm,
+                drawnOutE(hiragana(token.pronunciation)), end, reader = Reader.JMDICT)
+        }
+    }
+
+    private const val SMALL_HIRAGANA = "ぁぃぅぇぉっゃゅょゎ"
 
     /** [line] as IPADIC splits [text], the line with its kanji made the dictionary's. */
     private fun ipadicPieces(line: String, text: String) = tokenizer.tokenize(text).map { token ->
@@ -626,6 +667,8 @@ internal object Readings {
         /** How it is spelled today, when it is in old kana and [Furigana.byRule] says it. */
         val today: String? = null
     ) {
+        val startsWithUnreadSmallKana get() = unread && surface.firstOrNull()?.let { it in SMALL_HIRAGANA } == true
+
         /** Kanji the dictionary can't read. */
         val unknown get() = unread && surface.any(::isHan)
 

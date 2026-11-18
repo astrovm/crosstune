@@ -22,6 +22,15 @@ class LookupCacheTest {
     private fun cache(file: File = this.file) = LookupCache(file, Dispatchers.Unconfined)
 
     @Test
+    fun discardingAnAnswerThatWasReplacedKeepsTheReplacement() = runBlocking {
+        val cache = cache()
+        cache.put("song", "old sheet")
+        cache.put("song", "new sheet")
+        cache.discard("song", "old sheet")
+        assertEquals("new sheet", cache.get("song"))
+    }
+
+    @Test
     fun whatsUsedOftenStaysLongest() = runBlocking {
         val cache = LookupCache(file, Dispatchers.Unconfined, maxEntries = 2)
         cache.put("a", "1")
