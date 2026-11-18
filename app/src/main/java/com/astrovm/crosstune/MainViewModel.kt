@@ -2347,7 +2347,8 @@ internal class MainViewModel(
         val likelyInstrumental: Boolean,
         val tries: Int = 0,
         val held: LyricsFinder.Lyrics.Found? = null,
-        val final: Boolean = true
+        val final: Boolean = true,
+        val heldUntilMs: Long? = null
     )
 
     private var unsung: Unsung? = null
@@ -3109,15 +3110,22 @@ internal class MainViewModel(
         }
         TimingLog.note("LRCLIB or the title says no one sings in it: a voice is listened for before its words show")
         uiState = uiState.copy(lyricsInstrumental = true)
-        unsung = waiting
+        val listening = waiting.copy(heldUntilMs = SystemClock.elapsedRealtime() + HELD_MS)
+        unsung = listening
+        holdUntil(listening)
+        hearVoice()
+    }
+
+    private fun holdUntil(waiting: Unsung) {
+        val deadline = waiting.heldUntilMs ?: return
+        heldJob?.cancel()
         heldJob = viewModelScope.launch {
-            delay(HELD_MS)
-            unsung?.takeIf { it.held === words }?.let {
+            delay((deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+            unsung?.takeIf { it.held === waiting.held }?.let {
                 voiceJob?.cancel()
                 settleLate(it, Listen.TIMED_OUT)
             }
         }
-        hearVoice()
     }
 
     /** [heard]'s held words, by what the listen came to, [listen]: shown unless [hidesHeldWords] says. Whether they show. */
@@ -3156,13 +3164,18 @@ internal class MainViewModel(
             var heard = waiting
             while (heard.tries < VOICE_TRIES) {
                 if (heard.tries > 0) delay(VOICE_PAUSE_MS)
+                val started = SystemClock.elapsedRealtime()
                 val sung = hearing.hear(null, null)
                 TimingLog.note("voice while ${heard.tries + 1}: ${if (sung == null) "nothing heard, model missing ${hearing.missesModel}, no sound ${hearing.heardNoSound}" else "sings ${sung.sings}"}")
                 // Stopped: heard again once it plays, or, for held words, shown if it isn't in time.
                 if (unsung !== heard || uiState.following?.clock?.playing != true) return@launch
                 voiceIn(hearing, sung, held = heard.held != null)?.let { return@launch heardOut(heard, it) }
-                heard = heard.copy(tries = heard.tries + 1)
+                // On a slow phone, decoding a window takes time that its recording does not.
+                val previous = heard.heldUntilMs
+                val extra = (SystemClock.elapsedRealtime() - started - VOICE_CAPTURE_MS).coerceAtLeast(0)
+                heard = heard.copy(tries = heard.tries + 1, heldUntilMs = previous?.plus(extra))
                 unsung = heard
+                if (heard.heldUntilMs != previous && heard.tries < VOICE_TRIES) holdUntil(heard)
             }
             heardOut(heard, Listen.NO_VOICE)
         }
@@ -5767,12 +5780,14 @@ internal class MainViewModel(
 
         /** The pause between them, so they're heard across the song, a verse apart, rather than all in its intro. */
         const val VOICE_PAUSE_MS = 20_000L
+        private const val VOICE_CAPTURE_MS = SingingListener.SECONDS * 1_000L
 
         /**
          * How long words held for a listen wait for it to settle them before they show: the time one listen takes,
          * [VOICE_TRIES] whiles heard [VOICE_PAUSE_MS] apart, and a while more for the speech model to hear the last.
+         * A finished window adds any time the model took beyond its recording.
          */
-        const val HELD_MS = (VOICE_TRIES + 1) * SingingListener.SECONDS * 1_000L + (VOICE_TRIES - 1) * VOICE_PAUSE_MS
+        const val HELD_MS = (VOICE_TRIES + 1) * VOICE_CAPTURE_MS + (VOICE_TRIES - 1) * VOICE_PAUSE_MS
 
         /** How long the music apps are asked whether one plays a song before a listen for a voice in it starts: they say at once. */
         const val APP_ASKED_MS = 1_000L
