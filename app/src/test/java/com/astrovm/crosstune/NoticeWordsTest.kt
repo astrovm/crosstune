@@ -113,7 +113,6 @@ class NoticeWordsTest {
     @After
     fun tearDown() {
         Notices.open = open
-        Notices.letGoOfWords()
     }
 
     /** Each translated language, by the tag its strings give: every app language but English. */
@@ -206,9 +205,9 @@ class NoticeWordsTest {
 
     @Test
     fun whileALanguagesWordsAreReadWhatTheMainThreadAsksDoesNotWait() {
+        val cache = LicenseCache()
         val reading = CountDownLatch(1)
         val letGo = CountDownLatch(1)
-        Notices.letGoOfWords()
         Notices.open = { name ->
             if (name == "notices-es.txt") {
                 reading.countDown()
@@ -218,17 +217,18 @@ class NoticeWordsTest {
         }
         val threads = Executors.newFixedThreadPool(2)
         try {
-            val read = threads.submit<Map<String, NoticeWords>> { Notices.words("es") }
+            val read = threads.submit<Map<String, NoticeWords>?> { cache.words("es") }
             assertTrue("The words were never read", reading.await(5, TimeUnit.SECONDS))
             // The page asks for them on each pass, and lets go of them when it's left.
-            assertNull(threads.submit<Map<String, NoticeWords>?> { Notices.wordsRead("es") }.atOnce("wordsRead"))
-            threads.submit { Notices.letGoOfWords() }.atOnce("letGoOfWords")
+            assertNull(threads.submit<Map<String, NoticeWords>?> { cache.wordsRead("es") }.atOnce("wordsRead"))
+            threads.submit { cache.close() }.atOnce("close")
             letGo.countDown()
-            // Whoever asked gets them. They were read for a page that was left, so they're not kept.
-            assertEquals("Presets de MilkDrop", read.get(5, TimeUnit.SECONDS).getValue("MilkDrop presets").name)
-            assertNull(Notices.wordsRead("es"))
-            // Asked again, they're read and kept.
-            assertEquals(Notices.words("es"), Notices.wordsRead("es"))
+            assertNull(read.get(5, TimeUnit.SECONDS))
+            assertNull(cache.wordsRead("es"))
+            // The next visit reads and keeps its own words.
+            val next = LicenseCache()
+            assertEquals("Presets de MilkDrop", next.words("es")?.getValue("MilkDrop presets")?.name)
+            assertSame(next.words("es"), next.wordsRead("es"))
         } finally {
             letGo.countDown()
             // The held read ends on its own: interrupted, it would throw instead.
@@ -308,17 +308,17 @@ class NoticeWordsTest {
     @Test
     fun aLanguagesWordsAreReadOnceWhileTheyAreKept() {
         val reads = Collections.synchronizedList(mutableListOf<String>())
-        Notices.letGoOfWords()
         Notices.open = { name -> reads += name; open(name) }
-        val first = Notices.words("es")
-        // Asked again while the page keeps them, as two passes may: the same words, not read again.
-        assertSame(first, Notices.words("es"))
+        val cache = LicenseCache()
+        val first = cache.words("es")
+        // Another pass gets the same words.
+        assertSame(first, cache.words("es"))
         assertEquals(listOf("notices-es.txt"), reads.filter { it == "notices-es.txt" })
     }
 
     @Test
     fun aLanguageShowsItsWordsAndEnglishWhereAWorkHasNone() {
-        val spanish = Notices.words("es")
+        val spanish = Notices.translate("es")
         assertEquals("Presets de MilkDrop", spanish.getValue("MilkDrop presets").name)
         assertEquals("No indica ninguna", spanish.getValue("MilkDrop presets").license)
         assertTrue(checkNotNull(spanish.getValue("projectM").note).contains("compilá"))
@@ -327,7 +327,7 @@ class NoticeWordsTest {
         assertEquals(Notices.all.map { it.name }, spanish.keys.toList())
         // English, and a language with no file, show notices.txt as it is.
         listOf("en", "eo").forEach { tag ->
-            assertEquals(Notices.all.map { NoticeWords(it.name, it.by, it.license, it.note) }, Notices.words(tag).values.toList())
+            assertEquals(Notices.all.map { NoticeWords(it.name, it.by, it.license, it.note) }, Notices.translate(tag).values.toList())
         }
     }
 
