@@ -13,6 +13,8 @@ class RecordingKeyTest {
         assertEquals(album, RecordingKey.asPlayed(opened, played).instrumentalAlbum)
         assertNull(RecordingKey.asPlayed(opened, played.copy(url = "https://www.deezer.com/track/456")).instrumentalAlbum)
         assertEquals(album, RecordingKey.asPlayed(opened.copy(recordingId = played.recordingId), played.copy(url = null)).instrumentalAlbum)
+        val opaque = played.copy(url = null, recordingId = "deezer:catalog:duration:200000")
+        assertEquals(album, RecordingKey.asPlayed(opened.copy(recordingId = opaque.recordingId), opaque).instrumentalAlbum)
         val approximate = song.copy(recordingId = "deezer:duration:200000")
         assertNull(RecordingKey.asPlayed(opened.copy(recordingId = approximate.recordingId), approximate).instrumentalAlbum)
     }

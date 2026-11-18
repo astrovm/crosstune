@@ -49,7 +49,7 @@ internal object RecordingKey {
         val played = track(playing.url)
         if (asked != null && played != null) return asked.service != null && asked.service == played.service && asked.id == played.id
         val id = playing.recordingId ?: return false
-        return id == song.recordingId && ":duration:" !in id
+        return id == song.recordingId && !id.substringAfter(':').startsWith("duration:")
     }
 
     /** Android players can omit the ID, as YouTube Music does; their duration still separates edits. */

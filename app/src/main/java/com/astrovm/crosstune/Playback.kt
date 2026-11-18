@@ -978,7 +978,7 @@ internal class MediaSessionPlayback(
         val duration = controller.lengthOf(metadata, asked)
         return Heard.Song(named.copy(
             artworkUrl = artwork,
-            url = uri ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
+            url = uri?.takeIf(String::isNotBlank) ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
             recordingId = RecordingKey.playing(controller.packageName, id, duration)
         ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f)
     }
