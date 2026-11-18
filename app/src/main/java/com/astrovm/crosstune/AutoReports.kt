@@ -142,7 +142,7 @@ internal class AutoReports(
                     remember(going.owed.key)
                 }
                 Delivery.REFUSED -> turnedAway(going.owed)
-                Delivery.FAILED, null -> Unit
+                Delivery.FAILED, Delivery.RATE_LIMITED, null -> Unit
             }
         }
     }

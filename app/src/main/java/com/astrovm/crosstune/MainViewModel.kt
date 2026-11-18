@@ -3893,8 +3893,8 @@ internal class MainViewModel(
         val previous = manualReportJob
         manualReportJob = viewModelScope.launch {
             previous?.join()
-            val sent = sender.send(draft.report) == Delivery.SENT
-            if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+            val delivery = sender.send(draft.report)
+            if (manualReport === draft) uiState = uiState.copy(report = delivery.manualStatus)
         }
     }
 
@@ -3916,8 +3916,8 @@ internal class MainViewModel(
         val previous = manualReportJob
         manualReportJob = viewModelScope.launch {
             previous?.join()
-            val sent = sender.send(draft.report) == Delivery.SENT
-            if (manualReport === draft) uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+            val delivery = sender.send(draft.report)
+            if (manualReport === draft) uiState = uiState.copy(report = delivery.manualStatus)
         }
     }
 
@@ -4031,7 +4031,7 @@ internal class MainViewModel(
                     // Past the day's share, or gone another way meanwhile, as the words it's for were left: it's skipped.
                     val delivery = deliver(sender, owed) ?: continue
                     // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
-                    if (delivery == Delivery.FAILED) break
+                    if (delivery == Delivery.FAILED || delivery == Delivery.RATE_LIMITED) break
                     // Paced under the box's 5 a minute from one phone, with room left for what's found meanwhile.
                     delay(reportPaceMs)
                 }

@@ -231,15 +231,26 @@ internal enum class Delivery {
     /** The box turned it away, as it always will: it isn't one it takes. */
     REFUSED,
 
+    /** The box has reached a limit for now. The same report can go later. */
+    RATE_LIMITED,
+
     /**
-     * It didn't get there for now: no network, the box down, busy (408) or full for the day (429), or an answer that
+     * It didn't get there for now: no network, the box down, busy (408), or an answer that
      * isn't the box's about the report, as a network's own 403 or a 404 while the box moves.
      */
     FAILED;
 
+    val manualStatus: ReportStatus
+        get() = when (this) {
+            SENT -> ReportStatus.SENT
+            RATE_LIMITED -> ReportStatus.RATE_LIMITED
+            REFUSED, FAILED -> ReportStatus.FAILED
+        }
+
     companion object {
         fun of(code: Int): Delivery = when (code) {
             in 200..299 -> SENT
+            429 -> RATE_LIMITED
             in REFUSALS -> REFUSED
             else -> FAILED
         }
@@ -502,7 +513,12 @@ private fun SendDialog(
                 content(sending)
                 // What goes, said where it's sent, as it's sent without another step.
                 Text(stringResource(whatGoes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (status == ReportStatus.FAILED) Text(stringResource(R.string.report_failed), color = MaterialTheme.colorScheme.error)
+                val error = when (status) {
+                    ReportStatus.FAILED -> R.string.report_failed
+                    ReportStatus.RATE_LIMITED -> R.string.report_rate_limited
+                    else -> null
+                }
+                error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
