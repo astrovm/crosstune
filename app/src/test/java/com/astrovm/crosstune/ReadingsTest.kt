@@ -579,7 +579,8 @@ class ReadingsTest {
         fun reading(line: String) = Readings.words(line, Script.JAPANESE).filter { it.modern != null }
             .map { listOf(it.text, it.modern, it.lookup) }
         val lines = listOf("ゐたんだ", "「ゐたんだ」", "待つてゐたんだよ")
-        val wanted = List(lines.size) { listOf(listOf("ゐたんだ", "いたんだ", "いる")) }
+        val being = listOf("ゐたんだ", "いたんだ", "いる")
+        val wanted = listOf(listOf(being), listOf(being), listOf(listOf("待つて", "待って", "待つ"), being))
         val builtIn = lines.map(::reading)
         val uniDic = TestUniDic.reading { lines.map(::reading) }
         assertEquals(listOf(wanted, wanted), listOf(builtIn, uniDic))
