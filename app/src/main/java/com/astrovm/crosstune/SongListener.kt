@@ -364,6 +364,9 @@ internal class PlayedSound(
 internal fun interface SongHearing {
     suspend fun listen(): Heard
 
+    /** Names the song, using audio when [acceptPlaying] rejects the playing app's identification. */
+    suspend fun listen(acceptPlaying: suspend (Heard.Song) -> Boolean): Heard = listen()
+
     /**
      * What an app on the phone plays, heard rather than as the app says, to tell how far the app is from
      * the words; by the microphone too, when the phone won't share its sound, unless not [byMicrophone].
@@ -384,8 +387,11 @@ internal class PlayingFirst(
     private val hearing: SongHearing,
     private val played: SongHearing = hearing
 ) : SongHearing {
-    override suspend fun listen(): Heard {
+    override suspend fun listen(): Heard = listen { true }
+
+    override suspend fun listen(acceptPlaying: suspend (Heard.Song) -> Boolean): Heard {
         val playing = playback.songForRecognition() ?: return hearing.listen()
+        if (!acceptPlaying(playing)) return hearing.listen()
         if (playing.clock != null) return playing
         return listenToPlaying() as? Heard.Song ?: playing
     }

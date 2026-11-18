@@ -1038,19 +1038,35 @@ internal class MainViewModel(
         val unnamed = lyrics && liveUnnamed?.away == false
         job = viewModelScope.launch {
             byEar?.cancelAndJoin()
+            var checked: CheckedPlayerSong? = null
             val heard = try {
-                if (unnamed) listener.listenToPlaying() else listener.listen()
+                if (unnamed) listener.listenToPlaying() else listener.listen { playing ->
+                    val found = checkPlayerSong(playing)
+                    checked = found
+                    found?.match != ExactMatcher.Match.Missing
+                }
             } finally {
                 if (isActive) uiState = uiState.copy(listening = false)
             }
-            answer(heard, lyrics, byPhone = unnamed)
+            answer(heard, lyrics, byPhone = unnamed, checked = checked?.takeIf { it.song == heard })
         }
     }
 
+    private data class CheckedPlayerSong(val song: Heard.Song, val destination: Destination, val match: ExactMatcher.Match)
+
+    /** Checks the catalog before showing the app's identification. A search that fails tells us nothing about it. */
+    private suspend fun checkPlayerSong(playing: Heard.Song): CheckedPlayerSong? {
+        if (!uiState.exactMatch) return null
+        val destination = uiState.defaultDestination
+        val service = destination.matchService ?: return null
+        if (!canMatchExactly(service, playing.metadata.type)) return null
+        return CheckedPlayerSong(playing, destination, matcher.lookFor(service, playing.metadata))
+    }
+
     /** Shows what listening found, its words too when asked for [lyrics]; [byPhone] when it's what an app on the phone plays. */
-    private fun answer(heard: Heard, lyrics: Boolean, byPhone: Boolean = false) {
+    private fun answer(heard: Heard, lyrics: Boolean, byPhone: Boolean = false, checked: CheckedPlayerSong? = null) {
         when (heard) {
-            is Heard.Song -> showHeard(heard, lyrics, byPhone)
+            is Heard.Song -> showHeard(heard, lyrics, byPhone, checked)
             Heard.Nothing -> showListenError(AppError.NO_MATCH)
             is Heard.Failed -> showListenError(heard.error)
             is Heard.Unsent -> {
@@ -1453,16 +1469,16 @@ internal class MainViewModel(
      * Shows [song] as a result, like a pasted link, by the Shazam page [appleMusicId] names when it's
      * known. The player's own song's card goes under it; any other song takes the player's place.
      */
-    private fun showSong(song: MusicMetadata, appleMusicId: String? = null) {
+    private fun showSong(song: MusicMetadata, appleMusicId: String? = null, checked: CheckedPlayerSong? = null) {
         val input = appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") } ?: MusicLinks.recognizedSong(song)
         uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
-        resolve(input, openWhenReady = false, underPlayer = uiState.player?.let { sameSong(it.song, song) } == true)
+        resolve(input, openWhenReady = false, underPlayer = uiState.player?.let { sameSong(it.song, song) } == true, checked = checked)
     }
 
-    private fun showHeard(heard: Heard.Song, lyrics: Boolean, byPhone: Boolean) {
+    private fun showHeard(heard: Heard.Song, lyrics: Boolean, byPhone: Boolean, checked: CheckedPlayerSong? = null) {
         TimingLog.note("recognized ${heard.offsetMs} at ${heard.startedAtMs} match ${heard.matchId} received ${now()} speed ${heard.speed} length ${heard.metadata.lengthMs}")
         retryListens = false
-        showSong(heard.metadata, heard.appleMusicId)
+        showSong(heard.metadata, heard.appleMusicId, checked)
         alongByPhone = byPhone
         // Once it's shown, as showing it forgets what was heard for whatever was shown before.
         heardSong = heard.metadata
@@ -1488,7 +1504,10 @@ internal class MainViewModel(
      * nothing until YouTube Music says it's music, and then only if nothing else has been shown since.
      * A link that came [here], as links do, plays as soon as it's found when set to.
      */
-    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false, underPlayer: Boolean = false, keepsWords: Boolean = false) {
+    private fun resolve(
+        input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false,
+        here: Boolean = false, underPlayer: Boolean = false, keepsWords: Boolean = false, checked: CheckedPlayerSong? = null
+    ) {
         cancelContentWork(closesPlayer = !underPlayer, keepsWords = keepsWords)
         lastRequest = Request(input, openWhenReady, destination, here)
         pendingOpen = openWhenReady
@@ -1518,7 +1537,7 @@ internal class MainViewModel(
             // Looked up while asking whether it's music, so a music video costs one wait, not two.
             val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input)) }
             if (!lookupGoesOn(video, copied, lookup, ::showLoading)) return@launch
-            lookedUp(lookup.await(), saved)
+            lookedUp(lookup.await(), saved, checked)
         }
     }
 
@@ -1549,7 +1568,7 @@ internal class MainViewModel(
         ?.takeUnless { (it.link.type == ItemType.ALBUM || it.link.type == ItemType.PLAYLIST) && it.metadata.tracks.isEmpty() }
 
     /** What a link's lookup found, or why it failed; [saved] is how Recent had it. */
-    private suspend fun lookedUp(resolution: Resolution, saved: HistoryEntry?) {
+    private suspend fun lookedUp(resolution: Resolution, saved: HistoryEntry?, checked: CheckedPlayerSong?) {
         when (resolution) {
             is Resolution.Failed -> {
                 // Offline, the link waits for the internet, as the field's icon says, and is looked up once it's back.
@@ -1564,7 +1583,7 @@ internal class MainViewModel(
             }
             // A search page saved while exact matching was on means matching failed that time,
             // e.g. on a flaky network, so a new request for the link tries it again.
-            is Resolution.Resolved -> onResolved(resolution, saved?.destinationLinks.orEmpty().filterValues { it.exact || !it.matchingEnabled })
+            is Resolution.Resolved -> onResolved(resolution, saved?.destinationLinks.orEmpty().filterValues { it.exact || !it.matchingEnabled }, checked)
         }
     }
 
@@ -1585,8 +1604,12 @@ internal class MainViewModel(
     }
 
     /** [prepared] are the links already found for it, when it came from Recent. */
-    private suspend fun onResolved(resolution: Resolution.Resolved, prepared: Map<String, PreparedLink>) {
-        val entry = HistoryEntry(resolution.link, resolution.metadata, prepared)
+    private suspend fun onResolved(resolution: Resolution.Resolved, prepared: Map<String, PreparedLink>, checked: CheckedPlayerSong?) {
+        val namedLink = checked?.takeIf { uiState.exactMatch }?.let {
+            it.destination to preparedLink(it.destination, resolution.metadata, it.match)
+        }
+        val links = if (namedLink == null) prepared else prepared + (namedLink.first.key to namedLink.second)
+        val entry = HistoryEntry(resolution.link, resolution.metadata, links)
         val history = historyStore.add(entry)
         // The box shows the clean link Crosstune works with, e.g. without "?si=" or a short link's redirect.
         uiState = uiState.copy(
@@ -1595,7 +1618,7 @@ internal class MainViewModel(
             songsLike = false,
             link = resolution.link,
             linkText = fieldText(resolution.link),
-            destinationUrls = savedDestinations(entry),
+            destinationUrls = savedDestinations(entry) + listOfNotNull(namedLink),
             history = history
         )
         lookAhead()
@@ -5148,10 +5171,15 @@ internal class MainViewModel(
         } else {
             null
         }
+        val prepared = preparedLink(destination, metadata, match)
+        rememberDestination(destination, prepared)
+        return prepared.url.forSharing()
+    }
+
+    private fun preparedLink(destination: Destination, metadata: MusicMetadata, match: ExactMatcher.Match?): PreparedLink {
         val exactUrl = (match as? ExactMatcher.Match.Found)?.url
         val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(metadata))
-        rememberDestination(destination, PreparedLink(url, exactUrl != null, matched(match)))
-        return url.forSharing()
+        return PreparedLink(url, exactUrl != null, matched(match))
     }
 
     /**
