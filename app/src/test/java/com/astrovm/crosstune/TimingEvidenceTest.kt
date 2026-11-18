@@ -9,7 +9,7 @@ class TimingEvidenceTest {
 
     @Test
     fun twoTimedWordsMayStartTogether() {
-        val line = LyricLine(1000, "Walk on", listOf(TimedWord(1200, "Walk"), TimedWord(1200, "on")), 2000)
+        val line = LyricLine(1000, "Walk on", listOf(TimedWord(1200, "Walk "), TimedWord(1200, "on")), 2000)
         assertTrue("Words that share a time still give timing evidence", TimingEvidence.usable(listOf(line), 2500))
     }
 
