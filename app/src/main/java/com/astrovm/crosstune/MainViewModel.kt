@@ -3180,9 +3180,9 @@ internal class MainViewModel(
         while (true) {
             delay(VOICE_PAUSE_MS)
             if (unsung !== heard || !mayHearVoice(heard.song)) return
-            val sung = withTimeoutOrNull(HELD_MS) { hearing.hear(null, null) } ?: return
+            val sung = withTimeoutOrNull(HELD_MS) { hearing.hear(null, null) }
             if (unsung !== heard || !mayHearVoice(heard.song)) return
-            if (sung.sings) return heardOut(heard, Listen.VOICE)
+            if (sung?.sings == true) return heardOut(heard, Listen.VOICE)
         }
     }
 
@@ -3211,7 +3211,8 @@ internal class MainViewModel(
     /** Whether [song], with no words found, may be heard for a voice now: shown, played by a music app on the phone, Crosstune in sight. */
     private fun mayHearVoice(song: MusicMetadata): Boolean {
         if (shazamLeads || nextPaused) return false
-        if (!mayCalibrate() || uiState.lyricsFor != song) return false
+        // An artwork lookup can finish while the same song's words stay open.
+        if (!mayCalibrate() || uiState.lyricsFor?.copy(artworkUrl = song.artworkUrl) != song) return false
         return uiState.following?.let { it.app != null && it.clock.playing } == true
     }
 

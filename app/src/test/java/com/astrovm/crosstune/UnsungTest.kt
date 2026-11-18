@@ -472,6 +472,48 @@ class UnsungTest {
     }
 
     @Test
+    fun aLaterVoiceIsHeardAfterAnEmptyAndATimedOutWindow() {
+        hiddenAfterFourWindows()
+        singing.answers = List(MainViewModel.VOICE_TRIES) { music } + listOf(null, music, voice)
+        singing.before = {
+            if (singing.hears == MainViewModel.VOICE_TRIES + 2) awaitCancellation()
+        }
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertEquals(MainViewModel.VOICE_TRIES + 1, singing.hears)
+        assertFalse(showsWords())
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertEquals(MainViewModel.VOICE_TRIES + 2, singing.hears)
+        passes(MainViewModel.HELD_MS)
+        assertFalse(showsWords())
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertEquals(MainViewModel.VOICE_TRIES + 3, singing.hears)
+        assertTrue(showsWords())
+    }
+
+    @Test
+    fun aLaterVoiceIsHeardWhenTheSongsCoverArrives() {
+        hiddenAfterFourWindows()
+        val shown = requireNotNull(model().uiState.lyricsFor)
+        val cover = "https://example.com/demo.jpg"
+        val answer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                FakeSpotify.html(request, """{"data":[{"title":"Demo","artist":{"name":"Band"},"album":{"cover_big":"$cover"}}]}""")
+            } else answer(request)
+        }
+        // Deliver the same cover lookup that runs when playback first names the song.
+        composeRule.runOnIdle {
+            MainViewModel::class.java.getDeclaredMethod("remember", Heard.Song::class.java)
+                .apply { isAccessible = true }.invoke(model(), Heard.Song(shown, null))
+        }
+        waitUntil { model().uiState.lyricsFor?.artworkUrl == cover }
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertEquals(MainViewModel.VOICE_TRIES + 1, singing.hears)
+        assertTrue(showsWords())
+        assertEquals(cover, model().uiState.lyricsFor?.artworkUrl)
+    }
+
+    @Test
     fun aLaterVoiceIsNotListenedForWithTheLyricsClosed() {
         hiddenAfterFourWindows()
         model().dismissLyrics()
