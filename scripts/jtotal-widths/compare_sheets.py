@@ -24,7 +24,7 @@ machine's browser and fonts, such as a Mac's, and writes NAME.environment.txt be
 It loads files on this machine only, with the page's links read against J-Total's address, and a page
 that fails to draw is named in NAME.environment.txt while the others are still drawn.
 It draws every letter at 40px on a screen of 4 pixels to a CSS pixel, which places each most exactly.
-`--size page --scale 1.25` draws them as a reader sees them: at the page's own 15px, on a screen
+`--size page --scale 1.25` draws them as a reader sees them: at each page's own font size, on a screen
 Windows scales by 125%.
 `moves` puts two drawings side by side: how many chords sit over another letter, by how many columns,
 which code points before them are drawn at another width, and how many chords start where a letter
@@ -74,7 +74,7 @@ JS = r"""() => {
  }
  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ALL);
  const isChord = (e) => e.nodeType == 1 && e.tagName == 'A' && /cd\//.test(e.getAttribute('href') || '');
- const lines = []; let cur = { chars: [], chords: [] }, inside = false, font = null, pending = null, n;
+ const lines = []; let cur = { chars: [], chords: [] }, inside = false, font = null, fontSize = null, pending = null, n;
  while ((n = walker.nextNode())) {
   if (n.nodeType == 8) { if (/^HPSTART/.test(n.data)) inside = true; else if (inside && /^HPEND/.test(n.data)) break; continue; }
   if (!inside) continue;
@@ -88,7 +88,11 @@ JS = r"""() => {
     let bass = null;
     const next = n.nextSibling;
     if (next && next.nodeType == 3) { const m = /^on([A-G][#b]?)/.exec(next.data); if (m) bass = m[1]; }
-    if (font === null) font = getComputedStyle(n).fontFamily;
+    if (font === null) {
+     const style = getComputedStyle(n);
+     font = style.fontFamily;
+     fontSize = style.fontSize;
+    }
     // A <br> inside the link ends a line: the name is drawn on the line it starts on, so after the breaks before it.
     const inner = document.createTreeWalker(n, NodeFilter.SHOW_TEXT);
     let letters = null, t;
@@ -117,7 +121,7 @@ JS = r"""() => {
  // The left edge of a line: where an empty span at the very start of the sheet sits.
  const probe = document.createElement('span');
  first.parentNode.insertBefore(probe, first.nextSibling);
- return { x0: probe.getBoundingClientRect().left, font, lines };
+ return { x0: probe.getBoundingClientRect().left, font, fontSize, lines };
 }"""
 
 
@@ -430,7 +434,7 @@ SITE = "https://music.j-total.net/"
 
 def sheet_html(raw, css, faces, size=40):
     """The page as `draw` loads it: J-Total's stylesheet in it, no scripts, links read against `SITE`, and
-    Inconsolata from `faces`. At `size` pixels a letter, or at the page's own size (15px) when `size` is None."""
+    Inconsolata from `faces`. At `size` pixels a letter, or at each page's own size when `size` is None."""
     text = re.sub(r'<link href="/ssi_dat/dat_st.css[^>]*>', lambda _: "<style>" + css + "</style>", raw)
     text = re.sub(r"(?is)<script\b.*?</script[^>]*>", "", text)
     text = re.sub(r"(?i)<head\b[^<>]*+>", lambda found: found[0] + f'<base href="{SITE}">', text, count=1)
@@ -490,6 +494,8 @@ def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, ou
     (directory / out).write_text(json.dumps(pages, ensure_ascii=False), encoding="utf-8")
     letters = "the page's own size" if size is None else f"{size}px"
     found += [f"Browser language {lang or 'as Playwright starts it'}", f"Letters at {letters}, {scale} screen pixels to a CSS pixel"]
+    sizes = Counter((p["font"], p["fontSize"]) for p in pages if p["font"] and p["fontSize"])
+    found += [f"{size} on {stack}: {count} sheets" for (stack, size), count in sorted(sizes.items())]
     found += [f"Not drawn: {line}" for line in failed]
     (directory / out).with_suffix(".environment.txt").write_text("\n".join(found) + "\n", encoding="utf-8")
     print(f"{len(pages)} sheets drawn" + (f", {len(failed)} not" if failed else ""))
