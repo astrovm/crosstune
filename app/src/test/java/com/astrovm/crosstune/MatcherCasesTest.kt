@@ -66,6 +66,7 @@ class MatcherCasesTest {
         val deezerSeconds: Long? = null,
         val japan: Pair<String, String>? = null,
         val korea: Pair<String, String>? = null,
+        val lookupId: Long? = null,
         val songs: List<String> = emptyList(),
         val videos: List<String> = emptyList(),
         val picked: Int? = null,
@@ -499,7 +500,9 @@ class MatcherCasesTest {
     fun thePickerCannotUseAnotherSongOrPartAsPartTwo() {
         val songs = listOf(row("Fake Song Pt. 1"), row("偽の歌"), row("別の歌 Pt. 2"))
         for (selected in songs.indices) {
-            assertEquals(null, find(Case("not part two", null, title = "Fake Song, Pt. 2", songs = songs, picked = selected)))
+            val result = found(Case("not part two", null, title = "Fake Song, Pt. 2", songs = songs, picked = selected))
+            assertEquals(null, result.id)
+            assertEquals(false, result.asked)
         }
     }
 
@@ -517,6 +520,36 @@ class MatcherCasesTest {
             "part two in Roman numerals", "song1", title = "Fake Song, Pt. 2", japan = japanese("偽の歌 Part 2"),
             songs = listOf(row("偽の歌 Ⅲ"), row("偽の歌 Ⅱ"))
         )))
+        assertEquals("song0", find(Case(
+            "Roman numeral written with Pt.", "song0", title = "Fake Song Pt.2", songs = listOf(row("Fake Song Pt.Ⅱ")), picked = 0
+        )))
+    }
+
+    @Test
+    fun theRecordingChecksKeepKnownTitlesAndRequireAnActualLiveLabel() {
+        val cases = listOf(
+            Case("part named on album", "song0", title = "Fake Song (Part 2)", songs = listOf(row("Fake Song", "Fake Song (Part 2)"))),
+            Case("part in video with artist and video label", "video0", title = "Fake Song, Pt. 2",
+                videos = listOf(video("Fake Band - Fake Song, Pt. 2 (Official Video)"))),
+            Case("the previous Apple track has the alias", "song0", lengthMs = 210_000, linkMs = 270_000,
+                editions = listOf("Live at Budokan" to 270_000), japan = japanese("偽の歌"), lookupId = 7,
+                songs = listOf(row("偽の歌", length = ""))),
+            Case("alias has two takes", "song1", lengthMs = 210_000, linkMs = 240_000,
+                editions = listOf("Live at Budokan" to 240_000), japan = japanese("偽の歌"), songs = listOf(
+                    row("偽の歌", length = "3:30"), row("偽の歌 (ライブ)", "Live at Budokan", length = "4:00")
+                )),
+            Case("unrelated pair", "song0", lengthMs = 240_000, linkMs = 300_000,
+                editions = listOf("Fake Album" to 300_000), songs = listOf(
+                    row("偽の歌", length = "5:00"), row("別の歌", length = "4:00"), row("別の歌 (ライブ)", length = "5:00")
+                )),
+            Case("live is in the album name", "song1", title = "Fake Song: Live", songs = listOf(
+                row("偽の歌", "Long Live Fake Band"), row("偽の歌 (ライブ)", "Concert")
+            ))
+        )
+        assertEquals(emptyList<String>(), cases.mapNotNull { case ->
+            val actual = find(case)
+            "${case.what}: $actual, expected ${case.main}".takeIf { actual != case.main }
+        })
     }
 
     @Test
@@ -729,7 +762,9 @@ class MatcherCasesTest {
             broken += broken(key, found, was)
             found.zip(was).forEachIndexed { mode, (now, then) ->
                 val (before, after) = fuzzed.verdict(then) to fuzzed.verdict(now.id)
-                if (before == RIGHT && after != RIGHT && mode == 0) println("Right result changed: $key, $then -> ${now.id}")
+                if (before == RIGHT && after != RIGHT) {
+                    println("Right result changed: $key, ${MODES[mode]}, source ${fuzzed.modes[mode].linkMs}, $then -> ${now.id}")
+                }
                 counts.merge("${MODES[mode]}: $before -> $after", 1, Int::plus)
             }
         }
@@ -896,9 +931,12 @@ class MatcherCasesTest {
             when {
                 url.host == "itunes.apple.com" && url.encodedPath == "/search" ->
                     case.lengthMs?.let { length ->
-                        results(appleSong(case.title, case.artist, case.album, length), *case.editions.map { (album, ms) -> appleSong(case.title, case.artist, album, ms) }.toTypedArray())
+                        val home = appleSong(case.title, case.artist, case.album, length)
+                        val editions = case.editions.mapIndexed { index, (album, ms) -> appleSong(case.title, case.artist, album, ms, 8L + index) }
+                        results(home, *editions.toTypedArray())
                     } ?: results()
                 url.host == "itunes.apple.com" -> mapOf("JP" to case.japan, "KR" to case.korea)[url.queryParameter("country")]
+                    ?.takeIf { case.lookupId == null || url.queryParameter("id") == case.lookupId.toString() }
                     ?.let { (title, artist) -> results(appleSong(title, artist, case.album, case.lengthMs ?: 0)) } ?: results()
                 url.host == "api.deezer.com" -> FakeSpotify.html(request, JSONObject().put("data", JSONArray().apply {
                     case.deezerSeconds?.let { put(JSONObject().put("title", case.title).put("artist", JSONObject().put("name", case.artist)).put("duration", it)) }
@@ -924,8 +962,8 @@ class MatcherCasesTest {
 
     private fun id(kind: String, index: Int) = "$kind$index".padEnd(11, 'x')
 
-    private fun appleSong(title: String, artist: String, album: String, lengthMs: Long) = JSONObject()
-        .put("trackId", 7).put("trackName", title).put("artistName", artist).put("collectionName", album).put("trackTimeMillis", lengthMs)
+    private fun appleSong(title: String, artist: String, album: String, lengthMs: Long, trackId: Long = 7) = JSONObject()
+        .put("trackId", trackId).put("trackName", title).put("artistName", artist).put("collectionName", album).put("trackTimeMillis", lengthMs)
 
     /** A row, "name | details", as YouTube Music writes it. */
     private fun page(row: String, videoId: String): JSONObject {
