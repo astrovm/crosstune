@@ -1137,12 +1137,17 @@ internal class MediaSessionPlayback(
         val named = songName(title, artist)
         if (named?.unnamed == true) return false
         val fileTitle = MetadataParsers.withoutAudioExtension(title)
-        val creditedFile = fileTitle != title && named?.artist?.isNotBlank() == true
-        if (!SongNames.names(if (creditedFile) fileTitle else title, "", song)) return false
-        // In a credited file, the part before the dash can be the artist even if the rest looks like an edition.
-        if (!creditedFile && SongNames.wholeTitle(title, song.title)) return true
-        return named != null && named.artist.isNotBlank() && SongNames.sameArtist(named.artist, song.artist) && SongNames.wholeTitle(named.title, song.title)
+        if (fileTitle != title && named != null && named.artist.isNotBlank()) {
+            if (named.creditMatches(song)) return true
+            // A song shared without an artist can still name the entire file, including both sides of its dash.
+            return song.artist.isBlank() && fileTitle.trim().equals(MetadataParsers.withoutAudioExtension(song.title).trim(), ignoreCase = true)
+        }
+        if (!SongNames.names(title, "", song)) return false
+        return SongNames.wholeTitle(title, song.title) || named?.creditMatches(song) == true
     }
+
+    private fun MusicMetadata.creditMatches(song: MusicMetadata): Boolean =
+        artist.isNotBlank() && SongNames.sameArtist(artist, song.artist) && SongNames.wholeTitle(title, song.title)
 }
 
 /** Installed from a file rather than by an app store, which Android 13 and later restrict settings for. */

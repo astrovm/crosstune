@@ -1804,6 +1804,7 @@ class PlaybackTest {
             shadowOf(sessions).addController(session)
             val song = MusicMetadata(name.substringBeforeLast('.'), "Fixture Artist")
             assertNull(name, playback.appFor(song.copy(artist = "Wrong Artist"), app = packageName))
+            assertNull(name, playback.appFor(MusicMetadata("Fixture Artist", ""), app = packageName))
             val prefix = MusicMetadata("Fixture Artist", "Wrong Artist")
             assertNull(name, playback.appFor(prefix, app = packageName))
             playback.seekTo(prefix, 10_000, packageName)
@@ -1813,6 +1814,9 @@ class PlaybackTest {
             playback.seekTo(song, 10_000, packageName)
             playback.playPause(song, false, packageName)
             assertEquals(name, listOf("seekTo 10000", "pause"), asked())
+            assertEquals(name, session, playback.appFor(song.copy(artist = ""), app = packageName))
+            val fullTitle = MusicMetadata("Fixture Artist - ${song.title}", "")
+            assertEquals(name, session, playback.appFor(fullTitle, app = packageName))
         }
     }
 
