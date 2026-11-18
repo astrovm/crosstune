@@ -262,8 +262,19 @@ internal object Readings {
         val place = (at until at + text.length).takeIf { changesHo }
         if ((changesHo && text in oldKana.modern) || changed.any { writtenToday(line, at + it, place) }) return null
         val today = text.mapIndexed { i, c -> if (i in changed) KANA_SAID.getValue(c) else c }.joinToString("")
-        return knownToday(text, today, changed)
+        val known = knownToday(text, today, changed, singleToken = changesHo)
             ?: oldKana.today[today]?.let { lookup -> listOf(Piece(text, today, "名詞", "一般", lookup, today, reader = Reader.JMDICT, today = today)) }
+        return known?.takeUnless { changesHo && cutsOffModernWord(line, at + changed.last() + 1, at + text.length) }
+    }
+
+    /** An unchanged ending may start a word outside the old spelling, like いどう in とほいどう. */
+    private fun cutsOffModernWord(line: String, from: Int, end: Int): Boolean {
+        val known = oldKana
+        return (from until end).any { start ->
+            (end + 1..minOf(line.length, start + known.longestToday)).any { stop ->
+                line.substring(start, stop) in known.today
+            }
+        }
     }
 
     /** How ひ, ふ and ほ are said inside a word in old kana. */
@@ -287,8 +298,10 @@ internal object Readings {
      * inside a word, or ending a verb in う, as the old verbs in ふ do, or a noun, as 割合ひ does. Never ending an adjective,
      * whose い was never ひ: ふるひ is 降る日, not 古い. And no name, which IPADIC makes of kana it can't read otherwise.
      */
-    private fun knownToday(text: String, today: String, changed: List<Int>): List<Piece>? {
+    private fun knownToday(text: String, today: String, changed: List<Int>, singleToken: Boolean): List<Piece>? {
         val tokens = tokenizer.tokenize(today)
+        // A word with ほ can cover a shorter modern fragment only when the full spelling is known.
+        if (singleToken && tokens.size != 1) return null
         if (tokens.any { !it.isKnown || it.reading == "*" }) return null
         if (tokens.any { it.position in changed || it.partOfSpeechLevel2 == "固有名詞" }) return null
         val endings = changed.all { at ->
@@ -310,6 +323,7 @@ internal object Readings {
     internal class OldKana(val today: Map<String, String>, val modern: Set<String>) {
         val modernWithHiOrFu = modern.filter { word -> (1..word.lastIndex).any { word[it] in "ひふ" } }.toSet()
         val longest = modern.maxOf { it.length }
+        val longestToday = today.keys.maxOfOrNull { it.length } ?: 0
     }
 
     /**

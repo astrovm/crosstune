@@ -819,6 +819,18 @@ class ReadingsTest {
     }
 
     @Test
+    fun aModernWordAcrossTheEndOfAnOldSpellingCandidateKeepsItsKana() {
+        fun checkSpelling() {
+            for (text in listOf("とほいどう", "うるほふく", "こほりのふかい")) {
+                assertEquals(text, text, Readings.of(listOf(text), Script.JAPANESE).single().reading)
+                assertNull(text, Readings.words(text, Script.JAPANESE).firstNotNullOfOrNull(Word::modern))
+            }
+        }
+        checkSpelling()
+        TestUniDic.reading(::checkSpelling)
+    }
+
+    @Test
     fun aWordCarriesItsModernSpellingOnlyWhenItIsWrittenInOldKana() {
         assertNull(Readings.words("夜空に、分かった!", Script.JAPANESE).firstNotNullOfOrNull { it.modern })
         // The shipped dictionary says 思ひ出 as it's sung. It splits the old ending off 恋ひ and 住まゐ, which is said with its word.
