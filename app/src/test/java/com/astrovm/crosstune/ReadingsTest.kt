@@ -637,6 +637,17 @@ class ReadingsTest {
     }
 
     @Test
+    fun aRareKanaSpellingDoesNotReachAcrossTheEndOfAnOldVerb() {
+        val text = "いふひと"
+        fun check() {
+            assertEquals(listOf("いう"), Readings.words(text, Script.JAPANESE).mapNotNull { it.modern })
+            assertEquals("iu hito", Readings.of(listOf(text), Script.JAPANESE).single().romanized)
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
     fun aFuOrHiAfterKanaAloneIsNotAnOldEnding() {
         // ふ and ひ say う and い only after a kanji: ふふ is a laugh, not ふ and an old ending.
         listOf("ふふ" to "fufu", "ひふ" to "hifu").forEach { (text, romaji) ->

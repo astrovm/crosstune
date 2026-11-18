@@ -254,6 +254,7 @@ internal object Readings {
      */
     private fun kanaToday(word: List<Piece>, line: String, at: Int): List<Piece>? {
         val text = word.joinToString("") { it.surface }
+        if (text in rareKanaWords) return null
         val changed = text.indices.filter { it > 0 && text[it] in KANA_SAID }
         if (word.size < 2 || changed.isEmpty() || !Furigana.inOldKana(text)) return null
         // A word starts with no particle: は and ひく in あとへはひく are no はいく.
@@ -279,14 +280,14 @@ internal object Readings {
                 val spelling = line.substring(from, to)
                 val outside = word == null || from < word.first || to > word.last + 1
                 val whole = sameSpan && word != null && from == word.first && to == word.last + 1 && spelling !in oldVerbs
-                (outside || whole) && (spelling in modern || spelling in rareKanaWords)
+                (outside || whole) && spelling in modern
             }
         }
     }
 
     // Keep the old verbs 言ふ and 請ふ when they stand alone, despite their modern homophones.
     private val oldVerbs = setOf("いふ", "こふ")
-    // JMdict's rare reading of 千引き and archaic noun 浮費, left out of the modern table.
+    // JMdict's rare 千引き and archaic 浮費 count as whole words. ふひ across いふひと says nothing about いふ.
     private val rareKanaWords = setOf("ちひき", "ふひ")
 
     /**
