@@ -577,6 +577,13 @@ class MatcherCasesTest {
     }
 
     @Test
+    fun aNamedRemixCannotTakeThePlaceOfTheLinkedLiveRecording() {
+        assertEquals("song0", find(Case("named live remix", "song0", linkMs = 240_000, songs = listOf(
+            row("Fake Song", length = "3:30"), row("Fake Song (Remix) - Live Version", "Live at Budokan", length = "4:00")
+        ))))
+    }
+
+    @Test
     fun theNamesTheReviewsTriedReadAsMainReadThemOrBetter() {
         // The first review, 3: a sign is no letter, and 4: many songs in one, with a word run on.
         assertEquals(true, SongNames.same("Fake Song™", "Fake Song"))

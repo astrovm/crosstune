@@ -687,7 +687,7 @@ internal class ExactMatcher(
         return playable(items).singleOrNull {
             sameRecordingLength(it.lengthMs, link) &&
                 sameArtist(metadata, it.details.first()) && SongNames.same(metadata.title, SongNames.bareTitle(it.name)) &&
-                saysLive(it.name) && liveAlbum(it.details.getOrNull(1).orEmpty())
+                saysLive(it.name) && liveAlbum(it.details.getOrNull(1).orEmpty()) && hasOnlyRecordingNote(it.name, live = true)
         }
     }
 
@@ -801,13 +801,16 @@ internal class ExactMatcher(
         val base = SongNames.bareTitle(first.name)
         val other = rows.singleOrNull { it !== first && SongNames.same(SongNames.bareTitle(it.name), base) } ?: return null
         if (!sameRecordingLength(other.lengthMs, edition.lengthMs)) return null
-        val title = SongNames.withoutEditionTag(other.name).trim()
-        val note = title.removePrefix(SongNames.bareTitle(title)).trim { !it.isLetterOrDigit() }.lowercase(Locale.ROOT)
-        val live = rowIsLive(other)
-        val matchesEdition = if (edition.live) live && (note.isEmpty() || note in liveLabels) else !live && note.isEmpty()
-        if (!matchesEdition) return null
+        if (rowIsLive(other) != edition.live || !hasOnlyRecordingNote(other.name, edition.live)) return null
         val firstMarked = rowIsLive(first) || SongNames.saysAnotherVersion(SongNames.withoutFeaturing(first.name), base, "")
         return other.takeIf { firstMarked != edition.live }
+    }
+
+    /** A live album can name the take if the track title has no conflicting note. */
+    private fun hasOnlyRecordingNote(name: String, live: Boolean): Boolean {
+        val title = SongNames.withoutFeaturing(name).trim()
+        val note = title.removePrefix(SongNames.bareTitle(title)).trim { !it.isLetterOrDigit() }.lowercase(Locale.ROOT)
+        return note.isEmpty() || live && note in liveLabels
     }
 
     private fun rowIsLive(row: Row): Boolean = saysLive(row.name) || liveAlbum(row.details.getOrNull(1).orEmpty())
