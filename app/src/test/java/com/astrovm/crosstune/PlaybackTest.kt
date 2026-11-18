@@ -40,6 +40,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.net.URI
 import org.junit.After
@@ -2562,7 +2563,6 @@ class PlaybackTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(shadows = [CoverBitmap::class])
     fun collectingATemporaryTokenCannotDiscardAnActiveSessionsCover() {
         val controller = aBitmapCover()
         shadowOf(sessions).addController(controller)
@@ -2576,6 +2576,7 @@ class PlaybackTest {
         // Collect the temporary token and bitmap, while retaining this test's cache itself.
         val writer = PlaybackCovers(File(app.cacheDir, "temporary-session-cover"))
         val (cover, bitmap) = saveThroughATemporaryToken(writer, controller, token)
+        assertEquals(1L, runBlocking { withTimeout(5_000L) { writer.updates.first { it > 0 } } })
         val end = System.nanoTime() + 5_000_000_000L
         while (bitmap.get() != null && System.nanoTime() < end) {
             System.gc()
@@ -2587,11 +2588,11 @@ class PlaybackTest {
         val name = listOf("Fake Song", "Fake Artist", "Fake Album", null, null)
         writer.retainSessions(setOf(token))
         assertEquals(cover, writer.of(original, token, name))
-        assertEquals(1, CoverBitmap.encodes.get())
+        assertEquals(1L, writer.updates.value)
         writer.retainSessions(emptySet())
         assertNull(writer.of(original, token, name))
         assertEquals(cover, coverWhenReady { writer.of(original, token, name) })
-        assertEquals(2, CoverBitmap.encodes.get())
+        assertEquals(2L, runBlocking { withTimeout(5_000L) { writer.updates.first { it >= 2 } } })
     }
 
     @Test
