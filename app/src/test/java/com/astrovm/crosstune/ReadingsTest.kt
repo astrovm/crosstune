@@ -525,6 +525,24 @@ class ReadingsTest {
     }
 
     @Test
+    fun smallKanaRecoveryNeedsBothNounsAndTheirReadings() {
+        val text = "かいしゃのけいひ"
+        val cached = Readings.oldKanaRead
+        val vocabulary = Readings.oldKana
+        val unsure = listOf("かいし", "ゃのけいひ")
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        try {
+            for (today in listOf(vocabulary.today - "かいしゃ", vocabulary.today - "けいひ", vocabulary.today + ("けいひ" to "携帯"))) {
+                Readings.oldKanaRead = Readings.OldKana(today, vocabulary.modern)
+                assertEquals(unsure, words(text))
+            }
+        } finally {
+            Readings.oldKanaRead = cached
+        }
+        assertEquals(listOf("ちいさな", "ゃ"), words("ちいさなゃ"))
+    }
+
+    @Test
     fun aWordInOldKanaIsLookedUpAsTheWordItsSpellingTodayIs() {
         fun lookups(line: String) = Readings.words(line, Script.JAPANESE).map { it.lookup }
         // A translator knows 云う and 思い出, and takes 云ふ for a name and 思ふ for another word than 思ひ出: what's asked for is the word the card names.
