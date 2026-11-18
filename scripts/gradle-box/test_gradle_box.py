@@ -957,6 +957,38 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
         self.assertEqual(box.returncode, 0, output)
         self.assertIn(f"-v {sdk}:{sdk}:ro", self.asked()[0])
 
+    def test_apple_silicon_builds_and_runs_amd64_with_the_separate_linux_sdk(self):
+        self.tool("uname", 'case "$1" in -s) echo Darwin;; -m) echo x86_64;; esac\n')
+        self.tool("sysctl", 'test "$*" = "-n hw.optional.arm64" && echo 1\n')
+        linux_sdk = self.dir / "Linux SDK"
+        tool = linux_sdk / "build-tools" / "36.0.0" / "aapt2"
+        tool.parent.mkdir(parents=True)
+        tool.write_bytes(b"\x7fELF")
+        box = self.start("a", "help", GRADLE_BOX_ANDROID_HOME=str(linux_sdk), FAKE_NO_IMAGE="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        image, run = self.asked()
+        self.assertIn("build --platform linux/amd64", image)
+        self.assertIn("--platform linux/amd64", run)
+        self.assertIn(f"{self.image()}-amd64", image)
+        self.assertIn(f"{self.image()}-amd64", run)
+        self.assertIn(f"-v {linux_sdk}:{linux_sdk}:ro", run)
+        self.assertIn(f"ANDROID_HOME={linux_sdk}", run)
+        self.assertNotIn(f"-v {self.sdk}:", run)
+
+    def test_the_mac_reports_a_native_sdk_before_starting_a_box(self):
+        self.tool("uname", 'case "$1" in -s) echo Darwin;; -m) echo x86_64;; esac\n')
+        self.tool("sysctl", 'test "$*" = "-n hw.optional.arm64" && echo 1\n')
+        tool = self.sdk / "cmake" / "4.1.2" / "bin" / "cmake"
+        tool.parent.mkdir(parents=True)
+        tool.write_bytes(b"\xcf\xfa\xed\xfe")
+        box = self.start("a", ":app:ci")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 1, output)
+        self.assertIn("Linux Android SDK", output)
+        self.assertIn("GRADLE_BOX_ANDROID_HOME", output)
+        self.assertEqual(self.asked(), [])
+
     def test_a_second_build_waits_with_only_a_macs_tools(self):
         self.only_a_macs_tools()
         self.hold("first")
