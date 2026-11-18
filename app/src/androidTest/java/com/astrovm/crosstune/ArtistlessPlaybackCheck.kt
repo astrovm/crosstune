@@ -107,6 +107,8 @@ class ArtistlessPlaybackCheck : Instrumentation() {
             Fixture("Fixture Artist - Live", "", "Live", false),
             Fixture("Fixture Artist (Official Video) - Live", "", "Live", false),
             Fixture("Fixture Artist - Live.mp3", "", "Live", true),
+            Fixture("Fixture Artist - Live.mp3", "", "Fixture Artist", false, askedArtist = "Wrong Artist"),
+            Fixture("Fixture Artist - Live.mp3", "", "Live", false, askedArtist = "Wrong Artist"),
             Fixture("Fixture FM - Glass Lantern", "", "Glass Lantern", true, askedArtist = "Fixture FM"),
             Fixture("Glass Lantern Radio", "", "Glass Lantern", false),
             Fixture("Fixture Artist - Glass Lantern Radio", "", "Glass Lantern", false),

@@ -1128,16 +1128,20 @@ internal class MediaSessionPlayback(
         if (anotherRecording(playing, song)) return false
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
-        // A station or untagged file has no artist to support a partial title match.
-        if (MetadataParsers.noArtist(artist)) {
-            val compared = MetadataParsers.withoutAudioExtension(title)
-            if (!SongNames.names(compared, "", song)) return false
-            val named = songName(title, artist)
-            if (named?.unnamed == true) return false
-            if (SongNames.wholeTitle(title, song.title)) return true
-            return named != null && named.artist.isNotBlank() && SongNames.sameArtist(named.artist, song.artist) && SongNames.wholeTitle(named.title, song.title)
-        }
+        if (MetadataParsers.noArtist(artist)) return playsWithNoArtist(title, artist, song)
         return SongNames.names(title, artist, song)
+    }
+
+    /** A station or untagged file has no artist to support a partial title match. */
+    private fun MediaController.playsWithNoArtist(title: String, artist: String, song: MusicMetadata): Boolean {
+        val named = songName(title, artist)
+        if (named?.unnamed == true) return false
+        val fileTitle = MetadataParsers.withoutAudioExtension(title)
+        val creditedFile = fileTitle != title && named?.artist?.isNotBlank() == true
+        if (!SongNames.names(if (creditedFile) fileTitle else title, "", song)) return false
+        // In a credited file, the part before the dash can be the artist even if the rest looks like an edition.
+        if (!creditedFile && SongNames.wholeTitle(title, song.title)) return true
+        return named != null && named.artist.isNotBlank() && SongNames.sameArtist(named.artist, song.artist) && SongNames.wholeTitle(named.title, song.title)
     }
 }
 
