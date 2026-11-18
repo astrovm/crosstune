@@ -982,7 +982,7 @@ internal class MediaSessionPlayback(
     private fun said(controller: MediaController, asked: Long? = null): MusicMetadata? {
         val metadata = controller.metadata ?: return null
         val named = songsRead.of(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty() to metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
-        if (named.unnamed) return named
+        if (named.unnamed) return named.takeUnless { controller.isVideo() }
         val (title, artist) = named
         // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
         // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.

@@ -1991,6 +1991,19 @@ class PlaybackTest {
     }
 
     @Test
+    fun anArtistlessVideoWithARecordingLabelDoesNotHideASong() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Fake Song", "Fake Band", album = "Fake Album"))
+        val video = player("com.google.android.youtube", "YouTube", "Fake Show - Live", "", at = PLAYED_AT + 5)
+        shadowOf(sessions).addController(video)
+        assertEquals("Fake Song", playback.nowPlaying()?.metadata?.title)
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(video)
+        assertEquals(Unnamed("com.google.android.youtube", "YouTube", "Fake Show - Live", said = false), playback.playingUnnamed())
+    }
+
+    @Test
     @Config(shadows = [AppAsked::class])
     fun aStationCastToASpeakerIsReachedThereByItsApp() {
         allow()
