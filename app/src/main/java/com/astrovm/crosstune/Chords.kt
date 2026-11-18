@@ -389,11 +389,13 @@ internal object ChordSheets {
 
     private fun widthAt(text: String, index: Int, monospace: Boolean): Int = JTotalWidths.of(text.codePointAt(index), monospace)
 
+    // The browser comparison treats 0.05 px as the same distance. A digit is 7.5 px.
+    private const val JTOTAL_TIE_DISTANCE = 6
+
     /**
-     * The letter of [words] whose start is nearest [column], the later one when two are as near: a
-     * chord over the middle of a wide letter is read as the next. Each letter has its own width, whatever
-     * is beside it. Letters that start in the same place, as a mark with no width does, give the first.
-     * The end of the line is where a chord past the last letter goes.
+     * The letter of [words] whose start is nearest [column]. The later letter wins when both are
+     * equally near on the page. If their starts coincide, as a zero-width mark's does, keep the first.
+     * A chord past all the letters goes at the end of the line.
      */
     private fun letterAt(words: String, column: Int, monospace: Boolean): Int {
         var best = 0
@@ -403,7 +405,9 @@ internal object ChordSheets {
         var index = 0
         while (true) {
             val distance = abs(start - column)
-            if (distance < bestDistance || (distance == bestDistance && start > bestStart)) {
+            val nearer = distance < bestDistance - JTOTAL_TIE_DISTANCE
+            val tied = abs(distance - bestDistance) <= JTOTAL_TIE_DISTANCE
+            if (nearer || (tied && start > bestStart + JTOTAL_TIE_DISTANCE)) {
                 best = index
                 bestStart = start
                 bestDistance = distance

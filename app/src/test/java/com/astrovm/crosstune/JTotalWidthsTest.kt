@@ -144,6 +144,13 @@ class JTotalWidthsTest {
     }
 
     @Test
+    fun aChordThatIsVisuallyHalfwayUsesTheNextLetter() {
+        // Five half-width kana end at 40 px. The next pair of starts is 40 and 56 px.
+        // Three full-width spaces put the chord at 48 px, in the middle on the page.
+        assertEquals(6, landsOn("　".repeat(3), "ｶ".repeat(5) + "あい"))
+    }
+
+    @Test
     fun letterAtTheStartOfTheWordsKeepsTheFirstOfLettersThatStartTogether() {
         // The mark has no width, so it and the letter after it start in the same place. The chord goes on the first.
         assertEquals(1, landsOn("a", "áb"))
