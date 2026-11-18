@@ -909,6 +909,35 @@ class ReadingsTest {
     }
 
     @Test
+    fun aHoInAnOldKanaWordGetsItsModernSpellingWithoutChangingModernWords() {
+        fun checkSpelling() {
+            val old = mapOf("とほい" to "とおい", "おほぜい" to "おおぜい", "こほり" to "こおり", "なほさら" to "なおさら", "うるほふ" to "うるおう")
+            for ((text, modern) in old) {
+                assertEquals(text, modern, Readings.words(text, Script.JAPANESE).singleOrNull()?.modern)
+            }
+            for (text in listOf("ほほ", "まほう", "ほほえむ", "えてにほをあげる", "しりにほをかける")) {
+                assertNull(text, Readings.words(text, Script.JAPANESE).firstNotNullOfOrNull(Word::modern))
+            }
+            // The dictionary's long vowel is still heard in a modern word that contains ほ.
+            assertEquals("goohoo", Readings.words("あんごうほう", Script.JAPANESE).last().romanized)
+        }
+        checkSpelling()
+        TestUniDic.reading(::checkSpelling)
+    }
+
+    @Test
+    fun aModernWordAcrossTheEndOfAnOldSpellingCandidateKeepsItsKana() {
+        fun checkSpelling() {
+            for (text in listOf("とほいどう", "うるほふく", "こほりのふかい")) {
+                assertEquals(text, text, Readings.of(listOf(text), Script.JAPANESE).single().reading)
+                assertNull(text, Readings.words(text, Script.JAPANESE).firstNotNullOfOrNull(Word::modern))
+            }
+        }
+        checkSpelling()
+        TestUniDic.reading(::checkSpelling)
+    }
+
+    @Test
     fun repeatedOldKanaPairsSplitTheDictionaryPieceBetweenThem() {
         fun checkReading() {
             val text = "けふけふ"
