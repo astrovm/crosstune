@@ -85,6 +85,16 @@ internal class LookupCache(
         }
     }
 
+    /** Discard a checked answer if another lookup has not replaced it. */
+    suspend fun discard(key: String, value: String) = loaded().let { entries ->
+        synchronized(entries) {
+            if (entries[key]?.value == value) {
+                entries.remove(key)
+                changed = true
+            }
+        }
+    }
+
     /** How much what songs kept offline need takes, in characters, about as many bytes. */
     suspend fun pinnedSize(): Long = loaded().let { entries ->
         synchronized(entries) { entries.entries.filter { it.value.pins.isNotEmpty() }.sumOf { (it.key.length + it.value.value.length).toLong() } }
