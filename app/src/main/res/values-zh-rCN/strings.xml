@@ -202,6 +202,7 @@
     <string name="lyrics_pause">暂停</string>
     <string name="lyrics_next_song">下一首</string>
     <string name="lyrics_previous_song">上一首</string>
+    <string name="player_heard_nearby">在附近听到</string>
     <string name="player_playing_in">正在 %1$s 中播放</string>
     <string name="player_waiting">正在等待 %1$s</string>
     <string name="player_follow_allow">允许 Crosstune 查看并控制音乐应用中正在播放的歌曲。</string>
@@ -317,6 +318,7 @@
     <string name="report_send">发送</string>
     <string name="report_sent">已发送，谢谢！</string>
     <string name="report_failed">无法发送。请检查网络连接后重试。</string>
+    <string name="report_rate_limited">当前反馈太多。请稍后重试。</string>
     <string name="reading_wrong">读音有误</string>
     <string name="reading_right">正确读音（可选）</string>
     <string name="reading_what_goes">会发送这个词、显示的读音及其来源、所在的行和文字、你输入的读音、歌名和歌手、歌词来源，以及应用和 Android 版本。只有 Crosstune 的开发者会看到。</string>

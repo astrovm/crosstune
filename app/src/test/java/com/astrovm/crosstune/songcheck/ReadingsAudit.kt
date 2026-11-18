@@ -17,11 +17,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
 import okhttp3.Protocol
+import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -53,24 +57,66 @@ class ReadingsAudit {
     private val chords = ChordFinder(client)
     private val sungReadings = SungReadings(client)
 
+    private object PinnedLyrics
+
     /** UtaTen's answers from `http/` when they're there, else asked at most once a second and kept; the rest goes as it is. */
     private fun kept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val url = request.url.toString()
         if (request.url.host != "utaten.com" || request.method != "GET") return chain.proceed(request)
-        val file = File(dir, "http/" + MessageDigest.getInstance("SHA-1").digest(url.toByteArray()).joinToString("") { "%02x".format(it) })
-        val body = if (file.exists()) file.readText() else {
+        val file = pageFile(url)
+        val pinned = request.tag(PinnedLyrics::class.java) != null
+        val cached = file.takeIf(File::isFile)?.readText()
+        val body = if (cached != null && (!pinned || SungReadings.linesOf(cached).isNotEmpty())) cached else {
+            if (cached != null) check(file.delete()) { "Could not remove a cached page without lyrics: $file" }
             val wait = lastAsked + ASK_EVERY_MS - System.currentTimeMillis()
             if (wait > 0) Thread.sleep(wait)
             lastAsked = System.currentTimeMillis()
             val response = chain.proceed(request)
             if (!response.isSuccessful) return response
-            // An empty answer, as its search gives when it won't answer, is not kept.
-            response.body.string().also { if (it.isNotBlank()) file.apply { parentFile!!.mkdirs() }.writeText(it) }
+            // The search can answer with nothing. A pinned page must have lyrics for a later run to use it.
+            response.body.string().also {
+                if (it.isNotBlank() && (!pinned || SungReadings.linesOf(it).isNotEmpty())) {
+                    file.parentFile?.mkdirs()
+                    file.writeText(it)
+                }
+            }
         }
         if ("/lyric/" in url) pages[url] = body
         return Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
             .body(body.toResponseBody("text/html".toMediaType())).build()
+    }
+
+    private fun pageFile(url: String): File =
+        File(dir, "http/" + MessageDigest.getInstance("SHA-1").digest(url.toByteArray()).joinToString("") { "%02x".format(it) })
+
+    @Test
+    fun aPinnedPageIsCachedOnlyWhenItHasLyrics() {
+        val url = "${SungReadings.SITE_URL}/lyric/audit-cache-fixture/"
+        val file = pageFile(url)
+        val noLyrics = "<html>Please wait</html>"
+        val lyrics = """<div class="hiragana">おもひで</div>"""
+        val request = Request.Builder().url(url).tag(PinnedLyrics::class.java, PinnedLyrics).build()
+        var asks = 0
+        val fake = OkHttpClient.Builder().addInterceptor(::kept).addInterceptor { chain ->
+            val body = if (asks++ == 0) noLyrics else lyrics
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(body.toResponseBody("text/html".toMediaType())).build()
+        }.build()
+        fun read() = fake.newCall(request).execute().use { it.body.string() }
+        check(!file.exists()) { "The audit fixture would overwrite $file" }
+        try {
+            file.parentFile?.mkdirs()
+            file.writeText(noLyrics)
+            // A bad cached response and the next bad response must both be discarded.
+            assertEquals(noLyrics, read())
+            assertFalse(file.exists())
+            assertEquals(lyrics, read())
+            assertEquals(lyrics, read())
+            assertEquals(2, asks)
+        } finally {
+            file.delete()
+        }
     }
 
     @Test
@@ -79,9 +125,27 @@ class ReadingsAudit {
         val out = File(dir, "audit").apply { mkdirs() }
         for (i in 0 until songs.length()) {
             val song = songs.getJSONObject(i)
-            val found = found(song)
-            File(out, "${song.getString("id")}.json").writeText(read(song, found).toString())
+            val reference = pinnedPage(song)
+            val found = reference?.let { (_, truth) ->
+                val lines = truth.map { line -> line.joinToString("") { it.text } }
+                JSONObject().put("lyrics", "found").put("source", "UtaTen").put("lines", JSONArray(lines))
+            } ?: found(song)
+            File(out, "${song.getString("id")}.json").writeText(read(song, found, reference).toString())
             println("readingsaudit ${i + 1}/${songs.length()} ${song.getString("artist")} - ${song.getString("title")}")
+        }
+    }
+
+    /** The reference page keeps the old kana even when other lyric sources use its modern spelling. */
+    private fun pinnedPage(song: JSONObject): Pair<String, List<List<Ruby>>>? {
+        val id = song.optString("utatenPage").ifEmpty { return null }
+        val url = "${SungReadings.SITE_URL}/lyric/$id/"
+        val request = Request.Builder().url(url).header("User-Agent", SungReadings.BROWSER)
+            .tag(PinnedLyrics::class.java, PinnedLyrics).build()
+        return client.newCall(request).execute().use { response ->
+            check(response.isSuccessful) { "UtaTen returned ${response.code} for $url" }
+            val truth = SungReadings.linesOf(response.body.string())
+            check(truth.isNotEmpty()) { "UtaTen has no lyrics for $url" }
+            url to truth
         }
     }
 
@@ -108,7 +172,7 @@ class ReadingsAudit {
     private fun metadata(song: JSONObject) = MusicMetadata(song.getString("title"), song.getString("artist"))
 
     /** Each line as the app reads it, with the built-in dictionary alone, with UniDic, and as shown, after UtaTen's fixes; and UtaTen's line for it. */
-    private suspend fun read(song: JSONObject, found: JSONObject): JSONObject {
+    private suspend fun read(song: JSONObject, found: JSONObject, reference: Pair<String, List<List<Ruby>>>?): JSONObject {
         val report = JSONObject(song.toString())
         listOf("lyrics", "source", "timed", "chords", "error").forEach { key -> found.opt(key)?.let { report.put(key, it) } }
         val lines = found.optJSONArray("lines")?.let { array -> (0 until array.length()).map(array::getString) } ?: return report
@@ -121,17 +185,21 @@ class ReadingsAudit {
         var fixes: List<ReadingFix>? = null
         try {
             uniDic = Readings.of(lines, Script.JAPANESE)
-            pages.clear()
-            // Asked again if UtaTen took longer than the app waits, now that what it answered is kept.
-            for (attempt in 1..TRIES) {
-                fixes = sungReadings.of(metadata(song), lines, uniDic)
-                if (fixes != null) break
+            if (reference != null) {
+                fixes = SungReadings.matched(lines, uniDic, reference.second)
+            } else {
+                pages.clear()
+                // Asked again if UtaTen took longer than the app waits, now that what it answered is kept.
+                for (attempt in 1..TRIES) {
+                    fixes = sungReadings.of(metadata(song), lines, uniDic)
+                    if (fixes != null) break
+                }
             }
             shown = fixes?.takeIf { it.isNotEmpty() }?.let { Readings.corrected(uniDic, it) } ?: uniDic
         } finally {
             Readings.uniDic = null
         }
-        val theirs = utaTen(lines, uniDic)
+        val theirs = reference ?: utaTen(lines, uniDic)
         report.put("script", "JAPANESE").put("sungFixes", fixes?.size ?: -1).put("utaten", theirs?.first)
         report.put("lines", JSONArray(lines.indices.map { i ->
             JSONObject().put("text", lines[i]).put("builtIn", parts(builtIn[i])).put("uniDic", parts(uniDic[i])).put("shown", parts(shown[i]))

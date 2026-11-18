@@ -119,6 +119,44 @@ class FollowsTheSongTest {
         CrosstuneScreen(UiState(playingNow = following?.let { NowPlaying(MusicMetadata("Song", "Band", lengthMs = lengthMs), it) }), ScreenActions())
     }
 
+    @Test
+    @Config(qualifiers = "de-w320dp-h891dp-xxhdpi", fontScale = 2f)
+    fun theGermanNearbySourceIsVisibleAtTheLargestFontOnANarrowPhone() =
+        assertNearbySourceIsVisible("In der Nähe gehört")
+
+    @Test
+    @Config(qualifiers = "it-w320dp-h891dp-xxhdpi", fontScale = 2f)
+    fun theLongestNearbySourceIsVisibleAtTheLargestFontOnANarrowPhone() =
+        assertNearbySourceIsVisible("Sentito nelle vicinanze")
+
+    private fun assertNearbySourceIsVisible(label: String) {
+        val station = Unnamed("com.example.radio", "Fixture Radio", "Fixture FM")
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        show {
+            CrosstuneScreen(UiState(playingUnnamed = PlayingUnnamed(station, Heard.Song(song, null, inRoom = true))), ScreenActions())
+        }
+        val layouts = mutableListOf<TextLayoutResult>()
+        val bar = hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
+        compose.onNode(bar and hasText("$label · Fixture Artist"), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        val visibleEnd = layout.getLineEnd(layout.lineCount - 1, visibleEnd = true)
+        assertTrue("Only $visibleEnd of ${label.length} source characters are visible", visibleEnd >= label.length)
+    }
+
+    @Test
+    fun aSongHeardByTheMicrophoneSaysItWasHeardNearby() {
+        val station = Unnamed("com.example.radio", "Fixture Radio", "Fixture FM")
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        show {
+            CrosstuneScreen(UiState(playingUnnamed = PlayingUnnamed(station, Heard.Song(song, null, inRoom = true))), ScreenActions())
+        }
+        val bar = hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
+        compose.onNode(bar and hasText("Fixture Song"), useUnmergedTree = true).assertExists()
+        compose.onNode(bar and hasText("Heard nearby · Fixture Artist"), useUnmergedTree = true).assertExists()
+        compose.onNode(bar and hasText("Fixture Radio", substring = true), useUnmergedTree = true).assertDoesNotExist()
+    }
+
     private val playedSoFar = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo) and hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
 
     /** How far along the bar's line is, or null when it has none. */
@@ -463,10 +501,10 @@ class FollowsTheSongTest {
         .let { nodes -> nodes.firstOrNull { it.config.contains(ChordsShown) } ?: nodes.first() }
 
     /** Which of the first line's chords is lit, once they're placed over it, which happens off the main thread. */
-    private fun chordLit(): Int {
-        fun placed() = lineOf(lines[0].text).config.contains(ChordsShown)
+    private fun chordLit(text: String = lines[0].text): Int {
+        fun placed() = lineOf(text).config.contains(ChordsShown)
         compose.waitUntil(5_000) { placed() || run { settles(); placed() } }
-        return lineOf(lines[0].text).config[ChordLit]
+        return lineOf(text).config[ChordLit]
     }
 
     /** How many of [text]'s letters are lit as sung, before the dimmed ones; all of them when none are dimmed. */
@@ -501,6 +539,32 @@ class FollowsTheSongTest {
         passesAskingRarely(800)
         assertEquals(2, chordLit())
         assertEquals("Walking down the river ".length, litLetters(lines[0].text))
+    }
+
+    @Test
+    fun aChordInTheLastJapaneseWordLightsAfterThatWordStarts() {
+        val line = LyricLine(10_000, "君の名前を呼んだ夜のこと", listOf(TimedWord(10_000, "君の名前を"), TimedWord(12_000, "呼んだ夜のこと")))
+        lyricLines = listOf(line)
+        val chords = sheet.copy(lines = listOf(SheetLine(line.text, listOf(Chord(0, "G"), Chord(6, "C")))))
+        following = pausedAt(12_279)
+        words(ChordsState(on = true, sheet = chords))
+        assertEquals(0, chordLit(line.text))
+        following = pausedAt(12_280)
+        settles()
+        assertEquals(1, chordLit(line.text))
+    }
+
+    @Test
+    fun aChordInTheLastTimedWordUsesTheNetEaseLineEnd() {
+        val line = SyncedLyrics.parseWordByWord("[10000,6200](10000,2000,0)君の名前を(12000,4200,0)呼んだ夜のこと").single()
+        lyricLines = listOf(line)
+        val chords = sheet.copy(lines = listOf(SheetLine(line.text, listOf(Chord(0, "G"), Chord(6, "C")))))
+        following = pausedAt(12_599)
+        words(ChordsState(on = true, sheet = chords))
+        assertEquals(0, chordLit(line.text))
+        following = pausedAt(12_600)
+        settles()
+        assertEquals(1, chordLit(line.text))
     }
 
     @Test

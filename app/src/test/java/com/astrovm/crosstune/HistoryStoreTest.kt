@@ -38,9 +38,9 @@ class HistoryStoreTest {
         val url = entry(1).link.url
         store.remember(url, "YOUTUBE_MUSIC", PreparedLink("https://music.youtube.com/watch?v=upload00000", exact = true, matchingEnabled = true))
         store.remember(url, "DEEZER", PreparedLink("https://www.deezer.com/search/Title", exact = false, matchingEnabled = true))
-        // Kept as it was before its matching was versioned: the found link goes, the search stays.
+        // The old exact link is looked for again. The destination's ordinary search stays.
         val old = org.json.JSONArray(preferences.getString(HistoryStore.KEY_HISTORY, null))
-        old.getJSONObject(0).getJSONObject("destinations").getJSONObject("YOUTUBE_MUSIC").remove("matcher")
+        old.getJSONObject(0).getJSONObject("destinations").getJSONObject("YOUTUBE_MUSIC").put("matcher", 5)
         preferences.edit().putString(HistoryStore.KEY_HISTORY, old.toString()).commit()
         assertEquals(setOf("DEEZER"), HistoryStore(preferences).load().first().destinationLinks.keys)
     }
