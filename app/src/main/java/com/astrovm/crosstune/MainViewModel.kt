@@ -1138,11 +1138,12 @@ internal class MainViewModel(
         merge<Unnamed?>(source.unnamedUpdates().filterNotNull(), source.nowPlayingUpdates().filterNotNull().map { null })
             // Paused, it isn't said to play; ask the last one's app whether it still has it.
             .onStart { previous?.let { emit(it) } }
-            .distinctUntilChanged { was, now -> was?.app == now?.app && was?.played == now?.played }
+            .distinctUntilChanged { was, now -> was?.app == now?.app && was?.played == now?.played && was?.reportsState == now?.reportsState }
             .collectLatest { unnamed ->
                 followedUnnamed = null
                 showUnnamed()
-                if (unnamed == null) return@collectLatest
+                // The notification identifies the station, but there is no clock or transport to follow by name.
+                if (unnamed?.reportsState != true) return@collectLatest
                 source.follow(unnamed.played, unnamed.app).collect { following ->
                     followedUnnamed = following?.let { unnamed to it }
                     checkHeard(following)
@@ -1205,7 +1206,7 @@ internal class MainViewModel(
      */
     private fun showUnnamed() {
         val shown = liveUnnamed ?: followedUnnamed?.first?.takeIf { heardNow == null }
-        val following = followedUnnamed?.takeIf { (followed) -> shown != null && followed.app == shown.app && followed.played == shown.played }?.second
+        val following = followedUnnamed?.takeIf { (followed) -> shown?.reportsState == true && followed.app == shown.app && followed.played == shown.played }?.second
         val was = uiState.playingUnnamed?.takeIf { it.playing == shown }
         val heard = was?.heard?.takeIf { liveUnnamed != null }
         uiState = uiState.copy(playingUnnamed = shown?.let { PlayingUnnamed(it, heard, following) })
@@ -1363,6 +1364,7 @@ internal class MainViewModel(
             // No longer where it could be, the bar no longer shows it either.
             if (!fits(heard)) forgetHeardByEar()
         }
+        if (!playing.playing.reportsState) return peekPlayingUnnamed()
         val song = playing.playing.asSong?.takeIf { cantName(playing.playing) } ?: return peekPlayingUnnamed()
         if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
         if (uiState.player?.song != song) openPlayer(song, playing.playing.app, played = true)
@@ -1999,6 +2001,7 @@ internal class MainViewModel(
         playerJob?.cancel()
         playerJob = null
         val opened = uiState.player ?: return
+        if (opened.stationOnly) return
         val song = opened.song
         val source = playback?.takeIf { it.hasAccess() } ?: return
         playerJob = viewModelScope.launch {

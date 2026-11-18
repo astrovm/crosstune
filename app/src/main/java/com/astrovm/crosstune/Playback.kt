@@ -438,7 +438,7 @@ internal class MediaSessionPlayback(
     override fun matching(song: MusicMetadata): List<PlaybackMatch> = runCatching {
         val active = activeSessions()
         val counts = active.groupingBy { it.packageName }.eachCount()
-        active.filter { it.has(song, null) }.map { controller ->
+        active.filter { it.playbackState != null && it.has(song, null) }.map { controller ->
             val number = sessionNumbers.of(controller.sessionToken)
             PlaybackMatch(following(controller, song.lengthMs)?.copy(session = number), forSession(controller.sessionToken), controller.packageName, number,
                 controller.playbackState?.state == PlaybackState.STATE_PLAYING, counts.getValue(controller.packageName))
@@ -455,7 +455,10 @@ internal class MediaSessionPlayback(
     }
 
     private fun pauseSession(token: MediaSession.Token, app: String?) {
-        runCatching { activeSessions().filter { it.sessionToken == token && (app == null || it.packageName == app) }.forEach { it.clockCommand("pause") { pause() } } }
+        runCatching {
+            activeSessions().filter { it.playbackState != null && it.sessionToken == token && (app == null || it.packageName == app) }
+                .forEach { it.clockCommand("pause") { pause() } }
+        }
     }
 
     override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = followSession(song, app, null)
@@ -483,11 +486,6 @@ internal class MediaSessionPlayback(
             }
         }
         val callback = object : MediaController.Callback() {
-            // Gone on to another song, as TIDAL does at the end of a preview, it plays this one no longer, even before it's said its new name.
-            override fun onPlaybackStateChanged(state: PlaybackState?) {
-                trySend(followed?.takeIf { it.has(song, app) }?.let(::steadily))
-            }
-
             // What it plays next.
             override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) {
                 trySend(followed?.let(::steadily))
@@ -527,6 +525,8 @@ internal class MediaSessionPlayback(
                                 put("actions", state.actions)
                             }
                         }
+                        // A session may first report playback state without changing its title or joining the active list again.
+                        pick(watched)
                     }
                 }
                 controller.registerCallback(callback, handler)
@@ -847,7 +847,7 @@ internal class MediaSessionPlayback(
         // notification for the exact session and takes it down at pause, even when the title stays.
         val notices = radioNotices.value
         val radio = eligible.singleOrNull {
-            it.packageName == RadioNotice.PACKAGE && it.playbackState == null && !it.remote() && it.sessionToken in notices &&
+            it.packageName == RadioNotice.PACKAGE && it.playbackState == null && it.local() && it.sessionToken in notices &&
                 !it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).isNullOrBlank()
         }
         return listOfNotNull(radio)
@@ -965,7 +965,7 @@ internal class MediaSessionPlayback(
         val sounding = object : AudioManager.AudioPlaybackCallback() {
             override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>) = update()
         }
-        val noticeChanges = launch { radioNotices.collect { update() } }
+        launch { radioNotices.collect { update() } }
         val watching = runCatching {
             sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
             audio.registerAudioPlaybackCallback(sounding, handler)
@@ -974,7 +974,6 @@ internal class MediaSessionPlayback(
         if (!watching) update()
         awaitClose {
             coverChanges.cancel()
-            noticeChanges.cancel()
             handler.removeCallbacks(refreshCover)
             sessions.removeOnActiveSessionsChangedListener(changed)
             audio.unregisterAudioPlaybackCallback(sounding)
@@ -1112,12 +1111,16 @@ internal class MediaSessionPlayback(
         return state.position < 0 && now() - state.lastPositionUpdateTime > LEFT_BEHIND_MS
     }
 
-    /** Playing on another device, e.g. a TV a music app casts to, or a computer KDE Connect shows here. */
-    private fun MediaController.remote(): Boolean {
+    private fun MediaController.route(): Int? {
         // Up to Android 14, a session gone meanwhile answers null, though the newest SDK says it never does.
         val info: MediaController.PlaybackInfo? = playbackInfo
-        return info?.playbackType == MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE
+        return info?.playbackType
     }
+
+    private fun MediaController.local(): Boolean = route() == MediaController.PlaybackInfo.PLAYBACK_TYPE_LOCAL
+
+    /** Playing on another device, e.g. a TV a music app casts to, or a computer KDE Connect shows here. */
+    private fun MediaController.remote(): Boolean = route() == MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE
 
     /** A music app's own song, cast to a TV: still the phone's, played and paused from it. */
     private fun MediaController.cast(): Boolean = remote() && MusicService.ofPackage(packageName) != null
@@ -1363,7 +1366,9 @@ internal object RadioNotice {
             val notification = notice.notification
             val flags = Notification.FLAG_ONGOING_EVENT or Notification.FLAG_FOREGROUND_SERVICE
             if (notification.category != Notification.CATEGORY_TRANSPORT || notification.flags and flags != flags) null
-            else BundleCompat.getParcelable(notification.extras, Notification.EXTRA_MEDIA_SESSION, MediaSession.Token::class.java)
+            else runCatching {
+                BundleCompat.getParcelable(notification.extras, Notification.EXTRA_MEDIA_SESSION, MediaSession.Token::class.java)
+            }.getOrNull()
         }.toSet()
     }
 }

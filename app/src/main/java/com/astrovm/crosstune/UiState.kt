@@ -396,7 +396,7 @@ internal data class NowPlaying(val song: MusicMetadata, val following: Following
  * it in the app, for its buttons and where it is, as for a song.
  */
 internal data class PlayingUnnamed(val playing: Unnamed, val heard: Heard.Song? = null, val following: Following? = null) {
-    val canControl: Boolean get() = playing.reportsState || following != null
+    val canControl: Boolean get() = playing.reportsState
 }
 
 /**
@@ -421,7 +421,7 @@ internal data class PlayerState(
     val songless: Boolean = false,
     val stationAppLabel: String? = null
 ) {
-    val stationOnly: Boolean get() = stationAppLabel != null && following == null
+    val stationOnly: Boolean get() = stationAppLabel != null
 
     /** Who it's by, as shown under its name: for what names no song, the app that plays it. */
     val byLine: String get() = if (songless) (following?.app ?: stationAppLabel).orEmpty() else song.artist

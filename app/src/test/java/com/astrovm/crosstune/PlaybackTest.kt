@@ -1070,6 +1070,7 @@ class PlaybackTest {
         allow()
         val station = player("com.streema.simpleradio", "Simple Radio", "Fixture FM", null)
         shadowOf(station).setPlaybackState(null)
+        shadowOf(station).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_LOCAL).build())
         shadowOf(sessions).addController(station)
         radioNotices.value = setOf(station.sessionToken)
         assertNull(playback.whatPlays())
@@ -1090,16 +1091,27 @@ class PlaybackTest {
         val station = player(RadioNotice.PACKAGE, "Simple Radio", "Blue 100.7 FM", null)
         val old = player(RadioNotice.PACKAGE, "Simple Radio", "Other FM", null)
         shadowOf(station).setPlaybackState(null)
+        shadowOf(station).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_LOCAL).build())
         shadowOf(sessions).addController(station)
+        val shown = mutableListOf<String?>()
+        val watch = CoroutineScope(Dispatchers.Unconfined).launch { playback.unnamedUpdates().collect { shown += it?.name } }
+        collecting += watch
+        shadowOf(Looper.getMainLooper()).idle()
         assertNull(playback.whatPlays())
         radioNotices.value = setOf(old.sessionToken)
         assertNull(playback.whatPlays())
         radioNotices.value = setOf(station.sessionToken)
         assertEquals("Blue 100.7 FM", playback.playingUnnamed()?.name)
+        shadowOf(Looper.getMainLooper()).idle()
 
         // The session and global audio stay active. Only the notification for Blue went away.
         radioNotices.value = emptySet()
         assertNull(playback.whatPlays())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf(null, "Blue 100.7 FM", null), shown)
+        watch.cancel()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, radioNotices.subscriptionCount.value)
     }
 
     @Test
@@ -1142,7 +1154,7 @@ class PlaybackTest {
         val key = shadow.addActiveNotification(RadioNotice.PACKAGE, 1, notice)
         val posted = service.activeNotifications.single()
         try {
-            service.onNotificationPosted(posted)
+            service.onListenerConnected()
             assertEquals(setOf(station.sessionToken), RadioNotice.tokens.value)
             service.cancelNotification(key)
             service.onNotificationRemoved(posted)
@@ -1162,16 +1174,50 @@ class PlaybackTest {
         sounding()
         val station = player(RadioNotice.PACKAGE, "Simple Radio", song.title, song.artist)
         shadowOf(station).setPlaybackState(null)
+        shadowOf(station).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_LOCAL).build())
         shadowOf(sessions).addController(station)
         radioNotices.value = setOf(station.sessionToken)
         assertNull(playback.nowPlaying())
         assertEquals(false, playback.playingUnnamed()?.reportsState)
         assertNull(playback.appFor(song, app = RadioNotice.PACKAGE))
         assertNull(playback.appFor(song))
+        assertTrue(playback.matching(song).isEmpty())
         val paused = player("com.example.music", "Music", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
         shadowOf(sessions).addController(paused)
         assertEquals(paused, playback.appFor(song))
         assertNull(playback.nowPlaying())
+    }
+
+    @Test
+    fun aNoticeCannotMakeAnUnknownOrRemoteRouteLocal() {
+        allow()
+        sounding()
+        val station = player(RadioNotice.PACKAGE, "Simple Radio", "Blue 100.7 FM", null)
+        shadowOf(station).setPlaybackState(null)
+        shadowOf(sessions).addController(station)
+        radioNotices.value = setOf(station.sessionToken)
+        assertNull(playback.whatPlays())
+        shadowOf(station).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE).build())
+        assertNull(playback.whatPlays())
+    }
+
+    @Test
+    fun aPlayerThatReportsItsStateLateIsFollowedWithoutAnotherMetadataEvent() {
+        allow()
+        val controller = player("com.example.music", "Music", song.title, song.artist)
+        shadowOf(controller).setPlaybackState(null)
+        shadowOf(sessions).addController(controller)
+        val updates = followed()
+        assertNull(updates.last())
+        val callbacks = shadowOf(controller).callbacks.toList()
+        assertTrue(callbacks.isNotEmpty())
+        val started = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 500L, 1f, PLAYED_AT).build()
+        shadowOf(controller).setPlaybackState(started)
+        // Robolectric changes the getter but does not deliver the platform callback.
+        callbacks.forEach { it.onPlaybackStateChanged(started) }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("com.example.music", updates.last()?.appPackage)
+        assertEquals(true, updates.last()?.clock?.playing)
     }
 
     @Test

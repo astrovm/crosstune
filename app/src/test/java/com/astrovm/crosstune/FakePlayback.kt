@@ -178,7 +178,7 @@ internal class FakePlayback : PlaybackSource {
      */
     val unnamed = MutableStateFlow<Unnamed?>(null)
 
-    private fun playingOnly(unnamed: Unnamed?, following: Following?) = unnamed?.takeIf { following?.clock?.playing != false }
+    private fun playingOnly(unnamed: Unnamed?, following: Following?) = unnamed?.takeIf { !it.reportsState || following?.clock?.playing != false }
 
     /** Where [onThePhone] plays: on the phone, cast to a TV by its music app, or on another device, as KDE Connect shows a computer's. */
     var songWhere = Place.PHONE

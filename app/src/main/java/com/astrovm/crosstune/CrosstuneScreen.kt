@@ -904,10 +904,8 @@ private fun PlayingBar(
                         onClick = actions.onPlayingNowPlayPause,
                         modifier = Modifier.size(52.dp).focusRequester(playPause).focusProperties { left = bar }
                     ) {
-                        AppIcon(
-                            if (playing) R.drawable.ic_pause else R.drawable.ic_play,
-                            contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play)
-                        )
+                        val (icon, label) = if (playing) R.drawable.ic_pause to R.string.lyrics_pause else R.drawable.ic_play to R.string.lyrics_play
+                        AppIcon(icon, contentDescription = stringResource(label))
                     }
                     IconButton(onClick = actions.onPlayingNowSkip, enabled = following?.canSkipNext != false, modifier = Modifier.size(52.dp)) {
                         AppIcon(R.drawable.ic_skip_next, contentDescription = stringResource(R.string.lyrics_next_song))
