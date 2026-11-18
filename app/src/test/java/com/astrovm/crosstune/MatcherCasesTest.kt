@@ -88,23 +88,49 @@ class MatcherCasesTest {
         Case("1 link alone kanji", null, lengthMs = null, linkMs = 240_000, songs = listOf(row("偽の歌 (ライブ)", length = "4:00"), row("偽の歌", length = "3:30"))),
         Case("1 link alone latin", "song1", lengthMs = null, linkMs = 240_000, songs = listOf(row("Fake Song", length = "3:30"), row("Fake Song", length = "4:00"))),
         Case("1 link and apple", "video0", lengthMs = 240_000, linkMs = 240_000, videos = listOf(video("Fake Song (演唱会)", "4:00"), video("Fake Song", "3:30"))),
-        // 2. Apple has two editions named alike, a live album's and the studio's, at other lengths. Main opens the studio's
-        // row for the live one's link in Latin letters, and the live row for the studio's link: Issue #997.
+        // 2. The link gives the length of one of the two editions Apple names alike.
         Case(
-            "2 two editions", "song1", lengthMs = 240_000, linkMs = 240_000, album = "Live at Budokan", editions = listOf("Fake Album" to 210_000),
-            songs = listOf(row("Fake Song - Live", "Live at Budokan", length = "4:00"), row("Fake Song", length = "3:30")), knownWrong = 997
+            "2 two editions", "song0", lengthMs = 240_000, linkMs = 240_000, album = "Live at Budokan", editions = listOf("Fake Album" to 210_000),
+            songs = listOf(row("Fake Song - Live", "Live at Budokan", length = "4:00"), row("Fake Song", length = "3:30"))
         ),
         Case(
             "2 two editions kanji", "song0", lengthMs = 240_000, linkMs = 240_000, album = "Live at Budokan", editions = listOf("Fake Album" to 210_000),
             songs = listOf(row("偽の歌 (ライブ)", "Live at Budokan", length = "4:00"), row("偽の歌", length = "3:30"))
         ),
         Case(
-            "2 two editions, the studio's linked", "song0", linkMs = 210_000, lengthMs = 240_000, editions = listOf("Fake Album" to 210_000),
-            songs = listOf(row("偽の歌 (ライブ)", length = "4:00"), row("偽の歌", length = "3:30")), knownWrong = 997
+            "2 two editions, the studio's linked", "song1", linkMs = 210_000, lengthMs = 240_000, editions = listOf("Fake Album" to 210_000),
+            songs = listOf(row("偽の歌 (ライブ)", length = "4:00"), row("偽の歌", length = "3:30"))
         ),
         Case(
             "2 two editions, no link length", "song0", lengthMs = 240_000, editions = listOf("Fake Album" to 210_000),
             songs = listOf(row("偽の歌 (ライブ)", length = "4:00"), row("偽の歌", length = "3:30"))
+        ),
+        Case(
+            "2 unrelated live title", "song0", lengthMs = 240_000, linkMs = 240_000, album = "Live at Budokan",
+            editions = listOf("Fake Album" to 210_000),
+            songs = listOf(row("Fake Song", length = "3:30"), row("Different Song - Live", "Live at Budokan", length = "4:00"))
+        ),
+        Case(
+            "2 live title without live album", "song0", lengthMs = 240_000, linkMs = 240_000,
+            editions = listOf("Fake Album" to 210_000),
+            songs = listOf(row("Fake Song", length = "3:30"), row("Fake Song - Live", length = "4:00"))
+        ),
+        Case(
+            "2 two possible live takes", "song0", lengthMs = 240_000, linkMs = 240_000,
+            editions = listOf("Fake Album" to 210_000),
+            songs = listOf(
+                row("Fake Song", length = "3:30"), row("Fake Song - Live", "Live at Budokan", length = "4:00"),
+                row("Fake Song (Live)", "Live in London", length = "3:59")
+            )
+        ),
+        Case(
+            "2 ambiguous Apple editions", "song0", lengthMs = 240_000, linkMs = 210_000,
+            editions = listOf("Another Album" to 211_000, "Fake Album" to 210_000),
+            songs = listOf(row("偽の歌 (ライブ)", length = "4:00"), row("偽の歌", length = "3:30"))
+        ),
+        Case(
+            "2 an explicitly named live track", "song0", title = "Fake Song (Live)", lengthMs = 240_000, linkMs = 210_000,
+            songs = listOf(row("Fake Song (Live)", length = "4:00"), row("Fake Song", length = "3:30"))
         ),
         // 4. The artist named in Japan's store, and on the rows, in another script.
         Case("4 artist in kanji", "song0", japan = "偽の歌" to "偽バンド", songs = listOf(row("偽の歌", artist = "偽バンド"))),
@@ -113,16 +139,15 @@ class MatcherCasesTest {
         Case("4 artist in kanji, video", "video0", japan = "偽の歌" to "偽バンド", videos = listOf(video("偽の歌", channel = "偽バンド"))),
         Case("4 artist in kanji, another's row", "song1", japan = "偽の歌" to "偽バンド", songs = listOf(row("偽の歌", artist = "Other Band"), row("偽の歌", artist = "偽バンド")))
     ) + listOf(
-        // 3. A version or a part said without brackets, beside a tagged row and a plain one. Main opens the plain row
-        // for a live link where it comes first, and a row of part 1 for part 2: Issue #997.
-        Triple("Fake Song Live ver.", "偽の歌 (ライブ)", listOf("song0", "song0", "song2", "song1", null)),
-        Triple("Fake Song: Live", "偽の歌 (ライブ)", listOf("song0", "song0", "song0", "song1", null)),
-        Triple("Fake Song «Live»", "偽の歌 (ライブ)", listOf("song0", "song0", "song0", "song1", null)),
-        Triple("Fake Song, Pt. 2", "偽の歌 Pt.2", listOf("song0", "song0", "song2", "song1", null))
+        // 3. A link can name a live recording or a part without brackets.
+        Triple("Fake Song Live ver.", "偽の歌 (ライブ)", listOf("song0", "song1", "song2", "song1", null)),
+        Triple("Fake Song: Live", "偽の歌 (ライブ)", listOf("song0", "song1", "song0", "song1", null)),
+        Triple("Fake Song «Live»", "偽の歌 (ライブ)", listOf("song0", "song1", "song0", "song1", null)),
+        Triple("Fake Song, Pt. 2", "偽の歌 Pt.2", listOf(null, null, "song2", "song1", null))
     ).flatMap { (title, inJapan, main) ->
         listOf(
-            Case("3 $title", main[0], title = title, songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌")), knownWrong = 997.takeIf { "Pt." in title }),
-            Case("3 $title plain first", main[1], title = title, songs = listOf(row("偽の歌"), row("偽の歌 (ライブ)")), knownWrong = 997),
+            Case("3 $title", main[0], title = title, songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌"))),
+            Case("3 $title plain first", main[1], title = title, songs = listOf(row("偽の歌"), row("偽の歌 (ライブ)"))),
             Case("3 $title latin", main[2], title = title, songs = listOf(row("Fake Song (Live)"), row("Fake Song"), row(title))),
             Case("3 $title in japan", main[3], title = title, japan = japanese(inJapan), songs = listOf(row("偽の歌"), row(inJapan))),
             Case("3 $title video", main[4], title = title, videos = listOf(video("Fake Song (演唱会)"), video("Fake Song")))
@@ -453,6 +478,48 @@ class MatcherCasesTest {
     }
 
     @Test
+    fun aLinkedLengthCanChooseTheLiveAlbumWithinTheSearchResults() {
+        val liveLink = tenth.single { it.what == "2 two editions" }
+        val result = found(liveLink) { urls ->
+            assertEquals(1, urls.size)
+            assertTrue(urls.single().contains("music.youtube.com"))
+        }
+        assertEquals("song0", result.id)
+    }
+
+    @Test
+    fun aLiveTagByItselfDoesNotMakeAnotherTitleTheLiveRecording() {
+        assertEquals(null, find(Case(
+            "unrelated live title", null, title = "Fake Song: Live",
+            songs = listOf(row("偽の歌"), row("別の歌 (ライブ)"))
+        )))
+    }
+
+    @Test
+    fun thePickerCannotUseAnotherSongOrPartAsPartTwo() {
+        val songs = listOf(row("Fake Song Pt. 1"), row("偽の歌"), row("別の歌 Pt. 2"))
+        for (selected in songs.indices) {
+            assertEquals(null, find(Case("not part two", null, title = "Fake Song, Pt. 2", songs = songs, picked = selected)))
+        }
+    }
+
+    @Test
+    fun aTranslatedTitleCannotReplaceThePartsNumber() {
+        assertEquals(null, find(Case(
+            "translated as part one", null, title = "Fake Song, Pt. 2", japan = japanese("偽の歌 Pt. 1"),
+            songs = listOf(row("偽の歌 Pt. 1"), row("偽の歌")), picked = SAYS_NONE
+        )))
+    }
+
+    @Test
+    fun aTranslatedPartCanUseARomanNumeral() {
+        assertEquals("song1", find(Case(
+            "part two in Roman numerals", "song1", title = "Fake Song, Pt. 2", japan = japanese("偽の歌 Part 2"),
+            songs = listOf(row("偽の歌 Ⅲ"), row("偽の歌 Ⅱ"))
+        )))
+    }
+
+    @Test
     fun theNamesTheReviewsTriedReadAsMainReadThemOrBetter() {
         // The first review, 3: a sign is no letter, and 4: many songs in one, with a word run on.
         assertEquals(true, SongNames.same("Fake Song™", "Fake Song"))
@@ -630,6 +697,7 @@ class MatcherCasesTest {
             }
             results.zip(was).forEachIndexed { mode, (now, then) ->
                 val (before, after) = verdict(then) to verdict(now.id)
+                if (before == RIGHT && after != RIGHT && mode == 0) println("Right result changed: $key, $then -> ${now.id}")
                 counts.merge("${MODES[mode]}: $before -> $after", 1, Int::plus)
             }
         }
@@ -661,6 +729,7 @@ class MatcherCasesTest {
             broken += broken(key, found, was)
             found.zip(was).forEachIndexed { mode, (now, then) ->
                 val (before, after) = fuzzed.verdict(then) to fuzzed.verdict(now.id)
+                if (before == RIGHT && after != RIGHT && mode == 0) println("Right result changed: $key, $then -> ${now.id}")
                 counts.merge("${MODES[mode]}: $before -> $after", 1, Int::plus)
             }
         }
@@ -818,7 +887,7 @@ class MatcherCasesTest {
     /** What opened for a case, "song0" or null, and whether ChatGPT was [asked]. */
     private class Found(val id: String?, val asked: Boolean)
 
-    private fun found(case: Case): Found {
+    private fun found(case: Case, requests: ((List<String>) -> Unit)? = null): Found {
         // A fake of its own, as each keeps every request, and the matrix makes tens of thousands.
         val fake = FakeSpotify()
         fake.handler = { request ->
@@ -849,6 +918,7 @@ class MatcherCasesTest {
         }
         val matcher = ExactMatcher(fake.client(), "AR", pick = pick, pickTimeoutMs = if (case.slow) SLOW_PICK_MS else PICK_MS)
         val url = runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata(case.title, case.artist, lengthMs = case.linkMs)) }
+        requests?.invoke(fake.requestedUrls)
         return Found(url?.substringAfter("v=")?.trimEnd('x'), asked.get())
     }
 
