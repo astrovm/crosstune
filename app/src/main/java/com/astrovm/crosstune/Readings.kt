@@ -104,8 +104,9 @@ internal object Readings {
      * 8 for old verb endings written with a large つ.
      * 9 for successive old kana pairs in けふけふ.
      * 10 for an old ほ said お in kana alone.
+     * 11 for standalone old kana read with the built-in dictionary.
      */
-    const val VERSION = 10
+    const val VERSION = 11
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -181,7 +182,9 @@ internal object Readings {
     private fun pieces(line: String): List<Piece> {
         val text = line.mapIndexed { at, c -> NEW_FORMS[c] ?: KANJI_DIGITS[c]?.takeIf { counts(line, at) } ?: c }.joinToString("")
         val known = withSmallKana(okurigana(line, text, ipadicPieces(line, text)))
-        return saidAsWritten(modernPieces(uniDic?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known))
+        val other = uniDic
+        val read = saidAsWritten(modernPieces(other?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known))
+        return if (other == null) wholeOldKanaWord(line, read) ?: read else read
     }
 
     /** Keep the small kana with its noun where the dictionaries can read both nouns around の. */
@@ -321,9 +324,36 @@ internal object Readings {
         if ((changesHo && text in oldKana.modern) || changed.any { writtenToday(line, at + it, place) }) return null
         val today = text.mapIndexed { i, c -> if (i in changed) KANA_SAID.getValue(c) else c }.joinToString("")
         val known = knownToday(text, today, changed, singleToken = changesHo)
-            ?: oldKana.today[today]?.let { lookup -> listOf(Piece(text, today, "名詞", "一般", lookup, today, reader = Reader.JMDICT, today = today)) }
+            ?: listedKanaToday(text, today)
         return known?.takeUnless { changesHo && cutsOffModernWord(line, at + changed.last() + 1, at + text.length) }
     }
+
+    /**
+     * On a line by itself, even with marks around it, an old spelling can look like several modern words to IPADIC, such as まひ in めまひ.
+     * Use the whole word only when a dictionary knows its modern spelling. Keep words already read another way,
+     * and a known modern word with or without a particle, such as あるひは (ある日 and は).
+     */
+    private fun wholeOldKanaWord(line: String, read: List<Piece>): List<Piece>? {
+        val text = line.trim { !it.isLetterOrDigit() }
+        if (text in rareKanaWords || !Furigana.inOldKana(text)) return null
+        val changed = (1..text.lastIndex).filter { text[it] in "ひふ" }
+        if (changed.isEmpty() || text in oldKana.modern) return null
+        if (text.last() in "はをがものにへとで" && text.dropLast(1) in oldKana.modern) return null
+        if (read.any { piece ->
+                piece.today != null || Furigana.modernKana(piece.surface, listOf(Furigana.saidAsSpelled(piece.surface, piece.said))) != null
+            }) return null
+        val today = text.mapIndexed { i, kana -> if (i in changed) KANA_SAID.getValue(kana) else kana }.joinToString("")
+        val word = listedKanaToday(text, today) ?: knownToday(text, today, changed, singleToken = true) ?: return null
+        if (text.length == line.length) return word
+        // Keep the same punctuation and space pieces. A piece that includes letters must fit inside the word.
+        val before = read.takeWhile { it.surface.none(Char::isLetterOrDigit) }
+        val after = read.takeLastWhile { it.surface.none(Char::isLetterOrDigit) }
+        if (before.sumOf { it.surface.length } + text.length + after.sumOf { it.surface.length } != line.length) return null
+        return before + word + after
+    }
+
+    private fun listedKanaToday(text: String, today: String): List<Piece>? =
+        oldKana.today[today]?.let { lookup -> listOf(Piece(text, today, "名詞", "一般", lookup, today, reader = Reader.JMDICT, today = today)) }
 
     /** An unchanged ending may start a word outside the old spelling, like いどう in とほいどう. */
     private fun cutsOffModernWord(line: String, from: Int, end: Int): Boolean {
