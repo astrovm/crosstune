@@ -12,7 +12,8 @@ internal object RecordingKey {
         val name = "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
         val link = song.url?.let { MusicLinks.parse(it) as? LinkInput.Link }?.link
         val recording = song.recordingId ?: link?.takeIf { it.type == ItemType.TRACK }?.let { "${it.service}:${it.id}" }
-        return name + recording?.let { "\u0000$it" }.orEmpty() + song.lengthMs?.takeIf { it > 0 }?.let { "\u0000$it" }.orEmpty()
+        return name + recording?.let { "\u0000$it" }.orEmpty() + song.lengthMs?.takeIf { it > 0 }?.let { "\u0000$it" }.orEmpty() +
+            song.instrumentalAlbum?.let { "\u0000album:${SongNames.normalize(it)}" }.orEmpty()
     }
 
     /** YouTube's exact video, when the link is known. A search match isn't the playing video. */
@@ -26,7 +27,10 @@ internal object RecordingKey {
      * was opened by when the app gives none, as YouTube Music doesn't.
      */
     fun asPlayed(song: MusicMetadata, playing: MusicMetadata): MusicMetadata =
-        song.copy(recordingId = playing.recordingId, lengthMs = playing.lengthMs, heardLengthMs = song.heardLengthMs ?: song.lengthMs, url = playing.url ?: song.url)
+        song.copy(
+            recordingId = playing.recordingId, lengthMs = playing.lengthMs, heardLengthMs = song.heardLengthMs ?: song.lengthMs,
+            url = playing.url ?: song.url, instrumentalAlbum = playing.instrumentalAlbum
+        )
 
     /** Android players can omit the ID, as YouTube Music does; their duration still separates edits. */
     fun playing(app: String, id: String?, durationMs: Long?): String? {

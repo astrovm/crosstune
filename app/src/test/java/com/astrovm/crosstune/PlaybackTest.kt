@@ -535,6 +535,29 @@ class PlaybackTest {
     }
 
     @Test
+    fun anInstrumentalAlbumNamedByThePlayerLetsTheLyricsLookupRecognizeTheRecording() {
+        allow()
+        sounding()
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        val playing = player("com.spotify.music", "Spotify", song.title, song.artist, album = "Fixture Album (Instrumentals)", duration = 200_000)
+        shadowOf(sessions).addController(playing)
+        val heard = requireNotNull(playback.nowPlaying()).metadata
+        val fake = FakeSpotify()
+        fake.handler = { request ->
+            val answer = if (request.url.host == "lrclib.net") """[
+                {"id":1,"trackName":"Fixture Song","artistName":"Fixture Artist","albumName":"Fixture Album","duration":200,
+                 "syncedLyrics":"[00:01.000] Studio first\n[00:05.000] Studio second"},
+                {"id":2,"trackName":"Fixture Song","artistName":"Fixture Artist","albumName":"Fixture Album (Instrumentals)","duration":200,"instrumental":true},
+                {"id":3,"trackName":"Fixture Song","artistName":"Fixture Artist","albumName":"Fixture Album (Instrumentals)","duration":200,"instrumental":true}
+            ]""" else "{}"
+            FakeSpotify.html(request, answer)
+        }
+        val recording = RecordingKey.asPlayed(song, heard)
+        val found = runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0).lyricsOf(recording) }
+        assertEquals(found.toString(), true, (found as? LyricsFinder.Lyrics.Found)?.markedInstrumental)
+    }
+
+    @Test
     fun theOfferedSongTracksPlaybackAndMetadataWithoutReopeningTheApp() {
         allow()
         sounding()

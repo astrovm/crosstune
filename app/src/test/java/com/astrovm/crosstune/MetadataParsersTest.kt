@@ -12,6 +12,16 @@ import org.robolectric.RobolectricTestRunner
 class MetadataParsersTest {
 
     @Test
+    fun trackLinksRetainTheInstrumentalAlbumWhenItsNameSaysSo() {
+        val album = "Fixture Album (Instrumentals)"
+        val apple = json("""{"results":[{"trackName":"Song","artistName":"Artist","collectionName":"$album"}]}""")
+        val deezer = json("""{"title":"Song","artist":{"name":"Artist"},"album":{"title":"$album"}}""")
+        assertEquals(album, MetadataParsers.appleMusic(apple, ItemType.TRACK)?.instrumentalAlbum)
+        assertEquals(album, MetadataParsers.deezer(deezer, ItemType.TRACK)?.instrumentalAlbum)
+        assertNull(MetadataParsers.deezer(deezer, ItemType.ALBUM)?.instrumentalAlbum)
+    }
+
+    @Test
     fun readsTagsInAnyAttributeOrderAndQuoteStyle() {
         val html = """
             <meta content='Carly Rae Jepsen · Cut To The Feeling · Song · 2017' property='og:description'>

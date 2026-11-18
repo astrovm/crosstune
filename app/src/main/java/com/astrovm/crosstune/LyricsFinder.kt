@@ -620,7 +620,8 @@ internal class LyricsFinder(
      */
     private fun saidInstrumental(metadata: MusicMetadata, found: Lyrics, lookup: Answers): Lyrics {
         val said = lookup.marks(metadata.title) || SongNames.saysInstrumental(metadata.title, metadata.artist)
-        if (!said || SongNames.sungAlong(metadata.title, metadata.artist)) return found
+        if (!said || SongNames.sungAlong(metadata.title, metadata.artist) ||
+            metadata.instrumentalAlbum?.let { SongNames.sungAlong(it, "") } == true) return found
         return when {
             found is Lyrics.Found -> if (found.ofTheOriginal) found else found.copy(markedInstrumental = true)
             found == Lyrics.None || found == Lyrics.Instrumental -> Lyrics.LikelyInstrumental
@@ -1753,12 +1754,15 @@ internal class LyricsFinder(
 
         /**
          * The very recording, name for name but for a guest or remaster tag, so not "Song (Inst.)" for "Song (feat.
-         * Guest)"; by its artist, not one whose name holds theirs, "Band Piano Tribute"; not on an album of
-         * instrumentals, "Album (Instrumentals)", whose recording is named as the sung one; and as long, when both say.
+         * Guest)"; by its artist, not one whose name holds theirs, "Band Piano Tribute"; and as long, when both say.
+         * An album of instrumentals names its tracks as the sung ones, so only the same album counts.
          */
         fun isRecording(metadata: MusicMetadata): Boolean {
             if (!SongNames.same(title, metadata.title) || SongNames.artists(artist).none { it in SongNames.artists(metadata.artist) }) return false
-            if (SongNames.albumOfInstrumentals(json.optString("albumName"))) return false
+            val playedAlbum = metadata.instrumentalAlbum
+            val copyAlbum = json.optString("albumName")
+            if ((playedAlbum != null || SongNames.albumOfInstrumentals(copyAlbum)) &&
+                SongNames.normalize(playedAlbum.orEmpty()) != SongNames.normalize(copyAlbum)) return false
             val copyMs = lengthMs() ?: return true
             val playingMs = metadata.lengthMs ?: return true
             return abs(copyMs - playingMs) <= SAME_LENGTH_MS

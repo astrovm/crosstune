@@ -121,10 +121,27 @@ class LyricsFinderTest {
         for (lengthMs in listOf(200_000L, null)) {
             for (copies in listOf(listOf(sung) + marked.take(2), listOf(sung, sung) + marked)) {
                 respond(copies.joinToString(",", "[", "]"))
-                val answer = found(song.copy(lengthMs = lengthMs))
-                assertEquals("$lengthMs ${copies.size}", "First\nSecond", (answer as? Lyrics.Found)?.words)
+                val answer = found(song.copy(lengthMs = lengthMs)) as? Lyrics.Found
+                assertEquals("$lengthMs ${copies.size}", "First\nSecond", answer?.words)
+                assertEquals(false, answer?.markedInstrumental)
             }
         }
+        val differentAlbum = song.copy(lengthMs = 200_000, instrumentalAlbum = "Another Album (Instrumentals)")
+        respond((listOf(sung) + marked).joinToString(",", "[", "]"))
+        val answer = found(differentAlbum) as? Lyrics.Found
+        assertEquals("First\nSecond", answer?.words)
+        assertEquals(false, answer?.markedInstrumental)
+    }
+
+    @Test
+    fun aKaraokeAlbumKeepsTheLyricsAvailableToSingWith() {
+        val album = "Album (Karaoke Version)"
+        val sung = onAlbum(lasting(timedOnLrclib, 200.0), "Album")
+        val marked = onAlbum(lasting(instrumentalCopy(), 200.0), album)
+        respond("[$sung,$marked,$marked]")
+        val answer = found(song.copy(lengthMs = 200_000, instrumentalAlbum = album)) as? Lyrics.Found
+        assertEquals("First\nSecond", answer?.words)
+        assertEquals(false, answer?.markedInstrumental)
     }
 
     @Test

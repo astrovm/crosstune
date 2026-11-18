@@ -999,7 +999,10 @@ internal class MediaSessionPlayback(
         // A music app's "Song - Remastered" stays whole.
         // A song's length tells its versions apart; a video's is the video's, which may open with more.
         return when {
-            !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = controller.lengthOf(metadata, asked))
+            !controller.isVideo() -> MusicMetadata(
+                title, artist, lengthMs = controller.lengthOf(metadata, asked),
+                instrumentalAlbum = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)?.takeIf(SongNames::albumOfInstrumentals)
+            )
             MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist)
             // A computer's video, as KDE Connect shows one, is only a song when it says so plainly: a
             // talk show's "Show - Episode 12" isn't, though a video on the phone named so is taken as one.
