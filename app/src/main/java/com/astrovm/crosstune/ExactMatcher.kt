@@ -36,8 +36,9 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was;
  * 4, as Qobuz's songs are found in the phone's own store; 5, as another channel's video needs a known matching length.
  * Version 6 uses the link's length and an explicit recording label to choose an edition.
+ * Version 7 requires an accented Latin row to name the song.
  */
-internal const val MATCH_VERSION = 6
+internal const val MATCH_VERSION = 7
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -927,13 +928,18 @@ internal class ExactMatcher(
      * there, so its Japanese, Korean and Chinese stores give 終わらない歌 for Owaranai Uta, 봄날 for
      * Spring Day and 松原みき for Miki Matsubara. Deezer gives its length when Apple doesn't have it.
      */
-    private class Names(val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, val linkedEdition: LinkedEdition?)
+    private class Names(val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, japaneseTitle: String?, val linkedEdition: LinkedEdition?) {
+        val romanizedJapanese by lazy {
+            japaneseTitle?.let { Readings.of(listOf(it), Script.JAPANESE).single().typed }
+        }
+    }
 
     private class LinkedEdition(val lengthMs: Long, val live: Boolean)
 
     private suspend fun namesOf(metadata: MusicMetadata): Names {
         val titles = mutableSetOf(metadata.title)
         val artists = mutableSetOf(metadata.artist)
+        var japaneseTitle: String? = null
         val found = appleSong(metadata)
         val song = found?.song
         // Every edition it has, as the album's take of a song is often a minute longer than the single's, and a
@@ -943,6 +949,7 @@ internal class ExactMatcher(
             val elsewhere = coroutineScope {
                 NAMING_STORES.map { store -> async { answering { appleLookup(id, store) } } }.awaitAll()
             }
+            japaneseTitle = elsewhere[NAMING_STORES.indexOf("JP")]?.optString("trackName")?.takeIf(String::isNotBlank)
             (listOf(song) + elsewhere.filterNotNull()).forEach {
                 titles += it.optString("trackName").ifBlank { null } ?: return@forEach
                 artists += it.optString("artistName").ifBlank { null } ?: return@forEach
@@ -954,7 +961,7 @@ internal class ExactMatcher(
                     ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
             }?.let(lengthsMs::add)
         }
-        return Names(titles, artists, lengthsMs, linkedAppleEdition(metadata, found?.editions.orEmpty()))
+        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()))
     }
 
     /**
@@ -1062,16 +1069,41 @@ internal class ExactMatcher(
         wanted != null && other != null && wanted.title.isNotEmpty() && wanted.number == other.number && SongNames.same(wanted.title, other.title)
 
     /**
-     * A song result named in a script the song's known names aren't ("残酷な天使のテーゼ - Zankoku na Tenshi no
-     * Thesis" for "A Cruel Angel's Thesis"), which there are no words to compare. Its artist is the song's and
-     * it is as long as a known recording of it, to the second, which two songs of one artist hardly share.
+     * A song result named in non-Latin letters ("残酷な天使のテーゼ - Zankoku na Tenshi no
+     * Thesis" for "A Cruel Angel's Thesis"), or a Latin spelling of a known title. Its artist is the song's
+     * and it is within three seconds of a known recording.
      */
     private fun isTheSongInAnotherScript(row: Row, names: Names): Boolean {
         val length = row.lengthMs ?: return false
         if (row.id == null || names.lengthsMs.none { kotlin.math.abs(length - it) <= SAME_SONG_LENGTH_MS }) return false
-        if (row.name.none { it.isLetter() && Character.UnicodeBlock.of(it) != Character.UnicodeBlock.BASIC_LATIN }) return false
+        if (row.name.none { it.isLetter() && it.code > 0x7f }) return false
+        val anotherScript = row.name.codePoints().filter(Character::isLetter).anyMatch { Character.UnicodeScript.of(it) !in NO_OTHER_SCRIPT }
+        if (!anotherScript && !sameLatinSpelling(row.name, names)) return false
         val wanted = names.artists.flatMap(SongNames::artists).toSet()
         return SongNames.artists(row.details.first()).any(wanted::contains)
+    }
+
+    /** A Latin title can use another spelling of the same whole title, including a title the Japanese store names. */
+    private fun sameLatinSpelling(title: String, names: Names): Boolean {
+        val latin = title.lowercase(Locale.ROOT)
+        val withO = latin.replace('ø', 'o')
+        val writtenOut = latin.replace("ø", "oe").replace("ō", "ou").replace("ū", "uu").replace("ü", "ue")
+        val spellings = listOf(withO, writtenOut).filter { it != latin }.flatMap { listOf(it, withoutLatinCredit(it)) }.distinct()
+        if (names.titles.any { known -> spellings.any { SongNames.same(known, it) } }) return true
+        val macron = 'ō' in latin || 'ū' in latin
+        return macron && names.romanizedJapanese?.let { known -> spellings.any { SongNames.same(known, it) } } == true
+    }
+
+    /** A guest or a TV anime theme credit can follow the written-out Latin name. */
+    private fun withoutLatinCredit(title: String): String {
+        val open = title.lastIndexOf('(')
+        if (open < 1 || !title.endsWith(')')) return title
+        if (!title[open - 1].isWhitespace()) return title
+        val credit = title.substring(open + 1, title.lastIndex)
+        if (')' in credit) return title
+        val guest = credit.startsWith("with ") && credit.drop("with ".length).isNotBlank()
+        val theme = credit.startsWith("tv anime \"") && credit.endsWith("\" opening theme")
+        return if (guest || theme) title.substring(0, open) else title
     }
 
     /**
@@ -1234,6 +1266,7 @@ internal class ExactMatcher(
 
         /** The scripts the stores in [NAMING_STORES] write names in. */
         private val EAST_ASIAN = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL)
+        private val NO_OTHER_SCRIPT = setOf(Character.UnicodeScript.LATIN, Character.UnicodeScript.COMMON, Character.UnicodeScript.INHERITED, Character.UnicodeScript.UNKNOWN)
 
         /** How far another release of a song, e.g. a remaster or a video's, may be from its length. */
         const val SAME_LENGTH_MS = 8_000L
