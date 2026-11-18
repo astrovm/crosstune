@@ -252,9 +252,10 @@ class ReportTest {
             code = refused
             assertEquals(refused.toString(), Delivery.REFUSED, sender.send("{}"))
         }
-        // Too soon, too many, the box down, or an answer that isn't the box's about the report, as a network's own
-        // 403 or a 404 while the box moves: it may get there later.
-        for (later in listOf(199, 300, 401, 403, 404, 405, 408, 414, 416, 421, 423, 429, 499, 500, 503)) {
+        code = 429
+        assertEquals(Delivery.RATE_LIMITED, sender.send("{}"))
+        // Too soon, the box down, or a network's own answer: it may get there later.
+        for (later in listOf(199, 300, 401, 403, 404, 405, 408, 414, 416, 421, 423, 499, 500, 503)) {
             code = later
             assertEquals(later.toString(), Delivery.FAILED, sender.send("{}"))
         }

@@ -621,7 +621,7 @@ internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
 internal enum class OneTapFix { LINKS, FOLLOW, FLOAT, EXACT }
 
 /** A report on the words: on its way, there, or not sent. */
-internal enum class ReportStatus { SENDING, SENT, FAILED }
+internal enum class ReportStatus { SENDING, SENT, FAILED, RATE_LIMITED }
 
 /** The speech model, offered to be fetched by hand: [MISSING], [FETCHING] it, or the fetch [FAILED]. */
 internal enum class ModelOffer { MISSING, FETCHING, FAILED }

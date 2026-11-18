@@ -34,10 +34,11 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * Raised when songs are matched otherwise, so what was found the old way is looked for again, in the lookups kept and in
  * Recent: 2, as every edition's length counts, which finds a single's official song where an upload was found before;
  * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was;
- * 4, as Qobuz's songs are found in the phone's own store; 5, as another channel's video needs a known matching length;
- * 6, as an accented Latin row must name the song.
+ * 4, as Qobuz's songs are found in the phone's own store; 5, as another channel's video needs a known matching length.
+ * Version 6 uses the link's length and an explicit recording label to choose an edition.
+ * Version 7 requires an accented Latin row to name the song.
  */
-internal const val MATCH_VERSION = 6
+internal const val MATCH_VERSION = 7
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -629,6 +630,7 @@ internal class ExactMatcher(
             .put("query", searchQuery(metadata))
             .put("params", params)
         val items = fetchJson(YOUTUBE_MUSIC_SEARCH_URL, body).listItems()
+        val recording = requestedRecording(metadata.title.takeIf { isSong }.orEmpty())
         fun found(item: JSONObject, loose: Boolean): String? {
             val columns = item.optJSONArray("flexColumns")?.objects()
                 ?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }
@@ -639,7 +641,9 @@ internal class ExactMatcher(
             val artist = if (isSong) details.firstOrNull().orEmpty() else details.getOrNull(1).orEmpty()
             // A song's album may say what version it is, "Song" on "… Remix".
             val album = if (isSong) details.getOrNull(1).orEmpty() else ""
-            val same = if (loose) looselyMatches(metadata, name, artist) else matches(metadata, name, artist.ifEmpty { name }, album)
+            if (!keepsRequestedRecording(recording, name, album)) return null
+            val named = if (isSong && metadata.lengthMs != null) keepNotesAfterGuests(name) else name
+            val same = if (loose) looselyMatches(metadata, named, artist) else matches(metadata, named, artist.ifEmpty { named }, album)
             if (!same) return null
             return when (metadata.type) {
                 ItemType.TRACK -> item.optJSONObject("playlistItemData")?.let { it.optString("videoId").ifBlank { null } }
@@ -649,9 +653,12 @@ internal class ExactMatcher(
             }
         }
         // An exact match anywhere in the results beats a close one at the top.
-        fun firstFound(loose: Boolean) = asLongAs(metadata, items.mapNotNull { item -> found(item, loose)?.let { it to row(item).lengthMs } }) { it.second }?.first
-        firstFound(loose = false)?.let { return Answer(it) }
-        if (loosely) firstFound(loose = true)?.let { return Answer(it) }
+        fun firstFound(loose: Boolean) = asLongAs(metadata, items.mapNotNull { item -> found(item, loose)?.let { it to row(item).lengthMs } }) { it.second }
+        firstFound(loose = false)?.let { (url, length) ->
+            val edition = if (isSong) namedLinkedEdition(metadata, items, length) else null
+            return Answer(edition?.let { watchUrl + it.id } ?: url)
+        }
+        if (loosely) firstFound(loose = true)?.let { return Answer(it.first) }
         if (!isSong) return Answer(null)
         // Not there by its name, it may be by another, e.g. in Japanese, or only as a video, e.g. one
         // never released, or only put up by others, as The Blue Hearts' are.
@@ -660,15 +667,202 @@ internal class ExactMatcher(
             val names = async { namesOf(metadata) }
             videos.await() to names.await()
         }
-        items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return Answer(watchUrl + it.id) }
-        items.map(::row).firstOrNull { isTheSongInAnotherScript(it, names) }?.let { return Answer(watchUrl + it.id) }
-        videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }?.let { return Answer(watchUrl + it.id) }
+        val rows = items.map(::row)
+        val named = rows.firstOrNull { isTheSong(it, names) && keepsRequestedRecording(recording, it) }
+        val abroad = rows.filter { isTheSongInAnotherScript(it, names) }
+        val song = named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedEdition) ?: it }
+            ?: anotherScriptRecording(abroad, recording, names)
+        song?.let { return Answer(watchUrl + it.id) }
+        videos.map(::row).firstOrNull { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
+            ?.let { return Answer(watchUrl + it.id) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
     }
 
+    /** Keep a recording note separate when an unbracketed guest credit runs up to it. */
+    private fun keepNotesAfterGuests(name: String): String {
+        val title = name.trim()
+        val base = SongNames.bareTitle(title)
+        if (base == title || !title.startsWith(base)) return name
+        return SongNames.withoutFeaturing(base).trimEnd() + title.substring(base.length)
+    }
+
     /** The songs or videos among [items] that play. */
     private fun playable(items: List<JSONObject>): List<Row> = items.map(::row).filter { it.id != null }
+
+    /** The link's length can tell which recording it plays when a plain title left its recording off. */
+    private fun namedLinkedEdition(metadata: MusicMetadata, items: List<JSONObject>, firstLength: Long?): Row? {
+        val link = metadata.lengthMs ?: return null
+        if (firstLength == null || kotlin.math.abs(firstLength - link) <= SAME_LENGTH_MS || !plainLinkedTitle(metadata)) return null
+        return playable(items).singleOrNull {
+            sameRecordingLength(it.lengthMs, link) &&
+                sameArtist(metadata, it.details.first()) && SongNames.same(metadata.title, SongNames.bareTitle(it.name)) &&
+                takeSaysLive(it.name) == true && liveAlbum(it.details.getOrNull(1).orEmpty())
+        }
+    }
+
+    private fun saysLive(text: String): Boolean {
+        val title = text.trim()
+        val base = SongNames.bareTitle(title)
+        val note = title.removePrefix(base).ifEmpty { title }.trim { !it.isLetterOrDigit() }.lowercase(Locale.ROOT)
+        val quoted = title.substringAfterLast('«', "").substringBefore('»', "").trim()
+        return quoted.equals("live", ignoreCase = true) || liveAtEnd(title) || liveAtEnd(base) || note in liveLabels
+    }
+
+    private fun liveAlbum(text: String): Boolean {
+        val album = text.trim().lowercase(Locale.ROOT)
+        return saysLive(album) || liveAlbumStarts.any(album::startsWith)
+    }
+
+    private val liveLabels = setOf(
+        "live", "live ver", "live version", "en vivo", "ao vivo", "ライブ", "ライヴ", "ライブバージョン", "ライヴバージョン",
+        "现场版", "現場版", "라이브", "라이브버전"
+    )
+    private val liveAlbumStarts = listOf("live at ", "live in ", "live from ")
+
+    private fun sameRecordingLength(time: Long?, wanted: Long): Boolean =
+        time != null && kotlin.math.abs(time - wanted) <= SAME_SONG_LENGTH_MS
+
+    private class RequestedRecording(val live: Boolean, val part: NumberedPart?)
+
+    private class NumberedPart(val title: String, val number: String)
+
+    private fun numberedPart(title: String): NumberedPart? {
+        val text = title.trimEnd { it.isWhitespace() || it in TitleDelimiters.CLOSES || it == '»' }
+        val number = text.takeLastWhile { it in '0'..'9' }
+        if (number.isEmpty()) return romanPart(text)
+        return partWithLabel(text.dropLast(number.length), number.trimStart('0').ifEmpty { "0" })
+    }
+
+    private fun partWithLabel(beforeNumber: String, number: String): NumberedPart? {
+        val before = beforeNumber.trimEnd().removeSuffix(".")
+        val label = before.takeLastWhile(Char::isLetter)
+        if (!label.equals("part", ignoreCase = true) && !label.equals("pt", ignoreCase = true)) return null
+        val name = before.dropLast(label.length).trimEnd { it.isWhitespace() || it in TitleDelimiters.OPENS || it in ",:«" }
+        return NumberedPart(name, number)
+    }
+
+    // A localized title may spell the same part with a Unicode Roman numeral after its name.
+    private fun romanPart(title: String): NumberedPart? {
+        val numeral = title.lastOrNull() ?: return null
+        if (numeral !in '\u2160'..'\u216B' && numeral !in '\u2170'..'\u217B') return null
+        val before = title.dropLast(1)
+        val number = Character.getNumericValue(numeral).toString()
+        partWithLabel(before, number)?.let { return it }
+        val separator = before.lastOrNull() ?: return null
+        if (!separator.isWhitespace() && separator !in TitleDelimiters.OPENS) return null
+        return NumberedPart(before.trimEnd { it.isWhitespace() || it in TitleDelimiters.OPENS }, number)
+    }
+
+    private fun liveAtEnd(title: String): Boolean {
+        if (title.substringAfterLast(':', "").trim().equals("live", ignoreCase = true)) return true
+        val quoted = title.substringAfterLast('«', "")
+        if (quoted.endsWith('»') && quoted.dropLast(1).trim().equals("live", ignoreCase = true)) return true
+        val word = title.takeLastWhile { !it.isWhitespace() }
+        return when (word.lowercase(Locale.ROOT)) {
+            "ver", "ver.", "version" ->
+                title.dropLast(word.length).trimEnd().takeLastWhile { !it.isWhitespace() }.equals("live", ignoreCase = true)
+            else -> false
+        }
+    }
+
+    private fun requestedRecording(title: String): RequestedRecording {
+        val text = title.trim()
+        return RequestedRecording(liveAtEnd(text), numberedPart(text))
+    }
+
+    private fun keepsRequestedRecording(wanted: RequestedRecording, name: String, album: String): Boolean {
+        val part = wanted.part?.number
+        val keepsPart = part == null || part == (numberedPartBeforeNotes(name) ?: partOnAlbum(name, album))?.number
+        return keepsPart && (!wanted.live || saysLive(name) || liveAlbum(album))
+    }
+
+    private fun partOnAlbum(name: String, album: String): NumberedPart? =
+        numberedPartBeforeNotes(album)?.takeIf { SongNames.same(it.title, SongNames.bareTitle(name)) }
+
+    private fun keepsRequestedRecording(wanted: RequestedRecording, row: Row, video: Boolean = false): Boolean =
+        if (video) SongNames.titleNames(row.name).any { keepsRequestedRecording(wanted, it, "") }
+        else keepsRequestedRecording(wanted, row.name, row.details.getOrNull(1).orEmpty())
+
+    private fun anotherScriptRecording(rows: List<Row>, recording: RequestedRecording, names: Names): Row? {
+        // A numbered song needs a known name with that part. A candidate can add a recording note after its number.
+        if (recording.part != null) return rows.firstOrNull { row ->
+            val part = numberedPartBeforeNotes(row.name)
+            part != null && part.number == recording.part.number && names.titles.any { samePart(numberedPartBeforeNotes(it), part) }
+        }
+        val first = rows.firstOrNull() ?: return null
+        if (recording.live && !keepsRequestedRecording(recording, first)) {
+            val base = SongNames.bareTitle(first.name)
+            return rows.singleOrNull { keepsRequestedRecording(recording, it) && SongNames.bareTitle(it.name) == base }
+        }
+        return linkedEditionInAnotherScript(first, rows, names.linkedEdition) ?: first
+    }
+
+    /** Keep an explicit title ahead of any inference from the length. */
+    private fun plainLinkedTitle(metadata: MusicMetadata): Boolean {
+        val title = SongNames.withoutEditionTag(metadata.title)
+        return SongNames.bareTitle(title) == title.trim() && !SongNames.saysAnotherVersion(title, "", metadata.artist) &&
+            numberedPart(title) == null
+    }
+
+    /** Compare the matched row with one alternate take of its own title, at the other known recording's time. */
+    private fun linkedEditionInAnotherScript(first: Row, rows: List<Row>, edition: LinkedEdition?): Row? {
+        if (edition == null || first !in rows || sameRecordingLength(first.lengthMs, edition.lengthMs)) return null
+        val base = SongNames.bareTitle(first.name)
+        val other = rows.singleOrNull { it !== first && SongNames.same(SongNames.bareTitle(it.name), base) } ?: return null
+        if (!sameRecordingLength(other.lengthMs, edition.lengthMs)) return null
+        val titleSaysLive = takeSaysLive(other.name) ?: return null
+        if ((titleSaysLive || liveAlbum(other.details.getOrNull(1).orEmpty())) != edition.live) return null
+        val firstMarked = rowIsLive(first) || SongNames.saysAnotherVersion(SongNames.withoutFeaturing(first.name), base, "")
+        return other.takeIf { firstMarked != edition.live }
+    }
+
+    /** Read each note on its own so a guest credit cannot hide a later recording label. */
+    private fun takeSaysLive(name: String): Boolean? {
+        val title = name.trim()
+        val base = SongNames.bareTitle(title)
+        if (!title.startsWith(base)) return null
+        var at = base.length
+        var live = false
+        while (at < title.length) {
+            if (title[at].isWhitespace()) {
+                at++
+                continue
+            }
+            val bracket = TitleDelimiters.OPENS.indexOf(title[at])
+            val end = takeNoteEnd(title, at, bracket) ?: return null
+            val note = title.substring(at, end)
+            val label = note.trim { !it.isLetterOrDigit() }.lowercase(Locale.ROOT)
+            when {
+                label in liveLabels -> live = true
+                bracket >= 0 && SongNames.withGuests("", note).isNotBlank() && (at + 1 until end).none { takeDash(title, it) } -> Unit
+                neutralTakeNote(label) -> Unit
+                else -> return null
+            }
+            at = end
+        }
+        return live
+    }
+
+    private fun takeNoteEnd(title: String, at: Int, bracket: Int): Int? {
+        if (bracket >= 0) return title.indexOf(TitleDelimiters.CLOSES[bracket], at + 1).takeIf { it >= 0 }?.plus(1)
+        if (!takeDash(title, at)) return null
+        return (at + 1 until title.length).firstOrNull { takeDash(title, it) || title[it] in TitleDelimiters.OPENS } ?: title.length
+    }
+
+    private fun takeDash(title: String, at: Int): Boolean = title[at] in TitleDelimiters.DASHES &&
+        title.getOrNull(at - 1)?.isWhitespace() == true && title.getOrNull(at + 1)?.isWhitespace() == true
+
+    private fun neutralTakeNote(label: String): Boolean {
+        if (label in neutralTakeLabels) return true
+        val words = SongNames.words(label)
+        return words.any { it in remasterLabels } && words.all { it in remasterLabels || it.length == 4 && it.all(Char::isDigit) }
+    }
+
+    private val neutralTakeLabels = setOf("mono", "stereo", "original", "album version")
+    private val remasterLabels = setOf("remaster", "remastered", "remasterizado", "remasterizada")
+
+    private fun rowIsLive(row: Row): Boolean = saysLive(row.name) || liveAlbum(row.details.getOrNull(1).orEmpty())
 
     /**
      * The one among [rows] that [pick] says the song is, each shown as "title | details". Their titles
@@ -676,11 +870,23 @@ internal class ExactMatcher(
      * seconds for a song, more for a video, which may open with more.
      */
     private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row>, watchUrl: String, videos: Boolean, lengthsMs: List<Long>): String? {
-        if (rows.isEmpty()) return null
-        val index = pick(metadata, rows.map { "${it.name} | ${it.details.joinToString(" • ")}" }, videos) ?: return null
-        val row = rows.getOrNull(index) ?: return null
+        val recording = requestedRecording(metadata.title)
+        val part = recording.part
+        // Keep the row numbers while omitting any names that local evidence already rules out.
+        val offered = rows.map { it.takeIf { row -> keepsRequestedRecording(recording, row, video = videos) &&
+            (part == null || namesThePickedPart(part, row, videos)) } }
+        if (offered.none { it != null }) return null
+        val shown = offered.map { it?.let { row -> "${row.name} | ${row.details.joinToString(" • ")}" }.orEmpty() }
+        val index = pick(metadata, shown, videos) ?: return null
+        val row = offered.getOrNull(index) ?: return null
         val off = row.lengthMs?.let { length -> lengthsMs.minOfOrNull { kotlin.math.abs(it - length) } } ?: 0L
         return (watchUrl + row.id).takeIf { off <= if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS }
+    }
+
+    private fun namesThePickedPart(part: NumberedPart, row: Row, video: Boolean): Boolean {
+        val names = if (video) SongNames.titleNames(row.name) else listOf(row.name)
+        return names.any { samePart(part, numberedPartBeforeNotes(it)) } ||
+            !video && samePart(part, partOnAlbum(row.name, row.details.getOrNull(1).orEmpty()))
     }
 
     /**
@@ -722,11 +928,13 @@ internal class ExactMatcher(
      * there, so its Japanese, Korean and Chinese stores give 終わらない歌 for Owaranai Uta, 봄날 for
      * Spring Day and 松原みき for Miki Matsubara. Deezer gives its length when Apple doesn't have it.
      */
-    private class Names(val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, japaneseTitle: String?) {
+    private class Names(val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, japaneseTitle: String?, val linkedEdition: LinkedEdition?) {
         val romanizedJapanese by lazy {
             japaneseTitle?.let { Readings.of(listOf(it), Script.JAPANESE).single().typed }
         }
     }
+
+    private class LinkedEdition(val lengthMs: Long, val live: Boolean)
 
     private suspend fun namesOf(metadata: MusicMetadata): Names {
         val titles = mutableSetOf(metadata.title)
@@ -753,7 +961,7 @@ internal class ExactMatcher(
                     ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
             }?.let(lengthsMs::add)
         }
-        return Names(titles, artists, lengthsMs, japaneseTitle)
+        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()))
     }
 
     /**
@@ -772,6 +980,15 @@ internal class ExactMatcher(
 
     /** The [song] Apple has, and all its [editions] in the same store: its album's take, its single's, its remasters. */
     private class AppleSong(val song: JSONObject, val editions: List<JSONObject>)
+
+    private fun linkedAppleEdition(metadata: MusicMetadata, editions: List<JSONObject>): LinkedEdition? {
+        val length = metadata.lengthMs ?: return null
+        if (editions.size < 2 || !plainLinkedTitle(metadata)) return null
+        val timed = editions.filter { it.optLong("trackTimeMillis") > 0 && matches(metadata, it.optString("trackName"), it.optString("artistName")) }
+        if (timed.size < 2) return null
+        val chosen = timed.singleOrNull { sameRecordingLength(it.optLong("trackTimeMillis"), length) } ?: return null
+        return LinkedEdition(chosen.optLong("trackTimeMillis"), saysLive(chosen.optString("trackName")) || liveAlbum(chosen.optString("collectionName")))
+    }
 
     private suspend fun appleSong(metadata: MusicMetadata, store: String?): AppleSong? = answering {
         val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
@@ -844,6 +1061,12 @@ internal class ExactMatcher(
         val by = SongNames.artists(row.details.first()).any(wanted::contains)
         return named && by && sameLength(row, names)
     }
+
+    private fun numberedPartBeforeNotes(title: String): NumberedPart? = numberedPart(title) ?: numberedPart(SongNames.bareTitle(title))
+
+    /** The same title can spell its number with Part or Pt. */
+    private fun samePart(wanted: NumberedPart?, other: NumberedPart?): Boolean =
+        wanted != null && other != null && wanted.title.isNotEmpty() && wanted.number == other.number && SongNames.same(wanted.title, other.title)
 
     /**
      * A song result named in non-Latin letters ("残酷な天使のテーゼ - Zankoku na Tenshi no

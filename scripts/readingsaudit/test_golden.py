@@ -63,7 +63,7 @@ class FakeContexts:
         """GoldenReadings.broken: the ruby, and the sheet and shown parts the row locks, empty ones asking nothing."""
         line, word, index, kana, ruby, sheet, shown, _tag = row
         got = self.locks(line, word, index, kana, dictionary)
-        return (self.ruby_at(line, word, index, dictionary) == ruby
+        return ((not ruby or self.ruby_at(line, word, index, dictionary) == ruby)
                 and all(not want or want == have for want, have in zip((sheet, shown), got)))
 
     def ruby_at(self, stretch, word, index, dictionary):
@@ -608,6 +608,28 @@ class Golden(unittest.TestCase):
     def test_no_audit_stops(self):
         with tempfile.TemporaryDirectory() as folder, self.assertRaises(SystemExit):
             self.run_golden(Path(folder), Path(folder) / "golden.tsv")
+
+    def test_a_word_with_no_ruby_can_lock_its_word_sheet(self):
+        row = ("おもひでの", "おもひで", "", "おもいで", "", "omoide|omoide", "", "both")
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            path = folder / "golden.tsv"
+            write_audit(folder, [audit_line("丙", [["丙", "へい"]])])
+            golden.write_golden(path, [row])
+            self.assertEqual([row], golden.read_golden(path))
+            code, said, _fake = self.run_golden(folder, path, locks=lambda *args: ("omoide|omoide", ""))
+            self.assertEqual(0, code, said)
+            self.assertIn(row, golden.read_golden(path))
+            code, said, _fake = self.run_golden(folder, path)
+            self.assertEqual(1, code, said)
+            self.assertIn("regression: おもひで\tおもいで\tboth", said)
+        for bad in (
+            (*row[:5], "", "", "both"),
+            (*row[:6], "おもひで=おもいで", "both"),
+            (*row[:3], "", *row[4:]),
+        ):
+            with self.assertRaises(SystemExit, msg=bad):
+                golden.check_fields(bad)
 
     def test_a_row_is_eight_whole_fields_that_read_back_as_written(self):
         good = ("思い出", "思い出", "", "おもいで", "思=おも|い|出=で", "", "", "both")

@@ -317,6 +317,7 @@
     <string name="report_send">Wyślij</string>
     <string name="report_sent">Wysłano. Dziękujemy!</string>
     <string name="report_failed">Nie udało się wysłać. Sprawdź połączenie i spróbuj ponownie.</string>
+    <string name="report_rate_limited">W tej chwili jest za dużo zgłoszeń. Spróbuj ponownie później.</string>
     <string name="reading_wrong">Błędne czytanie</string>
     <string name="reading_right">Poprawne czytanie (opcjonalnie)</string>
     <string name="reading_what_goes">Wysyła słowo, pokazane czytanie i jego źródło, jego wers i pismo, czytanie, które wpiszesz, tytuł i wykonawcę utworu, skąd pochodzi tekst oraz wersje aplikacji i Androida. Czyta to tylko twórca Crosstune.</string>
