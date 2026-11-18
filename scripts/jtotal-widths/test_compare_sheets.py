@@ -269,6 +269,16 @@ class DrawSizeTest(unittest.TestCase):
         self.assertNotIn("font-size:40px", text)
         self.assertNotIn("<script", text)
 
+    def test_the_legacy_layout_uses_the_desktop_stylesheet_without_running_the_script(self):
+        selector = "<script>if (mobile) { phone() } else { document.write('<link rel=\"stylesheet\" href=\"/css/pc.css\">') }</script>"
+        raw = self.RAW.replace("<script>x()</script>", selector + "<script>x()</script>")
+        text = c.sheet_html(raw, "tt{font-family:monospace}", "FACES", size=None, desktop_css="table{font-size:15px}")
+        self.assertIn("<style>tt{font-family:monospace}</style><style>table{font-size:15px}</style>", text)
+        self.assertNotIn("<script", text)
+        self.assertNotIn("/css/pc.css", text)
+        with self.assertRaisesRegex(ValueError, "pc.css"):
+            c.sheet_html(raw, "", "", size=None)
+
     def test_a_sheet_drawn_larger_has_every_letter_at_that_size(self):
         self.assertIn("<style>FACES *{font-size:40px !important}</style></head>", c.sheet_html(self.RAW, "", "FACES", size=40))
 
@@ -329,6 +339,7 @@ class CrawlTest(unittest.TestCase):
                 unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as err, \
                 unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
             (Path(tmp) / "dat_st.css").write_text("", encoding="utf-8")
+            (Path(tmp) / "pc.css").write_text("", encoding="utf-8")
             c.crawl(Path(tmp), urls, 1000)
             fetched = [item["url"] for item in json.loads((Path(tmp) / "urls.json").read_text(encoding="utf-8"))]
         return fetched, slept, err.getvalue()

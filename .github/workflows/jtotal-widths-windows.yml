@@ -17,7 +17,11 @@ on:
         description: Monospace table font size in CSS pixels
         type: choice
         options: ['40', '16', '15']
-        default: '16'
+        default: '15'
+      positions_only:
+        description: Replay the sheets with existing tables
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -53,6 +57,7 @@ jobs:
           python -m pip install --disable-pip-version-check playwright==1.64.1 fonttools==4.68.0
           python -m playwright install chromium
       - name: Measure
+        if: ${{ !inputs.positions_only }}
         env:
           REFERENCE_FONT_SIZE: ${{ inputs.font_size }}
           MONO_FONT_SIZE: ${{ inputs.mono_font_size }}
@@ -109,6 +114,7 @@ jobs:
           # The sheets of scripts/jtotal-widths/sheets.txt, fetched one a second and drawn in Japanese. They are
           # another person's work: they stay in the runner's temporary folder, and only where each chord is, with
           # each line's words as a hash, goes in the artifact. `compare_sheets.py compare --truth` reads it.
+          mkdir -p windows
           sheets="$RUNNER_TEMP/sheets"
           c="python scripts/jtotal-widths/compare_sheets.py"
           fonts=$(python -c "import sys; sys.path.insert(0, 'scripts/jtotal-widths'); import jtotal_widths; print(jtotal_widths.container_fonts())")
