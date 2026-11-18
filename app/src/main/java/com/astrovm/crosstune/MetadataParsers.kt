@@ -451,7 +451,7 @@ internal object MetadataParsers {
         val title = withoutBlankSong(said)
         val known = spotifyPageSplitAtItsDash(songLine(title), artist)
         val named = known ?: if (noArtist(artist)) {
-            val fileName = title.replace(audioExtension, "")
+            val fileName = withoutAudioExtension(title)
             youtubeVideo(fileName, "", sessionCaption = session && fileName == title)
         } else MusicMetadata(title, artist)
         return named
@@ -472,8 +472,10 @@ internal object MetadataParsers {
 
     private val audioExtension = phoneRegex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
 
+    internal fun withoutAudioExtension(title: String): String = title.replace(audioExtension, "")
+
     /** Keep title words when reading a file's name. Recording captions are classified separately. */
-    internal fun comparisonTitle(title: String): String = withoutSubtitlesTag(title).replace(audioExtension, "")
+    internal fun comparisonTitle(title: String): String = withoutAudioExtension(withoutSubtitlesTag(title))
 
     /** Read the track prefix after captions, so a song named "01 (Audio)" keeps its numeric title. */
     internal fun withoutFileNumber(title: String): String {

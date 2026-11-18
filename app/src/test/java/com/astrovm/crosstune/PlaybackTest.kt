@@ -1795,6 +1795,24 @@ class PlaybackTest {
 
     @Test
     @Config(shadows = [AppAsked::class])
+    fun aCreditedAudioFilenameCanBeFollowedAndControlled() {
+        allow()
+        val packageName = "com.example.player"
+        for (name in listOf("Live.mp3", "Paperkite.flac", "Acoustic.OPUS")) {
+            ShadowMediaSessionManager.reset()
+            val session = player(packageName, "Player", "Fixture Artist - $name", "", duration = 200_000L)
+            shadowOf(sessions).addController(session)
+            val song = MusicMetadata(name.substringBeforeLast('.'), "Fixture Artist")
+            assertNull(name, playback.appFor(song.copy(artist = "Wrong Artist"), app = packageName))
+            assertEquals(name, session, playback.appFor(song, app = packageName))
+            playback.seekTo(song, 10_000, packageName)
+            playback.playPause(song, false, packageName)
+            assertEquals(name, listOf("seekTo 10000", "pause"), asked())
+        }
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
     fun anArtistlessRecordingLabelCannotControlTheTitleWithoutItsTag() {
         allow()
         sounding()
