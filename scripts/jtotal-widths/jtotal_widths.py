@@ -130,11 +130,11 @@ def font_faces(fonts):
     )
 
 
-def page_head(stack, fonts, lang=None, charset="utf-8"):
-    """The top of a page that draws `tt` as J-Total does: its font stack at 40px, one line a row."""
+def page_head(stack, fonts, lang=None, charset="utf-8", font_size=40):
+    """The top of a page that draws `tt` in J-Total's font stack, one line a row."""
     tag = f' lang="{lang}"' if lang else ""
     return (f'<!DOCTYPE html><html{tag}><head><meta charset="{charset}"><style>\n{font_faces(fonts)}'
-            'tt { font-family:' + stack + '; font-size:40px; line-height:1; white-space:pre; }\ndiv { margin:0; }\n</style></head><body>')
+            'tt { font-family:' + stack + f'; font-size:{font_size}px; line-height:1; white-space:pre; }}\ndiv {{ margin:0; }}\n</style></head><body>')
 
 
 def in_cp932(code):
@@ -294,11 +294,11 @@ def show(page, html, path):
     page.wait_for_timeout(100)
 
 
-def measure(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lang=None, codes=None):
+def measure(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lang=None, codes=None, *, font_size=40):
     """The width each letter adds to a line, in thousandths of a digit, and the fonts that drew it. Writes JSON to `out`."""
     from playwright.sync_api import sync_playwright
 
-    head = page_head(stack, fonts, charset="shift_jis")
+    head = page_head(stack, fonts, charset="shift_jis", font_size=font_size)
     codes = spans_codes() if codes is None else codes
     widths, used, misread = {}, {}, set()
     began = time.monotonic()
@@ -331,7 +331,7 @@ def measure(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lan
             batch_of(retry, as_entity=set(retry))
         found = environment(browser, browser_name if "/" not in browser_name else Path(browser_name).stem, stack, fonts)
         found.append(f"Page Shift_JIS with no language; browser language {lang or 'as Playwright starts it'}")
-        found.append(f"One digit is {digit} CSS px at 40px. A width is a tenth of what ten of the letter add, each between two of its base letters (base_letter).")
+        found.append(f"One digit is {digit} CSS px at {font_size}px. A width is a tenth of what ten of the letter add, each between two of its base letters (base_letter).")
         browser.close()
     if misread:
         raise SystemExit(f"read as other letters even as references: {sorted(misread)[:20]}")
@@ -376,16 +376,18 @@ TRIM_JS = """() => {
 }"""
 
 
-def trims(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lang=None):
+def trims(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lang=None, *, font_size=40):
     """How wide full-width brackets and stops are beside each other and at a line's ends. Writes JSON to `out`."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
         browser, page, cdp = open_page(p, browser_name, lang, Path(tmp) / "profile")
-        show(page, page_head(stack, fonts, charset="shift_jis") + trim_rows() + "</body></html>", Path(tmp) / "trims.html")
+        head = page_head(stack, fonts, charset="shift_jis", font_size=font_size)
+        show(page, head + trim_rows() + "</body></html>", Path(tmp) / "trims.html")
         found = page.evaluate(TRIM_JS)
         marks = dict(zip(PUNCTUATION, platform_fonts(cdp, "tt[data-last]"))) if cdp else {}
         environment_found = environment(browser, browser_name if "/" not in browser_name else Path(browser_name).stem, stack, fonts)
+        environment_found.append(f"Punctuation drawn at {font_size}px.")
         browser.close()
     Path(out).write_text(json.dumps({**found, "fonts": marks, "environment": environment_found, "stack": stack}, ensure_ascii=False), encoding="utf-8")
     print(f"{out}: {len(found['pairs'])} pairs", file=sys.stderr)
@@ -476,7 +478,8 @@ def container_fonts():
     for name, (url, _) in FONTS.items():
         font = fonts / f"inconsolata-{name}.woff2"
         if not font.exists():
-            font.write_bytes(urllib.request.urlopen(url, timeout=60).read())
+            with urllib.request.urlopen(url, timeout=60) as response:
+                font.write_bytes(response.read())
     return fonts
 
 
@@ -563,6 +566,7 @@ def main(argv):
     parser.add_argument("--browser", default="chromium")
     parser.add_argument("--lang")
     parser.add_argument("--fonts", type=Path)
+    parser.add_argument("--font-size", type=int, choices=(15, 40), default=40, help="measure or trims: J-Total's size or the 40px reference")
     parser.add_argument("--show", type=int, default=50)
     parser.add_argument("--stack", help="another font stack than the page's, such as one naming MS PGothic")
     parser.add_argument("--cp932", action="store_true", help="only the letters a Shift_JIS page holds")
@@ -570,10 +574,10 @@ def main(argv):
     stack = args.stack or (MONO_STACK if args.mono else STACK)
     if args.command == "measure":
         codes = [c for c in spans_codes() if in_cp932(c)] if args.cp932 else None
-        measure(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang, codes)
+        measure(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang, codes, font_size=args.font_size)
         return 0
     if args.command == "trims":
-        trims(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang)
+        trims(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang, font_size=args.font_size)
         return 0
     if args.command == "container":
         work = Path(args.paths[0]).resolve()

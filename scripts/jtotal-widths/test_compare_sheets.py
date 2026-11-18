@@ -347,9 +347,11 @@ class CrawlTest(unittest.TestCase):
         self.assertIn("5 failed in a row", err)
 
     def test_an_address_that_is_not_a_sheet_is_skipped_at_the_usual_pace(self):
-        missing = c.urllib.error.HTTPError("https://example.test/0.html", 404, "Not Found", {}, None)
+        body = io.BytesIO(b"Not Found")
+        missing = c.urllib.error.HTTPError("https://example.test/0.html", 404, "Not Found", {}, body)
         fetched, slept, _ = self.crawl([missing, missing, b"a"], 3)
         self.assertEqual((fetched, slept), (["https://example.test/2.html"], [0.0, 1.1, 1.1]))
+        self.assertTrue(body.closed)
 
 
 class CompareTest(unittest.TestCase):

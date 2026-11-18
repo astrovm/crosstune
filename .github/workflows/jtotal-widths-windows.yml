@@ -7,6 +7,12 @@ name: J-Total widths on Windows
 # then `compare_sheets.py against DIR main pr --truth ARTIFACT/positions-page-1.json`. The artifact lasts a day.
 on:
   workflow_dispatch:
+    inputs:
+      font_size:
+        description: Reference table font size in CSS pixels
+        type: choice
+        options: ['40', '15']
+        default: '40'
 
 permissions:
   contents: read
@@ -42,6 +48,8 @@ jobs:
           python -m pip install --disable-pip-version-check playwright==1.64.1 fonttools==4.68.0
           python -m playwright install chromium
       - name: Measure
+        env:
+          REFERENCE_FONT_SIZE: ${{ inputs.font_size }}
         shell: bash
         run: |
           set -euo pipefail
@@ -49,11 +57,11 @@ jobs:
           mkdir -p $out
           w="python scripts/jtotal-widths/jtotal_widths.py"
           edge="C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
-          echo "Measured on Windows, GitHub's windows-latest runner, Chromium as Playwright ships it, browser language ja (run ${{ github.run_id }})" > $out/SOURCE.txt
-          $w measure $out/main.json --lang ja
-          $w measure $out/mono.json --mono --lang ja
-          $w trims $out/main-trims.json --lang ja
-          $w trims $out/mono-trims.json --mono --lang ja
+          echo "Measured at ${REFERENCE_FONT_SIZE}px on Windows, GitHub's windows-latest runner, Chromium as Playwright ships it, browser language ja (run ${{ github.run_id }})" > $out/SOURCE.txt
+          $w measure $out/main.json --lang ja --font-size "$REFERENCE_FONT_SIZE"
+          $w measure $out/mono.json --mono --lang ja --font-size "$REFERENCE_FONT_SIZE"
+          $w trims $out/main-trims.json --lang ja --font-size "$REFERENCE_FONT_SIZE"
+          $w trims $out/mono-trims.json --mono --lang ja --font-size "$REFERENCE_FONT_SIZE"
           # Edge and Chrome as installed, each with a Japanese profile, on what a Shift_JIS page holds.
           chrome="C:/Program Files/Google/Chrome/Application/chrome.exe"
           for b in edge chrome; do

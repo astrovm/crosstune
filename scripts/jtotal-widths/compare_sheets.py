@@ -343,10 +343,15 @@ def crawl(directory, urls, limit):
             last = time.monotonic()
             request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; research crawler)"})
             try:
-                out.write_bytes(urllib.request.urlopen(request, timeout=35).read())
+                with urllib.request.urlopen(request, timeout=35) as response:
+                    out.write_bytes(response.read())
                 pause, in_a_row = PAUSE, 0
             except OSError as error:
-                said = f"HTTP {error.code}" if isinstance(error, urllib.error.HTTPError) else getattr(error, "reason", error)
+                if isinstance(error, urllib.error.HTTPError):
+                    error.close()
+                    said = f"HTTP {error.code}"
+                else:
+                    said = getattr(error, "reason", error)
                 print(f"{url}: {said}", file=sys.stderr)
                 missing += 1
                 # A guessed address that isn't a sheet is a quick answer. Anything else, such as no answer in time or
@@ -360,7 +365,8 @@ def crawl(directory, urls, limit):
         meta.append({"file": out.name, "url": url})
     sheet = directory / "dat_st.css"
     if not sheet.exists():
-        sheet.write_bytes(urllib.request.urlopen(STYLESHEET, timeout=35).read())
+        with urllib.request.urlopen(STYLESHEET, timeout=35) as response:
+            sheet.write_bytes(response.read())
     (directory / "urls.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(f"{len(meta)} sheets in {directory}" + (f", {missing} addresses missing" if missing else ""))
 

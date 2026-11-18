@@ -60,6 +60,14 @@ class SpansTest(unittest.TestCase):
 
 
 class ProbeTest(unittest.TestCase):
+    def test_reference_widths_and_trimming_use_the_selected_font_size(self):
+        self.assertIn("font-size:40px", w.page_head(w.STACK, Path(".")))
+        self.assertIn("font-size:15px", w.page_head(w.STACK, Path("."), font_size=15))
+        for command in ("measure", "trims"):
+            with mock.patch.object(w, command) as probe:
+                self.assertEqual(w.main([command, "out.json", "--fonts", ".", "--font-size", "15"]), 0)
+                self.assertEqual(probe.call_args.kwargs["font_size"], 15)
+
     def test_a_letter_shift_jis_holds_is_written_as_itself(self):
         self.assertEqual(w.written(0x3042), "あ")
         self.assertEqual(w.written(0xFF9E), "ﾞ")
