@@ -696,6 +696,9 @@ class ReadingsTest {
         assertEquals(listOf(noNotes, noNotes), listOf(builtIn, uniDic))
         val expected = mapOf("いふ" to listOf("いう"), "おもひで" to listOf("おもいで"))
         fun checkReadings() {
+            modern.zip(Readings.of(modern, Script.JAPANESE)).forEach { (text, line) ->
+                assertEquals(text, text, line.parts.joinToString("") { it.text })
+            }
             assertEquals(expected, notes(historical))
             val lines = Readings.of(listOf("はいひん", "ばいひん"), Script.JAPANESE)
             assertEquals(listOf("haihin", "baihin"), lines.map { it.romanized })
@@ -776,6 +779,77 @@ class ReadingsTest {
         }
         check()
         TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun aWholeOldKanaWordGetsItsModernReadingWithTheBuiltInDictionary() {
+        val cases = listOf(
+            Triple("さそふ", "さそう", "誘う"),
+            Triple("におふ", "におう", "におう"),
+            Triple("たまふ", "たまう", "たまう"),
+            Triple("ゆふべ", "ゆうべ", "昨夜"),
+            Triple("ゆふぐれ", "ゆうぐれ", "夕暮れ"),
+            Triple("ふくろふ", "ふくろう", "ふくろう"),
+            Triple("めまひ", "めまい", "めまい"),
+            Triple("つひに", "ついに", "ついに")
+        )
+        cases.forEach { (text, modern, lookup) ->
+            val words = Readings.words(text, Script.JAPANESE)
+            assertEquals(text, listOf(Triple(text, modern, lookup)), words.map { Triple(it.text, it.modern, it.lookup) })
+            assertEquals(text, modern, Readings.of(listOf(text), Script.JAPANESE).single().reading)
+        }
+    }
+
+    @Test
+    fun aWholeOldKanaWordDoesNotReplaceAnExistingReadingOrAModernPhrase() {
+        val cases = listOf(
+            "こふ" to emptyList(),
+            "あるひは" to emptyList(),
+            "ちひき" to emptyList(),
+            "ふひ" to emptyList(),
+            "きのふれる" to emptyList(),
+            "きのふ" to listOf("きのう"),
+            "ふるふ" to listOf("ふるう"),
+            "あっといふま" to listOf("という")
+        )
+        cases.forEach { (text, modern) ->
+            assertEquals(text, modern, Readings.words(text, Script.JAPANESE).mapNotNull { it.modern })
+            val line = Readings.of(listOf(text), Script.JAPANESE).single()
+            assertEquals(text, text, line.parts.joinToString("") { it.text })
+        }
+        TestUniDic.reading {
+            assertNull(Readings.words("さそふ", Script.JAPANESE).single().reading)
+            assertEquals("さそう", Readings.words("さそふ", Script.JAPANESE).single().modern)
+        }
+    }
+
+    @Test
+    fun anOldKanaWordOnItsOwnKeepsTheMarksAroundIt() {
+        val cases = listOf(
+            Triple("さそふ。", "さそう。", "誘う"),
+            Triple("「ゆふべ」", "「ゆうべ」", "昨夜"),
+            Triple("　たまふ！", "　たまう！", "たまう")
+        )
+        cases.forEach { (text, kana, lookup) ->
+            val word = Readings.words(text, Script.JAPANESE).single()
+            assertEquals(text, kana.trim { !it.isLetterOrDigit() }, word.modern)
+            assertEquals(text, lookup, word.lookup)
+            val line = Readings.of(listOf(text), Script.JAPANESE).single()
+            assertEquals(text, kana, line.reading)
+            assertEquals(text, text, line.parts.joinToString("") { it.text })
+        }
+        listOf("こふ。", "あるひは！", "今日もめまひ。").forEach { text ->
+            assertEquals(text, emptyList<String>(), Readings.words(text, Script.JAPANESE).mapNotNull { it.modern })
+        }
+    }
+
+    @Test
+    fun aCombiningMarkAttachedToAnOldKanaPieceKeepsItsText() {
+        // IPADIC keeps the leading combining dakuten in the word's first piece.
+        val text = "\u3099さそふ"
+        val line = Readings.of(listOf(text), Script.JAPANESE).single()
+        assertEquals(text, line.parts.joinToString("") { it.text })
+        assertEquals(emptyList<String>(), Readings.words(text, Script.JAPANESE).mapNotNull { it.modern })
     }
 
     @Test
