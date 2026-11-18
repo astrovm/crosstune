@@ -567,7 +567,7 @@ def main(argv):
     parser.add_argument("--browser", default="chromium")
     parser.add_argument("--lang")
     parser.add_argument("--fonts", type=Path)
-    parser.add_argument("--font-size", type=int, choices=(15, 40), help="measure, trims or container: J-Total's size or the 40px reference")
+    parser.add_argument("--font-size", type=int, choices=(15, 16, 40), help="measure, trims or container: J-Total's size or the 40px reference")
     parser.add_argument("--show", type=int, default=50)
     parser.add_argument("--stack", help="another font stack than the page's, such as one naming MS PGothic")
     parser.add_argument("--cp932", action="store_true", help="only the letters a Shift_JIS page holds")

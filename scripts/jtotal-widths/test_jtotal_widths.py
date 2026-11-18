@@ -64,9 +64,11 @@ class ProbeTest(unittest.TestCase):
         self.assertIn("font-size:40px", w.page_head(w.STACK, Path(".")))
         self.assertIn("font-size:15px", w.page_head(w.STACK, Path("."), font_size=15))
         for command in ("measure", "trims"):
-            with mock.patch.object(w, command) as probe:
-                self.assertEqual(w.main([command, "out.json", "--fonts", ".", "--font-size", "15"]), 0)
-                self.assertEqual(probe.call_args.kwargs["font_size"], 15)
+            for size, stack, flags in ((15, w.STACK, []), (16, w.MONO_STACK, ["--mono"])):
+                with self.subTest(command=command, size=size), mock.patch.object(w, command) as probe:
+                    self.assertEqual(w.main([command, "out.json", "--fonts", ".", "--font-size", str(size), *flags]), 0)
+                    self.assertEqual(probe.call_args.args[1], stack)
+                    self.assertEqual(probe.call_args.kwargs["font_size"], size)
 
     def test_container_passes_the_size_to_both_stacks_and_records_it(self):
         with tempfile.TemporaryDirectory() as folder, mock.patch.object(w, "run_in_container") as run:
