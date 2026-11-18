@@ -265,11 +265,12 @@ internal object Readings {
     }
 
     /**
-     * On a line by itself, an old spelling can look like several modern words to IPADIC, such as まひ in めまひ.
+     * On a line by itself, even with marks around it, an old spelling can look like several modern words to IPADIC, such as まひ in めまひ.
      * Use the whole word only when a dictionary knows its modern spelling. Keep words already read another way,
      * and a known modern word with or without a particle, such as あるひは (ある日 and は).
      */
-    private fun wholeOldKanaWord(text: String, read: List<Piece>): List<Piece>? {
+    private fun wholeOldKanaWord(line: String, read: List<Piece>): List<Piece>? {
+        val text = line.trim { !it.isLetterOrDigit() }
         if (!Furigana.inOldKana(text)) return null
         val changed = text.indices.filter { it > 0 && text[it] in KANA_SAID }
         if (changed.isEmpty() || text in oldKana.modern) return null
@@ -278,7 +279,13 @@ internal object Readings {
                 piece.today != null || Furigana.modernKana(piece.surface, listOf(Furigana.saidAsSpelled(piece.surface, piece.said))) != null
             }) return null
         val today = text.mapIndexed { i, kana -> if (i in changed) KANA_SAID.getValue(kana) else kana }.joinToString("")
-        return listedKanaToday(text, today) ?: knownToday(text, today, changed, singleToken = true)
+        val word = listedKanaToday(text, today) ?: knownToday(text, today, changed, singleToken = true) ?: return null
+        if (text.length == line.length) return word
+        // Keep the same punctuation and space pieces. A piece that includes letters must fit inside the word.
+        val before = read.takeWhile { it.surface.none(Char::isLetterOrDigit) }
+        val after = read.takeLastWhile { it.surface.none(Char::isLetterOrDigit) }
+        if (before.sumOf { it.surface.length } + text.length + after.sumOf { it.surface.length } != line.length) return null
+        return before + word + after
     }
 
     private fun listedKanaToday(text: String, today: String): List<Piece>? =

@@ -710,6 +710,26 @@ class ReadingsTest {
     }
 
     @Test
+    fun anOldKanaWordOnItsOwnKeepsTheMarksAroundIt() {
+        val cases = listOf(
+            Triple("さそふ。", "さそう。", "誘う"),
+            Triple("「ゆふべ」", "「ゆうべ」", "昨夜"),
+            Triple("　たまふ！", "　たまう！", "たまう")
+        )
+        cases.forEach { (text, kana, lookup) ->
+            val word = Readings.words(text, Script.JAPANESE).single()
+            assertEquals(text, kana.trim { !it.isLetterOrDigit() }, word.modern)
+            assertEquals(text, lookup, word.lookup)
+            val line = Readings.of(listOf(text), Script.JAPANESE).single()
+            assertEquals(text, kana, line.reading)
+            assertEquals(text, text, line.parts.joinToString("") { it.text })
+        }
+        listOf("こふ。", "あるひは！", "今日もめまひ。").forEach { text ->
+            assertEquals(text, emptyList<String>(), Readings.words(text, Script.JAPANESE).mapNotNull { it.modern })
+        }
+    }
+
+    @Test
     fun aWordInKanaAloneIsOldOnlyWhereItCanBe() {
         // A particle starts no word, an adjective's い was never ひ, and a verb in ひ may be a verb and 日: 降る日 is ふるひ.
         val lines = listOf("あとへはひく", "あめのふるひ", "ひふ", "あいうえお", "ふふふ", "あの日へ", "おひるのひ", "あひるのこ", "やまはふじ").map { it to emptyList<String>() } +
