@@ -393,8 +393,8 @@ class ChordSheetsTest {
     private fun jTotal(name: String) = """<a href="JavaScript:jump_1('../../../cd/$name.html');">$name</a>"""
 
     @Test
-    fun jTotalsChordsLandOnTheLetterAtTheirColumnInAFontWhereJapaneseTakesTwo() {
-        // E, six wide spaces and a space put Am 14 columns in: letter 7 of the words, as each of theirs takes two.
+    fun jTotalsChordsLandOnTheLetterAtTheirColumnInThePageFont() {
+        // E, six wide spaces and a space put Am 14.798 columns in, nearest the eighth kana start.
         val sheet = "${jTotal("E")}\u3000\u3000\u3000\u3000\u3000\u3000 ${jTotal("Am")}<br>\n  川の道を歩いていく"
         assertEquals(
             listOf(SheetLine("川の道を歩いていく", listOf(Chord(0, "E"), Chord(7, "Am")))),
@@ -517,18 +517,17 @@ class ChordSheetsTest {
     }
 
     @Test
-    fun jTotalsReferenceMarkIsTwoColumnsInBothStacks() {
-        // Drawn in Chromium on both stacks. At 1.650 columns, the first chord would land on the second a.
+    fun jTotalsReferenceMarkHasItsPageWidthInBothStacks() {
+        // Each mark is 16 px. The two lines put the chord nearest different letter starts.
         for (monospace in listOf(false, true)) {
             assertEquals(4, at("abcdefgh${jTotal("C")}<br>※※※※aaaa", monospace))
-            assertEquals(4, at("abcdef${jTotal("C")}<br>※A\u3000ああ", monospace))
+            assertEquals(3, at("abcdef${jTotal("C")}<br>※A\u3000ああ", monospace))
         }
     }
 
     @Test
-    fun jTotalsHalfwidthSoundMarksTakeAColumnEach() {
-        // Drawn in Chromium on both stacks: ﾞ and ﾟ draw as part of the kana before them, and still move the line on
-        // by a column. With no width, each chord would land one letter later, on い.
+    fun jTotalsHalfwidthSoundMarksKeepTheirMeasuredWidth() {
+        // Drawn in Chromium on both stacks: ﾞ and ﾟ draw over the prior kana and add 8 px to the line. With no width, each chord would land one letter later, on い.
         for (monospace in listOf(false, true)) {
             assertEquals(2, at("xx${jTotal("C")}<br>ｶﾞあい", monospace))
             assertEquals(2, at("xx${jTotal("C")}<br>ﾊﾟあい", monospace))
@@ -537,8 +536,8 @@ class ChordSheetsTest {
     }
 
     @Test
-    fun jTotalsGreekCyrillicAndOtherShiftJisSymbolsAreTwoColumns() {
-        // Drawn on Windows: MS Gothic has these, at two columns. Narrower, each chord would land a letter later.
+    fun jTotalsGreekCyrillicAndOtherShiftJisSymbolsKeepTheirMeasuredWidth() {
+        // MS Gothic draws these full-width glyphs at 16 px. With narrow widths the chords would land later.
         for (monospace in listOf(false, true)) {
             assertEquals(3, at("xxxxxx${jTotal("C")}<br>αβγδεあ", monospace))
             assertEquals(3, at("xxxxxx${jTotal("C")}<br>жизньあ", monospace))

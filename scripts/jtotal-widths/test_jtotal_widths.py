@@ -60,6 +60,25 @@ class SpansTest(unittest.TestCase):
 
 
 class ProbeTest(unittest.TestCase):
+    def test_reference_widths_and_trimming_use_the_selected_font_size(self):
+        self.assertIn("font-size:40px", w.page_head(w.STACK, Path(".")))
+        self.assertIn("font-size:15px", w.page_head(w.STACK, Path("."), font_size=15))
+        for command in ("measure", "trims"):
+            for size, stack, flags in ((15, w.STACK, []), (16, w.MONO_STACK, ["--mono"])):
+                with self.subTest(command=command, size=size), mock.patch.object(w, command) as probe:
+                    self.assertEqual(w.main([command, "out.json", "--fonts", ".", "--font-size", str(size), *flags]), 0)
+                    self.assertEqual(probe.call_args.args[1], stack)
+                    self.assertEqual(probe.call_args.kwargs["font_size"], size)
+
+    def test_container_passes_the_size_to_both_stacks_and_records_it(self):
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(w, "run_in_container") as run:
+            self.assertEqual(w.main(["container", folder, "--font-size", "15"]), 0)
+            self.assertEqual(run.call_count, 4)
+            for call in run.call_args_list:
+                flags = call.args[1]
+                self.assertEqual(flags[flags.index("--font-size") + 1], "15")
+            self.assertIn("15px", (Path(folder) / "SOURCE.txt").read_text(encoding="utf-8"))
+
     def test_a_letter_shift_jis_holds_is_written_as_itself(self):
         self.assertEqual(w.written(0x3042), "あ")
         self.assertEqual(w.written(0xFF9E), "ﾞ")
