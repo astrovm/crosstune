@@ -304,6 +304,27 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aWrongAccentedLatinMatchKeptByVersionFiveIsLookedForAgain() = runBlocking {
+        val directory = kotlin.io.path.createTempDirectory("lookups").toFile()
+        try {
+            val cache = LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined)
+            val track = MusicMetadata("Fake Song", "Fake Singer", lengthMs = 245_000)
+            val wrong = "wrong000000"
+            cache.put("find@5|YOUTUBE_MUSIC|TRACK|Fake Song|Fake Singer||245000", "https://music.youtube.com/watch?v=$wrong")
+            cache.save()
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow("Canción Falsa", "Fake Singer • Otro Álbum • 4:06", videoId = wrong)),
+                apple = mapOf("AR" to appleSong(track.title, track.artist, lengthMs = 245_000))
+            )
+            val matcher = ExactMatcher(fake.client(), "AR", Dispatchers.Unconfined, LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined))
+            assertNull(matcher.find(MusicService.YOUTUBE_MUSIC, track))
+            assertTrue(fake.requestedUrls.any { it.contains("music.youtube.com/youtubei/v1/search") })
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun uncertainOrMissingMatchesFallBackToSearch() {
         respond("""{"results":[{"trackName":"Beyoncé Song","artistName":"Someone Else","trackViewUrl":"https://x"}]}""")
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) })
