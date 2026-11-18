@@ -1602,6 +1602,26 @@ class MainViewModelTest {
     }
 
     @Test
+    fun anOpenStationPlayerStopsOfferingTransportWhenTheSameStationLosesState() {
+        val state = MutableStateFlow<Following?>(following(app = station.app))
+        val playback = FakePlayback().apply { appPlaying[station.app] = state }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(true, model.uiState.player?.following?.clock?.playing)
+
+        state.value = null
+        playback.unnamed.value = station.copy(reportsState = false)
+        idle()
+        assertNull(model.uiState.player?.following)
+        model.playerPlayPause()
+        assertTrue(playback.appsPlayed.isEmpty())
+        assertTrue(playback.plays.isEmpty())
+        assertEquals(true, model.uiState.player?.stationOnly)
+        assertEquals(station.played.title, model.uiState.player?.song?.title)
+    }
+
+    @Test
     fun sameNamedStationsFollowTheNewAppAndOnlyWhenItReportsState() {
         val other = station.copy(app = "com.example.radio", label = "Other Radio")
         val playback = FakePlayback().apply {

@@ -2049,13 +2049,14 @@ internal class MainViewModel(
 
     /**
      * Opens the player on [unnamed], what an app plays with no song named, e.g. the next station or a file
-     * with no tags, when the app went on to it from [song] once it [played], as it would to the next song;
-     * not while a song is [playing], or [song] is still [following]. Only in the player's own app: what
-     * another app plays is no next song of this one.
+     * with no tags, when the app went on to it from [song] once it [played]. What reports no state has
+     * no transport to follow, even if it has the same title or another session can still be [following].
+     * Only in the player's own app, and only when no named song is [playing].
      */
     private fun tookUpUnnamed(unnamed: Unnamed?, playing: Heard.Song?, following: Following?, played: Boolean, song: MusicMetadata): Boolean {
         val app = uiState.player?.let { it.following?.appPackage ?: it.app }
-        val next = unnamed?.takeIf { playing == null && following == null && played && uiState.practice == null && it.played.copy(artworkUrl = song.artworkUrl) != song && it.app == app } ?: return false
+        val next = unnamed?.takeIf { playing == null && played && uiState.practice == null && it.app == app } ?: return false
+        if (next.reportsState && (following != null || next.played.copy(artworkUrl = song.artworkUrl) == song)) return false
         openPlayer(next.played, next.app, played = true, unnamed = next)
         return true
     }
