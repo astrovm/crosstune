@@ -909,6 +909,22 @@ class ReadingsTest {
     }
 
     @Test
+    fun repeatedOldKanaPairsSplitTheDictionaryPieceBetweenThem() {
+        fun checkReading() {
+            val text = "けふけふ"
+            val reading = Readings.of(listOf(text), Script.JAPANESE).single()
+            assertEquals("きょうきょう", reading.reading)
+            val today = Word("けふ", "きょう", "kyoo", "きょう", "kyou", by = listOf(Reader.IPADIC), modern = "きょう")
+            assertEquals(listOf(today, today), Readings.words(text, Script.JAPANESE))
+            // A longer modern word at the pair's boundary must stay whole.
+            assertEquals(listOf("け", "ふたり"), Readings.words("けふたり", Script.JAPANESE).map { it.text })
+            assertNull(Readings.words("けふたり", Script.JAPANESE).firstNotNullOfOrNull(Word::modern))
+        }
+        checkReading()
+        TestUniDic.reading(::checkReading)
+    }
+
+    @Test
     fun aWordCarriesItsModernSpellingOnlyWhenItIsWrittenInOldKana() {
         assertNull(Readings.words("夜空に、分かった!", Script.JAPANESE).firstNotNullOfOrNull { it.modern })
         // The shipped dictionary says 思ひ出 as it's sung. It splits the old ending off 恋ひ and 住まゐ, which is said with its word.
