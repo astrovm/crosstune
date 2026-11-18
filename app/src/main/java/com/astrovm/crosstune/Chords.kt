@@ -828,25 +828,42 @@ internal object ChordSheets {
 
     /** When each chord's letter is sung. Use the known times before estimating the last part. */
     fun timesOf(line: LyricLine, chords: List<Chord>, nextMs: Long?): List<Long> {
-        val endMs = nextMs ?: line.endMs
+        val endMs = knownEnd(line, nextMs)
         val lastText = line.words.lastOrNull()?.text ?: line.text
         val estimate = if (endMs == null) estimatedOffsets(lastText) else longArrayOf()
-        return chords.map { timeOf(line, it.at, endMs, estimate) }
+        if (line.words.isEmpty()) {
+            return chords.map { atLetter(line.timeMs, endMs, line.text.length, it.at, estimate) }
+        }
+        val ends = IntArray(line.words.size)
+        var length = 0
+        line.words.forEachIndexed { index, word ->
+            length += word.text.length
+            ends[index] = length
+        }
+        return chords.map { chord ->
+            val index = wordAt(ends, chord.at)
+            val word = line.words[index]
+            val from = if (index > 0) ends[index - 1] else 0
+            val wordEnd = line.words.getOrNull(index + 1)?.timeMs ?: endMs
+            atLetter(word.timeMs, wordEnd, word.text.length, chord.at - from, estimate)
+        }
     }
 
-    private fun timeOf(line: LyricLine, at: Int, endMs: Long?, estimate: LongArray): Long {
-        if (line.words.isNotEmpty()) {
-            var from = 0
-            line.words.forEachIndexed { index, word ->
-                val to = from + word.text.length
-                if (at < to || index == line.words.lastIndex) {
-                    val wordEnd = line.words.getOrNull(index + 1)?.timeMs ?: endMs
-                    return atLetter(word.timeMs, wordEnd, word.text.length, at - from, estimate)
-                }
-                from = to
-            }
+    /** The earlier usable mark, before the gap to the next line if the service gives an end. */
+    fun knownEnd(line: LyricLine, nextMs: Long?): Long? {
+        val start = line.words.lastOrNull()?.timeMs ?: line.timeMs
+        return listOfNotNull(line.endMs, nextMs).filter { it >= start }.minOrNull()
+    }
+
+    /** First word ending after the chord, or the last word for a chord past the text. */
+    private fun wordAt(ends: IntArray, at: Int): Int {
+        var first = 0
+        var last = ends.lastIndex
+        while (first < last) {
+            val middle = first + (last - first) / 2
+            if (at < ends[middle]) last = middle else first = middle + 1
         }
-        return atLetter(line.timeMs, endMs, line.text.length, at, estimate)
+        return first
     }
 
     private fun atLetter(startMs: Long, endMs: Long?, length: Int, at: Int, estimate: LongArray): Long {

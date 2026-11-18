@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -311,6 +312,36 @@ class ChordSheetsTest {
             assertEquals(10_280L, timeOf(LyricLine(10_000, parts), parts.length, null))
             assertEquals(10_000L, timeOf(LyricLine(10_000, parts), 1, null))
         }
+    }
+
+    @Test
+    fun aChordUsesTheKnownEndWhenTheNextLineStartsMuchLater() {
+        val line = SyncedLyrics.parseWordByWord("[10000,4000](10000,2000,0)前(12000,2000,0)後半").single()
+        assertEquals(13_000L, timeOf(line, 2, 30_000))
+    }
+
+    @Test
+    fun aBadReportedEndDoesNotMakeChordsGoBackwards() {
+        val line = SyncedLyrics.parseWordByWord("[10000,1000](10000,2000,0)前(12000,2000,0)後半").single()
+        assertEquals(12_280L, timeOf(line, 2, null))
+        assertEquals(13_000L, timeOf(line, 2, 14_000))
+    }
+
+    @Test
+    fun buildingAChordScheduleReadsEachTimedWordOnlyAFewTimes() {
+        val count = 4_096
+        var reads = 0
+        val words = object : AbstractList<TimedWord>() {
+            override val size = count
+            override fun get(index: Int): TimedWord {
+                reads++
+                return TimedWord(index * 280L, "歌")
+            }
+        }
+        val line = LyricLine(0, "歌".repeat(count), words)
+        val times = ChordSheets.timesOf(line, (0 until count).map { Chord(it, "G") }, count * 280L)
+        assertEquals((0 until count).map { it * 280L }, times)
+        assertTrue("Read $reads words for $count chords", reads <= count * 4)
     }
 
     @Test

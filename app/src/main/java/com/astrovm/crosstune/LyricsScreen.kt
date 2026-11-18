@@ -1716,8 +1716,7 @@ private fun TimedLyrics(
                     line.text,
                     words = line.words,
                     timeMs = line.timeMs,
-                    // Use the line's end when there is no sung line after it.
-                    nextMs = lines.getOrNull(index + 1)?.takeIf { it.heard }?.timeMs ?: line.endMs,
+                    nextMs = ChordSheets.knownEnd(line, lines.getOrNull(index + 1)?.takeIf { it.heard }?.timeMs),
                     chords = chords.getOrNull(index),
                     following = following,
                     place = following?.let { index.compareTo(active) },
