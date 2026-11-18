@@ -570,6 +570,49 @@ class UnsungTest {
     }
 
     @Test
+    fun heldWordsGiveTheFourthVoiceWindowTimeToFinish() {
+        markedOnLrclibWithWords()
+        val window = SingingListener.SECONDS * 1_000L + 6_000
+        singing.answers = listOf(music)
+        singing.before = { kotlinx.coroutines.delay(window) }
+        val beforeFour = openFourthVoiceWindow(window)
+        passes(MainViewModel.HELD_MS - beforeFour + 1_000)
+        assertFalse("The fourth window is still decoding", showsWords())
+        passes(window)
+        assertTrue(TimingLog.lastMinute().contains("held words, the listen: NO_VOICE"))
+        assertFalse(showsWords())
+    }
+
+    @Test
+    fun aVoiceWindowThatNeverFinishesStillLetsTheHeldWordsShow() {
+        markedOnLrclibWithWords()
+        val extra = 6_000L
+        val window = SingingListener.SECONDS * 1_000L + extra
+        singing.answers = listOf(music)
+        singing.before = {
+            if (singing.hears == MainViewModel.VOICE_TRIES) awaitCancellation()
+            kotlinx.coroutines.delay(window)
+        }
+        val beforeFour = openFourthVoiceWindow(window)
+        passes(MainViewModel.HELD_MS - beforeFour + 1_000)
+        assertFalse(showsWords())
+        passes(extra * (MainViewModel.VOICE_TRIES - 1))
+        assertTrue(showsWords())
+        assertTrue(TimingLog.lastMinute().contains("held words, the listen: TIMED_OUT"))
+    }
+
+    private fun openFourthVoiceWindow(window: Long): Long {
+        openLyrics(shown = R.string.lyrics_instrumental)
+        waitUntil { singing.hears == 1 }
+        repeat(MainViewModel.VOICE_TRIES - 1) {
+            passes(window)
+            passes(MainViewModel.VOICE_PAUSE_MS)
+        }
+        waitUntil { singing.hears == MainViewModel.VOICE_TRIES }
+        return (MainViewModel.VOICE_TRIES - 1) * (window + MainViewModel.VOICE_PAUSE_MS)
+    }
+
+    @Test
     fun wordsHeldForAMarkShowOnceAListenTakesLongerThanOneDoes() {
         // Paused as it's heard, and not played again: no listen settles it, so the words show once one would have.
         markedOnLrclibWithWords()
