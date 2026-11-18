@@ -145,9 +145,9 @@ def table_header(date, version):
 
 
 def old_kana(words):
-    """The words in kana a word in old kana may be today, {kana: lookup}, and the words in kana with a ひ or ふ after their first kana.
+    """The words in kana a word in old kana may be today, {kana: lookup}, and the words in kana with ひ, ふ or ほ after their first kana.
 
-    The first are JMdict's common words with an い or う after their first kana, おもいで, but adjectives, each looked up as its usual form,
+    The first are JMdict's common words with い, う or お after their first kana, おもいで, but adjectives, each looked up as its usual form,
     思い出, or as its kana when it's usually written so or JMdict has more than one common word for it. The second are
     every word JMdict has that's written so today, おひる or くふう, not archaic: written there, it's no old spelling.
     """
@@ -161,11 +161,11 @@ def old_kana(words):
             text = kana["text"]
             if set(kana["tags"]) & ODD_KANA or not text or not all("ぁ" <= c <= "ゖ" for c in text):
                 continue
-            if any(c in "ひふ" for c in text[1:]) and not archaic:
+            if any(c in "ひふほ" for c in text[1:]) and not archaic:
                 modern.add(text)
             # An adjective's い was never ひ, 古い is ふるし: ふるひ is 降る日.
             adjective = any("adj-i" in sense.get("partOfSpeech", []) for sense in senses)
-            if kana.get("common") and any(c in "いう" for c in text[1:]) and not adjective:
+            if kana.get("common") and any(c in "いうお" for c in text[1:]) and not adjective:
                 forms = [k["text"] for k in entry["kanji"] if not set(k["tags"]) & ODD_FORMS
                          and ("*" in kana["appliesToKanji"] or k["text"] in kana["appliesToKanji"])]
                 common = [k["text"] for k in entry["kanji"] if k.get("common") and k["text"] in forms]
@@ -178,8 +178,8 @@ def old_kana_header(date, version):
     return [f"# JMdict {date}, by the Electronic Dictionary Research and Development Group, {JMDICT_URL}",
             f"# through jmdict-simplified {version}. Licensed under CC BY-SA 4.0, {CC_BY_SA_URL}",
             f"# as the Group's licence asks, {EDRDG_LICENCE_URL}",
-            "# Changed: only the common words in kana with い or う after their first kana, each with how it's looked up,",
-            "# then the words in kana with ひ or ふ after their first kana, which are no old spelling.",
+            "# Changed: only the common words in kana with い, う or お after their first kana, each with how it's looked up,",
+            "# then the words in kana with ひ, ふ or ほ after their first kana, which are no old spelling.",
             "# Made by scripts/readingsaudit/readingsaudit.py oldkana."]
 
 

@@ -127,6 +127,18 @@ class OldKana(unittest.TestCase):
         ]
         self.assertEqual(["おひる", "くふう"], readingsaudit.old_kana(words)[1])
 
+    def test_includes_o_readings_and_protects_modern_ho(self):
+        words = [
+            word([("氷", [], True)], [("こおり", [], True, ["*"])], [(["n"], [])]),
+            word([("徒歩", [], True)], [("とほ", [], False, ["*"])], [(["n"], [])]),
+            word([], [("けほ", [], False, [])], [(["n"], ["arch"])]),
+        ]
+        today, modern = readingsaudit.old_kana(words)
+        with self.subTest("modern reading"):
+            self.assertEqual({"こおり": "氷"}, today)
+        with self.subTest("current spelling"):
+            self.assertEqual(["とほ"], modern)
+
     def test_writes_the_table_with_where_it_comes_from(self):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)

@@ -99,9 +99,9 @@ internal object Readings {
      * and the dictionary's common misreadings, as 君 after a pause; 4 for counters, minutes, classical
      * verbs, the nouns IPADIC takes for suffixes, and the words JMdict reads one way only; 5 for words in old kana
      * alone that IPADIC splits, とりあふ and おもひで, modern words in kana that only looked old, さいふ said as written, 何分 as なんぷん,
-     * 洒落る, and numbers that start a longer word, 一重項.
+     * 洒落る, and numbers that start a longer word, 一重項. 6 for an old ほ said お in kana alone.
      */
-    const val VERSION = 5
+    const val VERSION = 6
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -247,33 +247,38 @@ internal object Readings {
 
     /**
      * A [word] in old kana written in kana alone, at [at] in [line], that IPADIC splits into words, とり and あふ, あ and ひたい,
-     * おも and ひで, read as the word it is today: each ひ and ふ after its first kana said い and う, as the old endings of verbs
-     * and the nouns made of them are, とりあう, あいたい, おもいで. It counts when IPADIC reads that as one word, with each
-     * change inside it or ending a verb that ends in う today, as the old verbs in ふ do; or when it is a common word in kana
-     * JMdict has, as IPADIC knows おもいで only in kanji. Never where a word written with that ひ or ふ today is, おひる or くふう.
+     * おも and ひで, read as the word it is today. Inside the word, ひ, ふ and ほ can be said い, う and お, as in
+     * とりあう, おもいで and おおぜい. It counts when IPADIC reads the result as one word or JMdict lists it as common.
+     * A longer modern word with those kana, as in おひる or くふう, protects them.
      */
     private fun kanaToday(word: List<Piece>, line: String, at: Int): List<Piece>? {
         val text = word.joinToString("") { it.surface }
         val changed = text.indices.filter { it > 0 && text[it] in KANA_SAID }
         if (word.size < 2 || changed.isEmpty() || !Furigana.inOldKana(text)) return null
         // A word starts with no particle: は and ひく in あとへはひく are no はいく.
-        if (word[0].kind in GRAMMAR || grouped(word).size < 2 || changed.any { writtenToday(line, at + it) }) return null
+        if (word[0].kind in GRAMMAR || grouped(word).size < 2) return null
+        val changesHo = changed.any { text[it] == 'ほ' }
+        // A shorter word inside an old ほ spelling can cross a split, as 徒歩 in とほい.
+        val place = (at until at + text.length).takeIf { changesHo }
+        if ((changesHo && text in oldKana.modern) || changed.any { writtenToday(line, at + it, place) }) return null
         val today = text.mapIndexed { i, c -> if (i in changed) KANA_SAID.getValue(c) else c }.joinToString("")
         return knownToday(text, today, changed)
             ?: oldKana.today[today]?.let { lookup -> listOf(Piece(text, today, "名詞", "一般", lookup, today, reader = Reader.JMDICT, today = today)) }
     }
 
-    /** How the old endings ひ and ふ are said in a word in kana alone. */
-    private val KANA_SAID = mapOf('ひ' to 'い', 'ふ' to 'う')
+    /** How ひ, ふ and ほ are said inside a word in old kana. */
+    private val KANA_SAID = mapOf('ひ' to 'い', 'ふ' to 'う', 'ほ' to 'お')
 
     /**
      * Whether the kana at [at] in [line] is in a word written so today, おひる or くふう, as JMdict has them, that reaches
      * out of [word]: a longer word than the one the old kana would be in, かいひ more than いひ. Any such word, with no [word].
      */
-    private fun writtenToday(line: String, at: Int, word: IntRange? = null): Boolean {
-        val longest = oldKana.longest
+    private fun writtenToday(line: String, at: Int, word: IntRange? = null, includeHo: Boolean = true): Boolean {
+        val known = oldKana
+        val modern = if (includeHo) known.modern else known.modernWithHiOrFu
+        val longest = known.longest
         return (maxOf(0, at - longest + 1)..at).any { from ->
-            (at + 1..minOf(line.length, from + longest)).any { to -> line.substring(from, to) in oldKana.modern && (word == null || from < word.first || to > word.last + 1) }
+            (at + 1..minOf(line.length, from + longest)).any { to -> line.substring(from, to) in modern && (word == null || from < word.first || to > word.last + 1) }
         }
     }
 
@@ -301,8 +306,9 @@ internal object Readings {
     /** Held while [listed] or [oldKana] is read from its file, so two threads that ask at once read it once. */
     private val tables = Any()
 
-    /** Words in kana from JMdict: those a word in old kana alone may be [today], each with the form it's looked up by, and those written with a ひ or ふ today, [modern]. */
+    /** Words in kana from JMdict: those a word in old kana alone may be [today], each with the form it's looked up by, and those written with ひ, ふ or ほ today, [modern]. */
     internal class OldKana(val today: Map<String, String>, val modern: Set<String>) {
+        val modernWithHiOrFu = modern.filter { word -> (1..word.lastIndex).any { word[it] in "ひふ" } }.toSet()
         val longest = modern.maxOf { it.length }
     }
 
@@ -1242,13 +1248,24 @@ internal object Readings {
         var at = 0
         return pieces.map { piece ->
             val place = at until (at + piece.surface.length).also { at = it }
-            if (piece.said != piece.kana && inLongerWord(piece.surface, line, place)) piece.reading(piece.kana, piece.kana) else piece
+            if (piece.said != piece.kana && inLongerWord(piece.surface, line, place, includeHo = saysHoAsO(piece))) {
+                piece.reading(piece.kana, piece.kana)
+            } else {
+                piece
+            }
         }
     }
 
+    /** Only a ほ said お needs the new guard for its sound. A long vowel in ほう is still long. */
+    private fun saysHoAsO(piece: Piece): Boolean {
+        if ('ほ' !in piece.surface) return false
+        val said = Furigana.saidAsSpelled(piece.surface, piece.said)
+        return said.length == piece.surface.length && (1..said.lastIndex).any { piece.surface[it] == 'ほ' && said[it] == 'お' }
+    }
+
     /** Whether a word in old kana alone, [text] at [place] in [line], is inside a longer word written so today: いふ in さいふ is 財布, whatever the dictionaries split. */
-    private fun inLongerWord(text: String, line: String, place: IntRange): Boolean =
-        Furigana.inOldKana(text) && place.any { it > place.first && line[it] in "ひふほ" && writtenToday(line, it, place) }
+    private fun inLongerWord(text: String, line: String, place: IntRange, includeHo: Boolean = true): Boolean =
+        Furigana.inOldKana(text) && place.any { it > place.first && line[it] in "ひふほ" && writtenToday(line, it, place, includeHo) }
 
     /** The lookup of each word of [line] spelled today, by where it starts in the line. */
     private fun wordsAt(line: String): List<Pair<Int, String>> {
