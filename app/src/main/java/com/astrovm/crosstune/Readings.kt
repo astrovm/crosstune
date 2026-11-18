@@ -99,9 +99,9 @@ internal object Readings {
      * and the dictionary's common misreadings, as 君 after a pause; 4 for counters, minutes, classical
      * verbs, the nouns IPADIC takes for suffixes, and the words JMdict reads one way only; 5 for words in old kana
      * alone that IPADIC splits, とりあふ and おもひで, modern words in kana that only looked old, さいふ said as written, 何分 as なんぷん,
-     * 洒落る, and numbers that start a longer word, 一重項.
+     * 洒落る, and numbers that start a longer word, 一重項. 6 for old words on their own, such as ゆふぐれ.
      */
-    const val VERSION = 5
+    const val VERSION = 6
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -177,7 +177,9 @@ internal object Readings {
     private fun pieces(line: String): List<Piece> {
         val text = line.mapIndexed { at, c -> NEW_FORMS[c] ?: KANJI_DIGITS[c]?.takeIf { counts(line, at) } ?: c }.joinToString("")
         val known = okurigana(line, text, ipadicPieces(line, text))
-        return saidAsWritten(modernPieces(uniDic?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known))
+        val other = uniDic
+        val read = saidAsWritten(modernPieces(other?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known))
+        return if (other == null) wholeOldKanaWord(line, read) ?: read else read
     }
 
     /** [line] as IPADIC splits [text], the line with its kanji made the dictionary's. */
@@ -259,9 +261,28 @@ internal object Readings {
         // A word starts with no particle: は and ひく in あとへはひく are no はいく.
         if (word[0].kind in GRAMMAR || grouped(word).size < 2 || changed.any { writtenToday(line, at + it) }) return null
         val today = text.mapIndexed { i, c -> if (i in changed) KANA_SAID.getValue(c) else c }.joinToString("")
-        return knownToday(text, today, changed)
-            ?: oldKana.today[today]?.let { lookup -> listOf(Piece(text, today, "名詞", "一般", lookup, today, reader = Reader.JMDICT, today = today)) }
+        return knownToday(text, today, changed) ?: listedKanaToday(text, today)
     }
+
+    /**
+     * On a line by itself, an old spelling can look like several modern words to IPADIC, such as まひ in めまひ.
+     * Use the whole word only when a dictionary knows its modern spelling. Keep words already read another way,
+     * and a known modern word with or without a particle, such as あるひは (ある日 and は).
+     */
+    private fun wholeOldKanaWord(text: String, read: List<Piece>): List<Piece>? {
+        if (!Furigana.inOldKana(text)) return null
+        val changed = text.indices.filter { it > 0 && text[it] in KANA_SAID }
+        if (changed.isEmpty() || text in oldKana.modern) return null
+        if (text.last() in "はをがものにへとで" && text.dropLast(1) in oldKana.modern) return null
+        if (read.any { piece ->
+                piece.today != null || Furigana.modernKana(piece.surface, listOf(Furigana.saidAsSpelled(piece.surface, piece.said))) != null
+            }) return null
+        val today = text.mapIndexed { i, kana -> if (i in changed) KANA_SAID.getValue(kana) else kana }.joinToString("")
+        return listedKanaToday(text, today) ?: knownToday(text, today, changed, singleToken = true)
+    }
+
+    private fun listedKanaToday(text: String, today: String): List<Piece>? =
+        oldKana.today[today]?.let { lookup -> listOf(Piece(text, today, "名詞", "一般", lookup, today, reader = Reader.JMDICT, today = today)) }
 
     /** How the old endings ひ and ふ are said in a word in kana alone. */
     private val KANA_SAID = mapOf('ひ' to 'い', 'ふ' to 'う')
@@ -282,8 +303,9 @@ internal object Readings {
      * inside a word, or ending a verb in う, as the old verbs in ふ do, or a noun, as 割合ひ does. Never ending an adjective,
      * whose い was never ひ: ふるひ is 降る日, not 古い. And no name, which IPADIC makes of kana it can't read otherwise.
      */
-    private fun knownToday(text: String, today: String, changed: List<Int>): List<Piece>? {
+    private fun knownToday(text: String, today: String, changed: List<Int>, singleToken: Boolean = false): List<Piece>? {
         val tokens = tokenizer.tokenize(today)
+        if (singleToken && tokens.size != 1) return null
         if (tokens.any { !it.isKnown || it.reading == "*" }) return null
         if (tokens.any { it.position in changed || it.partOfSpeechLevel2 == "固有名詞" }) return null
         val endings = changed.all { at ->
