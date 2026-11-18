@@ -3123,12 +3123,13 @@ internal class MainViewModel(
     /** [heard]'s held words, by what the listen came to, [listen]: shown unless [hidesHeldWords] says. Whether they show. */
     private suspend fun settle(heard: Unsung, listen: Listen): Boolean {
         val words = heard.held ?: return false
-        unsung = null
         TimingLog.note("held words, the listen: $listen")
         if (hidesHeldWords(listen)) {
+            unsung = heard
             uiState = uiState.copy(lyricsInstrumental = true)
             return false
         }
+        unsung = null
         showWords(heard.song, words)
         return true
     }
@@ -3150,7 +3151,12 @@ internal class MainViewModel(
     private fun hearVoice() {
         val hearing = singing ?: return
         val waiting = unsung ?: return
-        if (!mayHearVoice(waiting.song)) return
+        if (!mayHearVoice(waiting.song)) {
+            // An active recheck for hidden words stops as soon as it cannot hear their song.
+            if (waiting.tries == VOICE_TRIES) voiceJob?.cancel()
+            return
+        }
+        if (voiceJob?.isActive == true) return
         voiceJob = viewModelScope.launch {
             byEarLetsGo()
             var heard = waiting
@@ -3164,7 +3170,19 @@ internal class MainViewModel(
                 heard = heard.copy(tries = heard.tries + 1)
                 unsung = heard
             }
-            heardOut(heard, Listen.NO_VOICE)
+            if (waiting.tries < VOICE_TRIES) heardOut(heard, Listen.NO_VOICE)
+            if (heard.held != null) hearLater(hearing, heard)
+        }
+    }
+
+    /** Hidden words can still belong to a song that starts singing later, e.g. after a long intro. */
+    private suspend fun hearLater(hearing: SingingHearing, heard: Unsung) {
+        while (true) {
+            delay(VOICE_PAUSE_MS)
+            if (unsung !== heard || !mayHearVoice(heard.song)) return
+            val sung = withTimeoutOrNull(HELD_MS) { hearing.hear(null, null) } ?: return
+            if (unsung !== heard || !mayHearVoice(heard.song)) return
+            if (sung.sings) return heardOut(heard, Listen.VOICE)
         }
     }
 
@@ -3192,7 +3210,7 @@ internal class MainViewModel(
 
     /** Whether [song], with no words found, may be heard for a voice now: shown, played by a music app on the phone, Crosstune in sight. */
     private fun mayHearVoice(song: MusicMetadata): Boolean {
-        if (voiceJob?.isActive == true || shazamLeads || nextPaused) return false
+        if (shazamLeads || nextPaused) return false
         if (!mayCalibrate() || uiState.lyricsFor != song) return false
         return uiState.following?.let { it.app != null && it.clock.playing } == true
     }
