@@ -841,6 +841,15 @@ class ReadingsTest {
     }
 
     @Test
+    fun aCombiningMarkAttachedToAnOldKanaPieceKeepsItsText() {
+        // IPADIC keeps the leading combining dakuten in the word's first piece.
+        val text = "\u3099さそふ"
+        val line = Readings.of(listOf(text), Script.JAPANESE).single()
+        assertEquals(text, line.parts.joinToString("") { it.text })
+        assertEquals(emptyList<String>(), Readings.words(text, Script.JAPANESE).mapNotNull { it.modern })
+    }
+
+    @Test
     fun aWordInKanaAloneIsOldOnlyWhereItCanBe() {
         // A particle starts no word, an adjective's い was never ひ, and a verb in ひ may be a verb and 日: 降る日 is ふるひ.
         val lines = listOf("あとへはひく", "あめのふるひ", "ひふ", "あいうえお", "ふふふ", "あの日へ", "おひるのひ", "あひるのこ", "やまはふじ").map { it to emptyList<String>() } +
