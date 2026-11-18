@@ -319,6 +319,9 @@ internal interface PlaybackSource {
     /** A song the first playing app names with an artist of its own, ready for song recognition. */
     fun songForRecognition(): Heard.Song?
 
+    /** Whether the first session plays on the phone without naming a song for recognition. */
+    fun playsHereWithoutSong(): Boolean
+
     /** The matching recording, including one paused in its music app. */
     fun recording(song: MusicMetadata): MusicMetadata?
 
@@ -810,6 +813,10 @@ internal class MediaSessionPlayback(
     override fun nowPlaying(): Heard.Song? = (whatPlays() as? WhatPlays.Named)?.song
 
     override fun songForRecognition(): Heard.Song? = firstPlayingApp()?.let { playing(it, forRecognition = true) }
+
+    override fun playsHereWithoutSong(): Boolean = firstPlayingApp()?.let {
+        it.place() == Place.PHONE && playing(it, forRecognition = true) == null
+    } == true
 
     override fun playingUnnamed(): Unnamed? = (whatPlays() as? WhatPlays.Nameless)?.playing
 

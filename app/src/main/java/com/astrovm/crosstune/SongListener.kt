@@ -391,9 +391,16 @@ internal class PlayingFirst(
 
     override suspend fun listen(acceptPlaying: suspend (Heard.Song) -> Boolean): Heard {
         val playing = playback.songForRecognition() ?: return hearing.listen()
-        if (!acceptPlaying(playing)) return hearing.listen()
-        if (playing.clock != null) return playing
-        return listenToPlaying() as? Heard.Song ?: playing
+        val room = if (playing.clock == null) {
+            // An audio match names the song and finds its clock before we need the player's title.
+            val phone = played.listen()
+            if (phone is Heard.Song) return phone
+            if (phone == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else null
+        } else {
+            null
+        }
+        (room?.let(::roomForPlaying) as? Heard.Song)?.let { return it }
+        return if (acceptPlaying(playing)) playing else room ?: hearing.listen()
     }
 
     override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
@@ -401,6 +408,10 @@ internal class PlayingFirst(
         if (!byMicrophone || heard != Heard.Failed(AppError.MICROPHONE)) return heard
         // Through headphones or muted, the microphone hears nothing of it: no more use than none at all.
         val room = (if (whileAloud) aloud() else hearing.listen()) ?: return heard
+        return roomForPlaying(room)
+    }
+
+    private fun roomForPlaying(room: Heard): Heard {
         // The microphone hears the room too: another song playing there isn't the one the phone plays.
         // With no song named to tell, the one heard may be either.
         val playing = playback.songForRecognition()?.metadata ?: return (room as? Heard.Song)?.copy(inRoom = true) ?: room

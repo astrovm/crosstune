@@ -1966,6 +1966,7 @@ class PlaybackTest {
             ShadowMediaSessionManager.reset()
             shadowOf(sessions).addController(elsewhere(player(app, "Desktop player", "Fake Streamer - Twitch", null)))
             assertEquals("Twitch", playback.nowPlaying()?.metadata?.title)
+            assertFalse(playback.playsHereWithoutSong())
             assertEquals(app, nearby, runBlocking { listener.listen() })
         }
     }
@@ -1976,6 +1977,7 @@ class PlaybackTest {
         sounding()
         shadowOf(sessions).addController(player("com.example.browser", "Browser", "Fake Show - Episode 12", "<unknown>"))
         assertEquals("Episode 12", playback.nowPlaying()?.metadata?.title)
+        assertTrue(playback.playsHereWithoutSong())
         val nearby = Heard.Song(MusicMetadata("Demo", "Fake Band"), null)
         val listener = PlayingFirst(playback, SongHearing { nearby }, SongHearing { Heard.Failed(AppError.MICROPHONE) })
         assertEquals(nearby, runBlocking { listener.listen() })

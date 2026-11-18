@@ -1035,7 +1035,7 @@ internal class MainViewModel(
         // Its words are of what an app plays with no song named, heard from the phone's own sound first, as the
         // microphone hears the room too; with no app playing, one on a speaker it's cast to, or to name a song, the
         // microphone hears what's nearby.
-        val unnamed = lyrics && liveUnnamed?.away == false
+        val unnamed = lyrics && playback?.playsHereWithoutSong() == true
         job = viewModelScope.launch {
             byEar?.cancelAndJoin()
             var checked: CheckedPlayerSong? = null

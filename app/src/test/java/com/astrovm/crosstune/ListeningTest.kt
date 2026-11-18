@@ -322,11 +322,53 @@ class ListeningTest {
         assertEquals(0, shazamRequests())
     }
 
-    private fun playerSongForCatalog(song: MusicMetadata) {
+    @Test
+    fun aVideoNamedFromAudioOnlyChecksTheCatalogOnce() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls", artworkUrl = "https://example.com/iris.jpg")
+        playerSongForCatalog(playing, hasClock = false)
+        MainActivity.hearingFactory = {
+            SongHearing { Heard.Song(playing, null, 5_000, SystemClock.elapsedRealtime(), matchId = "iris") }
+        }
+        fake.handler = { request -> FakeSpotify.html(request, "Unavailable", code = 503) }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitUntil(TIMEOUT_MS) { controllerModel().destinationUrl() != null }
+
+        assertEquals(playing, controllerModel().uiState.result)
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://itunes.apple.com/search?") })
+    }
+
+    @Test
+    fun lyricsHearPhoneAudioWhenTheLocalPlayerOnlySuppliesAStreamTitle() {
+        val phoneAudio = FakeMicrophone()
+        val cleanSound = MainActivity.cleanSoundFactory
+        MainActivity.cleanSoundFactory = { phoneAudio }
+        playerSongForCatalog(MusicMetadata("Stream", "Fake Host"), artistReadFromTitle = true)
+        allowMicrophone()
+        phoneAudio.play(0.1)
+        phoneAudio.play(1.0)
+        phoneAudio.end()
+        microphone.end()
+        try {
+            launch()
+            click(string(R.string.tile_lyrics_label))
+            waitUntil(TIMEOUT_MS) { controllerModel().uiState.let { it.lyricsFor?.title == "Iris" || it.error != null } }
+            assertEquals(2, phoneAudio.opened)
+            assertEquals(0, microphone.opened)
+            assertEquals("Iris", controllerModel().uiState.lyricsFor?.title)
+        } finally {
+            MainActivity.cleanSoundFactory = cleanSound
+            phoneAudio.end()
+        }
+    }
+
+    private fun playerSongForCatalog(song: MusicMetadata, hasClock: Boolean = true, artistReadFromTitle: Boolean = false) {
         prefs().edit().putString("default_target", "APPLE_MUSIC").putBoolean("links_in_crosstune", true).commit()
         MainActivity.playbackFactory = { FakePlayback().apply {
             access = true
-            onThePhone = Heard.Song(song, null, 42_000, SystemClock.elapsedRealtime(), app = "com.example.player")
+            onThePhone = Heard.Song(song, null, 42_000L.takeIf { hasClock }, SystemClock.elapsedRealtime(), app = "com.example.player")
+            this.artistReadFromTitle = artistReadFromTitle
             // Keep the direct session read available while holding the bar's lyrics prefetch.
             nowPlayingLate.value = true
         } }
