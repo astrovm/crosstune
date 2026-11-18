@@ -586,7 +586,10 @@ internal class LyricsFinder(
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
-        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asKept(words, metadata), final = !provisional) } }
+        val kept = cache?.get(cacheKey(metadata))?.let(::fromCache)
+            ?: cache?.get(cacheKey(metadata, BEFORE_NETEASE_ARTIST_CHECK))?.let(::fromCache)
+                ?.takeUnless { (words) -> words.source?.startsWith(NETEASE) == true }
+        kept?.let { (words, provisional) -> return FirstLook(asKept(words, metadata), final = !provisional) }
         val lookup = Answers()
         val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { withContext(lookup + matching) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs).orNamedInTitle(metadata, timeoutMs) } } ?: Best(Lyrics.Unavailable)
         val found = (best as? Lyrics.Found)?.let { cleaned(it, metadata, lookup.copies.toList()) } ?: best
@@ -626,7 +629,9 @@ internal class LyricsFinder(
      * song kept offline, played from an app that names its recording otherwise, still has its words.
      */
     private suspend fun keptUnderName(metadata: MusicMetadata): Lyrics.Found? {
-        val names = listOf(CACHE_VERSION, 16, 15).map { version -> "$version\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}" }
+        val names = listOf(CACHE_VERSION, BEFORE_NETEASE_ARTIST_CHECK, 16, 15).map { version ->
+            "$version\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
+        }
         return cache?.entries()?.lastOrNull { (key) -> names.any { name -> key == name || key.startsWith("$name\u0000") } }?.let { (_, kept) -> fromCache(kept)?.first }
     }
 
@@ -682,7 +687,7 @@ internal class LyricsFinder(
      * The song, whatever the case or spacing of its name. Words kept by versions that didn't ask
      * YouTube Music or check timings may be worse than what's there now, so they're asked for again.
      */
-    private fun cacheKey(metadata: MusicMetadata) = "$CACHE_VERSION\u0000${RecordingKey.of(metadata)}"
+    private fun cacheKey(metadata: MusicMetadata, version: Int = CACHE_VERSION) = "$version\u0000${RecordingKey.of(metadata)}"
 
     /**
      * [found] timed as a well-timed copy of the song on LRCLIB times the same words, which may be
@@ -1370,11 +1375,9 @@ internal class LyricsFinder(
             val result = (fromNetEaseOnce(search.toString()) as? JSONObject)?.optJSONObject("result")
                 ?: return@withTimeoutOrNull Lyrics.Unavailable
             val songs = result.optJSONArray("songs") ?: return@withTimeoutOrNull Lyrics.None
+            val credits = listOf(SongNames.withGuests(metadata.artist, metadata.title), alsoBy).distinct()
             val matching = (0 until songs.length()).mapNotNull { songs.optJSONObject(it) }.filter { song ->
                 val artists = song.optJSONArray("artists")?.let { list -> (0 until list.length()).map { list.optJSONObject(it)?.optString("name").orEmpty() } }.orEmpty()
-                // An artist only written in another script there, say パイパー for Piper, or in Latin
-                // letters for one given in another, YANGHONGWON for 양홍원, counts when the recording
-                // lasts as long as the store's, or the music app's.
                 val length = lengthMs ?: metadata.lengthMs
                 val sameLength = length != null && abs(song.optLong("duration") - length) <= SAME_RECORDING_LENGTH_MS
                 val name = song.optString("name")
@@ -1385,8 +1388,11 @@ internal class LyricsFinder(
                 (SongNames.sameVersion(metadata.title, name, album) ||
                     SongNames.sameVersion(SongNames.asChinaWrites(metadata.title), SongNames.asChinaWrites(name), SongNames.asChinaWrites(album)) ||
                     (sameLength && SongNames.sameButKanji(metadata.title, name))) &&
-                    artists.any { name ->
-                        listOf(SongNames.withGuests(metadata.artist, metadata.title), alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && (!name.hasLatin() || !metadata.artist.hasLatin()))
+                    artists.any { artist ->
+                        credits.any { credit ->
+                            SongNames.sameArtist(artist, credit) || SongNames.artistInside(artist, credit) ||
+                                (sameLength && SongNames.artistNames(credit).any { sameArtistInLatin(artist, it) })
+                        }
                     }
             }
             // Of the same song, the recording as long as the one playing is the one timed for it.
@@ -1605,6 +1611,19 @@ internal class LyricsFinder(
      * NetEase's answer, asked once in a lookup: it's asked for the words it times word by word and
      * again under the song's names. LRCLIB isn't kept so, as its answer can be that it's busy.
      */
+    /** A same-length cover can still be by someone else. Check the reading of an alternate credit. */
+    private fun sameArtistInLatin(one: String, other: String): Boolean {
+        if (one.hasLatin() == other.hasLatin()) return false
+        val (latin, original) = if (one.hasLatin()) one to other else other to one
+        val reading = when {
+            original == "パイパー" -> "Piper" // NetEase uses the Japanese spelling of the band's name.
+            original.hasHangul() -> Readings.romaja(original)
+            original.hasJapanese() -> Readings.romaji(original)
+            else -> return false
+        }
+        return SongNames.normalize(latin) == SongNames.normalize(reading)
+    }
+
     private suspend fun fromNetEaseOnce(url: String): Any =
         currentCoroutineContext()[Answers]?.of(url) { parse(url, NETEASE_REFERER) } ?: parse(url, NETEASE_REFERER)
 
@@ -1916,9 +1935,10 @@ internal class LyricsFinder(
          * with China's kanji, and words in romaji found under a song's name in Latin letters; 11 for
          * Korean songs found in Latin letters; 12 for Korean words NetEase keeps garbled; 13 for commas it keeps as apostrophes, and the notes it opens with for a moment;
          * 14 for untimed words kept before the other title names were checked for timings; 15 for lines timed late and rushed; 16 for spaces and name capitals in saved words;
-         * 17 for a song's words kept for an instrumental recording of it.
+         * 17 for a song's words kept for an instrumental recording of it; 18 to check alternate NetEase artist credits again.
          */
-        const val CACHE_VERSION = 17
+        const val CACHE_VERSION = 18
+        private const val BEFORE_NETEASE_ARTIST_CHECK = 17
 
         /**
          * [found] without what's since learned to be left out: a site's ad, and a note on how the song is played, "（repeat and fade）", from any site, and what

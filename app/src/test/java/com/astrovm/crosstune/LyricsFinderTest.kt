@@ -1948,6 +1948,59 @@ class LyricsFinderTest {
         assertEquals("Found now", (runBlocking { kept.lyricsOf(MusicMetadata("Old", "Band")) } as Lyrics.Found).words)
     }
 
+    @Test
+    fun aCoverByAnArtistInAnotherScriptDoesNotTakeTheOriginalNetEaseLyrics() {
+        val cover = MusicMetadata("only my railgun (アニメ「とある科学の超電磁砲」より)", "ハルシオン", lengthMs = 255_000)
+        japaneseSong(
+            lrclib = { """[${instrumentalCopy(cover.title, cover.artist)}]""" },
+            ownNames = false,
+            netEase = { """{"result":{"songs":[{"id":8,"name":"only my railgun","artists":[{"name":"fripSide"}],"duration":254000,"album":{"name":"infinite synthesis"}}]}}""" },
+            lyric = "[00:09.000]The original recording has words"
+        )
+
+        assertEquals(Lyrics.Instrumental, found(cover))
+        assertFalse(fake.requestedUrls.any { "/api/song/lyric" in it })
+
+        val file = File.createTempFile("old-lyrics", ".json")
+        try {
+            val cache = LookupCache(file, Dispatchers.Unconfined)
+            val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
+            val key = "17\u0000${RecordingKey.of(cover)}"
+            runBlocking {
+                cache.put(key, """{"words":"The original recording has words","lines":[[9000,"The original recording has words"]],"source":"netease"}""")
+                assertEquals(Lyrics.Instrumental, finder.lyricsOf(cover))
+
+                val asked = fake.requestedUrls.size
+                cache.put(key, """{"words":"A different saved sheet","lines":[],"source":"lrclib"}""")
+                assertEquals(Lyrics.Found("A different saved sheet", source = LyricsFinder.LRCLIB), finder.lyricsOf(cover))
+                assertEquals(asked, fake.requestedUrls.size)
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun matchingReadingsCanIdentifyAProperlyCreditedNetEaseRecording() {
+        val song = MusicMetadata("Song", "Haru Shion", lengthMs = 200_000)
+        fun credit(artist: String) {
+            japaneseSong(
+                ownNames = false,
+                netEase = { """{"result":{"songs":[{"id":8,"name":"Song","artists":[{"name":${quote(artist)}}],"duration":200000}]}}""" },
+                lyric = "[00:01.000]The words for this recording"
+            )
+        }
+
+        credit("ハルシオン")
+        assertEquals("The words for this recording", words(song))
+        credit("三田 寛子")
+        assertEquals(Lyrics.None, found(song))
+        credit("Хару Шион")
+        assertEquals(Lyrics.None, found(song))
+        credit("ナツシオン")
+        assertEquals(Lyrics.None, found(song.copy(artist = "ハルシオン")))
+    }
+
     /** Sunshine Kiz, 3:07 long in the US store, which the Japanese one doesn't have; NetEase has it by パイパー, [lengthMs] long. */
     private fun piperSong(lengthMs: Long) {
         fake.handler = { request ->
