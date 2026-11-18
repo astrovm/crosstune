@@ -708,6 +708,7 @@ internal class ExactMatcher(
         "live", "live ver", "live version", "en vivo", "ao vivo", "ライブ", "ライヴ", "ライブバージョン", "ライヴバージョン",
         "现场版", "現場版", "라이브", "라이브버전"
     )
+    private val liveVersionWords = liveLabels.joinToString(" ")
     private val liveAlbumStarts = listOf("live at ", "live in ", "live from ")
 
     private fun sameRecordingLength(time: Long?, wanted: Long): Boolean =
@@ -804,7 +805,8 @@ internal class ExactMatcher(
         val live = rowIsLive(other)
         val otherMarked = live || SongNames.saysAnotherVersion(other.name, base, "")
         val firstMarked = rowIsLive(first) || SongNames.saysAnotherVersion(first.name, base, "")
-        return other.takeIf { firstMarked != otherMarked && if (edition.live) live else !otherMarked }
+        val matchesEdition = if (edition.live) live && !SongNames.saysAnotherVersion(other.name, "$base $liveVersionWords", "") else !otherMarked
+        return other.takeIf { firstMarked != otherMarked && matchesEdition }
     }
 
     private fun rowIsLive(row: Row): Boolean = saysLive(row.name) || liveAlbum(row.details.getOrNull(1).orEmpty())
