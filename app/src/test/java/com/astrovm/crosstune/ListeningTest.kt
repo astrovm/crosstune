@@ -354,8 +354,10 @@ class ListeningTest {
             launch()
             click(string(R.string.tile_lyrics_label))
             waitUntil(TIMEOUT_MS) { controllerModel().uiState.let { it.lyricsFor?.title == "Iris" || it.error != null } }
-            assertEquals(2, phoneAudio.opened)
+            // Listening along can open another probe after the lyrics appear.
+            assertTrue(phoneAudio.opened >= 2)
             assertEquals(0, microphone.opened)
+            assertEquals(1, shazamRequests())
             assertEquals("Iris", controllerModel().uiState.lyricsFor?.title)
         } finally {
             MainActivity.cleanSoundFactory = cleanSound
