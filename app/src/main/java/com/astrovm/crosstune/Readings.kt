@@ -101,7 +101,7 @@ internal object Readings {
      * alone that IPADIC splits, とりあふ and おもひで, modern words in kana that only looked old, さいふ said as written, 何分 as なんぷん,
      * 洒落る, and numbers that start a longer word, 一重項.
      */
-    const val VERSION = 5
+    const val VERSION = 6
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -239,10 +239,22 @@ internal object Readings {
                 ?: counts.firstNotNullOfOrNull { count -> kanaToday(pieces.subList(at, at + count), line, from)?.let { count to it } }
             val taken = found?.first ?: 1
             from += pieces.subList(at, at + taken).sumOf { it.surface.length }
-            if (found == null) out += pieces[at] else out += found.second
+            if (found == null) out += smallTsu(pieces[at], pieces.getOrNull(at + 1)) ?: pieces[at] else out += found.second
             at += taken
         }
         return out
+    }
+
+    /** The verb 待つ takes connective て as 待って today. */
+    private fun smallTsu(verb: Piece, next: Piece?): Piece? {
+        if (next?.surface != "て" || next.kind != "助詞" || next.subkind != "接続助詞") return null
+        if (verb.kind != "動詞" || verb.base != verb.surface) return null
+        if (!verb.surface.endsWith('つ') || verb.surface.none(::isHan)) return null
+        if (!verb.kana.endsWith('つ') || !verb.said.endsWith('つ')) return null
+        return Piece(
+            verb.surface, verb.kana.dropLast(1) + 'っ', verb.kind, verb.subkind, verb.base, verb.said.dropLast(1) + 'っ',
+            verb.end, reader = verb.reader, today = verb.surface.dropLast(1) + 'っ'
+        )
     }
 
     /**
