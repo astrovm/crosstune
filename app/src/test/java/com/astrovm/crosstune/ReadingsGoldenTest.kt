@@ -131,6 +131,18 @@ class ReadingsGoldenTest {
     }
 
     @Test
+    fun aRowCanLockKanaWithoutRuby() {
+        fun rows(row: String) = GoldenReadings.rows("# rows: 1\n$row\n")
+        val row = rows("おもひでの\tおもひで\t\tおもいで\t\tomoide|omoide\t\tboth").single()
+        val parts = listOf(Ruby("おもひでの"))
+        val right = listOf(Word("おもひで", "おもいで", "omoide"))
+        assertNull(GoldenReadings.broken(row, parts, right))
+        assertEquals("sheet=omoide|omoide got=", GoldenReadings.broken(row, parts, listOf(Word("おもひで"))))
+        assertThrows(IllegalStateException::class.java) { rows("おもひでの\tおもひで\t\tおもいで\t\t\t\tboth") }
+        assertThrows(IllegalStateException::class.java) { rows("おもひでの\tおもひで\t\tおもいで\t\tomoide|omoide\tおもひで=おもいで\tboth") }
+    }
+
+    @Test
     fun theRubyIsTheWordsOwnParts() {
         val parts = listOf(Ruby("思", "おも"), Ruby("い"), Ruby("出", "で"), Ruby("の", null), Ruby("思い", "おもい"))
         val line = "思い出の思い"

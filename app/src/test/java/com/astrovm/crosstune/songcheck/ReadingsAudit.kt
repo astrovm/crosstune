@@ -18,6 +18,7 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Protocol
+import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONArray
@@ -79,9 +80,26 @@ class ReadingsAudit {
         val out = File(dir, "audit").apply { mkdirs() }
         for (i in 0 until songs.length()) {
             val song = songs.getJSONObject(i)
-            val found = found(song)
-            File(out, "${song.getString("id")}.json").writeText(read(song, found).toString())
+            val reference = pinnedPage(song)
+            val found = reference?.let { (_, truth) ->
+                val lines = truth.map { line -> line.joinToString("") { it.text } }
+                JSONObject().put("lyrics", "found").put("source", "UtaTen").put("timed", false).put("lines", JSONArray(lines))
+            } ?: found(song)
+            File(out, "${song.getString("id")}.json").writeText(read(song, found, reference).toString())
             println("readingsaudit ${i + 1}/${songs.length()} ${song.getString("artist")} - ${song.getString("title")}")
+        }
+    }
+
+    /** The reference page keeps the old kana even when other lyric sources use its modern spelling. */
+    private fun pinnedPage(song: JSONObject): Pair<String, List<List<Ruby>>>? {
+        val id = song.optString("utatenPage").ifEmpty { return null }
+        val url = "${SungReadings.SITE_URL}/lyric/$id/"
+        val request = Request.Builder().url(url).header("User-Agent", SungReadings.BROWSER).build()
+        return client.newCall(request).execute().use { response ->
+            check(response.isSuccessful) { "UtaTen returned ${response.code} for $url" }
+            val truth = SungReadings.linesOf(response.body.string())
+            check(truth.isNotEmpty()) { "UtaTen has no lyrics for $url" }
+            url to truth
         }
     }
 
@@ -108,7 +126,7 @@ class ReadingsAudit {
     private fun metadata(song: JSONObject) = MusicMetadata(song.getString("title"), song.getString("artist"))
 
     /** Each line as the app reads it, with the built-in dictionary alone, with UniDic, and as shown, after UtaTen's fixes; and UtaTen's line for it. */
-    private suspend fun read(song: JSONObject, found: JSONObject): JSONObject {
+    private suspend fun read(song: JSONObject, found: JSONObject, reference: Pair<String, List<List<Ruby>>>?): JSONObject {
         val report = JSONObject(song.toString())
         listOf("lyrics", "source", "timed", "chords", "error").forEach { key -> found.opt(key)?.let { report.put(key, it) } }
         val lines = found.optJSONArray("lines")?.let { array -> (0 until array.length()).map(array::getString) } ?: return report
@@ -121,17 +139,21 @@ class ReadingsAudit {
         var fixes: List<ReadingFix>? = null
         try {
             uniDic = Readings.of(lines, Script.JAPANESE)
-            pages.clear()
-            // Asked again if UtaTen took longer than the app waits, now that what it answered is kept.
-            for (attempt in 1..TRIES) {
-                fixes = sungReadings.of(metadata(song), lines, uniDic)
-                if (fixes != null) break
+            if (reference != null) {
+                fixes = SungReadings.matched(lines, uniDic, reference.second)
+            } else {
+                pages.clear()
+                // Asked again if UtaTen took longer than the app waits, now that what it answered is kept.
+                for (attempt in 1..TRIES) {
+                    fixes = sungReadings.of(metadata(song), lines, uniDic)
+                    if (fixes != null) break
+                }
             }
             shown = fixes?.takeIf { it.isNotEmpty() }?.let { Readings.corrected(uniDic, it) } ?: uniDic
         } finally {
             Readings.uniDic = null
         }
-        val theirs = utaTen(lines, uniDic)
+        val theirs = reference ?: utaTen(lines, uniDic)
         report.put("script", "JAPANESE").put("sungFixes", fixes?.size ?: -1).put("utaten", theirs?.first)
         report.put("lines", JSONArray(lines.indices.map { i ->
             JSONObject().put("text", lines[i]).put("builtIn", parts(builtIn[i])).put("uniDic", parts(uniDic[i])).put("shown", parts(shown[i]))

@@ -10,13 +10,14 @@
 # sheet is the word sheet's romaji for the word, as said and as typed, joined by |, when the sheet has the word
 # there with this kana. shown is the word's parts once the song's words put its reading right (Readings.corrected),
 # written as ruby is, when they read as the kana. Each is empty when the row does not lock it.
+# A word with only a sheet reading has empty ruby and shown fields. Its kana is the word sheet's reading.
 # dictionary is ipadic, unidic or both.
 # Regenerate: python3 scripts/readingsaudit/readingsaudit.py golden
 # The command adds rows. It does not remove or change a row.
 # A row the app now reads otherwise is a regression, and the command exits 1.
 # A change you mean drops that lock: python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA
 # audit: 3450 lines, 14376 right readings, sha256 b607a4aef67a5746
-# rows: 7062
+# rows: 7063
    夜の孤独	夜		よる	夜=よる	yoru|yoru	夜=よる	both
    時代のエク	時代		じだい	時代=じだい	jidai|jidai	時代=じだい	both
    硝子のディ	硝子		がらす	硝子=がらす	garasu|garasu	硝子=がらす	both
@@ -666,6 +667,7 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 え追い駈ける 	駈		か	駈=か		駈=か	both
 え）を求めて	求		もと	求=もと		求=もと	both
 おしく思いたい	思		おも	思=おも		思=おも	both
+おもひでの	おもひで		おもいで		omoide|omoide		both
 おやじ似で	似		に	似=に	ni|ni	似=に	both
 おりた時から	時		とき	時=とき	toki|toki	時=とき	both
 お先にゆき	先		さき	先=さき		先=さき	both
