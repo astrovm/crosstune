@@ -13,6 +13,12 @@ class TimingEvidenceTest {
         assertTrue("Words that share a time still give timing evidence", TimingEvidence.usable(listOf(line), 2500))
     }
 
+    @Test
+    fun twoLyricLinesMayStartTogether() {
+        val together = lines + LyricLine(5000, "Answer")
+        assertTrue("Lines that share a time still give timing evidence", TimingEvidence.usable(together, 6000))
+    }
+
     @Test fun impossibleTimesAreRejected() {
         assertTrue(TimingEvidence.usable(lines))
         assertTrue(TimingEvidence.usable(lines, 5001))
