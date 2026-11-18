@@ -613,6 +613,10 @@ internal object MetadataParsers {
         val right = rawTitle.substring(separator.last + 1).trim()
         if (sessionCaption && Songless.isCaption(left, right)) return MusicMetadata(rawTitle, "", unnamed = true)
         if (tagOnly) return MusicMetadata(rawTitle, author)
+        return creditedVideoName(rawTitle, author, left, right)
+    }
+
+    private fun creditedVideoName(rawTitle: String, author: String, left: String, right: String): MusicMetadata {
         // One song by two names, as YouTube Music titles Japanese ones, "プラスティック・ラブ - Plastic Love": by the channel.
         // Two sounds are enough here, as "アイドル - Idol", since a dash pairing them is already a sign.
         if (SongNames.soundsAlike(right, left, TWO_NAMES_SOUNDS) || SongNames.soundsAlike(left, right, TWO_NAMES_SOUNDS)) return MusicMetadata(rawTitle, author)
