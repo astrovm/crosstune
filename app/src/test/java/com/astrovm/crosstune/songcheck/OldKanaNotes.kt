@@ -59,6 +59,7 @@ class OldKanaNotes {
     }.filter { line -> line.any { it in '぀'..'ヿ' } }.distinct()
 
     private companion object {
-        val STRING = Regex(""""((?:[^"\\\n]|\\.)*)${'"'}""")
+        // A quoted string can end only at an unescaped quote. Consume its body without backtracking.
+        val STRING = Regex(""""((?:[^"\\\n]|\\.)*+)${'"'}""")
     }
 }

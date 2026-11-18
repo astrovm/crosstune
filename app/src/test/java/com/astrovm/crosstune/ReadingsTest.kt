@@ -546,6 +546,18 @@ class ReadingsTest {
     }
 
     @Test
+    fun theOldSpellingOfBeingKeepsItsVerbWhenTheLineIsShort() {
+        fun reading(line: String) = Readings.words(line, Script.JAPANESE).filter { it.modern != null }
+            .map { listOf(it.text, it.modern, it.lookup) }
+        val lines = listOf("ゐたんだ", "「ゐたんだ」", "待つてゐたんだよ")
+        val wanted = List(lines.size) { listOf(listOf("ゐたんだ", "いたんだ", "いる")) }
+        val builtIn = lines.map(::reading)
+        val uniDic = TestUniDic.reading { lines.map(::reading) }
+        assertEquals(listOf(wanted, wanted), listOf(builtIn, uniDic))
+        assertTrue(reading("いたんだ").isEmpty())
+    }
+
+    @Test
     fun aWordInOldKanaIsReadAsTheWordItsSpellingTodayIsWithOrWithoutUniDic() {
         // Text, reading, spelling today, and the word it is looked up as: the same from either dictionary.
         val words = listOf(
