@@ -99,9 +99,9 @@ internal object Readings {
      * and the dictionary's common misreadings, as 君 after a pause; 4 for counters, minutes, classical
      * verbs, the nouns IPADIC takes for suffixes, and the words JMdict reads one way only; 5 for words in old kana
      * alone that IPADIC splits, とりあふ and おもひで, modern words in kana that only looked old, さいふ said as written, 何分 as なんぷん,
-     * 洒落る, and numbers that start a longer word, 一重項.
+     * 洒落る, and numbers that start a longer word, 一重項. 6 for successive old kana pairs in けふけふ.
      */
-    const val VERSION = 5
+    const val VERSION = 6
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -329,9 +329,7 @@ internal object Readings {
         val tokens = tokenizer.tokenize(today.text)
         // A word starting with a ひ, ふ or へ that was changed is a modern word: 一人ひとり is not 一人いとり.
         if (tokens.any { !it.isKnown || it.reading == "*" || it.position in today.plain }) return null
-        // And so is a contracted pair that ends in the start of a longer word, て and ふたり in 来てふたり.
-        val starts = word.runningFold(0) { at, piece -> at + piece.surface.length }
-        if (today.contracted.any { pair -> word.indices.any { starts[it] == pair + 1 && word[it].surface.length > 1 } }) return null
+        if (crossesAWord(word, today.contracted)) return null
         // And so is a word JMdict writes so today that holds the change and more: かいひ, いふう and てふだ are no かいい, いうう or ちょうだ.
         val text = word.joinToString("") { it.surface }
         val ends = tokens.map { it.position + it.surface.length }.map { if (it == today.text.length) text.length else today.origins[it] }
@@ -343,6 +341,15 @@ internal object Readings {
             words
         }
         return words.map { group -> todayPiece(group, today, text) }
+    }
+
+    /** A pair cannot cut into a longer word as in 来てふたり, unless the piece is the middle of two pairs, ふけ in けふけふ. */
+    private fun crossesAWord(word: List<Piece>, contracted: List<Int>): Boolean {
+        val starts = word.runningFold(0) { at, piece -> at + piece.surface.length }
+        return contracted.any { pair ->
+            val width = word.getOrNull(starts.indexOf(pair + 1))?.surface?.length ?: 0
+            width > 1 && (width != 2 || pair + 2 !in contracted)
+        }
     }
 
     /** The spelling by rule of a [word] in old kana, when the dictionary doesn't already read it so and the change starts in its first piece. */
