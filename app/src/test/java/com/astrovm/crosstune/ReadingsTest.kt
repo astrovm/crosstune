@@ -909,6 +909,51 @@ class ReadingsTest {
     }
 
     @Test
+    fun aHoInAnOldKanaWordGetsItsModernSpellingWithoutChangingModernWords() {
+        fun checkSpelling() {
+            val old = mapOf("とほい" to "とおい", "おほぜい" to "おおぜい", "こほり" to "こおり", "なほさら" to "なおさら", "うるほふ" to "うるおう")
+            for ((text, modern) in old) {
+                assertEquals(text, modern, Readings.words(text, Script.JAPANESE).singleOrNull()?.modern)
+            }
+            for (text in listOf("ほほ", "まほう", "ほほえむ", "えてにほをあげる", "しりにほをかける")) {
+                assertNull(text, Readings.words(text, Script.JAPANESE).firstNotNullOfOrNull(Word::modern))
+            }
+            // The dictionary's long vowel is still heard in a modern word that contains ほ.
+            assertEquals("goohoo", Readings.words("あんごうほう", Script.JAPANESE).last().romanized)
+        }
+        checkSpelling()
+        TestUniDic.reading(::checkSpelling)
+    }
+
+    @Test
+    fun aModernWordAcrossTheEndOfAnOldSpellingCandidateKeepsItsKana() {
+        fun checkSpelling() {
+            for (text in listOf("とほいどう", "うるほふく", "こほりのふかい")) {
+                assertEquals(text, text, Readings.of(listOf(text), Script.JAPANESE).single().reading)
+                assertNull(text, Readings.words(text, Script.JAPANESE).firstNotNullOfOrNull(Word::modern))
+            }
+        }
+        checkSpelling()
+        TestUniDic.reading(::checkSpelling)
+    }
+
+    @Test
+    fun repeatedOldKanaPairsSplitTheDictionaryPieceBetweenThem() {
+        fun checkReading() {
+            val text = "けふけふ"
+            val reading = Readings.of(listOf(text), Script.JAPANESE).single()
+            assertEquals("きょうきょう", reading.reading)
+            val today = Word("けふ", "きょう", "kyoo", "きょう", "kyou", by = listOf(Reader.IPADIC), modern = "きょう")
+            assertEquals(listOf(today, today), Readings.words(text, Script.JAPANESE))
+            // A longer modern word at the pair's boundary must stay whole.
+            assertEquals(listOf("け", "ふたり"), Readings.words("けふたり", Script.JAPANESE).map { it.text })
+            assertNull(Readings.words("けふたり", Script.JAPANESE).firstNotNullOfOrNull(Word::modern))
+        }
+        checkReading()
+        TestUniDic.reading(::checkReading)
+    }
+
+    @Test
     fun aWordCarriesItsModernSpellingOnlyWhenItIsWrittenInOldKana() {
         assertNull(Readings.words("夜空に、分かった!", Script.JAPANESE).firstNotNullOfOrNull { it.modern })
         // The shipped dictionary says 思ひ出 as it's sung. It splits the old ending off 恋ひ and 住まゐ, which is said with its word.
