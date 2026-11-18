@@ -509,6 +509,8 @@ class PlaybackTest {
         val lengths = SteadyLengths(prefs)
         repeat(501) { lengths.of("Song $it", "Band", 200_000) }
         val again = SteadyLengths(prefs)
+        // The 500th newest entry is still there after reopening the stored lengths.
+        assertEquals(listOf(200_000L), again.known("Song 1", "Band"))
         // The first is gone, so it's taken as said; the last is kept.
         assertEquals(201_000L, again.of("Song 0", "Band", 201_000))
         assertEquals(200_000L, again.of("Song 500", "Band", 201_000))
