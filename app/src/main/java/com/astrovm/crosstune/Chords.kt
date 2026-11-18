@@ -328,9 +328,9 @@ internal object ChordSheets {
 
     /**
      * J-Total's sheet, as written into its page: a line of chords over the line of words they're
-     * played on, each over its letter. Japanese takes two columns, and the Latin font the page names
-     * first takes one. A full-width bracket or stop is two as well, beside another or not: a Japanese
-     * reader's browser on Windows trims none. A letter in neither font is as wide as the browser's
+     * played on, each over its letter. Inconsolata's digit is 7.5 px and common full-width Japanese
+     * glyphs are 16 px. Adjacent brackets and stops keep their widths in the Windows drawing.
+     * A letter in neither font is as wide as the browser's
      * fallback draws it, and a chord goes over the letter that starts nearest where it is. Only a <br>
      * ends a line, and spaces count as a browser counts them, as its source wraps anywhere. Tags are not
      * drawn: an empty link adds no column, and a link split by a <br> names the chord on the line its
@@ -377,8 +377,8 @@ internal object ChordSheets {
     /**
      * How wide [text] is in the font the page asks for, as a Japanese reader's browser on Windows draws
      * it, in thousandths of a column ([JTotalWidths]). A letter takes the width of the font it is drawn
-     * from: Inconsolata's own at one column, MS Gothic's at one or two, and any other from a proportional
-     * font, at whatever it measures. MS Gothic has no narrow forms, so the browser trims no full-width
+     * from: Inconsolata's at one column, MS Gothic's at about one or two, and other fallbacks at
+     * their measured widths. MS Gothic has no narrow forms, so the browser trims no full-width
      * bracket or stop beside another. A letter outside the Basic Multilingual Plane is one letter, not two halves.
      */
     private fun columns(text: String, monospace: Boolean): Int {
@@ -393,11 +393,13 @@ internal object ChordSheets {
 
     private fun widthAt(text: String, index: Int, monospace: Boolean): Int = JTotalWidths.of(text.codePointAt(index), monospace)
 
+    // The browser comparison treats 0.05 px as the same distance. A digit is 7.5 px.
+    private const val JTOTAL_TIE_DISTANCE = 6
+
     /**
-     * The letter of [words] whose start is nearest [column], the later one when two are as near: a
-     * chord over the middle of a wide letter is read as the next. Each letter has its own width, whatever
-     * is beside it. Letters that start in the same place, as a mark with no width does, give the first.
-     * The end of the line is where a chord past the last letter goes.
+     * The letter of [words] whose start is nearest [column]. The later letter wins when both are
+     * equally near on the page. If their starts coincide, as a zero-width mark's does, keep the first.
+     * A chord past all the letters goes at the end of the line.
      */
     private fun letterAt(words: String, column: Int, monospace: Boolean): Int {
         var best = 0
@@ -407,7 +409,9 @@ internal object ChordSheets {
         var index = 0
         while (true) {
             val distance = abs(start - column)
-            if (distance < bestDistance || (distance == bestDistance && start > bestStart)) {
+            val nearer = distance < bestDistance - JTOTAL_TIE_DISTANCE
+            val tied = abs(distance - bestDistance) <= JTOTAL_TIE_DISTANCE
+            if (nearer || (tied && start > bestStart + JTOTAL_TIE_DISTANCE)) {
                 best = index
                 bestStart = start
                 bestDistance = distance

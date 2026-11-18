@@ -377,9 +377,11 @@ class UnsungTest {
         markedOnLrclibWithWords()
         singing.answers = listOf(music)
         openLyrics(shown = R.string.lyrics_instrumental)
-        repeat(MainViewModel.VOICE_TRIES) { passes(MainViewModel.VOICE_PAUSE_MS) }
-        waitUntil { singing.hears == MainViewModel.VOICE_TRIES }
-        composeRule.waitForIdle()
+        waitUntil { singing.hears == 1 }
+        repeat(MainViewModel.VOICE_TRIES - 1) { passes(MainViewModel.VOICE_PAUSE_MS) }
+        assertEquals(MainViewModel.VOICE_TRIES, singing.hears)
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertEquals(MainViewModel.VOICE_TRIES + 1, singing.hears)
         assertTrue(shows(R.string.lyrics_instrumental))
         assertFalse(showsWords())
         assertEquals(emptyList<String>(), problems())
@@ -459,6 +461,112 @@ class UnsungTest {
         passes(MainViewModel.HELD_MS)
         assertTrue(showsWords())
         assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
+    fun aVoiceAfterTheFirstFourWindowsBringsBackTheWords() {
+        hiddenAfterFourWindows()
+        passes(MainViewModel.VOICE_PAUSE_MS * 2)
+        assertTrue("A later window should hear the voice", showsWords())
+        assertEquals(MainViewModel.VOICE_TRIES + 1, singing.hears)
+    }
+
+    @Test
+    fun aLaterVoiceIsHeardAfterAnEmptyAndATimedOutWindow() {
+        hiddenAfterFourWindows()
+        singing.answers = List(MainViewModel.VOICE_TRIES) { music } + listOf(null, music, voice)
+        singing.before = {
+            if (singing.hears == MainViewModel.VOICE_TRIES + 2) awaitCancellation()
+        }
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertEquals(MainViewModel.VOICE_TRIES + 1, singing.hears)
+        assertFalse(showsWords())
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertEquals(MainViewModel.VOICE_TRIES + 2, singing.hears)
+        passes(MainViewModel.HELD_MS)
+        assertFalse(showsWords())
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertEquals(MainViewModel.VOICE_TRIES + 3, singing.hears)
+        assertTrue(showsWords())
+    }
+
+    @Test
+    fun aLaterVoiceIsHeardWhenTheSongsCoverArrives() {
+        hiddenAfterFourWindows()
+        val shown = requireNotNull(model().uiState.lyricsFor)
+        val cover = "https://example.com/demo.jpg"
+        val answer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                FakeSpotify.html(request, """{"data":[{"title":"Demo","artist":{"name":"Band"},"album":{"cover_big":"$cover"}}]}""")
+            } else answer(request)
+        }
+        // Deliver the same cover lookup that runs when playback first names the song.
+        composeRule.runOnIdle {
+            MainViewModel::class.java.getDeclaredMethod("remember", Heard.Song::class.java)
+                .apply { isAccessible = true }.invoke(model(), Heard.Song(shown, null))
+        }
+        waitUntil { model().uiState.lyricsFor?.artworkUrl == cover }
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertEquals(MainViewModel.VOICE_TRIES + 1, singing.hears)
+        assertTrue(showsWords())
+        assertEquals(cover, model().uiState.lyricsFor?.artworkUrl)
+    }
+
+    @Test
+    fun aLaterVoiceIsNotListenedForWithTheLyricsClosed() {
+        hiddenAfterFourWindows()
+        model().dismissLyrics()
+        composeRule.waitForIdle()
+        passes(MainViewModel.VOICE_PAUSE_MS * 2)
+        assertEquals(MainViewModel.VOICE_TRIES, singing.hears)
+        assertFalse(showsWords())
+    }
+
+    @Test
+    fun aLaterVoiceWaitsUntilCrosstuneIsInSightAgain() {
+        hiddenAfterFourWindows()
+        model().pauseFollowingNext()
+        passes(MainViewModel.VOICE_PAUSE_MS * 2)
+        assertEquals(MainViewModel.VOICE_TRIES, singing.hears)
+        assertFalse(showsWords())
+        model().resumeFollowingNext()
+        passes(MainViewModel.VOICE_PAUSE_MS * 2)
+        assertTrue(showsWords())
+    }
+
+    @Test
+    fun pausingPlaybackStopsAnActiveCheckForALaterVoice() {
+        hiddenAfterFourWindows()
+        val stopped = CompletableDeferred<Unit>()
+        singing.before = {
+            try {
+                awaitCancellation()
+            } finally {
+                stopped.complete(Unit)
+            }
+        }
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertEquals(MainViewModel.VOICE_TRIES + 1, singing.hears)
+        plays(playing = false)
+        assertTrue(stopped.isCompleted)
+        passes(MainViewModel.VOICE_PAUSE_MS * 2)
+        assertFalse(showsWords())
+        assertEquals(MainViewModel.VOICE_TRIES + 1, singing.hears)
+        singing.before = {}
+        plays()
+        passes(MainViewModel.VOICE_PAUSE_MS * 2)
+        assertTrue(showsWords())
+    }
+
+    private fun hiddenAfterFourWindows() {
+        markedOnLrclibWithWords()
+        singing.answers = List(MainViewModel.VOICE_TRIES) { music } + voice
+        openLyrics(shown = R.string.lyrics_instrumental)
+        waitUntil { singing.hears == 1 }
+        repeat(MainViewModel.VOICE_TRIES - 1) { passes(MainViewModel.VOICE_PAUSE_MS) }
+        assertFalse(showsWords())
+        assertEquals(MainViewModel.VOICE_TRIES, singing.hears)
     }
 
     @Test
@@ -660,7 +768,7 @@ class UnsungTest {
             val hidden = listened && outcome == Outcome.NO_VOICE
             assertEquals("$case ${TimingLog.lastMinute()}", !hidden, showsWords())
             assertEquals(case, hidden, shows(R.string.lyrics_instrumental))
-            if (hidden) assertEquals(case, MainViewModel.VOICE_TRIES, singing.hears)
+            if (hidden) assertTrue(case, singing.hears > MainViewModel.VOICE_TRIES)
             if (!listened) assertEquals(case, 0, singing.hears)
         }
     }

@@ -2688,7 +2688,7 @@ class PlaybackTest {
             binder
         }
         val token = copyCoverToken(controller.sessionToken, stable)
-        // Collect the temporary token and bitmap, while retaining this test's cache itself.
+        // Release the bitmap written by a temporary token wrapper. Keep the live Binder token.
         val writer = PlaybackCovers(File(app.cacheDir, "temporary-session-cover"))
         val (cover, bitmap) = saveThroughATemporaryToken(writer, controller, token)
         assertEquals(1L, runBlocking { withTimeout(5_000L) { writer.updates.first { it > 0 } } })
@@ -2704,6 +2704,7 @@ class PlaybackTest {
         writer.retainSessions(setOf(token))
         assertEquals(cover, writer.of(original, token, name))
         assertEquals(1L, writer.updates.value)
+        // Removing the alias starts a new save, which returns the same file once it is ready.
         writer.retainSessions(emptySet())
         assertNull(writer.of(original, token, name))
         assertEquals(cover, coverWhenReady { writer.of(original, token, name) })

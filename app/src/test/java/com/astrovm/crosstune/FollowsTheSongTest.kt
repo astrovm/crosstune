@@ -119,6 +119,44 @@ class FollowsTheSongTest {
         CrosstuneScreen(UiState(playingNow = following?.let { NowPlaying(MusicMetadata("Song", "Band", lengthMs = lengthMs), it) }), ScreenActions())
     }
 
+    @Test
+    @Config(qualifiers = "de-w320dp-h891dp-xxhdpi", fontScale = 2f)
+    fun theGermanNearbySourceIsVisibleAtTheLargestFontOnANarrowPhone() =
+        assertNearbySourceIsVisible("In der Nähe gehört")
+
+    @Test
+    @Config(qualifiers = "it-w320dp-h891dp-xxhdpi", fontScale = 2f)
+    fun theLongestNearbySourceIsVisibleAtTheLargestFontOnANarrowPhone() =
+        assertNearbySourceIsVisible("Sentito nelle vicinanze")
+
+    private fun assertNearbySourceIsVisible(label: String) {
+        val station = Unnamed("com.example.radio", "Fixture Radio", "Fixture FM")
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        show {
+            CrosstuneScreen(UiState(playingUnnamed = PlayingUnnamed(station, Heard.Song(song, null, inRoom = true))), ScreenActions())
+        }
+        val layouts = mutableListOf<TextLayoutResult>()
+        val bar = hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
+        compose.onNode(bar and hasText("$label · Fixture Artist"), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        val visibleEnd = layout.getLineEnd(layout.lineCount - 1, visibleEnd = true)
+        assertTrue("Only $visibleEnd of ${label.length} source characters are visible", visibleEnd >= label.length)
+    }
+
+    @Test
+    fun aSongHeardByTheMicrophoneSaysItWasHeardNearby() {
+        val station = Unnamed("com.example.radio", "Fixture Radio", "Fixture FM")
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        show {
+            CrosstuneScreen(UiState(playingUnnamed = PlayingUnnamed(station, Heard.Song(song, null, inRoom = true))), ScreenActions())
+        }
+        val bar = hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
+        compose.onNode(bar and hasText("Fixture Song"), useUnmergedTree = true).assertExists()
+        compose.onNode(bar and hasText("Heard nearby · Fixture Artist"), useUnmergedTree = true).assertExists()
+        compose.onNode(bar and hasText("Fixture Radio", substring = true), useUnmergedTree = true).assertDoesNotExist()
+    }
+
     private val playedSoFar = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo) and hasAnyAncestor(hasTestTag(NOW_PLAYING_TAG))
 
     /** How far along the bar's line is, or null when it has none. */

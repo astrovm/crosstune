@@ -4,9 +4,9 @@ package com.astrovm.crosstune
  * How wide a letter is on J-Total's page, in thousandths of a column (a column is the width of a
  * digit), as a Japanese reader's browser on Windows draws it. The page sets a sheet in Inconsolata,
  * then MS Gothic, then whatever the browser finds: a letter in neither is drawn from a proportional
- * font, so ۰ is 1144, not a whole number of columns. The widths are measured on Windows with the
- * page's own CSS and Windows' own fonts, see `scripts/jtotal-widths`, and kept in `jtotal-widths.txt`
- * and `jtotal-widths-mono.txt`, one for each of the page's font stacks. Each lists every letter from
+ * font, so ۰ is 1144, not a whole number of columns. The widths are measured in a Japanese
+ * browser on Windows at the desktop page's 15 px size. `scripts/jtotal-widths` writes them into
+ * `jtotal-widths.txt` and `jtotal-widths-mono.txt`, one for each font stack. Each lists every letter from
  * U+0080 up that is not two columns: that is what the rest are.
  */
 internal object JTotalWidths {

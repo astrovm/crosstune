@@ -1270,7 +1270,9 @@ internal object Readings {
             // A word JMdict names in kana keeps the form JMdict lists it by, おもいで as 思い出, which IPADIC reads otherwise.
             val inLine = word.modern != null && groups[i].none { it.reader == Reader.JMDICT }
             val lookup = if (inLine) read.lastOrNull { it.first <= starts[i] }?.second ?: word.lookup else word.lookup
-            word.copy(lookup = lookup).takeIf { word.text.any(Char::isLetter) }
+            // ゐたんだ is from 居る. On its own, the modern いたんだ is read as the past of 痛む.
+            val base = if (word.text == "ゐたんだ" && lookup == "いたむ") "いる" else lookup
+            word.copy(lookup = base).takeIf { word.text.any(Char::isLetter) }
         }
     }
 

@@ -3131,12 +3131,13 @@ internal class MainViewModel(
     /** [heard]'s held words, by what the listen came to, [listen]: shown unless [hidesHeldWords] says. Whether they show. */
     private suspend fun settle(heard: Unsung, listen: Listen): Boolean {
         val words = heard.held ?: return false
-        unsung = null
         TimingLog.note("held words, the listen: $listen")
         if (hidesHeldWords(listen)) {
+            unsung = heard
             uiState = uiState.copy(lyricsInstrumental = true)
             return false
         }
+        unsung = null
         showWords(heard.song, words)
         return true
     }
@@ -3158,7 +3159,12 @@ internal class MainViewModel(
     private fun hearVoice() {
         val hearing = singing ?: return
         val waiting = unsung ?: return
-        if (!mayHearVoice(waiting.song)) return
+        if (!mayHearVoice(waiting.song)) {
+            // An active recheck for hidden words stops as soon as it cannot hear their song.
+            if (waiting.tries == VOICE_TRIES) voiceJob?.cancel()
+            return
+        }
+        if (voiceJob?.isActive == true) return
         voiceJob = viewModelScope.launch {
             byEarLetsGo()
             var heard = waiting
@@ -3170,14 +3176,30 @@ internal class MainViewModel(
                 // Stopped: heard again once it plays, or, for held words, shown if it isn't in time.
                 if (unsung !== heard || uiState.following?.clock?.playing != true) return@launch
                 voiceIn(hearing, sung, held = heard.held != null)?.let { return@launch heardOut(heard, it) }
-                // On a slow phone, decoding a window takes time that its recording does not.
-                val previous = heard.heldUntilMs
-                val extra = (SystemClock.elapsedRealtime() - started - VOICE_CAPTURE_MS).coerceAtLeast(0)
-                heard = heard.copy(tries = heard.tries + 1, heldUntilMs = previous?.plus(extra))
-                unsung = heard
-                if (heard.heldUntilMs != previous && heard.tries < VOICE_TRIES) holdUntil(heard)
+                heard = voiceWindowFinished(heard, started)
             }
-            heardOut(heard, Listen.NO_VOICE)
+            if (waiting.tries < VOICE_TRIES) heardOut(heard, Listen.NO_VOICE)
+            if (heard.held != null) hearLater(hearing, heard)
+        }
+    }
+
+    /** Count a completed window and give the next window the time the phone spent decoding this one. */
+    private fun voiceWindowFinished(heard: Unsung, startedAtMs: Long): Unsung {
+        val extra = (SystemClock.elapsedRealtime() - startedAtMs - VOICE_CAPTURE_MS).coerceAtLeast(0)
+        val next = heard.copy(tries = heard.tries + 1, heldUntilMs = heard.heldUntilMs?.plus(extra))
+        unsung = next
+        if (next.heldUntilMs != heard.heldUntilMs && next.tries < VOICE_TRIES) holdUntil(next)
+        return next
+    }
+
+    /** Hidden words can still belong to a song that starts singing later, e.g. after a long intro. */
+    private suspend fun hearLater(hearing: SingingHearing, heard: Unsung) {
+        while (true) {
+            delay(VOICE_PAUSE_MS)
+            if (unsung !== heard || !mayHearVoice(heard.song)) return
+            val sung = withTimeoutOrNull(HELD_MS) { hearing.hear(null, null) }
+            if (unsung !== heard || !mayHearVoice(heard.song)) return
+            if (sung?.sings == true) return heardOut(heard, Listen.VOICE)
         }
     }
 
@@ -3205,8 +3227,9 @@ internal class MainViewModel(
 
     /** Whether [song], with no words found, may be heard for a voice now: shown, played by a music app on the phone, Crosstune in sight. */
     private fun mayHearVoice(song: MusicMetadata): Boolean {
-        if (voiceJob?.isActive == true || shazamLeads || nextPaused) return false
-        if (!mayCalibrate() || uiState.lyricsFor != song) return false
+        if (shazamLeads || nextPaused) return false
+        // An artwork lookup can finish while the same song's words stay open.
+        if (!mayCalibrate() || uiState.lyricsFor?.copy(artworkUrl = song.artworkUrl) != song) return false
         return uiState.following?.let { it.app != null && it.clock.playing } == true
     }
 
