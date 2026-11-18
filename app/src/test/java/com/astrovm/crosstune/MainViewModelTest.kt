@@ -1602,6 +1602,30 @@ class MainViewModelTest {
     }
 
     @Test
+    fun sameNamedStationsFollowTheNewAppAndOnlyWhenItReportsState() {
+        val other = station.copy(app = "com.example.radio", label = "Other Radio")
+        val playback = FakePlayback().apply {
+            appPlaying[station.app] = MutableStateFlow(following(app = station.app))
+            appPlaying[other.app] = MutableStateFlow(following(app = other.app))
+        }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        assertEquals(station.app, model.uiState.playingUnnamed?.following?.appPackage)
+
+        playback.unnamed.value = other
+        idle()
+        assertEquals(other.app, model.uiState.playingUnnamed?.following?.appPackage)
+
+        playback.unnamed.value = other.copy(reportsState = false)
+        idle()
+        assertNull(model.uiState.playingUnnamed?.following)
+        assertEquals(false, model.uiState.playingUnnamed?.canControl)
+
+        playback.unnamed.value = other
+        idle()
+        assertEquals(other.app, model.uiState.playingUnnamed?.following?.appPackage)
+    }
+
+    @Test
     fun aStationBackAfterASongPlayedOverItIsNotShownAsItWasTillItsAppSaysHowItIs() {
         val playback = FakePlayback()
         val radio = MutableStateFlow<Following?>(Following(PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = false))

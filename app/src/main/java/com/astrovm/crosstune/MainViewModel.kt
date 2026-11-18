@@ -1138,7 +1138,7 @@ internal class MainViewModel(
         merge<Unnamed?>(source.unnamedUpdates().filterNotNull(), source.nowPlayingUpdates().filterNotNull().map { null })
             // Paused, it isn't said to play; ask the last one's app whether it still has it.
             .onStart { previous?.let { emit(it) } }
-            .distinctUntilChanged { was, now -> was?.app == now?.app && was?.played == now?.played && was?.reportsState == now?.reportsState }
+            .distinctUntilChangedBy { station -> station?.let { Triple(it.app, it.played, it.reportsState) } }
             .collectLatest { unnamed ->
                 followedUnnamed = null
                 showUnnamed()
@@ -2001,9 +2001,12 @@ internal class MainViewModel(
         playerJob?.cancel()
         playerJob = null
         val opened = uiState.player ?: return
-        if (opened.stationOnly) return
-        val song = opened.song
         val source = playback?.takeIf { it.hasAccess() } ?: return
+        if (opened.stationOnly) {
+            playerJob = viewModelScope.launch { followStationDisplay(source) }
+            return
+        }
+        val song = opened.song
         playerJob = viewModelScope.launch {
             // What names no song is only told apart by the app that plays it.
             combine(source.follow(song, opened.askedOf), source.nowPlayingUpdates(), source.unnamedUpdates(), ::Triple).collect { (following, playing, unnamed) ->
@@ -2017,6 +2020,18 @@ internal class MainViewModel(
                 if (next != null) return@collect openPlayer(next.metadata, next.app ?: player.following?.appPackage ?: player.app, played = true)
                 if (tookUpUnnamed(unnamed, playing, following, played, song)) return@collect
                 uiState = uiState.copy(player = player.withCurrentCover(playing, unnamed, following).copy(following = following, played = played))
+            }
+        }
+    }
+
+    /** A stateless station has no transport to follow. Keep its display only while it is current. */
+    private suspend fun followStationDisplay(source: PlaybackSource) {
+        source.unnamedUpdates().collect { station ->
+            val player = uiState.player?.takeIf { it.stationOnly } ?: return@collect
+            if (station == null || station.app != player.app || station.reportsState) {
+                closePlayer()
+            } else {
+                uiState = uiState.copy(player = player.copy(song = station.played, stationAppLabel = station.label ?: station.app))
             }
         }
     }

@@ -1202,6 +1202,28 @@ class PlaybackTest {
     }
 
     @Test
+    fun aRouteChangeAloneUpdatesTheNotifiedRadioStation() {
+        allow()
+        sounding()
+        val station = player(RadioNotice.PACKAGE, "Simple Radio", "Blue 100.7 FM", null)
+        val local = PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_LOCAL).build()
+        val remote = PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE).build()
+        shadowOf(station).setPlaybackState(null)
+        shadowOf(station).setPlaybackInfo(local)
+        shadowOf(sessions).addController(station)
+        radioNotices.value = setOf(station.sessionToken)
+        val shown = mutableListOf<String?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.unnamedUpdates().collect { shown += it?.name } }
+        shadowOf(Looper.getMainLooper()).idle()
+        for (route in listOf(remote, local)) {
+            shadowOf(station).setPlaybackInfo(route)
+            shadowOf(station).callbacks.toList().forEach { it.onAudioInfoChanged(route) }
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        assertEquals(listOf("Blue 100.7 FM", null, "Blue 100.7 FM"), shown)
+    }
+
+    @Test
     fun aPlayerThatReportsItsStateLateIsFollowedWithoutAnotherMetadataEvent() {
         allow()
         val controller = player("com.example.music", "Music", song.title, song.artist)

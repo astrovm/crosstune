@@ -952,6 +952,7 @@ internal class MediaSessionPlayback(
                         update()
                     }
                     override fun onPlaybackStateChanged(state: PlaybackState?) = update()
+                    override fun onAudioInfoChanged(info: MediaController.PlaybackInfo) = update()
                     override fun onSessionDestroyed() { covers.forget(controller.sessionToken); update() }
                     override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) = update()
                 }
