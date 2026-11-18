@@ -432,8 +432,8 @@ class MatcherCasesTest {
 
     // The review of 61c74c9c, PR comment 6812563715, and the defect the PR was opened for, Issue #945.
     private val before = listOf(
-        // Another name may be the song's, translated: it can't tell, so it opens as on main (the eighth review, 2).
-        Case("945 accent", "song0", artist = "Fake Singer", lengthMs = 245_000, songs = listOf(row("Canción Falsa", "Otro Álbum", "Fake Singer", "4:06"))),
+        // A Latin accent alone does not show that a different title names the song.
+        Case("945 accent", null, artist = "Fake Singer", lengthMs = 245_000, songs = listOf(row("Canción Falsa", "Otro Álbum", "Fake Singer", "4:06"))),
         angel.copy(what = "945 karaoke", main = "song0", lengthMs = 245_000, songs = listOf(row("残酷な天使のテーゼ (オフ・ヴォーカル)", "残酷な天使のテーゼ", "Yoko Takahashi", "4:06")), knownWrong = 983),
         // Another song by the artist as long, with nothing to say it isn't, opens as on main, asked or not (Issue #983).
         angel.copy(what = "945 other song", main = "song0", lengthMs = 245_000, songs = listOf(row("魂のルフラン", "魂のルフラン", "Yoko Takahashi", "4:04")), knownWrong = 983),
@@ -443,6 +443,27 @@ class MatcherCasesTest {
         // 12. Written in full-width letters: nothing opens, as on main.
         Case("f12 full width", null, title = "Ｆａｋｅ Ｓｏｎｇ", songs = listOf(row("Fake Song")))
     )
+
+    @Test
+    fun latinAccentsDoNotMakeAnUnrelatedTitleAnotherScript() {
+        val accented = before.single { it.what == "945 accent" }
+        val equivalentAccent = accented.copy(title = "Cancion Falsa", main = "song0")
+        val equivalentStroke = Case("same Latin name with a stroke", "song0", songs = listOf(row("Fake Søng")))
+        val otherScript = first.single { it.what == "2a pr 797" }
+        val spellings = listOf(
+            "Soeren" to "Søren",
+            "Toukyou" to "Tōkyō",
+            "Ryuusei" to "Ryūsei (with Live Crew)",
+            "Muede" to "Müde",
+            "Ryuusei" to "Ryūsei (TV Anime \"Live Forever\" Opening Theme)"
+        ).map { (title, found) ->
+            Case("same Latin title spelled another way", "song0", title = title, songs = listOf(row(found)))
+        }
+        val japanese = eighth.single { it.what == "2 shooting star" }
+        val unrelated = japanese.copy(main = null, songs = listOf(row("Tōkyō")))
+        val cases = listOf(accented, equivalentAccent, equivalentStroke, otherScript, japanese, unrelated) + spellings
+        assertEquals(cases.map(Case::main), cases.map(::find))
+    }
 
     @Test
     fun everyInputTheReviewsTriedOpensWhatMainDid() {
