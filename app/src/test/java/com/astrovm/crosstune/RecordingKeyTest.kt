@@ -6,6 +6,17 @@ import org.junit.Test
 class RecordingKeyTest {
     private val song = MusicMetadata("Demo", "Band")
 
+    @Test fun anExactPlayingLinkCanKeepItsInstrumentalAlbumWhenTheSessionOmitsIt() {
+        val album = "Album (Instrumentals)"
+        val opened = song.copy(url = "https://www.deezer.com/us/track/123", instrumentalAlbum = album)
+        val played = song.copy(url = "https://www.deezer.com/track/123", recordingId = "deezer:123")
+        assertEquals(album, RecordingKey.asPlayed(opened, played).instrumentalAlbum)
+        assertNull(RecordingKey.asPlayed(opened, played.copy(url = "https://www.deezer.com/track/456")).instrumentalAlbum)
+        assertEquals(album, RecordingKey.asPlayed(opened.copy(recordingId = played.recordingId), played.copy(url = null)).instrumentalAlbum)
+        val approximate = song.copy(recordingId = "deezer:duration:200000")
+        assertNull(RecordingKey.asPlayed(opened.copy(recordingId = approximate.recordingId), approximate).instrumentalAlbum)
+    }
+
     @Test fun anAppThatGivesNoLinkLeavesTheOneTheSongWasOpenedBy() {
         val opened = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
         val played = RecordingKey.asPlayed(opened, song.copy(lengthMs = 200_000, recordingId = "music:duration:200000"))

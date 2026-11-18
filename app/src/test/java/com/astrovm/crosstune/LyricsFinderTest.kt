@@ -145,6 +145,26 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun offlineFallbackDoesNotBorrowBetweenASungAndAnInstrumentalAlbum() {
+        val instrumental = song.copy(instrumentalAlbum = "Album (Instrumentals)")
+        fake.handler = { throw IOException("offline") }
+        for ((previous, playing) in listOf(instrumental to song, song to instrumental)) {
+            val file = File.createTempFile("lyrics", ".json")
+            try {
+                val cache = LookupCache(file, Dispatchers.Unconfined)
+                val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
+                val key = "${LyricsFinder.CACHE_VERSION}\u0000${RecordingKey.of(previous)}"
+                runBlocking {
+                    cache.put(key, """{"words":"Other recording's words","lines":[],"marked":${previous.instrumentalAlbum != null}}""")
+                    assertEquals(Lyrics.Unavailable, finder.lyricsOf(playing))
+                }
+            } finally {
+                file.delete()
+            }
+        }
+    }
+
+    @Test
     fun oneMarkedCopyGivesWayToWordsFoundElsewhere() {
         // A copy sent with no words may be marked so, as one of a sung song's ten is.
         everywhere("[${instrumentalCopy()}]", youTubeMusicPage("Words the video sings" to null))

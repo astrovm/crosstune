@@ -10,16 +10,23 @@ import kotlin.math.abs
 internal object RecordingKey {
     fun of(song: MusicMetadata): String {
         val name = "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
-        val link = song.url?.let { MusicLinks.parse(it) as? LinkInput.Link }?.link
-        val recording = song.recordingId ?: link?.takeIf { it.type == ItemType.TRACK }?.let { "${it.service}:${it.id}" }
+        val recording = song.recordingId ?: track(song.url)?.let { "${it.service}:${it.id}" }
         return name + recording?.let { "\u0000$it" }.orEmpty() + song.lengthMs?.takeIf { it > 0 }?.let { "\u0000$it" }.orEmpty() +
-            song.instrumentalAlbum?.let { "\u0000album:${SongNames.normalize(it)}" }.orEmpty()
+            instrumentalAlbumKey(song)?.let { "\u0000$it" }.orEmpty()
     }
+
+    /** Words from another take can only be borrowed offline within the same instrumental album, or with none known for either. */
+    fun sameInstrumentalAlbum(key: String, song: MusicMetadata): Boolean =
+        key.substringAfterLast('\u0000').takeIf { it.startsWith(INSTRUMENTAL_ALBUM_PREFIX) } == instrumentalAlbumKey(song)
+
+    private const val INSTRUMENTAL_ALBUM_PREFIX = "album:"
+
+    private fun instrumentalAlbumKey(song: MusicMetadata): String? =
+        song.instrumentalAlbum?.let { INSTRUMENTAL_ALBUM_PREFIX + SongNames.normalize(it) }
 
     /** YouTube's exact video, when the link is known. A search match isn't the playing video. */
     fun youTubeId(song: MusicMetadata): String? {
-        val link = (song.url?.let(MusicLinks::parse) as? LinkInput.Link)?.link ?: return null
-        return link.takeIf { it.type == ItemType.TRACK && it.service in setOf(MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC) }?.id
+        return track(song.url)?.takeIf { it.service in setOf(MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC) }?.id
     }
 
     /**
@@ -29,8 +36,21 @@ internal object RecordingKey {
     fun asPlayed(song: MusicMetadata, playing: MusicMetadata): MusicMetadata =
         song.copy(
             recordingId = playing.recordingId, lengthMs = playing.lengthMs, heardLengthMs = song.heardLengthMs ?: song.lengthMs,
-            url = playing.url ?: song.url, instrumentalAlbum = playing.instrumentalAlbum
+            url = playing.url ?: song.url,
+            instrumentalAlbum = playing.instrumentalAlbum ?: song.instrumentalAlbum?.takeIf { sameRecording(song, playing) }
         )
+
+    private fun track(url: String?): MusicLink? =
+        (url?.let(MusicLinks::parse) as? LinkInput.Link)?.link?.takeIf { it.type == ItemType.TRACK }
+
+    /** A player can omit the album. Keep the link's evidence only for an identified recording. */
+    private fun sameRecording(song: MusicMetadata, playing: MusicMetadata): Boolean {
+        val asked = track(song.url)
+        val played = track(playing.url)
+        if (asked != null && played != null) return asked.service != null && asked.service == played.service && asked.id == played.id
+        val id = playing.recordingId ?: return false
+        return id == song.recordingId && ":duration:" !in id
+    }
 
     /** Android players can omit the ID, as YouTube Music does; their duration still separates edits. */
     fun playing(app: String, id: String?, durationMs: Long?): String? {

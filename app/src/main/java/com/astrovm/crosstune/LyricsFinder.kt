@@ -635,7 +635,9 @@ internal class LyricsFinder(
      */
     private suspend fun keptUnderName(metadata: MusicMetadata): Lyrics.Found? {
         val names = cachedNames(metadata)
-        return cache?.entries()?.lastOrNull { (key) -> key.isCachedUnder(names) }?.let { (_, kept) -> fromCache(kept)?.first }
+        return cache?.entries()?.lastOrNull { (key) ->
+            key.isCachedUnder(names) && RecordingKey.sameInstrumentalAlbum(key, metadata)
+        }?.let { (_, kept) -> fromCache(kept)?.first }
     }
 
     /** The sheets on the phone for [song]. The reading cache keys use the whole sheet as shown, timed or plain. */
