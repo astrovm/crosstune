@@ -1138,9 +1138,11 @@ internal class MediaSessionPlayback(
         if (named?.unnamed == true) return false
         val fileTitle = MetadataParsers.withoutAudioExtension(title)
         if (fileTitle != title && named != null && named.artist.isNotBlank()) {
-            if (named.creditMatches(song)) return true
-            // A song shared without an artist can still name the entire file, including both sides of its dash.
-            return song.artist.isBlank() && fileTitle.trim().equals(MetadataParsers.withoutAudioExtension(song.title).trim(), ignoreCase = true)
+            if (!SongNames.sameArtist(named.artist, song.artist)) return false
+            // Files can be asked for by the track or by their whole literal title, including both sides of the dash.
+            val requested = MetadataParsers.withoutAudioExtension(song.title)
+            return (SongNames.names(named.title, "", song) && SongNames.wholeTitle(named.title, song.title)) ||
+                SongNames.wholeTitle(fileTitle, requested, keepNotes = true)
         }
         if (!SongNames.names(title, "", song)) return false
         return SongNames.wholeTitle(title, song.title) || named?.creditMatches(song) == true

@@ -855,15 +855,15 @@ internal object SongNames {
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter) && titleWordsMatch(one, other, onePlain, otherPlain)
     }
 
-    /** Without an artist, require the whole title. A bare word such as Radio can be part of a station's name. */
-    fun wholeTitle(one: String, other: String): Boolean {
-        val title = wholeTitleWords(one)
-        return title.isNotEmpty() && title == wholeTitleWords(other)
+    /** Require every title word. [keepNotes] also compares recording labels, as for a literal file title. */
+    fun wholeTitle(one: String, other: String, keepNotes: Boolean = false): Boolean {
+        val title = wholeTitleWords(one, keepNotes)
+        return title.isNotEmpty() && title == wholeTitleWords(other, keepNotes)
     }
 
     /** Keep word boundaries and non-Latin marks, such as the voicing in ガラス and カラス. */
-    private fun wholeTitleWords(title: String): List<String> =
-        Normalizer.normalize(titleEvidence(title, bareNotes = false), Normalizer.Form.NFC).lowercase(Locale.ROOT)
+    private fun wholeTitleWords(title: String, keepNotes: Boolean): List<String> =
+        Normalizer.normalize(if (keepNotes) title else titleEvidence(title, bareNotes = false), Normalizer.Form.NFC).lowercase(Locale.ROOT)
             .split(titleWordSplit).filter { word -> word.codePoints().anyMatch(Character::isLetterOrDigit) }.map { word ->
                 if (word.codePoints().filter(Character::isLetter).allMatch { Character.UnicodeScript.of(it) == Character.UnicodeScript.LATIN }) normalize(word) else word
             }

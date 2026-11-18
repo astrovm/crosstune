@@ -1817,6 +1817,12 @@ class PlaybackTest {
             assertEquals(name, session, playback.appFor(song.copy(artist = ""), app = packageName))
             val fullTitle = MusicMetadata("Fixture Artist - ${song.title}", "")
             assertEquals(name, session, playback.appFor(fullTitle, app = packageName))
+            val fullBy = fullTitle.copy(title = "Fixture Artist – ${song.title}", artist = "Fixture Artist")
+            assertEquals(name, session, playback.appFor(fullBy, app = packageName))
+            assertNull(name, playback.appFor(fullBy.copy(artist = "Wrong Artist"), app = packageName))
+            if (name == "Paperkite.flac") {
+                assertNull(name, playback.appFor(song.copy(title = "Paperkite (Live)"), app = packageName))
+            }
         }
     }
 
