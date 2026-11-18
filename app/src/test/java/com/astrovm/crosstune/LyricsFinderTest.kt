@@ -174,13 +174,17 @@ class LyricsFinderTest {
             val sung = instrumental.copy(lengthMs = 201_000, recordingId = "app:sung")
             fake.handler = { throw IOException("offline") }
             runBlocking {
-                cache.put("${LyricsFinder.CACHE_VERSION}\u0000${RecordingKey.of(instrumental)}",
-                    """{"words":"Words","lines":[],"marked":true}""")
-                val kept = finder.lyricsOf(instrumental) as Lyrics.Found
-                val borrowed = finder.lyricsOf(sung) as Lyrics.Found
-                assertEquals(true, kept.markedInstrumental)
-                assertEquals(kept.words, borrowed.words)
-                assertEquals(false, borrowed.markedInstrumental)
+                // Version 17 NetEase words are rechecked online, but still lent offline without their mark.
+                for (version in listOf(17, LyricsFinder.CACHE_VERSION)) {
+                    cache.put("$version\u0000${RecordingKey.of(instrumental)}",
+                        """{"words":"Version $version words","lines":[],"source":"netease","marked":true}""")
+                    val kept = finder.lyricsOf(instrumental) as Lyrics.Found
+                    val borrowed = finder.lyricsOf(sung) as Lyrics.Found
+                    assertEquals("Version $version words", kept.words)
+                    assertEquals(true, kept.markedInstrumental)
+                    assertEquals(kept.words, borrowed.words)
+                    assertEquals(false, borrowed.markedInstrumental)
+                }
             }
         } finally {
             file.delete()
