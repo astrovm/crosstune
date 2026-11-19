@@ -1,2 +1,0 @@
-FROM localhost/crosstune-gradle-box:f4b34550c1c3c0ef280d138d1f5364450dba90f9344bb9cfd0377ae62fcd7f1e
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs libnss3 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 libpangocairo-1.0-0 fonts-dejavu-core && rm -rf /var/lib/apt/lists/*

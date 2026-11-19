@@ -275,9 +275,9 @@ class ChordWikiTest {
     }
 
     @Test
-    fun structureSeparatesAutomaticChecksFromCheckboxes() {
-        val automatic = chordWikiSeen("""{"href":"https://ja.chordwiki.org/","automatic":true}""")
-        val interactive = chordWikiSeen("""{"href":"https://ja.chordwiki.org/","automatic":true,"interactive":true}""")
+    fun wordsSeparateAutomaticChecksFromCheckboxes() {
+        val automatic = chordWikiSeen("""{"href":"https://ja.chordwiki.org/","title":"Just a moment..."}""")
+        val interactive = chordWikiSeen("""{"href":"https://ja.chordwiki.org/","title":"Just a moment...","text":"Click the checkbox"}""")
         assertEquals(ChordWikiLook.Waiting, chordWikiLook(automatic, false))
         assertEquals(ChordWikiCheck.AUTOMATIC, stopped { chordWikiLook(automatic, true) })
         assertEquals(ChordWikiCheck.INTERACTIVE, stopped { chordWikiLook(interactive, false) })
@@ -287,7 +287,7 @@ class ChordWikiTest {
     @Test
     fun genericVerificationTextDoesNotProveThatAClickIsNeeded() {
         for (words in listOf("The site needs to verify you are human before proceeding. Please enable JavaScript and cookies", "人間であることを確認しています")) {
-            val seen = chordWikiSeen(org.json.JSONObject().put("href", "https://ja.chordwiki.org/").put("text", words).put("automatic", true).toString())
+            val seen = chordWikiSeen(org.json.JSONObject().put("href", "https://ja.chordwiki.org/").put("text", words).toString())
             assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen, false))
             assertEquals(ChordWikiCheck.AUTOMATIC, stopped { chordWikiLook(seen, true) })
         }
@@ -325,7 +325,7 @@ class ChordWikiTest {
             assertEquals(ChordWikiCheck.AUTOMATIC, observation.check)
             // Cloudflare may also inject its script into an ordinary editor page.
             val editor = JSONObject().put("href", "https://ja.chordwiki.org/wiki.cgi?c=edit")
-                .put("hasEditor", true).put("source", "[C]架空の歌").put("automatic", true)
+                .put("hasEditor", true).put("source", "[C]架空の歌")
             answer(web, JSONObject.quote(editor.toString()))
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals("[C]架空の歌", done.within().getOrThrow())
@@ -418,6 +418,31 @@ class ChordWikiTest {
         } finally {
             job.cancel()
         }
+    }
+
+    @Test
+    fun theCheckMayBuildItsFramesFromAddresslessPagesButTheHiddenPageGoesNowhereElse() {
+        fun may(url: String) = chordWikiMayNavigate(Uri.parse(url))
+        for (url in listOf("about:blank", "about:srcdoc", "blob:https://challenges.cloudflare.com/1-2", "data:text/html,x", "javascript:void(0)",
+            "https://ja.chordwiki.org/wiki/x", "https://brunhild.challenges.cloudflare.com/x", "ABOUT:blank")) assertTrue(url, may(url))
+        for (url in listOf("https://tracker.example/", "http://ja.chordwiki.org/", "intent://scan/#Intent;scheme=zxing;end", "market://details?id=x",
+            "file:///sdcard/x", "tel:123", "content://x/y")) assertFalse(url, may(url))
+    }
+
+    @Test
+    fun theCheckMayReachItsOwnSubdomainsAndNoLookAlike() {
+        fun allowed(url: String) = chordWikiAllowed(Uri.parse(url))
+        // Measured on a phone: every blocked request of a check that never ended went here.
+        assertTrue(allowed("https://brunhild.challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/orchestrate"))
+        assertTrue(allowed("https://Brunhild.Challenges.Cloudflare.com/x"))
+        for (url in listOf(
+            "https://cloudflare.com/x",
+            "https://challenges.cloudflare.com.evil.example/x",
+            "https://evilchallenges.cloudflare.com/x",
+            "https://brunhild.challenges.cloudflare.com:8443/x",
+            "http://brunhild.challenges.cloudflare.com/x",
+            "https://static.cloudflareinsights.com/beacon.min.js",
+        )) assertFalse(url, allowed(url))
     }
 
     @Test

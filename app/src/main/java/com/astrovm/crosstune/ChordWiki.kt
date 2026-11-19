@@ -127,9 +127,7 @@ internal data class ChordWikiSeen(
     val text: String,
     val source: String,
     val hasEditor: Boolean,
-    val links: String,
-    val automatic: Boolean = false,
-    val interactive: Boolean = false
+    val links: String
 )
 
 /** Whether the page is the sheet, or Cloudflare still checking, or a check a person has to click. */
@@ -208,7 +206,7 @@ internal class ChordWikiBrowser(
                 return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
             }
 
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !chordWikiAllowed(request.url)
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !chordWikiMayNavigate(request.url)
 
             override fun onPageFinished(view: WebView, loaded: String) {
                 ask(view, started, observation, ::finish)
@@ -277,7 +275,13 @@ internal class ChordWikiBrowser(
         /** How long a page may take before the lookup gives up on it. */
         const val WAIT_MS = 18_000L
 
-        /** The editor's text, the links to sheets, and the words on screen. Not the page's scripts. */
+        /**
+         * The editor's text, the links to sheets, and the words on screen. Not the page's scripts.
+         *
+         * It never looks for Cloudflare's own elements or frames. Measured on a phone with no ChordWiki cookie,
+         * asking the page for the check's elements (by id) made the check fail every time, 14 runs in 14, and
+         * leaving them alone made it pass every time, so what the check is has to come from the words.
+         */
         fun readPage(): String = """
             (function(){
               var areas=document.getElementsByTagName('textarea');
@@ -294,36 +298,13 @@ internal class ChordWikiBrowser(
                 links.push((as[j].innerText||'').replace(/\s+/g,' ').trim()+'\t'+href);
               }
               var body=document.body;
-              var automatic=false,interactive=false;
-              var scopes=[{root:document,challenge:false}];
-              for(var n=0;n<scopes.length;n++){
-                var scope=scopes[n],root=scope.root;
-                var marker='#challenge-running, #challenge-stage, form#challenge-form';
-                automatic=automatic||!!root.querySelector(marker+', script[src*="/cdn-cgi/challenge-platform/"], iframe[src^="https://challenges.cloudflare.com/"]');
-                interactive=interactive||!!root.querySelector('#challenge-stage input[type="checkbox"], #challenge-stage [role="checkbox"], form#challenge-form input[type="checkbox"], form#challenge-form [role="checkbox"]');
-                if(scope.challenge) interactive=interactive||!!root.querySelector('input[type="checkbox"], [role="checkbox"]');
-                var elements=root.querySelectorAll('*');
-                for(var k=0;k<elements.length;k++){
-                  var element=elements[k];
-                  var challenge=scope.challenge||!!element.closest(marker);
-                  if(element.shadowRoot) scopes.push({root:element.shadowRoot,challenge:challenge});
-                  if(element.tagName==='IFRAME'){
-                    try{
-                      var framed=element.contentDocument;
-                      if(framed&&framed.documentElement) scopes.push({root:framed,challenge:challenge});
-                    }catch(ignored){}
-                  }
-                }
-              }
               return JSON.stringify({
                 href:location.href,
                 title:document.title||'',
                 text:body?(body.innerText||''):'',
                 source:source,
                 hasEditor:areas.length>0,
-                links:links.join('\n'),
-                automatic:automatic,
-                interactive:interactive
+                links:links.join('\n')
               });
             })()
         """.trimIndent()
@@ -337,9 +318,22 @@ internal class ChordWikiBrowser(
  */
 private val CHORD_WIKI_HOSTS = setOf("ja.chordwiki.org", "challenges.cloudflare.com", "cse.google.com", "www.google.com")
 
-/** Whether the hidden page may reach [uri]: one of [CHORD_WIKI_HOSTS], over HTTPS on its usual port. */
-internal fun chordWikiAllowed(uri: Uri): Boolean =
-    uri.scheme == "https" && uri.host?.lowercase() in CHORD_WIKI_HOSTS && (uri.port == -1 || uri.port == 443)
+/** The check also asks its own subdomain, "brunhild.challenges.cloudflare.com" (seen on a phone, once for each check). */
+private const val CHECK_SUBDOMAINS = ".challenges.cloudflare.com"
+
+/** Whether the hidden page may reach [uri]: one of [CHORD_WIKI_HOSTS] or a subdomain of the check's, over HTTPS on its usual port. */
+internal fun chordWikiAllowed(uri: Uri): Boolean {
+    val host = uri.host?.lowercase() ?: return false
+    return uri.scheme == "https" && (uri.port == -1 || uri.port == 443) && (host in CHORD_WIKI_HOSTS || host.endsWith(CHECK_SUBDOMAINS))
+}
+
+/**
+ * Whether the hidden page may move to [uri]: where it may fetch from, or a page with no address of its
+ * own, like a frame the check builds. An app's own link scheme, or any other site, it may not.
+ */
+internal fun chordWikiMayNavigate(uri: Uri): Boolean = chordWikiAllowed(uri) || uri.scheme?.lowercase() in LOCAL_SCHEMES
+
+private val LOCAL_SCHEMES = setOf("about", "blob", "data", "javascript")
 
 /** The edit page for [title], whose editor holds the sheet as ChordPro. */
 internal fun chordWikiEditUrl(title: String): String = "https://ja.chordwiki.org/wiki.cgi?c=edit&t=${chordWikiEncode(title)}"
@@ -371,9 +365,7 @@ internal fun chordWikiSeen(json: String): ChordWikiSeen {
         text = page.optString("text"),
         source = page.optString("source"),
         hasEditor = page.optBoolean("hasEditor"),
-        links = page.optString("links"),
-        automatic = page.optBoolean("automatic"),
-        interactive = page.optBoolean("interactive")
+        links = page.optString("links")
     )
 }
 
@@ -388,15 +380,8 @@ internal fun chordWikiCheck(title: String, text: String): ChordWikiCheck {
     return ChordWikiCheck.NONE
 }
 
-internal fun chordWikiCheck(seen: ChordWikiSeen): ChordWikiCheck {
-    if (seen.hasEditor) return ChordWikiCheck.NONE
-    val text = chordWikiCheck(seen.title, seen.text)
-    return when {
-        seen.interactive || text == ChordWikiCheck.INTERACTIVE -> ChordWikiCheck.INTERACTIVE
-        seen.automatic || text == ChordWikiCheck.AUTOMATIC -> ChordWikiCheck.AUTOMATIC
-        else -> ChordWikiCheck.NONE
-    }
-}
+internal fun chordWikiCheck(seen: ChordWikiSeen): ChordWikiCheck =
+    if (seen.hasEditor) ChordWikiCheck.NONE else chordWikiCheck(seen.title, seen.text)
 
 /**
  * What to do with [seen]. An editor is the sheet, even an empty one. A check keeps being waited on

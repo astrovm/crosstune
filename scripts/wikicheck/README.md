@@ -18,18 +18,3 @@ The runner reads ChordWiki's public practice editor. It submits no form and does
 8. Send `done`. Remove the test APK. Close the Device panel, stop the emulator, restore and verify the complete AVD, delete the private backup and release the lock.
 
 The runner stops after ten minutes. It leaves the status file for the device session to copy. App data must be restored after this check.
-
-## DOM extraction
-
-`test-page-script.cjs` reads the production JavaScript from `ChordWiki.kt`. It executes seven made-up DOM cases in Chrome: automatic checks, direct and shadow checkboxes, same-origin and opaque frames, an unrelated checkbox, and an editor. An opaque frame gives no evidence of a required click. It remains an unfinished check.
-
-Run this in a network-disabled container. `Containerfile` provides the browser libraries and Node. Mount an installed Chrome read-only; it must match the host architecture. No user profile or host sockets are mounted.
-
-```bash
-nice -n 10 podman build -t localhost/crosstune-wiki-qa -f scripts/wikicheck/Containerfile .
-nice -n 10 podman run --rm --network=none --memory=2g --memory-swap=2g --cpus=2 \
-  -v "$PWD:/repo:ro" -v /opt/google/chrome:/chrome:ro -w /repo \
-  localhost/crosstune-wiki-qa node scripts/wikicheck/test-page-script.cjs
-```
-
-`CHROME_BIN` selects the browser executable inside the container. If Chrome is missing, install it or use a machine that has it. This test does not establish Cloudflare's live challenge result. It cannot read a cross-origin frame's document.

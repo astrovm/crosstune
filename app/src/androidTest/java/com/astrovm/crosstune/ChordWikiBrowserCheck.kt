@@ -47,8 +47,12 @@ class ChordWikiBrowserCheck : Instrumentation() {
     /** How long one page may take: the app's own 18 s by default. `-e wait_ms N` lengthens it to see how long a check really takes. */
     private var waitMs = ChordWikiBrowser.WAIT_MS
 
+    /** `-e measure 0` leaves the page's client alone, to see whether the measurement itself changes a check. */
+    private var measure = true
+
     override fun onCreate(arguments: Bundle?) {
         waitMs = arguments?.getString("wait_ms")?.toLongOrNull() ?: ChordWikiBrowser.WAIT_MS
+        measure = arguments?.getString("measure") != "0"
         super.onCreate(arguments)
         start()
     }
@@ -67,6 +71,7 @@ class ChordWikiBrowserCheck : Instrumentation() {
                 MainActivity.chordWikiFactory = { host ->
                     creations.incrementAndGet()
                     ChordWikiBrowser(host, waitMs = waitMs, onPageCreated = page@ { web, observation ->
+                        if (!measure) return@page
                         val probe = probeRead?.takeIf { it.observation === observation } ?: return@page
                         val recording = probe.capture
                         val started = probe.started
@@ -119,6 +124,7 @@ class ChordWikiBrowserCheck : Instrumentation() {
                             }))
                             .put("blocked_requests", recorded.events.count { it["decision"] == "app_response" })
                             .put("wait_ms", waitMs)
+                            .put("measure", measure)
                             .put("events_truncated", recorded.truncated)
                             .put("pending_callbacks", recorded.pending)
                             .put("callback_failed", recorded.failed)
@@ -159,8 +165,15 @@ class ChordWikiBrowserCheck : Instrumentation() {
             }) { inner.shouldInterceptRequest(view, request) }
         }
 
-        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-            inner.shouldOverrideUrlLoading(view, request)
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+            val cancelled = inner.shouldOverrideUrlLoading(view, request)
+            recording.record({
+                mapOf("type" to "navigation", "scheme" to (request.url.scheme?.takeIf { it in setOf("https", "http", "about", "blob", "data", "javascript") } ?: "other"),
+                    "host" to hostName(request.url), "main_frame" to request.isForMainFrame, "cancelled" to cancelled,
+                    "t_ms" to SystemClock.elapsedRealtime() - started)
+            })
+            return cancelled
+        }
 
         override fun onPageFinished(view: WebView, url: String?) = inner.onPageFinished(view, url)
 
