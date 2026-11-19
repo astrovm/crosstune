@@ -93,6 +93,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performFirstLinkClick
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -119,6 +120,111 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h2000dp")
 class ListeningTest {
+    private fun field(owner: Any, name: String): Any? = owner.javaClass.getDeclaredField(name).let {
+        it.isAccessible = true
+        it.get(owner)
+    }
+
+    private fun chordFinder(activity: MainActivity): ChordFinder =
+        field(ViewModelProvider(activity)[MainViewModel::class.java], "chordFinder") as ChordFinder
+
+    private fun wikiPages(activity: MainActivity): ChordWikiPages = field(chordFinder(activity), "chordWiki") as ChordWikiPages
+
+    @Test
+    fun chordDiagnosticsDoNotLogSongNamesInNonDebuggableBuilds() {
+        val debuggable = android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE
+        val originalFlags = app.applicationInfo.flags
+        ShadowLog.setLoggable(ChordFinder.CHORD_LOG, android.util.Log.INFO)
+        fake.handler = { FakeSpotify.html(it, "{}") }
+        try {
+            for ((debug, title) in listOf(false to "Release fixture", true to "Debug fixture")) {
+                app.applicationInfo.flags = if (debug) originalFlags or debuggable else originalFlags and debuggable.inv()
+                val activity = launch()
+                assertEquals(debug, activity.applicationInfo.flags and debuggable != 0)
+                val finder = chordFinder(activity)
+                runBlocking { finder.chordsOf(MusicMetadata(title, "Fixture artist"), listOf("Fixture line"), timeoutMs = 100) }
+                assertEquals(debug, ShadowLog.getLogsForTag(ChordFinder.CHORD_LOG).any { it.msg.contains("lookup title=$title ") })
+                controller?.destroyAndSettle()
+                controller = null
+            }
+        } finally {
+            app.applicationInfo.flags = originalFlags
+        }
+    }
+
+    private fun wikiWeb(view: android.view.View): android.webkit.WebView? = when (view) {
+        is android.webkit.WebView -> view
+        is android.view.ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { wikiWeb(view.getChildAt(it)) }
+        else -> null
+    }
+
+    @Test
+    fun chordWikiPagesFollowTheRecreatedActivity() {
+        val first = launch()
+        val model = ViewModelProvider(first)[MainViewModel::class.java]
+        val pages = wikiPages(first)
+        val oldRoot = first.window.decorView
+        val normal = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { pages.page("https://ja.chordwiki.org/") }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNotNull(wikiWeb(oldRoot))
+        normal.cancel()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(normal.isCancelled)
+        assertNull(wikiWeb(oldRoot))
+        controller = requireNotNull(controller).recreate()
+        val current = requireNotNull(controller).get()
+        assertSame(model, ViewModelProvider(current)[MainViewModel::class.java])
+        var result: Result<String>? = null
+        val lookup = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { result = runCatching { pages.page("https://ja.chordwiki.org/") } }
+        shadowOf(Looper.getMainLooper()).idle()
+        val old = wikiWeb(oldRoot)
+        val live = wikiWeb(current.window.decorView)
+        assertTrue("old decor has page=${old != null}; live decor has page=${live != null}", old == null && live != null)
+        prefs().edit().putString("theme", "DARK").commit()
+        controller = requireNotNull(controller).recreate()
+        shadowOf(Looper.getMainLooper()).idle()
+        // The lookup's screen is gone, so it isn't over: the same page opens on the next one.
+        assertNull(result)
+        assertNull(live?.parent)
+        val themed = requireNotNull(controller).get()
+        assertSame(model, ViewModelProvider(themed)[MainViewModel::class.java])
+        assertNull(wikiWeb(current.window.decorView))
+        assertNotNull(wikiWeb(themed.window.decorView))
+        lookup.cancel()
+    }
+
+    @Test
+    fun destroyingTheActivityRemovesItsPendingWikiPageAndKeepsTheLookupWaiting() {
+        val activity = launch()
+        val pages = wikiPages(activity)
+        val root = activity.window.decorView
+        var result: Result<String>? = null
+        val job = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { result = runCatching { pages.page("https://ja.chordwiki.org/") } }
+        shadowOf(Looper.getMainLooper()).idle()
+        val page = wikiWeb(root)
+        assertNotNull(page)
+        requireNotNull(controller).pause().stop().destroy()
+        shadowOf(Looper.getMainLooper()).idle()
+        val removed = page?.parent == null
+        val waiting = result == null && job.isActive
+        job.cancel()
+        assertTrue("page removed=$removed; request waiting=$waiting", removed && waiting)
+    }
+
+    @Test
+    fun wikiRequestWithoutAnActivityWaitsWithoutOpeningAPage() {
+        val activity = launch()
+        val pages = wikiPages(activity)
+        val root = activity.window.decorView
+        requireNotNull(controller).pause().stop().destroy()
+        var result: Result<String>? = null
+        val job = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { result = runCatching { pages.page("https://ja.chordwiki.org/") } }
+        shadowOf(Looper.getMainLooper()).idle()
+        val waiting = result == null && job.isActive
+        val old = wikiWeb(root)
+        job.cancel()
+        assertTrue("waiting=$waiting; destroyed decor has page=${old != null}", waiting && old == null)
+    }
 
     @get:Rule
     val composeRule = createEmptyComposeRule()

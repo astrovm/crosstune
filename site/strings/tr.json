@@ -62,7 +62,7 @@
   "privacy_link": "Gizlilik politikası",
   "language_label": "Dil",
   "privacy_title": "Crosstune Gizlilik Politikası",
-  "updated": "Son güncelleme: 18 Kasım 2026",
+  "updated": "Son güncelleme: 19 Kasım 2026",
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
@@ -113,6 +113,10 @@
     [
       "p",
       "Bir bağlantı yerine şarkının adını yazdığınızda Crosstune, bu adı Deezer ve Apple'ın herkese açık şarkı aramalarına gönderir ve bulunan şarkıları gösterir; böylece istediğiniz şarkıyı bağlantısı olmadan açabilirsiniz. Bir şarkının sözlerini veya akorlarını istediğinizde uygulama, şarkının başlığını ve sanatçısını hesap veya anahtar gerektirmeyen servislere gönderir: sözler için LRCLIB, YouTube Music, NetEase Cloud Music, Letras ve Genius'a, akorlar için Ultimate Guitar, Cifra Club, LaCuerda, U-FRET, J-Total ve ChordWiki'ye, şarkının özgün adını ya da bir cover'ın şarkısını ilk kimin söylediğini ve kimin yazdığını bulmak için de Apple'ın şarkı aramasına ve şarkı sayfalarına. Sözlerde Çeviri'yi açtığında uygulama satırları hesap gerektirmeyen çeviri hizmetleri olan Google Translate'e, Google Translate çeviremezse MyMemory'ye gönderir; aşağıda anlatıldığı gibi ChatGPT çevirmiyorsa. Android bir şarkının dilini telefonunda anlar; zaten çeviri dilindeki ya da çevrilmemesini seçtiğin bir dildeki sözler gönderilmez. Kanjilerin üstündeki kana gibi okunuşlar telefonunda hesaplanır ve hiçbir yere gönderilmez; aşağıda anlatıldığı gibi birini yanlış olarak işaretlersen bu değişir. Okunuşlar ya da Latin harfleri açıkken veya sözler sadece kana ya da sadece Latin harfleriyle gösterilirken Japonca bir şarkının başlığı ve sanatçısı, kanjilerin üstüne kanayı söylendiği gibi yazan bir şarkı sözü sitesi olan UtaTen'e de gönderilir. Anlamı için dokunduğun bir kelime de aynı şekilde gönderilir. Uygulama İngilizceyse, İngilizce bir kelime Wiktionary sözlüğünde aranır. Kaydettiğin satırlar telefonunda kalır. Japonca için daha büyük bir sözlük, UniDic, Maven Central'dan bir kez indirilir, yalnızca Wi-Fi'da ya da kotasız başka bir ağda. Her istek gibi bu da IP adresini Maven Central'a gösterir."
+    ],
+    [
+      "p",
+      "Japonca bir şarkı için Crosstune akorları ChordWiki'de de arar. Site düz isteklere yanıt vermez, bu yüzden uygulama sayfalarını telefonunda gizli bir tarayıcı sayfasında açar ve şarkının adı ile sanatçısı oraya gider. Sayfa JavaScript çalıştırır; ChordWiki çerez bırakabilir ve site verilerini telefonunun ortak tarayıcı depolamasında tutabilir. Uygulamanın diğer web sayfaları da, örneğin bir alıştırma kartındaki YouTube oynatıcısı, bu depolamayı kullanır. Sayfalar tek tek açılır. ChordWiki'de bir şarkının akorları yoksa uygulama bunu telefonunda 24 saat hatırlar ve yeniden sormaz. Başarısız bir arama ya da bitmemiş bir kontrol hatırlanmaz, yeniden denenir; değişen şarkı sözleri ise ayrı aranır. Bu tarayıcı depolama alanı Crosstune’a aittir. Sayfa, komut dosyaları veya yönlendirmeler aracılığıyla Cloudflare ve başka sitelerle de bağlantı kurabilir. Uygulama ChordWiki'de arama yaptığında, arama sayfası aranan sözcükleri Google'a da gönderir; sonuçları Google verir."
     ],
     [
       "p",

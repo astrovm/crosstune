@@ -1,0 +1,20 @@
+# ChordWiki browser checks
+
+The runner reads ChordWiki's public practice editor. It submits no form and does not click a browser check. It records counts, allowed host names, resource kinds and callback decisions. It keeps no URLs, query strings, paths, cookie values, unknown host labels or editor text.
+
+1. Back up the stopped test AVD and verify the copy before starting it. Hold its device lock. The runner needs the dev app, never the production app. Use a clean dev data set or restore the complete AVD afterwards.
+2. Build with `scripts/wikicheck/build.sh`. Check both hashes and the test APK's instrumentation entry.
+3. Start the emulator with `scripts/emulator/emulator.py`. Attach through `device_list` and `device_open`. Set media volume to zero through Android Settings with that pinned command before anything can play. Do not use adb to change a setting. If the command has no volume action, open Android Settings and use its sound slider.
+4. Install both APKs with the SDK adb, naming the emulator serial. Save the previous `run_id` from `cache/wikicheck-status.json` if the file exists. Then start the project runner:
+
+   ```bash
+   "$HOME/Android/Sdk/platform-tools/adb" -s emulator-5580 shell am instrument -w com.astrovm.crosstune.dev.test/com.astrovm.crosstune.ChordWikiBrowserCheck
+   ```
+
+5. Wait for that file to say `ready` with a different `run_id`. Use the pinned command from `device_open` with `open com.astrovm.crosstune.dev --activity com.astrovm.crosstune.dev/com.astrovm.crosstune.MainActivity`. The package is the first argument; the full component belongs to `--activity`. Do not use `--relaunch`, which would stop the runner.
+6. Send `read` through `run-as` and the `cache/wikicheck-control` file. Wait for the same current `run_id`, a new `request_id` and `state: read`. While that request runs, its state is `reading`. Do not reuse the previous request ID. A successful editor has `editor_chars > 0` and no error. A stopped challenge is a failed editor check, even when instrumentation itself exits zero.
+   By default the page uses the production 18-second page limit and a deadline two seconds after it. To see how long a check really takes, start the runner with `-e wait_ms 90000`; the status file then says `wait_ms`, and `blocked_requests` counts what the app's allowlist answered itself. `page_events` records resource decisions and HTTP errors. Require at least one `challenge_image` with decision `not_intercepted`, and none with `app_response`. A null interception result means WebView handles the resource; it does not prove network delivery or an HTTP success. Require `events_complete: true`, `events_truncated: false`, `callback_failed: false` and `pending_callbacks: 0` before counting events. The recorder installs its client and records `settings_before_load` before `loadUrl`. It seals the event list, counts and completeness flags together when the lookup ends. Later callbacks are outside this observation window. The recorder registers callback entry before reading its host, headers or error fields. A callback still running when it closes makes that result incomplete. This runner never overrides the browser policy.
+7. Change appearance through the pinned device command to recreate MainActivity. Send `read` again. `activity_creations` must increase, `live_requests` must be positive, and `old_requests` must stay zero. The runner retains the first view model's page source.
+8. Send `done`. Remove the test APK. Close the Device panel, stop the emulator, restore and verify the complete AVD, delete the private backup and release the lock.
+
+The runner stops after ten minutes. It leaves the status file for the device session to copy. App data must be restored after this check.

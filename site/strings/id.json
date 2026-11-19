@@ -62,7 +62,7 @@
   "privacy_link": "Kebijakan privasi",
   "language_label": "Bahasa",
   "privacy_title": "Kebijakan Privasi Crosstune",
-  "updated": "Terakhir diperbarui: 18 November 2026",
+  "updated": "Terakhir diperbarui: 19 November 2026",
   "short_h2": "Singkatnya",
   "short_items": [
     "Tanpa akun, iklan, atau analitik.",
@@ -113,6 +113,10 @@
     [
       "p",
       "Jika kamu mengetik nama lagu alih-alih link, Crosstune mengirim nama itu ke pencarian lagu publik Deezer dan Apple dan menampilkan lagu yang ditemukan, sehingga kamu bisa membuka lagu yang kamu maksud tanpa link-nya. Saat kamu meminta lirik atau chord lagu, aplikasi mengirim judul dan artis lagu ke layanan yang tidak butuh akun atau kunci: LRCLIB, YouTube Music, NetEase Cloud Music, Letras, dan Genius untuk lirik, Ultimate Guitar, Cifra Club, LaCuerda, U-FRET, J-Total, dan ChordWiki untuk chord, serta pencarian dan halaman lagu Apple untuk menemukan nama asli lagu, atau siapa yang pertama menyanyikan dan menulis lagu dari sebuah cover. Saat kamu menyalakan Terjemahan di lirik, aplikasi mengirim baris-barisnya ke Google Translate, atau ke MyMemory saat Google Translate tidak bisa menerjemahkannya, layanan terjemahan tanpa akun, kecuali ChatGPT yang menerjemahkannya, seperti dijelaskan di bawah. Android mengenali bahasa lagu di ponselmu, dan lirik yang sudah dalam bahasa terjemahanmu, atau dalam bahasa yang kamu pilih untuk tidak diterjemahkan, tidak dikirim. Bacaan, seperti kana di atas kanji, dihitung di ponselmu dan tidak dikirim ke mana pun, kecuali kamu menandai salah satunya salah, seperti dijelaskan di bawah. Untuk lagu Jepang dengan bacaan atau huruf Latin aktif, atau dengan kata yang ditampilkan hanya dalam kana atau hanya huruf Latin, aplikasi juga mengirim judul dan artis lagu ke UtaTen, situs lirik yang menulis kana di atas kanji seperti yang dinyanyikan. Kata yang kamu ketuk untuk melihat artinya dikirim dengan cara yang sama. Jika aplikasi berbahasa Inggris, kata bahasa Inggris dicari di kamus Wiktionary. Baris yang kamu simpan tetap di ponselmu. Untuk bahasa Jepang, kamus yang lebih besar, UniDic, diunduh sekali dari Maven Central, hanya lewat Wi-Fi atau jaringan lain yang tidak berkuota, yang, seperti permintaan lainnya, memperlihatkan alamat IP-mu ke Maven Central."
+    ],
+    [
+      "p",
+      "Untuk lagu berbahasa Jepang, Crosstune juga mencari chord di ChordWiki. Situs itu tidak menjawab permintaan biasa, jadi aplikasi membuka halamannya di halaman browser tersembunyi di ponselmu, dan judul serta artis lagu dikirim ke sana. Halaman itu menjalankan JavaScript, dan ChordWiki bisa menyimpan cookie dan data situs di penyimpanan browser bersama di ponselmu, yang dipakai juga oleh halaman web lain di aplikasi, seperti pemutar YouTube di kartu latihan. Halaman dibuka satu per satu. Kalau ChordWiki tidak punya chord untuk sebuah lagu, aplikasi mengingatnya di ponselmu selama 24 jam dan tidak bertanya lagi. Pencarian yang gagal atau pemeriksaan yang belum selesai tidak diingat, jadi dicoba lagi, dan lirik lagu yang berubah dicari tersendiri. Penyimpanan browser ini milik Crosstune. Halaman ini juga dapat menghubungi Cloudflare dan situs lain melalui skrip atau pengalihannya. Saat aplikasi mencari di ChordWiki, halaman pencariannya juga mengirim kata yang dicari ke Google, yang menyediakan hasilnya."
     ],
     [
       "p",
