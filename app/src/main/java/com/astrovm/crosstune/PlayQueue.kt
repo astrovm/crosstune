@@ -91,10 +91,14 @@ internal class PlayQueue(
             list?.takeIf { sameApp(it.app, following.appPackage, installed) && it.tracks.any { track -> sameEntry(track, song) } }?.let { skips.playedFrom(it) } ?: skips
         }
 
+        /** Whether [session] still has [song], in [app] when one is named. */
+        private fun PlaybackSource.holds(song: MusicMetadata, app: String?, session: Int) =
+            matching(song).any { it.session == session && (app == null || it.app == app) }
+
         override fun skip(song: MusicMetadata, next: Boolean, app: String?, session: Int?) {
             val last = onLast.value
             if (!next || last == null || !sameEntry(last, song)) return playback.skip(song, next, app, session)
-            if (session != null && playback.matching(song).none { it.session == session && (app == null || it.app == app) }) return
+            if (session != null && !playback.holds(song, app, session)) return
             onLast.value = null
             scope.launch { playNext() }
         }

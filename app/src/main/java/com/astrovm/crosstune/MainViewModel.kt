@@ -2059,7 +2059,8 @@ internal class MainViewModel(
     private fun tookUpUnnamed(unnamed: Unnamed?, playing: Heard.Song?, following: Following?, played: Boolean, song: MusicMetadata): Boolean {
         val app = uiState.player?.let { it.following?.appPackage ?: it.app }
         val next = unnamed?.takeIf { playing == null && played && uiState.practice == null && it.app == app } ?: return false
-        if (next.reportsState && (following != null || (next.session == uiState.player?.session && next.played.copy(artworkUrl = song.artworkUrl) == song))) return false
+        val sameSong = next.session == uiState.player?.session && next.played.copy(artworkUrl = song.artworkUrl) == song
+        if (next.reportsState && (following != null || sameSong)) return false
         openPlayer(next.played, next.app, played = true, unnamed = next)
         return true
     }
