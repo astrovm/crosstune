@@ -1504,6 +1504,8 @@ class ReadingsTest {
             // 桜 and 刃 after anything else are as they are alone.
             assertEquals("$withUniDic", "はるのさくら", read("春の桜"))
             assertEquals("$withUniDic", "さくらがさく", read("桜が咲く"))
+            // Nor after a word of more than one kanji that is no number and counter.
+            assertEquals("$withUniDic", "せかいさくら", read("世界桜"))
             assertEquals("$withUniDic", "はのひかり", read("刃の光"))
         }
     }
