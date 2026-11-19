@@ -1079,7 +1079,7 @@ class PlaybackTest {
 
         sounding()
         shadowOf(sessions).addController(player("com.brave.browser", "Brave", "Old Fixture", "Old Artist", at = NOW - LEFT_BEHIND_MS - 1, position = -1))
-        assertEquals(Unnamed("com.streema.simpleradio", "Simple Radio", "Fixture FM", reportsState = false), playback.playingUnnamed())
+        assertEquals(Unnamed("com.streema.simpleradio", "Simple Radio", "Fixture FM", reportsState = false), playback.playingUnnamed().sessionless())
         assertNull(playback.nowPlaying())
 
         sounding(false)
@@ -1457,7 +1457,7 @@ class PlaybackTest {
             assertEquals(title, expected, playback.nowPlaying()?.metadata)
             // Followed by what the app has where the artist goes, as the app has it, and shown by its title as a song's is read.
             val shown = mapOf("Unknown Artist - Fake Song.ogg" to "Fake Song", "AUD-20240101-WA0003.opus" to "AUD-20240101-WA0003")[title] ?: title
-            assertEquals(title, if (expected == null) Unnamed(packageName, "Player", shown, artist = artist.orEmpty()) else null, playback.playingUnnamed())
+            assertEquals(title, if (expected == null) Unnamed(packageName, "Player", shown, artist = artist.orEmpty()) else null, playback.playingUnnamed().sessionless())
         }
         // A title with a real artist is a song, even one shaped like a recording's name.
         ShadowMediaSessionManager.reset()
@@ -1949,7 +1949,7 @@ class PlaybackTest {
         // Android's word for a file with no artist is no artist (#591): the file plays (#780), with no song named, so it's listened to.
         shadowOf(sessions).addController(player("com.other.player", "Other", "Your FYP, but make it a playlist (256k)", "<unknown>", album = "Downloads"))
         assertNull(playback.nowPlaying())
-        assertEquals(Unnamed("com.other.player", "Other", "Your FYP, but make it a playlist (256k)", artist = "<unknown>"), playback.playingUnnamed())
+        assertEquals(Unnamed("com.other.player", "Other", "Your FYP, but make it a playlist (256k)", artist = "<unknown>"), playback.playingUnnamed().sessionless())
         // A compilation's file names its artist in the title, whatever the language it says so in.
         for (various in listOf("Various Artists", "Varios Artistas", "VA")) {
             ShadowMediaSessionManager.reset()
@@ -1972,7 +1972,7 @@ class PlaybackTest {
         val cover = "https://example.com/logo.png"
         shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", album = "VRadio", duration = 120_000, art = mapOf(MediaMetadata.METADATA_KEY_ART_URI to cover)))
         assertNull(playback.nowPlaying())
-        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2", cover), playback.playingUnnamed())
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2", cover), playback.playingUnnamed().sessionless())
         // An artist named as the app that plays them is a song, as "Trust Me" by Pandora in the Pandora app.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.pandora.android", "Pandora", "Trust Me", "Pandora", album = "Fake Album"))
@@ -2000,7 +2000,7 @@ class PlaybackTest {
         shadowOf(sessions).addController(player(app, "VRadio", title, "", album = "VRadio", actions = PlaybackState.ACTION_SEEK_TO))
         assertNull(playback.nowPlaying())
         val station = Unnamed(app, "VRadio", title, caption = true)
-        assertEquals(WhatPlays.Nameless(station), playback.whatPlays())
+        assertEquals(WhatPlays.Nameless(station), playback.whatPlays().sessionless())
         val wrong = MusicMetadata("Hits 24/7", "Fake FM")
         playback.seekTo(wrong, 10_000, app)
         playback.playPause(wrong, false, app)
@@ -2077,14 +2077,14 @@ class PlaybackTest {
         sounding()
         // With no title at all, it still plays, named by nothing.
         shadowOf(sessions).addController(player("com.example.player", "Player", "", null, at = PLAYED_AT + 1))
-        assertEquals(Unnamed("com.example.player", "Player", null), playback.playingUnnamed())
+        assertEquals(Unnamed("com.example.player", "Player", null), playback.playingUnnamed().sessionless())
         // The one that played last is the one told.
         shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", at = PLAYED_AT + 2))
-        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2"), playback.playingUnnamed())
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2"), playback.playingUnnamed().sessionless())
         // A song that played before it doesn't take its place, as the sleep timer and practice have the station too.
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", at = PLAYED_AT))
         assertNull(playback.nowPlaying())
-        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2"), playback.playingUnnamed())
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2"), playback.playingUnnamed().sessionless())
         // A song played since does.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "RTP Antena 2", "", at = PLAYED_AT + 2))
@@ -2122,7 +2122,7 @@ class PlaybackTest {
         val file = player("com.example.player", "Fake Player", "", null)
         shadowOf(sessions).addController(file)
         val unnamed = checkNotNull(playback.playingUnnamed())
-        assertEquals(Unnamed("com.example.player", "Fake Player", null), unnamed)
+        assertEquals(Unnamed("com.example.player", "Fake Player", null), unnamed.sessionless())
         val seen = mutableListOf<Following?>()
         collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(unnamed.played, unnamed.app).collect { seen += it } }
         shadowOf(Looper.getMainLooper()).idle()
@@ -2192,26 +2192,26 @@ class PlaybackTest {
         // A station cast to a speaker plays, and has the bar, though the phone has nothing of it to hear.
         shadowOf(sessions).addController(elsewhere(player("com.ilv.vradio", "VRadio", "Fake FM", "")))
         assertNull(playback.nowPlaying())
-        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "Fake FM", where = Place.ELSEWHERE), playback.playingUnnamed())
-        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM", where = Place.ELSEWHERE)), playback.whatPlays())
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "Fake FM", where = Place.ELSEWHERE), playback.playingUnnamed().sessionless())
+        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM", where = Place.ELSEWHERE)), playback.whatPlays().sessionless())
         // A station on the phone comes before a song on a computer, though the computer's said so since: the bar has the station.
         ShadowMediaSessionManager.reset()
         sounding()
         shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Fake FM", ""))
         shadowOf(sessions).addController(elsewhere(player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Song", "Fake Band", album = "Fake Album", at = PLAYED_AT + 5)))
         assertNull(playback.nowPlaying())
-        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "Fake FM"), playback.playingUnnamed())
-        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM")), playback.whatPlays())
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "Fake FM"), playback.playingUnnamed().sessionless())
+        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM")), playback.whatPlays().sessionless())
         // A music app's item with no song named, cast to a TV, is the phone's own, so it comes before a newer song on a computer.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(elsewhere(player("com.spotify.music", "Spotify", "Fake Episode", "")))
         shadowOf(sessions).addController(elsewhere(player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Song", "Fake Band", album = "Fake Album", at = PLAYED_AT + 5)))
-        assertEquals(WhatPlays.Nameless(Unnamed("com.spotify.music", "Spotify", "Fake Episode", where = Place.CAST)), playback.whatPlays())
+        assertEquals(WhatPlays.Nameless(Unnamed("com.spotify.music", "Spotify", "Fake Episode", where = Place.CAST)), playback.whatPlays().sessionless())
         // Both on the phone, and both saying what they play, the one that said where it is last comes first, either way.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
         shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Fake FM", "", at = PLAYED_AT + 5))
-        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM")), playback.whatPlays())
+        assertEquals(WhatPlays.Nameless(Unnamed("com.ilv.vradio", "VRadio", "Fake FM")), playback.whatPlays().sessionless())
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Fake FM", ""))
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", at = PLAYED_AT + 5))
@@ -2253,7 +2253,7 @@ class PlaybackTest {
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(vlog())
         assertNull(playback.nowPlaying())
-        assertEquals(Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel", said = false), playback.playingUnnamed())
+        assertEquals(Unnamed("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", artist = "Fake Channel", said = false), playback.playingUnnamed().sessionless())
     }
 
     @Test
@@ -2266,7 +2266,7 @@ class PlaybackTest {
         assertEquals("Fake Song", playback.nowPlaying()?.metadata?.title)
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(video)
-        assertEquals(Unnamed("com.google.android.youtube", "YouTube", "Fake Show - Live", said = false), playback.playingUnnamed())
+        assertEquals(Unnamed("com.google.android.youtube", "YouTube", "Fake Show - Live", said = false), playback.playingUnnamed().sessionless())
     }
 
     @Test
@@ -2706,7 +2706,7 @@ class PlaybackTest {
         val radio = player("com.ilv.vradio", "VRadio", "RTP Antena 2", "")
         shadowOf(sessions).addController(radio)
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2"), seen.last())
+        assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2"), seen.last().sessionless())
     }
 
     @Test
@@ -3616,6 +3616,46 @@ class PlaybackTest {
         assertTrue(asked().isEmpty())
     }
 
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aPlayerControlDoesNotReachAnotherSessionAfterItsOwnLosesState() = runBlocking {
+        val radio = RadioNotice.PACKAGE
+        allow()
+        val original = player(radio, "Simple Radio", song.title, song.artist)
+        val other = player(radio, "Simple Radio", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(original)
+        shadowOf(sessions).addController(other)
+        val session = requireNotNull(followed().last()).session
+
+        playback.playPause(song, false, radio, session)
+        playback.playPause(song, true, radio, session)
+        assertTrue(playback.resume(song, radio, session))
+        playback.seekTo(song, 1_000, radio, session)
+        playback.skip(song, true, radio, session)
+        playback.playApp(radio, session)
+        assertEquals(listOf("pause", "play", "play", "seekTo 1000", "skipToNext", "play"), asked())
+        playback.shuffle(song, true, radio, session)
+        playback.repeat(song, Repeat.ALL, radio, session)
+        assertEquals(listOf(radio to true), modes.told)
+        assertEquals(listOf(radio to Repeat.ALL), modes.toldRepeat)
+
+        shadowOf(original).setPlaybackState(null)
+        playback.playPause(song, false, radio, session)
+        playback.playPause(song, true, radio, session)
+        playback.seekTo(song, 1_000, radio, session)
+        playback.skip(song, true, radio, session)
+        playback.playApp(radio, session)
+        playback.shuffle(song, false, radio, session)
+        playback.repeat(song, Repeat.ONE, radio, session)
+        playback.like(song, radio, session)
+        assertFalse(playback.resume(song, radio, session))
+        assertFalse(playback.bringToFront(song, radio, session))
+        assertNull(playback.follow(song, radio, session).first())
+        assertTrue(asked().isEmpty())
+        assertEquals(listOf(radio to true), modes.told)
+        assertEquals(listOf(radio to Repeat.ALL), modes.toldRepeat)
+    }
+
     /** A music app's shuffle and repeat as the app has them, what it's told, and who's watching them. */
     private class FakeModes : AppModes {
         var on: Boolean? = null
@@ -4227,6 +4267,11 @@ class PlaybackTest {
         assertEquals(MainActivity::class.java.name, back.component?.className)
         assertTrue(back.flags and android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT != 0)
     }
+
+    /** The session number a station carries is checked on its own; these compare what else it says. */
+    private fun Unnamed?.sessionless() = this?.copy(session = null)
+
+    private fun WhatPlays?.sessionless() = if (this is WhatPlays.Nameless) WhatPlays.Nameless(playing.copy(session = null)) else this
 
     private companion object {
         const val NOW = 500_000L

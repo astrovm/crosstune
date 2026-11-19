@@ -419,7 +419,8 @@ internal data class PlayerState(
      * and where it is, but nothing that takes it for a song, no card, words, link or search.
      */
     val songless: Boolean = false,
-    val stationAppLabel: String? = null
+    val stationAppLabel: String? = null,
+    val session: Int? = null
 ) {
     val stationOnly: Boolean get() = stationAppLabel != null
 

@@ -1802,8 +1802,9 @@ class MainViewModelTest {
     fun aStationsButtonsAskItsAppByPackageOnTheBarAndInItsPlayer() {
         val playback = FakePlayback()
         val model = stationPlaying(EarsOnThePhone(Heard.Nothing), playback)
+        playback.unnamed.value = station.copy(session = 41)
         playback.playing.value = Following(
-            PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = true, canSkipNext = true, shuffle = false, repeat = Repeat.OFF, like = AppAction("like", "Like", 0)
+            PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = true, canSkipNext = true, shuffle = false, repeat = Repeat.OFF, like = AppAction("like", "Like", 0), session = 41
         )
         idle()
         model.playingNowPlayPause()
@@ -1815,11 +1816,16 @@ class MainViewModelTest {
         model.playerShuffle()
         model.playerRepeat()
         model.playerLike()
-        model.playerPlayQueued(3, 0)
+        model.playerPlayQueued(3, 41)
         model.playerSeek(1_000)
         assertEquals(listOf<String?>(station.app, station.app), playback.playedApps)
         assertEquals(List<String?>(6) { station.app }, playback.controlledApps)
         assertEquals(listOf<String?>(station.app), playback.seekedApps)
+        assertTrue(41 in playback.followedSessions)
+        assertEquals(listOf<Int?>(41, 41), playback.playedSessions)
+        assertEquals(List<Int?>(5) { 41 }, playback.controlledSessions)
+        assertEquals(listOf<Int?>(41), playback.queuedSessions)
+        assertEquals(listOf<Int?>(41), playback.controlSeekSessions)
     }
 
     @Test
@@ -2310,7 +2316,7 @@ class MainViewModelTest {
             onThePhone = Heard.Song(song, null, app = "com.spotify")
         }
         val source = object : PlaybackSource by playback {
-            override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = playback.follow(song, app).distinctUntilChanged()
+            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = playback.follow(song, app, session).distinctUntilChanged()
         }
         val model = model(playback = source)
         model.viewModelScope.launch { model.watchPlayingNow() }
@@ -4177,7 +4183,7 @@ class MainViewModelTest {
         val playback = FakePlayback().apply { access = true }
         val answers = MutableSharedFlow<Following?>(extraBufferCapacity = 1)
         val source = object : PlaybackSource by playback {
-            override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = answers
+            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = answers
         }
         val model = ytMusicModel(source)
         val effects = mutableListOf<Effect>()

@@ -42,8 +42,8 @@ internal class SleepTimer(
      * Pauses [song] as it ends, or what plays once it's no longer playing, e.g. skipped. [app] has it when it names
      * no song, e.g. a file with no tags, as it's followed and paused there; see [PlaybackSource.follow].
      */
-    fun afterSong(song: MusicMetadata, app: String? = null) = start(Sleep()) {
-        playback.follow(song, app).collectLatest { following ->
+    fun afterSong(song: MusicMetadata, app: String? = null, session: Int? = null) = start(Sleep()) {
+        playback.follow(song, app, session).collectLatest { following ->
             if (following == null) {
                 pauseWhatPlays()
                 return@collectLatest off()
@@ -53,7 +53,7 @@ internal class SleepTimer(
             val duration = following.durationMs ?: return@collectLatest
             // A moment before its end, as the app may already be on to the next one at it.
             delay(((duration - clock.positionAt(now())) / clock.speed).toLong() - SONG_END_EARLY_MS)
-            playback.playPause(song, false, app)
+            playback.playPause(song, false, app, following.session)
             off()
         }
     }
@@ -62,7 +62,7 @@ internal class SleepTimer(
     private fun pauseWhatPlays() {
         when (val first = playback.whatPlays()) {
             is WhatPlays.Named -> playback.playPause(first.song.metadata, false)
-            is WhatPlays.Nameless -> if (first.playing.reportsState) playback.playPause(first.playing.played, false, first.playing.app)
+            is WhatPlays.Nameless -> if (first.playing.reportsState) playback.playPause(first.playing.played, false, first.playing.app, first.playing.session)
             null -> Unit
         }
     }

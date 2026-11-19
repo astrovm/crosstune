@@ -84,16 +84,17 @@ internal class PlayQueue(
      * shows it's from it, with the list's songs still to come up next.
      */
     fun skipping(playback: PlaybackSource): PlaybackSource = object : PlaybackSource by playback {
-        override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = combine(playback.follow(song, app), onLast, shown) { following, last, list ->
+        override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = combine(playback.follow(song, app, session), onLast, shown) { following, last, list ->
             if (following == null) return@combine null
             val skips = if (last != null && sameEntry(last, song)) following.copy(canSkipNext = true) else following
             // In the app it's played through, not another that happens to play one of its songs.
             list?.takeIf { sameApp(it.app, following.appPackage, installed) && it.tracks.any { track -> sameEntry(track, song) } }?.let { skips.playedFrom(it) } ?: skips
         }
 
-        override fun skip(song: MusicMetadata, next: Boolean, app: String?) {
+        override fun skip(song: MusicMetadata, next: Boolean, app: String?, session: Int?) {
             val last = onLast.value
-            if (!next || last == null || !sameEntry(last, song)) return playback.skip(song, next, app)
+            if (!next || last == null || !sameEntry(last, song)) return playback.skip(song, next, app, session)
+            if (session != null && playback.matching(song).none { it.session == session && (app == null || it.app == app) }) return
             onLast.value = null
             scope.launch { playNext() }
         }

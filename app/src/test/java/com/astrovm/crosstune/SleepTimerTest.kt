@@ -55,12 +55,15 @@ class SleepTimerTest {
     @Test
     fun theSongIsPausedAMomentBeforeItEnds() {
         plays(190_000)
-        timer.afterSong(song)
+        phone.playing.value = phone.playing.value?.copy(session = 41)
+        timer.afterSong(song, session = 41)
         assertEquals(Sleep(), timer.set.value)
         passes(9_499)
         assertTrue(phone.plays.isEmpty())
         passes(1)
         assertEquals(listOf(false), phone.plays)
+        assertEquals(listOf<Int?>(41), phone.followedSessions)
+        assertEquals(listOf<Int?>(41), phone.playedSessions)
         assertNull(timer.set.value)
     }
 
