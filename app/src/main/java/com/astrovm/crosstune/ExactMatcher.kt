@@ -815,7 +815,7 @@ internal class ExactMatcher(
                 val halves = video.name.split(" - ").takeIf { it.size == 2 } ?: return@mapNotNull null
                 val own = halves.indexOfFirst { SongNames.normalize(it) == title }
                 halves.getOrNull(1 - own)?.let(SongNames::normalize)
-            }.filter { it.isNotEmpty() }.toSet()
+            }.toSet()
         return rows.singleOrNull { SongNames.normalize(it.name) in aliases && SongNames.normalize(it.details.getOrNull(1).orEmpty()) == album }
     }
 
