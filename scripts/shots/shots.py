@@ -8,6 +8,7 @@ are drawn ahead by scripts/milkdrop-render, from a made-up beat, with the same v
   python3 scripts/shots/shots.py          # both themes, then copies into docs/, fastlane/ and screenshots/
   python3 scripts/shots/shots.py ja ko    # only these languages
   python3 scripts/shots/shots.py --theme light  # only the light set
+  python3 scripts/shots/shots.py --box    # Gradle in the build box, in turn with other checkouts
 
 Needs ffmpeg, and what scripts/milkdrop-render needs the first time. Run scripts/build-site.py
 after, if the site's pages changed too.
@@ -58,6 +59,7 @@ def arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("langs", nargs="*", help="language folders, all by default")
     parser.add_argument("--theme", choices=("dark", "light", "both"), default="both")
+    parser.add_argument("--box", action="store_true", help="run Gradle in scripts/gradle-box")
     args = parser.parse_args(argv)
     args.langs = args.langs or list(LANGS)
     unknown = [lang for lang in args.langs if lang not in LANGS]
@@ -93,7 +95,8 @@ def main():
     visuals()
     tests = [arg for lang in args.langs for theme in themes
              for arg in ("--tests", f"com.astrovm.crosstune.shots.Shots{LANGS[lang][0]}{'Light' if theme == 'light' else ''}")]
-    run([*LOW, ROOT / "gradlew", "-q", ":app:shots", f"-PshotsVisuals={VISUALS}", "--max-workers=2", *tests])
+    gradle = ROOT / ("scripts/gradle-box/gradle-box.sh" if args.box else "gradlew")
+    run([*LOW, gradle, "-q", ":app:shots", f"-PshotsVisuals={VISUALS}", "--max-workers=2", *tests])
     for lang in args.langs:
         for theme in themes:
             publish(lang, theme)
