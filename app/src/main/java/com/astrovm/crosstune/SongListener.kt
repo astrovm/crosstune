@@ -82,6 +82,10 @@ internal class Shazam(
 ) {
     /** The first [count] of [samples], mono 16 kHz. [keepIfOffline] allows one retry of the fingerprint. */
     suspend fun recognize(samples: ShortArray, count: Int, keepIfOffline: Boolean = false): Heard {
+        // Nothing but zeros is a muted microphone or a phone playing at volume 0. Shazam answers it with no
+        // match, and it can't match anything, so it isn't sent: a busy Shazam must not make silence look
+        // like Shazam being out of reach, which hands the listen over to another app.
+        if ((0 until count).none { samples[it].toInt() != 0 }) return Heard.Nothing
         val uri = withContext(computeDispatcher) { Busy.during { ShazamSignature.uri(samples, count) } }
         val heard = send(uri)
         return if (keepIfOffline && heard == Heard.Failed(AppError.NETWORK)) Heard.Unsent { send(uri) } else heard
@@ -100,7 +104,12 @@ internal class Shazam(
         return try {
             client.newCall(request).answer(ioDispatcher) { response ->
                 // Too many requests, or the server failing: another app may still name it.
-                if (!response.isSuccessful) Heard.Failed(AppError.RECOGNITION_UNAVAILABLE) else parse(response.body.stringAtMost())
+                if (!response.isSuccessful) {
+                    TimingLog.note("shazam answered ${response.code}")
+                    Heard.Failed(AppError.RECOGNITION_UNAVAILABLE)
+                } else {
+                    parse(response.body.stringAtMost())
+                }
             }.let { heard -> if (heard is Heard.Song) withLength(heard) else heard }
         } catch (_: IOException) {
             Heard.Failed(AppError.NETWORK)

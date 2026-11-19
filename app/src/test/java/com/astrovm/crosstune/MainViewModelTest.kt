@@ -2469,6 +2469,24 @@ class MainViewModelTest {
     }
 
     @Test
+    fun silenceIsNoSongFoundAndOnlyShazamBeingOutOfReachOpensAnotherApp() {
+        val effects = mutableListOf<Effect>()
+        val silent = EarsOnThePhone(Heard.Nothing)
+        val model = radioModel(silent)
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        model.listen()
+        idle()
+        assertEquals(AppError.NO_MATCH, model.uiState.error)
+        assertTrue(effects.isEmpty())
+        // Shazam failing to answer is the other case: another app is opened to name it (#1095).
+        silent.heardNearby = Heard.Failed(AppError.RECOGNITION_UNAVAILABLE)
+        model.listen()
+        idle()
+        assertEquals(AppError.RECOGNITION_UNAVAILABLE, model.uiState.error)
+        assertEquals(listOf<Effect>(Effect.RecognizeElsewhere), effects)
+    }
+
+    @Test
     fun withNoAccessNothingPlayingIsShown() {
         val playback = FakePlayback()
         val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
