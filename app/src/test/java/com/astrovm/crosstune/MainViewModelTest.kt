@@ -3189,10 +3189,10 @@ class MainViewModelTest {
         }
         idle()
         val refreshed = model.uiState.savedLines.single()
-        // The second fix, ぼん, cuts through the dictionary's 三本, so that stretch stays as the card had it. The first fix,
-        // ほん, is the dictionary's own reading already, and is not lent to the 本 of 三本.
-        assertEquals("ほんとさんほんのはな", refreshed.reading)
-        assertEquals(listOf(Ruby("本", "ほん"), Ruby("と"), Ruby("三", "さん"), Ruby("本", "ほん"), Ruby("の"), Ruby("花", "はな")), refreshed.ruby)
+        // The second fix, ぼん, cuts through the dictionary's 三本, which already reads さんぼん: the card takes that. The first
+        // fix, ほん, is the dictionary's own reading already, and is not lent to the 本 of 三本.
+        assertEquals("ほんとさんぼんのはな", refreshed.reading)
+        assertEquals(listOf(Ruby("本", "ほん"), Ruby("と"), Ruby("三本", "さんぼん"), Ruby("の"), Ruby("花", "はな")), refreshed.ruby)
         assertEquals(refreshed, store.load().single())
         assertTrue(fake.requestedUrls.isEmpty())
     }
