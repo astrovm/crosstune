@@ -8,17 +8,41 @@ import kotlin.math.abs
 
 /** Keeps different performances and video edits from sharing lyrics or corrections. */
 internal object RecordingKey {
+    /**
+     * Name, then the recording the player or link names, the length and the instrumental album, each only when known.
+     * When none of those tells two takes apart (the same title, artist and length, and a player that names neither an
+     * album nor its own recording), they share one key and one cache entry: nothing better can be known about them.
+     */
     fun of(song: MusicMetadata): String {
         val name = "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
-        val link = song.url?.let { MusicLinks.parse(it) as? LinkInput.Link }?.link
-        val recording = song.recordingId ?: link?.takeIf { it.type == ItemType.TRACK }?.let { "${it.service}:${it.id}" }
-        return name + recording?.let { "\u0000$it" }.orEmpty() + song.lengthMs?.takeIf { it > 0 }?.let { "\u0000$it" }.orEmpty()
+        val recording = song.recordingId ?: track(song.url)?.let { "${it.service}:${it.id}" }
+        return name + recording?.let { "\u0000$it" }.orEmpty() + song.lengthMs?.takeIf { it > 0 }?.let { "\u0000$it" }.orEmpty() +
+            instrumentalAlbumKey(song)?.let { "\u0000$it" }.orEmpty()
     }
+
+    /** Words from another take can only be borrowed offline within the same instrumental album, or with none known for either. */
+    fun sameInstrumentalAlbum(key: String, song: MusicMetadata): Boolean =
+        key.substringAfterLast('\u0000').takeIf { it.startsWith(INSTRUMENTAL_ALBUM_PREFIX) } == instrumentalAlbumKey(song)
+
+    private const val INSTRUMENTAL_ALBUM_PREFIX = "album:"
+
+    private val pluralInstrumental = Regex("(?<=instrumental)s\\b", RegexOption.IGNORE_CASE)
+
+    /** Whether [a] and [b] name one album, as "Album (Instrumental)" and "Album (Instrumentals)" do. */
+    fun sameAlbum(a: String, b: String) = albumName(a) == albumName(b)
+
+    private fun albumName(album: String) = SongNames.normalize(album.replace(pluralInstrumental, ""))
+
+    private fun instrumentalAlbumKey(song: MusicMetadata): String? =
+        song.instrumentalAlbum?.let { INSTRUMENTAL_ALBUM_PREFIX + albumName(it) }
+
+    /** The length a cache [key] holds, ahead of the album it may end with. */
+    fun lengthIn(key: String): Long? =
+        key.split('\u0000').dropLastWhile { it.startsWith(INSTRUMENTAL_ALBUM_PREFIX) }.drop(3).lastOrNull()?.toLongOrNull()
 
     /** YouTube's exact video, when the link is known. A search match isn't the playing video. */
     fun youTubeId(song: MusicMetadata): String? {
-        val link = (song.url?.let(MusicLinks::parse) as? LinkInput.Link)?.link ?: return null
-        return link.takeIf { it.type == ItemType.TRACK && it.service in setOf(MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC) }?.id
+        return track(song.url)?.takeIf { it.service in setOf(MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC) }?.id
     }
 
     /**
@@ -26,7 +50,23 @@ internal object RecordingKey {
      * was opened by when the app gives none, as YouTube Music doesn't.
      */
     fun asPlayed(song: MusicMetadata, playing: MusicMetadata): MusicMetadata =
-        song.copy(recordingId = playing.recordingId, lengthMs = playing.lengthMs, heardLengthMs = song.heardLengthMs ?: song.lengthMs, url = playing.url ?: song.url)
+        song.copy(
+            recordingId = playing.recordingId, lengthMs = playing.lengthMs, heardLengthMs = song.heardLengthMs ?: song.lengthMs,
+            url = playing.url ?: song.url,
+            instrumentalAlbum = playing.instrumentalAlbum ?: song.instrumentalAlbum?.takeIf { sameRecording(song, playing) }
+        )
+
+    private fun track(url: String?): MusicLink? =
+        (url?.let(MusicLinks::parse) as? LinkInput.Link)?.link?.takeIf { it.type == ItemType.TRACK }
+
+    /** A player can omit the album. Keep the link's evidence only for an identified recording. */
+    private fun sameRecording(song: MusicMetadata, playing: MusicMetadata): Boolean {
+        val asked = track(song.url)
+        val played = track(playing.url)
+        if (asked != null && played != null) return asked.service != null && asked.service == played.service && asked.id == played.id
+        val id = playing.recordingId ?: return false
+        return id == song.recordingId && !id.substringAfter(':').startsWith("duration:")
+    }
 
     /** Android players can omit the ID, as YouTube Music does; their duration still separates edits. */
     fun playing(app: String, id: String?, durationMs: Long?): String? {

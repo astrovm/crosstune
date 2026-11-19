@@ -32,7 +32,9 @@ internal data class MusicMetadata(
      * What an app plays with no song named, as [Unnamed.played] asks for it: had only by its app, by what it's
      * called there, never as a song by its name, whatever it's called. Never kept or sent anywhere.
      */
-    val unnamed: Boolean = false
+    val unnamed: Boolean = false,
+    /** The recording's album name when it explicitly says the tracks are instrumental. */
+    val instrumentalAlbum: String? = null
 )
 
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */
@@ -720,7 +722,11 @@ internal object MetadataParsers {
         // The lookup only offers small sizes, but the image server renders any size in the path.
         val artwork = result.optString("artworkUrl100").replace("/100x100bb.", "/600x600bb.").ifBlank { null }
         return when (type) {
-            ItemType.TRACK -> MusicMetadata(result.optString("trackName"), artist, type, artwork, lengthMs = result.optLong("trackTimeMillis").takeIf { it > 0 })
+            ItemType.TRACK -> MusicMetadata(
+                result.optString("trackName"), artist, type, artwork,
+                lengthMs = result.optLong("trackTimeMillis").takeIf { it > 0 },
+                instrumentalAlbum = result.optString("collectionName").takeIf(SongNames::albumOfInstrumentals)
+            )
             // Albums are looked up with their songs, which follow the album in the results.
             ItemType.ALBUM -> MusicMetadata(
                 result.optString("collectionName").removeSuffix(" - Single").removeSuffix(" - EP"), artist, type, artwork,
@@ -732,7 +738,10 @@ internal object MetadataParsers {
 
     private fun appleAlbumSongs(results: JSONArray): List<MusicMetadata> = (1 until results.length()).mapNotNull { index ->
         val song = results.optJSONObject(index)?.takeIf { it.optString("wrapperType") == "track" } ?: return@mapNotNull null
-        MusicMetadata(song.optString("trackName").ifBlank { return@mapNotNull null }, song.optString("artistName"))
+        MusicMetadata(
+            song.optString("trackName").ifBlank { return@mapNotNull null }, song.optString("artistName"),
+            instrumentalAlbum = song.optString("collectionName").takeIf(SongNames::albumOfInstrumentals)
+        )
     }
 
     /**
@@ -798,14 +807,16 @@ internal object MetadataParsers {
         }
         // Albums have a cover and artists and playlists a picture; tracks use their album's cover.
         // The 500px size is sharp at the biggest cover Crosstune shows; 1000px only costs more data.
+        val album = json.optJSONObject("album")
         val artwork = json.optString("cover_big").ifEmpty { json.optString("picture_big") }
-            .ifEmpty { json.optJSONObject("album")?.optString("cover_big").orEmpty() }
+            .ifEmpty { album?.optString("cover_big").orEmpty() }
             .ifBlank { null }
         // An album's or playlist's object lists its songs, up to a few hundred.
         val tracks = json.optJSONObject("tracks")?.optJSONArray("data")?.let(::deezerTracks).orEmpty()
         val count = json.optInt("nb_tracks").takeIf { it > tracks.size }
         val lengthMs = json.optLong("duration").takeIf { type == ItemType.TRACK && it > 0 }?.times(1000)
-        return MusicMetadata(title, artist, type, artwork, tracks, trackCount = count, lengthMs = lengthMs).takeIf { title.isNotBlank() }
+        val instrumentalAlbum = album?.optString("title")?.takeIf { type == ItemType.TRACK && SongNames.albumOfInstrumentals(it) }
+        return MusicMetadata(title, artist, type, artwork, tracks, trackCount = count, lengthMs = lengthMs, instrumentalAlbum = instrumentalAlbum).takeIf { title.isNotBlank() }
     }
 
     private fun deezerTracks(data: JSONArray): List<MusicMetadata> = (0 until data.length()).mapNotNull { index ->
@@ -814,7 +825,8 @@ internal object MetadataParsers {
             deezerTitle(track).ifBlank { return@mapNotNull null },
             track.optJSONObject("artist")?.optString("name").orEmpty(),
             // The 250px size: sharp in a list.
-            artworkUrl = track.optJSONObject("album")?.let { it.optString("cover_medium").ifBlank { null } }
+            artworkUrl = track.optJSONObject("album")?.let { it.optString("cover_medium").ifBlank { null } },
+            instrumentalAlbum = track.optJSONObject("album")?.optString("title")?.takeIf(SongNames::albumOfInstrumentals)
         )
     }
 

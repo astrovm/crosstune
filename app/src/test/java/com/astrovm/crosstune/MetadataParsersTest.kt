@@ -12,6 +12,16 @@ import org.robolectric.RobolectricTestRunner
 class MetadataParsersTest {
 
     @Test
+    fun trackLinksRetainTheInstrumentalAlbumWhenItsNameSaysSo() {
+        val album = "Fixture Album (Instrumentals)"
+        val apple = json("""{"results":[{"trackName":"Song","artistName":"Artist","collectionName":"$album"}]}""")
+        val deezer = json("""{"title":"Song","artist":{"name":"Artist"},"album":{"title":"$album"}}""")
+        assertEquals(album, MetadataParsers.appleMusic(apple, ItemType.TRACK)?.instrumentalAlbum)
+        assertEquals(album, MetadataParsers.deezer(deezer, ItemType.TRACK)?.instrumentalAlbum)
+        assertNull(MetadataParsers.deezer(deezer, ItemType.ALBUM)?.instrumentalAlbum)
+    }
+
+    @Test
     fun readsTagsInAnyAttributeOrderAndQuoteStyle() {
         val html = """
             <meta content='Carly Rae Jepsen · Cut To The Feeling · Song · 2017' property='og:description'>
@@ -948,6 +958,13 @@ class MetadataParsersTest {
         assertEquals(listOf("A", "B", "C", "D"), listed.map { it.title })
         assertEquals(listOf("Band", "", "", ""), listed.map { it.artist })
         assertEquals(listOf("https://c/a", null, null, null), listed.map { it.artworkUrl })
+    }
+
+    @Test
+    fun deezerPlaylistRowsKeepAnInstrumentalAlbumOnlyWhenItsNameSaysSo() {
+        val tracks = """[{"title":"A","album":{"title":"Album (Instrumentals)"}},{"title":"B","album":{"title":"Album"}},{"title":"C"}]"""
+        val listed = checkNotNull(MetadataParsers.deezer(json("""{"title":"Mix","tracks":{"data":$tracks}}"""), ItemType.PLAYLIST)).tracks
+        assertEquals(listOf("Album (Instrumentals)", null, null), listed.map { it.instrumentalAlbum })
     }
 
     @Test

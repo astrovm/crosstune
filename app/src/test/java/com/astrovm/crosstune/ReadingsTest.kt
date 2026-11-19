@@ -1167,6 +1167,58 @@ class ReadingsTest {
 
 
     @Test
+    fun aKeptFixThatCutsThroughAPartIsLeftAloneWhenThePartAlreadyReadsItSo() {
+        fun line(vararg parts: Ruby) = LineReading(parts.toList(), parts.joinToString("") { it.reading ?: it.text }, "")
+        fun cut(parts: List<Ruby>, kanji: String, reading: String) =
+            Readings.correctedWhereKept(line(*parts.toTypedArray()), listOf(ReadingFix(0, kanji, reading, Reader.SUNG)))
+        // The end of a run of kanji: 三本 さんぼん ends in ぼん, so there is nothing to keep and nothing to make.
+        val joined = listOf(Ruby("三本", "さんぼん"), Ruby("の"), Ruby("花", "はな"))
+        val (agreed, none) = cut(joined, "本", "ぼん")
+        assertEquals(joined, agreed.parts)
+        assertEquals(emptyList<Int>(), none.map { it.start })
+        // The start of one: 三 さん begins 三本 さんぼん. Katakana says the same.
+        assertEquals(emptyList<Int>(), cut(joined, "三", "サン").second.map { it.start })
+        // Kana among the kanji give the place too: 食べ物 たべもの, 物 at the end of its run.
+        assertEquals(emptyList<Int>(), cut(listOf(Ruby("食べ物", "たべもの")), "物", "もの").second.map { it.start })
+        // The fix is the run itself, with kana around it: 食 た in 食べる.
+        assertEquals(emptyList<Int>(), cut(listOf(Ruby("食べる", "たべる")), "食", "た").second.map { it.start })
+        // The place counts from the start of the part, not of the line: 三本 is the second part here.
+        val later = listOf(Ruby("花", "はな"), Ruby("の"), Ruby("三本", "さんぼん"))
+        assertEquals(emptyList<Int>(), cut(later, "本", "ぼん").second.map { it.start })
+        assertEquals(listOf(3), cut(later, "本", "ぽん").second.map { it.start })
+        assertEquals(emptyList<Int>(), cut(later, "三", "さん").second.map { it.start })
+        // A reading the part doesn't hold at that place is the card's to keep, as it was: ぽん is not at the end of さんぼん.
+        val (same, left) = cut(joined, "本", "ぽん")
+        assertEquals(line(*joined.toTypedArray()), same)
+        assertEquals(listOf(1 to 2), left.map { it.start to it.end })
+        // Nor at the other end: さん is not at the end, and ぼん is not at the start.
+        assertEquals(listOf(0), cut(joined, "三", "ぼん").second.map { it.start })
+        assertEquals(listOf(1), cut(joined, "本", "さん").second.map { it.start })
+        // The fix's reading is all the part has: nothing is left for the other kanji, so it can't hold.
+        assertEquals(listOf(1), cut(listOf(Ruby("三本", "ぼん")), "本", "ぼん").second.map { it.start })
+    }
+
+    @Test
+    fun aKeptFixThatCutsThroughAPartIsNotTakenToAgreeWhenItsPlaceIsNotKnown() {
+        fun line(vararg parts: Ruby) = LineReading(parts.toList(), parts.joinToString("") { it.reading ?: it.text }, "")
+        fun left(vararg parts: Ruby, kanji: String, reading: String) =
+            Readings.correctedWhereKept(line(*parts), listOf(ReadingFix(0, kanji, reading, Reader.SUNG))).second.map { it.start }
+        // In the middle of a run: 二 に is inside いちにさん, but where one kanji's reading stops can't be told.
+        assertEquals(listOf(1), left(Ruby("一二三", "いちにさん"), kanji = "二", reading = "に"))
+        // A reading shared with the kana: 飛び立 ゆく is not laid over 立 alone, so ゆく ending in く says nothing.
+        assertEquals(listOf(2), left(Ruby("飛び立つ", "ゆく"), kanji = "立", reading = "く"))
+        // The fix cuts through two parts, so no one part holds it.
+        assertEquals(listOf(1), left(Ruby("三本", "さんぼん"), Ruby("目", "め"), kanji = "本目", reading = "ぼんめ"))
+        // The fix reaches from kanji into the kana after them, 食べ in 食べる, so no one piece of the part has it all.
+        assertEquals(listOf(0), left(Ruby("食べる", "たべる"), kanji = "食べ", reading = "たべ"))
+        // Or it names kana alone, べ, which no reading is laid over.
+        assertEquals(listOf(1), left(Ruby("食べる", "たべる"), kanji = "べ", reading = "べ"))
+        // A part with no reading holds nothing.
+        assertEquals(listOf(1), left(Ruby("三本"), kanji = "本", reading = "ぼん"))
+    }
+
+
+    @Test
     fun aSungReadingIsMadeWhereItsKanjiAreHoweverTheDictionarySplitThem() {
         fun line(vararg parts: Ruby) = LineReading(parts.toList(), parts.joinToString("") { it.reading ?: it.text }, "")
         // UtaTen reads as one what the dictionary split in two: 闇間 is やみま, not 闇 and 間 read やみかん.
