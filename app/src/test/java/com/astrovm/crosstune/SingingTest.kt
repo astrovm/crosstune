@@ -307,13 +307,22 @@ class SingingTest {
         assertEquals(3, singing.hears)
     }
 
+    /** Picked up partway, words timed for another take heard [offMs] off in each while: the first, then the next once the song plays on to it. */
+    private fun heardFarOffTwice(offMs: Long) {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { offMs }) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 }
+        passes(30_000)
+    }
+
     @Test
     fun pickedUpPartwayWordsHeardFarOffAreKeptForNextTime() {
         // Timed for another take, the words are seconds off: far more than the app's clock can be behind.
-        singing.answer = { sung(FAR_MS) }
-        openLyrics()
-        plays(positionMs = 3_000)
-        waitUntil { singing.hears == 1 && model().uiState.lyricLines[2].timeMs == 6_000 + FAR_MS }
+        heardFarOffTwice(FAR_MS)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[2].timeMs == 8_000 + FAR_MS }
         // So it's the words that are off, and the lines heard are kept: played again, they start where they're sung.
         assertTrue(model().uiState.lyricsSynced)
         assertTrue(prefs().contains("lyrics_sync"))
@@ -730,10 +739,31 @@ class SingingTest {
     }
 
     @Test
-    fun pickedUpPartwayWordsHeardFarOffOfferToReportOnce() {
-        singing.answer = { sung(FAR_MS) }
+    fun pickedUpPartwayOneWhileHeardFarOffAloneLeavesTheLinesWhereTheyreTimed() {
+        // As Never Gonna Give You Up went, picked up partway on Spotify: one while matched a verse seven
+        // seconds from where it's sung, though the next is heard where the app's clock says, a second late.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.answer = { sungAt(times, times.map { if (whiles == 0) 7_000L else 1_000L }).also { whiles++ } }
         openLyrics()
         plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        // Nothing else says the words are that far off, so the lines lit stay where they're timed.
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertFalse(model().uiState.lyricsSynced)
+        passes(30_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 31_000L }
+        // Heard about a second late, it's the clock: put right this time only, and nothing's kept.
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertFalse(model().uiState.reportOffer)
+    }
+
+    @Test
+    fun pickedUpPartwayWordsHeardFarOffOfferToReportOnce() {
+        heardFarOffTwice(FAR_MS)
         waitUntil { model().uiState.reportOffer }
         composeRule.waitForIdle()
         assertEquals(setOf(SongProblem.SUNG_OFF), model().uiState.reportOfferFor)
@@ -745,9 +775,7 @@ class SingingTest {
     fun pickedUpPartwayWordsHeardFarOffAreReportedOnceWhenAllowed() {
         TimingLog.clear()
         prefs().edit().putBoolean("auto_reports", true).commit()
-        singing.answer = { sung(FAR_MS) }
-        openLyrics()
-        plays(positionMs = 3_000)
+        heardFarOffTwice(FAR_MS)
         waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
         val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
         assertEquals("sung_off", sent.getString("problem"))
@@ -763,9 +791,7 @@ class SingingTest {
 
     @Test
     fun pickedUpPartwayWordsHeardJustFarEnoughOffAreKeptAndOffered() {
-        singing.answer = { sung(MainViewModel.WORDS_OFF_MS) }
-        openLyrics()
-        plays(positionMs = 3_000)
+        heardFarOffTwice(MainViewModel.WORDS_OFF_MS)
         waitUntil { model().uiState.reportOffer }
         assertTrue(prefs().contains("lyrics_sync"))
     }
@@ -773,9 +799,7 @@ class SingingTest {
     @Test
     fun theTimingNotesSayHowFarOffTheSingingWasHeardAndHowSureTheClockWas() {
         TimingLog.clear()
-        singing.answer = { sung(FAR_MS) }
-        openLyrics()
-        plays(positionMs = 3_000)
+        heardFarOffTwice(FAR_MS)
         waitUntil { prefs().contains("lyrics_sync") }
         assertTrue(TimingLog.lastMinute(), TimingLog.lastMinute().contains("sung $FAR_MS off, clock sure false, first true"))
     }
