@@ -165,6 +165,17 @@ internal class FakePlayback : PlaybackSource {
 
     override fun nowPlaying() = (whatPlays() as? WhatPlays.Named)?.song
 
+    /** Whether the artist on the player bar came from a title with no separate artist field. */
+    var artistReadFromTitle = false
+
+    override fun songForRecognition() = nowPlaying()?.takeUnless { artistReadFromTitle }
+
+    override fun playsHereWithoutSong(): Boolean = when (val first = whatPlays()) {
+        is WhatPlays.Named -> songWhere == Place.PHONE && artistReadFromTitle
+        is WhatPlays.Nameless -> !first.playing.away
+        null -> false
+    }
+
     override fun recording(song: MusicMetadata) = onThePhone?.metadata
 
     /** Whether what's on the phone is yet to be said, as by a session slow to answer: [nowPlayingUpdates] says nothing till it's false. */

@@ -8036,6 +8036,25 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSavedCatalogMissIsCheckedAgainWhenTheLinkIsShared() {
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
+        val url = "https://open.spotify.com/track/$TRACK_ID"
+        val miss = PreparedLink("https://www.deezer.com/search/Again%20Artist", exact = false, matchingEnabled = true)
+        HistoryStore(prefs()).add(
+            HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, url), MusicMetadata("Again", "Artist"), mapOf("DEEZER" to miss))
+        )
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"data":[{"title":"Again","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/123"}]}""")
+        }
+
+        val activity = launch(trackLink())
+
+        waitUntil { activity.isFinishing }
+        assertEquals("https://www.deezer.com/track/123", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://api.deezer.com/search") })
+    }
+
+    @Test
     fun aSearchPageSavedWithMatchingOffIsStillReused() {
         prefs().edit().putString("default_target", "DEEZER").commit()
         respondWithTrack("Again", "Artist · Song")

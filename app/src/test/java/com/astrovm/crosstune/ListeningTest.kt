@@ -259,6 +259,159 @@ class ListeningTest {
     }
 
     @Test
+    fun aPlayerSongMissingFromTheChosenCatalogIsRecognizedByShazam() {
+        val playing = MusicMetadata("Misleading Stream Title", "Radio Host", artworkUrl = "https://example.com/stream.jpg")
+        playerSongForCatalog(playing)
+        fake.handler = { request ->
+            val body = when {
+                request.url.host == "amp.shazam.com" -> MATCH
+                request.url.encodedPath == "/lookup" -> """{"results":[{"trackName":"Iris","artistName":"The Goo Goo Dolls"}]}"""
+                else -> """{"results":[]}"""
+            }
+            FakeSpotify.html(request, body)
+        }
+        allowMicrophone()
+        launch()
+        microphone.play(1.0)
+        microphone.end()
+        recognize()
+        waitUntil(TIMEOUT_MS) {
+            fake.requestedUrls.any { it.startsWith("https://itunes.apple.com/search?") } &&
+                controllerModel().uiState.result != null
+        }
+
+        assertEquals(1, shazamRequests())
+        assertEquals(1, microphone.opened)
+        assertEquals("Iris", controllerModel().uiState.result?.title)
+        assertEquals(listOf("Iris"), HistoryStore(prefs()).load().map { it.metadata.title })
+    }
+
+    @Test
+    fun aPlayerSongFoundInTheChosenCatalogUsesTheCheckedLinkWithoutListening() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls", artworkUrl = "https://example.com/iris.jpg")
+        playerSongForCatalog(playing)
+        val track = "https://music.apple.com/us/song/1109658204"
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"results":[{"trackName":"Iris","artistName":"The Goo Goo Dolls","trackViewUrl":"$track"}]}""")
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitUntil(TIMEOUT_MS) { controllerModel().destinationUrl() == track }
+
+        assertEquals(playing, controllerModel().uiState.result)
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://itunes.apple.com/search?") })
+        assertEquals(0, microphone.opened)
+        assertEquals(0, shazamRequests())
+    }
+
+    @Test
+    fun aCatalogRequestThatFailsKeepsThePlayerSongWithoutStartingTheMic() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls", artworkUrl = "https://example.com/iris.jpg")
+        playerSongForCatalog(playing)
+        fake.handler = { request -> FakeSpotify.html(request, "Unavailable", code = 503) }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitUntil(TIMEOUT_MS) { controllerModel().destinationUrl() != null }
+
+        assertEquals(playing, controllerModel().uiState.result)
+        assertFalse(controllerModel().uiState.resultMissing)
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://itunes.apple.com/search?") })
+        assertEquals(0, microphone.opened)
+        assertEquals(0, shazamRequests())
+    }
+
+    @Test
+    fun aVideoNamedFromAudioOnlyChecksTheCatalogOnce() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls", artworkUrl = "https://example.com/iris.jpg")
+        playerSongForCatalog(playing, hasClock = false)
+        MainActivity.hearingFactory = {
+            SongHearing { Heard.Song(playing, null, 5_000, SystemClock.elapsedRealtime(), matchId = "iris") }
+        }
+        fake.handler = { request -> FakeSpotify.html(request, "Unavailable", code = 503) }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitUntil(TIMEOUT_MS) { controllerModel().destinationUrl() != null }
+
+        assertEquals(playing, controllerModel().uiState.result)
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://itunes.apple.com/search?") })
+    }
+
+    @Test
+    fun lyricsHearPhoneAudioWhenTheLocalPlayerOnlySuppliesAStreamTitle() {
+        val phoneAudio = FakeMicrophone()
+        val cleanSound = MainActivity.cleanSoundFactory
+        MainActivity.cleanSoundFactory = { phoneAudio }
+        playerSongForCatalog(MusicMetadata("Stream", "Fake Host"), artistReadFromTitle = true)
+        allowMicrophone()
+        phoneAudio.play(0.1)
+        phoneAudio.play(1.0)
+        phoneAudio.end()
+        microphone.end()
+        try {
+            launch()
+            click(string(R.string.tile_lyrics_label))
+            waitUntil(TIMEOUT_MS) { controllerModel().uiState.let { it.lyricsFor?.title == "Iris" || it.error != null } }
+            // Listening along can open another probe after the lyrics appear.
+            assertTrue(phoneAudio.opened >= 2)
+            assertEquals(0, microphone.opened)
+            assertEquals(1, shazamRequests())
+            assertEquals("Iris", controllerModel().uiState.lyricsFor?.title)
+        } finally {
+            MainActivity.cleanSoundFactory = cleanSound
+            phoneAudio.end()
+        }
+    }
+
+    private fun playerSongForCatalog(song: MusicMetadata, hasClock: Boolean = true, artistReadFromTitle: Boolean = false) {
+        prefs().edit().putString("default_target", "APPLE_MUSIC").putBoolean("links_in_crosstune", true).commit()
+        MainActivity.playbackFactory = { FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(song, null, 42_000L.takeIf { hasClock }, SystemClock.elapsedRealtime(), app = "com.example.player")
+            this.artistReadFromTitle = artistReadFromTitle
+            // Keep the direct session read available while holding the bar's lyrics prefetch.
+            nowPlayingLate.value = true
+        } }
+    }
+
+    @Test
+    fun theMicAndItsRetryHearTheSongWhenASessionOnlySuppliesAStreamTitle() {
+        MainActivity.playbackFactory = {
+            FakePlayback().apply {
+                access = true
+                songWhere = Place.ELSEWHERE
+                artistReadFromTitle = true
+                onThePhone = Heard.Song(
+                    MusicMetadata("Twitch", "Fake Streamer"), null, 42_000, SystemClock.elapsedRealtime(),
+                    app = "com.example.desktop"
+                )
+            }
+        }
+        shazamAnswers(NO_MATCH)
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        microphone.play(1.0)
+        microphone.end()
+        recognize()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.let { it.error != null || it.result != null } }
+        assertEquals(1, microphone.opened)
+        waitForText(string(R.string.error_no_match))
+        assertEquals(1, shazamRequests())
+
+        shazamAnswers(MATCH)
+        microphone.play(1.0)
+        microphone.end()
+        click(string(R.string.retry_button))
+        waitForText("Iris")
+        composeRule.onNodeWithTag(RESULT_TAG).assertExists()
+        assertEquals(2, microphone.opened)
+        assertEquals(listOf("Iris"), HistoryStore(prefs()).load().map { it.metadata.title })
+    }
+
+    @Test
     fun aRadioStationKeepsItsButtonsAndPlayerAsItIsUntilItsSongIsHeardAndThenATapShowsTheSong() {
         // VRadio names only the station (#998).
         val radio = FakePlayback().apply {

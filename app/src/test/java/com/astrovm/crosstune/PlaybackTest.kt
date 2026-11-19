@@ -2251,6 +2251,58 @@ class PlaybackTest {
     }
 
     @Test
+    fun aMirroredBrowserTitleCanHaveTheBarWhileRecognitionListensToTheRoom() {
+        allow()
+        sounding(false)
+        val nearby = Heard.Song(MusicMetadata("Demo", "Fake Band"), null)
+        val listener = PlayingFirst(playback, SongHearing { nearby }, SongHearing { error("The phone is quiet") })
+        for (app in listOf("org.kde.kdeconnect_tp", "com.example.desktop")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(elsewhere(player(app, "Desktop player", "Fake Streamer - Twitch", null)))
+            assertEquals("Twitch", playback.nowPlaying()?.metadata?.title)
+            assertFalse(playback.playsHereWithoutSong())
+            assertEquals(app, nearby, runBlocking { listener.listen() })
+        }
+    }
+
+    @Test
+    fun aBrowserTitleOnThePhoneWithNoArtistStillNeedsAudioToNameTheSong() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.example.browser", "Browser", "Fake Show - Episode 12", "<unknown>"))
+        assertEquals("Episode 12", playback.nowPlaying()?.metadata?.title)
+        assertTrue(playback.playsHereWithoutSong())
+        val nearby = Heard.Song(MusicMetadata("Demo", "Fake Band"), null)
+        val listener = PlayingFirst(playback, SongHearing { nearby }, SongHearing { Heard.Failed(AppError.MICROPHONE) })
+        assertEquals(nearby, runBlocking { listener.listen() })
+        assertEquals(nearby.copy(inRoom = true), runBlocking { listener.listenToPlaying() })
+    }
+
+    @Test
+    fun aMusicAppWithARemoteSpeakerCanStillNameItsSong() {
+        allow()
+        sounding(false)
+        val music = elsewhere(player("com.example.player", "Music Player", "Demo", "Fake Band", album = "Fake Album"))
+        shadowOf(sessions).addController(music)
+        val playing = checkNotNull(playback.nowPlaying())
+        val listener = PlayingFirst(playback, SongHearing { Heard.Nothing })
+        assertEquals(playing, runBlocking { listener.listen() })
+    }
+
+    @Test
+    fun aMirroredMusicPlayerCanNameTheSongWhenItSuppliesItsArtist() {
+        allow()
+        sounding(false)
+        shadowOf(sessions).addController(elsewhere(player(
+            "org.kde.kdeconnect_tp", "Desktop player", "Demo", "Fake Band", album = "Fake Album"
+        )))
+        val playing = checkNotNull(playback.nowPlaying())
+        assertEquals("Demo", playing.metadata.title)
+        val listener = PlayingFirst(playback, SongHearing { Heard.Nothing })
+        assertEquals(playing, runBlocking { listener.listen() })
+    }
+
+    @Test
     fun whatPlaysFirstIsRankedNamedOrNotOnThePhoneOrNot() {
         allow()
         // A station cast to a speaker plays, and has the bar, though the phone has nothing of it to hear.
