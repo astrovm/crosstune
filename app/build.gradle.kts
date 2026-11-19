@@ -15,6 +15,13 @@ plugins {
     id("pl.droidsonroids.pitest")
 }
 
+abstract class DetektTestClasspath : CommandLineArgumentProvider {
+    @get:Classpath
+    abstract val files: ConfigurableFileCollection
+
+    override fun asArguments() = listOf("--classpath", files.asPath)
+}
+
 // projectM comes as a submodule. A checkout without it, like GitHub's own code scanning, still
 // builds, just with no visuals: they need the native library, and the app runs fine without it.
 val projectM = rootProject.file("third_party/projectm/CMakeLists.txt").exists()
@@ -321,7 +328,7 @@ val detektTests = tasks.register<JavaExec>("detektTests") {
     group = "verification"
     description = "Checks test sources for unsafe calls on nullable values."
     val testSources = fileTree("src") {
-        include("test*/**/*.kt", "androidTest*/**/*.kt", "sharedTest*/**/*.kt")
+        include("test*/**/*.kt", "*Test*/**/*.kt")
     }
     val config = rootProject.layout.projectDirectory.file("config/detekt/tests.yml")
     val report = layout.buildDirectory.file("reports/detekt/tests.txt")
@@ -331,16 +338,16 @@ val detektTests = tasks.register<JavaExec>("detektTests") {
     classpath = detektCli
     mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
     jvmArgs("--sun-misc-unsafe-memory-access=allow")
-    doFirst {
-        val testClasspath = tasks.named<Test>("testDebugUnitTest").get().classpath
-        args(
-            "--input", testSources.files.joinToString(",") { it.path },
-            "--config", config.asFile.path,
-            "--classpath", testClasspath.asPath,
-            "--jvm-target", "17",
-            "--report", "txt:" + report.get().asFile.path,
-        )
-    }
+    args(
+        "--input", layout.projectDirectory.dir("src").asFile.path,
+        "--includes", "**/test*/**/*.kt,**/*Test*/**/*.kt",
+        "--config", config.asFile.path,
+        "--jvm-target", "17",
+        "--report", "txt:" + report.get().asFile.path,
+    )
+    argumentProviders.add(objects.newInstance<DetektTestClasspath>().apply {
+        files.from(tasks.named<Test>("testDebugUnitTest").get().classpath)
+    })
 }
 val noUnsafeCalls = tasks.register<Test>("noUnsafeCalls") {
     group = "verification"
