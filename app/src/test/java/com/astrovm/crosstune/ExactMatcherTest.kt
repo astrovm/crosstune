@@ -316,6 +316,7 @@ class ExactMatcherTest {
             val track = MusicMetadata("Fake Song", "Fake Singer", lengthMs = 245_000)
             val wrong = "wrong000000"
             cache.put("find@5|YOUTUBE_MUSIC|TRACK|Fake Song|Fake Singer||245000", "https://music.youtube.com/watch?v=$wrong")
+            cache.put("find@7|YOUTUBE_MUSIC|TRACK|Fake Song|Fake Singer||245000", "https://music.youtube.com/watch?v=$wrong")
             cache.save()
             namesAndTabs(
                 songs = listOf(youTubeMusicRow("Canción Falsa", "Fake Singer • Otro Álbum • 4:06", videoId = wrong)),
@@ -546,6 +547,60 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aRowInAnotherScriptThatSaysItIsAnotherTakeIsNotTheSong() {
+        val angel = MusicMetadata("A Cruel Angel's Thesis", "Yoko Takahashi")
+        val studio = appleSong("A Cruel Angel's Thesis", "Yoko Takahashi", 245_000, album = "残酷な天使のテーゼ")
+        fun row(name: String, id: String, album: String = "残酷な天使のテーゼ", artist: String = "Yoko Takahashi", length: String = "4:06") =
+            youTubeMusicRow(name, "$artist • $album • $length", videoId = id)
+        fun find(vararg songs: String, apple: String = studio, song: MusicMetadata = angel, other: Map<String, String> = emptyMap()) = runBlocking {
+            namesAndTabs(songs = songs.toList(), apple = mapOf("AR" to apple), elsewhere = other)
+            matcher().find(MusicService.YOUTUBE_MUSIC, song)
+        }
+        fun url(id: String) = "https://music.youtube.com/watch?v=$id"
+        // Issue #945: the karaoke, as long as the song, and the other takes Issues #983 and #992 name, by their tags, open nothing.
+        for ((at, name) in listOf(
+            "残酷な天使のテーゼ (オフ・ヴォーカル)", "残酷な天使のテーゼ (TV Size)", "残酷な天使のテーゼ (TV Edit)", "残酷な天使のテーゼ (OP Size)",
+            "残酷な天使のテーゼ (ショートバージョン)", "残酷な天使のテーゼ (Short)", "残酷な天使のテーゼ (ライブ)", "残酷な天使のテーゼ (ライヴ)",
+            "残酷な天使のテーゼ (Live from Budokan)", "残酷な天使のテーゼ (カヴァー)", "残酷な天使のテーゼ (カラオケ)"
+        ).withIndex()) {
+            assertNull(name, find(row(name, "take%07d".format(at))))
+        }
+        // Nor does the album that's live, though the row's name is plain (Issues #983, #992).
+        assertNull(find(row("残酷な天使のテーゼ", "album000000", album = "Live at Budokan")))
+        // The plain row beside a take is the song, wherever the take is. A compilation named Live Best is no live album.
+        assertEquals(url("plain000000"), find(row("残酷な天使のテーゼ (オフ・ヴォーカル)", "karaoke0000"), row("残酷な天使のテーゼ", "plain000000")))
+        assertEquals(url("best0000000"), find(row("残酷な天使のテーゼ", "best0000000", album = "Live Best")))
+        // Beside a take, a row only known by its artist and length opens as it does alone, as the song may be written otherwise;
+        // but not beside a take the song's name in Japan's store names, as that is the song, and the row is not its studio recording.
+        assertEquals(url("other000000"), find(row("残酷な天使のテーゼ (ライブ)", "live0000000"), row("魂のルフラン", "other000000")))
+        val named = mapOf("JP" to appleSong("残酷な天使のテーゼ", "高橋洋子", 245_000))
+        assertNull(find(row("残酷な天使のテーゼ - Live", "live0000000"), row("魂のルフラン", "other000000"), other = named))
+        // A show's name or a credit in a tag is no take.
+        assertEquals(url("show0000000"), find(row("残酷な天使のテーゼ (TVアニメ「ライブ」オープニングテーマ)", "show0000000")))
+        assertEquals(url("credit00000"), find(row("残酷な天使のテーゼ (Live Crew)", "credit00000", artist = "Yoko Takahashi & Live Crew")))
+        // The song's own name, or Apple's, may say the take: a live title, or a live album Apple has it on, or editions of different
+        // lengths, one of which a live row may be.
+        assertEquals(url("live0000000"), find(row("残酷な天使のテーゼ (ライブ)", "live0000000"), song = MusicMetadata("A Cruel Angel's Thesis (Live)", "Yoko Takahashi"),
+            apple = appleSong("A Cruel Angel's Thesis (Live)", "Yoko Takahashi", 245_000)))
+        val onLiveAlbum = appleSong("A Cruel Angel's Thesis", "Yoko Takahashi", 245_000, album = "Live at Budokan")
+        assertEquals(url("live0000000"), find(row("残酷な天使のテーゼ (ライブ)", "live0000000"), apple = onLiveAlbum))
+        assertEquals(url("album000000"), find(row("残酷な天使のテーゼ", "album000000", album = "Live at Budokan"), apple = onLiveAlbum))
+        val twoLengths = studio + "," + appleSong("A Cruel Angel's Thesis", "Yoko Takahashi", 251_000, id = 8, album = "Another Album")
+        assertEquals(url("live0000000"), find(row("残酷な天使のテーゼ (ライブ)", "live0000000", length = "4:11"), apple = twoLengths))
+        // But a karaoke row stays out where Apple knows two lengths, as it's as long as the studio song, whichever.
+        assertNull(find(row("残酷な天使のテーゼ (オフ・ヴォーカル)", "karaoke0000", length = "4:11"), apple = twoLengths))
+        // Recordings of one length, or within three seconds of each other, are one recording: a live row isn't the song then.
+        fun editions(vararg lengthsMs: Long) = lengthsMs.withIndex().joinToString(",") { (at, ms) -> appleSong("A Cruel Angel's Thesis", "Yoko Takahashi", ms, id = 7L + at, album = "Album $at") }
+        assertNull(find(row("残酷な天使のテーゼ (ライブ)", "live0000000"), apple = editions(245_000, 245_000)))
+        assertNull(find(row("残酷な天使のテーゼ (ライブ)", "live0000000"), apple = editions(245_000, 248_000)))
+        assertEquals(url("live0000000"), find(row("残酷な天使のテーゼ (ライブ)", "live0000000"), apple = editions(245_000, 248_001)))
+        // A title's other letters, or marks, don't make a Latin spelling another script's.
+        assertNull(find(row("Café 〇", "mark0000000")))
+        // Another song by the artist, as long, with nothing to say it isn't, opens: no evidence takes it away (Issues #945, #983).
+        assertEquals(url("other000000"), find(row("魂のルフラン", "other000000", length = "4:04")))
+    }
+
+    @Test
     fun aSongInAnotherScriptMayBeAsFarFromTheKnownLengthAsTheSameSongIsAndNoFarther() {
         val angel = MusicMetadata("A Cruel Angel's Thesis", "Yoko Takahashi")
         val named = "残酷な天使のテーゼ - Zankoku na Tenshi no Thesis"
@@ -650,8 +705,8 @@ class ExactMatcherTest {
         }
     }
 
-    private fun appleSong(title: String, artist: String, lengthMs: Long = 312_000, id: Long = 7) =
-        """{"trackId":$id,"trackName":"$title","artistName":"$artist","trackTimeMillis":$lengthMs}"""
+    private fun appleSong(title: String, artist: String, lengthMs: Long = 312_000, id: Long = 7, album: String? = null) =
+        """{"trackId":$id,"trackName":"$title","artistName":"$artist","trackTimeMillis":$lengthMs${album?.let { ""","collectionName":"$it${'"'}""" }.orEmpty()}}"""
 
     @Test
     fun aBusyOrFailingServiceIsNoAnswerRatherThanNotThere() {
