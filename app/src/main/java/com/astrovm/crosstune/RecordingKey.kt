@@ -8,6 +8,11 @@ import kotlin.math.abs
 
 /** Keeps different performances and video edits from sharing lyrics or corrections. */
 internal object RecordingKey {
+    /**
+     * Name, then the recording the player or link names, the length and the instrumental album, each only when known.
+     * When none of those tells two takes apart (the same title, artist and length, and a player that names neither an
+     * album nor its own recording), they share one key and one cache entry: nothing better can be known about them.
+     */
     fun of(song: MusicMetadata): String {
         val name = "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
         val recording = song.recordingId ?: track(song.url)?.let { "${it.service}:${it.id}" }
@@ -24,10 +29,16 @@ internal object RecordingKey {
     private val pluralInstrumental = Regex("(?<=instrumental)s\\b", RegexOption.IGNORE_CASE)
 
     /** Whether [a] and [b] name one album, as "Album (Instrumental)" and "Album (Instrumentals)" do. */
-    fun sameAlbum(a: String, b: String) = SongNames.normalize(a.replace(pluralInstrumental, "")) == SongNames.normalize(b.replace(pluralInstrumental, ""))
+    fun sameAlbum(a: String, b: String) = albumName(a) == albumName(b)
+
+    private fun albumName(album: String) = SongNames.normalize(album.replace(pluralInstrumental, ""))
 
     private fun instrumentalAlbumKey(song: MusicMetadata): String? =
-        song.instrumentalAlbum?.let { INSTRUMENTAL_ALBUM_PREFIX + SongNames.normalize(it) }
+        song.instrumentalAlbum?.let { INSTRUMENTAL_ALBUM_PREFIX + albumName(it) }
+
+    /** The length a cache [key] holds, ahead of the album it may end with. */
+    fun lengthIn(key: String): Long? =
+        key.split('\u0000').dropLastWhile { it.startsWith(INSTRUMENTAL_ALBUM_PREFIX) }.drop(3).lastOrNull()?.toLongOrNull()
 
     /** YouTube's exact video, when the link is known. A search match isn't the playing video. */
     fun youTubeId(song: MusicMetadata): String? {

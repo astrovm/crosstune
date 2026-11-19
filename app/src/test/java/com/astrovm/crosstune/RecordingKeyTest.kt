@@ -52,6 +52,33 @@ class RecordingKeyTest {
         assertEquals(RecordingKey.of(song.copy(recordingId = "player:one")), RecordingKey.of(song.copy(recordingId = "player:one", url = "https://youtu.be/abcdefghijk")))
     }
 
+    @Test fun takesNothingTellsApartShareOneKey() {
+        // The same title, artist and length, and a player that names neither an album nor its own recording: nothing
+        // better can be known, so they share one cache entry. A named album or recording would part them.
+        val one = song.copy(lengthMs = 200_000)
+        val other = song.copy(lengthMs = 200_000, artworkUrl = "https://example.com/other.jpg")
+        assertEquals(RecordingKey.of(one), RecordingKey.of(other))
+        assertNotEquals(RecordingKey.of(one), RecordingKey.of(other.copy(instrumentalAlbum = "Album (Instrumentals)")))
+        assertNotEquals(RecordingKey.of(one), RecordingKey.of(other.copy(recordingId = "player:other")))
+    }
+
+    @Test fun anAlbumOfInstrumentalsIsTheSameAlbumWhateverItsPlural() {
+        val plural = song.copy(lengthMs = 200_000, instrumentalAlbum = "Album (Instrumentals)")
+        val singular = plural.copy(instrumentalAlbum = "Album (Instrumental)")
+        assertEquals(RecordingKey.of(plural), RecordingKey.of(singular))
+        assertNotEquals(RecordingKey.of(plural), RecordingKey.of(plural.copy(instrumentalAlbum = "Other Album (Instrumentals)")))
+    }
+
+    @Test fun theLengthAKeyHoldsComesAheadOfItsAlbum() {
+        val album = "Album (Instrumentals)"
+        assertEquals(200_000L, RecordingKey.lengthIn("17\u0000demo\u0000band\u0000200000"))
+        assertEquals(200_000L, RecordingKey.lengthIn(RecordingKey.of(song.copy(lengthMs = 200_000, instrumentalAlbum = album)).let { "17\u0000$it" }))
+        assertEquals(200_000L, RecordingKey.lengthIn(RecordingKey.of(song.copy(recordingId = "a:1", lengthMs = 200_000, instrumentalAlbum = album)).let { "17\u0000$it" }))
+        assertNull(RecordingKey.lengthIn("17\u0000demo\u0000band"))
+        assertNull(RecordingKey.lengthIn("17\u0000" + RecordingKey.of(song.copy(instrumentalAlbum = album))))
+        assertNull(RecordingKey.lengthIn("17\u0000demo\u0000band\u0000player:one"))
+    }
+
     @Test fun onlyAnActualYouTubeLinkIdentifiesTheVideo() {
         assertEquals("abcdefghijk", RecordingKey.youTubeId(song.copy(url = "https://youtu.be/abcdefghijk")))
         assertEquals("abcdefghijk", RecordingKey.youTubeId(song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")))

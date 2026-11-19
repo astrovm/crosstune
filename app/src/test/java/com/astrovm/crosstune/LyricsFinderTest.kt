@@ -172,6 +172,47 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun offlineAnotherTakeOnTheSameInstrumentalAlbumKeepsTheAlbumsMark() {
+        val file = File.createTempFile("lyrics", ".json")
+        try {
+            val cache = LookupCache(file, Dispatchers.Unconfined)
+            val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
+            val kept = song.copy(lengthMs = 200_000, instrumentalAlbum = "Album (Instrumentals)")
+            // The other app says the same recording is a second longer and spells the album in the singular.
+            val played = kept.copy(lengthMs = 201_000, instrumentalAlbum = "Album (Instrumental)")
+            fake.handler = { throw IOException("offline") }
+            runBlocking {
+                cache.put("${LyricsFinder.CACHE_VERSION}\u0000${RecordingKey.of(kept)}", """{"words":"Studio words","lines":[],"marked":true}""")
+                val borrowed = finder.lyricsOf(played) as Lyrics.Found
+                assertEquals("Studio words", borrowed.words)
+                assertEquals(true, borrowed.markedInstrumental)
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun cachedSheetsOfAnInstrumentalAlbumStillHoldToTheLength() {
+        val file = File.createTempFile("lyrics", ".json")
+        try {
+            val cache = LookupCache(file, Dispatchers.Unconfined)
+            val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
+            val album = "Album (Instrumentals)"
+            runBlocking {
+                for (length in listOf(200_000L, 320_000L)) {
+                    val key = "${LyricsFinder.CACHE_VERSION}\u0000${RecordingKey.of(song.copy(lengthMs = length, instrumentalAlbum = album))}"
+                    cache.put(key, """{"words":"Words at $length","lines":[]}""")
+                }
+                val sheets = finder.cachedLineSets(song.copy(lengthMs = 200_000, instrumentalAlbum = album))
+                assertEquals(listOf(listOf("Words at 200000")), sheets)
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
     fun aKaraokeAlbumKeepsTheLyricsAvailableToSingWith() {
         val album = "Album (Karaoke Version)"
         val sung = onAlbum(lasting(timedOnLrclib, 200.0), "Album")

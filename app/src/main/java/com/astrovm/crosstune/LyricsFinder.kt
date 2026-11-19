@@ -642,9 +642,10 @@ internal class LyricsFinder(
         val recording = RecordingKey.of(metadata)
         val (key, kept) = candidates.lastOrNull { (key) -> key.substringAfter('\u0000') == recording } ?: candidates.lastOrNull() ?: return null
         val words = fromCache(kept)?.first ?: return null
-        // A different recording can lend its words. Its instrumental votes apply to that recording.
+        // A different recording can lend its words. Its instrumental votes apply to that recording, unless both are
+        // on the one instrumental album: then the mark is the album's, whatever each app says the length is.
         val sameRecording = key.substringAfter('\u0000') == recording
-        return if (words.markedInstrumental && !sameRecording && !SongNames.saysInstrumental(metadata.title, metadata.artist)) {
+        return if (words.markedInstrumental && !sameRecording && metadata.instrumentalAlbum == null && !SongNames.saysInstrumental(metadata.title, metadata.artist)) {
             words.copy(markedInstrumental = false)
         } else words
     }
@@ -664,7 +665,7 @@ internal class LyricsFinder(
 
     private fun cachedLengthFits(words: Lyrics.Found, key: String, wanted: Long?): Boolean {
         // A card keeps the lyric sheet's length when it has one, not the app's length in the key.
-        val kept = words.lengthMs ?: key.split('\u0000', limit = 4).getOrNull(3)?.substringAfterLast('\u0000')?.toLongOrNull()
+        val kept = words.lengthMs ?: RecordingKey.lengthIn(key)
         return wanted == null || kept == null || abs(kept - wanted) <= SAME_RECORDING_LENGTH_MS
     }
 
