@@ -391,16 +391,26 @@ internal class PlayingFirst(
 
     override suspend fun listen(acceptPlaying: suspend (Heard.Song) -> Boolean): Heard {
         val playing = playback.songForRecognition() ?: return hearing.listen()
-        val room = if (playing.clock == null) {
-            // An audio match names the song and finds its clock before we need the player's title.
-            val phone = played.listen()
-            if (phone is Heard.Song) return phone
-            if (phone == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else null
-        } else {
-            null
+        // An app that can't say where in the song it is is heard first: an audio match names the song and
+        // finds its clock before we need the app's title.
+        var around = if (playing.clock == null) hearPlaying() else null
+        around?.let {
+            if (it.phone is Heard.Song) return it.phone
+            (it.room?.let(::roomForPlaying) as? Heard.Song)?.let { song -> return song }
         }
-        (room?.let(::roomForPlaying) as? Heard.Song)?.let { return it }
-        return if (acceptPlaying(playing)) playing else room ?: hearing.listen()
+        if (acceptPlaying(playing)) return playing
+        // The catalog doesn't know the app's name, so the sound may name the song better. When it doesn't,
+        // as with headphones or silence, the app's name is still the best there is.
+        around = around ?: hearPlaying()
+        return (around.room ?: around.phone) as? Heard.Song ?: playing
+    }
+
+    /** What the phone's own sound says, and what the room's does when the phone won't share it. */
+    private class Around(val phone: Heard, val room: Heard?)
+
+    private suspend fun hearPlaying(): Around {
+        val phone = played.listen()
+        return Around(phone, if (phone == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else null)
     }
 
     override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
