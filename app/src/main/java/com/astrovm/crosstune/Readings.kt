@@ -1110,7 +1110,8 @@ internal object Readings {
      * [line] with [fixes], answers kept for it and not asked again, made each at the one place it was kept for: one that
      * names a word again takes the next place that word stands, never one an earlier fix took, and is never copied to
      * another that ours read alike. Made where our parts split the line at both ends of the stretch, joined into one part
-     * when they cover more than one. Not made, and given back instead, where it cuts through the middle of one of ours.
+     * when they cover more than one. Where it cuts through the middle of one of ours, that part is left as ours read it
+     * when it already holds the fix's reading at the fix's place, see [holds]; otherwise it is not made, and given back.
      */
     fun correctedWhereKept(line: LineReading, fixes: List<ReadingFix>): Pair<LineReading, List<Kept>> {
         val parts = line.parts
@@ -1120,7 +1121,38 @@ internal object Readings {
         val out = parts.map { listOf(it) }.toMutableList()
         coverWhole(text, parts, out, whole)
         val made = out.flatten()
-        return (if (made == parts) line else readAs(made)) to cut.map { Kept(it.start, it.end, it.fix) }
+        return (if (made == parts) line else readAs(made)) to cut.filterNot { holds(parts, starts, it) }.map { Kept(it.start, it.end, it.fix) }
+    }
+
+    /**
+     * Whether the one part of ours that a fix cuts through already reads the fix's kanji as the fix says, at the place
+     * they stand in it: 三本 さんぼん holds 本 ぼん. The place is found by laying the part's reading along its kanji and the
+     * kana written among them, as [furigana] does, so it is known only at the start or the end of a run of kanji, where
+     * the reading before or after the rest of the run is all that is left. In the middle of a run it can't be told where
+     * one kanji's reading stops, and when the reading can't be laid at all, so it doesn't hold.
+     */
+    private fun holds(parts: List<Ruby>, starts: List<Int>, fix: Sung): Boolean {
+        if (fix.first != fix.last) return false
+        val part = parts[fix.first]
+        val said = hiragana(fix.fix.reading)
+        val from = fix.start - starts[fix.first]
+        val to = fix.end - starts[fix.first]
+        var at = 0
+        for (piece in furigana(part.text, part.reading ?: return false)) {
+            val end = at + piece.text.length
+            if (from >= at && to <= end) {
+                val reading = hiragana(piece.reading ?: return false)
+                return when {
+                    from == at && to == end -> reading == said
+                    reading.length == said.length || !piece.text.all(::isHan) -> false
+                    from == at -> reading.startsWith(said)
+                    to == end -> reading.endsWith(said)
+                    else -> false
+                }
+            }
+            at = end
+        }
+        return false
     }
 
     /** Each place [kanji] stands in [line]. */

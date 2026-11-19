@@ -620,7 +620,8 @@ internal class LyricsFinder(
      */
     private fun saidInstrumental(metadata: MusicMetadata, found: Lyrics, lookup: Answers): Lyrics {
         val said = lookup.marks(metadata.title) || SongNames.saysInstrumental(metadata.title, metadata.artist)
-        if (!said || SongNames.sungAlong(metadata.title, metadata.artist)) return found
+        if (!said || SongNames.sungAlong(metadata.title, metadata.artist) ||
+            metadata.instrumentalAlbum?.let { SongNames.sungAlong(it, "") } == true) return found
         return when {
             found is Lyrics.Found -> if (found.ofTheOriginal) found else found.copy(markedInstrumental = true)
             found == Lyrics.None || found == Lyrics.Instrumental -> Lyrics.LikelyInstrumental
@@ -634,7 +635,18 @@ internal class LyricsFinder(
      */
     private suspend fun keptUnderName(metadata: MusicMetadata): Lyrics.Found? {
         val names = cachedNames(metadata)
-        return cache?.entries()?.lastOrNull { (key) -> key.isCachedUnder(names) }?.let { (_, kept) -> fromCache(kept)?.first }
+        val candidates = cache?.entries().orEmpty().filter { (key) ->
+            key.isCachedUnder(names) && RecordingKey.sameInstrumentalAlbum(key, metadata)
+        }
+        // The very recording's own words come first, kept under an older cache version or not.
+        val recording = RecordingKey.of(metadata)
+        val (key, kept) = candidates.lastOrNull { (key) -> key.substringAfter('\u0000') == recording } ?: candidates.lastOrNull() ?: return null
+        val words = fromCache(kept)?.first ?: return null
+        // A different recording can lend its words. Its instrumental votes apply to that recording, unless both are
+        // on the one instrumental album: then the mark is the album's, whatever each app says the length is.
+        val sameRecording = key.substringAfter('\u0000') == recording || metadata.instrumentalAlbum != null
+        val lent = words.markedInstrumental && !sameRecording
+        return if (lent && !SongNames.saysInstrumental(metadata.title, metadata.artist)) words.copy(markedInstrumental = false) else words
     }
 
     /** The sheets on the phone for [song]. The reading cache keys use the whole sheet as shown, timed or plain. */
@@ -652,7 +664,7 @@ internal class LyricsFinder(
 
     private fun cachedLengthFits(words: Lyrics.Found, key: String, wanted: Long?): Boolean {
         // A card keeps the lyric sheet's length when it has one, not the app's length in the key.
-        val kept = words.lengthMs ?: key.split('\u0000', limit = 4).getOrNull(3)?.substringAfterLast('\u0000')?.toLongOrNull()
+        val kept = words.lengthMs ?: RecordingKey.lengthIn(key)
         return wanted == null || kept == null || abs(kept - wanted) <= SAME_RECORDING_LENGTH_MS
     }
 
@@ -1753,12 +1765,16 @@ internal class LyricsFinder(
 
         /**
          * The very recording, name for name but for a guest or remaster tag, so not "Song (Inst.)" for "Song (feat.
-         * Guest)"; by its artist, not one whose name holds theirs, "Band Piano Tribute"; not on an album of
-         * instrumentals, "Album (Instrumentals)", whose recording is named as the sung one; and as long, when both say.
+         * Guest)"; by its artist, not one whose name holds theirs, "Band Piano Tribute"; and as long, when both say.
+         * An album of instrumentals names its tracks as the sung ones, so only the same album counts.
          */
         fun isRecording(metadata: MusicMetadata): Boolean {
             if (!SongNames.same(title, metadata.title) || SongNames.artists(artist).none { it in SongNames.artists(metadata.artist) }) return false
-            if (SongNames.albumOfInstrumentals(json.optString("albumName"))) return false
+            val playedAlbum = metadata.instrumentalAlbum
+            val copyAlbum = json.optString("albumName")
+            // A copy with no album says nothing against the played one: it goes by its length and title, as it always did.
+            val albumsMatter = playedAlbum != null || SongNames.albumOfInstrumentals(copyAlbum)
+            if (copyAlbum.isNotBlank() && albumsMatter && !RecordingKey.sameAlbum(playedAlbum.orEmpty(), copyAlbum)) return false
             val copyMs = lengthMs() ?: return true
             val playingMs = metadata.lengthMs ?: return true
             return abs(copyMs - playingMs) <= SAME_LENGTH_MS

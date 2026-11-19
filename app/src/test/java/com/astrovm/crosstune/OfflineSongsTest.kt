@@ -29,6 +29,16 @@ class OfflineSongsTest {
     private val list = MusicMetadata("Mix", "", ItemType.PLAYLIST, url = "https://open.spotify.com/playlist/9", tracks = listOf(song, other))
 
     @Test
+    fun anInstrumentalAlbumAndTheSungRecordingStaySeparateAcrossRestart() = runBlocking {
+        val instrumental = song.copy(instrumentalAlbum = "Album (Instrumentals)")
+        val kept = songs()
+        assertTrue(kept.keep(song).id != kept.keep(instrumental).id)
+        val reopened = songs()
+        assertEquals(listOf(song), reopened.has(song)?.songs)
+        assertEquals(listOf(instrumental), reopened.has(instrumental)?.songs)
+    }
+
+    @Test
     fun aSongKeptWithoutItsSungReadingsStaysSoAcrossRestartsUntilItHasThem() = runBlocking {
         val mix = songs().keep(list)
         songs().saved(mix.id, song, unread = true)
