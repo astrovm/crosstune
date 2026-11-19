@@ -639,23 +639,27 @@ internal class LyricsFinder(
 
     /** The sheets on the phone for [song]. The reading cache keys use the whole sheet as shown, timed or plain. */
     suspend fun cachedLineSets(song: MusicMetadata): List<List<String>> {
-        val names = cachedNames(song)
+        val names = cachedNames(song, FIRST_SUNG_LYRICS_CACHE..CACHE_VERSION)
         return cache?.entries().orEmpty().flatMap { (key, json) ->
-            if (!key.isCachedUnder(names) || !cachedLengthFits(key, song.lengthMs)) return@flatMap emptyList()
-            val found = fromCache(json)?.first?.let(::asJapanWrites) ?: return@flatMap emptyList()
-            listOf(found.lines.map { it.text }, found.words.lines()).filter { lines -> lines.isNotEmpty() }
+            if (!key.isCachedUnder(names)) return@flatMap emptyList()
+            val found = fromCache(json)?.first ?: return@flatMap emptyList()
+            if (!cachedLengthFits(found, key, song.lengthMs)) return@flatMap emptyList()
+            // The old app may have shown the words before it started writing China's kanji as Japan does.
+            listOf(found, asJapanWrites(found)).flatMap { words -> listOf(words.lines.map { it.text }, words.words.lines()) }
+                .filter { lines -> lines.isNotEmpty() }
         }.distinct()
     }
 
-    private fun cachedLengthFits(key: String, wanted: Long?): Boolean {
-        val kept = key.split('\u0000', limit = 4).getOrNull(3)?.substringAfterLast('\u0000')?.toLongOrNull()
+    private fun cachedLengthFits(words: Lyrics.Found, key: String, wanted: Long?): Boolean {
+        // A card keeps the lyric sheet's length when it has one, not the app's length in the key.
+        val kept = words.lengthMs ?: key.split('\u0000', limit = 4).getOrNull(3)?.substringAfterLast('\u0000')?.toLongOrNull()
         return wanted == null || kept == null || abs(kept - wanted) <= SAME_RECORDING_LENGTH_MS
     }
 
-    private fun cachedNames(metadata: MusicMetadata): List<String> =
-        listOf(CACHE_VERSION, BEFORE_NETEASE_ARTIST_CHECK, 16, 15).map { version ->
-            "$version\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
-        }
+    private fun cachedNames(metadata: MusicMetadata, versions: Iterable<Int> = listOf(CACHE_VERSION, BEFORE_NETEASE_ARTIST_CHECK, 16, 15)): List<String> {
+        val name = "${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
+        return versions.map { version -> "$version\u0000$name" }
+    }
 
     private fun String.isCachedUnder(names: List<String>) = names.any { name -> this == name || startsWith("$name\u0000") }
 
@@ -1965,6 +1969,8 @@ internal class LyricsFinder(
          */
         const val CACHE_VERSION = 18
         private const val BEFORE_NETEASE_ARTIST_CHECK = 17
+        /** The lyrics cache when the app first kept sung readings. Older sheets can't have a matching answer. */
+        private const val FIRST_SUNG_LYRICS_CACHE = 6
 
         /**
          * [found] without what's since learned to be left out: a site's ad, and a note on how the song is played, "（repeat and fade）", from any site, and what

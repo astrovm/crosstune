@@ -54,9 +54,12 @@ internal class SungReadings(
     private suspend fun keptFromBefore(song: MusicMetadata, lines: List<String>): List<ReadingFix>? =
         kept(song, lines, BEFORE_NONE_WAS_A_PAGE)?.takeIf { it.isNotEmpty() }
 
-    /** An old card may have kept real readings later lost by the site. Read those first. Never asks the site. */
-    suspend fun cachedForSavedLines(song: MusicMetadata, lines: List<String>): List<ReadingFix>? =
-        keptFromBefore(song, lines) ?: kept(song, lines, BEFORE_SEARCH_REFERER)?.takeIf { it.isNotEmpty() } ?: kept(song, lines, CACHE_VERSION)
+    /** All positive answers, even ones later lost by the site. Only the current cache can confirm "none". Never asks the site. */
+    suspend fun cachedForSavedLines(song: MusicMetadata, lines: List<String>): List<List<ReadingFix>> {
+        val current = kept(song, lines, CACHE_VERSION)
+        val earlier = (FIRST_CACHE_VERSION until CACHE_VERSION).mapNotNull { kept(song, lines, it) }
+        return (earlier + listOfNotNull(current)).filter { it.isNotEmpty() }.ifEmpty { listOfNotNull(current) }
+    }
 
     private suspend fun kept(song: MusicMetadata, lines: List<String>, version: Int): List<ReadingFix>? =
         cache?.get(cacheKey(song, lines, version))?.let(::fromCache)
@@ -173,8 +176,7 @@ internal class SungReadings(
         /** The cache version that could keep "none" for a page UtaTen doesn't write. Readings it kept are still used. */
         private const val BEFORE_NONE_WAS_A_PAGE = 3
 
-        /** Version 2 could keep "none" when the search needed a Referer. A positive answer still has the readings. */
-        private const val BEFORE_SEARCH_REFERER = 2
+        private const val FIRST_CACHE_VERSION = 1
 
         /** What its search says when it finds no words. */
         private const val NONE_FOUND = "歌詞が見つかりませんでした"

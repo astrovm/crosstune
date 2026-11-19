@@ -3006,20 +3006,82 @@ class MainViewModelTest {
     }
 
     @Test
-    fun aPositiveSungAnswerFromBeforeTheSearchRefererStillRefreshesAKeptLine() {
+    fun anOldCompatibleLyricsCacheStillRefreshesAKeptLine() {
         val song = MusicMetadata("City Counters", "Band", lengthMs = 60_000L + SAME_RECORDING_LENGTH_MS)
         val text = "都会の三本"
         val line = SavedLine(text, reading = "まちのさんほん", title = song.title, artist = song.artist, lengthMs = song.lengthMs)
         val store = SavedLinesStore(prefs())
         store.addAll(listOf(line))
         val model = modelWithReadingCache { lyrics, sung ->
-            lyrics.putCachedLyrics(song, text)
+            lyrics.putCachedLyrics(song, text, version = 13)
             sung.putCachedSung(song, listOf(text), version = 2, answer = """[[0,"都会","まち"]]""")
         }
         idle()
         val refreshed = model.uiState.savedLines.single()
         assertEquals("まちのさんぼん", refreshed.reading)
         assertEquals(Ruby("都会", "まち", Reader.SUNG), refreshed.ruby?.first())
+        assertEquals(refreshed, store.load().single())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineIgnoresARecordingWhosePayloadHasTheWrongLength() {
+        val song = MusicMetadata("City Counters", "Band", lengthMs = 60_000L)
+        val text = "都会の三本"
+        val line = SavedLine(text, reading = "まちのさんほん", title = song.title, artist = song.artist, lengthMs = song.lengthMs)
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            val key = "16\u0000${RecordingKey.of(song.copy(lengthMs = null))}"
+            lyrics.put(key, """{"words":"$text","lines":[],"length":80000}""")
+            sung.putCachedSung(song, listOf(text), version = 4, answer = "[]")
+        }
+        idle()
+        assertEquals(line, model.uiState.savedLines.single())
+        assertEquals(line, store.load().single())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineStaysAsKeptWhenPositiveCachedVersionsDisagree() {
+        val song = MusicMetadata("Two cities", "Band")
+        val text = "都会の三本"
+        val line = SavedLine(text, reading = "まちのさんほん", title = song.title, artist = song.artist)
+        val unambiguous = line.copy(text = "三本の花", reading = "さんほんのはな")
+        val lines = listOf(text, unambiguous.text)
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line, unambiguous))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, lines.joinToString("\n"))
+            sung.putCachedSung(song, lines, version = 2, answer = """[[0,"都会","まち"]]""")
+            sung.putCachedSung(song, lines, version = 3, answer = """[[0,"都会","みやこ"]]""")
+            sung.putCachedSung(song, lines, version = 4, answer = """[[0,"都会","まち"]]""")
+        }
+        idle()
+        assertEquals(line, model.uiState.savedLines.first())
+        assertEquals("さんぼんのはな", model.uiState.savedLines.last().reading)
+        assertEquals(model.uiState.savedLines, store.load())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineKeepsItsCachedPronunciationWhenTheNewDictionaryJoinsItsParts() {
+        val song = MusicMetadata("Counters", "Band")
+        val text = "三本と三匹"
+        val line = SavedLine(
+            text, reading = "さんもととさんひき", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("三", "さん"), Ruby("本", "もと"), Ruby("と"), Ruby("三匹", "さんひき"))
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text, version = 6)
+            sung.putCachedSung(song, listOf(text), version = 1, answer = """[[0,"本","もと"]]""")
+        }
+        idle()
+        val refreshed = model.uiState.savedLines.single()
+        assertEquals("さんもととさんびき", refreshed.reading)
+        assertEquals(Ruby("本", "もと", Reader.SUNG), refreshed.ruby?.get(1))
         assertEquals(refreshed, store.load().single())
         assertTrue(fake.requestedUrls.isEmpty())
     }
@@ -3053,8 +3115,8 @@ class MainViewModelTest {
         return model(lyricsFinder = LyricsFinder(client, "test", cache = lyrics), sungReadings = SungReadings(client, sung))
     }
 
-    private suspend fun LookupCache.putCachedLyrics(song: MusicMetadata, text: String) =
-        put("16\u0000${RecordingKey.of(song.copy(lengthMs = 60_000))}", JSONObject().put("words", text).put("lines", JSONArray()).toString())
+    private suspend fun LookupCache.putCachedLyrics(song: MusicMetadata, text: String, version: Int = 16) =
+        put("$version\u0000${RecordingKey.of(song.copy(lengthMs = 60_000))}", JSONObject().put("words", text).put("lines", JSONArray()).toString())
 
     private suspend fun LookupCache.putCachedSung(song: MusicMetadata, lines: List<String>, version: Int, answer: String) =
         put("utaten|$version|${SongNames.normalize(song.title)}|${SongNames.normalize(song.artist)}|${lines.hashCode()}", answer)
