@@ -633,11 +633,31 @@ internal class LyricsFinder(
      * song kept offline, played from an app that names its recording otherwise, still has its words.
      */
     private suspend fun keptUnderName(metadata: MusicMetadata): Lyrics.Found? {
-        val names = listOf(CACHE_VERSION, BEFORE_NETEASE_ARTIST_CHECK, 16, 15).map { version ->
+        val names = cachedNames(metadata)
+        return cache?.entries()?.lastOrNull { (key) -> key.isCachedUnder(names) }?.let { (_, kept) -> fromCache(kept)?.first }
+    }
+
+    /** The sheets on the phone for [song]. The reading cache keys use the whole sheet as shown, timed or plain. */
+    suspend fun cachedLineSets(song: MusicMetadata): List<List<String>> {
+        val names = cachedNames(song)
+        return cache?.entries().orEmpty().flatMap { (key, json) ->
+            if (!key.isCachedUnder(names) || !cachedLengthFits(key, song.lengthMs)) return@flatMap emptyList()
+            val found = fromCache(json)?.first?.let(::asJapanWrites) ?: return@flatMap emptyList()
+            listOf(found.lines.map { it.text }, found.words.lines()).filter { lines -> lines.isNotEmpty() }
+        }.distinct()
+    }
+
+    private fun cachedLengthFits(key: String, wanted: Long?): Boolean {
+        val kept = key.split('\u0000', limit = 4).getOrNull(3)?.substringAfterLast('\u0000')?.toLongOrNull()
+        return wanted == null || kept == null || abs(kept - wanted) <= SAME_RECORDING_LENGTH_MS
+    }
+
+    private fun cachedNames(metadata: MusicMetadata): List<String> =
+        listOf(CACHE_VERSION, BEFORE_NETEASE_ARTIST_CHECK, 16, 15).map { version ->
             "$version\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
         }
-        return cache?.entries()?.lastOrNull { (key) -> names.any { name -> key == name || key.startsWith("$name\u0000") } }?.let { (_, kept) -> fromCache(kept)?.first }
-    }
+
+    private fun String.isCachedUnder(names: List<String>) = names.any { name -> this == name || startsWith("$name\u0000") }
 
     /**
      * [found], timed as a well-timed copy of the song times them when they're timed badly or not at

@@ -84,6 +84,9 @@ Turn the service on in **Settings** → **Open links from**. Then in Android, go
 **I got a search, not the song.**
 Crosstune found no confident match. Choose what happens then in **Settings** → **When a song isn't found**.
 
+**An older Japanese line still shows its old reading.**
+Crosstune can refresh an old saved line at startup if it still has the song's lyrics and UtaTen's answer on the phone. It makes no request for this. Without a matching answer, open the song to refresh its readings. Old lines you edited by hand are left alone at startup.
+
 **Practice reminders arrive late.**
 In **Settings** → **Practice**, use **Allow exact time**. Without that access, Android can hold a reminder. A pending reminder can arrive after midnight or when Crosstune opens again. If several days pass, only the latest due reminder is shown.
 
