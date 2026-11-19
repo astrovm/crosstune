@@ -1138,7 +1138,8 @@ internal class MainViewModel(
         merge<Unnamed?>(source.unnamedUpdates().filterNotNull(), source.nowPlayingUpdates().filterNotNull().map { null })
             // Paused, it isn't said to play; ask the last one's app whether it still has it.
             .onStart { previous?.let { emit(it) } }
-            .distinctUntilChangedBy { station -> station?.let { Triple(it.app, it.played, it.reportsState) } }
+            // The session too: the same app can start another for the same station, and the bar's buttons follow that one.
+            .distinctUntilChangedBy { station -> station?.let { listOf(it.app, it.played, it.reportsState, it.session) } }
             .collectLatest { unnamed ->
                 followedUnnamed = null
                 showUnnamed()

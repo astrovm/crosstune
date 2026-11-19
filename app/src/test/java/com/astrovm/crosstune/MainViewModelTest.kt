@@ -2200,6 +2200,18 @@ class MainViewModelTest {
     }
 
     @Test
+    fun theBarFollowsTheNewSessionWhenAnAppStartsAnotherForTheSameStation() {
+        val playback = FakePlayback()
+        radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        idle()
+        assertEquals(null, playback.followedSessions.last())
+        // The old session is gone and the app made a new one: the bar must follow that one, or its buttons reach nothing.
+        playback.unnamed.value = station.copy(session = 9)
+        idle()
+        assertEquals(9, playback.followedSessions.last())
+    }
+
+    @Test
     fun aStationsSleepTimerFollowsItInItsApp() {
         val playback = FakePlayback().apply { playing.value = following(app = station.app) }
         val scope = MainScope()
