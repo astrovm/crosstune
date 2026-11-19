@@ -259,7 +259,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
-    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("org.robolectric:robolectric:4.18")
     testImplementation("androidx.test:core:1.7.0")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.glance:glance-appwidget-testing:1.2.0")
@@ -393,7 +393,7 @@ val songCheck = tasks.register<Test>("songCheck") {
 // before it was all there, and so ran on Android's empty stubs instead. One configuration each, as
 // Gradle would otherwise keep only the newest of one library's versions.
 val robolectricRuntimes = files(
-    listOf("8.0.0_r4-robolectric-r1-i7", "9-robolectric-4913185-2-i7", "10-robolectric-5803371-i7", "11-robolectric-6757853-i7", "12-robolectric-7732740-i7", "12.1-robolectric-8229987-i7", "13-robolectric-9030017-i7", "14-robolectric-10818077-i7", "16-robolectric-13921718-i7").map {
+    listOf("8.0.0_r4-robolectric-r1-i7", "9-robolectric-4913185-2-i7", "10-robolectric-5803371-i7", "11-robolectric-6757853-i7", "12-robolectric-7732740-i7", "12.1-robolectric-8229987-i7", "13-robolectric-9030017-i7", "14-robolectric-10818077-i7", "16-robolectric-13921718-2-i7").map {
         configurations.detachedConfiguration(dependencies.create("org.robolectric:android-all-instrumented:$it")).apply { isTransitive = false }
     }
 )
