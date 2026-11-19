@@ -192,7 +192,7 @@ class ListeningTest {
     private fun launch(intent: Intent = Intent(Intent.ACTION_MAIN).setClass(app, MainActivity::class.java)): MainActivity {
         controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
         composeRule.waitForIdle()
-        return controller!!.get()
+        return checkNotNull(controller) { "Expected controller to be non-null" }.get()
     }
 
     private fun allowMicrophone() = shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
@@ -389,17 +389,17 @@ class ListeningTest {
         bar.performClick()
         bar.assertIsOff()
         assertFalse(prefs().getBoolean("playing_bar", true))
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertFalse(barShown())
         // Kept for the next launch, and back on, it shows again.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch()
         composeRule.waitForIdle()
         assertFalse(barShown())
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.setting_playing_bar)).performScrollTo().assertIsOff().performClick()
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         waitUntil(TIMEOUT_MS) { barShown() }
     }
 
@@ -485,7 +485,7 @@ class ListeningTest {
         composeRule.onNode(copy).performClick()
         composeRule.waitForIdle()
         // The link copied is the next song's, not the one the card was of before.
-        val copied = app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
+        val copied = checkNotNull(app.getSystemService(ClipboardManager::class.java).primaryClip) { "Expected app.getSystemService(ClipboardManager::class.java).primaryClip to be non-null" }.getItemAt(0).text.toString()
         assertTrue(copied, copied.contains("Slide") && !copied.contains("Iris"))
         // Still in the player, which is on the song the card now is.
         assertEquals(next, controllerModel().uiState.player?.song)
@@ -591,12 +591,12 @@ class ListeningTest {
         composeRule.runOnIdle { phone.onThePhone = next.copy(offsetMs = 2000) }
         composeRule.waitForIdle()
         assertTrue(shown("Next Test Song"))
-        controller!!.pause()
-        val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause()
+        val model = ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
         phone.onThePhone = null
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(next.metadata, model.uiState.playingNow?.song)
-        controller!!.resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.resume()
         composeRule.waitForIdle()
         assertFalse(barShown())
         composeRule.runOnIdle { phone.onThePhone = first }
@@ -631,7 +631,7 @@ class ListeningTest {
                     .header("Location", "https://www.youtube.com/watch?v=x&list=TLGGnext").build()
                 // Each song is found as itself, its video named after its number.
                 request.url.encodedPath == "/youtubei/v1/search" -> {
-                    val number = Regex("Song (\\d+)").find(body)!!.groupValues[1]
+                    val number = checkNotNull(Regex("Song (\\d+)").find(body)) { "Expected Regex(\"Song (\\\\d+)\").find(body) to be non-null" }.groupValues[1]
                     FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
                         "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song $number"}]}}},
                         {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
@@ -689,7 +689,7 @@ class ListeningTest {
         click(string(R.string.lyrics_play))
         assertEquals(listOf(false, true), phone.plays)
         // Returning while it's still paused keeps the song, but checks that its app still has it.
-        controller!!.pause().stop().restart().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop().restart().resume()
         waitForDescription(string(R.string.lyrics_play))
         assertTrue(barShown())
         // A tap on the song opens its player, and closing that brings the bar back.
@@ -703,7 +703,7 @@ class ListeningTest {
         phone.playing.value = null
         waitUntil(TIMEOUT_MS) { !barShown() }
         // An old offer mustn't come back after its app has let the song go.
-        controller!!.pause().stop().restart().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop().restart().resume()
         composeRule.waitForIdle()
         assertFalse(barShown())
     }
@@ -764,7 +764,7 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { barShown() }
         // Access taken away while away, what was offered goes with it.
         phone.access = false
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertFalse(barShown())
         assertFalse(shown("Iris"))
@@ -1594,7 +1594,7 @@ class ListeningTest {
         recognize()
         waitForText(string(R.string.listening_text))
         waitUntil(TIMEOUT_MS) { microphone.opened == 2 }
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         waitUntil(TIMEOUT_MS) { microphone.closed }
         waitUntil(TIMEOUT_MS) { !shown(string(R.string.listening_text)) }
     }
@@ -1606,13 +1606,13 @@ class ListeningTest {
         recognize()
         waitForText(string(R.string.listening_text))
         // A rotation recreates the screen, still listening.
-        controller = controller!!.recreate()
+        controller = checkNotNull(controller) { "Expected controller to be non-null" }.recreate()
         composeRule.waitForIdle()
         assertTrue(shown(string(R.string.listening_text)))
         assertTrue(!microphone.closed)
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         waitUntil(TIMEOUT_MS) { microphone.closed }
-        controller!!.start().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         composeRule.waitForIdle()
         assertTrue(!shown(string(R.string.listening_text)))
     }
@@ -1635,7 +1635,7 @@ class ListeningTest {
         assertEquals("package:${app.packageName}", settings.dataString)
 
         // Tapped again later, Android won't ask, so the steps to its page show instead.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         val next = launch()
         recognize()
         waitForText(string(R.string.fix_mic_title))
@@ -1643,7 +1643,7 @@ class ListeningTest {
 
         // Allowed there, the steps go, and it listens right away.
         allowMicrophone()
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitUntil(TIMEOUT_MS) { !shown(string(R.string.fix_mic_title)) }
         recognize()
         waitForText(string(R.string.listening_text))
@@ -1657,12 +1657,12 @@ class ListeningTest {
         click(string(R.string.lyrics_stop_listening))
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
         click(string(R.string.lyrics_listen_along))
-        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        val asked = shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).lastRequestedPermission
         assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
         // Turned while Android asks, then allowed: it listens along, rather than for a new song.
-        controller!!.recreate()
+        checkNotNull(controller) { "Expected controller to be non-null" }.recreate()
         allowMicrophone()
-        controller!!.get().answer(asked, PackageManager.PERMISSION_GRANTED)
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().answer(asked, PackageManager.PERMISSION_GRANTED)
         hearing.song("Demo", 3.0)
         waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_stop_listening)) }
         assertFalse(controllerModel().uiState.listening)
@@ -1678,18 +1678,18 @@ class ListeningTest {
         // Taken back meanwhile, the microphone is asked for in Crosstune, which comes to the front.
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
         click(string(R.string.lyrics_listen_along))
-        assertEquals(MainActivity::class.java.name, shadowOf(app).nextStartedActivity.component!!.className)
+        assertEquals(MainActivity::class.java.name, checkNotNull(shadowOf(app).nextStartedActivity.component) { "Expected shadowOf(app).nextStartedActivity.component to be non-null" }.className)
         val before = hearing.listens
-        controller!!.restart()
-        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        checkNotNull(controller) { "Expected controller to be non-null" }.restart()
+        val asked = shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).lastRequestedPermission
         assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
         allowMicrophone()
-        controller!!.get().answer(asked, PackageManager.PERMISSION_GRANTED)
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().answer(asked, PackageManager.PERMISSION_GRANTED)
         waitUntil(TIMEOUT_MS) { hearing.listens > before }
         // Asked once: back again, it isn't asked again.
-        controller!!.pause().stop()
-        controller!!.restart()
-        assertEquals(asked, shadowOf(controller!!.get()).lastRequestedPermission)
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.restart()
+        assertEquals(asked, shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).lastRequestedPermission)
     }
 
     @Test
@@ -1718,14 +1718,14 @@ class ListeningTest {
         install(ComponentName(SongRecognizers.SHAZAM, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
         shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.GOOGLE, "Google"))
         install(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), listenFilter(SongRecognizers.GOOGLE_SONG_SEARCH))
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         recognizeBusy(again = true)
         assertEquals(Intent.ACTION_MAIN, shadowOf(app).nextStartedActivity.action)
         assertNull(shadowOf(app).nextStartedActivity)
 
         // With it, Shazam listens right away.
         install(ComponentName(SongRecognizers.SHAZAM, "Tagging"), listenFilter(SongRecognizers.SHAZAM_LISTEN))
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         recognizeBusy(again = true)
         assertEquals(SongRecognizers.SHAZAM_LISTEN, shadowOf(app).nextStartedActivity.action)
         // Back from it, the others are still offered. Not Crosstune: it's what just failed.
@@ -1740,7 +1740,7 @@ class ListeningTest {
         launch(Intent(MainActivity.ACTION_LISTEN).setClassName(app, MainActivity.LISTEN_ALIAS))
         waitForText(string(R.string.listening_text))
         waitUntil(TIMEOUT_MS) { microphone.opened == 1 }
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         // MainActivity itself is exported; asked directly, it doesn't listen.
         microphone = FakeMicrophone()
@@ -1893,12 +1893,12 @@ class ListeningTest {
         val phone = appPlaying("Demo")
         launch()
         openWordsFromRecent("Demo")
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         phone.goesOnTo("Other")
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("Demo", controllerModel().uiState.lyricsFor?.title)
         assertFalse(fake.requestedUrls.any { "Other" in it })
-        controller!!.restart().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.restart().resume()
         waitForText("Other one")
     }
 
@@ -1990,7 +1990,7 @@ class ListeningTest {
     fun aTapOnWordsAskedForFromTheSearchBarOpensAPlayerInTheAppPlayingThem() {
         timedWordsOfAnySong()
         val phone = appPlaying("Demo")
-        phone.playing.value = phone.playing.value!!.copy(appPackage = "com.example.music")
+        phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(appPackage = "com.example.music")
         allowMicrophone()
         launch()
         click(string(R.string.tile_lyrics_label))
@@ -2442,11 +2442,11 @@ class ListeningTest {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        val song = controllerModel().uiState.lyricsFor!!
+        val song = checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }
         assertEquals("video:demo", song.recordingId)
         hearIntro(phone, hearing, 0..2)
         waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
-        assertTrue(LeadStore(prefs()).load(song)!! in 9_000..11_000)
+        assertTrue(checkNotNull(LeadStore(prefs()).load(song)) { "Expected LeadStore(prefs()).load(song) to be non-null" } in 9_000..11_000)
         assertFalse(controllerModel().uiState.lyricsOffTake)
         assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.timingKnown == true)
         assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.canSeek == true)
@@ -2464,7 +2464,7 @@ class ListeningTest {
         for (index in hearings) {
             composeRule.runOnIdle {
                 val position = 2_000L + index * 10_000
-                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + leadMs, SystemClock.elapsedRealtime()))
+                phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(position + leadMs, SystemClock.elapsedRealtime()))
                 hearing.song("Demo", position / 1000.0)
             }
             if (index < hearings.last) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
@@ -2476,11 +2476,11 @@ class ListeningTest {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        val song = controllerModel().uiState.lyricsFor!!
+        val song = checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }
         // Ten seconds longer than the words' take, all of it at the end: the song starts where the video does.
         hearIntro(phone, hearing, 0..2, leadMs = 0)
         waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null }
-        assertTrue(LeadStore(prefs()).load(song)!! in -1_000..1_000)
+        assertTrue(checkNotNull(LeadStore(prefs()).load(song)) { "Expected LeadStore(prefs()).load(song) to be non-null" } in -1_000..1_000)
         assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.timingKnown == true)
     }
 
@@ -2493,13 +2493,13 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertFalse(controllerModel().uiState.lyricsOffTake)
         assertFalse(shown(string(R.string.lyrics_sync_hint)))
-        val song = controllerModel().uiState.lyricsFor!!
+        val song = checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }
         hearIntro(phone, hearing, 0..2)
         waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
-        assertTrue(LeadStore(prefs()).load(song)!! in 9_000..11_000)
+        assertTrue(checkNotNull(LeadStore(prefs()).load(song)) { "Expected LeadStore(prefs()).load(song) to be non-null" } in 9_000..11_000)
         assertFalse(controllerModel().uiState.lyricsOffTake)
         // The words follow the app, ten seconds behind it, and a line tapped is played where the release has it.
-        val following = controllerModel().uiState.following!!
+        val following = checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }
         assertTrue(following.toString(), following.clock.positionAt(SystemClock.elapsedRealtime()) in 20_000..24_000)
         composeRule.onNodeWithText("Demo two").performClick()
         assertTrue(phone.seeks.last() in 19_000..21_000)
@@ -2517,18 +2517,18 @@ class ListeningTest {
         // As long as the words' take: where the app is, is where the words are.
         val phone = videoWithWords(hearing, video = false, durationMs = 52_000)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        val song = controllerModel().uiState.lyricsFor!!
+        val song = checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }
         // Shazam matches it to a recording twenty seconds ahead of it, as one with a longer intro.
         for (index in 0..2) {
             composeRule.runOnIdle {
                 val position = 2_000L + index * 10_000
-                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position, SystemClock.elapsedRealtime()))
+                phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(position, SystemClock.elapsedRealtime()))
                 hearing.song("Demo", (position + 20_000) / 1000.0, matchId = "longer")
             }
             if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
         }
         waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") != null && !controllerModel().uiState.listeningAlong }
-        assertTrue(ShazamGapStore(prefs()).load(52_000, "longer")!! in -21_000..-19_000)
+        assertTrue(checkNotNull(ShazamGapStore(prefs()).load(52_000, "longer")) { "Expected ShazamGapStore(prefs()).load(52_000, \"longer\") to be non-null" } in -21_000..-19_000)
         // Nothing to line up, the app's place stays the words'.
         assertNull(LeadStore(prefs()).load(song))
         assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.timingKnown == true)
@@ -2549,7 +2549,7 @@ class ListeningTest {
         for ((index, match) in listOf("longer", "longer", "other").withIndex()) {
             composeRule.runOnIdle {
                 val position = 2_000L + index * 10_000
-                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position, SystemClock.elapsedRealtime()))
+                phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(position, SystemClock.elapsedRealtime()))
                 hearing.song("Demo", (position + 20_000) / 1000.0, matchId = match)
             }
             waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
@@ -2569,7 +2569,7 @@ class ListeningTest {
         for (index in 0..2) {
             composeRule.runOnIdle {
                 val position = 2_000L + index * 10_000
-                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position, SystemClock.elapsedRealtime()))
+                phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(position, SystemClock.elapsedRealtime()))
                 // Learnt, it asks what's playing nearby, not the app, which would answer at once, again and again, with no pause between.
                 if (index == 2) phone.onThePhone = null
                 hearing.song("Demo", (position + 20_000) / 1000.0, matchId = "longer")
@@ -2589,19 +2589,19 @@ class ListeningTest {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing, video = false)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        val song = controllerModel().uiState.lyricsFor!!
+        val song = checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }
         // This release is ten seconds ahead of the words, so thirty behind Shazam's place: not a lead it could
         // have, unless Shazam's gap is taken off.
         for (index in 0..2) {
             composeRule.runOnIdle {
                 val position = 2_000L + index * 10_000
-                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
                 hearing.song("Demo", (position + 20_000) / 1000.0, matchId = "longer")
             }
             if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
         }
         waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null }
-        assertTrue(LeadStore(prefs()).load(song)!! in 9_000..11_000)
+        assertTrue(checkNotNull(LeadStore(prefs()).load(song)) { "Expected LeadStore(prefs()).load(song) to be non-null" } in 9_000..11_000)
     }
 
     /** A video with words on it, lined up by Shazam, whose recording is five seconds ahead of the words: learnt as the video's lead, not yet as Shazam's gap. */
@@ -2609,19 +2609,19 @@ class ListeningTest {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        val song = controllerModel().uiState.lyricsFor!!
+        val song = checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }
         composeRule.runOnIdle { controllerModel().toggleSavedLine(1) }
         // The video is ten seconds ahead of the words, but Shazam's recording five ahead of them, which isn't known yet.
         for (index in 0..2) {
             composeRule.runOnIdle {
                 val position = 2_000L + index * 10_000
-                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
                 hearing.song("Demo", (position + 5_000) / 1000.0, matchId = "longer")
             }
             if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
         }
         waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
-        assertTrue(LeadStore(prefs()).load(song)!! in 4_000..6_000)
+        assertTrue(checkNotNull(LeadStore(prefs()).load(song)) { "Expected LeadStore(prefs()).load(song) to be non-null" } in 4_000..6_000)
         return phone to song
     }
 
@@ -2630,20 +2630,20 @@ class ListeningTest {
         val (phone, song) = videoLinedUpByShazam()
         val lines = SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")
         // Ten seconds into the words, the second line is tapped as it's sung: the words were five seconds ahead.
-        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        composeRule.runOnIdle { phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
         click(string(R.string.lyrics_sync))
         waitForText(string(R.string.lyrics_sync_hint))
         composeRule.onNodeWithText("Demo two").performClick()
         waitUntil(TIMEOUT_MS) { lit("Demo two") }
         // That's Shazam's gap, for any release it matches to that recording, and this video's lead put right, the line saved from it
         // too; nothing kept for this release alone.
-        assertTrue(ShazamGapStore(prefs()).load(52_000, "longer").toString(), ShazamGapStore(prefs()).load(52_000, "longer")!! in -5_600..-4_400)
-        assertTrue(LeadStore(prefs()).load(song)!! in 9_400..10_600)
+        assertTrue(ShazamGapStore(prefs()).load(52_000, "longer").toString(), checkNotNull(ShazamGapStore(prefs()).load(52_000, "longer")) { "Expected ShazamGapStore(prefs()).load(52_000, \"longer\") to be non-null" } in -5_600..-4_400)
+        assertTrue(checkNotNull(LeadStore(prefs()).load(song)) { "Expected LeadStore(prefs()).load(song) to be non-null" } in 9_400..10_600)
         assertTrue(SavedLinesStore(prefs()).load().single().leadMs in 9_400..10_600)
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
         assertFalse(controllerModel().uiState.lyricsOffTake)
         // Another line tapped after stretches the words from the one that moved them, for this release.
-        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(55_000, SystemClock.elapsedRealtime())) }
+        composeRule.runOnIdle { phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(55_000, SystemClock.elapsedRealtime())) }
         composeRule.onNodeWithText("Demo three").performClick()
         waitUntil(TIMEOUT_MS) { LyricsSyncStore(prefs()).load(song, lines).isNotEmpty() }
         val points = LyricsSyncStore(prefs()).load(song, lines)
@@ -2653,20 +2653,20 @@ class ListeningTest {
         // Reset puts it all back as it was.
         click(string(R.string.lyrics_sync_reset))
         waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") == null }
-        assertTrue(LeadStore(prefs()).load(song)!! in 4_000..6_000)
+        assertTrue(checkNotNull(LeadStore(prefs()).load(song)) { "Expected LeadStore(prefs()).load(song) to be non-null" } in 4_000..6_000)
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
     }
 
     @Test
     fun aGapMovedByHandOffersToReportByItselfAndTheOfferStaysOnceTheBarGoes() {
         val (phone, _) = videoLinedUpByShazam()
-        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        composeRule.runOnIdle { phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
         click(string(R.string.lyrics_sync))
         waitForText(string(R.string.lyrics_sync_hint))
         composeRule.onNodeWithText("Demo two").performClick()
         waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") != null }
         // The gap moved, not the lines: a way to put the words in time by hand all the same.
-        assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(controllerModel().uiState.lyricsFor!!, SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")))
+        assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }, SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")))
         assertEquals(setOf(SongProblem.TIMED_BY_HAND), controllerModel().uiState.reportOfferFor)
         // Owed at once, so it isn't lost if the app is killed before the words are left.
         assertTrue(prefs().getString("auto_reports_owed", "[]").orEmpty().contains("timed_by_hand"))
@@ -2680,7 +2680,7 @@ class ListeningTest {
     fun aGapMovedByHandAloneIsReportedAsTheWordsAreLeftWhenReportsAreAllowed() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         val (phone, _) = videoLinedUpByShazam()
-        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        composeRule.runOnIdle { phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
         click(string(R.string.lyrics_sync))
         waitForText(string(R.string.lyrics_sync_hint))
         composeRule.onNodeWithText("Demo two").performClick()
@@ -2695,7 +2695,7 @@ class ListeningTest {
     @Test
     fun aGapMovedByTheArrowsOffersToReportByItselfAndTheOfferStaysOnceTheBarGoes() {
         val (phone, _) = videoLinedUpByShazam()
-        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        composeRule.runOnIdle { phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
         click(string(R.string.lyrics_sync))
         waitForText(string(R.string.lyrics_sync_hint))
         val before = ShazamGapStore(prefs()).load(52_000, "longer")
@@ -2743,7 +2743,7 @@ class ListeningTest {
         val afterTap = SystemClock.elapsedRealtime()
         waitUntil(TIMEOUT_MS) { lit("Ten") }
         // Gap = original gap - (song position at the tap - line time).
-        val tapped = gap()!!
+        val tapped = checkNotNull(gap()) { "Expected gap() to be non-null" }
         assertTrue(tapped.toString(), tapped in (-original.positionAt(afterTap))..(-original.positionAt(beforeTap)))
         // Nudged half a second later, the gap moves along.
         click(string(R.string.lyrics_sync_later))
@@ -2755,7 +2755,7 @@ class ListeningTest {
         assertEquals("Ten", moved.getString("line"))
         // Moved as far as the gap moved from what was learnt before.
         assertEquals(10_000L, moved.getLong("timedMs"))
-        assertEquals(-10_000L - gap()!!, moved.getLong("heardMs") - moved.getLong("timedMs"))
+        assertEquals(-10_000L - checkNotNull(gap()) { "Expected gap() to be non-null" }, moved.getLong("heardMs") - moved.getLong("timedMs"))
         // Reset puts back the gap learnt before, and the words with it, at once.
         click(string(R.string.lyrics_sync_reset))
         composeRule.runOnIdle {
@@ -2797,7 +2797,7 @@ class ListeningTest {
         composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         // Heard from the moment the player said where it is, so how far apart they are is exact.
-        hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band", lengthMs = recognizedMs), null, kotlin.math.round(heardSeconds * 1000).toLong(), phone.playing.value!!.clock.atMs, "reference"))
+        hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band", lengthMs = recognizedMs), null, kotlin.math.round(heardSeconds * 1000).toLong(), checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.clock.atMs, "reference"))
         waitForText("Demo one")
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
         return phone
@@ -2896,7 +2896,7 @@ class ListeningTest {
     }
 
     private fun playerAt(phone: FakePlayback, positionMs: Long) {
-        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(positionMs, SystemClock.elapsedRealtime())) }
+        composeRule.runOnIdle { phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(positionMs, SystemClock.elapsedRealtime())) }
         composeRule.waitForIdle()
     }
 
@@ -2917,7 +2917,7 @@ class ListeningTest {
         }
         repeat(3) { hearsAt(hearing, 200_000, 1.05f) }
         composeRule.runOnIdle {
-            assertEquals(1.05f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(1.05f, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.speed, 0.001f)
             assertEquals(40_000L, wordsSpan())
         }
     }
@@ -2930,11 +2930,11 @@ class ListeningTest {
         repeat(2) { hearsAt(hearing, 200_000, 1.05f) }
         // The third capture is already waiting for its answer at 1.05, then the player changes rate.
         composeRule.runOnIdle {
-            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(12_000, SystemClock.elapsedRealtime(), speed = 1.25f))
+            phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(12_000, SystemClock.elapsedRealtime(), speed = 1.25f))
         }
         hearsAt(hearing, 200_000, 1.05f)
         composeRule.runOnIdle {
-            assertEquals(1.25f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(1.25f, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.speed, 0.001f)
             assertEquals(40_000L, wordsSpan())
         }
     }
@@ -2949,13 +2949,13 @@ class ListeningTest {
         hearIntro(phone, hearing, 0..2)
         waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
         composeRule.runOnIdle {
-            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(32_000, SystemClock.elapsedRealtime(), speed = 1.05f))
+            phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(32_000, SystemClock.elapsedRealtime(), speed = 1.05f))
             controllerModel().listenAlong()
             controllerModel().syncLine(0)
         }
         repeat(4) { hearsAt(hearing, 200_000, 0.945f) }
         composeRule.runOnIdle {
-            assertEquals(0.945f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(0.945f, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.speed, 0.001f)
             assertEquals(40_000L, wordsSpan())
         }
     }
@@ -2967,8 +2967,8 @@ class ListeningTest {
         composeRule.runOnIdle {
             val at = SystemClock.elapsedRealtime()
             // 2 seconds into the song 12 into the video, and 30 seconds of the video later, 29.7 of the song.
-            assertEquals(31_700.0, controllerModel().uiState.following!!.clock.positionAt(at).toDouble(), 150.0)
-            assertEquals(0.99f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(31_700.0, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.positionAt(at).toDouble(), 150.0)
+            assertEquals(0.99f, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.speed, 0.001f)
         }
     }
 
@@ -2987,7 +2987,7 @@ class ListeningTest {
         assertTrue(TimingLog.lastMinute(), Regex("pace 1\\.11\\d* from speed 0\\.9\\d* player speed 1\\.0").containsMatchIn(TimingLog.lastMinute()))
         // ...until the video's speed, once enough hearings agree, is taken off its clock: it's the clock that goes at it then.
         repeat(2) { hearsAt(hearing, 200_000, 0.9f) }
-        composeRule.runOnIdle { assertEquals(0.9f, controllerModel().uiState.following!!.clock.speed, 0.001f) }
+        composeRule.runOnIdle { assertEquals(0.9f, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.speed, 0.001f) }
         composeRule.runOnIdle { assertEquals(40_000L, wordsSpan()) }
     }
 
@@ -2998,7 +2998,7 @@ class ListeningTest {
         playerAt(phone, 12_000)
         composeRule.runOnIdle { controllerModel().syncLine(0) }
         repeat(3) { hearsAt(hearing, 200_000, 0.5f) }
-        composeRule.runOnIdle { assertEquals(1f, controllerModel().uiState.following!!.clock.speed, 0.001f) }
+        composeRule.runOnIdle { assertEquals(1f, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.speed, 0.001f) }
         composeRule.runOnIdle { assertEquals(80_000L, wordsSpan()) }
     }
 
@@ -3016,7 +3016,7 @@ class ListeningTest {
         val phone = videoHeardGoingAt(FakeHearing(), listOf(0.5f, 0.5f))
         playerAt(phone, 42_000)
         composeRule.runOnIdle {
-            assertEquals(32_000.0, controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 150.0)
+            assertEquals(32_000.0, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 150.0)
         }
     }
 
@@ -3025,14 +3025,14 @@ class ListeningTest {
         val phone = videoHeardGoingAt(FakeHearing(), listOf(0.5f, 0.5f, 0.5f))
         playerAt(phone, 42_000)
         composeRule.runOnIdle {
-            assertEquals(32_000.0, controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 150.0)
+            assertEquals(32_000.0, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 150.0)
         }
     }
 
     @Test
     fun aLengthHeardOnlyTellsTakesApartWhenThePlayerDoesNotKnowIt() {
         heardVideo(FakeHearing(), recognizedMs = 52_000)
-        val song = controllerModel().uiState.lyricsFor!!
+        val song = checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }
         assertEquals(52_000L, song.heardLengthMs)
         // It isn't said to be this recording's length, so the words looked up and kept stay the player's.
         assertNull(song.lengthMs)
@@ -3041,15 +3041,15 @@ class ListeningTest {
 
     /** The song heard [leadMs] behind what the video plays now, as the answer's taken to say. */
     private fun heardBehind(hearing: FakeHearing, phone: FakePlayback, leadMs: Long, speed: Float = 1f) =
-        hearsAt(hearing, phone.playing.value!!.clock.positionAt(SystemClock.elapsedRealtime()) - leadMs, speed)
+        hearsAt(hearing, checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.clock.positionAt(SystemClock.elapsedRealtime()) - leadMs, speed)
 
     /** How far the video is ahead of the words followed, as they go now. */
     private fun followedBehind(phone: FakePlayback) = SystemClock.elapsedRealtime().let { at ->
-        phone.playing.value!!.clock.positionAt(at) - controllerModel().uiState.following!!.clock.positionAt(at)
+        checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.clock.positionAt(at) - checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.positionAt(at)
     }
 
     private fun assertLinedUp(lined: Boolean) =
-        composeRule.runOnIdle { assertEquals(controllerModel().uiState.following.toString(), lined, controllerModel().uiState.following!!.timingKnown) }
+        composeRule.runOnIdle { assertEquals(controllerModel().uiState.following.toString(), lined, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.timingKnown) }
 
     // A video 10 seconds longer than its words may be 8 seconds behind them, or 18 ahead.
     @Test
@@ -3093,7 +3093,7 @@ class ListeningTest {
         val phone = heardVideo(FakeHearing(), heardSeconds = 1.0, playerMs = 5_000)
         assertLinedUp(false)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(laterMs))
-        composeRule.runOnIdle { SystemClock.elapsedRealtime().let { at -> phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(phone.playing.value!!.clock.positionAt(at), at)) } }
+        composeRule.runOnIdle { SystemClock.elapsedRealtime().let { at -> phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.clock.positionAt(at), at)) } }
         composeRule.waitForIdle()
         return phone
     }
@@ -3120,7 +3120,7 @@ class ListeningTest {
         composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
         waitUntil(TIMEOUT_MS) { hearing.listens > listens }
         heardBehind(hearing, phone, 10_000)
-        composeRule.runOnIdle { assertEquals(1f, controllerModel().uiState.following!!.clock.speed, 0.001f) }
+        composeRule.runOnIdle { assertEquals(1f, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.speed, 0.001f) }
     }
 
     @Test
@@ -3128,7 +3128,7 @@ class ListeningTest {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        val song = controllerModel().uiState.lyricsFor!!
+        val song = checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }
         hearIntro(phone, hearing, 0..2)
         waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
         composeRule.runOnIdle { controllerModel().dismissLyrics() }
@@ -3140,7 +3140,7 @@ class ListeningTest {
         repeat(4) { hearsAt(hearing, 200_000, 0.9f) }
         playerAt(phone, 130_000)
         // 30 seconds of the video from where it was opened, 27 of the song.
-        composeRule.runOnIdle { assertEquals(LeadStore(prefs()).load(song)!! + 3_000.0, followedBehind(phone).toDouble(), 500.0) }
+        composeRule.runOnIdle { assertEquals(checkNotNull(LeadStore(prefs()).load(song)) { "Expected LeadStore(prefs()).load(song) to be non-null" } + 3_000.0, followedBehind(phone).toDouble(), 500.0) }
     }
 
     @Test
@@ -3148,11 +3148,11 @@ class ListeningTest {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        val song = controllerModel().uiState.lyricsFor!!
+        val song = checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }
         for (index in 0..2) {
             composeRule.runOnIdle {
                 val position = 2_000L + index * 10_000
-                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
                 hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band"), null, position + 5_000, SystemClock.elapsedRealtime(), "longer", speed = 0.9f))
             }
             if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
@@ -3165,7 +3165,7 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { lit("Demo two") }
         playerAt(phone, 50_000)
         // 30 seconds of the video from where the line, 10 seconds in, was tapped: 27 of the song.
-        composeRule.runOnIdle { assertEquals(37_000.0, controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 500.0) }
+        composeRule.runOnIdle { assertEquals(37_000.0, checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 500.0) }
     }
 
     @Test
@@ -3178,14 +3178,14 @@ class ListeningTest {
     @Test
     fun aVideoDoesNotStartAtAnImpossibleFingerprintPosition() {
         heardVideo(FakeHearing(), heardSeconds = 39.0)
-        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+        assertFalse(controllerModel().uiState.following.toString(), checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.timingKnown)
     }
 
     @Test
     fun aFingerprintJumpCannotReplaceTheVideosExistingLead() {
         val hearing = FakeHearing()
         heardVideo(hearing)
-        val before = controllerModel().uiState.following!!.clock
+        val before = checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock
         // The same reference gives two consistent but false positions, 37 seconds ahead.
         repeat(2) { index ->
             shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(10))
@@ -3194,7 +3194,7 @@ class ListeningTest {
         }
         composeRule.runOnIdle {
             val at = SystemClock.elapsedRealtime()
-            assertTrue(controllerModel().uiState.following.toString(), kotlin.math.abs(controllerModel().uiState.following!!.clock.positionAt(at) - before.positionAt(at)) < 1_000)
+            assertTrue(controllerModel().uiState.following.toString(), kotlin.math.abs(checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.positionAt(at) - before.positionAt(at)) < 1_000)
         }
     }
 
@@ -3203,11 +3203,11 @@ class ListeningTest {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        val song = controllerModel().uiState.lyricsFor!!
+        val song = checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }
         // Heard 2 seconds into the song, 12 into the video: the words go by that until hearings agree, rather than stand still.
         hearIntro(phone, hearing, 0..0)
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
-        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(23_000, SystemClock.elapsedRealtime())) }
+        composeRule.runOnIdle { phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(23_000, SystemClock.elapsedRealtime())) }
         waitUntil(TIMEOUT_MS) { lit("Demo two") }
         assertFalse(lit("Demo one"))
         composeRule.onNodeWithText("Demo three").performClick()
@@ -3223,7 +3223,7 @@ class ListeningTest {
         // 30 seconds into the song, but only 12 into the video, which can't be behind its song.
         hearing.song("Demo", 30.0)
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
-        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+        assertFalse(controllerModel().uiState.following.toString(), checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.timingKnown)
     }
 
     @Test
@@ -3233,11 +3233,11 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         // 30 seconds ahead, in a video only 10 longer than the song.
         composeRule.runOnIdle {
-            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(32_000, SystemClock.elapsedRealtime()))
+            phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(32_000, SystemClock.elapsedRealtime()))
             hearing.song("Demo", 2.0)
         }
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
-        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+        assertFalse(controllerModel().uiState.following.toString(), checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.timingKnown)
     }
 
     @Test
@@ -3247,11 +3247,11 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         // 5 seconds into a video 10 longer than the song, what's heard may be a bit of it played before it starts.
         composeRule.runOnIdle {
-            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(5_000, SystemClock.elapsedRealtime()))
+            phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(5_000, SystemClock.elapsedRealtime()))
             hearing.song("Demo", 0.0)
         }
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
-        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+        assertFalse(controllerModel().uiState.following.toString(), checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.timingKnown)
     }
 
     @Test
@@ -3265,12 +3265,12 @@ class ListeningTest {
         assertTrue(TimingLog.lastMinute(), Regex("lead guessed -?\\d+").containsMatchIn(TimingLog.lastMinute()))
         // Heard again, 16 seconds ahead this time: the words stay where they were put.
         composeRule.runOnIdle {
-            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime()))
+            phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime()))
             hearing.song("Demo", 4.0)
         }
         waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
         composeRule.runOnIdle {
-            val at = controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime())
+            val at = checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.clock.positionAt(SystemClock.elapsedRealtime())
             assertTrue(at.toString(), at in 9_000..11_500)
         }
     }
@@ -3337,7 +3337,7 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         // What plays under the scene is heard, more times than the tries: the song may not have started, so none counts.
         repeat(6) { index ->
-            composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000L + index * 10_000, SystemClock.elapsedRealtime())) }
+            composeRule.runOnIdle { phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(20_000L + index * 10_000, SystemClock.elapsedRealtime())) }
             hearing.song("Wonderland", 5.0 + index * 10)
             waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
         }
@@ -3346,14 +3346,14 @@ class ListeningTest {
         for (index in 0..2) {
             composeRule.runOnIdle {
                 val position = 2_000L + index * 10_000
-                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 100_000, SystemClock.elapsedRealtime()))
+                phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(position + 100_000, SystemClock.elapsedRealtime()))
                 hearing.song("Demo", position / 1000.0)
             }
             if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 8 }
         }
-        val song = controllerModel().uiState.lyricsFor!!
+        val song = checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }
         waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null }
-        assertTrue(LeadStore(prefs()).load(song).toString(), LeadStore(prefs()).load(song)!! in 99_000..101_000)
+        assertTrue(LeadStore(prefs()).load(song).toString(), checkNotNull(LeadStore(prefs()).load(song)) { "Expected LeadStore(prefs()).load(song) to be non-null" } in 99_000..101_000)
     }
 
     @Test
@@ -3387,7 +3387,7 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
         assertTrue(controllerModel().uiState.lyricsOffTake)
         waitForText(string(R.string.lyrics_sync_hint))
-        assertNull(LeadStore(prefs()).load(controllerModel().uiState.lyricsFor!!))
+        assertNull(LeadStore(prefs()).load(checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }))
     }
 
     @Test
@@ -3396,7 +3396,7 @@ class ListeningTest {
         val phone = videoWithWords(hearing, permission = false)
         composeRule.waitForIdle()
         assertEquals(0, hearing.listens)
-        assertFalse(controllerModel().uiState.following!!.timingKnown)
+        assertFalse(checkNotNull(controllerModel().uiState.following) { "Expected controllerModel().uiState.following to be non-null" }.timingKnown)
         assertFalse(lit("Demo one"))
         composeRule.runOnIdle {
             controllerModel().seekLyrics(10_000)
@@ -3413,7 +3413,7 @@ class ListeningTest {
         }
         waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
         assertEquals(5, hearing.listens)
-        assertNull(LeadStore(prefs()).load(controllerModel().uiState.lyricsFor!!))
+        assertNull(LeadStore(prefs()).load(checkNotNull(controllerModel().uiState.lyricsFor) { "Expected controllerModel().uiState.lyricsFor to be non-null" }))
     }
 
     @Test
@@ -3509,8 +3509,8 @@ class ListeningTest {
 
         // Out of sight, it stops listening; back, it listens again.
         waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
-        controller!!.pause().stop()
-        controller!!.start().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
 
         // Turned off and on from the words themselves.
@@ -3576,8 +3576,8 @@ class ListeningTest {
         ShadowSettings.setCanDrawOverlays(true)
         demoWords(FakeHearing())
         // Even with the song playing and listened along to: only Float does.
-        controller!!.userLeaving()
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.userLeaving()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         assertEquals(null, shadowOf(app).nextStartedService)
     }
 
@@ -3626,18 +3626,18 @@ class ListeningTest {
 
         // Taken away meanwhile, they can't hear the music, and their menu offers it first.
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         val deaf = visualsShown().single()
         click(string(R.string.visuals_options))
         click(string(R.string.fix_mic_title))
-        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        val asked = shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).lastRequestedPermission
         assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
 
         // Allowed, they start over, hearing it, and the menu has nothing to fix.
         allowMicrophone()
-        controller!!.get().answer(asked, PackageManager.PERMISSION_GRANTED)
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().answer(asked, PackageManager.PERMISSION_GRANTED)
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitUntil(TIMEOUT_MS) { visualsShown().singleOrNull()?.let { it !== deaf } == true }
         click(string(R.string.visuals_options))
         assertFalse(shown(string(R.string.fix_mic_title)))
@@ -3716,7 +3716,7 @@ class ListeningTest {
         click(string(R.string.visuals_show))
         waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
         onlyVisuals()
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         // The words, not the screen before them, with their tools working again.
         waitUntil(TIMEOUT_MS) { shown("Demo one") }
         click(string(R.string.visuals_options))
@@ -3891,7 +3891,7 @@ class ListeningTest {
         click(string(R.string.visual_show))
         assertEquals(setOf(heavy), prefs().getStringSet("visuals_keep", null))
         // Back in the list, where it was.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertTrue(visualsShown().isEmpty())
         composeRule.onNodeWithText(heavy).assertIsDisplayed()
@@ -3910,7 +3910,7 @@ class ListeningTest {
     fun visualsAskForTheMicrophoneFirstWhichAndroidNeedsToShareWhatPlays() {
         demoWords(FakeHearing())
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
-        val activity = controller!!.get()
+        val activity = checkNotNull(controller) { "Expected controller to be non-null" }.get()
         click(string(R.string.visuals_show))
         val asked = shadowOf(activity).lastRequestedPermission
         assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
@@ -3928,7 +3928,7 @@ class ListeningTest {
             is android.view.ViewGroup -> (0 until view.childCount).flatMap { find(view.getChildAt(it)) }
             else -> emptyList()
         }
-        return find(controller!!.get().window.decorView)
+        return find(checkNotNull(controller) { "Expected controller to be non-null" }.get().window.decorView)
     }
 
     /** projectM, when it can't start. */
@@ -4031,8 +4031,8 @@ class ListeningTest {
         shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         click(string(R.string.floating_float))
         val started = shadowOf(app).nextStartedService
-        assertEquals(FloatingLyricsService::class.java.name, started.component!!.className)
-        controller!!.pause().stop()
+        assertEquals(FloatingLyricsService::class.java.name, checkNotNull(started.component) { "Expected started.component to be non-null" }.className)
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         return Robolectric.buildService(FloatingLyricsService::class.java, started).create().startCommand(0, 1).also { composeRule.waitForIdle() }
     }
 
@@ -4115,7 +4115,7 @@ class ListeningTest {
         val floating = floatOverApps(FakeHearing())
         val service = floating.get()
         assertTrue((overlay(service).layoutParams as WindowManager.LayoutParams).flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0)
-        val unlock = unlockButton(service)!!
+        val unlock = checkNotNull(unlockButton(service)) { "Expected unlockButton(service) to be non-null" }
         assertEquals(string(R.string.floating_unlock), unlock.contentDescription)
         // It takes touches, at the words' top right corner.
         val button = unlock.layoutParams as WindowManager.LayoutParams
@@ -4199,9 +4199,9 @@ class ListeningTest {
         // Open Crosstune, in their settings, brings it back, and back in sight they stop floating.
         floatingSettings()
         click(string(R.string.floating_open))
-        assertEquals(MainActivity::class.java.name, shadowOf(service).nextStartedActivity.component!!.className)
-        controller!!.start()
-        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStoppedService.component!!.className)
+        assertEquals(MainActivity::class.java.name, checkNotNull(shadowOf(service).nextStartedActivity.component) { "Expected shadowOf(service).nextStartedActivity.component to be non-null" }.className)
+        checkNotNull(controller) { "Expected controller to be non-null" }.start()
+        assertEquals(FloatingLyricsService::class.java.name, checkNotNull(shadowOf(app).nextStoppedService.component) { "Expected shadowOf(app).nextStoppedService.component to be non-null" }.className)
         assertEquals(null, FloatingLyricsService.host)
     }
 
@@ -4272,7 +4272,7 @@ class ListeningTest {
         assertTrue(windowViews(floating.get()).none { (it.layoutParams as WindowManager.LayoutParams).type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY })
     }
 
-    private fun controllerModel() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+    private fun controllerModel() = ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
 
     private val sliders = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)
 
@@ -4312,13 +4312,13 @@ class ListeningTest {
         assertEquals(null, closeTarget(service))
         touch(MotionEvent.ACTION_DOWN, 100f, 20f)
         touch(MotionEvent.ACTION_MOVE, 100f, 60f)
-        val target = closeTarget(service)!!
+        val target = checkNotNull(closeTarget(service)) { "Expected closeTarget(service) to be non-null" }
         val spot = target.layoutParams as WindowManager.LayoutParams
         // Near the bottom, in the middle, and touches go through it.
         assertEquals((app.resources.displayMetrics.widthPixels - spot.width) / 2, spot.x)
         assertTrue(spot.y > app.resources.displayMetrics.heightPixels / 2)
         assertTrue(spot.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0)
-        fun fill() = (target.background as android.graphics.drawable.GradientDrawable).color!!.defaultColor
+        fun fill() = checkNotNull((target.background as android.graphics.drawable.GradientDrawable).color) { "Expected (target.background as android.graphics.drawable.GradientDrawable).color to be non-null" }.defaultColor
         val idle = fill()
         // Over it, it turns red, with a tick felt once; off it again, it's back as it was.
         val (centerX, centerY) = spot.x + spot.width / 2f to spot.y + spot.height / 2f
@@ -4343,7 +4343,7 @@ class ListeningTest {
         // Dropped on it, they close; dragged straight onto it again, it still turns red.
         touch(MotionEvent.ACTION_DOWN, 100f, 20f)
         touch(MotionEvent.ACTION_MOVE, centerX, centerY)
-        assertEquals(0xFFD32F2F.toInt(), (closeTarget(service)!!.background as android.graphics.drawable.GradientDrawable).color!!.defaultColor)
+        assertEquals(0xFFD32F2F.toInt(), checkNotNull((checkNotNull(closeTarget(service)) { "Expected closeTarget(service) to be non-null" }.background as android.graphics.drawable.GradientDrawable).color) { "Expected (closeTarget(service).background as android.graphics.drawable.GradientDrawable).color to be non-null" }.defaultColor)
         touch(MotionEvent.ACTION_UP, centerX, centerY)
         assertEquals(null, closeTarget(service))
         assertTrue(shadowOf(service).isStoppedBySelf)
@@ -4438,9 +4438,9 @@ class ListeningTest {
         shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         demoWords(FakeHearing())
         click(string(R.string.floating_float))
-        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+        assertEquals(FloatingLyricsService::class.java.name, checkNotNull(shadowOf(app).nextStartedService.component) { "Expected shadowOf(app).nextStartedService.component to be non-null" }.className)
         // Crosstune goes behind the app the words float over.
-        assertTrue(shadowOf(controller!!.get()).isTaskMovedToBack)
+        assertTrue(shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).isTaskMovedToBack)
     }
 
     @Test
@@ -4459,15 +4459,15 @@ class ListeningTest {
         assertEquals(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, shadowOf(app).nextStartedActivity.action)
         // Back, allowed: Android 13 asks about their notification once, and they float either way.
         ShadowSettings.setCanDrawOverlays(true)
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertTrue(prefs().getBoolean("asked_floating_notifications", false))
-        shadowOf(controller!!.get()).getLastRequestedPermission()?.let { request ->
-            shadowOf(controller!!.get()).grantPermissions(*request.requestedPermissions)
-            controller!!.get().answer(request, PackageManager.PERMISSION_GRANTED)
+        shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).getLastRequestedPermission()?.let { request ->
+            shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).grantPermissions(*request.requestedPermissions)
+            checkNotNull(controller) { "Expected controller to be non-null" }.get().answer(request, PackageManager.PERMISSION_GRANTED)
         }
         composeRule.waitForIdle()
-        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+        assertEquals(FloatingLyricsService::class.java.name, checkNotNull(shadowOf(app).nextStartedService.component) { "Expected shadowOf(app).nextStartedService.component to be non-null" }.className)
     }
 
     @Test
@@ -4476,13 +4476,13 @@ class ListeningTest {
         demoWords(FakeHearing())
         click(string(R.string.floating_float))
         click(string(R.string.fix_open_settings))
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertEquals(null, shadowOf(app).nextStartedService)
         // Put off, allowing it later doesn't float them out of the blue.
         click(string(R.string.setup_skip_for_now))
         ShadowSettings.setCanDrawOverlays(true)
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertEquals(null, shadowOf(app).nextStartedService)
     }
@@ -4518,18 +4518,18 @@ class ListeningTest {
         val link = "https://music.apple.com/us/song/1109658204"
         HistoryStore(prefs()).add(HistoryEntry((MusicLinks.parse(link) as LinkInput.Link).link, MusicMetadata("Iris", "Band")))
         floatOverApps(FakeHearing())
-        val first = controller!!.get()
+        val first = checkNotNull(controller) { "Expected controller to be non-null" }.get()
         // Reaching the screen that floats them, as Android does: in sight first, then the link.
-        controller!!.start()
-        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStoppedService.component!!.className)
-        controller!!.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
-        controller!!.resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start()
+        assertEquals(FloatingLyricsService::class.java.name, checkNotNull(shadowOf(app).nextStoppedService.component) { "Expected shadowOf(app).nextStoppedService.component to be non-null" }.className)
+        checkNotNull(controller) { "Expected controller to be non-null" }.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
+        checkNotNull(controller) { "Expected controller to be non-null" }.resume()
         waitUntil(TIMEOUT_MS) { shadowOf(app).peekNextStartedActivity() != null }
         val opened = shadowOf(app).nextStartedActivity
         assertEquals("player://search/Iris%20Band", opened.dataString)
         // In a task of its own, so Crosstune stepping back doesn't take it along.
         assertTrue(opened.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
-        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+        assertEquals(FloatingLyricsService::class.java.name, checkNotNull(shadowOf(app).nextStartedService.component) { "Expected shadowOf(app).nextStartedService.component to be non-null" }.className)
         assertFalse(first.isFinishing)
         // The words they float are still there, and opening Crosstune shows them, not the hand-off.
         val model = ViewModelProvider(first)[MainViewModel::class.java]
@@ -4562,7 +4562,7 @@ class ListeningTest {
         floating.command(FloatingLyricsService.ACTION_CLOSE)
         assertTrue(shadowOf(floating.get()).isStoppedBySelf)
 
-        controller!!.destroy()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroy()
         controller = null
         assertEquals(null, FloatingLyricsService.host)
     }
@@ -4581,7 +4581,7 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertEquals(3, hearing.listens)
         // Back in sight, they listen along again.
-        controller!!.restart()
+        checkNotNull(controller) { "Expected controller to be non-null" }.restart()
         waitUntil(TIMEOUT_MS) { hearing.listens > 3 }
     }
 
@@ -4614,7 +4614,7 @@ class ListeningTest {
         click(string(R.string.lyrics_stop_listening))
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
         click(string(R.string.lyrics_listen_along))
-        assertEquals(MainActivity::class.java.name, shadowOf(app).nextStartedActivity.component!!.className)
+        assertEquals(MainActivity::class.java.name, checkNotNull(shadowOf(app).nextStartedActivity.component) { "Expected shadowOf(app).nextStartedActivity.component to be non-null" }.className)
         floating.get()
     }
 
@@ -4767,7 +4767,7 @@ class ListeningTest {
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         waitUntil(TIMEOUT_MS) { shown("«Stars»") }
         // Back to the song, then to Settings, where ChatGPT is picked.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.setting_translation_server)).performScrollTo()
         click(string(R.string.setting_translation_server))
@@ -4775,7 +4775,7 @@ class ListeningTest {
         assertFalse(prefs().getBoolean("translation_chatgpt", true))
         assertTrue(shown("Google Translate"))
         // The words are translated again, by Google Translate now.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         click(string(R.string.lyrics_button))
         waitUntil(TIMEOUT_MS) { shown("[Stars]") }
     }
@@ -4788,14 +4788,14 @@ class ListeningTest {
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         waitUntil(TIMEOUT_MS) { shown("«Stars»") }
         assertEquals("gpt-6.1-luna", openAi.asked.last().getString("model"))
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.chatgpt_model)).performScrollTo()
         click(string(R.string.chatgpt_model))
         click("gpt-6.1-sol")
         assertEquals("gpt-6.1-sol", prefs().getString("chatgpt_model", null))
         // Translated again, by the model picked.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         click(string(R.string.lyrics_button))
         waitUntil(TIMEOUT_MS) { openAi.asked.last().getString("model") == "gpt-6.1-sol" }
     }
@@ -5056,7 +5056,7 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { readingShown("とかい") }
         settle()
         assertEquals(asked, utatenRequests())
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch()
         recognize()
         waitForText("Demo")
@@ -5469,7 +5469,7 @@ class ListeningTest {
     @Test
     fun uniDicIsntFetchedOnAMeteredNetwork() = kotlinx.coroutines.runBlocking {
         // Robolectric's network is a phone's, which is metered.
-        assertNull(realUniDic(app, fake.client())!!.tokenizer(fetch = true))
+        assertNull(checkNotNull(realUniDic(app, fake.client())) { "Expected realUniDic(app, fake.client()) to be non-null" }.tokenizer(fetch = true))
         assertEquals(emptyList<String>(), fake.requestedUrls)
     }
 
@@ -5645,9 +5645,9 @@ class ListeningTest {
         click(string(R.string.practice_again))
         assertEquals(0, SavedLinesStore(prefs()).load().single().step)
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.practice?.missed == 1 && shown(string(R.string.practice_show)) }
-        assertEquals(1, controllerModel().uiState.practice!!.queue.size)
+        assertEquals(1, checkNotNull(controllerModel().uiState.practice) { "Expected controllerModel().uiState.practice to be non-null" }.queue.size)
         // Back goes back to the words.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertNull(controllerModel().uiState.practice)
         waitForText("[Stars]")
@@ -5713,7 +5713,7 @@ class ListeningTest {
         click(string(R.string.song_tab_artist))
         assertTrue(shown(string(R.string.chatgpt_continue)))
         click(string(R.string.chatgpt_continue))
-        assertEquals(ChatGptSignInService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+        assertEquals(ChatGptSignInService::class.java.name, checkNotNull(shadowOf(app).nextStartedService.component) { "Expected shadowOf(app).nextStartedService.component to be non-null" }.className)
         click(string(R.string.cancel_button))
 
         // A problem is an icon in the sheet's corner, across from the song's name.
@@ -5779,7 +5779,7 @@ class ListeningTest {
         val palette = composeRule.onNodeWithTag("lyrics-display-options").getBoundsInRoot()
         assertTrue(composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].getBoundsInRoot().bottom <= palette.top)
         // Back closes them without leaving the song.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("lyrics-display-options").assertDoesNotExist()
         assertTrue(shown("食べる"))
@@ -5907,7 +5907,7 @@ class ListeningTest {
         assertTrue(shown("yozora ni hoshi ga"))
         assertFalse(shown("夜空に星が"))
         floating.destroy()
-        controller!!.start().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         composeRule.waitForIdle()
         // As written again.
         learnMenu()
@@ -6269,11 +6269,11 @@ class ListeningTest {
         wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = sites)
         waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") && shown("[Singing to the morning light]") && searches.get() == 2 }
         // Left while they're still being timed, the words are kept once they are, and then Android closes the app.
-        composeRule.runOnIdle { controller!!.pause().stop() }
+        composeRule.runOnIdle { checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop() }
         timing.countDown()
         waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
-        composeRule.settle(controller!!.get())
-        controller!!.destroy()
+        composeRule.settle(checkNotNull(controller) { "Expected controller to be non-null" }.get())
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroy()
         val asked = fake.requestedUrls.size
 
         launch()
@@ -6298,10 +6298,10 @@ class ListeningTest {
         wordsOf(null, "Walking down the river road\\nSinging to the morning light")
         waitForText("Walking down the river road\nSinging to the morning light")
         // Kept once they're timed, by a second copy from LRCLIB, which may still be on its way when the app's left.
-        composeRule.runOnIdle { controller!!.pause().stop() }
+        composeRule.runOnIdle { checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop() }
         waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
-        composeRule.settle(controller!!.get())
-        controller!!.destroy()
+        composeRule.settle(checkNotNull(controller) { "Expected controller to be non-null" }.get())
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroy()
         // As an earlier version kept them from NetEase, opening with the song's name and its artist's.
         for (name in listOf("lyrics.json", "kept_words.json")) {
             val file = File(app.cacheDir, name)
@@ -6338,10 +6338,10 @@ class ListeningTest {
     private fun keptBeforeAFix(before: String, after: String) {
         wordsOf(null, "Walking down the river road\\nSinging to the morning light")
         waitForText("Walking down the river road\nSinging to the morning light")
-        composeRule.runOnIdle { controller!!.pause().stop() }
+        composeRule.runOnIdle { checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop() }
         waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
-        composeRule.settle(controller!!.get())
-        controller!!.destroy()
+        composeRule.settle(checkNotNull(controller) { "Expected controller to be non-null" }.get())
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroy()
         // As kept before the fix, with nothing saying where they came from, which only words worked out again have.
         val file = File(app.cacheDir, "kept_words.json")
         val entries = org.json.JSONArray(file.readText())
@@ -6358,7 +6358,7 @@ class ListeningTest {
         composeRule.runOnIdle { controllerModel().showLyrics() }
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyrics == "Walking down the river road\nSinging to the morning light" && !controllerModel().uiState.isLoadingLyrics }
         // Worked out again, they say where they're from, kept as the app's left.
-        composeRule.runOnIdle { controller!!.pause().stop() }
+        composeRule.runOnIdle { checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop() }
         waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").readText().contains("\\\"source\\\":\\\"lrclib\\\"") }
     }
 
@@ -6477,7 +6477,7 @@ class ListeningTest {
         assertTrue(shown("yozora ni hoshi ga"))
         assertTrue(shown("[夜空に星が]"))
         floating.destroy()
-        controller!!.start().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         composeRule.waitForIdle()
 
         // Switched off, each goes; kept off for the next song.
@@ -6533,7 +6533,7 @@ class ListeningTest {
         // Floating, the same switch, set from the floating words' options, is the lyrics' too.
         val floatingWords = floatNow()
         assertEquals(1, floating("ドアをたたいて"))
-        composeRule.runOnIdle { FloatingLyricsService.host!!.learningActions.onKatakanaAsHiraganaChange(true) }
+        composeRule.runOnIdle { checkNotNull(FloatingLyricsService.host) { "Expected FloatingLyricsService.host to be non-null" }.learningActions.onKatakanaAsHiraganaChange(true) }
         waitUntil(TIMEOUT_MS) { floating("どあをたたいて") == 1 }
         assertTrue(prefs().getBoolean("lyrics_katakana_as_hiragana", false))
         floatingWords.destroy()
@@ -6553,7 +6553,7 @@ class ListeningTest {
         assertNull(floatingReadings())
         assertEquals(0, floating("よぞらにほしが"))
         floatingWords.destroy()
-        controller!!.start().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         composeRule.waitForIdle()
 
         // In kana, the line already is its reading: it floats once, with nothing over it.
@@ -7126,8 +7126,8 @@ class ListeningTest {
         val clip = ClipData.newPlainText("copied", "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")
         app.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
         ClipDescription::class.java.getDeclaredMethod("setTimestamp", Long::class.javaPrimitiveType).invoke(clip.description, System.currentTimeMillis() - 1_000)
-        controller!!.windowFocusChanged(false)
-        controller!!.windowFocusChanged(true)
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(false)
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(true)
         composeRule.waitForIdle()
         assertTrue(shown(string(R.string.songs_like_label)) && shown("Moon"))
     }
@@ -7251,7 +7251,7 @@ class ListeningTest {
         alignOption(R.string.lyrics_align_center).assertIsSelected()
         assertTrue(prefs().getBoolean("words_centered", false))
         // Turned over, the words are still centered.
-        controller = controller!!.recreate()
+        controller = checkNotNull(controller) { "Expected controller to be non-null" }.recreate()
         composeRule.waitForIdle()
         assertTrue(wordsCentered("Sky full of stars"))
         learnMenu()
@@ -7277,7 +7277,7 @@ class ListeningTest {
         }
         click(string(R.string.lyrics_align_start))
         assertTrue(wordsAtStart("Sky full of stars"))
-        controller = controller!!.recreate()
+        controller = checkNotNull(controller) { "Expected controller to be non-null" }.recreate()
         composeRule.waitForIdle()
         assertTrue(wordsAtStart("Sky full of stars"))
     }
