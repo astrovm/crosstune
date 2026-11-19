@@ -42,20 +42,33 @@ internal class CachedSavedReadings(
     private fun Map<Int, List<ReadingFix>>.forLine(index: Int) = get(index).orEmpty().map { it.copy(line = 0) }
 
     private data class Answer(private val sung: List<ReadingFix>, private val checked: List<ReadingFix>) {
+        /**
+         * [card] read by the dictionary now, with each cached fix made where it was kept for and nowhere else. Where the
+         * dictionary splits or joins the words so that a fix cuts through the middle of one of its parts, the card keeps
+         * what it had there. Not guessed.
+         */
         fun refresh(card: SavedLine): SavedLine {
-            val dictionary = Readings.of(listOf(card.text), Script.JAPANESE)
-            val current = Readings.corrected(Readings.corrected(dictionary, sung), checked).single()
-            return markCachedParts(card).rereadAs(card.readBy(current), Script.JAPANESE)
+            val dictionary = Readings.of(listOf(card.text), Script.JAPANESE).single()
+            val (sungRead, sungCut) = Readings.correctedWhereKept(dictionary, sung)
+            val (current, checkedCut) = Readings.correctedWhereKept(sungRead, checked)
+            val cut = sungCut + checkedCut
+            val kept = card.ruby ?: listOf(Ruby(card.text))
+            val keptAt = kept.runningFold(0) { at, part -> at + part.text.length }
+            val parts = keptOver(kept, current.parts, over = true) { index -> cut.any { it.start < keptAt[index + 1] && keptAt[index] < it.end } } ?: current.parts
+            return card.readBy(Readings.readAs(named(parts, cut), Script.JAPANESE))
         }
 
-        /** An old fix may fit the card's original parts but not the dictionary's new split. Keep the one we can identify. */
-        private fun markCachedParts(card: SavedLine): SavedLine {
-            val fixes = (sung + checked).associateBy { it.kanji to Readings.hiragana(it.reading) }
-            val parts = card.ruby?.map { part ->
-                val fix = part.reading?.let { fixes[part.text to Readings.hiragana(it)] }
-                if (part.by == null && fix != null) part.copy(by = fix.by) else part
+        /** What a card kept where a fix stood is that fix's, whoever put it there, when it reads the same. */
+        private fun named(parts: List<Ruby>, cut: List<Readings.Kept>): List<Ruby> {
+            var at = 0
+            return parts.map { part ->
+                val start = at
+                at += part.text.length
+                val fix = cut.firstOrNull {
+                    it.start == start && it.end == at && it.fix.kanji == part.text && part.reading?.let(Readings::hiragana) == Readings.hiragana(it.fix.reading)
+                }
+                if (part.by == null && fix != null) part.copy(by = fix.fix.by) else part
             }
-            return card.copy(ruby = parts)
         }
     }
 }
