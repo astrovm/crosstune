@@ -295,8 +295,8 @@ internal class ChordFinder(
     /** A fallback sheet can still win, but an incomplete title lookup cannot prove a miss. */
     private suspend fun lookupWiki(song: MusicMetadata, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean): Tried {
         val title = chordWikiTitle(song, otherNames)
-        val sheet = readChordWiki(song, title ?: song.title, fits)
-        return Tried(sheet, false, incompleteTitle = title == null)
+        val sheet = readChordWiki(song, title.name, fits)
+        return Tried(sheet, false, incompleteTitle = !title.complete)
     }
 
     private suspend fun hasWikiMiss(key: String): Boolean {
@@ -438,14 +438,16 @@ internal class ChordFinder(
     // delay() of nothing returns at once, so a pause of none needs no check of its own.
     private suspend fun chordWikiPause() = delay(chordWikiPauseMs)
 
-    /** The Japanese title when known; null when a catalog failure left the lookup incomplete. */
-    private suspend fun chordWikiTitle(song: MusicMetadata, otherNames: suspend () -> OtherNames): String? {
-        if (japanese(song.title)) return song.title
+    private class WikiTitle(val name: String, val complete: Boolean)
+
+    /** The best title to try, and whether the catalogs could establish that no other name is needed. */
+    private suspend fun chordWikiTitle(song: MusicMetadata, otherNames: suspend () -> OtherNames): WikiTitle {
+        if (japanese(song.title)) return WikiTitle(song.title, true)
         return try {
             val names = otherNames()
-            names.titles.firstOrNull(::japanese) ?: song.title.takeIf { names.complete }
+            WikiTitle(names.titles.firstOrNull(::japanese) ?: song.title, names.complete)
         } catch (e: IOException) {
-            null
+            WikiTitle(song.title, false)
         }
     }
 
@@ -728,7 +730,7 @@ internal class ChordFinder(
         title.split(titleBreak).map { it.trim() }.flatMap { listOf(it, SongNames.bareTitle(it)) }.filter { it.length >= 2 && it != title }.distinct()
 
     /** A song's names in Japanese, and its artists' names, as NetEase or Japan's Apple Music store has them. */
-    private class OtherNames(val titles: List<String>, val artists: List<String>, val complete: Boolean = true)
+    private class OtherNames(val titles: List<String>, val artists: List<String>, val complete: Boolean)
 
     /**
      * [ask]'s answer, asked for the first time it's wanted and kept for the rest. One that failed isn't
@@ -748,27 +750,29 @@ internal class ChordFinder(
      */
     private suspend fun otherNames(song: MusicMetadata): OtherNames {
         val netEase = try { netEaseNames(song) } catch (e: JSONException) { null }
-        if (netEase != null && netEase.titles.isNotEmpty()) return netEase
+        if (netEase != null && netEase.complete && netEase.titles.isNotEmpty()) return netEase
         val inJapan = try { namesInJapan(song) } catch (e: JSONException) { null }
-        val titles = inJapan.orEmpty().map { it.first }.distinct().take(MAX_NAMES)
-        val artists = (netEase?.artists.orEmpty() + inJapan.orEmpty().map { it.second }).distinct()
-        return OtherNames(titles, artists, complete = netEase != null && inJapan != null)
+        val titles = (netEase?.titles.orEmpty() + inJapan?.titles.orEmpty()).distinct().take(MAX_NAMES)
+        val artists = (netEase?.artists.orEmpty() + inJapan?.artists.orEmpty()).distinct()
+        return OtherNames(titles, artists, complete = netEase?.complete == true && inJapan?.complete == true)
     }
 
     /**
      * The titles and artists Japan's Apple Music store has for songs found by [song]'s names, those
      * named in Japanese, without what a version adds: "残酷な天使のテーゼ" for "残酷な天使のテーゼ (2009VERSION)".
      */
-    private suspend fun namesInJapan(song: MusicMetadata): List<Pair<String, String>> {
+    private suspend fun namesInJapan(song: MusicMetadata): OtherNames {
         val search = LyricsFinder.ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("term", "${song.title} ${song.artist}")
             .addQueryParameter("entity", "song")
             .addQueryParameter("limit", "10")
             .addQueryParameter("country", "jp")
             .build()
-        val list = JSONObject(fetch(search.toString())).optJSONArray("results")
+        val answer = JSONObject(fetch(search.toString()))
+        val list = answer.optJSONArray("results")
         val found = list?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) } }.orEmpty()
-        return found.map { SongNames.bareTitle(it.optString("trackName")) to it.optString("artistName").trim() }.filter { (title) -> japanese(title) }
+        val names = found.map { SongNames.bareTitle(it.optString("trackName")) to it.optString("artistName").trim() }.filter { (title) -> japanese(title) }
+        return OtherNames(names.map { it.first }, names.map { it.second }, complete = list != null && !answer.has("errorMessage"))
     }
 
     /** The names NetEase has [song] by, in Japanese, and the artists of a song of its name. */
@@ -778,14 +782,18 @@ internal class ChordFinder(
             .addQueryParameter("type", "1")
             .addQueryParameter("limit", "10")
             .build()
-        val list = JSONObject(fetch(search.toString(), NETEASE_REFERER)).optJSONObject("result")?.optJSONArray("songs")
+        val answer = JSONObject(fetch(search.toString(), NETEASE_REFERER))
+        val result = answer.optJSONObject("result")
+        val list = result?.optJSONArray("songs")
         val songs = list?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) } }.orEmpty()
         val titles = songs.map { SongNames.bareTitle(it.optString("name")) }.filter(::japanese).distinct().take(MAX_NAMES)
         val names = listOf(song.title) + titleParts(song.title)
         val artists = songs.filter { found -> names.any { SongNames.same(found.optString("name"), it) } }.flatMap { found ->
             found.optJSONArray("artists")?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) }.map { it.optString("name") } }.orEmpty()
         }.distinct()
-        return OtherNames(titles, artists)
+        val complete = answer.optInt("code", -1) == 200 && result != null &&
+            (list != null || result.optInt("songCount", -1) == 0)
+        return OtherNames(titles, artists, complete)
     }
 
     /** What the first group of this matches in [text], if it does. */

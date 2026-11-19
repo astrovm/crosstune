@@ -121,7 +121,7 @@ Singing to the morning light</div>"""
     private fun netEase(vararg songs: Pair<String, List<String>>) = JSONObject().put(
         "result",
         JSONObject().put("songs", JSONArray(songs.map { (name, artists) -> JSONObject().put("name", name).put("artists", JSONArray(artists.map { JSONObject().put("name", it) })) }))
-    ).toString()
+    ).put("code", 200).toString()
 
     /** U-FRET answering [searches] by what's searched for, and [pages] otherwise. */
     private fun uFret(searches: Map<String, String>, pages: Map<String, String>): (Request) -> okhttp3.Response = { request ->
@@ -286,7 +286,7 @@ Singing to the morning light</div>"""
         jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), jTotalPages)
         val pages = fake.handler
         fake.handler = { request ->
-            if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else pages(request)
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""") else pages(request)
         }
         assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(named, japanese) as ChordFinder.Chords.Found).sheet.url)
     }
@@ -349,7 +349,7 @@ Singing to the morning light</div>"""
             jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), pages)
             val site = fake.handler
             fake.handler = { request ->
-                if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else site(request)
+                if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""") else site(request)
             }
             assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(song, japanese) as ChordFinder.Chords.Found).sheet.url)
         }
@@ -1519,7 +1519,7 @@ Singing to the morning light</div>"""
                 "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch())
                 "music.j-total.net" -> FakeSpotify.html(request, "")
                 "www.ufret.jp" -> FakeSpotify.html(request, "")
-                "music.163.com" -> FakeSpotify.html(request, """{"result":{}}""")
+                "music.163.com" -> FakeSpotify.html(request, """{"result":{"songCount":0},"code":200}""")
                 "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
                 else -> answer(request, emptyMap())
             }
@@ -1600,7 +1600,7 @@ Singing to the morning light</div>"""
         val sites = fake.handler
         // Named in Japanese by NetEase, so the edit page is that name and the search is never opened.
         fake.handler = { request ->
-            if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else sites(request)
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""") else sites(request)
         }
         var edits = 0
         val found = chords(
@@ -1833,7 +1833,7 @@ Singing to the morning light</div>"""
         var catalogReady = false
         fake.handler = { request ->
             if (request.url.host != "music.163.com") sites(request)
-            else if (catalogReady) FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""")
+            else if (catalogReady) FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""")
             else FakeSpotify.html(request, "Temporarily unavailable", code = 503)
         }
         val cacheFile = File.createTempFile("chords-names", ".json").apply { delete(); deleteOnExit() }
@@ -1858,7 +1858,7 @@ Singing to the morning light</div>"""
             fake.handler = { request ->
                 when {
                     !catalogReady && request.url.host == badHost -> FakeSpotify.html(request, "<html>bad</html>")
-                    catalogReady && request.url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""")
+                    catalogReady && request.url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""")
                     else -> sites(request)
                 }
             }
@@ -1871,6 +1871,40 @@ Singing to the morning light</div>"""
             catalogReady = true
             val found = chords(song, japanese, finder) as? ChordFinder.Chords.Found
             assertEquals(badHost, chordWikiViewUrl("川の道").takeIf { badHost != null }, found?.sheet?.url)
+        }
+    }
+
+    @Test
+    fun aWikiMissWithAnIncompleteCatalogCanBeRetriedEvenWithAnAlternateTitle() {
+        val song = MusicMetadata("Kawa no Michi", "歩く人")
+        val cases = listOf(
+            "music.163.com" to "<html>bad</html>",
+            "music.163.com" to """{"code":500,"message":"unavailable"}""",
+            "music.163.com" to """{"result":{"songs":[]}}""",
+            "itunes.apple.com" to """{"errorMessage":"unavailable"}""",
+            "itunes.apple.com" to """{"results":[],"errorMessage":"unavailable"}"""
+        )
+        for ((badHost, bad) in cases) {
+            noOtherChordSites()
+            val sites = fake.handler
+            var recovered = false
+            fake.handler = { request ->
+                when {
+                    recovered && request.url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""")
+                    !recovered && request.url.host == badHost -> FakeSpotify.html(request, bad)
+                    !recovered && request.url.host == "itunes.apple.com" && badHost == "music.163.com" ->
+                        FakeSpotify.html(request, """{"results":[{"trackName":"海の歌","artistName":"歩く人"}]}""")
+                    else -> sites(request)
+                }
+            }
+            val cacheFile = File.createTempFile("chords-incomplete", ".json").apply { delete(); deleteOnExit() }
+            val cache = LookupCache(cacheFile, Dispatchers.Unconfined)
+            val finder = withWiki(ChordWikiPages { url -> if (url == chordWikiEditUrl("川の道")) chordPro else "" }, cache)
+            assertEquals(bad, ChordFinder.Chords.None, chords(song, japanese, finder))
+            assertFalse(bad, runBlocking { cache.entries().any { it.first.startsWith("wiki-miss:") } })
+            recovered = true
+            val found = chords(song, japanese, finder) as? ChordFinder.Chords.Found
+            assertEquals(bad, chordWikiViewUrl("川の道"), found?.sheet?.url)
         }
     }
 
