@@ -353,7 +353,7 @@ class MainActivityTest {
         shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.GOOGLE, "Google"))
         installActivity(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), IntentFilter(SongRecognizers.GOOGLE_SONG_SEARCH).apply { addCategory(Intent.CATEGORY_DEFAULT) })
         prefs().edit().putString("song_recognizer", SongRecognizers.GOOGLE).commit()
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertListensHere()
 
@@ -373,7 +373,7 @@ class MainActivityTest {
             putExtra(Intent.EXTRA_SHORTCUT_ID, "open_in:DEEZER")
         })
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/track/123", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         // Deezer has no cover for it, so Apple's is looked for too.
         assertTrue(fake.requestedUrls.all { it.startsWith("https://api.deezer.com/search") || it.startsWith("https://itunes.apple.com/search") })
     }
@@ -388,14 +388,14 @@ class MainActivityTest {
         // Waits on the link that opened, not on the screen closing, which also waits on Android
         // for the installed apps and can outlast a timeout on a busy machine.
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("player://search/A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
+        assertEquals("player://search/A%20Song%20Example%20Band", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         waitUntil { fake.requestedUrls.isNotEmpty() }
         assertOnlyCoverSearches()
         val entry = HistoryStore(prefs()).load().first()
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(entry.link.url)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("player://search/A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
+        assertEquals("player://search/A%20Song%20Example%20Band", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
     }
 
     @Test
@@ -406,16 +406,16 @@ class MainActivityTest {
             putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
         })
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("com.google.android.apps.youtube.music", opened.`package`)
         assertEquals("https://music.youtube.com/search?q=A%20Song%20Example%20Band", opened.dataString)
         assertOnlyCoverSearches()
         val saved = HistoryStore(prefs()).load().first()
         assertEquals(MusicMetadata("A Song", "Example Band"), saved.metadata)
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(saved.link.url)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals(opened.dataString, nextStartedActivity()!!.dataString)
+        assertEquals(opened.dataString, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertOnlyCoverSearches()
     }
 
@@ -452,7 +452,7 @@ class MainActivityTest {
                     assertEquals(service.packageName, sent.`package`)
                     assertTrue("${service.name}, card=$card, $title: ${sent.toUri(0)}", sent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
                     assertTrue(sent.dataString.orEmpty().contains(title.replace(" ", "%20")))
-                    controller!!.destroyAndSettle()
+                    checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
                 }
             }
         }
@@ -492,7 +492,7 @@ class MainActivityTest {
             assertEquals(tidal, search.`package`)
             assertTrue(search.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
             assertEquals(0, search.flags and Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            controller!!.destroyAndSettle()
+            checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         }
     }
 
@@ -516,14 +516,14 @@ class MainActivityTest {
         })
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         // Through a screen of its own, which leaves time for the second however long Crosstune's been up.
-        val through = nextStartedActivity()!!
+        val through = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(OpenSongActivity::class.java.name, through.component?.className)
         Robolectric.buildActivity(OpenSongActivity::class.java, through).create()
-        val first = nextStartedActivity()!!
+        val first = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         // The second goes a moment after the first, once the app has started.
         assertNull(nextStartedActivity())
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(SECOND_START_MS))
-        val sent = listOf(first, nextStartedActivity()!!)
+        val sent = listOf(first, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" })
         for (intent in sent) {
             assertEquals(Intent.ACTION_SEARCH, intent.action)
             assertEquals(ComponentName(MusicService.BANDCAMP.packageName, MusicService.BANDCAMP_SEARCH_ACTIVITY), intent.component)
@@ -543,8 +543,8 @@ class MainActivityTest {
             putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
         })
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        Robolectric.buildActivity(OpenSongActivity::class.java, nextStartedActivity()!!).create()
-        assertEquals("A Song Example Band", nextStartedActivity()!!.getStringExtra(SearchManager.QUERY))
+        Robolectric.buildActivity(OpenSongActivity::class.java, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }).create()
+        assertEquals("A Song Example Band", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.getStringExtra(SearchManager.QUERY))
     }
 
     @Test
@@ -555,7 +555,7 @@ class MainActivityTest {
             putExtra(Intent.EXTRA_TEXT, "Canción de Simon & Garfunkel\nhttps://www.google.com/search?q=Canción+de+Simon+&+Garfunkel")
         })
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://music.youtube.com/search?q=Canci%C3%B3n%20Simon%20%26%20Garfunkel", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/search?q=Canci%C3%B3n%20Simon%20%26%20Garfunkel", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertEquals(MusicMetadata("Canción", "Simon & Garfunkel"), HistoryStore(prefs()).load().first().metadata)
     }
 
@@ -579,7 +579,7 @@ class MainActivityTest {
 
         // Opened again from Recent, it already has its cover.
         fake.requestedUrls.clear()
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         val url = HistoryStore(prefs()).load().first().link.url
         launch(Intent(Intent.ACTION_VIEW, Uri.parse(url)).putExtra(MainActivity.EXTRA_SHOW_SONG, true))
         waitForText("A Song")
@@ -614,10 +614,10 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("song", NOW_PLAYING_SHARE))
         launch(pasteIntent())
-        controller!!.windowFocusChanged(true)
-        val activity = controller!!.get()
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(true)
+        val activity = checkNotNull(controller) { "Expected controller to be non-null" }.get()
         waitUntil { activity.isFinishing }
-        assertEquals("https://music.youtube.com/search?q=A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/search?q=A%20Song%20Example%20Band", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertOnlyCoverSearches()
     }
 
@@ -660,7 +660,7 @@ class MainActivityTest {
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
         val started = nextStartedActivity()
         assertNotNull(started)
-        assertEquals(Intent.ACTION_VIEW, started!!.action)
+        assertEquals(Intent.ACTION_VIEW, checkNotNull(started) { "Expected started to be non-null" }.action)
         assertEquals("com.google.android.apps.youtube.music", started.`package`)
         assertEquals(
             "https://music.youtube.com/search?q=Cut%20To%20The%20Feeling%20Carly%20Rae%20Jepsen",
@@ -688,7 +688,7 @@ class MainActivityTest {
         }
         assertTrue(prefs().getBoolean("links_in_crosstune", false))
         assertFalse(prefs().getBoolean("play_right_away", true))
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         val activity = launch(
             Intent(Intent.ACTION_SEND).apply {
@@ -700,14 +700,14 @@ class MainActivityTest {
         assertTextShown(string(R.string.open_in_deezer))
         assertFalse(activity.isFinishing)
         assertNull(nextStartedActivity())
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         // Tapped links too.
         val tapped = launch(trackLink())
         waitForText("Shown First")
         assertFalse(tapped.isFinishing)
         assertNull(nextStartedActivity())
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         // An "Open in" app picked in the share sheet still opens right away.
         launch(
@@ -718,7 +718,7 @@ class MainActivityTest {
             }
         )
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("deezer.android.app", nextStartedActivity()!!.`package`)
+        assertEquals("deezer.android.app", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
     }
 
     @Test
@@ -733,7 +733,7 @@ class MainActivityTest {
         waitForText("Right Away")
         assertTrue(phone.songsAsked.isEmpty())
         assertNull(nextStartedActivity())
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         shadowOf(app.packageManager).installPackage(installedApp(deezer, "Deezer"))
         val activity = launch(trackLink())
@@ -800,7 +800,7 @@ class MainActivityTest {
             prefs().edit().remove("links_in_crosstune").remove("play_right_away").remove("ask_each_time").remove("show_song_first")
                 .apply { before.forEach { (key, on) -> putBoolean(key, on) } }.commit()
             launch()
-            controller!!.destroyAndSettle()
+            checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
             return prefs().getBoolean("links_in_crosstune", false) to prefs().getBoolean("play_right_away", false)
         }
         assertEquals(false to true, migrated("setup_complete" to false))
@@ -819,7 +819,7 @@ class MainActivityTest {
         fun migrated(linksInCrosstune: Boolean, exact: Boolean): Boolean {
             prefs().edit().putBoolean("links_in_crosstune", linksInCrosstune).putBoolean("play_right_away", true).putBoolean("exact_match", exact).commit()
             launch()
-            controller!!.destroyAndSettle()
+            checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
             assertFalse(prefs().contains("exact_match"))
             return prefs().getBoolean("play_right_away", false)
         }
@@ -850,12 +850,12 @@ class MainActivityTest {
         assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
         // The app's own links go straight to it again.
         assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         val activity = launch(trackLink())
         waitUntil { activity.isFinishing }
-        assertEquals(MusicService.YOUTUBE_MUSIC.packageName, nextStartedActivity()!!.`package`)
-        controller!!.destroyAndSettle()
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageName, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         // Shown here first again, they come here again too.
         launch()
@@ -889,7 +889,7 @@ class MainActivityTest {
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
         val started = nextStartedActivity()
         assertNotNull(started)
-        assertEquals("com.google.android.youtube", started!!.`package`)
+        assertEquals("com.google.android.youtube", checkNotNull(started) { "Expected started to be non-null" }.`package`)
         assertTrue(started.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertEquals(
             "https://www.youtube.com/results?search_query=Song%20%26%20Dance%20The%20Band",
@@ -917,7 +917,7 @@ class MainActivityTest {
 
     private fun shareChooser(): Intent {
         click(string(R.string.share_link_button))
-        return nextStartedActivity()!!.also { assertEquals(Intent.ACTION_CHOOSER, it.action) }
+        return checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.also { assertEquals(Intent.ACTION_CHOOSER, it.action) }
     }
 
     @Test
@@ -929,11 +929,11 @@ class MainActivityTest {
         waitForDestinationReady()
 
         val chooser = shareChooser()
-        assertEquals("https://www.deezer.com/search/Cut%20To%20The%20Feeling%20Carly%20Rae%20Jepsen", chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
+        assertEquals("https://www.deezer.com/search/Cut%20To%20The%20Feeling%20Carly%20Rae%20Jepsen", checkNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)) { "Expected chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) to be non-null" }.getStringExtra(Intent.EXTRA_TEXT))
         // Crosstune isn't offered in its own share sheet, which would only loop back here.
         assertEquals(
             listOf(ComponentName(app, MainActivity::class.java)),
-            chooser.getParcelableArrayExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, ComponentName::class.java)!!.toList()
+            checkNotNull(chooser.getParcelableArrayExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, ComponentName::class.java)) { "Expected chooser.getParcelableArrayExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, ComponentName::class.java) to be non-null" }.toList()
         )
         assertFalse(chooser.hasExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS))
     }
@@ -961,7 +961,7 @@ class MainActivityTest {
         // Each song is matched on its own, and opens without leaving Crosstune behind.
         composeRule.onNodeWithText("Second Song").performScrollTo().performClick()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("deezer.android.app", opened.`package`)
         assertEquals("https://www.deezer.com/search/Second%20Song", opened.dataString)
         assertFalse(activity.isFinishing)
@@ -1016,17 +1016,17 @@ class MainActivityTest {
         composeRule.onNodeWithText(string(R.string.copy_songs_button)).assertDoesNotExist()
         // The songs, not a search for the playlist's name, are what's copied and shared.
         click(string(R.string.copy_songs_button))
-        assertEquals("Band - First Song\nSecond Song", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("Band - First Song\nSecond Song", checkNotNull(app.getSystemService(ClipboardManager::class.java).primaryClip) { "Expected app.getSystemService(ClipboardManager::class.java).primaryClip to be non-null" }.getItemAt(0).text.toString())
         click(string(R.string.share_songs_button))
-        val chooser = nextStartedActivity()!!
-        assertEquals("Band - First Song\nSecond Song", chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
+        val chooser = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
+        assertEquals("Band - First Song\nSecond Song", checkNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)) { "Expected chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) to be non-null" }.getStringExtra(Intent.EXTRA_TEXT))
 
         // Playing them all is the main button, rather than a search for the playlist's name.
         assertTextAbsent(string(R.string.search_in_destination, string(MusicService.YOUTUBE_MUSIC.labelRes)))
         // Play all matches each song and opens YouTube's temporary playlist of them.
         click(string(R.string.play_all_in, string(MusicService.YOUTUBE_MUSIC.labelRes)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertFalse(activity.isFinishing)
 
         // The songs found are remembered, and for a while so is one not found, so playing them again
@@ -1034,7 +1034,7 @@ class MainActivityTest {
         fake.requestBodies.clear()
         click(string(R.string.play_all_in, string(MusicService.YOUTUBE_MUSIC.labelRes)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertEquals(emptyList<String>(), fake.requestBodies.filter { "\"query\"" in it }.map { JSONObject(it).getString("query") })
     }
 
@@ -1076,7 +1076,7 @@ class MainActivityTest {
         phone.access = false
         click(playAll)
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals(queue, nextStartedActivity()!!.dataString)
+        assertEquals(queue, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertTrue(composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isEmpty())
     }
 
@@ -1096,7 +1096,7 @@ class MainActivityTest {
         waitUntil { composeRule.onAllNodes(hasText(string(R.string.play_all_button)) and isNotEnabled()).fetchSemanticsNodes().isNotEmpty() }
         found.countDown()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
     }
 
     @Test
@@ -1132,7 +1132,7 @@ class MainActivityTest {
         // Deezer can't queue them, so the button plays the first.
         click(string(R.string.play_first_in, string(MusicService.DEEZER.labelRes)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/search/First%20Song%20Band", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/First%20Song%20Band", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertFalse(activity.isFinishing)
 
         // Shown again from Recent, it needs no lookups.
@@ -1148,7 +1148,7 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.play_first_in, string(MusicService.SPOTIFY.labelRes)))
         composeRule.onNodeWithText("Second Song").performScrollTo().performClick()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://open.spotify.com/track/second", nextStartedActivity()!!.dataString)
+        assertEquals("https://open.spotify.com/track/second", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
     }
 
     @Test
@@ -1208,7 +1208,7 @@ class MainActivityTest {
                     .header("Location", "https://www.youtube.com/watch?v=x&list=TLGGpart").build()
                 // Each song is found as itself, its video named after its number.
                 request.url.host == "music.youtube.com" -> {
-                    val number = Regex("Song (\\d+)").find(body)!!.groupValues[1]
+                    val number = checkNotNull(Regex("Song (\\d+)").find(body)) { "Expected Regex(\"Song (\\\\d+)\").find(body) to be non-null" }.groupValues[1]
                     (if (number == "50") last else release).await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
                         "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song $number"}]}}},
@@ -1272,7 +1272,7 @@ class MainActivityTest {
                 // Each song is found as itself, its video named after its number.
                 request.url.host == "music.youtube.com" -> {
                     found.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                    val number = Regex("Song (\\d+)").find(body)!!.groupValues[1]
+                    val number = checkNotNull(Regex("Song (\\d+)").find(body)) { "Expected Regex(\"Song (\\\\d+)\").find(body) to be non-null" }.groupValues[1]
                     FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
                         "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song $number"}]}}},
                         {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
@@ -1293,7 +1293,7 @@ class MainActivityTest {
         found.countDown()
         waitUntil(TIMEOUT_MS) { phone.listsAsked.isNotEmpty() }
         // The first part YouTube Music is given is any 50 of the 60, in no set order.
-        val part = fake.requestedUrls.single { "/watch_videos" in it }.toHttpUrl().queryParameter("video_ids")!!.split(",").map { it.trimStart('0').toInt() }
+        val part = checkNotNull(fake.requestedUrls.single { "/watch_videos" in it }.toHttpUrl().queryParameter("video_ids")) { "Expected fake.requestedUrls.single { \"/watch_videos\" in it }.toHttpUrl().queryParameter(\"video_ids\") to be non-null" }.split(",").map { it.trimStart('0').toInt() }
         assertEquals(50, part.toSet().size)
         assertTrue(part.all { it in 1..60 })
         assertTrue(part != part.sorted())
@@ -1304,7 +1304,7 @@ class MainActivityTest {
             phone.inApp(music).value = AppPlays(MusicMetadata("Song ${part.first()}", "Band"), 100)
         }
         waitUntil(TIMEOUT_MS) { fake.requestedUrls.count { "/watch_videos" in it } == 2 }
-        val rest = fake.requestedUrls.last { "/watch_videos" in it }.toHttpUrl().queryParameter("video_ids")!!.split(",").map { it.trimStart('0').toInt() }
+        val rest = checkNotNull(fake.requestedUrls.last { "/watch_videos" in it }.toHttpUrl().queryParameter("video_ids")) { "Expected fake.requestedUrls.last { \"/watch_videos\" in it }.toHttpUrl().queryParameter(\"video_ids\") to be non-null" }.split(",").map { it.trimStart('0').toInt() }
         assertEquals((1..60).toSet(), (part + rest).toSet())
     }
 
@@ -1336,7 +1336,7 @@ class MainActivityTest {
         waitForText("First Song")
         composeRule.onNodeWithText("First Song").performScrollTo().performClick()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://music.youtube.com/watch?v=first000000", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/watch?v=first000000", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
     }
 
     @Test
@@ -1355,7 +1355,7 @@ class MainActivityTest {
         click(string(R.string.clear_button))
         prefs().edit().putString("default_target", "DEEZER").commit()
         collectionWithSongs()
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         resolveTyped("https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj")
         waitForText("First Song")
         assertTextAbsent(string(R.string.play_all_button))
@@ -1374,7 +1374,7 @@ class MainActivityTest {
         resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
         waitForText("First Song")
         assertTextAbsent(string(R.string.play_all_button))
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         shadowOf(app.packageManager).installPackage(installedApp(tidal, "TIDAL"))
         launch()
@@ -1396,7 +1396,7 @@ class MainActivityTest {
         click(string(R.string.dismiss_button))
         click(string(R.string.play_all_in, string(MusicService.TIDAL.labelRes)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals(tidal, nextStartedActivity()!!.`package`)
+        assertEquals(tidal, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
         assertEquals(2, phone.songsAsked.size)
         waitForDescription(string(R.string.play_all_in, string(MusicService.TIDAL.labelRes)))
         assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.dismiss_button))).fetchSemanticsNodes().isEmpty())
@@ -1498,7 +1498,7 @@ class MainActivityTest {
         waitUntil { composeRule.onAllNodes(playAll).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onNode(playAll).performClick()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://open.spotify.com/track/${ids["First Song"]}", nextStartedActivity()!!.dataString)
+        assertEquals("https://open.spotify.com/track/${ids["First Song"]}", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         // And the list isn't left to play on from it.
         waitUntil { !File(app.noBackupFilesDir, "play_queue.json").exists() }
     }
@@ -1559,7 +1559,7 @@ class MainActivityTest {
         waitForText("First Song")
         click(string(R.string.play_all_in, string(MusicService.SPOTIFY.labelRes)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals(MusicService.SPOTIFY.searchUrl("First Song Band"), nextStartedActivity()!!.dataString)
+        assertEquals(MusicService.SPOTIFY.searchUrl("First Song Band"), checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertTrue(phone.opened.isEmpty())
         assertFalse(File(app.noBackupFilesDir, "play_queue.json").exists())
     }
@@ -1570,7 +1570,7 @@ class MainActivityTest {
         fake.handler = { request -> FakeSpotify.html(request, """<meta property="og:title" content="Road Trip">""") }
         launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI")))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://music.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
     }
 
     @Test
@@ -1583,14 +1583,14 @@ class MainActivityTest {
         // Waits on the link that opened rather than on the screen closing, which also waits on
         // Android for the installed apps, and that can outlast a timeout on a busy machine.
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.youtube.com/watch?v=sPmul8b17AU", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.youtube.com/watch?v=sPmul8b17AU", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
 
         nextStartedActivity()
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Street Dolphin","author_name":"Kingo Hamada"}""") }
         launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=VDuDQNkSC6g")))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://music.youtube.com/watch?v=VDuDQNkSC6g", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/watch?v=VDuDQNkSC6g", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
     }
 
     @Test
@@ -1632,7 +1632,7 @@ class MainActivityTest {
         assertTextShown("Song 3")
         assertTextAbsent("Song 4")
         // Keep the open search and query through a configuration change.
-        controller!!.recreate()
+        checkNotNull(controller) { "Expected controller to be non-null" }.recreate()
         composeRule.waitForIdle()
         assertTextShown("Song 3")
         assertTextAbsent("Song 4")
@@ -1685,7 +1685,7 @@ class MainActivityTest {
         launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
 
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/search/Saved%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/Saved%20Artist", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertTrue(fake.requestedUrls.isEmpty())
     }
 
@@ -1725,7 +1725,7 @@ class MainActivityTest {
         assertNull(nextStartedActivity())
         click(string(R.string.open_in_spotify))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(url, opened.dataString)
         assertEquals(MusicService.SPOTIFY.packageName, opened.`package`)
         assertTextAbsent(string(R.string.not_found_on, string(R.string.target_deezer)))
@@ -1735,7 +1735,7 @@ class MainActivityTest {
         composeRule.runOnIdle { model.openRecent(url) }
         click(string(R.string.search_anyway, string(R.string.target_deezer)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/search/Saved%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/Saved%20Artist", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         composeRule.runOnIdle { model.openRecent(url) }
         waitForText(string(R.string.not_found_on, string(R.string.target_deezer)))
         composeRule.runOnIdle { model.dismissNotFoundOffer() }
@@ -1764,10 +1764,10 @@ class MainActivityTest {
         assertNull(nextStartedActivity())
         // Sharing it shares where it is, which has it.
         click(string(R.string.share_link_button))
-        assertEquals("https://open.spotify.com/track/$TRACK_ID", nextStartedActivity()!!.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", checkNotNull(checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)) { "Expected nextStartedActivity().getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) to be non-null" }.getStringExtra(Intent.EXTRA_TEXT))
         click(string(R.string.search_anyway, string(R.string.target_deezer)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/Exact%20Artist", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
     }
 
     @Test
@@ -1778,22 +1778,22 @@ class MainActivityTest {
         resolveTyped("https://open.spotify.com/track/$TRACK_ID")
         val model = ViewModelProvider(activity)[MainViewModel::class.java]
         // Asked while away, and back a while later: it's not opened out of the blue.
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         composeRule.settle(activity)
         model.openResult()
         composeRule.settle(activity)
         org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(61))
-        controller!!.restart().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.restart().resume()
         composeRule.waitForIdle()
         assertNull(nextStartedActivity())
         // Back soon after, it is.
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         composeRule.settle(activity)
         model.openResult()
         composeRule.settle(activity)
-        controller!!.restart().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.restart().resume()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/Exact%20Artist", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
     }
 
     @Test
@@ -1812,7 +1812,7 @@ class MainActivityTest {
 
         // Deezer down says nothing about whether it has the song, so it's searched there.
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/Exact%20Artist", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertTextAbsent(string(R.string.not_found_on, string(R.string.target_deezer)))
         assertEquals(false, HistoryStore(prefs()).load().first().destinationLinks["DEEZER"]?.matchingEnabled)
 
@@ -1835,7 +1835,7 @@ class MainActivityTest {
         // So its button searches where it goes, as it says.
         click(string(R.string.search_in_destination, string(R.string.target_deezer)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/search/Owaranai%20Uta%20The%20Blue%20Hearts", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/Owaranai%20Uta%20The%20Blue%20Hearts", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertFalse(activity.isFinishing)
     }
 
@@ -1856,7 +1856,7 @@ class MainActivityTest {
 
         // Its songs unknown, it might have been an album, but isn't one, so it opens where it's from.
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(url, opened.dataString)
         assertEquals(MusicService.SOUNDCLOUD.packageName, opened.`package`)
         assertTrue(askedForAlbum)
@@ -1869,7 +1869,7 @@ class MainActivityTest {
         val activity = launch(trackLink())
 
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("https://open.spotify.com/track/$TRACK_ID", opened.dataString)
         assertEquals(MusicService.SPOTIFY.packageName, opened.`package`)
         waitUntil(TIMEOUT_MS) { activity.isFinishing }
@@ -1894,7 +1894,7 @@ class MainActivityTest {
         // A playlist's songs come without links of their own, so where it's from is only a search away.
         composeRule.onNodeWithText("Second Song").performScrollTo().performClick()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/search/Second%20Song", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/Second%20Song", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
 
         // Asked, only the search is offered.
         composeRule.runOnIdle { ViewModelProvider(activity)[MainViewModel::class.java].selectNotFoundAction(NotFoundAction.ASK) }
@@ -1904,7 +1904,7 @@ class MainActivityTest {
         assertNull(nextStartedActivity())
         click(string(R.string.search_anyway, string(R.string.target_deezer)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/search/First%20Song%20Band", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/First%20Song%20Band", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
     }
 
     @Test
@@ -1924,7 +1924,7 @@ class MainActivityTest {
         // The screen closing waits on Android for the installed apps, which can outlast
         // a timeout on a loaded machine, so the link that opened is what gets awaited.
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
     }
 
     private val savedPlaylistUrl = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
@@ -1936,7 +1936,7 @@ class MainActivityTest {
     private fun widgetPlays(url: String): String? {
         launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        return nextStartedActivity()!!.dataString
+        return checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString
     }
 
     @Test
@@ -1948,7 +1948,7 @@ class MainActivityTest {
         java.io.File(app.cacheDir, "lookups.json").writeText("[$found]")
         var asked = ""
         fake.handler = { request ->
-            asked = java.net.URLDecoder.decode(request.url.queryParameter("video_ids")!!, "UTF-8")
+            asked = java.net.URLDecoder.decode(checkNotNull(request.url.queryParameter("video_ids")) { "Expected request.url.queryParameter(\"video_ids\") to be non-null" }, "UTF-8")
             FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=v1&list=TLGGq").build()
         }
 
@@ -2014,7 +2014,7 @@ class MainActivityTest {
 
         waitUntil(TIMEOUT_MS) { activity.isFinishing }
         // YouTube Music has no album by that name here, so it's searched for, not played as its songs.
-        val opened = nextStartedActivity()!!.dataString!!
+        val opened = checkNotNull(checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString) { "Expected nextStartedActivity().dataString to be non-null" }
         assertTrue(opened, opened.startsWith("https://music.youtube.com/search"))
         assertTrue(fake.requestedUrls.none { it.contains("watch_videos") })
     }
@@ -2024,7 +2024,7 @@ class MainActivityTest {
         respondWithTrack("Gone", "Artist · Song")
         launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("com.google.android.apps.youtube.music", nextStartedActivity()!!.`package`)
+        assertEquals("com.google.android.apps.youtube.music", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
     }
 
     @Test
@@ -2037,7 +2037,7 @@ class MainActivityTest {
         )
 
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("com.google.android.apps.youtube.music", nextStartedActivity()!!.`package`)
+        assertEquals("com.google.android.apps.youtube.music", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
     }
 
     private fun dynamicShortcuts(): List<ShortcutInfo> = app.getSystemService(ShortcutManager::class.java).dynamicShortcuts
@@ -2054,8 +2054,8 @@ class MainActivityTest {
         val song = dynamicShortcuts().single()
         assertEquals("Recent Song", song.shortLabel)
         // Tapping it opens the song like tapping its link, wherever the user listens.
-        assertEquals(Intent.ACTION_VIEW, song.intent!!.action)
-        assertEquals("https://open.spotify.com/track/$TRACK_ID", song.intent!!.dataString)
+        assertEquals(Intent.ACTION_VIEW, checkNotNull(song.intent) { "Expected song.intent to be non-null" }.action)
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", checkNotNull(song.intent) { "Expected song.intent to be non-null" }.dataString)
 
         // The song on screen isn't listed again under Recent.
         assertTextAbsent(string(R.string.clear_history_button))
@@ -2074,7 +2074,7 @@ class MainActivityTest {
         composeRule.mainClock.advanceTimeBy(15_000)
         composeRule.waitForIdle()
         assertTextAbsent(string(R.string.undo_button))
-        val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+        val model = ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
         assertFalse(model.uiState.canUndoClearHistory)
         assertTrue(HistoryStore(prefs()).load().isEmpty())
     }
@@ -2136,8 +2136,8 @@ class MainActivityTest {
         assertNull(deezer.longLabel)
         assertEquals(setOf(AppShortcuts.SHARE_CATEGORY), deezer.categories)
         // Android drops shortcuts hidden from the launcher, so there they use the copied link.
-        assertEquals(MainActivity.ACTION_PASTE_FROM_CLIPBOARD, deezer.intent!!.action)
-        assertEquals(MainActivity.PASTE_ALIAS, deezer.intent!!.component!!.className)
+        assertEquals(MainActivity.ACTION_PASTE_FROM_CLIPBOARD, checkNotNull(deezer.intent) { "Expected deezer.intent to be non-null" }.action)
+        assertEquals(MainActivity.PASTE_ALIAS, checkNotNull(checkNotNull(deezer.intent) { "Expected deezer.intent to be non-null" }.component) { "Expected deezer.intent.component to be non-null" }.className)
 
         // Android shows them for any shared text, so they can be turned off, leaving the song.
         click(string(R.string.settings_button))
@@ -2159,14 +2159,14 @@ class MainActivityTest {
         wakes.assertIsOn()
         assertTrue(prefs().getBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, false))
         // Set, it stays so the next time Crosstune opens.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch()
         click(string(R.string.settings_button))
         openAdvanced()
         wakes.performScrollTo().assertIsOn()
         // A PIN set meanwhile, it can't work, so it's no longer offered.
         shadowOf(app.getSystemService(android.app.KeyguardManager::class.java)).setIsDeviceSecure(true)
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertTextAbsent(string(R.string.setting_wakes_for_next_song))
         assertTextAbsent(string(R.string.settings_playing_section))
@@ -2232,9 +2232,9 @@ class MainActivityTest {
         respondWithTrack("Shared On", "Artist · Song")
         launch(sharedFromTopRow("action:SHARE"))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        val chooser = nextStartedActivity()!!
+        val chooser = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(Intent.ACTION_CHOOSER, chooser.action)
-        assertEquals("https://www.deezer.com/search/Shared%20On%20Artist", chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
+        assertEquals("https://www.deezer.com/search/Shared%20On%20Artist", checkNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)) { "Expected chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) to be non-null" }.getStringExtra(Intent.EXTRA_TEXT))
     }
 
     @Test
@@ -2267,8 +2267,8 @@ class MainActivityTest {
 
     /** Back to Crosstune from another app. */
     private fun comeBack() {
-        controller!!.windowFocusChanged(false)
-        controller!!.windowFocusChanged(true)
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(false)
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(true)
         composeRule.waitForIdle()
     }
 
@@ -2394,11 +2394,11 @@ class MainActivityTest {
         assertResultShown()
         click(string(R.string.copy_link_button))
         val clipboard = app.getSystemService(ClipboardManager::class.java)
-        assertNotNull(MusicLinks.parse(clipboard.primaryClip!!.getItemAt(0).text.toString()))
+        assertNotNull(MusicLinks.parse(checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString()))
         // Crosstune notes it copied it, which Android marks a moment before, however long the test takes since.
         val noted = prefs().getLong("clip_seen_at", 0L)
         assertTrue(System.currentTimeMillis() - noted in 0..60_000)
-        val description = clipboard.primaryClipDescription!!
+        val description = checkNotNull(clipboard.primaryClipDescription) { "Expected clipboard.primaryClipDescription to be non-null" }
         ClipDescription::class.java.getDeclaredMethod("setTimestamp", Long::class.javaPrimitiveType)
             .invoke(description, noted - 1_000)
         click(string(R.string.clear_button))
@@ -2425,11 +2425,11 @@ class MainActivityTest {
         app.getSystemService(ClipboardManager::class.java)
             .setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
         launch(pasteIntent().putExtra(Intent.EXTRA_SHORTCUT_ID, "action:SHARE"))
-        controller!!.windowFocusChanged(true)
-        val activity = controller!!.get()
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(true)
+        val activity = checkNotNull(controller) { "Expected controller to be non-null" }.get()
         waitUntil { activity.isFinishing }
-        val chooser = nextStartedActivity()!!
-        assertEquals("https://www.deezer.com/search/From%20Launcher%20Artist", chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
+        val chooser = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
+        assertEquals("https://www.deezer.com/search/From%20Launcher%20Artist", checkNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)) { "Expected chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) to be non-null" }.getStringExtra(Intent.EXTRA_TEXT))
     }
 
     @Test
@@ -2440,10 +2440,10 @@ class MainActivityTest {
             .setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
 
         launch(pasteIntent().putExtra(Intent.EXTRA_SHORTCUT_ID, "open_in:TIDAL"))
-        controller!!.windowFocusChanged(true)
-        val activity = controller!!.get()
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(true)
+        val activity = checkNotNull(controller) { "Expected controller to be non-null" }.get()
         waitUntil { activity.isFinishing }
-        assertEquals(MusicService.TIDAL.packageName, nextStartedActivity()!!.`package`)
+        assertEquals(MusicService.TIDAL.packageName, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
     }
 
     @Test
@@ -2460,7 +2460,7 @@ class MainActivityTest {
         )
 
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals(MusicService.DEEZER.packageName, nextStartedActivity()!!.`package`)
+        assertEquals(MusicService.DEEZER.packageName, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
     }
 
     @Test
@@ -2513,7 +2513,7 @@ class MainActivityTest {
         val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
         onNewIntent.isAccessible = true
         onNewIntent.invoke(
-            controller!!.get(),
+            checkNotNull(controller) { "Expected controller to be non-null" }.get(),
             Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, "not a music link")
@@ -2535,7 +2535,7 @@ class MainActivityTest {
         val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
         onNewIntent.isAccessible = true
         onNewIntent.invoke(
-            controller!!.get(),
+            checkNotNull(controller) { "Expected controller to be non-null" }.get(),
             Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, "not a music link")
@@ -2557,12 +2557,12 @@ class MainActivityTest {
         ).remove(KEY_ASKED_RETURN).commit()
         launch()
         val practice = "${string(R.string.saved_practice)}, ${string(R.string.practice_due, 2)}"
-        val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+        val model = ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
         listOf("Timed", string(R.string.practice_all_songs)).forEach { song ->
             if (composeRule.onAllNodesWithText(string(R.string.practice_all_songs)).fetchSemanticsNodes().isEmpty()) click(practice)
             click(song)
             assertNotNull(model.uiState.practice)
-            assertNull(shadowOf(controller!!.get()).lastRequestedPermission)
+            assertNull(shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).lastRequestedPermission)
             click(string(R.string.floating_close))
             composeRule.waitForIdle()
         }
@@ -2575,9 +2575,9 @@ class MainActivityTest {
         postReturnNotice()
         val notices = app.getSystemService(NotificationManager::class.java)
         assertEquals(1, notices.activeNotifications.size)
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         assertEquals(1, notices.activeNotifications.size)
-        controller!!.restart().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.restart().resume()
         composeRule.waitForIdle()
         assertTrue(notices.activeNotifications.isEmpty())
     }
@@ -2599,7 +2599,7 @@ class MainActivityTest {
         val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
         onNewIntent.isAccessible = true
         onNewIntent.invoke(
-            controller!!.get(),
+            checkNotNull(controller) { "Expected controller to be non-null" }.get(),
             Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, "not a music link")
@@ -2653,14 +2653,14 @@ class MainActivityTest {
 
         click(string(R.string.open_in_youtube_music))
         val opened = nextStartedActivity()
-        assertEquals("com.google.android.apps.youtube.music", opened!!.`package`)
+        assertEquals("com.google.android.apps.youtube.music", checkNotNull(opened) { "Expected opened to be non-null" }.`package`)
         assertFalse(activity.isFinishing)
 
         clickResultText()
         val clipboard = app.getSystemService(ClipboardManager::class.java)
         assertEquals(
             "Cut To The Feeling Carly Rae Jepsen",
-            clipboard.primaryClip!!.getItemAt(0).text.toString()
+            checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString()
         )
         // Android 13+ confirms clipboard writes itself, so the app stays quiet.
         assertNull(ShadowToast.getTextOfLatestToast())
@@ -2668,14 +2668,14 @@ class MainActivityTest {
         click(string(R.string.copy_link_button))
         assertEquals(
             "https://music.youtube.com/search?q=Cut%20To%20The%20Feeling%20Carly%20Rae%20Jepsen",
-            clipboard.primaryClip!!.getItemAt(0).text.toString()
+            checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString()
         )
 
         click(string(R.string.share_link_button))
         val chooser = nextStartedActivity()
-        assertEquals(Intent.ACTION_CHOOSER, chooser!!.action)
+        assertEquals(Intent.ACTION_CHOOSER, checkNotNull(chooser) { "Expected chooser to be non-null" }.action)
         val shared = chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-        assertEquals(Intent.ACTION_SEND, shared!!.action)
+        assertEquals(Intent.ACTION_SEND, checkNotNull(shared) { "Expected shared to be non-null" }.action)
         assertEquals(
             "https://music.youtube.com/search?q=Cut%20To%20The%20Feeling%20Carly%20Rae%20Jepsen",
             shared.getStringExtra(Intent.EXTRA_TEXT)
@@ -2686,7 +2686,7 @@ class MainActivityTest {
         assertEquals("YOUTUBE", prefs().getString("default_target", null))
         assertTextShown(string(R.string.open_in_youtube))
         click(string(R.string.open_in_youtube))
-        assertEquals("com.google.android.youtube", nextStartedActivity()!!.`package`)
+        assertEquals("com.google.android.youtube", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
 
         chooseDefault(string(R.string.target_youtube_music))
         click(string(R.string.make_default_named, string(R.string.target_youtube_music)))
@@ -2707,7 +2707,7 @@ class MainActivityTest {
 
         clickResultText()
         val clipboard = app.getSystemService(ClipboardManager::class.java)
-        assertEquals("Only Title", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("Only Title", checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString())
     }
 
     @Test
@@ -2989,7 +2989,7 @@ class MainActivityTest {
         waitForText("Fallback")
         click(string(R.string.open_in_youtube_music))
 
-        val started = nextStartedActivity()!!
+        val started = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(MusicService.YOUTUBE_TV, started.`package`)
         assertEquals("https://www.youtube.com/search?q=Fallback%20Artist", started.dataString)
     }
@@ -3012,7 +3012,7 @@ class MainActivityTest {
         val started = nextStartedActivity()
         assertNotNull(started)
         // The browser, by name, not the missing app.
-        assertEquals("com.example.browser", started!!.`package`)
+        assertEquals("com.example.browser", checkNotNull(started) { "Expected started to be non-null" }.`package`)
         assertEquals(
             "https://music.youtube.com/search?q=Fallback%20Artist",
             started.dataString
@@ -3045,7 +3045,7 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.privacy_policy)).performScrollTo().performClick()
 
-        assertEquals("https://crosstune.cc/es/privacy/", nextStartedActivity()!!.dataString)
+        assertEquals("https://crosstune.cc/es/privacy/", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
     }
 
     @Test
@@ -3065,7 +3065,7 @@ class MainActivityTest {
         composeRule.onNodeWithText(string(R.string.made_with_love, HEART)).performScrollTo().performClick()
 
         val started = nextStartedActivity()
-        assertEquals(Intent.ACTION_VIEW, started!!.action)
+        assertEquals(Intent.ACTION_VIEW, checkNotNull(started) { "Expected started to be non-null" }.action)
         assertEquals(string(R.string.github_repo_url), started.dataString)
     }
 
@@ -3075,13 +3075,13 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.report_problem)).performScrollTo().performClick()
         click(string(R.string.report_on_github))
-        val issue = nextStartedActivity()!!.data!!
+        val issue = checkNotNull(checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.data) { "Expected nextStartedActivity().data to be non-null" }
         assertEquals("https://github.com/astrovm/crosstune/issues/new", issue.toString().substringBefore("?"))
-        assertTrue(issue.getQueryParameter("body")!!.contains("Crosstune 2."))
+        assertTrue(checkNotNull(issue.getQueryParameter("body")) { "Expected issue.getQueryParameter(\"body\") to be non-null" }.contains("Crosstune 2."))
         assertTextAbsent(string(R.string.report_problem_text))
         composeRule.onNodeWithText(string(R.string.report_problem)).performScrollTo().performClick()
         click(string(R.string.report_by_email))
-        val email = nextStartedActivity()!!.dataString!!
+        val email = checkNotNull(checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString) { "Expected nextStartedActivity().dataString to be non-null" }
         assertTrue(email, email.startsWith("mailto:crosstune@4st.li?subject=Crosstune&body="))
     }
 
@@ -3107,7 +3107,7 @@ class MainActivityTest {
         composeRule.onNodeWithText(string(R.string.privacy_policy)).performScrollTo().performClick()
 
         val started = nextStartedActivity()
-        assertEquals(Intent.ACTION_VIEW, started!!.action)
+        assertEquals(Intent.ACTION_VIEW, checkNotNull(started) { "Expected started to be non-null" }.action)
         assertEquals("https://crosstune.cc/privacy/", started.dataString)
     }
 
@@ -3216,7 +3216,7 @@ class MainActivityTest {
 
         clickResultText()
         val clipboard = app.getSystemService(ClipboardManager::class.java)
-        assertEquals("Rock & Roll AC/DC", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("Rock & Roll AC/DC", checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString())
     }
 
     @Test
@@ -3232,7 +3232,7 @@ class MainActivityTest {
 
         assertEquals(
             "https://www.youtube.com/results?search_query=Solo",
-            nextStartedActivity()!!.dataString
+            checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString
         )
     }
 
@@ -3350,14 +3350,14 @@ class MainActivityTest {
 
         assertTextShown(string(R.string.open_in_youtube_music))
         click(string(R.string.open_in_youtube_music))
-        assertEquals("com.google.android.apps.youtube.music", nextStartedActivity()!!.`package`)
+        assertEquals("com.google.android.apps.youtube.music", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
     }
 
     @Test
     fun selectedTargetSurvivesRelaunch() {
         launch()
         chooseDefault(string(R.string.target_youtube))
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         respondWithTrack("Remembered", "Artist · Song")
         launch()
@@ -3565,7 +3565,7 @@ class MainActivityTest {
         click(string(R.string.resolve_button))
         waitForText("Kept")
 
-        controller!!.recreate()
+        checkNotNull(controller) { "Expected controller to be non-null" }.recreate()
         composeRule.waitForIdle()
 
         assertTextShown("Kept")
@@ -3582,9 +3582,9 @@ class MainActivityTest {
         launch(trackLink())
         waitUntil { fake.requestedUrls.size == 1 }
 
-        controller!!.recreate()
+        checkNotNull(controller) { "Expected controller to be non-null" }.recreate()
         release.countDown()
-        val recreated = controller!!.get()
+        val recreated = checkNotNull(controller) { "Expected controller to be non-null" }.get()
         waitUntil { recreated.isFinishing }
 
         assertEquals(1, fake.requestedUrls.size)
@@ -3611,10 +3611,10 @@ class MainActivityTest {
         val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
         onNewIntent.isAccessible = true
         onNewIntent.invoke(
-            controller!!.get(),
+            checkNotNull(controller) { "Expected controller to be non-null" }.get(),
             Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$OTHER_TRACK_ID"))
         )
-        waitUntil { controller!!.get().isFinishing }
+        waitUntil { checkNotNull(controller) { "Expected controller to be non-null" }.get().isFinishing }
         release.countDown()
         Thread.sleep(100L)
         shadowOf(Looper.getMainLooper()).idle()
@@ -3708,7 +3708,7 @@ class MainActivityTest {
         launch()
         resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
         click(string(R.string.clear_button))
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         MainActivity.lookAheadLyrics = true
         launch()
@@ -3801,7 +3801,7 @@ class MainActivityTest {
         resolveTyped(link)
         // Side by side: one starts where the other ends.
         assertTrue(bounds(open).left >= bounds(play).right)
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         RuntimeEnvironment.setFontScale(2f)
         try {
             launch()
@@ -3830,9 +3830,9 @@ class MainActivityTest {
         assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.play_in_background, "Spotify"))).fetchSemanticsNodes().isEmpty())
         click(search)
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals(spotify, nextStartedActivity()!!.`package`)
+        assertEquals(spotify, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
         // A link that comes in to play right away shows here with the search, asking Spotify for nothing.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         prefs().edit().putBoolean("links_in_crosstune", true).putBoolean("play_right_away", true).commit()
         launch(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
         waitUntil { composeRule.onAllNodes(hasContentDescription(search) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
@@ -3853,7 +3853,7 @@ class MainActivityTest {
         launch()
         resolveTyped(link)
         assertTrue(composeRule.onAllNodes(hasContentDescription(play)).fetchSemanticsNodes().isEmpty())
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
         launch()
         resolveTyped(link)
@@ -3952,7 +3952,7 @@ class MainActivityTest {
 
         // Open goes to it as well.
         click(string(R.string.open_in_custom, "YT Music Morphe"))
-        assertEquals(morphe, nextStartedActivity()!!.`package`)
+        assertEquals(morphe, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
 
         // The plain choice is still the official app, one tap away on the card: with Morphe paused on the
         // song, it's the official app that's asked, rather than Morphe played on.
@@ -4064,7 +4064,7 @@ class MainActivityTest {
         waitUntil { composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onNode(button).performClick()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals(Intent.ACTION_VIEW, nextStartedActivity()!!.action)
+        assertEquals(Intent.ACTION_VIEW, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
     }
 
     @Test
@@ -4088,7 +4088,7 @@ class MainActivityTest {
         // Not in the app, it's opened on the song.
         tapOpen()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals(Intent.ACTION_VIEW, nextStartedActivity()!!.action)
+        assertEquals(Intent.ACTION_VIEW, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
 
         // Playing there, the app is only brought forward, which keeps the song going.
         phone.playing.value = Following(PlaybackClock(60_000, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
@@ -4101,7 +4101,7 @@ class MainActivityTest {
         installActivity(ComponentName(youTubeMusic, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
         tapOpen()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        val shown = nextStartedActivity()!!
+        val shown = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(Intent.ACTION_MAIN, shown.action)
         assertNull(shown.data)
         assertEquals(youTubeMusic, shown.component?.packageName ?: shown.`package`)
@@ -4134,9 +4134,9 @@ class MainActivityTest {
             composeRule.waitForIdle()
         }
         tapItem(string(R.string.copy_link_button))
-        assertEquals("https://music.youtube.com/watch?v=sPmul8b17AU", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("https://music.youtube.com/watch?v=sPmul8b17AU", checkNotNull(app.getSystemService(ClipboardManager::class.java).primaryClip) { "Expected app.getSystemService(ClipboardManager::class.java).primaryClip to be non-null" }.getItemAt(0).text.toString())
         tapItem(string(R.string.share_link_button))
-        assertEquals(Intent.ACTION_CHOOSER, nextStartedActivity()!!.action)
+        assertEquals(Intent.ACTION_CHOOSER, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
 
         // Its app's icon brings that app forward as it is; with nothing to open it with, nothing happens.
         click(playingIn)
@@ -4146,7 +4146,7 @@ class MainActivityTest {
         installActivity(ComponentName(youTubeMusic, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
         click(playingIn)
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        val shown = nextStartedActivity()!!
+        val shown = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(Intent.ACTION_MAIN, shown.action)
         assertNull(shown.data)
 
@@ -4192,7 +4192,7 @@ class MainActivityTest {
         waitForText("3:20")
 
         val layouts = mutableListOf<TextLayoutResult>()
-        composeRule.onNode(hasText("3:20")).fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!(layouts)
+        checkNotNull(composeRule.onNode(hasText("3:20")).fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action) { "Expected composeRule.onNode(hasText(\"3:20\")).fetchSemanticsNode().config[SemanticsActions.GetTextLayoutRes... to be non-null" }(layouts)
         assertFalse(layouts.single().didOverflowHeight)
     }
 
@@ -4232,12 +4232,12 @@ class MainActivityTest {
         // Shuffle shows once the app says whether it shuffles, as it says, and turns it the other way.
         val shuffle = string(R.string.player_shuffle)
         assertTrue(composeRule.onAllNodes(hasContentDescription(shuffle)).fetchSemanticsNodes().isEmpty())
-        phone.playing.value = phone.playing.value!!.copy(shuffle = false)
+        phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(shuffle = false)
         waitForDescription(shuffle)
         composeRule.onNode(hasContentDescription(shuffle)).assertIsOff()
         click(shuffle)
         assertEquals(listOf(true), phone.shuffled)
-        phone.playing.value = phone.playing.value!!.copy(shuffle = true)
+        phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(shuffle = true)
         composeRule.waitForIdle()
         composeRule.onNode(hasContentDescription(shuffle)).assertIsOn()
         click(shuffle)
@@ -4268,7 +4268,7 @@ class MainActivityTest {
         // Its words open over it, and close back to it.
         click(string(R.string.lyrics_button))
         waitUntil { composeRule.onAllNodes(hasTestTag(LYRICS_SONG_TAG)).fetchSemanticsNodes().isNotEmpty() }
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
 
@@ -4289,7 +4289,7 @@ class MainActivityTest {
         composeRule.onNodeWithTag("destination-icon:YOUTUBE_MUSIC", useUnmergedTree = true).assertExists()
 
         // Closed, it's the song's card again.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         waitForDescription(play)
         assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.player_playing_in, "YouTube Music"))).fetchSemanticsNodes().isEmpty())
@@ -4498,10 +4498,10 @@ class MainActivityTest {
         // Repeat goes round the app's ways, as music apps do.
         val repeat = string(R.string.player_repeat)
         click(repeat)
-        phone.playing.value = phone.playing.value!!.copy(repeat = Repeat.ALL)
+        phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(repeat = Repeat.ALL)
         composeRule.waitForIdle()
         click(repeat)
-        phone.playing.value = phone.playing.value!!.copy(repeat = Repeat.ONE)
+        phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(repeat = Repeat.ONE)
         composeRule.waitForIdle()
         click(repeat)
         assertEquals(listOf(Repeat.ALL, Repeat.ONE, Repeat.OFF), phone.repeated)
@@ -4521,7 +4521,7 @@ class MainActivityTest {
         click(string(R.string.lyrics_next_song))
         assertEquals(listOf(7L, 8L), phone.queuedPlayed)
         // Back puts the list away, before the player.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodes(hasText("Third Song")).fetchSemanticsNodes().isEmpty())
         // The sleep timer counts down the minutes, and is turned off.
@@ -4537,7 +4537,7 @@ class MainActivityTest {
         composeRule.waitForIdle()
         click(sleep)
         assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_sleep_off))).fetchSemanticsNodes().isEmpty())
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
 
         // Its name opens its card, which is the song's already.
@@ -4549,16 +4549,16 @@ class MainActivityTest {
         click(string(R.string.lyrics_button))
         waitUntil { composeRule.onAllNodes(hasTestTag(LYRICS_SONG_TAG)).fetchSemanticsNodes().isNotEmpty() }
         waitForText("Three")
-        controller!!.pause().stop().restart().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop().restart().resume()
         composeRule.waitForIdle()
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         click(play)
         waitForText("Two")
 
         // Another song the app went on to, once this one played, opens a card of its own.
-        phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = true))
+        phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = true))
         composeRule.waitForIdle()
         phone.playing.value = null
         phone.onThePhone = Heard.Song(MusicMetadata("Other Song", "Band"), null)
@@ -4591,7 +4591,7 @@ class MainActivityTest {
         // Allowed meanwhile, it follows the app from then on.
         phone.access = true
         phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = false, appPackage = youTubeMusic)
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitForDescription(string(R.string.lyrics_pause))
         assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_follow_allow))).fetchSemanticsNodes().isEmpty())
     }
@@ -4641,7 +4641,7 @@ class MainActivityTest {
     fun aLineLightsAMomentBeforeItsSung() {
         val playback = timedSong()
         playback.access = true
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         // 0.3 s before "Two" is sung it's lit already, so it's been read by then.
         playback.playing.value = Following(PlaybackClock(19_700, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
         waitUntil(TIMEOUT_MS) { lit("Two") }
@@ -4656,7 +4656,7 @@ class MainActivityTest {
         prefs().edit().putLong("lines_early_ms", 0).putBoolean("next_line_first", true).commit()
         val playback = timedSong()
         playback.access = true
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         playback.playing.value = Following(PlaybackClock(19_700, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
         waitUntil(TIMEOUT_MS) { lit("One") }
         assertFalse(lit("Two"))
@@ -4759,7 +4759,7 @@ class MainActivityTest {
         waitForText(string(R.string.lyrics_follow_allow))
         click(string(R.string.follow_turn_on))
         click(string(R.string.fix_open_settings))
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, opened.action)
         assertEquals(
             ComponentName(app, NowPlayingListener::class.java).flattenToString(),
@@ -4768,7 +4768,7 @@ class MainActivityTest {
 
         // Allowed and back, with no app playing it yet: the steps and the offer go, and the microphone's still there.
         playback.access = true
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.follow_help_title)).fetchSemanticsNodes().isEmpty() }
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.lyrics_follow_allow)).fetchSemanticsNodes().isEmpty() }
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_listen_along)).assertExists()
@@ -4802,10 +4802,10 @@ class MainActivityTest {
         assertEquals(listOf(40_000L), playback.seeks)
 
         // Back goes back to the song.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         waitForResult()
         // Nothing left to follow, a resume changes nothing.
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         assertResultShown()
     }
 
@@ -4814,7 +4814,7 @@ class MainActivityTest {
         shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         val playback = timedSong()
         playback.access = true
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
         waitUntil(TIMEOUT_MS) { lit("Two") }
         // The app goes on to another song: the words stop where it left them, and stay this song's.
@@ -4823,7 +4823,7 @@ class MainActivityTest {
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isEmpty() }
         assertLit("Two")
         // Closed and opened again, and even listened along with, they're still this song's, not what plays now.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         waitForResult()
         composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasAnyAncestor(hasTestTag(RESULT_TAG))).performClick()
         waitForText("Two")
@@ -4904,7 +4904,7 @@ class MainActivityTest {
     fun aLineOpensToStudyRepeatsInTheMusicAppAndIsKept() {
         val playback = timedSong()
         playback.access = true
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         // The words are fetched off the main thread and fade in over the placeholder, so they can still be on their way.
         waitForText("Two")
         fun tapLabel() = composeRule.onNodeWithText("Two").fetchSemanticsNode().config[SemanticsActions.OnClick].label
@@ -4954,7 +4954,7 @@ class MainActivityTest {
         // Kept, with the song it's from.
         click(string(R.string.lyrics_save_line))
         assertTextShown(string(R.string.lyrics_line_saved))
-        assertTrue(prefs().getString("saved_lines", null)!!.contains("\"Two\""))
+        assertTrue(checkNotNull(prefs().getString("saved_lines", null)) { "Expected prefs().getString(\"saved_lines\", null) to be non-null" }.contains("\"Two\""))
         click(string(R.string.lyrics_line_saved))
         assertTextShown(string(R.string.lyrics_save_line))
         click(string(R.string.lyrics_save_line))
@@ -4969,7 +4969,7 @@ class MainActivityTest {
         assertTextShown("Kingo Hamada")
         composeRule.onNode(isToggleable() and hasText("Two")).assertIsOn().performClick()
         click(string(R.string.save_button))
-        assertFalse(prefs().getString("saved_lines", null)!!.contains("\"Two\""))
+        assertFalse(checkNotNull(prefs().getString("saved_lines", null)) { "Expected prefs().getString(\"saved_lines\", null) to be non-null" }.contains("\"Two\""))
         waitForText("Three")
         assertTextAbsent(string(R.string.save_button))
     }
@@ -4978,7 +4978,7 @@ class MainActivityTest {
     fun lyricsAskForTheMicrophoneTheFirstTimeTheyOpenOnly() {
         timedSong(microphone = false)
         waitForText(string(R.string.lyrics_follow_allow))
-        val activity = controller!!.get()
+        val activity = checkNotNull(controller) { "Expected controller to be non-null" }.get()
         val asked = shadowOf(activity).lastRequestedPermission
         assertEquals(listOf(android.Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
         // Turned down, though Android would ask again, nothing is wrong yet: it was only asked.
@@ -5005,17 +5005,17 @@ class MainActivityTest {
         waitForText(string(R.string.follow_help_title))
         assertNull(nextStartedActivity())
         click(string(R.string.follow_help_app_info))
-        val appInfo = nextStartedActivity()!!
+        val appInfo = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appInfo.action)
         assertEquals("package:${app.packageName}", appInfo.dataString)
         click(string(R.string.fix_open_settings))
-        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
 
         // Back without it, the steps stay; with it, they go, and the words follow.
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         assertTextShown(string(R.string.follow_help_title))
         playback.access = true
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.follow_help_title)).fetchSemanticsNodes().isEmpty() }
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.lyrics_follow_allow)).fetchSemanticsNodes().isEmpty() }
     }
@@ -5034,20 +5034,20 @@ class MainActivityTest {
         follow.performClick()
         waitForText(string(R.string.follow_help_title))
         click(string(R.string.fix_open_settings))
-        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
-        controller!!.pause().resume()
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         assertTextShown(string(R.string.follow_help_title))
 
         // Allowed there, it's on, and the steps go.
         playback.access = true
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.follow_help_title)).fetchSemanticsNodes().isEmpty() }
         follow.assertIsOn()
         // Allowed, it no longer says it needs the access it has.
         assertTextAbsent(string(R.string.setting_lyrics_follow_description))
         // Switched off: Android's page again, where it's turned off.
         follow.performClick()
-        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
     }
 
     @Test
@@ -5071,7 +5071,7 @@ class MainActivityTest {
         assertTrue(prefs().getBoolean("pure_black", false))
 
         // Kept for the next launch.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch()
         click(string(R.string.settings_button))
         composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo().assertIsSelected()
@@ -5118,7 +5118,7 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.chatgpt_continue)).performScrollTo().performClick()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        if (settle) controller!!.destroyAndSettle() else controller!!.pause().stop().destroy()
+        if (settle) checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle() else checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop().destroy()
         return generateSequence { shadowOf(app).nextStoppedService }.any { it.component?.className == ChatGptSignInService::class.java.name }
     }
 
@@ -5140,14 +5140,14 @@ class MainActivityTest {
         // Android 13 asks about notifications first, without which some phones freeze Crosstune
         // while the browser's open; turned down, it signs in all the same.
         composeRule.onNodeWithText(string(R.string.chatgpt_continue)).performScrollTo().performClick()
-        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        val asked = shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).lastRequestedPermission
         assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, asked.requestedPermissions.single())
-        assertEquals("android.content.pm.action.REQUEST_PERMISSIONS", nextStartedActivity()!!.action)
-        controller!!.get().answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
+        assertEquals("android.content.pm.action.REQUEST_PERMISSIONS", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
         composeRule.waitForIdle()
-        assertEquals(ChatGptSignInService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+        assertEquals(ChatGptSignInService::class.java.name, checkNotNull(shadowOf(app).nextStartedService.component) { "Expected shadowOf(app).nextStartedService.component to be non-null" }.className)
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals(Intent.ACTION_VIEW, nextStartedActivity()!!.action)
+        assertEquals(Intent.ACTION_VIEW, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
         click(string(R.string.cancel_button))
         // Allowed, it isn't asked again.
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
@@ -5156,11 +5156,11 @@ class MainActivityTest {
         fun startSigningIn() {
             composeRule.onNodeWithText(string(R.string.chatgpt_continue)).performScrollTo().performClick()
             // Kept running while the browser's open, so Android won't freeze it.
-            assertEquals(ChatGptSignInService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+            assertEquals(ChatGptSignInService::class.java.name, checkNotNull(shadowOf(app).nextStartedService.component) { "Expected shadowOf(app).nextStartedService.component to be non-null" }.className)
             waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-            val browser = nextStartedActivity()!!
+            val browser = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
             assertEquals(Intent.ACTION_VIEW, browser.action)
-            openAi.authorize = browser.dataString!!.toHttpUrl()
+            openAi.authorize = checkNotNull(browser.dataString) { "Expected browser.dataString to be non-null" }.toHttpUrl()
             assertEquals("https://auth.openai.com/api/accounts/authorize", openAi.authorize.toString().substringBefore("?"))
             assertTextShown(string(R.string.cancel_button))
         }
@@ -5191,7 +5191,7 @@ class MainActivityTest {
         assertTrue(page.contains("package=${app.packageName}"))
         val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
         onNewIntent.isAccessible = true
-        onNewIntent.invoke(controller!!.get(), Intent(Intent.ACTION_VIEW, Uri.parse("crosstune://chatgpt")))
+        onNewIntent.invoke(checkNotNull(controller) { "Expected controller to be non-null" }.get(), Intent(Intent.ACTION_VIEW, Uri.parse("crosstune://chatgpt")))
         waitUntil { composeRule.onAllNodesWithText(FakeOpenAi.EMAIL).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(fake.requestedUrls.none { "crosstune" in it })
 
@@ -5202,10 +5202,10 @@ class MainActivityTest {
         assertTrue(prefs().getBoolean("chatgpt_welcomed", false))
 
         click(string(R.string.chatgpt_manage_usage))
-        assertEquals("https://chatgpt.com/settings/usage", nextStartedActivity()!!.dataString)
+        assertEquals("https://chatgpt.com/settings/usage", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
 
         // Signed in still when Crosstune's opened again.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch()
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(FakeOpenAi.EMAIL).performScrollTo()
@@ -5262,7 +5262,7 @@ class MainActivityTest {
 
         // Kept for the next launch.
         pick(string(R.string.theme_dark))
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch()
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.theme_dark)).assertExists()
@@ -5280,7 +5280,7 @@ class MainActivityTest {
         waitForText(string(R.string.lyrics_follow_allow))
         click(string(R.string.follow_turn_on))
         click(string(R.string.fix_open_settings))
-        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS, nextStartedActivity()!!.action)
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
     }
 
     @Test
@@ -5453,12 +5453,12 @@ class MainActivityTest {
         assertTextShown("Album")
         composeRule.onNodeWithContentDescription("from Spotify").assertExists()
         click(string(R.string.open_in_youtube_music))
-        assertEquals("https://music.youtube.com/search?q=After%20Hours%20The%20Weeknd", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/search?q=After%20Hours%20The%20Weeknd", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
 
         click(string(R.string.clear_button))
         resolveTyped("spotify:artist:$TRACK_ID")
         click(string(R.string.open_in_youtube_music))
-        assertEquals("https://music.youtube.com/search?q=The%20Weeknd", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/search?q=The%20Weeknd", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
 
         click(string(R.string.clear_button))
         resolveTyped("https://open.spotify.com/playlist/$TRACK_ID")
@@ -5492,7 +5492,7 @@ class MainActivityTest {
         for ((label, destination) in expected) {
             chooseDefault(string(label))
             click(string(MusicService.entries.first { it.labelRes == label }.openLabelRes))
-            val opened = nextStartedActivity()!!
+            val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
             assertEquals(destination.first, opened.`package`)
             assertEquals(destination.second, opened.dataString)
         }
@@ -5551,7 +5551,7 @@ class MainActivityTest {
 
         click(string(R.string.open_in_apple_music))
         waitUntil { activity.isFinishing }
-        assertEquals("https://music.apple.com/us/song/1", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.apple.com/us/song/1", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertEquals(2, fake.requestedUrls.size)
         assertTrue(fake.requestedUrls.last().startsWith("https://itunes.apple.com/search?"))
     }
@@ -5590,7 +5590,7 @@ class MainActivityTest {
         // Shown in Spotify, where it's from, it's its own link, with nothing more to ask.
         click(string(R.string.copy_link_button))
         assertEquals("https://open.spotify.com/track/$TRACK_ID",
-            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+            checkNotNull(app.getSystemService(ClipboardManager::class.java).primaryClip) { "Expected app.getSystemService(ClipboardManager::class.java).primaryClip to be non-null" }.getItemAt(0).text.toString())
         assertEquals(1, fake.requestedUrls.size)
         assertNull(nextStartedActivity())
         assertFalse(activity.isFinishing)
@@ -5613,7 +5613,7 @@ class MainActivityTest {
         waitForDestinationReady()
         click(string(R.string.copy_link_button))
         assertEquals("https://www.deezer.com/track/1",
-            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+            checkNotNull(app.getSystemService(ClipboardManager::class.java).primaryClip) { "Expected app.getSystemService(ClipboardManager::class.java).primaryClip to be non-null" }.getItemAt(0).text.toString())
 
         inSettings {
             // Only going straight to the app does turning it off open a search instead.
@@ -5623,14 +5623,14 @@ class MainActivityTest {
             click(string(R.string.setting_show_in_crosstune_first))
             click(string(R.string.setting_play_right_away))
         }
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         fake.requestedUrls.clear()
         val restored = launch()
         assertFalse(ViewModelProvider(restored)[MainViewModel::class.java].uiState.exactMatch)
         resolveTyped()
         click(string(R.string.copy_link_button))
         assertEquals("https://www.deezer.com/search/Default%20Artist",
-            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+            checkNotNull(app.getSystemService(ClipboardManager::class.java).primaryClip) { "Expected app.getSystemService(ClipboardManager::class.java).primaryClip to be non-null" }.getItemAt(0).text.toString())
         // The song comes from Recent, and a search link needs no lookup.
         assertEquals(emptyList<String>(), fake.requestedUrls)
 
@@ -5639,7 +5639,7 @@ class MainActivityTest {
         waitForDestinationReady()
         click(string(R.string.copy_link_button))
         assertEquals("https://www.deezer.com/track/1",
-            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+            checkNotNull(app.getSystemService(ClipboardManager::class.java).primaryClip) { "Expected app.getSystemService(ClipboardManager::class.java).primaryClip to be non-null" }.getItemAt(0).text.toString())
     }
 
     @Test
@@ -5659,12 +5659,12 @@ class MainActivityTest {
         waitForDestinationReady()
         val clipboard = app.getSystemService(ClipboardManager::class.java)
         click(string(R.string.copy_link_button))
-        assertEquals("https://music.apple.com/us/album/clean/1?i=2", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("https://music.apple.com/us/album/clean/1?i=2", checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString())
 
         inAdvancedSettings { composeRule.onNodeWithText(string(R.string.setting_clean_links)).performScrollTo().performClick() }
         assertFalse(prefs().getBoolean("clean_links", true))
         click(string(R.string.copy_link_button))
-        assertEquals("https://music.apple.com/us/album/clean/1?i=2&uo=4", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("https://music.apple.com/us/album/clean/1?i=2&uo=4", checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString())
     }
 
     @Test
@@ -5748,14 +5748,14 @@ class MainActivityTest {
         waitForDestinationReady()
         click(string(R.string.copy_link_button))
         val clipboard = app.getSystemService(ClipboardManager::class.java)
-        assertEquals("https://music.apple.com/us/song/1", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("https://music.apple.com/us/song/1", checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString())
         click(string(R.string.share_link_button))
-        val shared = nextStartedActivity()!!.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
+        val shared = checkNotNull(checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)) { "Expected nextStartedActivity().getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) to be non-null" }
         assertEquals("https://music.apple.com/us/song/1", shared.getStringExtra(Intent.EXTRA_TEXT))
         val requestsBeforeOpen = fake.requestedUrls.size
         click(string(R.string.open_in_apple_music))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://music.apple.com/us/song/1", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.apple.com/us/song/1", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertEquals(requestsBeforeOpen, fake.requestedUrls.size)
 
         // Not on Deezer, it says so, and plays where it's from unless a search is asked for anyway.
@@ -5763,13 +5763,13 @@ class MainActivityTest {
         waitForDestinationReady()
         assertTextShown(string(R.string.not_found_on, string(R.string.target_deezer)))
         click(string(R.string.copy_link_button))
-        assertEquals("https://open.spotify.com/track/$TRACK_ID", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString())
         click(string(R.string.open_in_spotify))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://open.spotify.com/track/$TRACK_ID", nextStartedActivity()!!.dataString)
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         click(string(R.string.search_anyway, string(R.string.target_deezer)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/Exact%20Artist", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
 
         // Searching anyway picked in settings, it's a search like before.
         inAdvancedSettings {
@@ -5780,18 +5780,18 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.not_found_on, string(R.string.target_deezer)))
         click(string(R.string.search_in_destination, string(R.string.target_deezer)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/Exact%20Artist", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
 
         val requestsBeforeReturning = fake.requestedUrls.size
         chooseDefault(string(R.string.target_apple_music))
         click(string(R.string.copy_link_button))
-        assertEquals("https://music.apple.com/us/song/1", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("https://music.apple.com/us/song/1", checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString())
         assertEquals(requestsBeforeReturning, fake.requestedUrls.size)
 
         inSettings { click(string(R.string.setting_play_right_away)) }
         assertFalse(prefs().getBoolean("play_right_away", true))
         click(string(R.string.copy_link_button))
-        assertEquals("https://music.apple.com/search?term=Exact%20Artist", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("https://music.apple.com/search?term=Exact%20Artist", checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString())
     }
 
     @Test
@@ -5822,7 +5822,7 @@ class MainActivityTest {
         click(string(R.string.copy_link_button))
         assertEquals(
             "https://www.deezer.com/search/Slow%20Artist",
-            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
+            checkNotNull(app.getSystemService(ClipboardManager::class.java).primaryClip) { "Expected app.getSystemService(ClipboardManager::class.java).primaryClip to be non-null" }.getItemAt(0).text.toString()
         )
         val requestsBeforeOpen = fake.requestedUrls.size
         click(string(R.string.open_in_deezer))
@@ -5858,26 +5858,26 @@ class MainActivityTest {
 
         val clipboard = app.getSystemService(ClipboardManager::class.java)
         click(string(R.string.copy_link_button))
-        assertEquals("https://music.youtube.com/watch?v=first000000", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("https://music.youtube.com/watch?v=first000000", checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString())
         click(string(R.string.share_link_button))
         assertEquals(
             "https://music.youtube.com/watch?v=first000000",
-            nextStartedActivity()!!.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT)
+            checkNotNull(checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)) { "Expected nextStartedActivity().getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) to be non-null" }.getStringExtra(Intent.EXTRA_TEXT)
         )
         click(string(R.string.open_in_youtube_music))
-        assertEquals("https://music.youtube.com/watch?v=first000000", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.youtube.com/watch?v=first000000", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertEquals(2, fake.requestedUrls.size)
 
         resolveTyped(OTHER_TRACK_ID)
         waitForDestinationReady()
         click(string(R.string.copy_link_button))
-        assertEquals("https://music.youtube.com/watch?v=second00000", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("https://music.youtube.com/watch?v=second00000", checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString())
         assertEquals(4, fake.requestedUrls.size)
 
         click("First")
         waitForDestinationReady()
         click(string(R.string.copy_link_button))
-        assertEquals("https://music.youtube.com/watch?v=first000000", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals("https://music.youtube.com/watch?v=first000000", checkNotNull(clipboard.primaryClip) { "Expected clipboard.primaryClip to be non-null" }.getItemAt(0).text.toString())
         assertEquals(4, fake.requestedUrls.size)
     }
 
@@ -5931,9 +5931,9 @@ class MainActivityTest {
         }
         val activity = launch(trackLink())
         waitForText(string(R.string.handoff_opening, "Deezer"))
-        controller!!.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$OTHER_TRACK_ID")))
+        checkNotNull(controller) { "Expected controller to be non-null" }.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$OTHER_TRACK_ID")))
         waitUntil { activity.isFinishing }
-        assertEquals("https://www.deezer.com/track/2", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/track/2", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         release.countDown()
         Thread.sleep(200L)
         shadowOf(Looper.getMainLooper()).idle()
@@ -5950,7 +5950,7 @@ class MainActivityTest {
         click(string(R.string.retry_button))
         // The retried request keeps the original intent's behaviour and opens the search.
         waitUntil { activity.isFinishing }
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         fake.handler = { request -> FakeSpotify.html(request, "", code = 404) }
         launch()
@@ -5981,7 +5981,7 @@ class MainActivityTest {
         )
         assertTextAbsent("Shared Song")
 
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
 
         assertTextShown("Shared Song")
@@ -5997,7 +5997,7 @@ class MainActivityTest {
         resolveTyped(TRACK_ID)
         click(string(R.string.clear_button))
         resolveTyped(OTHER_TRACK_ID)
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         launch()
         assertTextShown(string(R.string.history_title))
@@ -6021,16 +6021,16 @@ class MainActivityTest {
             .setPrimaryClip(ClipData.newPlainText("link", "Listen https://open.spotify.com/track/$TRACK_ID"))
 
         launch(pasteIntent())
-        controller!!.windowFocusChanged(false)
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(false)
         assertTrue(fake.requestedUrls.isEmpty())
 
-        controller!!.windowFocusChanged(true)
-        val activity = controller!!.get()
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(true)
+        val activity = checkNotNull(controller) { "Expected controller to be non-null" }.get()
         waitUntil { activity.isFinishing }
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
 
         // Focus returning later doesn't read the clipboard again.
-        controller!!.windowFocusChanged(true)
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(true)
         assertEquals(1, fake.requestedUrls.size)
     }
 
@@ -6038,7 +6038,7 @@ class MainActivityTest {
     fun clipboardShortcutWithEmptyClipboardExplains() {
         app.getSystemService(ClipboardManager::class.java).clearPrimaryClip()
         launch(pasteIntent())
-        controller!!.windowFocusChanged(true)
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(true)
 
         assertTextShown(string(R.string.error_clipboard_empty))
     }
@@ -6061,13 +6061,13 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.open_in_youtube))
 
         click(string(R.string.open_in_youtube_music))
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("com.google.android.apps.youtube.music", opened.`package`)
         assertEquals("https://music.youtube.com/watch?v=4NRXx6U8ABQ", opened.dataString)
 
         click(string(R.string.share_link_button))
         @Suppress("DEPRECATION")
-        val shared = nextStartedActivity()!!.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
+        val shared = checkNotNull(checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)) { "Expected nextStartedActivity().getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) to be non-null" }
         assertEquals("https://music.youtube.com/watch?v=4NRXx6U8ABQ", shared.getStringExtra(Intent.EXTRA_TEXT))
     }
 
@@ -6079,7 +6079,7 @@ class MainActivityTest {
 
         openInTheAppItCameFrom()
 
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("com.spotify.music", opened.`package`)
         assertEquals("https://open.spotify.com/track/$TRACK_ID", opened.dataString)
         assertFalse(activity.isFinishing)
@@ -6093,7 +6093,7 @@ class MainActivityTest {
 
         click(string(R.string.open_in_deezer))
 
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("deezer.android.app", opened.`package`)
         assertEquals("https://www.deezer.com/track/908604612", opened.dataString)
         waitUntil { activity.isFinishing }
@@ -6111,7 +6111,7 @@ class MainActivityTest {
 
         openInTheAppItCameFrom()
 
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("https://open.spotify.com/track/$TRACK_ID", opened.dataString)
         assertEquals("com.example.browser", opened.component?.packageName ?: opened.`package`)
     }
@@ -6133,12 +6133,12 @@ class MainActivityTest {
 
         openInTheAppItCameFrom()
 
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(Intent.ACTION_CHOOSER, opened.action)
         // Each browser named outright, since Android would leave them out for a link Crosstune is allowed.
-        val first = opened.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
-        val rest = opened.getParcelableArrayExtra(Intent.EXTRA_INITIAL_INTENTS, Intent::class.java)!!.toList()
-        assertEquals(setOf("com.example.browser", "com.example.other"), (rest + first).map { it.component!!.packageName }.toSet())
+        val first = checkNotNull(opened.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)) { "Expected opened.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) to be non-null" }
+        val rest = checkNotNull(opened.getParcelableArrayExtra(Intent.EXTRA_INITIAL_INTENTS, Intent::class.java)) { "Expected opened.getParcelableArrayExtra(Intent.EXTRA_INITIAL_INTENTS, Intent::class.java) to be non-null" }.toList()
+        assertEquals(setOf("com.example.browser", "com.example.other"), (rest + first).map { checkNotNull(it.component) { "Expected it.component to be non-null" }.packageName }.toSet())
         assertTrue((rest + first).all { it.dataString == "https://open.spotify.com/track/$TRACK_ID" })
     }
 
@@ -6156,7 +6156,7 @@ class MainActivityTest {
 
         openInTheAppItCameFrom()
 
-        assertEquals("com.example.browser", nextStartedActivity()!!.`package`)
+        assertEquals("com.example.browser", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
     }
 
     // endregion
@@ -6210,11 +6210,11 @@ class MainActivityTest {
         click(string(R.string.back_button))
         assertTextShown(string(R.string.rule_opens_in, "Apple Music"))
         click(string(R.string.back_button))
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://youtu.be/4NRXx6U8ABQ")))
         waitUntil { activity.isFinishing }
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("com.apple.android.music", opened.`package`)
         assertEquals("https://music.apple.com/search?term=Blinding%20Lights%20The%20Weeknd", opened.dataString)
 
@@ -6263,11 +6263,11 @@ class MainActivityTest {
         chooseDefault("Word Finder")
         resolveTyped()
         click(string(R.string.open_in_custom, "Word Finder"))
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("https://words.example/search?q=Custom%20Song%20Artist", opened.dataString)
         assertEquals(
             "com.example.browser",
-            app.packageManager.resolveActivity(opened, 0)!!.activityInfo.packageName
+            checkNotNull(app.packageManager.resolveActivity(opened, 0)) { "Expected app.packageManager.resolveActivity(opened, 0) to be non-null" }.activityInfo.packageName
         )
 
         click(string(R.string.settings_button))
@@ -6299,7 +6299,7 @@ class MainActivityTest {
 
         resolveTyped()
         click(string(R.string.search_in_destination, "NewPipe"))
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(newPipe, opened.`package`)
         assertEquals("https://www.youtube.com/results?search_query=Frontend%20Song%20Artist", opened.dataString)
     }
@@ -6333,7 +6333,7 @@ class MainActivityTest {
         chooseDefault("Invidious")
         resolveTyped()
         click(string(R.string.search_in_destination, "Invidious"))
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("https://inv.example.org/search?q=Web%20Song%20Artist", opened.dataString)
         assertEquals("com.example.browser", opened.`package`)
     }
@@ -6386,14 +6386,14 @@ class MainActivityTest {
         assertTextShown(string(R.string.rule_opens_in, "Spotify"))
         assertEquals(Destination.Service(MusicService.SPOTIFY), DestinationStore(prefs()).rule(Frontend.INVIDIOUS))
         click(string(R.string.back_button))
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         fake.handler = { request ->
             FakeSpotify.html(request, """{"title":"The Weeknd - Blinding Lights (Official Video)","author_name":"TheWeekndVEVO"}""")
         }
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://yewtu.be/watch?v=4NRXx6U8ABQ")))
         waitUntil { activity.isFinishing }
-        assertEquals(MusicService.SPOTIFY.packageName, nextStartedActivity()!!.`package`)
+        assertEquals(MusicService.SPOTIFY.packageName, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
 
         // Piped's links still go where YouTube's do.
         assertNull(DestinationStore(prefs()).rule(Frontend.PIPED))
@@ -6411,20 +6411,20 @@ class MainActivityTest {
         respondNotMusic()
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
         waitUntil { activity.isFinishing }
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(MusicService.YOUTUBE.packageName, opened.`package`)
         assertEquals("https://www.youtube.com/watch?v=jNQXAC9IVRw", opened.dataString)
         // YouTube Music was asked. The video's own lookup runs alongside, so a music video waits once,
         // and is dropped once it isn't music.
         assertTrue(fake.requestedUrls.any { it.startsWith("https://music.youtube.com/") })
 
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         // Opening links in Crosstune, it goes to YouTube all the same, rather than to a card.
         linksShowHere()
         val shown = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
         waitUntil { shown.isFinishing }
-        assertEquals(MusicService.YOUTUBE.packageName, nextStartedActivity()!!.`package`)
+        assertEquals(MusicService.YOUTUBE.packageName, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
     }
 
     @Test
@@ -6434,9 +6434,9 @@ class MainActivityTest {
         respondNotMusic()
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://yewtu.be/watch?v=jNQXAC9IVRw")))
         waitUntil { activity.isFinishing }
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("https://yewtu.be/watch?v=jNQXAC9IVRw", opened.dataString)
-        assertEquals("com.example.browser", app.packageManager.resolveActivity(opened, 0)!!.activityInfo.packageName)
+        assertEquals("com.example.browser", checkNotNull(app.packageManager.resolveActivity(opened, 0)) { "Expected app.packageManager.resolveActivity(opened, 0) to be non-null" }.activityInfo.packageName)
     }
 
     @Test
@@ -6449,7 +6449,7 @@ class MainActivityTest {
         assertFalse(prefs().getBoolean("only_music_videos", true))
         click(string(R.string.back_button))
         click(string(R.string.back_button))
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         fake.requestedUrls.clear()
         launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
@@ -6471,7 +6471,7 @@ class MainActivityTest {
             }
         )
         waitUntil { activity.isFinishing }
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(MusicService.YOUTUBE.packageName, opened.`package`)
         assertEquals("https://www.youtube.com/watch?v=4NRXx6U8ABQ", opened.dataString)
     }
@@ -6485,7 +6485,7 @@ class MainActivityTest {
 
         click(string(R.string.open_in_custom, "Player"))
 
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("player://search/Scheme%20Artist", opened.dataString)
         assertNull(opened.`package`)
     }
@@ -6566,7 +6566,7 @@ class MainActivityTest {
     fun interceptedPagesCrosstuneCantConvertGoStraightToTheirApp() {
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://soundcloud.com/discover")))
 
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("com.soundcloud.android", opened.`package`)
         assertEquals("https://soundcloud.com/discover", opened.dataString)
         waitUntil { activity.isFinishing }
@@ -6639,7 +6639,7 @@ class MainActivityTest {
 
         // Coming back later leaves the user's choices alone.
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, false)
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch()
         assertFalse(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
     }
@@ -6666,12 +6666,12 @@ class MainActivityTest {
         assertEquals(0, checkedOff())
         click(string(R.string.setup_check_allow))
         click(string(R.string.fix_open_settings))
-        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
         click(string(R.string.back_button))
         assertTextShown(string(R.string.ask_links_gets))
 
         // Still asked next time, until something's been opened.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch()
         assertTextShown(string(R.string.ask_links_gets))
     }
@@ -6704,13 +6704,13 @@ class MainActivityTest {
 
         // Some allowed isn't all.
         states = mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED)
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertEquals(0, checkedOff())
 
         // Done, it's checked off but stays, so the list doesn't move under the user's finger.
         states = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertEquals(1, checkedOff())
         assertTextShown(string(R.string.ask_links_gets))
@@ -6733,11 +6733,11 @@ class MainActivityTest {
         // Android hides the links to tick until it's switched back, so that's the first step.
         assertTextShown(string(R.string.fix_step_pick, string(R.string.android_in_the_app)))
         click(string(R.string.fix_open_settings))
-        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
 
         // Switched back, the steps go, and the links are checked off.
         ownLinksOn = true
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitUntil(TIMEOUT_MS) { checkedOff() == 1 }
         assertTextAbsent(string(R.string.fix_step_pick, string(R.string.android_in_the_app)))
     }
@@ -6756,11 +6756,11 @@ class MainActivityTest {
         openSource(string(R.string.service_spotify))
         click(string(R.string.allow_button))
         click(string(R.string.fix_open_settings))
-        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
 
         // All allowed, the steps close by themselves, back where they were opened.
         states = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.fix_open_settings)).fetchSemanticsNodes().isEmpty() }
         assertTextAbsent(string(R.string.setup_not_allowed))
         click(string(R.string.back_button))
@@ -6877,19 +6877,19 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_check_app, "YouTube Create"))
         click(string(R.string.setup_check_app, "YouTube"))
         click(string(R.string.open_app_link_settings_button, "YouTube"))
-        assertEquals(Uri.parse("package:$youtube"), nextStartedActivity()!!.data)
+        assertEquals(Uri.parse("package:$youtube"), checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.data)
         youtubeAllowsLinks = false
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitUntil(TIMEOUT_MS) { checkedOff() == 1 }
 
         // Fixed, it's checked off but stays, so the list doesn't move under the user's finger.
         assertTextShown(string(R.string.setup_check_app, "YouTube"))
         click(string(R.string.setup_check_app, "YouTube Create"))
         click(string(R.string.open_app_link_settings_button, "YouTube Create"))
-        assertEquals(Uri.parse("package:$creator"), nextStartedActivity()!!.data)
+        assertEquals(Uri.parse("package:$creator"), checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.data)
 
         appAllowsLinks = false
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitUntil(TIMEOUT_MS) { checkedOff() == 2 }
     }
 
@@ -6926,16 +6926,16 @@ class MainActivityTest {
         // One app at a time, in name order.
         assertTextShown(string(R.string.setup_step, 1, 4))
         click(string(R.string.open_app_link_settings_button, "YouTube"))
-        assertEquals(Uri.parse("package:$youtube"), nextStartedActivity()!!.data)
+        assertEquals(Uri.parse("package:$youtube"), checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.data)
         youtubeAllowsLinks = false
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitForText(string(R.string.setup_step, 2, 4))
         click(string(R.string.open_app_link_settings_button, "YouTube Create"))
-        assertEquals(Uri.parse("package:$creator"), nextStartedActivity()!!.data)
+        assertEquals(Uri.parse("package:$creator"), checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.data)
 
         // Fixed, both stay listed, checked off, so the list doesn't move under the user's finger.
         creatorAllowsLinks = false
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitForText(string(R.string.setup_step, 3, 4))
         click(string(R.string.back_button))
         assertTextShown(string(R.string.setup_check_app, "YouTube"))
@@ -6980,7 +6980,7 @@ class MainActivityTest {
         click(string(R.string.setup_check_allow))
         assertTextShown(string(R.string.fix_step_pick, string(R.string.android_in_the_app)))
         ownLinksOn = true
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitUntil(TIMEOUT_MS) { checkedOff() == 1 }
 
         // Lyrics are next, and held back, so their steps go through App info.
@@ -7007,11 +7007,11 @@ class MainActivityTest {
 
         // Given up to Crosstune, it stays listed, so it can be given back.
         appAllowsLinks = false
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertTextShown(string(R.string.link_owner_lets_crosstune))
         click(string(R.string.link_owner_lets_crosstune))
-        assertEquals(Uri.parse("package:$youtube"), nextStartedActivity()!!.data)
+        assertEquals(Uri.parse("package:$youtube"), checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.data)
     }
 
     @Test
@@ -7051,12 +7051,12 @@ class MainActivityTest {
         assertFalse(marked(string(R.string.setup_not_allowed)))
         // One left, the mark says which.
         keeping = setOf(creator)
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertTrue(marked(string(R.string.notice_app_still_opens, "YouTube Create")))
         // None left, nothing is.
         keeping = emptySet()
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertFalse(marked(string(R.string.notice_app_still_opens, "YouTube Create")))
         click(string(R.string.back_button))
@@ -7092,13 +7092,13 @@ class MainActivityTest {
         // Android won't let Crosstune take links the app verified, so it's to stop, with how; not to allow.
         click(string(R.string.setup_check_app, string(R.string.service_spotify)))
         click(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
-        val started = nextStartedActivity()!!
+        val started = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
         assertEquals(Uri.parse("package:${MusicService.SPOTIFY.packageName}"), started.data)
 
         // Fixed in Android's settings, and its links are allowed already: only lyrics are left.
         setAppAllowsLinks(false)
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         waitUntil(TIMEOUT_MS) { checkedOff() == 2 }
         assertTextShown(string(R.string.ask_follow_gets))
     }
@@ -7194,7 +7194,7 @@ class MainActivityTest {
         // Links going straight to it, its own stay there.
         assertFalse(LinkInterception(app).isEnabled(MusicService.DEEZER))
         assertTrue(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         // An app picked already stays, though another's the only one now.
         freshInstall()
@@ -7202,7 +7202,7 @@ class MainActivityTest {
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
         assertEquals(Destination.Service(MusicService.TIDAL), DestinationStore(prefs()).defaultDestination())
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         // With two, it's left to the first one picked on a song.
         freshInstall()
@@ -7241,7 +7241,7 @@ class MainActivityTest {
         launch()
         waitUntil(TIMEOUT_MS) { DestinationStore(prefs()).hasDefault() }
         assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         // Going straight to the app, Crosstune would only hand YouTube Music its own links back.
         freshInstall()
@@ -7377,18 +7377,18 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.fix_all))
 
         shell.ready = true
-        shell.changed!!()
+        checkNotNull(shell.changed) { "Expected shell.changed to be non-null" }()
         composeRule.waitForIdle()
         assertTextShown(string(R.string.fix_all))
 
         // Stopped, it's gone again, and coming back looks again too.
         shell.ready = false
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         assertTextAbsent(string(R.string.fix_all))
 
         // Done with, Crosstune stops watching.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         assertNull(shell.changed)
     }
 
@@ -7437,7 +7437,7 @@ class MainActivityTest {
         // What it couldn't do is left to the steps, which say so.
         assertTextShown(string(R.string.fix_failed))
         click(string(R.string.fix_open_settings))
-        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.action)
     }
 
     @Test
@@ -7456,7 +7456,7 @@ class MainActivityTest {
         assertTrue(phone.songsAsked.isEmpty())
         assertNull(nextStartedActivity())
         assertFalse(activity.isFinishing)
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         // History from that link must not be mistaken for an install from before sources were asked.
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, false)
@@ -7486,7 +7486,7 @@ class MainActivityTest {
 
         val activity = launch()
         val delivered = trackLink()
-        controller!!.newIntent(delivered)
+        checkNotNull(controller) { "Expected controller to be non-null" }.newIntent(delivered)
         assertEquals(delivered, activity.intent)
     }
 
@@ -7495,16 +7495,16 @@ class MainActivityTest {
         val clipboard = app.getSystemService(ClipboardManager::class.java)
         clipboard.clearPrimaryClip()
         launch(pasteIntent())
-        controller!!.windowFocusChanged(true)
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(true)
         assertTextShown(string(R.string.error_clipboard_empty))
 
         respondWithTrack("Second", "Artist · Song")
         clipboard.setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
-        controller!!.windowFocusChanged(false)
-        controller!!.newIntent(pasteIntent())
-        controller!!.windowFocusChanged(true)
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(false)
+        checkNotNull(controller) { "Expected controller to be non-null" }.newIntent(pasteIntent())
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(true)
 
-        waitUntil { controller!!.get().isFinishing }
+        waitUntil { checkNotNull(controller) { "Expected controller to be non-null" }.get().isFinishing }
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
     }
 
@@ -7514,10 +7514,10 @@ class MainActivityTest {
             .setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
         // Straight to MainActivity, not through the unexported alias.
         launch(Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD))
-        controller!!.windowFocusChanged(true)
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(true)
 
         assertTrue(fake.requestedUrls.isEmpty())
-        assertFalse(controller!!.get().isFinishing)
+        assertFalse(checkNotNull(controller) { "Expected controller to be non-null" }.get().isFinishing)
     }
 
     @Test
@@ -7530,8 +7530,8 @@ class MainActivityTest {
         launch(trackLink())
         waitUntil { fake.requestedUrls.size == 1 }
         val saved = Bundle()
-        controller!!.saveInstanceState(saved)
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.saveInstanceState(saved)
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         release.countDown()
 
         // A new controller has a new ViewModel, as after Android ends the process.
@@ -7549,8 +7549,8 @@ class MainActivityTest {
         launch()
         resolveTyped()
         val saved = Bundle()
-        controller!!.saveInstanceState(saved)
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.saveInstanceState(saved)
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         val restored = Robolectric.buildActivity(MainActivity::class.java, Intent(Intent.ACTION_MAIN).setClass(app, MainActivity::class.java))
             .setup(saved)
@@ -7566,10 +7566,10 @@ class MainActivityTest {
         app.getSystemService(ClipboardManager::class.java)
             .setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
         launch(pasteIntent())
-        controller!!.windowFocusChanged(false)
+        checkNotNull(controller) { "Expected controller to be non-null" }.windowFocusChanged(false)
         val saved = Bundle()
-        controller!!.saveInstanceState(saved)
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.saveInstanceState(saved)
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         val restored = Robolectric.buildActivity(MainActivity::class.java, pasteIntent()).setup(saved)
         controller = restored
@@ -7626,7 +7626,7 @@ class MainActivityTest {
         Thread.sleep(200L)
         shadowOf(Looper.getMainLooper()).idle()
 
-        assertEquals("com.spotify.music", nextStartedActivity()!!.`package`)
+        assertEquals("com.spotify.music", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
         // The late Deezer match doesn't open a second app.
         assertNull(nextStartedActivity())
         assertTextAbsent(string(R.string.matching_text))
@@ -7637,7 +7637,7 @@ class MainActivityTest {
         respondWithTrack("Remembered", "Artist · Song")
         launch()
         resolveTyped()
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         fake.handler = { throw IOException("offline") }
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$OTHER_TRACK_ID")))
@@ -7647,7 +7647,7 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.retry_button))
         openInTheAppItCameFrom()
 
-        assertEquals("https://open.spotify.com/track/$TRACK_ID", nextStartedActivity()!!.dataString)
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertFalse(activity.isFinishing)
     }
 
@@ -7721,12 +7721,12 @@ class MainActivityTest {
         resolveTyped()
         waitForDestinationReady()
         val requests = fake.requestedUrls.size
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         val activity = launch()
         val model = ViewModelProvider(activity)[MainViewModel::class.java]
 
         click(string(R.string.history_open, "Remember"))
-        assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/track/123", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertEquals(requests, fake.requestedUrls.size)
         assertEquals("", model.uiState.linkText)
         assertNull(model.uiState.result)
@@ -7734,21 +7734,21 @@ class MainActivityTest {
         model.setPlayRightAway(false)
         composeRule.waitForIdle()
         click(string(R.string.history_open, "Remember"))
-        assertEquals("https://www.deezer.com/search/Remember%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/search/Remember%20Artist", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertNull(model.uiState.result)
 
         model.setPlayRightAway(true)
         model.selectDefault(Destination.Service(MusicService.SPOTIFY))
         composeRule.waitForIdle()
         click(string(R.string.history_open, "Remember"))
-        assertEquals("https://open.spotify.com/track/$TRACK_ID", nextStartedActivity()!!.dataString)
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertEquals("", model.uiState.linkText)
 
         // An app with no exact match, only a search.
         model.selectDefault(Destination.Service(MusicService.AMAZON_MUSIC))
         composeRule.waitForIdle()
         click(string(R.string.history_open, "Remember"))
-        assertEquals("https://music.amazon.com/search/Remember%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.amazon.com/search/Remember%20Artist", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertNull(model.uiState.result)
     }
 
@@ -7840,13 +7840,13 @@ class MainActivityTest {
 
         // The user turns the app's links off in Android's settings and comes back.
         spotifyKeepsLinks = false
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         // Until Android answers the count stays, rather than drop and come back.
         bar.assert(hasText("3"))
 
         // Coming back again before that answer: the newer look is the one that counts.
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
         android.runLast()
         composeRule.waitForIdle()
@@ -7876,7 +7876,7 @@ class MainActivityTest {
             if (model.uiState.history.isNotEmpty()) model.clearHistory()
             emptyMap()
         }
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         android.runAll()
         composeRule.waitForIdle()
         assertTextAbsent("Cleared Song")
@@ -7916,7 +7916,7 @@ class MainActivityTest {
         assertEquals(cover, HistoryStore(prefs()).load().first().metadata.artworkUrl)
 
         // A video no song matches, like a tutorial, keeps its own picture.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         HistoryStore(prefs()).clear()
         File(app.cacheDir, "lookups.json").delete()
         respond("""{"data":[{"title":"Blinding Lights","artist":{"name":"Someone Else"},"album":{"cover_big":"$cover"}}]}""")
@@ -7942,7 +7942,7 @@ class MainActivityTest {
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=4NRXx6U8ABQ")))
         waitUntil { activity.isFinishing }
         assertTrue(answeredWhileLookingUp.get())
-        assertEquals(MusicService.YOUTUBE_MUSIC.packageName, nextStartedActivity()!!.`package`)
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageName, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
     }
 
     @Test
@@ -7958,7 +7958,7 @@ class MainActivityTest {
         }
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
         waitUntil { activity.isFinishing }
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(MusicService.YOUTUBE.packageName, opened.`package`)
         assertEquals("https://www.youtube.com/watch?v=jNQXAC9IVRw", opened.dataString)
         // What the lookup found is neither shown nor kept.
@@ -8001,12 +8001,12 @@ class MainActivityTest {
         launch()
         resolveTyped()
         waitForDestinationReady()
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         val requests = fake.requestedUrls.size
 
         val activity = launch(trackLink())
         waitUntil { activity.isFinishing }
-        assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/track/123", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertEquals(requests, fake.requestedUrls.size)
     }
 
@@ -8025,13 +8025,13 @@ class MainActivityTest {
         waitForDestinationReady()
         // Matching failed, so the song is saved with Deezer's search page.
         assertEquals(false, HistoryStore(prefs()).load().single().destinationLinks["DEEZER"]?.exact)
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         // Shared again once the network is back, it opens the song itself rather than the search.
         deezerDown = false
         val activity = launch(trackLink())
         waitUntil { activity.isFinishing }
-        assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/track/123", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertEquals(true, HistoryStore(prefs()).load().single().destinationLinks["DEEZER"]?.exact)
     }
 
@@ -8042,13 +8042,13 @@ class MainActivityTest {
         launch()
         resolveTyped()
         waitForDestinationReady()
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         val requests = fake.requestedUrls.size
         fake.handler = { throw IOException("offline") }
 
         val activity = launch(trackLink())
         waitUntil { activity.isFinishing }
-        assertEquals(HistoryStore(prefs()).load().single().destinationLinks.getValue("DEEZER").url, nextStartedActivity()!!.dataString)
+        assertEquals(HistoryStore(prefs()).load().single().destinationLinks.getValue("DEEZER").url, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertEquals(requests, fake.requestedUrls.size)
     }
 
@@ -8073,13 +8073,13 @@ class MainActivityTest {
         val saved = HistoryStore(prefs()).load().single().destinationLinks
         assertEquals("https://music.youtube.com/watch?v=kept", saved.getValue("YOUTUBE_MUSIC").url)
         saved["frontend:INVIDIOUS"]?.let { assertTrue(it.url, it.url.startsWith("https://inv.example.org/")) }
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         // A browser to open the new site in.
         installActivity(ComponentName("com.example.browser", "com.example.browser.Main"), browserFilter())
         val activity = launch(trackLink())
         waitUntil { activity.isFinishing }
-        assertTrue(nextStartedActivity()!!.dataString!!.startsWith("https://inv.example.org/"))
+        assertTrue(checkNotNull(checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString) { "Expected nextStartedActivity().dataString to be non-null" }.startsWith("https://inv.example.org/"))
     }
 
     @Test
@@ -8149,9 +8149,9 @@ class MainActivityTest {
         waitForText(string(R.string.notice_update, "99.0.0"))
         click(string(R.string.update_button))
         // The browser downloads it, and Crosstune stays open.
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(UPDATE_APK, opened.dataString)
-        assertFalse(controller!!.get().isFinishing)
+        assertFalse(checkNotNull(controller) { "Expected controller to be non-null" }.get().isFinishing)
     }
 
     @Test
@@ -8167,7 +8167,7 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.notice_update, "99.0.0"))
         click(string(R.string.back_button))
 
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch()
         composeRule.waitForIdle()
         assertTextAbsent(string(R.string.notice_update, "99.0.0"))
@@ -8230,7 +8230,7 @@ class MainActivityTest {
         try {
             // Unanswered for as long as it takes the song to open, and for its whole wait after that.
             qobuzSongOpened(phone, answeringOther = { check(answer.await(10, java.util.concurrent.TimeUnit.SECONDS)) })
-            assertEquals(MusicService.QOBUZ.packageName, nextStartedActivity()!!.`package`)
+            assertEquals(MusicService.QOBUZ.packageName, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
             assertTrue(phone.opened.isEmpty())
             answer.countDown()
             waitUntil { phone.opened.isNotEmpty() }
@@ -8268,7 +8268,7 @@ class MainActivityTest {
             putExtra(Intent.EXTRA_TEXT, "https://music.youtube.com/watch?v=$video")
         }
         launch(sharing("aaaaaaaaaaa"))
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         named.countDown()
         waitUntil { fake.requestedUrls.count { "www.qobuz.com" in it } >= 2 }
         shadowOf(android.os.Looper.getMainLooper()).idle()
@@ -8280,8 +8280,8 @@ class MainActivityTest {
     fun aQobuzOpenOvertakenWhileCrosstuneWasAwayNeverOpens() {
         val phone = FakePlayback().apply { access = true }
         val newer = qobuzSongWaitingForCrosstune(phone)
-        controller!!.newIntent(newer)
-        controller!!.start().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.newIntent(newer)
+        checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         val opened = generateSequence { nextStartedActivity() }.map { IntentCompat.getParcelableExtra(it, OpenSongActivity.EXTRA_OPEN, Intent::class.java) ?: it }.mapNotNull { it.dataString }.toList()
         assertEquals(listOf("https://play.qobuz.com/track/3"), opened)
@@ -8292,7 +8292,7 @@ class MainActivityTest {
         val phone = FakePlayback().apply { access = true }
         qobuzSongWaitingForCrosstune(phone)
         shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMinutes(1))
-        controller!!.start()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals(1, generateSequence { nextStartedActivity() }.count())
     }
@@ -8303,12 +8303,12 @@ class MainActivityTest {
         qobuzSongWaitingForCrosstune(phone)
         assertTrue(phone.nowPlayingWatchers > 0)
         shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMinutes(2))
-        controller!!.start()
-        composeRule.settle(controller!!.get())
+        checkNotNull(controller) { "Expected controller to be non-null" }.start()
+        composeRule.settle(checkNotNull(controller) { "Expected controller to be non-null" }.get())
         assertNull(shadowOf(app).peekNextStartedActivity())
         // The screen doesn't watch once it's gone, and nothing else should be left doing it.
-        controller!!.stop()
-        composeRule.settle(controller!!.get())
+        checkNotNull(controller) { "Expected controller to be non-null" }.stop()
+        composeRule.settle(checkNotNull(controller) { "Expected controller to be non-null" }.get())
         assertEquals(0, phone.nowPlayingWatchers)
     }
 
@@ -8319,9 +8319,9 @@ class MainActivityTest {
         qobuzSongOpened(phone)
         waitUntil { phone.opened.isNotEmpty() }
         // Crosstune closes as it opens it, which already gives it the time to open it again.
-        val opening = nextStartedActivity()!!
+        val opening = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(MusicService.QOBUZ.packageName, opening.`package`)
-        val first = opening.dataString!!
+        val first = checkNotNull(opening.dataString) { "Expected opening.dataString to be non-null" }
         val numbers = setOf("https://play.qobuz.com/track/1", "https://play.qobuz.com/track/2")
         assertEquals(numbers.single { it.substringAfterLast("/") == first.substringAfterLast("/") }.let { numbers - it }.single(), phone.opened.single().second)
     }
@@ -8364,10 +8364,10 @@ class MainActivityTest {
         waitUntil { composeRule.onAllNodes(hasText(open) or hasContentDescription(open)).fetchSemanticsNodes().isNotEmpty() }
         click(open)
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        val started = nextStartedActivity()!!
+        val started = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals(OpenSongActivity::class.java.name, started.component?.className)
         Robolectric.buildActivity(OpenSongActivity::class.java, started).create()
-        val opened = nextStartedActivity()!!
+        val opened = checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }
         assertEquals("https://open.qobuz.com/track/7", opened.dataString)
         assertEquals(qobuz, opened.`package`)
     }

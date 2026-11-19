@@ -156,13 +156,13 @@ class ReadingsAudit {
         val metadata = metadata(song)
         val report = JSONObject()
         val answer = runCatching { lyrics.lyricsOf(metadata) }.onFailure { report.put("error", it.toString()) }.getOrNull()
-        report.put("lyrics", answer?.let { it::class.simpleName!!.lowercase() } ?: "error")
+        report.put("lyrics", answer?.let { checkNotNull(it::class.simpleName) { "Expected it::class.simpleName to be non-null" }.lowercase() } ?: "error")
         if (answer is LyricsFinder.Lyrics.Found) {
             val lines = answer.lines.map { it.text }.ifEmpty { answer.words.lines() }
             report.put("source", answer.source).put("timed", answer.lines.isNotEmpty()).put("lines", JSONArray(lines))
-            report.put("chords", runCatching { chords.chordsOf(metadata, lines)::class.simpleName!!.lowercase() }.getOrElse { "error" })
+            report.put("chords", runCatching { checkNotNull(chords.chordsOf(metadata, lines)::class.simpleName) { "Expected chords.chordsOf(metadata, lines)::class.simpleName to be non-null" }.lowercase() }.getOrElse { "error" })
         }
-        file.parentFile!!.mkdirs()
+        checkNotNull(file.parentFile) { "Expected file.parentFile to be non-null" }.mkdirs()
         file.writeText(report.toString())
         // The services are free; asked a song at a time, with a breath between.
         delay(PAUSE_MS)

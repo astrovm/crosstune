@@ -50,7 +50,7 @@ internal object TitleFuzz {
         Title("Band - Song 『[HD] 』", "Channel", "Artist"),
         // The ninth review's: songs of symbols only, and letters out of the basic plane, which are two chars.
         Title("Artist「？」", "Channel", "Artist"), Title("Artist「♡」", "Channel", "Artist"), Title("Artist「…」", "Channel", "Artist"),
-        Title("Artist『!!!』", "Channel", "Artist"), Title("Artist「\uD842\uDFB7」", "Channel", "Artist"),
+        Title("Artist『!\u0021!』", "Channel", "Artist"), Title("Artist「\uD842\uDFB7」", "Channel", "Artist"),
         Title("Artist「\uD835\uDC12\uD835\uDC28\uD835\uDC27\uD835\uDC20」", "Channel", "Artist"), Title("Artist「😀」", "Channel", "Artist"),
         Title("Song M/V\uD835\uDC00", "Channel", "Artist"), Title("Song (featuring\uD835\uDC00 X)", "Channel", "Artist"),
         Title("Song\uD835\uDC00 ft. X", "Channel", "Artist"), Title("Song\u00AD - Live", "Channel", "Artist"),
@@ -351,7 +351,7 @@ internal object TitleFuzz {
     )
     private val MARKS = listOf(
         "(", ")", "[", "]", "{", "}", "（", "）", "【", "】", "「", "」", "『", "』", "〈", "〉", "［", "］",
-        ":(", ":)", ";)", ":-(", "(:", "):", "XD", "<3", "!", "?", "\"", "'", "...", "#1", "@", "？", "♡", "…", "!!!",
+        ":(", ":)", ";)", ":-(", "(:", "):", "XD", "<3", "!", "?", "\"", "'", "...", "#1", "@", "？", "♡", "…", "!\u0021!",
     )
     private val SCRIPTS = listOf(
         "أغنية", "حب", "שיר", "אהבה", "\u200F", "\u200E", "🎵", "😀", "👍🏽", "Ünïcödé", "Ђорђе", "노래", "\u3000", "\u00A0",

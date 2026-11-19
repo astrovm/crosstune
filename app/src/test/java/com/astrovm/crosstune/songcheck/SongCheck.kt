@@ -96,7 +96,7 @@ class SongCheck {
             .put("words", found.words)
             .put("lines", JSONArray(found.lines.map { JSONObject().put("ms", it.timeMs).put("text", it.text) }))
         null -> JSONObject().put("kind", "error")
-        else -> JSONObject().put("kind", found::class.simpleName!!.lowercase())
+        else -> JSONObject().put("kind", checkNotNull(found::class.simpleName) { "Expected found::class.simpleName to be non-null" }.lowercase())
     }
 
     /**
@@ -133,7 +133,7 @@ class SongCheck {
             .put("url", answer.sheet.url)
             .put("capo", answer.sheet.capo)
             .put("lines", JSONArray(shownChords(answer.sheet, lines)))
-        else -> JSONObject().put("kind", answer::class.simpleName!!.lowercase())
+        else -> JSONObject().put("kind", checkNotNull(answer::class.simpleName) { "Expected answer::class.simpleName to be non-null" }.lowercase())
     }
 
     /**

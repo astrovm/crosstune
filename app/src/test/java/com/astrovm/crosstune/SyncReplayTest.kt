@@ -244,7 +244,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             val following = state.following?.takeIf { it.timingKnown } ?: continue
             val now = SystemClock.elapsedRealtime()
             // In the song, by the music app's own clock: the lines as shown, less how far the app's clock is put right.
-            val appAt = playback.playing.value!!.clock.positionAt(now)
+            val appAt = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.positionAt(now)
             val heardAt = following.clock.positionAt(now)
             // A video slower than its song has each line where it gets to at that speed, so they stay put as it plays.
             val times = state.lyricLines.map { (appAt + behindMs + (it.timeMs - heardAt) * playerSpeed / following.clock.speed).toLong() / STEP_MS * STEP_MS }
@@ -259,7 +259,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         return JSONObject().put("lines", lines).put("shown", shown).put("placed", placed).put("known", known).put("heard", heardLog).put("lyricsSpeed", model().uiState.following?.clock?.speed)
     }
 
-    private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+    private fun model() = ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
 
     /** How long the phone takes to work out the words in what it heard, after hearing it. */
     private var workMs = WORK_MS
@@ -292,7 +292,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
 
         override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? = coroutineScope {
             // What's heard is where the song really is, ahead of the app's clock.
-            fun position() = playback.playing.value!!.clock.positionAt(SystemClock.elapsedRealtime()) + behindMs
+            fun position() = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.positionAt(SystemClock.elapsedRealtime()) + behindMs
             whilesFrom.getOrNull(whiles)?.let { delay(maxOf(0L, ((it - position()) / playerSpeed).toLong())) }
             val at = SystemClock.elapsedRealtime()
             val from = position()
@@ -323,7 +323,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         override suspend fun listen(): Heard {
             delay(SHAZAM_MS)
             val at = SystemClock.elapsedRealtime()
-            val playing = playback.playing.value!!.clock.positionAt(at) + behindMs
+            val playing = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.positionAt(at) + behindMs
             return Heard.Song(MusicMetadata("Demo", "Band"), null, aheadMs + (playing * (1 + skew)).toLong(), at, matchId = "replayed", speed = (1 + skew).toFloat() * playerSpeed)
         }
     }

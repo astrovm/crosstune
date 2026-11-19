@@ -150,9 +150,9 @@ class TvPlayTest {
         click(play)
         waitUntil { shadowOf(app).peekNextStartedService() != null }
         val started = shadowOf(app).nextStartedService
-        assertEquals(FloatingLyricsService::class.java.name, started.component!!.className)
+        assertEquals(FloatingLyricsService::class.java.name, checkNotNull(started.component) { "Expected started.component to be non-null" }.className)
         assertTrue(started.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         return Robolectric.buildService(FloatingLyricsService::class.java, started).create().startCommand(0, 1).also { composeRule.waitForIdle() }
     }
 
@@ -203,7 +203,7 @@ class TvPlayTest {
         // From there, Back leaves Crosstune, to YouTube, which plays on.
         pressBack(floating.get())
         waitUntil { shadowOf(floating.get()).isStoppedBySelf }
-        controller!!.start().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         composeRule.waitForIdle()
         assertFalse(shown("Demo one"))
     }
@@ -265,7 +265,7 @@ class TvPlayTest {
         waitUntil { shown("Demo one") }
         backOut(floating)
         playback.playing.value = null
-        controller!!.start().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         composeRule.waitForIdle()
         // Nothing opened, so there's nothing to cover, and nothing in the app goes on thinking there is.
         playback.opens = false
@@ -285,7 +285,7 @@ class TvPlayTest {
         backOut(floating)
         // Back in Crosstune, YouTube lets go of the song, and Play opens it on the song again, covered again.
         playback.playing.value = null
-        controller!!.start().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         composeRule.waitForIdle()
         waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         playCovered()
@@ -298,8 +298,8 @@ class TvPlayTest {
         playCovered()
         playing()
         waitUntil { shown("Demo one") }
-        controller!!.get().startActivity(Intent(Settings.ACTION_SETTINGS))
-        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStoppedService.component!!.className)
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().startActivity(Intent(Settings.ACTION_SETTINGS))
+        assertEquals(FloatingLyricsService::class.java.name, checkNotNull(shadowOf(app).nextStoppedService.component) { "Expected shadowOf(app).nextStoppedService.component to be non-null" }.className)
         // Robolectric doesn't stop the activity as Android would, so only the cover being closed lets it cover again.
         playback.playing.value = null
         composeRule.waitForIdle()
@@ -371,8 +371,8 @@ class TvPlayTest {
     fun anAppOpenedFromTheCoverShowsWithNothingOverIt() {
         launch()
         playCovered()
-        controller!!.get().startActivity(Intent(Settings.ACTION_SETTINGS))
-        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStoppedService.component!!.className)
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().startActivity(Intent(Settings.ACTION_SETTINGS))
+        assertEquals(FloatingLyricsService::class.java.name, checkNotNull(shadowOf(app).nextStoppedService.component) { "Expected shadowOf(app).nextStoppedService.component to be non-null" }.className)
         assertNull(FloatingLyricsService.host)
     }
 
@@ -405,7 +405,7 @@ class TvPlayTest {
         pressBack(floating.get())
         // On the player, YouTube stopped, and lets go of the song.
         playback.playing.value = null
-        controller!!.start().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         composeRule.waitForIdle()
         click(string(R.string.lyrics_play))
         waitUntil { playback.opened.size == 2 }
@@ -450,7 +450,7 @@ class TvPlayTest {
         waitUntil { shadowOf(app).peekNextStartedService() != null }
         val started = shadowOf(app).nextStartedService
         assertTrue(started.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         val floating = Robolectric.buildService(FloatingLyricsService::class.java, started).create().startCommand(0, 1)
         composeRule.waitForIdle()
         assertEquals(WindowManager.LayoutParams.MATCH_PARENT, params(floating.get()).width)
@@ -473,9 +473,9 @@ class TvPlayTest {
         launch()
         click(play)
         // Not allowed over other apps, so Play asks once for the way back, then still leaves an app that only plays in front.
-        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        val asked = shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).lastRequestedPermission
         assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, asked.requestedPermissions.single())
-        controller!!.get().answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
         composeRule.waitForIdle()
         waitUntil { playback.opened.size == 1 }
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)

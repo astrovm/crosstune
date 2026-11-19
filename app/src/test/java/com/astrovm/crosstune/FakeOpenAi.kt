@@ -55,7 +55,7 @@ internal class FakeOpenAi(private val now: () -> Long) {
             ChatGpt.REVOKE_URL -> if (revokeFails) throw IOException("offline") else 200 to ""
             ChatGpt.MODELS_URL -> models()
             ChatGpt.RESPONSES_URL -> {
-                val body = JSONObject(okio.Buffer().also { request.body!!.writeTo(it) }.readUtf8())
+                val body = JSONObject(okio.Buffer().also { checkNotNull(request.body) { "Expected request.body to be non-null" }.writeTo(it) }.readUtf8())
                 asked += body
                 reply(body)
             }

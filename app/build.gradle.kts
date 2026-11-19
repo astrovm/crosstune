@@ -15,6 +15,13 @@ plugins {
     id("pl.droidsonroids.pitest")
 }
 
+abstract class DetektTestClasspath : CommandLineArgumentProvider {
+    @get:Classpath
+    abstract val files: ConfigurableFileCollection
+
+    override fun asArguments() = listOf("--classpath", files.asPath)
+}
+
 // projectM comes as a submodule. A checkout without it, like GitHub's own code scanning, still
 // builds, just with no visuals: they need the native library, and the app runs fine without it.
 val projectM = rootProject.file("third_party/projectm/CMakeLists.txt").exists()
@@ -314,6 +321,44 @@ tasks.register<JavaExec>("detekt") {
         "--report", "txt:" + report.get().asFile.path,
     )
 }
+
+// detekt's null-safety rule needs the test classpath to resolve types. NoUnsafeCallsTest also checks
+// the source without type resolution, so an unresolved type cannot hide an assertion.
+val detektTests = tasks.register<JavaExec>("detektTests") {
+    group = "verification"
+    description = "Checks test sources for unsafe calls on nullable values."
+    val testSources = fileTree("src") {
+        include("test*/**/*.kt", "*Test*/**/*.kt")
+    }
+    val config = rootProject.layout.projectDirectory.file("config/detekt/tests.yml")
+    val report = layout.buildDirectory.file("reports/detekt/tests.txt")
+    inputs.files(testSources, config).withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.file(report)
+    dependsOn("compileDebugUnitTestKotlin")
+    classpath = detektCli
+    mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
+    jvmArgs("--sun-misc-unsafe-memory-access=allow")
+    args(
+        "--input", layout.projectDirectory.dir("src").asFile.path,
+        "--includes", "**/test*/**/*.kt,**/*Test*/**/*.kt",
+        "--config", config.asFile.path,
+        "--jvm-target", "17",
+        "--report", "txt:" + report.get().asFile.path,
+    )
+    argumentProviders.add(objects.newInstance<DetektTestClasspath>().apply {
+        files.from(tasks.named<Test>("testDebugUnitTest").get().classpath)
+    })
+}
+val noUnsafeCalls = tasks.register<Test>("noUnsafeCalls") {
+    group = "verification"
+    description = "Checks source for null assertions even where detekt cannot resolve the type."
+    val unitTests = tasks.named<Test>("testDebugUnitTest").get()
+    testClassesDirs = unitTests.testClassesDirs
+    classpath = unitTests.classpath
+    filter.includeTestsMatching("com.astrovm.crosstune.NoUnsafeCallsTest")
+    inputs.files(fileTree("src") { include("**/*.kt", "**/*.java") }).withPathSensitivity(PathSensitivity.RELATIVE)
+}
+tasks.named("detekt") { dependsOn(detektTests, noUnsafeCalls) }
 
 // The store's screenshots and the site's clips, drawn on this computer frame by frame: one test
 // class per language, side by side. scripts/shots/shots.py runs it, with the visuals drawn ahead.

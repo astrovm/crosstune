@@ -917,8 +917,8 @@ Singing to the morning light</div>"""
             }
         }
         val found = chords(river, english) as ChordFinder.Chords.Found
-        assertEquals(listOf("G", "Dm7*"), ChordSheets.place(found.sheet, english)!![0].over.map { it.name })
-        assertEquals(listOf("Am"), ChordSheets.place(found.sheet, english)!![1].over.map { it.name })
+        assertEquals(listOf("G", "Dm7*"), checkNotNull(ChordSheets.place(found.sheet, english)) { "Expected ChordSheets.place(found.sheet, english) to be non-null" }[0].over.map { it.name })
+        assertEquals(listOf("Am"), checkNotNull(ChordSheets.place(found.sheet, english)) { "Expected ChordSheets.place(found.sheet, english) to be non-null" }[1].over.map { it.name })
     }
 
     @Test
@@ -933,7 +933,7 @@ Singing to the morning light</div>"""
             )
         }
         val found = chords(river, english) as ChordFinder.Chords.Found
-        assertEquals(listOf("G", "Dº"), ChordSheets.place(found.sheet, english)!![0].over.map { it.name })
+        assertEquals(listOf("G", "Dº"), checkNotNull(ChordSheets.place(found.sheet, english)) { "Expected ChordSheets.place(found.sheet, english) to be non-null" }[0].over.map { it.name })
     }
 
     @Test
@@ -950,7 +950,7 @@ Singing to the morning light</div>"""
             val found = chords(river, english) as ChordFinder.Chords.Found
             assertEquals("https://acordes.lacuerda.net/walkers/river_road.shtml", found.sheet.url)
             assertEquals(listOf("River Road The Walkers", "River Road"), fake.requestedUrls.filter { "/busca.php" in it }.map { it.toHttpUrl().queryParameter("exp") })
-            assertEquals(listOf("G", "C"), ChordSheets.place(found.sheet, english)!![0].over.map { it.name })
+            assertEquals(listOf("G", "C"), checkNotNull(ChordSheets.place(found.sheet, english)) { "Expected ChordSheets.place(found.sheet, english) to be non-null" }[0].over.map { it.name })
         }
     }
 

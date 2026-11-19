@@ -104,7 +104,7 @@ class SungReadingsTest {
     fun theSongIsLookedUpByItsSingerAndItsPageReadOnceThenKept() {
         fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
         val cache = LookupCache(File(folder.root, "sung.json"), Dispatchers.Unconfined)
-        val fixes = ask(cache)!!
+        val fixes = checkNotNull(ask(cache)) { "Expected ask(cache) to be non-null" }
         assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in fixes)
         val search = fake.requestedUrls.first().toHttpUrl()
         assertEquals("utaten.com", search.host)
@@ -132,7 +132,7 @@ class SungReadingsTest {
                 else -> FakeSpotify.html(request, other)
             }
         }
-        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask()!!)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in checkNotNull(ask()) { "Expected ask() to be non-null" })
         assertTrue(fake.requestedUrls.any { "title=Night%20Town" in it })
         // The singer's own, though listed second.
         assertTrue(fake.requestedUrls.none { "/lyric/zz0002/" in it })
@@ -194,7 +194,7 @@ class SungReadingsTest {
         // Kept from before, but kept wrong, it's asked again.
         runBlocking { cache.put("utaten|${SungReadings.CACHE_VERSION}|${SongNames.normalize(song.title)}|${SongNames.normalize(song.artist)}|${lines.hashCode()}", "not json") }
         fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
-        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(cache)!!)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in checkNotNull(ask(cache)) { "Expected ask(cache) to be non-null" })
     }
 
     @Test
@@ -209,7 +209,7 @@ class SungReadingsTest {
         assertNull(ask(cache))
         // Neither was kept as none: once it answers, it's asked again.
         fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
-        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(cache)!!)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in checkNotNull(ask(cache)) { "Expected ask(cache) to be non-null" })
     }
 
     @Test
@@ -230,7 +230,7 @@ class SungReadingsTest {
             assertNull(ask(fresh()))
             assertEquals(requests * 2, fake.requestedUrls.size)
             fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
-            assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(fresh())!!)
+            assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in checkNotNull(ask(fresh())) { "Expected ask(fresh()) to be non-null" })
             assertEquals(requests * 2 + 2, fake.requestedUrls.size)
         }
     }
@@ -330,7 +330,7 @@ class SungReadingsTest {
         wanted = true
         fake.requestedUrls.clear()
         fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
-        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in SungReadings(fake.client(), cache, Dispatchers.Unconfined).of(song, lines, read())!!)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in checkNotNull(SungReadings(fake.client(), cache, Dispatchers.Unconfined).of(song, lines, read())) { "Expected SungReadings(fake.client(), cache, Dispatchers.Unconfined).of(song, lines, read()) to be non-null" })
         assertTrue(fake.requestedUrls.any { "utaten.com" in it })
     }
 

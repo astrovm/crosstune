@@ -342,7 +342,7 @@ class TranslatorTest {
         val lines = (1..40).map { "Line number $it of the song" }
         assertEquals(lines.map { "[$it]" }, translate(lines))
         assertEquals(3, myMemoryAsked().size)
-        myMemoryAsked().forEach { assert(Request.Builder().url(it).build().url.queryParameter("q")!!.toByteArray().size <= Translator.MYMEMORY_BYTES) }
+        myMemoryAsked().forEach { assert(checkNotNull(Request.Builder().url(it).build().url.queryParameter("q")) { "Expected Request.Builder().url(it).build().url.queryParameter(\"q\") to be non-null" }.toByteArray().size <= Translator.MYMEMORY_BYTES) }
     }
 
     @Test

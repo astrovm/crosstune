@@ -129,7 +129,7 @@ class LinkInterceptionTest {
         )
         FakeDomainVerification.install(app) { states }
 
-        val unapproved = interception.linkState().unapprovedHosts!!
+        val unapproved = checkNotNull(interception.linkState().unapprovedHosts) { "Expected interception.linkState().unapprovedHosts to be non-null" }
         assertEquals(listOf("spotify.link", "www.spotify.link"), unapproved[MusicService.SPOTIFY])
         assertEquals(LinkInterception.HOSTS[MusicService.YOUTUBE], unapproved[MusicService.YOUTUBE])
         assertEquals(emptyList<String>(), unapproved[MusicService.TIDAL])
@@ -344,7 +344,7 @@ class LinkInterceptionTest {
         // An app that claims several sources' links is one app, listed once.
         assertEquals(
             listOf(linkApp(MusicService.SPOTIFY) to true, linkApp(MusicService.TIDAL) to false),
-            state.claimingApps(setOf(MusicService.TIDAL, MusicService.SPOTIFY))!!.toList()
+            checkNotNull(state.claimingApps(setOf(MusicService.TIDAL, MusicService.SPOTIFY))) { "Expected state.claimingApps(setOf(MusicService.TIDAL, MusicService.SPOTIFY)) to be non-null" }.toList()
         )
         // What's worked out for some sources doesn't need Android again.
         assertEquals(setOf(linkApp(MusicService.SPOTIFY)), state.blockingApps(setOf(MusicService.SPOTIFY)))

@@ -152,7 +152,7 @@ class TitlesReadAsMainTest {
     @Test
     fun aSongInBracketsIsAnythingButSpacesAndABar() {
         // The ninth review's titles: a song of symbols is one, as main named it on a phone, and so is a letter past U+FFFF.
-        for (song in listOf("？", "♡", "…", "!!!", "\uD83D\uDE00", "\uD835\uDC12\uD835\uDC28\uD835\uDC27\uD835\uDC20", "\uD842\uDFB7", "\uD835\uDFD7", "\u00AD", "?|")) {
+        for (song in listOf("？", "♡", "…", "!\u0021!", "\uD83D\uDE00", "\uD835\uDC12\uD835\uDC28\uD835\uDC27\uD835\uDC20", "\uD842\uDFB7", "\uD835\uDFD7", "\u00AD", "?|")) {
             assertEquals(song, "Artist" to song, MetadataParsers.bracketedSong("Artist「$song」"))
             assertEquals(song, MusicMetadata(song, "Artist"), MetadataParsers.musicVideo("Artist「$song」", "Channel"))
         }

@@ -49,20 +49,20 @@ class KeptWordsTest {
     @Test
     fun readingsKeptOverKanaAmongKanjiReadBackOverTheKanjiOnly() {
         val flying = all.copy(learning = all.learning.copy(lines = listOf(LineReading(listOf(Ruby("飛び立", "とびた"), Ruby("つ")), "とびたつ", "tobitatsu"))))
-        val back = KeptWords.from(flying.json())!!
+        val back = checkNotNull(KeptWords.from(flying.json())) { "Expected flying words to be restored" }
         assertEquals(listOf(Ruby("飛", "と"), Ruby("び"), Ruby("立", "た"), Ruby("つ")), back.learning.lines.single().parts)
     }
 
     @Test
     fun readingsKeptOverKanaTheySpellAnotherWayReadBackOverTheKanjiOnly() {
         val today = all.copy(learning = all.learning.copy(lines = listOf(LineReading(listOf(Ruby("今日は", "こんにちわ")), "こんにちわ", "konnichiwa"))))
-        val back = KeptWords.from(today.json())!!
+        val back = checkNotNull(KeptWords.from(today.json())) { "Expected today's words to be restored" }
         assertEquals(listOf(Ruby("今日", "こんにち"), Ruby("は", "わ")), back.learning.lines.single().parts)
     }
 
     @Test
     fun aReadingPutRightByWhatThisVersionDoesntKnowReadsBackAsTheDictionarys() {
-        val back = KeptWords.from(all.json().replace("\"utaten\"", "\"klingon\""))!!
+        val back = checkNotNull(KeptWords.from(all.json().replace("\"utaten\"", "\"klingon\""))) { "Expected words with an unknown source to be restored" }
         assertEquals(Ruby("日", "ひ"), back.learning.lines.single().parts[2])
     }
 

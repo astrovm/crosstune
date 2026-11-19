@@ -135,9 +135,9 @@ class FlashcardsTest {
         composeRule.waitForIdle()
     }
 
-    private fun model() = androidx.lifecycle.ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+    private fun model() = androidx.lifecycle.ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
 
-    private fun practice() = model().uiState.practice!!
+    private fun practice() = checkNotNull(model().uiState.practice) { "Expected model().uiState.practice to be non-null" }
 
     /** Waits for [condition], the phone's clock moving on a little each time, for what waits on it. */
     private fun waitUntil(condition: () -> Boolean) =
@@ -188,7 +188,7 @@ class FlashcardsTest {
     private fun inEditor() = composeRule.onNode(hasSetTextAction()).assertExists()
 
     private fun pressBack() {
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
     }
 
@@ -463,7 +463,7 @@ class FlashcardsTest {
         click(string(R.string.back_button))
         assertTrue(shown(string(R.string.card_type_new)))
         click(string(R.string.practice_fix_reading))
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertTrue(shown(string(R.string.card_type_new)))
         assertEquals("よのそら", savedLine("夜の空").reading)
@@ -486,7 +486,7 @@ class FlashcardsTest {
         )
         // The app has the song open, but plays an ad first, so the card waits for it there.
         appHas("Other", atMs = 0, playing = false)
-        phone.playing.value = phone.playing.value!!.copy(ad = true)
+        phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(ad = true)
         launch()
         // Due, practice is a tap away from the main screen, saying how many.
         practiseAll(2)
@@ -945,7 +945,7 @@ class FlashcardsTest {
         click(string(R.string.practice_show))
         waitUntil { practice().sound == LineSound.PLAYING }
         val pauses = linePlayer.pauses
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         waitUntil { practice().sound == LineSound.PLAYED }
         assertTrue(linePlayer.pauses > pauses)
     }
@@ -1024,7 +1024,7 @@ class FlashcardsTest {
         waitUntil { practice().line?.text == "Lost" && practice().sound == LineSound.NONE }
         assertTrue(phone.songsAsked.isEmpty())
         // Already this song, and it won't move, and YouTube has no video of it. It isn't asked for, and the card has no sound.
-        appHas(practice().line!!.title, canSeek = false)
+        appHas(checkNotNull(practice().line) { "Expected practice().line to be non-null" }.title, canSeek = false)
         click(string(R.string.floating_close))
         waitUntil { model().uiState.practice == null }
         practiseAll(1)
@@ -1033,7 +1033,7 @@ class FlashcardsTest {
         assertNull(model().uiState.practice?.video)
         assertFalse(described(string(R.string.practice_play)))
         // Stopped while a line plays, the app pauses it. The app that wouldn't move is skipped for a week, so another one has it.
-        val playing = practice().line!!
+        val playing = checkNotNull(practice().line) { "Expected practice().line to be non-null" }
         appHas(playing.title, atMs = 0, app = "com.example.player")
         click(string(R.string.floating_close))
         waitUntil { model().uiState.practice == null }
@@ -1312,7 +1312,7 @@ class FlashcardsTest {
         click(string(R.string.saved_practice))
         assertTrue(shown(string(R.string.practice_all_songs)) && shown("Demo"))
         // Back, it's the main screen.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertFalse(shown(string(R.string.practice_all_songs)))
         assertTrue(described(string(R.string.saved_practice)))

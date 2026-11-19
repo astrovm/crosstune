@@ -103,7 +103,7 @@ class UntimedSingingTest {
         MainActivity.lyricsLanguageFactory = null
     }
 
-    private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+    private fun model() = ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
 
     private fun state() = model().uiState
 
@@ -293,8 +293,8 @@ class UntimedSingingTest {
     @Test
     fun aPaceKeptFromBeforeLeavesLinesTimedByEarWhereTheyreHeardAsTheVideosSpeedIsLearnt() {
         openLyrics()
-        val song = state().lyricsFor!!
-        controller!!.destroyAndSettle()
+        val song = checkNotNull(state().lyricsFor) { "Expected state().lyricsFor to be non-null" }
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         // An earlier Crosstune kept a pace for these words, though they have no timing to pace.
         LyricsSyncStore(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)).save(song, emptyList(), emptyList(), 0.8)
         File(app.cacheDir, "kept_words.json").delete()
@@ -334,7 +334,7 @@ class UntimedSingingTest {
         openLyrics()
         plays()
         waitUntil { state().lyricsTimedByEar && singing.hears == 4 }
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         // Opened again, the words are timed from the start, before anything's heard.
         singing.answer = { null }
         openLyrics()
@@ -345,7 +345,7 @@ class UntimedSingingTest {
         composeRule.waitForIdle()
         assertEquals(4, singing.hears)
         // Worked out again, as after an update, they're timed from what was heard, before anything's heard.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         File(app.cacheDir, "kept_words.json").delete()
         openLyrics()
         assertTrue(state().lyricsTimedByEar)
@@ -359,7 +359,7 @@ class UntimedSingingTest {
         openLyrics()
         plays()
         waitUntil { state().lyricsTimedByEar && singing.hears == 4 }
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         // Opened again, as after a restart, and on to the player: its peek has the lines kept, timed by ear.
         singing.answer = { null }
         openLyrics()
@@ -400,7 +400,7 @@ class UntimedSingingTest {
         composeRule.waitForIdle()
         assertEquals(90, singing.hears)
         // Opened again, as after a restart, it's heard enough already.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         openLyrics()
         plays(durationMs = FIFTEEN_MINUTES_MS)
         composeRule.waitForIdle()
@@ -416,7 +416,7 @@ class UntimedSingingTest {
         waitUntil { singing.hears >= HeardSongs.MAX_STRETCHES }
         composeRule.waitForIdle()
         assertEquals(HeardSongs.MAX_STRETCHES, singing.hears)
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         openLyrics()
         plays(durationMs = 4 * FIFTEEN_MINUTES_MS)
         composeRule.waitForIdle()

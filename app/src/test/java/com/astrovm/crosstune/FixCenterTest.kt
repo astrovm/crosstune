@@ -129,12 +129,12 @@ class FixCenterTest {
     private fun launch(): MainActivity {
         controller = Robolectric.buildActivity(MainActivity::class.java, Intent(Intent.ACTION_MAIN).setClass(app, MainActivity::class.java)).setup()
         composeRule.waitForIdle()
-        return controller!!.get()
+        return checkNotNull(controller) { "Expected controller to be non-null" }.get()
     }
 
     /** Back from Android's settings, where things may have changed. */
     private fun comeBack() {
-        controller!!.pause().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().resume()
         composeRule.waitForIdle()
     }
 
@@ -172,7 +172,7 @@ class FixCenterTest {
 
     /** Answers Android's question for the microphone, which was just asked. */
     private fun answerMicrophone(granted: Boolean) {
-        val activity = controller!!.get()
+        val activity = checkNotNull(controller) { "Expected controller to be non-null" }.get()
         val asked = shadowOf(activity).lastRequestedPermission
         assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
         if (granted) allowMicrophone()
@@ -228,7 +228,7 @@ class FixCenterTest {
         click(string(R.string.fix_one_by_one))
         assertShown(string(R.string.setup_step, 1, 2), string(R.string.setup_check_allow))
         click(string(R.string.fix_open_settings))
-        val links = nextStarted()!!
+        val links = checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, links.action)
         assertEquals(Uri.parse("package:${activity.packageName}"), links.data)
 
@@ -236,7 +236,7 @@ class FixCenterTest {
         comeBack()
         waitUntil { shown(string(R.string.setup_step, 2, 2)) }
         click(string(R.string.fix_open_settings))
-        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStarted()!!.action)
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }.action)
         playback.access = true
         comeBack()
         // All done, it's back to the list, all checked off.
@@ -273,7 +273,7 @@ class FixCenterTest {
         click(string(R.string.recognize_button))
         assertShown(string(R.string.fix_step_tap, string(R.string.android_permissions)))
         click(string(R.string.fix_open_settings))
-        val appInfo = nextStarted()!!
+        val appInfo = checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appInfo.action)
         assertEquals(Uri.parse("package:${activity.packageName}"), appInfo.data)
 
@@ -291,9 +291,9 @@ class FixCenterTest {
         answerMicrophone(granted = false)
         assertFalse(prefs().getBoolean("microphone_denied", false))
         // Tapped again, Android asks again, rather than the steps showing.
-        val first = shadowOf(controller!!.get()).lastRequestedPermission
+        val first = shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).lastRequestedPermission
         click(string(R.string.recognize_button))
-        assertFalse(first === shadowOf(controller!!.get()).lastRequestedPermission)
+        assertFalse(first === shadowOf(checkNotNull(controller) { "Expected controller to be non-null" }.get()).lastRequestedPermission)
         assertAbsent(string(R.string.fix_step_tap, string(R.string.android_permissions)))
     }
 
@@ -306,7 +306,7 @@ class FixCenterTest {
         click(string(R.string.fix_one_by_one))
         assertShown(string(R.string.setup_step, 1, 3), string(R.string.setup_check_app, "Spotify"))
         click(string(R.string.open_app_link_settings_button, "Spotify"))
-        val started = nextStarted()!!
+        val started = checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
         assertEquals(Uri.parse("package:$spotify"), started.data)
 
@@ -384,10 +384,10 @@ class FixCenterTest {
         openFixes()
         assertShown(string(R.string.fix_shizuku_stopped), string(R.string.fix_one_by_one))
         click(string(R.string.open_button))
-        assertEquals(shizuku, nextStarted()!!.component!!.packageName)
+        assertEquals(shizuku, checkNotNull(checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }.component) { "Expected nextStarted().component to be non-null" }.packageName)
 
         shell.ready = true
-        shell.changed!!()
+        checkNotNull(shell.changed) { "Expected shell.changed to be non-null" }()
         composeRule.waitForIdle()
         assertAbsent(string(R.string.fix_shizuku_stopped))
         assertShown(string(R.string.fix_all))
@@ -442,7 +442,7 @@ class FixCenterTest {
         openFixes()
         click(string(R.string.follow_help_title))
         click(string(R.string.follow_help_app_info))
-        val appInfo = nextStarted()!!
+        val appInfo = checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appInfo.action)
         assertEquals(Uri.parse("package:${activity.packageName}"), appInfo.data)
     }
@@ -463,7 +463,7 @@ class FixCenterTest {
         openFixes()
         click(string(R.string.setup_check_allow))
         click(string(R.string.fix_open_settings))
-        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, nextStarted()!!.action)
+        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }.action)
         // Nor is there a page for one app's notification access, or any.
         click(string(R.string.setup_skip_for_now))
         click(string(R.string.follow_help_title))
@@ -481,14 +481,14 @@ class FixCenterTest {
         assertShown(string(R.string.setup_check_app, "Spotify"))
         click(string(R.string.setup_check_allow))
         click(string(R.string.fix_open_settings))
-        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, nextStarted()!!.action)
+        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }.action)
         click(string(R.string.fix_try_link))
-        val test = nextStarted()!!
+        val test = checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }
         assertEquals(Intent.ACTION_VIEW, test.action)
         assertEquals("https://open.spotify.com/track/$TEST_LINK#$TEST_LINK", test.dataString)
 
         // It reached Crosstune, which doesn't look it up: the links work, so Spotify's app doesn't take them.
-        controller!!.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse(test.dataString)).setClass(app, MainActivity::class.java))
+        checkNotNull(controller) { "Expected controller to be non-null" }.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse(test.dataString)).setClass(app, MainActivity::class.java))
         composeRule.waitForIdle()
         assertTrue(fake.requestedUrls.isEmpty())
         waitUntil { checkedOff() == 2 }
@@ -505,7 +505,7 @@ class FixCenterTest {
         val floating = startGuide()
         // Floating, it opens Android's page under it, in a task of its own.
         floating.get().onPictureInPictureModeChanged(true, Configuration())
-        val page = nextStarted()!!
+        val page = checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, page.action)
         assertEquals(Uri.parse("package:$spotify"), page.data)
         assertTrue(page.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
@@ -522,8 +522,8 @@ class FixCenterTest {
 
         // Made big, it's in sight, so Android lets it bring Crosstune back, and the guide is done with.
         floating.get().onPictureInPictureModeChanged(false, Configuration())
-        val back = nextStarted()!!
-        assertEquals(MainActivity::class.java.name, back.component!!.className)
+        val back = checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }
+        assertEquals(MainActivity::class.java.name, checkNotNull(back.component) { "Expected back.component to be non-null" }.className)
         assertTrue(back.flags and Intent.FLAG_ACTIVITY_REORDER_TO_FRONT != 0)
         assertTrue(floating.get().isFinishing)
     }
@@ -536,7 +536,7 @@ class FixCenterTest {
         click(string(R.string.setup_check_allow))
         click(string(R.string.fix_open_settings))
         // Android's page opens at once, with no guide floating over its dialog.
-        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStarted()!!.action)
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }.action)
         assertNull(GuideActivity.host)
         backToCrosstune()
         assertShown(string(R.string.fix_step_tap, string(R.string.android_add_link)))
@@ -550,7 +550,7 @@ class FixCenterTest {
         click(string(R.string.follow_help_title))
         click(string(R.string.fix_open_settings))
         // Android asks to allow it in a dialog at the foot of the screen, where the guide would float.
-        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStarted()!!.action)
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }.action)
         assertNull(GuideActivity.host)
     }
 
@@ -569,7 +569,7 @@ class FixCenterTest {
         floating.get().onPictureInPictureModeChanged(true, Configuration())
         nextStarted()
         floating.get().onPictureInPictureModeChanged(false, Configuration())
-        assertEquals(MainActivity::class.java.name, nextStarted()!!.component!!.className)
+        assertEquals(MainActivity::class.java.name, checkNotNull(checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }.component) { "Expected nextStarted().component to be non-null" }.className)
         assertTrue(floating.get().isFinishing)
         // Already going, it isn't brought back twice.
         floating.get().onPictureInPictureModeChanged(false, Configuration())
@@ -623,13 +623,13 @@ class FixCenterTest {
         click(string(R.string.open_app_link_settings_button, "Spotify"))
         NoPictureInPicture.throws = false
         assertTrue(startGuide().get().isFinishing)
-        assertEquals(Uri.parse("package:$spotify"), nextStarted()!!.data)
+        assertEquals(Uri.parse("package:$spotify"), checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }.data)
         // Some phones say so by throwing.
         backToCrosstune()
         click(string(R.string.open_app_link_settings_button, "Spotify"))
         NoPictureInPicture.throws = true
         assertTrue(startGuide().get().isFinishing)
-        assertEquals(Uri.parse("package:$spotify"), nextStarted()!!.data)
+        assertEquals(Uri.parse("package:$spotify"), checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }.data)
     }
 
     @Test
@@ -695,7 +695,7 @@ class FixCenterTest {
         openFixes()
         click(string(R.string.follow_help_title))
         click(string(R.string.fix_open_settings))
-        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStarted()!!.action)
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }.action)
     }
 
     @Test
@@ -708,22 +708,22 @@ class FixCenterTest {
         click(string(R.string.open_app_link_settings_button, "Spotify"))
         assertTrue(GuideActivity.host != null)
         activity.finish()
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         controller = null
         assertNull(GuideActivity.host)
     }
 
     private fun backToCrosstune() {
-        controller!!.restart().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.restart().resume()
         composeRule.waitForIdle()
     }
 
     /** The guide Crosstune just asked for, started as Android would. */
     private fun startGuide(): ActivityController<GuideActivity> {
-        val intent = nextStarted()!!
-        assertEquals(GuideActivity::class.java.name, intent.component!!.className)
+        val intent = checkNotNull(nextStarted()) { "Expected nextStarted() to be non-null" }
+        assertEquals(GuideActivity::class.java.name, checkNotNull(intent.component) { "Expected intent.component to be non-null" }.className)
         assertTrue(intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         return Robolectric.buildActivity(GuideActivity::class.java, intent).setup().also { guide = it }
     }
 }

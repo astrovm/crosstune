@@ -194,7 +194,7 @@ class LayerSwipeTest {
     fun aScreensBackMovesTheScreensWithASwipeAndGoesBackOnceItsLetGo() {
         swipe.backTo = Screen.MAIN
         compose.setContent {
-            back = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            back = checkNotNull(LocalOnBackPressedDispatcherOwner.current) { "Expected LocalOnBackPressedDispatcherOwner.current to be non-null" }.onBackPressedDispatcher
             CompositionLocalProvider(LocalLayerSwipe provides swipe) { SwipedBack { said += "back" } }
         }
         swipeBack(0.4f)
@@ -216,7 +216,7 @@ class LayerSwipeTest {
     @Test
     fun aScreensBackWhereItsNotKnownWhereItGoesOnlyGoesBack() {
         compose.setContent {
-            back = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            back = checkNotNull(LocalOnBackPressedDispatcherOwner.current) { "Expected LocalOnBackPressedDispatcherOwner.current to be non-null" }.onBackPressedDispatcher
             CompositionLocalProvider(LocalLayerSwipe provides swipe) { SwipedBack { said += "back" } }
         }
         swipeBack(0.4f)
@@ -229,7 +229,7 @@ class LayerSwipeTest {
     fun aPageGoesOffWithASwipeBackAsFarAsItsGoneOverTheOneItGoesBackTo() {
         var shown by mutableStateOf<String?>("Page")
         compose.setContent {
-            back = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            back = checkNotNull(LocalOnBackPressedDispatcherOwner.current) { "Expected LocalOnBackPressedDispatcherOwner.current to be non-null" }.onBackPressedDispatcher
             SwipedBackPages(shown, back = null, label = "pages", forward = { _, to -> to != null }, onBack = { shown = null }) { page ->
                 Text(page ?: "List", Modifier.fillMaxSize())
             }
@@ -259,7 +259,7 @@ class LayerSwipeTest {
         var mode by mutableStateOf("first")
         lateinit var away: () -> Float
         compose.setContent {
-            back = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            back = checkNotNull(LocalOnBackPressedDispatcherOwner.current) { "Expected LocalOnBackPressedDispatcherOwner.current to be non-null" }.onBackPressedDispatcher
             away = swipedAway(enabled = enabled, shown = mode) { enabled = false; said += "closed" }
             if (enabled) Box(Modifier.size(200.dp).goingAway(away, TransformOrigin(0f, 0f)).testTag("mode"))
         }
