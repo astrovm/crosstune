@@ -43,7 +43,7 @@ class ServiceApisTest {
         fun track(id: Int) = JSONObject().put("id", id).put("title", "Song $id").put("artists", JSONArray().put(JSONObject().put("name", "Band")))
             .put("album", JSONObject().put("cover", "aa-bb-cc"))
         fake.handler = { request ->
-            val offset = request.url.queryParameter("offset")!!.toInt()
+            val offset = checkNotNull(request.url.queryParameter("offset")) { "Expected request.url.queryParameter(\"offset\") to be non-null" }.toInt()
             val items = JSONArray((offset until minOf(offset + 100, 150)).map(::track))
             FakeSpotify.html(request, JSONObject().put("items", items).put("totalNumberOfItems", 150).toString())
         }
@@ -121,7 +121,7 @@ class ServiceApisTest {
                     JSONObject().put("tracks", JSONArray(ids.map { if (it <= 2) track(it, "Band").put("artwork_url", "https://i1.sndcdn.com/a-large.jpg") else JSONObject().put("id", it) })).toString()
                 )
                 // In any order.
-                else -> FakeSpotify.html(request, JSONArray(request.url.queryParameter("ids")!!.split(",").map { track(it.toInt()) }.reversed()).toString())
+                else -> FakeSpotify.html(request, JSONArray(checkNotNull(request.url.queryParameter("ids")) { "Expected request.url.queryParameter(\"ids\") to be non-null" }.split(",").map { track(it.toInt()) }.reversed()).toString())
             }
         }
         val tracks = runBlocking { apis().soundCloudTracks("https://soundcloud.com/uploader/sets/party") }
@@ -129,7 +129,7 @@ class ServiceApisTest {
         assertEquals(MusicMetadata("Song 1", "Band", artworkUrl = "https://i1.sndcdn.com/a-t500x500.jpg", url = "https://soundcloud.com/uploader/song-1"), tracks.first())
         // Credited to no one, a song is by whoever uploaded it.
         assertEquals("uploader", tracks.last().artist)
-        val batches = fake.requestedUrls.filter { it.contains("/tracks?") }.map { it.toHttpUrl().queryParameter("ids")!!.split(",").size }
+        val batches = fake.requestedUrls.filter { it.contains("/tracks?") }.map { checkNotNull(it.toHttpUrl().queryParameter("ids")) { "Expected it.toHttpUrl().queryParameter(\"ids\") to be non-null" }.split(",").size }
         assertEquals(listOf(50, 8), batches)
         assertEquals("https://soundcloud.com/uploader/sets/party", fake.requestedUrls.first { it.contains("/resolve") }.toHttpUrl().queryParameter("url"))
         // A set that isn't one has no songs; a batch that isn't a list adds none.
@@ -153,7 +153,7 @@ class ServiceApisTest {
         assertEquals(1, runBlocking { apis().audiomackSearch("songs", "Song") }.size)
         val asked = fake.requestedUrls.single().toHttpUrl()
         assertEquals("songs", asked.queryParameter("show"))
-        assertTrue(asked.queryParameter("oauth_signature")!!.isNotEmpty())
+        assertTrue(checkNotNull(asked.queryParameter("oauth_signature")) { "Expected asked.queryParameter(\"oauth_signature\") to be non-null" }.isNotEmpty())
     }
 
     @Test

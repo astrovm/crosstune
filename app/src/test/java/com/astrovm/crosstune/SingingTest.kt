@@ -113,7 +113,7 @@ class SingingTest {
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
 
-    private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+    private fun model() = ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
 
     private fun waitUntil(condition: () -> Boolean) =
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
@@ -186,7 +186,7 @@ class SingingTest {
         assertEquals(0L, firstLineMs())
         assertEquals(1, singing.hears)
         // Opened again, the song's words were heard already.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         openLyrics()
         plays(positionMs = 200)
         composeRule.waitForIdle()
@@ -205,7 +205,7 @@ class SingingTest {
     }
 
     /** Where the music app's clock is when the first line is lit, whatever part of that is how far ahead it's taken to be. */
-    private fun firstLineOnAppsClock() = SystemClock.elapsedRealtime().let { now -> firstLineMs() + playback.playing.value!!.clock.positionAt(now) - followedAt() }
+    private fun firstLineOnAppsClock() = SystemClock.elapsedRealtime().let { now -> firstLineMs() + checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.positionAt(now) - followedAt() }
 
     @Test
     fun aVideoNoAnswerFitsIsLinedUpByTheSingingAlone() {
@@ -275,7 +275,7 @@ class SingingTest {
     private fun shown(id: Int) = composeRule.onAllNodesWithText(app.getString(id)).fetchSemanticsNodes().isNotEmpty()
 
     /** Where the words follow the song to be now. */
-    private fun followedAt() = model().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime())
+    private fun followedAt() = checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.clock.positionAt(SystemClock.elapsedRealtime())
 
     @Test
     fun pickedUpPartwayTheSingingPutsItRightThisTimeOnly() {
@@ -417,11 +417,11 @@ class SingingTest {
         passes(500)
         waitUntil { singing.agains == 1 }
         composeRule.waitForIdle()
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         // Nor does the whole while heard as music alone doubt them, as a voice was heard in it.
         rest.complete(musicAlone())
         composeRule.waitForIdle()
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
     }
 
     @Test
@@ -436,7 +436,7 @@ class SingingTest {
         passes(500)
         waitUntil { singing.hears == 1 }
         composeRule.waitForIdle()
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         // A voice heard, they're not heard again.
         assertEquals(0, singing.agains)
         rest.complete(null)
@@ -455,7 +455,7 @@ class SingingTest {
         plays(positionMs = 60_000)
         early.complete(Unit)
         composeRule.waitForIdle()
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
     }
 
     @Test
@@ -474,7 +474,7 @@ class SingingTest {
         passes(20_000)
         waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
         assertEquals(22_000L, model().uiState.lyricLines[1].timeMs)
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
     }
 
     @Test
@@ -493,7 +493,7 @@ class SingingTest {
         // Its first seconds hold lines enough to tell, so they're put where they're sung without waiting on the rest.
         waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
         assertEquals(22_000L, model().uiState.lyricLines[1].timeMs)
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         rest.complete(null)
     }
 
@@ -1042,7 +1042,7 @@ class SingingTest {
         // Heard straight on, a while at a time.
         waitUntil { singing.hears == 1 }
         // Music alone where the words are timed says they may be timed into an intro.
-        assertFalse(model().uiState.following!!.timingKnown)
+        assertFalse(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         passes(20_000)
         waitUntil { singing.hears == 2 }
         passes(20_000)
@@ -1051,7 +1051,7 @@ class SingingTest {
         assertEquals(3, singing.hears)
         assertFalse(model().uiState.lyricsSynced)
         // Given up on, the lines are shown sung as they're timed again, as nothing says they're wrong.
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
     }
 
     @Test
@@ -1062,16 +1062,16 @@ class SingingTest {
         repeat(5) { plays(positionMs = it.toLong()) }
         // Heard on a few times, the lines are shown sung as they're timed all the while.
         waitUntil { singing.hears == 1 }
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         passes(20_000)
         waitUntil { singing.hears == 2 }
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         passes(20_000)
         waitUntil { singing.hears == 3 }
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         passes(60_000)
         assertEquals(3, singing.hears)
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
     }
 
     @Test
@@ -1081,12 +1081,12 @@ class SingingTest {
         openLyrics()
         plays()
         waitUntil { singing.hears == 1 }
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         heard.complete(sung(SHIFT_MS))
-        composeRule.settle(controller!!.get())
+        composeRule.settle(checkNotNull(controller) { "Expected controller to be non-null" }.get())
         assertFalse(model().uiState.lyricsSynced)
         singing.answer = { sung(SHIFT_MS) }
-        controller!!.start().resume()
+        checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         waitUntil { model().uiState.lyricsSynced }
         assertEquals(2, singing.hears)
     }
@@ -1178,7 +1178,7 @@ class SingingTest {
         passes(20_000)
         waitUntil { singing.hears == 4 }
         composeRule.waitForIdle()
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         last.complete(null)
     }
 
@@ -1194,14 +1194,14 @@ class SingingTest {
         passes(500)
         waitUntil { singing.hears == 1 }
         composeRule.waitForIdle()
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         // Then none's heard where the words are timed, and the singing has still not been found.
         passes(20_000)
         waitUntil { singing.hears == 2 }
         passes(20_000)
         waitUntil { singing.hears == 3 }
         composeRule.waitForIdle()
-        assertFalse(model().uiState.following!!.timingKnown)
+        assertFalse(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         last.complete(null)
     }
 
@@ -1220,7 +1220,7 @@ class SingingTest {
         passes(20_000)
         waitUntil { singing.hears == 2 }
         composeRule.waitForIdle()
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         last.complete(null)
     }
 
@@ -1238,7 +1238,7 @@ class SingingTest {
         passes(20_000)
         waitUntil { singing.hears == 2 }
         composeRule.waitForIdle()
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         // Only the first while's first seconds are heard again, as only they doubt the words.
         assertEquals(1, singing.agains)
         rest.complete(null)
@@ -1259,7 +1259,7 @@ class SingingTest {
         waitUntil { singing.hears == 2 }
         composeRule.waitForIdle()
         assertEquals(0, singing.agains)
-        assertTrue(model().uiState.following!!.timingKnown)
+        assertTrue(checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown)
         last.complete(null)
     }
 
@@ -1272,7 +1272,7 @@ class SingingTest {
         plays()
         waitUntil { singing.hears == 1 }
         composeRule.waitForIdle()
-        return model().uiState.following!!.timingKnown.also { rest.complete(null) }
+        return checkNotNull(model().uiState.following) { "Expected model().uiState.following to be non-null" }.timingKnown.also { rest.complete(null) }
     }
 
     @Test

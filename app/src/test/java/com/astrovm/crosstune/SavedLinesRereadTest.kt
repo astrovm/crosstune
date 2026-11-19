@@ -307,7 +307,7 @@ class SavedLinesRereadTest {
         val marked = SavedLine("谢谢", title = "Song", artist = "Singer", translation = "gracias", readWith = 3)
         val again = readAgain(listOf(kanji, unread, pinyin, marked))
         assertNotNull("a kanji-only line was left, because no line of its song has kana", again)
-        val read = again!!.first { it.text == "三本" }
+        val read = checkNotNull(again) { "Expected again to be non-null" }.first { it.text == "三本" }
         assertEquals("さんぼん", read.reading)
         assertEquals(Readings.VERSION, read.readWith)
         assertEquals(unread, again.first { it.text == "你好" })
@@ -319,7 +319,7 @@ class SavedLinesRereadTest {
         val rubyOnly = SavedLine("三本", title = "Demo", artist = "Band", ruby = listOf(Ruby("三本", "さんほん")), readWith = 3)
         val fromRuby = readAgain(listOf(rubyOnly))
         assertNotNull(fromRuby)
-        assertEquals("さんぼん", fromRuby!!.single().reading)
+        assertEquals("さんぼん", checkNotNull(fromRuby) { "Expected fromRuby to be non-null" }.single().reading)
     }
 
     @Test

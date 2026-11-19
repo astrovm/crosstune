@@ -291,13 +291,13 @@ class PracticeCardsTest {
 
         // A practice with no cards left shows nothing, and has nothing to read, grade or replay.
         cards.start(null, before = null)
-        assertEquals(0, practice!!.total)
+        assertEquals(0, checkNotNull(practice) { "Expected practice to be non-null" }.total)
         cards.replay()
         cards.readAs(listOf("x"))
         cards.turn()
         cards.grade(Grade.GOOD)
-        assertEquals(0, practice!!.done)
-        assertTrue(practice!!.turned)
+        assertEquals(0, checkNotNull(practice) { "Expected practice to be non-null" }.done)
+        assertTrue(checkNotNull(practice) { "Expected practice to be non-null" }.turned)
         // A card turned already isn't turned again.
         cards.turn()
         assertTrue(playback.plays.isEmpty())
@@ -371,13 +371,13 @@ class PracticeCardsTest {
         // There's nothing to play again, nor to turn the sound on for.
         cards.replay()
         cards.turn()
-        assertTrue(practice!!.turned)
+        assertTrue(checkNotNull(practice) { "Expected practice to be non-null" }.turned)
         // Done, there's no app to go back to, so practice stays as it is until stopped.
         cards.stop()
         keep(line("Another"))
         cards.start(null, before = Before(MusicMetadata("Before", "Band"), 4_000, "Spotify"))
         cards.backToBefore()
-        assertEquals("Another", practice!!.line!!.text)
+        assertEquals("Another", checkNotNull(checkNotNull(practice) { "Expected practice to be non-null" }.line) { "Expected practice.line to be non-null" }.text)
         cards.stop()
         assertNull(practice)
     }
@@ -396,7 +396,7 @@ class PracticeCardsTest {
         keep(line(start = null))
         playing()
         cards().start(null, before = null)
-        assertEquals(LineSound.NONE, practice!!.sound)
+        assertEquals(LineSound.NONE, checkNotNull(practice) { "Expected practice to be non-null" }.sound)
         assertTrue(playback.seeks.isEmpty())
     }
 
@@ -442,7 +442,7 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitFor("it's loading") { practice?.sound == LineSound.LOADING }
         cards.turn()
-        assertTrue(practice!!.turned)
+        assertTrue(checkNotNull(practice) { "Expected practice to be non-null" }.turned)
         playing()
         waitFor("it played the line once there") { playback.plays.take(2) == listOf(true, false) && practice?.sound == LineSound.PLAYED }
     }
@@ -468,7 +468,7 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitFor("the line is ready") { practice?.sound == LineSound.PLAYED }
         cards.turn()
-        assertTrue(practice!!.turned)
+        assertTrue(checkNotNull(practice) { "Expected practice to be non-null" }.turned)
         assertEquals(listOf(false), playback.plays)
     }
 
@@ -496,7 +496,7 @@ class PracticeCardsTest {
         keep(line())
         playback.access = true
         cards().start(null, before = null)
-        assertEquals(LineSound.LOADING, practice!!.sound)
+        assertEquals(LineSound.LOADING, checkNotNull(practice) { "Expected practice to be non-null" }.sound)
         waitFor("it gave up") { practice?.sound == LineSound.NONE }
         assertTrue(playback.seeks.isEmpty())
     }
@@ -562,7 +562,7 @@ class PracticeCardsTest {
         shows { it.copy(savedLines = store.practised(store.load().first { it.text == "Due" }, Grade.EASY, 1_000_000L)) }
         val cards = cards(source = null)
         cards.start(MusicMetadata("Demo", "Band"), before = null)
-        assertEquals(listOf("Due"), practice!!.queue.map { it.text })
+        assertEquals(listOf("Due"), checkNotNull(practice) { "Expected practice to be non-null" }.queue.map { it.text })
     }
 
     @Test
@@ -578,11 +578,11 @@ class PracticeCardsTest {
         // Read as it is already: nothing changes.
         cards.readAs(listOf("なが", "ほし"))
         assertEquals(kept, screen.value.savedLines)
-        assertFalse(practice!!.line!!.readByHand)
+        assertFalse(checkNotNull(checkNotNull(practice) { "Expected practice to be non-null" }.line) { "Expected practice.line to be non-null" }.readByHand)
 
         cards.readAs(listOf("りゅう", "ほし"))
         waitFor("the reading put right") { practice?.line?.readByHand == true }
-        assertTrue(practice!!.line!!.reading!!.startsWith("りゅう"))
+        assertTrue(checkNotNull(checkNotNull(checkNotNull(practice) { "Expected practice to be non-null" }.line) { "Expected practice.line to be non-null" }.reading) { "Expected practice.line.reading to be non-null" }.startsWith("りゅう"))
         assertTrue(screen.value.savedLines.single().readByHand)
     }
 
@@ -605,7 +605,7 @@ class PracticeCardsTest {
         cards.stop()
         assertEquals(ytMusic, playback.playedApps.last())
         assertEquals(false, playback.plays.last())
-        assertFalse(playback.playing.value!!.clock.playing)
+        assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
     }
 
     @Test
@@ -617,7 +617,7 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         try {
             assertTrue(entered.await(60, TimeUnit.SECONDS))
-            val pending = scope.coroutineContext[Job]!!.children.toList()
+            val pending = checkNotNull(scope.coroutineContext[Job]) { "Expected scope.coroutineContext[Job] to be non-null" }.children.toList()
             cards.background()
             assertEquals(LineSound.PLAYED, practice?.sound)
             release.countDown()
@@ -646,7 +646,7 @@ class PracticeCardsTest {
         cards.replay()
         waitFor("the replay is waiting for its session") { playback.followed.size > followed }
         assertEquals(LineSound.PLAYED, practice?.sound)
-        val pending = scope.coroutineContext[Job]!!.children.toList()
+        val pending = checkNotNull(scope.coroutineContext[Job]) { "Expected scope.coroutineContext[Job] to be non-null" }.children.toList()
         cards.background()
         waiting.complete(Unit)
         waitFor("the background replay ends") { pending.all { it.isCompleted } }
@@ -658,7 +658,7 @@ class PracticeCardsTest {
     fun nativeSoundFullRecordingWinsOverAPlayingPreviewTooShortForTheLine() {
         keep(line(start = 60_000), types = hearIt)
         appPlays(spotify)
-        playback.playing.value = playback.playing.value!!.copy(durationMs = 30_000)
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(durationMs = 30_000)
         playback.appPlaying[ytMusic] = MutableStateFlow(Following(PlaybackClock(0, System.currentTimeMillis(), 20f, playing = false), "Music", canSeek = true, appPackage = ytMusic, durationMs = 200_000))
         cards().start(null, before = null)
         waitFor("the chosen sound settles") { practice?.sound == LineSound.PLAYED || practice?.sound == LineSound.NONE }
@@ -671,7 +671,7 @@ class PracticeCardsTest {
     fun nativeSoundFullRecordingCanBecomeSeekableAfterSelection() {
         keep(line(start = 60_000))
         appPlays(spotify)
-        playback.playing.value = playback.playing.value!!.copy(durationMs = 30_000)
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(durationMs = 30_000)
         val full = MutableStateFlow<Following?>(Following(PlaybackClock(0, System.currentTimeMillis(), playing = false), "Music", canSeek = false, appPackage = ytMusic, durationMs = 200_000))
         playback.appPlaying[ytMusic] = full
         cards().start(null, before = null)
@@ -723,7 +723,7 @@ class PracticeCardsTest {
     fun nativeSoundBindsTheFullSessionAndStopsOnlyThatSessionInTheSameApp() {
         keep(line(start = 60_000))
         appPlays(spotify, speed = 1f, positionMs = 0)
-        playback.playing.value = playback.playing.value!!.copy(durationMs = 30_000)
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(durationMs = 30_000)
         val full = MutableStateFlow<Following?>(Following(PlaybackClock(0, System.currentTimeMillis(), 1f, playing = false), "Music", canSeek = true, appPackage = spotify, durationMs = 200_000))
         playback.extraSessions += full
         traits.keeps(spotify, false)
@@ -733,14 +733,14 @@ class PracticeCardsTest {
         assertEquals(LineSound.PLAYED, practice?.sound)
         assertEquals(listOf(1), playback.seekedSessions.toList())
         assertEquals(60_000L, full.value?.clock?.positionMs)
-        assertFalse(playback.playing.value!!.clock.playing)
+        assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
         assertEquals(AppTraits(), traits.of(spotify))
         cards.replay()
         waitFor("the bound full recording plays") { practice?.sound == LineSound.PLAYING }
-        playback.playing.value = playback.playing.value!!.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 1f, playing = true))
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 1f, playing = true))
         cards.stop()
-        assertFalse("the owned recording kept playing", full.value!!.clock.playing)
-        assertTrue("stop paused an unowned session in the same app", playback.playing.value!!.clock.playing)
+        assertFalse("the owned recording kept playing", checkNotNull(full.value) { "Expected full.value to be non-null" }.clock.playing)
+        assertTrue("stop paused an unowned session in the same app", checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
         assertTrue(player.shown.isEmpty())
     }
 
@@ -762,10 +762,10 @@ class PracticeCardsTest {
         cards.replay()
         waitFor("the full session plays while the failed one stays paused") { practice?.sound == LineSound.PLAYING }
         Thread.sleep(150)
-        assertTrue("failed-session cleanup paused the full recording", full.value!!.clock.playing)
-        assertFalse(playback.playing.value!!.clock.playing)
+        assertTrue("failed-session cleanup paused the full recording", checkNotNull(full.value) { "Expected full.value to be non-null" }.clock.playing)
+        assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
         cards.stop()
-        assertFalse(full.value!!.clock.playing)
+        assertFalse(checkNotNull(full.value) { "Expected full.value to be non-null" }.clock.playing)
         assertTrue(player.shown.isEmpty())
     }
 
@@ -783,7 +783,7 @@ class PracticeCardsTest {
         cards(source = source).start(null, before = null)
         waitFor("the ready recording is prepared") { practice?.sound == LineSound.PLAYED || practice?.sound == LineSound.NONE }
         assertEquals(LineSound.PLAYED, practice?.sound)
-        assertFalse("the unknown-clock session was left playing", playback.playing.value!!.clock.playing)
+        assertFalse("the unknown-clock session was left playing", checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
         assertEquals(listOf(1), playback.seekedSessions.toList())
         assertEquals(60_000L, full.value?.clock?.positionMs)
         assertTrue(player.shown.isEmpty())
@@ -805,7 +805,7 @@ class PracticeCardsTest {
         cards(source = source).start(null, before = null)
         waitForThePlayer()
         assertTrue(player.shown.single().play)
-        assertFalse("the selected clockless session plays over the embedded player", playback.playing.value!!.clock.playing)
+        assertFalse("the selected clockless session plays over the embedded player", checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
     }
 
     @Test
@@ -840,7 +840,7 @@ class PracticeCardsTest {
         cards().start(null, before = null)
         waitFor("the second session plays the line") { practice?.sound == LineSound.PLAYED }
         assertEquals(listOf(ytMusic), playback.seekedApps.toList())
-        assertFalse(playback.playing.value!!.clock.playing)
+        assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
         assertTrue(player.shown.isEmpty())
     }
 
@@ -848,14 +848,14 @@ class PracticeCardsTest {
     fun nativeSoundUsesAnotherMatchingSessionWhenTheFirstHasFailed() {
         keep(line())
         appPlays(spotify)
-        playback.playing.value = playback.playing.value!!.copy(ad = true, clock = PlaybackClock(0, System.currentTimeMillis(), playing = false))
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(ad = true, clock = PlaybackClock(0, System.currentTimeMillis(), playing = false))
         traits.keeps(spotify, false)
         playback.appPlaying[ytMusic] = MutableStateFlow(Following(PlaybackClock(0, System.currentTimeMillis(), playing = false), "Music", canSeek = true, appPackage = ytMusic))
         cards().start(null, before = null)
         waitFor("the suitable session is ready") { practice?.sound == LineSound.PLAYED }
         assertEquals(listOf(spotify, ytMusic), playback.playedApps.toList())
         assertEquals(listOf(ytMusic), playback.seekedApps.toList())
-        assertFalse(playback.playing.value!!.clock.playing)
+        assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
         assertTrue(player.shown.isEmpty())
     }
 
@@ -867,7 +867,7 @@ class PracticeCardsTest {
         cards(traitStore = freshTraits()).start(null, before = null)
         waitFor("the matching session is ready") { practice?.sound == LineSound.PLAYED }
         assertEquals(listOf(10_000L), playback.seeks.toList())
-        assertFalse(playback.playing.value!!.clock.playing)
+        assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
         assertTrue(player.shown.isEmpty())
     }
 
@@ -877,7 +877,7 @@ class PracticeCardsTest {
         youTubeHasTheSong()
         appPlays(spotify)
         // A native ad reports the song clock as paused, although the ad itself is audible.
-        playback.playing.value = playback.playing.value!!.copy(ad = true, clock = PlaybackClock(0, System.currentTimeMillis(), playing = false))
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(ad = true, clock = PlaybackClock(0, System.currentTimeMillis(), playing = false))
         traits.keeps(spotify, false)
         cards().start(null, before = null)
         waitForThePlayer()
@@ -894,12 +894,12 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitFor("the anonymous session plays") { true in playback.plays && practice?.sound == LineSound.PLAYING }
         cards.background()
-        assertFalse(playback.playing.value!!.clock.playing)
+        assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
         assertEquals(LineSound.PLAYED, practice?.sound)
         cards.replay()
         waitFor("the anonymous session replays") { playback.plays.count { it } == 2 && practice?.sound == LineSound.PLAYING }
         cards.release()
-        assertFalse(playback.playing.value!!.clock.playing)
+        assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
         assertEquals(listOf(true, false, true, false), playback.plays.toList())
         assertTrue(playback.playedApps.all { it == null })
     }
@@ -913,7 +913,7 @@ class PracticeCardsTest {
         waitFor("the anonymous session finishes") { practice?.sound == LineSound.PLAYED }
         assertEquals(listOf(true, false), playback.plays.toList())
         assertTrue(playback.playedApps.all { it == null })
-        assertFalse(playback.playing.value!!.clock.playing)
+        assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
     }
 
     @Test
@@ -922,13 +922,13 @@ class PracticeCardsTest {
             keep(line())
             youTubeHasTheSong()
             appPlays(spotify)
-            playback.playing.value = playback.playing.value!!.copy(durationMs = 8_000)
+            playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(durationMs = 8_000)
             val (release, entered) = holdHosts("music.youtube.com")
             val cards = cards()
             cards.start(null, before = null)
             try {
                 assertTrue(entered.await(60, TimeUnit.SECONDS))
-                val pending = scope.coroutineContext[Job]!!.children.filter { it.isActive }.toList()
+                val pending = checkNotNull(scope.coroutineContext[Job]) { "Expected scope.coroutineContext[Job] to be non-null" }.children.filter { it.isActive }.toList()
                 assertTrue("the failed app has no repeated stop to test", pending.size >= 2)
                 leave(cards)
                 assertTrue("a closed card can still pause the music app", pending.none { it.isActive })
@@ -943,12 +943,12 @@ class PracticeCardsTest {
         keep(line())
         youTubeHasTheSong()
         appPlays(spotify)
-        playback.playing.value = playback.playing.value!!.copy(durationMs = 8_000)
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(durationMs = 8_000)
         val cards = cards()
         cards.start(null, before = null)
         waitForThePlayer()
         assertEquals(LineSound.PLAYED, practice?.sound)
-        val pending = scope.coroutineContext[Job]!!.children.filter { it.isActive }.toList()
+        val pending = checkNotNull(scope.coroutineContext[Job]) { "Expected scope.coroutineContext[Job] to be non-null" }.children.filter { it.isActive }.toList()
         assertTrue("the repeated stop must still be active", pending.isNotEmpty())
         cards.background()
         assertTrue("a background card can still pause the music app", pending.none { it.isActive })
@@ -976,13 +976,13 @@ class PracticeCardsTest {
         keep(line())
         youTubeHasTheSong()
         appPlays(ytMusic)
-        playback.playing.value = playback.playing.value!!.copy(ad = true)
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(ad = true)
         val cards = cards()
         cards.start(null, before = null)
         waitForThePlayer()
         assertTrue(playback.seeks.isEmpty())
         assertEquals(AppTraits(), traits.of(ytMusic))
-        playback.playing.value = playback.playing.value!!.copy(ad = false)
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(ad = false)
         cards.stop()
         player.shown.clear()
         cards.start(null, before = null)
@@ -995,7 +995,7 @@ class PracticeCardsTest {
         keep(line())
         youTubeHasTheSong()
         appPlays(spotify)
-        playback.playing.value = playback.playing.value!!.copy(durationMs = 8_000)
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(durationMs = 8_000)
         cards().start(null, before = null)
         waitForThePlayer()
         assertNull(player.shown.single().expectedMs)
@@ -1006,7 +1006,7 @@ class PracticeCardsTest {
         keep(line().copy(lengthMs = 200_000))
         youTubeHasTheSong()
         appPlays(spotify)
-        playback.playing.value = playback.playing.value!!.copy(durationMs = 8_000)
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(durationMs = 8_000)
         cards().start(null, before = null)
         waitForThePlayer()
         assertEquals(200_000L, player.shown.single().expectedMs)
@@ -1062,11 +1062,11 @@ class PracticeCardsTest {
             val pauses = player.pauses
             cards.turn()
             assertEquals(LineSound.PLAYED, practice?.sound)
-            if (native) assertFalse(playback.playing.value!!.clock.playing) else assertTrue(player.pauses > pauses)
+            if (native) assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing) else assertTrue(player.pauses > pauses)
             cards.replay()
             waitFor("explicit replay on the silent side") { if (native) playback.plays.count { it } == 2 else player.shown.size == 2 }
             cards.release()
-            if (native) assertFalse(playback.playing.value!!.clock.playing)
+            if (native) assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
             playback.plays.clear()
             player.shown.clear()
         }
@@ -1081,7 +1081,7 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitFor("the native line plays") { practice?.sound == LineSound.PLAYING && playback.plays.contains(true) }
         cards.turn()
-        assertTrue("the back must still be audible before grading", playback.playing.value!!.clock.playing)
+        assertTrue("the back must still be audible before grading", checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
         cards.grade(Grade.GOOD)
         assertNull(practice?.line)
         assertFalse("the previous line keeps playing", playback.playing.value?.clock?.playing == true)
@@ -1099,7 +1099,7 @@ class PracticeCardsTest {
         cards.grade(Grade.GOOD)
         assertEquals("Other", practice?.line?.title)
         assertEquals(MusicMetadata("Demo", "Band") to false, playback.playedSongs.last() to playback.plays.last())
-        assertFalse(playback.playing.value!!.clock.playing)
+        assertFalse(checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.clock.playing)
     }
 
     @Test
@@ -1237,7 +1237,7 @@ class PracticeCardsTest {
         val cards = cards()
         cards.start(null, before = null)
         cards.backToBefore()
-        assertEquals("Night sky", practice!!.line!!.text)
+        assertEquals("Night sky", checkNotNull(checkNotNull(practice) { "Expected practice to be non-null" }.line) { "Expected practice.line to be non-null" }.text)
     }
 
     @Test
@@ -1350,7 +1350,7 @@ class PracticeCardsTest {
         keep(line("Due"), line("Not due"))
         shows { it.copy(savedLines = store.practised(store.load().first { it.text == "Not due" }, Grade.EASY, 1_000_000L)) }
         cards(source = null).start(MusicMetadata("Demo", "Band"), before = null)
-        assertEquals(listOf("Due"), practice!!.queue.map { it.text })
+        assertEquals(listOf("Due"), checkNotNull(practice) { "Expected practice to be non-null" }.queue.map { it.text })
     }
 
     @Test
@@ -1360,8 +1360,8 @@ class PracticeCardsTest {
         val cards = cards(source = null)
         cards.start(MusicMetadata("Demo", "Band"), before = null)
         cards.readAs(listOf("りゅう", "ほし"))
-        assertEquals(listOf("流れる星", "Plain"), practice!!.queue.map { it.text }.sortedByDescending { it == "流れる星" })
-        assertFalse(practice!!.queue.first { it.text == "Plain" }.readByHand)
+        assertEquals(listOf("流れる星", "Plain"), checkNotNull(practice) { "Expected practice to be non-null" }.queue.map { it.text }.sortedByDescending { it == "流れる星" })
+        assertFalse(checkNotNull(practice) { "Expected practice to be non-null" }.queue.first { it.text == "Plain" }.readByHand)
     }
 
     @Test
@@ -1549,7 +1549,7 @@ class PracticeCardsTest {
         keep(line(lead = 5_000), types = hearIt)
         // A video with 5 s before the song: the line is 15 s to 20 s into it, and takes a second to be over at five times the speed.
         appPlays(morphe, speed = 5f, positionMs = 15_000)
-        playback.playing.value = playback.playing.value!!.copy(video = true)
+        playback.playing.value = checkNotNull(playback.playing.value) { "Expected playback.playing.value to be non-null" }.copy(video = true)
         cards().start(null, before = null)
         waitFor("it's asked to play") { playback.playedApps.zip(playback.plays).contains(morphe to true) }
         assertEquals(listOf(15_000L), playback.seeks.toList())
@@ -1813,7 +1813,7 @@ class PracticeCardsTest {
         waitFor("the line plays in the app") { playback.playedApps.zip(playback.plays).contains(morphe to true) }
         // It stops for a moment, much less than it takes to be sure it won't go on, and then goes on.
         Thread.sleep(100)
-        val at = flow.value!!.clock.positionAt(System.currentTimeMillis())
+        val at = checkNotNull(flow.value) { "Expected flow.value to be non-null" }.clock.positionAt(System.currentTimeMillis())
         flow.value = Following(PlaybackClock(at, System.currentTimeMillis(), 5f, playing = false), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
         Thread.sleep(400)
         flow.value = Following(PlaybackClock(at, System.currentTimeMillis(), 5f), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
@@ -2087,7 +2087,7 @@ class PracticeCardsTest {
         val tidal = MusicService.TIDAL.packageName
         appPlays(tidal)
         // As TIDAL without an account: only a 30 s preview, here over before the line starts at 10 s.
-        playback.appPlaying.getValue(tidal).value = playback.appPlaying.getValue(tidal).value!!.copy(durationMs = 8_000)
+        playback.appPlaying.getValue(tidal).value = checkNotNull(playback.appPlaying.getValue(tidal).value) { "Expected playback.appPlaying.getValue(tidal).value to be non-null" }.copy(durationMs = 8_000)
         cards().start(null, before = null)
         waitForThePlayer("the player is on the line")
         // Never sent there, nor played to its end and on into the next song.
@@ -2351,7 +2351,7 @@ class PracticeCardsTest {
         keep(line())
         val tidal = MusicService.TIDAL.packageName
         appPlays(tidal)
-        playback.appPlaying.getValue(tidal).value = playback.appPlaying.getValue(tidal).value!!.copy(durationMs = 8_000)
+        playback.appPlaying.getValue(tidal).value = checkNotNull(playback.appPlaying.getValue(tidal).value) { "Expected playback.appPlaying.getValue(tidal).value to be non-null" }.copy(durationMs = 8_000)
         cards().start(null, before = null)
         waitForThePlayer("the player is on the line")
         assertEquals(listOf("$tidal is left out", "the YouTube player"), steps())
@@ -2366,7 +2366,7 @@ class PracticeCardsTest {
         val tidal = MusicService.TIDAL.packageName
         appPlays(tidal, canSeek = false)
         val flow = playback.appPlaying.getValue(tidal)
-        val preview = flow.value!!.copy(durationMs = 8_000, canSeek = true)
+        val preview = checkNotNull(flow.value) { "Expected flow.value to be non-null" }.copy(durationMs = 8_000, canSeek = true)
         val cards = cards()
         cards.start(null, before = null)
         // Still on its way to where it can be moved as the card's turned: what it plays is then for the back, to be heard.
@@ -2385,13 +2385,13 @@ class PracticeCardsTest {
         appPlays(ytMusic, speed = 1f)
         val flow = playback.appPlaying.getValue(ytMusic)
         // The song ends at 11.5 s, before the line's end and its tail.
-        flow.value = flow.value!!.copy(durationMs = 11_500)
+        flow.value = checkNotNull(flow.value) { "Expected flow.value to be non-null" }.copy(durationMs = 11_500)
         var pausedAt: Long? = null
-        playback.onPlay = { _, play -> if (!play && playback.plays.contains(true)) pausedAt = pausedAt ?: flow.value!!.clock.positionAt(System.currentTimeMillis()) }
+        playback.onPlay = { _, play -> if (!play && playback.plays.contains(true)) pausedAt = pausedAt ?: checkNotNull(flow.value) { "Expected flow.value to be non-null" }.clock.positionAt(System.currentTimeMillis()) }
         cards().start(null, before = null)
         waitFor("it played the line") { traits.of(ytMusic).works && practice?.sound == LineSound.PLAYED }
         // Paused before its end, so it never starts the next song, rather than at the line's.
-        assertTrue("paused at $pausedAt", pausedAt!! in 11_500L - LineWindow.END_GUARD_MS until 15_000L)
+        assertTrue("paused at $pausedAt", checkNotNull(pausedAt) { "Expected pausedAt to be non-null" } in 11_500L - LineWindow.END_GUARD_MS until 15_000L)
         assertTrue(player.shown.isEmpty())
     }
 
@@ -2686,7 +2686,7 @@ class PracticeCardsTest {
         playback.access = true
         val cards = cards(songLoadMs = 300)
         cards.start(null, before = null)
-        val total = practice!!.total
+        val total = checkNotNull(practice) { "Expected practice to be non-null" }.total
         // Read it, hear it and the user's own kind, for each line.
         assertEquals(6, total)
         repeat(total) { card ->
@@ -2703,8 +2703,8 @@ class PracticeCardsTest {
             cards.grade(Grade.GOOD)
             assertNoAppBroughtUp()
         }
-        assertNull(practice!!.line)
-        assertEquals(total, practice!!.done)
+        assertNull(checkNotNull(practice) { "Expected practice to be non-null" }.line)
+        assertEquals(total, checkNotNull(practice) { "Expected practice to be non-null" }.done)
         // Nothing was asked about the song for Spotify: only the player's video was looked up.
         assertTrue(lookups().none { "spotify" in it || "listenbrainz" in it })
         assertTrue(playback.seeks.isEmpty())
@@ -2745,13 +2745,13 @@ class PracticeCardsTest {
         playback.access = true
         val cards = cards(songLoadMs = 300)
         cards.start(null, before = null)
-        val total = practice!!.total
+        val total = checkNotNull(practice) { "Expected practice to be non-null" }.total
         repeat(total) { card ->
             waitFor("card ${card + 1} has no sound") { practice?.sound == LineSound.NONE }
             cards.turn()
             cards.grade(Grade.GOOD)
         }
-        assertEquals(total, practice!!.done)
+        assertEquals(total, checkNotNull(practice) { "Expected practice to be non-null" }.done)
         assertTrue(player.shown.isEmpty())
         assertNoAppBroughtUp()
     }
@@ -2776,7 +2776,7 @@ class PracticeCardsTest {
         val asked = sites.requestedUrls.size
         val cards = cards(songLoadMs = 300, matcher = matcher)
         cards.start(null, before = null)
-        repeat(practice!!.total) { card ->
+        repeat(checkNotNull(practice) { "Expected practice to be non-null" }.total) { card ->
             waitForTheCard("card ${card + 1} is ready")
             assertEquals("demo0000000", practice?.video)
             cards.turn()

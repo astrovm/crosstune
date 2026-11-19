@@ -383,7 +383,7 @@ class TvTest {
         composeRule.waitForIdle()
         composeRule.onNode(hasText(string(R.string.report_on_github)) and hasAnyAncestor(isDialog())).assertIsFocused()
 
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertTrue(!shown(string(R.string.report_on_github)))
         // Still in settings, and the remote where it was.

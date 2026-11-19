@@ -35,7 +35,7 @@ class SongNamesVersionTest {
     @Test
     fun aTitleThatSaysNoOneSingsInItSaysItsInstrumental() {
         // The list scripts/songcheck/instrumental_rules.py is tested against too, so both read titles alike.
-        val titles = javaClass.getResource("/instrumental-titles.tsv")!!.readText().lines().filter { it.isNotBlank() && !it.startsWith("#") }
+        val titles = checkNotNull(javaClass.getResource("/instrumental-titles.tsv")) { "Expected javaClass.getResource(\"/instrumental-titles.tsv\") to be non-null" }.readText().lines().filter { it.isNotBlank() && !it.startsWith("#") }
         for (line in titles) {
             val (says, title) = line.split("\t")
             val artist = line.split("\t").getOrElse(2) { "" }

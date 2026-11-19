@@ -95,9 +95,9 @@ class SongListenerTest {
         var request: Request? = null
         fake.handler = { request = it; FakeSpotify.html(it, NO_MATCH) }
         heard()
-        assertEquals("application/json; charset=utf-8", request!!.body!!.contentType().toString())
+        assertEquals("application/json; charset=utf-8", checkNotNull(checkNotNull(request) { "Expected request to be non-null" }.body) { "Expected request.body to be non-null" }.contentType().toString())
         assertEquals("en_US", request.header("Content-Language"))
-        assertTrue(request.header("User-Agent")!!.startsWith("Dalvik/2.1.0 (Linux; U; Android"))
+        assertTrue(checkNotNull(request.header("User-Agent")) { "Expected request.header(\"User-Agent\") to be non-null" }.startsWith("Dalvik/2.1.0 (Linux; U; Android"))
         assertEquals("POST", request.method)
     }
 
@@ -158,10 +158,10 @@ class SongListenerTest {
     fun anUploadSpedUpIsFollowedAtItsOwnSpeed() {
         // Shazam's answers for every 10 s of a YouTube upload of "Bizarre Love Triangle" (#611): it plays
         // 3.5% faster than every release Shazam knows, so its place in the one matched gains 347 ms each time.
-        val answers = javaClass.getResource("/shazam/faster.jsonl")!!.readText().lines().filter { it.isNotBlank() }
+        val answers = checkNotNull(javaClass.getResource("/shazam/faster.jsonl")) { "Expected javaClass.getResource(\"/shazam/faster.jsonl\") to be non-null" }.readText().lines().filter { it.isNotBlank() }
         val clocks = answers.mapIndexed { index, matches ->
             answer("""{"matches":$matches,"track":{"title":"Demo"}}""")
-            (heard() as Heard.Song).copy(startedAtMs = index * 10_000L).clock!!
+            checkNotNull((heard() as Heard.Song).copy(startedAtMs = index * 10_000L).clock) { "Expected (heard() as Heard.Song).copy(startedAtMs = index * 10_000L).clock to be non-null" }
         }
         // Where the words are guessed to be by one hearing is where the next hears them.
         clocks.zipWithNext { one, next -> assertEquals(next.positionMs.toDouble(), one.positionAt(next.atMs).toDouble(), 100.0) }
@@ -385,9 +385,9 @@ class SongListenerTest {
         val recording = AudioRecordMicrophone().open()
         assertNotNull(recording)
         val buffer = ShortArray(10)
-        assertEquals(4, recording!!.read(buffer, 2, 4))
+        assertEquals(4, checkNotNull(recording) { "Expected recording to be non-null" }.read(buffer, 2, 4))
         assertArrayEquals(shortArrayOf(0, 0, 7, 7, 7, 7, 0, 0, 0, 0), buffer)
-        assertEquals(16_000, made!!.sampleRate)
+        assertEquals(16_000, checkNotNull(made) { "Expected made to be non-null" }.sampleRate)
         assertEquals(AudioFormat.CHANNEL_IN_MONO, made.channelConfiguration)
         assertEquals(AudioFormat.ENCODING_PCM_16BIT, made.audioFormat)
         assertEquals(MediaRecorder.AudioSource.MIC, made.audioSource)
@@ -443,7 +443,7 @@ class SongListenerTest {
             }.also { made = it }
         }
         assertNull(busy.open())
-        assertEquals(AudioRecord.STATE_UNINITIALIZED, made!!.state)
+        assertEquals(AudioRecord.STATE_UNINITIALIZED, checkNotNull(made) { "Expected made to be non-null" }.state)
     }
 
     @Test
@@ -531,7 +531,7 @@ class SongListenerTest {
             val tap = PlayingTap(sound) { clock }
             waits = 0
             val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
-            assertEquals("$durationMs ms blip", 0, played.open()!!.use { it.read(ShortArray(1), 0, 1) })
+            assertEquals("$durationMs ms blip", 0, checkNotNull(played.open()) { "Expected played.open() to be non-null" }.use { it.read(ShortArray(1), 0, 1) })
             assertFalse("$durationMs ms blip was saved as shared sound", preferences.getBoolean(PlayedSound.KEY_SHARES, false))
         }
     }
@@ -544,7 +544,7 @@ class SongListenerTest {
         val tap = PlayingTap(sound) { clock }
         waits = 0
         val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
-        val heard = played.open()!!.use { all(it, max = max) }
+        val heard = checkNotNull(played.open()) { "Expected played.open() to be non-null" }.use { all(it, max = max) }
         return heard to preferences.getBoolean(PlayedSound.KEY_SHARES, false)
     }
 
@@ -613,7 +613,7 @@ class SongListenerTest {
         clock = 0
         waits = 0
         val played = PlayedSound({ SampleTap(samples, size) }, preferences, now = { clock }, sleep = { waitFor(size.toLong()) })
-        val got = played.open()!!.use { it.read(ShortArray(8), 0, 8) }
+        val got = checkNotNull(played.open()) { "Expected played.open() to be non-null" }.use { it.read(ShortArray(8), 0, 8) }
         return got to preferences.getBoolean(PlayedSound.KEY_SHARES, false)
     }
 
@@ -675,7 +675,7 @@ class SongListenerTest {
         val tap = PlayingTap(ByteArray(48_000 * 3) { 128.toByte() }) { clock }
         waits = 0
         val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
-        assertEquals(0, played.open()!!.use { it.read(ShortArray(1), 0, 1) })
+        assertEquals(0, checkNotNull(played.open()) { "Expected played.open() to be non-null" }.use { it.read(ShortArray(1), 0, 1) })
     }
 
     @Test
@@ -683,7 +683,7 @@ class SongListenerTest {
         val sound = music(3)
         clock = 100
         val tap = PlayingTap(sound) { clock }
-        val heard = played(tap).open()!!.use { all(it, max = 16_000) }
+        val heard = checkNotNull(played(tap).open()) { "Expected played(tap).open() to be non-null" }.use { all(it, max = 16_000) }
         // From where listening started on, every sample, at 16 kHz: each the three it's made of.
         val start = 100 * 48
         assertEquals(16_000, heard.size)
@@ -709,7 +709,7 @@ class SongListenerTest {
         val flaky = object : SoundTap by inner {
             override fun read(into: ByteArray) = if (empty-- > 0) 0 else inner.read(into)
         }
-        val heard = played(flaky).open()!!.use { all(it, max = 1_600) }
+        val heard = checkNotNull(played(flaky).open()) { "Expected played(flaky).open() to be non-null" }.use { all(it, max = 1_600) }
         assertEquals(1_600, heard.size)
         assertTrue(heard.any { it != 0.toShort() })
     }
@@ -721,7 +721,7 @@ class SongListenerTest {
         val tap = PlayingTap(sound) { clock }
         // A clock that's behind: the reads overlap by more than it says, so where they match is looked for.
         waits = 0
-        val heard = PlayedSound({ tap }, now = { 0L }, sleep = { waitFor(1) }).open()!!.use { all(it, max = 3_200) }
+        val heard = checkNotNull(PlayedSound({ tap }, now = { 0L }, sleep = { waitFor(1) }).open()) { "Expected PlayedSound({ tap }, now = { 0L }, sleep = { waitFor(1) }).open() to be non-null" }.use { all(it, max = 3_200) }
         assertEquals(3_200, heard.size)
         assertEquals(sixteenKilohertz(sound, 100, 3_200), heard.toList())
     }
@@ -731,7 +731,7 @@ class SongListenerTest {
         val sound = music(3)
         clock = 100
         // Reads 40 ms apart don't overlap; what played between them is lost.
-        val heard = played(PlayingTap(sound) { clock }, every = 40).open()!!.use { all(it, max = 16_000) }
+        val heard = checkNotNull(played(PlayingTap(sound) { clock }, every = 40).open()) { "Expected played(PlayingTap(sound) { clock }, every = 40).open() to be non-null" }.use { all(it, max = 16_000) }
         assertEquals(16_000, heard.size)
         // Each 40 ms is 640 samples: the last 21 ms heard, the rest silence before it.
         assertTrue(heard.copyOfRange(0, 297).all { it == 0.toShort() })
@@ -741,7 +741,7 @@ class SongListenerTest {
     @Test
     fun aPhonesSoundAt44KhzIsHeardAt16() {
         clock = 0
-        val heard = played(PlayingTap(music(2, 44_100), rateHz = 44_100) { clock }).open()!!.use { all(it, max = 16_000) }
+        val heard = checkNotNull(played(PlayingTap(music(2, 44_100), rateHz = 44_100) { clock }).open()) { "Expected played(PlayingTap(music(2, 44_100), rateHz = 44_100) { clock }).open() to be non-null" }.use { all(it, max = 16_000) }
         assertEquals(16_000, heard.size)
         assertTrue(heard.count { it == 0.toShort() } < 300)
     }
@@ -752,7 +752,7 @@ class SongListenerTest {
         val sound = ByteArray(48_000) { 128.toByte() } + music(2)
         clock = 0
         val tap = PlayingTap(sound) { clock }
-        val heard = played(tap).open()!!.use { all(it, max = 24_000) }
+        val heard = checkNotNull(played(tap).open()) { "Expected played(tap).open() to be non-null" }.use { all(it, max = 24_000) }
         assertEquals(24_000, heard.size)
         assertTrue(heard.copyOfRange(0, 15_900).all { it == 0.toShort() })
         assertTrue(heard.copyOfRange(16_100, 24_000).any { it != 0.toShort() })
@@ -779,10 +779,10 @@ class SongListenerTest {
             waits = 0
             return PlayedSound({ taps.removeFirst() }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
         }
-        assertTrue(sound().open()!!.use { all(it, max = 8_000) }.any { it != 0.toShort() })
+        assertTrue(checkNotNull(sound().open()) { "Expected sound().open() to be non-null" }.use { all(it, max = 8_000) }.any { it != 0.toShort() })
         // Even after Crosstune starts again.
         clock = 0
-        val quiet = sound().open()!!.use { all(it, max = 48_000) }
+        val quiet = checkNotNull(sound().open()) { "Expected sound().open() to be non-null" }.use { all(it, max = 48_000) }
         assertTrue(quiet.isNotEmpty() && quiet.all { it == 0.toShort() })
     }
 
@@ -791,7 +791,7 @@ class SongListenerTest {
         val sound = music(2)
         clock = 100
         val tap = PlayingTap(sound) { clock }
-        val heard = played(tap).open()!!.use { recording ->
+        val heard = checkNotNull(played(tap).open()) { "Expected played(tap).open() to be non-null" }.use { recording ->
             all(recording, max = 1_600).also { tap.size = 512 } + all(recording, max = 1_600)
         }
         assertEquals(3_200, heard.size)
