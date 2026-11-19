@@ -194,7 +194,8 @@ internal class ChatGptTutor(
     suspend fun cachedReadingFixes(song: MusicMetadata, lines: List<String>): List<List<ReadingFix>> {
         val suffix = readingKey(song, lines)
         return cache.entries().mapNotNull { (key, value) ->
-            if (!key.startsWith("readings|") || key.removePrefix("readings|").substringAfter('|') != suffix) return@mapNotNull null
+            val fields = key.split('|', limit = 3)
+            if (fields.first() != "readings" || fields.getOrNull(2) != suffix) return@mapNotNull null
             try {
                 readingFixes(value)
             } catch (_: JSONException) {

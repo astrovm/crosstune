@@ -256,13 +256,14 @@ class FlashcardsTest {
         val sung = LookupCache(File(app.cacheDir, "sung_readings.json"), Dispatchers.Unconfined)
         val answers = LookupCache(File(app.cacheDir, "chatgpt_answers.json"), Dispatchers.Unconfined)
         runBlocking {
-            lyrics.put("16\u0000${RecordingKey.of(song)}", """{"words":"雨が降る\n$text","lines":[[1000,"雨が降る"],[2000,"$text"]]}""")
+            lyrics.put("16\u0000${RecordingKey.of(song)}", """{"words":"雨が降る\n${text}かな","lines":[[1000,"雨が降る"],[2000,"$text"]]}""")
             val key = "oldcounters|band|${lines.hashCode()}"
             sung.put("utaten|3|$key", """[[1,"都会","まち"]]""")
             sung.put("utaten|4|$key", "[]")
             answers.put("readings|old-model|${song.title}|Band|${lines.hashCode()}", """[{"line":2,"kanji":"存在","reading":"こと"}]""")
             answers.put("readings|bad-model|${song.title}|Band|${lines.hashCode()}", "bad cache entry")
             answers.put("readings|other-model|${song.title}|Other Band|${lines.hashCode()}", """[{"line":2,"kanji":"存在","reading":"もの"}]""")
+            answers.put("unrelated|old-model|${song.title}|Band|${lines.hashCode()}", """[{"line":2,"kanji":"存在","reading":"もの"}]""")
             lyrics.save()
             sung.save()
             answers.save()

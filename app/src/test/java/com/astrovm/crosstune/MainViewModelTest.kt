@@ -2974,12 +2974,15 @@ class MainViewModelTest {
         val olderNone = noLyrics.copy(title = "Older none")
         val different = noLyrics.copy(title = "Different line")
         val otherTake = noLyrics.copy(title = "Other take", lengthMs = 80_000L)
+        val current = noLyrics.copy(title = "Current dictionary", readWith = Readings.VERSION)
         val edited = noLyrics.copy(title = "Edited", reading = "さんほんのか", readByHand = true, ruby = parts.dropLast(1) + Ruby("花", "か"))
         val word = noLyrics.copy(title = "Word", text = "三本", reading = "さんほん", ruby = parts.take(1), line = text)
         val chinese = noLyrics.copy(title = "Chinese", text = "你好", reading = "nǐ hǎo", ruby = listOf(Ruby("你", "nǐ"), Ruby("好", "hǎo")))
-        val kept = listOf(noLyrics, noSung, corrupt, oldNone, olderNone, different, otherTake, edited, word, chinese)
+        val kept = listOf(noLyrics, noSung, corrupt, oldNone, olderNone, different, otherTake, current, edited, word, chinese)
         val store = SavedLinesStore(prefs())
         store.addAll(kept)
+        val raw = prefs().getString("saved_lines", null) + " "
+        prefs().edit().putString("saved_lines", raw).commit()
 
         val model = modelWithReadingCache { lyrics, sung ->
             kept.filter { it != noLyrics }.forEach { line ->
@@ -2991,19 +2994,20 @@ class MainViewModelTest {
             sung.putCachedSung(MusicMetadata(oldNone.title, oldNone.artist), listOf(text), version = 3, answer = "[]")
             sung.putCachedSung(MusicMetadata(olderNone.title, olderNone.artist), listOf(text), version = 2, answer = "[]")
             sung.putCachedSung(MusicMetadata(different.title, different.artist), listOf("三本の花に"), version = 4, answer = "[]")
-            for (line in listOf(otherTake, edited, word, chinese)) {
+            for (line in listOf(otherTake, current, edited, word, chinese)) {
                 sung.putCachedSung(MusicMetadata(line.title, line.artist), listOf(line.text), version = 4, answer = "[]")
             }
         }
         idle()
         assertEquals(kept, model.uiState.savedLines)
         assertEquals(kept, store.load())
+        assertEquals(raw, prefs().getString("saved_lines", null))
         assertTrue(fake.requestedUrls.isEmpty())
     }
 
     @Test
     fun aPositiveSungAnswerFromBeforeTheSearchRefererStillRefreshesAKeptLine() {
-        val song = MusicMetadata("City Counters", "Band", lengthMs = 60_000L)
+        val song = MusicMetadata("City Counters", "Band", lengthMs = 60_000L + SAME_RECORDING_LENGTH_MS)
         val text = "都会の三本"
         val line = SavedLine(text, reading = "まちのさんほん", title = song.title, artist = song.artist, lengthMs = song.lengthMs)
         val store = SavedLinesStore(prefs())
