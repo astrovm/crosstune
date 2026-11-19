@@ -912,6 +912,34 @@ class SongListenerTest {
         assertEquals(room.copy(inRoom = true), runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listenToPlaying() })
     }
 
+    @Test
+    fun aSongTheCatalogMissesIsHeardOnThePhoneFirstThenInTheRoomAndKeepsTheAppsNameWhenNothingIsHeard() {
+        val named = Heard.Song(MusicMetadata("Misleading Stream Title", "Radio Host"), null, 42_000, 400_000)
+        val phone = FakePlayback().apply { onThePhone = named }
+        val miss: suspend (Heard.Song) -> Boolean = { false }
+        val bySound = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null, 13_000, 400_000)
+        val byRoom = bySound.copy(offsetMs = 12_000)
+        val unshared = SongHearing { Heard.Failed(AppError.MICROPHONE) }
+        val notAsked = SongHearing { error("not asked") }
+        fun heard(room: SongHearing, played: SongHearing) = runBlocking { PlayingFirst(phone, room, played).listen(miss) }
+        // The phone's own sound is cleaner than the room's, so it's heard first even for an app that has a clock.
+        assertEquals(bySound, heard(notAsked, SongHearing { bySound }))
+        assertEquals(byRoom, heard(SongHearing { byRoom }, unshared))
+        // Shazam names no song, as with headphones or silence: the app's name was right as far as anyone can tell.
+        assertEquals(named, heard(SongHearing { Heard.Nothing }, unshared))
+        assertEquals(named, heard(SongHearing { Heard.Failed(AppError.NETWORK) }, unshared))
+        // Phone sound that was heard and named nothing isn't heard again through the room.
+        assertEquals(named, heard(notAsked, SongHearing { Heard.Nothing }))
+        // An app with no clock is heard the same way, once.
+        val video = Heard.Song(MusicMetadata("Misleading Stream Title", "Radio Host"), null)
+        phone.onThePhone = video
+        assertEquals(bySound, heard(notAsked, SongHearing { bySound }))
+        assertEquals(video, heard(notAsked, SongHearing { Heard.Nothing }))
+        assertEquals(video, heard(SongHearing { Heard.Nothing }, unshared))
+        // The room names another song than the one the catalog missed: the catalog missed the app's name, not the song.
+        assertEquals(byRoom, heard(SongHearing { byRoom }, unshared))
+    }
+
     private companion object {
         const val NO_MATCH = """{"matches":[],"timestamp":5,"tagid":"x"}"""
         const val MATCH = """{"matches":[{"id":"238534"}],"track":{"key":"238534","title":"Iris","subtitle":"The Goo Goo Dolls",""" +

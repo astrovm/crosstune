@@ -321,6 +321,12 @@ internal interface PlaybackSource {
      */
     fun nowPlaying(): Heard.Song?
 
+    /** A song the first playing app names with an artist of its own, ready for song recognition. */
+    fun songForRecognition(): Heard.Song?
+
+    /** Whether the first session plays on the phone without naming a song for recognition. */
+    fun playsHereWithoutSong(): Boolean
+
     /** The matching recording, including one paused in its music app. */
     fun recording(song: MusicMetadata): MusicMetadata?
 
@@ -818,14 +824,22 @@ internal class MediaSessionPlayback(
     // What plays first, as [whatPlays] ranks it, so the bar, the sleep timer and practice never disagree.
     override fun nowPlaying(): Heard.Song? = (whatPlays() as? WhatPlays.Named)?.song
 
+    override fun songForRecognition(): Heard.Song? = firstPlayingApp()?.let { playing(it, forRecognition = true) }
+
+    override fun playsHereWithoutSong(): Boolean = firstPlayingApp()?.let {
+        it.place() == Place.PHONE && playing(it, forRecognition = true) == null
+    } == true
+
     override fun playingUnnamed(): Unnamed? = (whatPlays() as? WhatPlays.Nameless)?.playing
 
     override fun whatPlays(): WhatPlays? =
+        firstPlayingApp()?.let { app ->
+            // Without playback state this is a station, not a song whose transport can be followed.
+            app.playbackState?.let { playing(app) }?.let(WhatPlays::Named) ?: WhatPlays.Nameless(app.unnamed())
+        }
+
+    private fun firstPlayingApp(): MediaController? =
         playingApps().minWithOrNull(compareBy(playsFirst) { Rank(said(it) != null, it.place(), it.playbackState?.lastPositionUpdateTime ?: 0L) })
-            ?.let { app ->
-                // Without playback state this is a station, not a song whose transport can be followed.
-                app.playbackState?.let { playing(app) }?.let(WhatPlays::Named) ?: WhatPlays.Nameless(app.unnamed())
-            }
 
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
 
@@ -992,12 +1006,15 @@ internal class MediaSessionPlayback(
     }.distinctUntilChanged()
 
     /** What [controller] plays, as a song, unless it names none; [asked] is how long the song asked for is, when known. */
-    private fun playing(controller: MediaController, asked: Long? = null): Heard.Song? {
+    private fun playing(controller: MediaController, asked: Long? = null, forRecognition: Boolean = false): Heard.Song? {
         val metadata = controller.metadata ?: return null
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        // A dash in a browser tab or stream title can look like an artist and song. For recognition,
+        // use the audio when the session only supplies that title.
+        if (forRecognition && MetadataParsers.noArtist(artist)) return null
         if (Songless.namesNoSong(title, artist, controller.songName(title, artist))) return null
-        val named = said(controller, asked) ?: return null
+        val named = said(controller, asked, metadata) ?: return null
         val artwork = coverOf(metadata, controller.sessionToken)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         // Nor where a song waiting for an ad to end is, as it isn't playing yet.
@@ -1017,8 +1034,8 @@ internal class MediaSessionPlayback(
      * once took it; null when it says nothing a song could be read from, e.g. no title, or a video that doesn't
      * say it's music. What plays is ranked by it, see [playsFirst].
      */
-    private fun said(controller: MediaController, asked: Long? = null): MusicMetadata? {
-        val metadata = controller.metadata ?: return null
+    private fun said(controller: MediaController, asked: Long? = null, snapshot: MediaMetadata? = controller.metadata): MusicMetadata? {
+        val metadata = snapshot ?: return null
         val named = controller.songName(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
         if (named.unnamed) return named.takeUnless { controller.isVideo() }
         val (title, artist) = named
