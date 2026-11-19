@@ -1087,6 +1087,32 @@ class PlaybackTest {
     }
 
     @Test
+    fun theStationOnlyCountsTheSoundWhenNoOtherSessionCouldBeItsSource() {
+        allow()
+        sounding()
+        val station = player(RadioNotice.PACKAGE, "Simple Radio", "Blue 100.7 FM", null)
+        shadowOf(station).setPlaybackState(null)
+        shadowOf(station).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_LOCAL).build())
+        shadowOf(sessions).addController(station)
+        radioNotices.value = setOf(station.sessionToken)
+        // An app that says it stopped is not where the sound comes from, so the station still shows.
+        val stopped = player("com.spotify.music", "Spotify", "Old Song", "Old Artist", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(stopped)
+        assertEquals("Blue 100.7 FM", playback.playingUnnamed()?.name)
+
+        // A second session with no state could be the one making the sound, so it is no one's.
+        val other = player("com.example.player", "Player", song.title, song.artist, album = "Album")
+        val reported = checkNotNull(other.playbackState)
+        shadowOf(other).setPlaybackState(null)
+        shadowOf(sessions).addController(other)
+        assertNull(playback.whatPlays())
+
+        // An app that reports playing wins, as it always did.
+        shadowOf(other).setPlaybackState(reported)
+        assertEquals(song.title, (playback.whatPlays() as WhatPlays.Named).song.metadata.title)
+    }
+
+    @Test
     fun aStoppedRadioSessionDoesNotBorrowAnotherAppsSound() {
         allow()
         sounding()
@@ -3297,7 +3323,7 @@ class PlaybackTest {
     @Test
     fun matchingSessionCountsIncludeItsAppsOtherSongs() {
         allow()
-        shadowOf(sessions).addController(player("com.example.player", "Player", song.title, song.artist))
+        shadowOf(sessions).addController(player("com.example.player", "Player", song.title, song.artist, album = "Album"))
         shadowOf(sessions).addController(player("com.example.player", "Player", "Another fake song", "Fake artist"))
         val match = playback.matching(song).single()
         assertEquals("com.example.player", match.app)

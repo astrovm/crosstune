@@ -2157,6 +2157,32 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aSongsSleepTimerFollowsItInTheSessionItsPlayerFollows() {
+        val playback = FakePlayback().apply { playing.value = following().copy(session = 7) }
+        val scope = MainScope()
+        val model = playingModel(playback, sleepTimer = SleepTimer(playback, scope))
+        assertEquals(7, model.uiState.player?.following?.session)
+        val followed = playback.followedSessions.size
+        model.playerSleep(null)
+        idle()
+        assertEquals(listOf<Int?>(7), playback.followedSessions.drop(followed))
+        scope.cancel()
+    }
+
+    @Test
+    fun anotherSessionOfTheSameAppSayingTheSameStationIsTakenUpOnItsOwnSession() {
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(station.played, model.uiState.player?.song)
+        assertNull(model.uiState.player?.session)
+        playback.unnamed.value = station.copy(session = 9)
+        idle()
+        assertEquals(9, model.uiState.player?.session)
+    }
+
+    @Test
     fun aStationsSleepTimerFollowsItInItsApp() {
         val playback = FakePlayback().apply { playing.value = following(app = station.app) }
         val scope = MainScope()
