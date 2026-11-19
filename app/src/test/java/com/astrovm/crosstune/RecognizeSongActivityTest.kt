@@ -36,7 +36,7 @@ class RecognizeSongActivityTest {
 
     private fun assertListens(started: Intent) {
         assertEquals(MainActivity.ACTION_LISTEN, started.action)
-        assertEquals(MainActivity.LISTEN_ALIAS, started.component!!.className)
+        assertEquals(MainActivity.LISTEN_ALIAS, checkNotNull(started.component) { "Expected a started activity component" }.className)
         // It starts from the home screen, outside any task of Crosstune's.
         assertTrue(started.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
     }
