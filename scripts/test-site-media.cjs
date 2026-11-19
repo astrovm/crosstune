@@ -23,10 +23,9 @@ function page({ dark = false, override, reduced = false, blockedStorage = false,
     getAttribute(name) { return this.attributes[name] ?? null; },
     removeAttribute(name) { delete this.attributes[name]; },
     getBoundingClientRect() { return { top: 0 }; }, click() { this.listeners.click(); } });
-  const button = element(), play = element(), steps = element(), container = element(), hero = element();
+  const button = element();
   const apk = Object.assign(element(), { href: releasePage });
   const asked = [];
-  steps.hidden = true; hero.querySelector = () => container;
   const videos = ['home', 'lyrics'].map(name => Object.assign(element(), {
     dataset: { clip: `/img/${language}/${name}` }, loads: 0, plays: 0, paused: true,
     load() { this.loads++; }, pause() { this.paused = true; }, play() { this.plays++; this.paused = false; return Promise.resolve(); },
@@ -35,8 +34,8 @@ function page({ dark = false, override, reduced = false, blockedStorage = false,
   const dataset = override ? { theme: override } : {};
   const storage = {};
   vm.runInNewContext(script, {
-    document: { documentElement: { dataset }, fonts: { ready: Promise.resolve() }, getElementById: () => steps,
-      querySelector: selector => ({ '.theme': button, '.play-toggle': play, '#google-play': steps, '.hero': hero, '.apk': apk })[selector],
+    document: { documentElement: { dataset }, fonts: { ready: Promise.resolve() },
+      querySelector: selector => ({ '.theme': button, '.apk': apk })[selector],
       querySelectorAll: () => videos },
     matchMedia: query => query.includes('reduced-motion') ? motion : os,
     localStorage: { setItem(key, value) { if (blockedStorage) throw Error('blocked'); storage[key] = value; } },
