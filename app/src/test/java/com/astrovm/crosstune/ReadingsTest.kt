@@ -1445,6 +1445,73 @@ class ReadingsTest {
     }
 
     @Test
+    fun aHandAfterAPronounIsAHandNotASuffix() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            // IPADIC takes 手 for the suffix of a person, しゅ, after 僕ら: it is the hand, before any particle.
+            assertEquals("$withUniDic", "ぼくらてをたたいて", read("僕ら手を叩いて"))
+            assertEquals("$withUniDic", "ぼくらてがふるえる", read("僕ら手が震える"))
+            // A suffix a pronoun does take stays: あなた方, 私達 わたしたち.
+            assertEquals("$withUniDic", "あなたかたは", read("あなた方は"))
+            assertEquals("$withUniDic", "わたしたちは", read("私達は"))
+        }
+    }
+
+    @Test
+    fun aSuffixSaidWithAVoiceAfterAWordItCantJoinIsTheNounItIsAlone() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            // 日 after いつか and いつの is a day, ひ, not the び of a word's second half.
+            assertEquals("$withUniDic", "いつかひがのぼる", read("いつか日が昇る"))
+            assertEquals("$withUniDic", "いつのひも", read("いつの日も"))
+            // 星 after how many times is a star, ほし, as it's after 一度 or いちど.
+            assertEquals("$withUniDic", "いちどほしに", read("一度星に"))
+            assertEquals("$withUniDic", "もいちどほしにひかれ", read("もいちど星にひかれ"))
+            assertEquals("$withUniDic", "なんどほしに", read("何度星に"))
+            // After a word it's the second half of, it stays: 一番星, ガラス玉, and 日 after a kanji.
+            assertEquals("$withUniDic", "いちばんぼしを", read("一番星を"))
+            assertEquals("$withUniDic", "がらすだま", read("ガラス玉"))
+            // 一度 and 星 as words: 一度だけ stays.
+            assertEquals("$withUniDic", "いちどだけ", read("一度だけ"))
+        }
+    }
+
+    @Test
+    fun aKanjiAfterAVerbIsNotANameForHito() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            // 等 is ひとし, a name, but after a verb it's など.
+            assertEquals("$withUniDic", "かなうなど", read("叶う等"))
+            assertEquals("$withUniDic", "かなうなど…", read("叶う等…"))
+        }
+        // Where it follows a surname it's the name.
+        assertEquals("やまだひとし", reading("山田等").reading)
+    }
+
+    @Test
+    fun aNounAfterANumberAndACounterIsSaidWithAVoice() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            assertEquals("$withUniDic", "せんぼんざくら よるにまぎれ", read("千本桜 夜ニ紛レ"))
+            assertEquals("$withUniDic", "ひゃっぽんざくらがさく", read("百本桜が咲く"))
+            assertEquals("$withUniDic", "かたるにまいば", read("騙る二枚刃"))
+            // 桜 and 刃 after anything else are as they are alone.
+            assertEquals("$withUniDic", "はるのさくら", read("春の桜"))
+            assertEquals("$withUniDic", "さくらがさく", read("桜が咲く"))
+            assertEquals("$withUniDic", "はのひかり", read("刃の光"))
+        }
+    }
+
+    @Test
+    fun aThousandNightsIsSenYaWhateverNameUniDicHasForIt() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            assertEquals("$withUniDic", "ひとりまうせんや", read("一人舞う千夜"))
+            assertEquals("$withUniDic", "さんやのつき", read("三夜の月"))
+        }
+    }
+
+    @Test
     fun wordsJmdictListsAreReadAsItReadsThem() {
         // Read from the file again, and its header is no word.
         Readings.listed = null
