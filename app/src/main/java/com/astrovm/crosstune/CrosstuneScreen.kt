@@ -163,7 +163,7 @@ internal class BarFocus {
     var owed by mutableStateOf(false)
 }
 
-internal val LocalBarFocus = staticCompositionLocalOf<BarFocus?> { null }
+internal val LocalBarFocus = staticCompositionLocalOf { BarFocus() }
 
 /** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
 internal const val CARD_TOOLS_TAG = "card_tools"
@@ -887,10 +887,10 @@ private fun PlayingBar(
     val playing = following?.clock?.playing != false
     // The buttons sit inside the bar's own tap target, where a remote's search from the bar never looks.
     val handed = LocalBarFocus.current
-    val bar = handed?.requester ?: remember { FocusRequester() }
+    val bar = handed.requester
     // Once the player that covered it is gone, the remote comes back to it.
-    LaunchedEffect(handed?.owed) {
-        if (handed?.owed != true) return@LaunchedEffect
+    LaunchedEffect(handed.owed) {
+        if (!handed.owed) return@LaunchedEffect
         withFrameNanos {}
         runCatching { bar.requestFocus() }
         handed.owed = false

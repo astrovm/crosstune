@@ -123,6 +123,8 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 internal const val PLAYER_COVER_TAG = "player-cover"
+internal const val OPEN_STATION_ICON_TAG = "open-station-icon"
+internal const val OPEN_STATION_WORD_TAG = "open-station-word"
 
 /**
  * Crosstune's player: the song playing in its music app, behind, with its cover, where it is, and
@@ -179,7 +181,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     val barFocus = LocalBarFocus.current
     val handsBack by rememberUpdatedState(player.stationOnly && state.phone == Phone.TV)
     DisposableEffect(barFocus) {
-        onDispose { if (handsBack) barFocus?.owed = true }
+        onDispose { if (handsBack) barFocus.owed = true }
     }
     val fromTools = remember { FocusRequester() }
     // Which of them opened it, null till one did, so the remote is back there once it's put away,
@@ -282,9 +284,9 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                     contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
                     modifier = Modifier.heightIn(min = 52.dp).focusRequester(openStation).semantics { contentDescription = openApp }
                 ) {
-                    AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                    AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize).testTag(OPEN_STATION_ICON_TAG))
                     Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                    Text(stringResource(R.string.open_button))
+                    Text(stringResource(R.string.open_button), modifier = Modifier.testTag(OPEN_STATION_WORD_TAG))
                 }
             }
         } else PlayerButtons(following, actions, Modifier.moves("buttons", moving))

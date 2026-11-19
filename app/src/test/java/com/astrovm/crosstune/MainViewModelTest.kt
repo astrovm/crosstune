@@ -2183,6 +2183,23 @@ class MainViewModelTest {
     }
 
     @Test
+    fun theSameSessionSayingTheSameStationAgainKeepsItsPlayerOnIt() {
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        playback.unnamed.value = station.copy(session = 9)
+        idle()
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(9, model.uiState.player?.session)
+        val followed = playback.followed.size
+        // Only where it plays changed: the same session on the same station, with nothing new to follow.
+        playback.unnamed.value = station.copy(session = 9, where = Place.CAST)
+        idle()
+        assertEquals(followed, playback.followed.size)
+        assertEquals(9, model.uiState.player?.session)
+    }
+
+    @Test
     fun aStationsSleepTimerFollowsItInItsApp() {
         val playback = FakePlayback().apply { playing.value = following(app = station.app) }
         val scope = MainScope()
