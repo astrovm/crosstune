@@ -342,7 +342,16 @@ val detektTests = tasks.register<JavaExec>("detektTests") {
         )
     }
 }
-tasks.named("detekt") { dependsOn(detektTests) }
+val noUnsafeCalls = tasks.register<Test>("noUnsafeCalls") {
+    group = "verification"
+    description = "Checks source for null assertions even where detekt cannot resolve the type."
+    val unitTests = tasks.named<Test>("testDebugUnitTest").get()
+    testClassesDirs = unitTests.testClassesDirs
+    classpath = unitTests.classpath
+    filter.includeTestsMatching("com.astrovm.crosstune.NoUnsafeCallsTest")
+    inputs.files(fileTree("src") { include("**/*.kt", "**/*.java") }).withPathSensitivity(PathSensitivity.RELATIVE)
+}
+tasks.named("detekt") { dependsOn(detektTests, noUnsafeCalls) }
 
 // The store's screenshots and the site's clips, drawn on this computer frame by frame: one test
 // class per language, side by side. scripts/shots/shots.py runs it, with the visuals drawn ahead.
