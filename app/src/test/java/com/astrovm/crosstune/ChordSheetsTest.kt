@@ -39,7 +39,7 @@ class ChordSheetsTest {
             SheetLine("عاشق بقالي سنين ولا غيرك في بالي", listOf(Chord(0, "G"))),
             SheetLine("eashiq biqali sinin wala ghyrk fi baly", emptyList())
         )
-        val placed = ChordSheets.place(sheet, texts)!!
+        val placed = checkNotNull(ChordSheets.place(sheet, texts)) { "Expected ChordSheets.place(sheet, texts) to be non-null" }
         assertEquals(listOf("Cm", "Fm"), placed[0].over.map { it.name })
         assertEquals(listOf("G"), placed[1].over.map { it.name })
         // A sheet with only the Latin lines is not this song's words.
@@ -70,7 +70,7 @@ class ChordSheetsTest {
             ),
             site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/psy/gangnam-style-chords-1176046"
         )
-        val placed = ChordSheets.place(sheet, texts)!!
+        val placed = checkNotNull(ChordSheets.place(sheet, texts)) { "Expected ChordSheets.place(sheet, texts) to be non-null" }
         assertEquals(listOf("Am"), placed[0].over.map { it.name })
         assertEquals(listOf("F", "G"), placed[2].over.map { it.name })
         // The second chord is about half way along the line, wherever its letters are now.
@@ -213,7 +213,7 @@ class ChordSheetsTest {
         assertNull(ChordSheets.place(other, words))
         // The song's own lines are placed, a word left out or put differently.
         val own = sheet(SheetLine("Told my mama that I made it out the trench", listOf(Chord(0, "Am"))), SheetLine("Now we pull up in foreign cars and benches", listOf(Chord(0, "F"))))
-        assertEquals(listOf(Chord(0, "Am")), ChordSheets.place(own, words)!![2].over)
+        assertEquals(listOf(Chord(0, "Am")), checkNotNull(ChordSheets.place(own, words)) { "Expected ChordSheets.place(own, words) to be non-null" }[2].over)
     }
 
     @Test
@@ -225,10 +225,10 @@ class ChordSheetsTest {
             *(listOf(SheetLine("Tuned to standard, as was asked for in the comments", emptyList())) + once +
                 SheetLine("Below, the same tuned half a step down, as the record is", emptyList()) + once).toTypedArray()
         )
-        assertEquals(listOf(Chord(0, "G")), ChordSheets.place(twice, words)!![0].over)
+        assertEquals(listOf(Chord(0, "G")), checkNotNull(ChordSheets.place(twice, words)) { "Expected ChordSheets.place(twice, words) to be non-null" }[0].over)
         // The words shown are only the first lines of a longer song.
         val longer = sheet(*(once + SheetLine("Carry me home by the water tonight", listOf(Chord(0, "C"))) + SheetLine("Under the stars where the lanterns are bright", listOf(Chord(0, "Am")))).toTypedArray())
-        assertEquals(listOf(Chord(0, "D")), ChordSheets.place(longer, words)!![1].over)
+        assertEquals(listOf(Chord(0, "D")), checkNotNull(ChordSheets.place(longer, words)) { "Expected ChordSheets.place(longer, words) to be non-null" }[1].over)
     }
 
     @Test
@@ -363,7 +363,7 @@ class ChordSheetsTest {
     @Test
     fun wordsInFullWidthLettersLineUpWithASheetInPlainOnes() {
         val sheet = sheet(SheetLine("I love you so much tonight", listOf(Chord(0, "Am"), Chord(7, "G"))))
-        val placed = ChordSheets.place(sheet, listOf("Ｉ　ｌｏｖｅ　ｙｏｕ　ｓｏ　ｍｕｃｈ　ｔｏｎｉｇｈｔ"))!!
+        val placed = checkNotNull(ChordSheets.place(sheet, listOf("Ｉ　ｌｏｖｅ　ｙｏｕ　ｓｏ　ｍｕｃｈ　ｔｏｎｉｇｈｔ"))) { "Expected ChordSheets.place(sheet, listOf(\"Ｉ　ｌｏｖｅ　ｙｏｕ　ｓｏ　ｍｕｃｈ　ｔｏｎｉｇｈｔ\")) to be non-null" }
         assertEquals(listOf("Am", "G"), placed.single().over.map { it.name })
     }
 
@@ -797,7 +797,7 @@ class ChordSheetsTest {
             [C]遠い海へ[Am]船を漕ぎ出そう
             """.trimIndent()
         ).lines
-        val placed = ChordSheets.place(sheet(*written.toTypedArray()), texts)!!
+        val placed = checkNotNull(ChordSheets.place(sheet(*written.toTypedArray()), texts)) { "Expected ChordSheets.place(sheet(*written.toTypedArray()), texts) to be non-null" }
         // The last one is played after the line, past readings the song doesn't have.
         assertEquals(listOf("Am", "F", "G", "C"), placed[0].over.map { it.name })
         assertEquals(listOf("C", "Am"), placed[1].over.map { it.name })
@@ -957,7 +957,7 @@ class ChordSheetsTest {
             SheetLine("Singing to the morning light", listOf(Chord(0, "D"))),
             SheetLine("", listOf(Chord(0, "Em")))
         )
-        val placed = ChordSheets.place(sheet, listOf("Walking down the river road", "Singing to the morning light"))!!
+        val placed = checkNotNull(ChordSheets.place(sheet, listOf("Walking down the river road", "Singing to the morning light"))) { "Expected ChordSheets.place(sheet, listOf(\"Walking down the river road\", \"Singing to the morning light\")) to be non-null" }
         val names = placed.flatMap { line -> line.before + line.over.map { it.name } }
         assertEquals(listOf("DbM7", "E", "F7", "C7", "G", "D", "Em"), names)
     }
@@ -971,7 +971,7 @@ class ChordSheetsTest {
             SheetLine("$lyric ${"q".repeat(30)}", listOf(Chord(0, "G"), Chord(lyric.length + 1, "C"))),
             SheetLine("Singing to the morning light", listOf(Chord(0, "D")))
         )
-        val placed = ChordSheets.place(sheet, listOf(lyric, "Singing to the morning light"))!!
+        val placed = checkNotNull(ChordSheets.place(sheet, listOf(lyric, "Singing to the morning light"))) { "Expected ChordSheets.place(sheet, listOf(lyric, \"Singing to the morning light\")) to be non-null" }
         assertEquals(listOf("G", "D"), placed.flatMap { line -> line.before + line.over.map { it.name } })
     }
 

@@ -400,7 +400,7 @@ class MainViewModelTest {
         val model = model(oneTap = OneTapSetup(app, listOf(shell)))
         assertFalse(model.uiState.canSetUpInOneTap)
         shell.ready = true
-        shell.changed!!.invoke()
+        checkNotNull(shell.changed) { "Expected shell.changed to be non-null" }.invoke()
         assertTrue(model.uiState.canSetUpInOneTap)
         // Cleared, it stops listening.
         model.onClearedForTest()
@@ -3100,7 +3100,7 @@ class MainViewModelTest {
         fake.handler = { request ->
             val asked = request.url.queryParameter("q").orEmpty()
             when {
-                openAi.answer(request) != null -> openAi.answer(request)!!
+                openAi.answer(request) != null -> checkNotNull(openAi.answer(request)) { "Expected openAi.answer(request) to be non-null" }
                 request.url.host == "api.deezer.com" -> {
                     val tracks = catalogue.filter { (title, _) -> title in asked }.entries.joinToString(",") { (title, artist) ->
                         """{"id":${title.length},"title":"$title","link":"https://www.deezer.com/track/${title.length}","artist":{"name":"$artist"},"album":{"cover_big":"https://cdn/$title.jpg"}}"""
@@ -3217,7 +3217,7 @@ class MainViewModelTest {
         assertEquals(listOf("Hush", "Moon", "Stars"), model.uiState.songSearch.map { it.title })
         assertFalse(model.uiState.isAskingForSongs)
         model.playlistFromSearch()
-        val playlist = model.uiState.result!!
+        val playlist = checkNotNull(model.uiState.result) { "Expected model.uiState.result to be non-null" }
         assertEquals(ItemType.PLAYLIST, playlist.type)
         assertEquals("quiet songs about hush and moon", playlist.title)
         assertEquals(listOf("Hush", "Moon", "Stars"), playlist.tracks.map { it.title })
@@ -3386,24 +3386,24 @@ class MainViewModelTest {
         assertTrue(model.uiState.listeningAlong)
         idle()
         assertEquals(1, ears.asked)
-        val first = model.uiState.following!!
+        val first = checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }
         assertNull(first.app)
         assertTrue(first.clock.playing)
         assertTrue(first.clock.positionAt(android.os.SystemClock.elapsedRealtime()) >= 12_000)
         // Heard nothing: the music most likely stopped, so the words stop where they are.
         pass(8_500)
         assertEquals(2, ears.asked)
-        assertFalse(model.uiState.following!!.clock.playing)
+        assertFalse(checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }.clock.playing)
         // Heard again, far from where the words are, it's where the song is now.
         ears.queue.add(heardNow(at = 50_000))
         pass(8_500)
-        assertTrue(model.uiState.following!!.clock.playing)
-        assertTrue(model.uiState.following!!.clock.positionAt(android.os.SystemClock.elapsedRealtime()) >= 50_000)
+        assertTrue(checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }.clock.playing)
+        assertTrue(checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }.clock.positionAt(android.os.SystemClock.elapsedRealtime()) >= 50_000)
         // Heard a moment off, nothing moves.
-        val placed = model.uiState.following!!.clock
+        val placed = checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }.clock
         ears.queue.add(heardNow(at = 50_000 + 8_500 + 700))
         pass(8_500)
-        assertEquals(placed, model.uiState.following!!.clock)
+        assertEquals(placed, checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }.clock)
         // The next song takes over the words, and joins Recent.
         val next = MusicMetadata("Moon", "Luna")
         ears.queue.add(heardNow(of = next, at = 1_000, match = "m2", appleMusicId = "1234"))
@@ -3545,7 +3545,7 @@ class MainViewModelTest {
         assertTrue(opened != null)
         model.openPlayerApp()
         idle()
-        assertEquals(Effect.Show(opened!!, finishAfterOpen = false, saysWhenItFails = false), effects.last())
+        assertEquals(Effect.Show(checkNotNull(opened) { "Expected opened to be non-null" }, finishAfterOpen = false, saysWhenItFails = false), effects.last())
         assertEquals(2, effects.size)
     }
 

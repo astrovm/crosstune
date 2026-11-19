@@ -80,13 +80,13 @@ class ChatGptTest {
         // A first sign-in registers, under Crosstune's name, for this phone, asking for the plan's use.
         assertEquals("dynamic_agent_client", openAi.authorize.queryParameter("client_id"))
         assertEquals("Crosstune", openAi.authorize.queryParameter("agent_name_hint"))
-        assertTrue(openAi.authorize.queryParameter("ext_agent_host_id")!!.startsWith("urn:uuid:"))
+        assertTrue(checkNotNull(openAi.authorize.queryParameter("ext_agent_host_id")) { "Expected openAi.authorize.queryParameter(\"ext_agent_host_id\") to be non-null" }.startsWith("urn:uuid:"))
         assertEquals("openid profile email offline_access resource.invoke chatgpt.tokens.use.direct", openAi.authorize.queryParameter("scope"))
         assertEquals("https://api.openai.com/v1", openAi.authorize.queryParameter("resource"))
         assertEquals("code", openAi.authorize.queryParameter("response_type"))
         assertNull(openAi.authorize.queryParameter("prompt"))
         assertNull(openAi.authorize.queryParameter("login_hint"))
-        val redirect = openAi.authorize.queryParameter("redirect_uri")!!.toHttpUrl()
+        val redirect = checkNotNull(openAi.authorize.queryParameter("redirect_uri")) { "Expected openAi.authorize.queryParameter(\"redirect_uri\") to be non-null" }.toHttpUrl()
         assertEquals("127.0.0.1", redirect.host)
         assertEquals("/auth/callback", redirect.encodedPath)
 
@@ -101,7 +101,7 @@ class ChatGptTest {
         assertEquals("S256", openAi.authorize.queryParameter("code_challenge_method"))
 
         // The page the browser lands on sends it back to Crosstune.
-        assertTrue(backPage!!.contains("intent://chatgpt#Intent;scheme=crosstune;package=com.example.crosstune;end"))
+        assertTrue(checkNotNull(backPage) { "Expected backPage to be non-null" }.contains("intent://chatgpt#Intent;scheme=crosstune;package=com.example.crosstune;end"))
 
         assertEquals("ana@example.com", runBlocking { chatGpt.email() })
         assertEquals("access-1", runBlocking { chatGpt.accessToken() })
@@ -127,7 +127,7 @@ class ChatGptTest {
         openAi.tokenAnswer = { form -> 200 to openAi.tokens(openAi.idToken(audience = form.getValue("client_id"), subject = "user-2"), access = "access-2") }
         assertEquals(ChatGptSignInResult.SIGNED_IN, signIn(chatGpt) { "code=c&state=${it.queryParameter("state")}&client_id=oaiapp_2" })
         assertEquals("dynamic_agent_client", openAi.authorize.queryParameter("client_id"))
-        assertTrue(openAi.authorize.queryParameter("agent_name_hint")!!.isNotEmpty())
+        assertTrue(checkNotNull(openAi.authorize.queryParameter("agent_name_hint")) { "Expected openAi.authorize.queryParameter(\"agent_name_hint\") to be non-null" }.isNotEmpty())
         assertEquals(host, openAi.authorize.queryParameter("ext_agent_host_id"))
         assertNull(openAi.authorize.queryParameter("login_hint"))
         assertNull(openAi.authorize.queryParameter("id_token_hint"))
@@ -136,7 +136,7 @@ class ChatGptTest {
 
         // Signed in again without signing out, the account is hinted at, and kept to.
         signIn(chatGpt) { "code=c&state=${it.queryParameter("state")}" }
-        assertTrue(openAi.authorize.queryParameter("id_token_hint")!!.isNotEmpty())
+        assertTrue(checkNotNull(openAi.authorize.queryParameter("id_token_hint")) { "Expected openAi.authorize.queryParameter(\"id_token_hint\") to be non-null" }.isNotEmpty())
         assertEquals("oaiapp_2", openAi.authorize.queryParameter("client_id"))
     }
 
@@ -247,7 +247,7 @@ class ChatGptTest {
         val result = runBlocking {
             chatGpt().signIn(open = { url ->
                 openAi.authorize = url.toHttpUrl()
-                val callback = openAi.authorize.queryParameter("redirect_uri")!!.toHttpUrl()
+                val callback = checkNotNull(openAi.authorize.queryParameter("redirect_uri")) { "Expected openAi.authorize.queryParameter(\"redirect_uri\") to be non-null" }.toHttpUrl()
                 thread {
                     // A connection opened ahead of time that says nothing, then a request for the icon.
                     Socket("127.0.0.1", callback.port).use { Thread.sleep(800) }
@@ -266,7 +266,7 @@ class ChatGptTest {
         val result = runBlocking {
             chatGpt().signIn(open = { url ->
                 openAi.authorize = url.toHttpUrl()
-                val callback = openAi.authorize.queryParameter("redirect_uri")!!.toHttpUrl()
+                val callback = checkNotNull(openAi.authorize.queryParameter("redirect_uri")) { "Expected openAi.authorize.queryParameter(\"redirect_uri\") to be non-null" }.toHttpUrl()
                 thread {
                     // Closed without a word, then a request with no address.
                     Socket("127.0.0.1", callback.port).close()
@@ -282,10 +282,10 @@ class ChatGptTest {
     fun theFirstSignInsPortIsUsedWhenFreeAndAnyOtherWhenNot() {
         val free = ServerSocket(0).use { it.localPort }
         signIn(chatGpt(port = free))
-        assertEquals(free, openAi.authorize.queryParameter("redirect_uri")!!.toHttpUrl().port)
+        assertEquals(free, checkNotNull(openAi.authorize.queryParameter("redirect_uri")) { "Expected openAi.authorize.queryParameter(\"redirect_uri\") to be non-null" }.toHttpUrl().port)
         ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { taken ->
             assertEquals(ChatGptSignInResult.SIGNED_IN, signIn(chatGpt(port = taken.localPort)))
-            assertTrue(openAi.authorize.queryParameter("redirect_uri")!!.toHttpUrl().port != taken.localPort)
+            assertTrue(checkNotNull(openAi.authorize.queryParameter("redirect_uri")) { "Expected openAi.authorize.queryParameter(\"redirect_uri\") to be non-null" }.toHttpUrl().port != taken.localPort)
         }
     }
 
@@ -486,7 +486,7 @@ class ChatGptTest {
         val result = runBlocking {
             chatGpt().signIn(open = { url ->
                 openAi.authorize = url.toHttpUrl()
-                val callback = openAi.authorize.queryParameter("redirect_uri")!!.toHttpUrl()
+                val callback = checkNotNull(openAi.authorize.queryParameter("redirect_uri")) { "Expected openAi.authorize.queryParameter(\"redirect_uri\") to be non-null" }.toHttpUrl()
                 thread {
                     Socket("127.0.0.1", callback.port).use { it.getOutputStream().write("GET nonsense HTTP/1.1\r\n\r\n".toByteArray()) }
                     backPage = openAi.comeBack()
@@ -836,7 +836,7 @@ class ChatGptTest {
         val lines = listOf("Shock!　君はアスファルト・レディ")
         val read = listOf(LineReading(listOf(Ruby("Shock!　"), Ruby("君", "くん"), Ruby("はアスファルト・レディ")), "Shock!　くんはアスファルト・レディ", "Shock! kun wa asufaruto redi"))
         answering("Here:\n[{\"line\": 1, \"kanji\": \"君\", \"reading\": \"きみ\"}]")
-        val checked = runBlocking { tutor.checkReadings(song, lines, read) }!!
+        val checked = checkNotNull(runBlocking { tutor.checkReadings(song, lines, read) }) { "Expected runBlocking { tutor.checkReadings(song, lines, read) } to be non-null" }
         assertEquals("きみ", checked[0].parts[1].reading)
         assertEquals("Shock! kimi wa asufaruto redi", checked[0].romanized)
         val asked = openAi.asked.single()

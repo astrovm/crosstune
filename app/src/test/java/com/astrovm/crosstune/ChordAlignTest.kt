@@ -75,7 +75,7 @@ class ChordAlignTest {
         assertEquals(listOf("D"), aligned.lines[1].drawn)
         assertEquals(10, aligned.lines[1].letters)
         assertEquals(5, aligned.lines[1].matched)
-        assertEquals(listOf(Chord(0, "G")), aligned.placed!![0].over)
+        assertEquals(listOf(Chord(0, "G")), checkNotNull(aligned.placed) { "Expected aligned.placed to be non-null" }[0].over)
         assertEquals(1, aligned.placed[1].over.size)
         assertEquals("D", aligned.placed[1].over.single().name)
     }
@@ -101,7 +101,7 @@ class ChordAlignTest {
         // Ten letters is long enough to be another verse, so the chord on a letter that didn't line up is left off, and the other stays on its own line.
         assertEquals(listOf("A"), aligned.lines[1].drawn)
         assertEquals(listOf("A", "B"), aligned.lines[1].chords)
-        assertEquals(listOf(Chord(1, "A")), aligned.placed!![1].over)
+        assertEquals(listOf(Chord(1, "A")), checkNotNull(aligned.placed) { "Expected aligned.placed to be non-null" }[1].over)
         assertEquals(emptyList<String>(), aligned.placed[1].before)
     }
 
@@ -113,7 +113,7 @@ class ChordAlignTest {
         )
         assertEquals(3, aligned.lines[1].matched)
         assertEquals(listOf("K"), aligned.lines[1].drawn)
-        assertEquals(listOf(Chord(0, "K")), aligned.placed!![1].over)
+        assertEquals(listOf(Chord(0, "K")), checkNotNull(aligned.placed) { "Expected aligned.placed to be non-null" }[1].over)
     }
 
     @Test
@@ -124,7 +124,7 @@ class ChordAlignTest {
         )
         assertEquals(1, aligned.lines[0].matched)
         assertEquals(listOf("X"), aligned.lines[0].drawn)
-        assertEquals(listOf(Chord(0, "X")), aligned.placed!![0].over)
+        assertEquals(listOf(Chord(0, "X")), checkNotNull(aligned.placed) { "Expected aligned.placed to be non-null" }[0].over)
         assertEquals(listOf(Chord(0, "Y")), aligned.placed[1].over)
         assertEquals(listOf(Chord(0, "Z")), aligned.placed[2].over)
     }
@@ -143,7 +143,7 @@ class ChordAlignTest {
         // Each is above the blank line it was written over. A chord that had landed doesn't land again for the next.
         assertEquals(listOf(listOf("A"), emptyList(), listOf("B"), listOf("C")), aligned.lines.map { it.drawn })
         assertEquals(listOf(listOf("A"), emptyList(), listOf("B"), listOf("C")), aligned.lines.map { it.chords })
-        val placed = aligned.placed!!
+        val placed = checkNotNull(aligned.placed) { "Expected aligned.placed to be non-null" }
         assertEquals(listOf("A"), placed[0].before)
         assertEquals(emptyList<String>(), placed[1].before)
         assertEquals(listOf("B"), placed[2].before)
@@ -157,7 +157,7 @@ class ChordAlignTest {
             listOf(first)
         )
         // Line 0 is the first line shown, and there is nothing above it to take the chord.
-        assertEquals(listOf("A"), aligned.placed!![0].before)
+        assertEquals(listOf("A"), checkNotNull(aligned.placed) { "Expected aligned.placed to be non-null" }[0].before)
         assertEquals(listOf(Chord(0, "G")), aligned.placed[0].over)
         assertEquals(listOf(listOf("A"), listOf("G")), aligned.lines.map { it.drawn })
     }
@@ -168,7 +168,7 @@ class ChordAlignTest {
             sheet(SheetLine(first, listOf(Chord(0, "G"))), SheetLine(second, emptyList()), SheetLine("", listOf(Chord(0, "E")))),
             listOf(first, second, "")
         )
-        assertEquals(listOf(Chord(10, "E")), aligned.placed!![1].over)
+        assertEquals(listOf(Chord(10, "E")), checkNotNull(aligned.placed) { "Expected aligned.placed to be non-null" }[1].over)
         assertEquals(emptyList<Chord>(), aligned.placed[2].over)
         assertEquals(listOf(listOf("G"), emptyList(), listOf("E")), aligned.lines.map { it.drawn })
     }
@@ -179,7 +179,7 @@ class ChordAlignTest {
             sheet(SheetLine(first, listOf(Chord(0, "G"))), SheetLine(second, emptyList()), SheetLine("", listOf(Chord(0, "E")))),
             listOf(first, second)
         )
-        assertEquals(listOf(Chord(10, "E")), aligned.placed!![1].over)
+        assertEquals(listOf(Chord(10, "E")), checkNotNull(aligned.placed) { "Expected aligned.placed to be non-null" }[1].over)
         assertEquals(listOf("E"), aligned.lines[2].drawn)
     }
 
@@ -190,7 +190,7 @@ class ChordAlignTest {
             listOf(first, second)
         )
         // Nine letters is not enough to be another verse, so the N is held for the line after it.
-        assertEquals(listOf("N"), aligned.placed!![1].before)
+        assertEquals(listOf("N"), checkNotNull(aligned.placed) { "Expected aligned.placed to be non-null" }[1].before)
         assertEquals(listOf(listOf("G"), listOf("N"), listOf("C")), aligned.lines.map { it.drawn })
     }
 }

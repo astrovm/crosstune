@@ -28,7 +28,7 @@ class ArtworkLoaderTest {
 
         val image = loader.load(COVER)
         assertNotNull(image)
-        assertEquals(4, image!!.width)
+        assertEquals(4, checkNotNull(image) { "Expected image to be non-null" }.width)
         assertEquals(image, loader.load(COVER))
         assertEquals(listOf(COVER), fake.requestedUrls)
     }
@@ -37,7 +37,7 @@ class ArtworkLoaderTest {
     fun largeCoversAreSampledDown() = runBlocking {
         fake.handler = { request -> FakeSpotify.image(request, FakeSpotify.png(size = 1000)) }
         // Deezer's 1000px covers only ever show at ~100dp, so half size is plenty.
-        assertEquals(500, loader.load(COVER)!!.width)
+        assertEquals(500, checkNotNull(loader.load(COVER)) { "Expected loader.load(COVER) to be non-null" }.width)
     }
 
     @Test
@@ -64,7 +64,7 @@ class ArtworkLoaderTest {
         val kept = File(covers, "playing-1.jpg").apply { writeBytes(FakeSpotify.png()) }
         val elsewhere = File(dir, "other.jpg").apply { writeBytes(FakeSpotify.png()) }
         val loader = ArtworkLoader(fake.client(), Dispatchers.Unconfined, covers)
-        assertEquals(4, loader.load(kept.toURI().toString())!!.width)
+        assertEquals(4, checkNotNull(loader.load(kept.toURI().toString())) { "Expected loader.load(kept.toURI().toString()) to be non-null" }.width)
         // Not even through a way around.
         assertNull(loader.load(elsewhere.toURI().toString()))
         assertNull(loader.load("file:${covers.path}/../other.jpg"))
@@ -88,7 +88,7 @@ class ArtworkLoaderTest {
         // Only the newest are kept.
         val many = ArtworkLoader(fake.client(), Dispatchers.Unconfined, cacheDir = dir)
         repeat(610) { many.load("https://img.example/$it.jpg") }
-        assertTrue(dir.listFiles()!!.size <= 600)
+        assertTrue(checkNotNull(dir.listFiles()) { "Expected dir.listFiles() to be non-null" }.size <= 600)
 
         // A cover that can't be saved still shows.
         val notADirectory = File(dir, "file").apply { writeText("x") }
@@ -123,7 +123,7 @@ class ArtworkLoaderTest {
         assertTrue(loader.keep("https://img.example/other.jpg"))
         assertTrue(loader.keep("https://img.example/other.jpg"))
         assertEquals(2, fake.requestedUrls.size)
-        assertEquals(kept.listFiles()!!.sumOf { it.length() }, loader.keptSize())
+        assertEquals(checkNotNull(kept.listFiles()) { "Expected kept.listFiles() to be non-null" }.sumOf { it.length() }, loader.keptSize())
         // Android clearing the app's cache leaves it showing.
         cached.deleteRecursively()
         assertNotNull(ArtworkLoader(fake.client(), Dispatchers.Unconfined, cacheDir = cached, keptDir = kept).load(COVER))

@@ -189,7 +189,7 @@ class ChordWikiTest {
         shadowOf(Looper.getMainLooper()).idle()
         val error = nowhere.within().exceptionOrNull()
         assertTrue(error is IOException)
-        assertTrue(error!!.message!!.contains("nowhere"))
+        assertTrue(checkNotNull(checkNotNull(error) { "Expected error to be non-null" }.message) { "Expected error.message to be non-null" }.contains("nowhere"))
         val root = activity.window.decorView as ViewGroup
         CookieManager.getInstance().setAcceptCookie(false)
         val done = open(activity, gapMs = 20, waitMs = 10_000)
@@ -256,7 +256,7 @@ class ChordWikiTest {
         answer(findWeb(root), null)
         shadowOf(Looper.getMainLooper()).idle()
         val stalledError = stalled.within().exceptionOrNull()
-        assertTrue(stalledError is IOException && stalledError.message!!.contains("didn't finish loading"))
+        assertTrue(stalledError is IOException && checkNotNull(stalledError.message) { "Expected stalledError.message to be non-null" }.contains("didn't finish loading"))
 
         clock = 0
         val garbage = open(activity, now = { clock }, gapMs = 60_000, waitMs = 10)
@@ -271,7 +271,7 @@ class ChordWikiTest {
         answer(findWeb(root), page(title = "Just a moment...", text = "Checking your browser"))
         shadowOf(Looper.getMainLooper()).idle()
         val check = checking.within().exceptionOrNull()
-        assertTrue(check is IOException && check.message!!.contains("didn't finish"))
+        assertTrue(check is IOException && checkNotNull(check.message) { "Expected check.message to be non-null" }.contains("didn't finish"))
 
         clock = 0
         val clicked = open(activity, now = { clock }, gapMs = 60_000, waitMs = 10)
@@ -279,7 +279,7 @@ class ChordWikiTest {
         answer(findWeb(root), page(title = "Verify you are human", text = "cf-turnstile"))
         shadowOf(Looper.getMainLooper()).idle()
         val click = clicked.within().exceptionOrNull()
-        assertTrue(click is IOException && click.message!!.contains("click"))
+        assertTrue(click is IOException && checkNotNull(click.message) { "Expected click.message to be non-null" }.contains("click"))
     }
 
     @Test
@@ -343,7 +343,7 @@ class ChordWikiTest {
         third.onReceiveValue(page(title = "Just a moment...", text = "Checking your browser"))
         shadowOf(Looper.getMainLooper()).idle()
         val error = done.within().exceptionOrNull()
-        assertTrue(error is IOException && error.message!!.contains("didn't finish"))
+        assertTrue(error is IOException && checkNotNull(error.message) { "Expected error.message to be non-null" }.contains("didn't finish"))
     }
 
     @Test
@@ -456,7 +456,7 @@ class ChordWikiTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(done.isCompleted)
         val error = done.within().exceptionOrNull()
-        assertTrue(error is IOException && error.message!!.contains("didn't finish"))
+        assertTrue(error is IOException && checkNotNull(error.message) { "Expected error.message to be non-null" }.contains("didn't finish"))
     }
 
     /** ChordFinder cancels ChordWiki from a worker when another site already has the sheet. */
@@ -554,7 +554,7 @@ class ChordWikiTest {
             block()
             fail()
         } catch (e: IOException) {
-            assertTrue(e.message, part in e.message!!)
+            assertTrue(e.message, part in checkNotNull(e.message) { "Expected e.message to be non-null" })
         }
     }
 }

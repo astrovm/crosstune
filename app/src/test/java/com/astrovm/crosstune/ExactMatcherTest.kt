@@ -1387,7 +1387,7 @@ class ExactMatcherTest {
         var asked = ""
         fake.handler = { request ->
             if (request.url.encodedPath == "/watch_videos") {
-                asked = java.net.URLDecoder.decode(request.url.queryParameter("video_ids")!!, "UTF-8")
+                asked = java.net.URLDecoder.decode(checkNotNull(request.url.queryParameter("video_ids")) { "Expected request.url.queryParameter(\"video_ids\") to be non-null" }, "UTF-8")
                 FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=a&list=TLGGq").build()
             } else {
                 // Every search answers with the same video, e.g. two titles for one recording.

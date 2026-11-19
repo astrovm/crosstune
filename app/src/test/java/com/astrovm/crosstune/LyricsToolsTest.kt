@@ -525,7 +525,7 @@ class LyricsToolsTest {
 
     private fun offers() = composeRule.onAllNodes(hasText(offer)).fetchSemanticsNodes().size
 
-    private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+    private fun model() = ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
 
     private fun yes() = composeRule.onAllNodes(hasText(string(R.string.auto_report_yes)))[0]
 

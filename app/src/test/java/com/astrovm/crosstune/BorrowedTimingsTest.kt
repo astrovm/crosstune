@@ -23,7 +23,7 @@ class BorrowedTimingsTest {
     fun twoLinesSungAsOneThereSplitItByWhereTheSecondStarts() {
         // Written otherwise there: "one two three four five six" is one line, with a slip.
         val other = listOf(LyricLine(10_000, "One-two three, four five sicks"), LyricLine(30_000, "Seven eight nine ten eleven twelve"))
-        val timed = BorrowedTimings.retime(words, sounds, other, other.map { BorrowedTimings.sound(it.text) })!!.map { it.timeMs }
+        val timed = checkNotNull(BorrowedTimings.retime(words, sounds, other, other.map { BorrowedTimings.sound(it.text) })) { "Expected BorrowedTimings.retime(words, sounds, other, other.map { BorrowedTimings.sound(it.text) }) to be non-null" }.map { it.timeMs }
         assertEquals(10_000L, timed[0])
         // "four" starts about halfway through "onetwothreefourfivesix".
         assertTrue(timed.toString(), timed[1] in 18_000L..22_000L)
@@ -35,11 +35,11 @@ class BorrowedTimingsTest {
     @Test
     fun aLineBeforeTheFirstThereIsAsFarBeforeIt() {
         val other = listOf(LyricLine(20_000, "Four five six"), LyricLine(30_000, "Seven eight nine"))
-        val timed = BorrowedTimings.retime(words, sounds, other, other.map { BorrowedTimings.sound(it.text) })!!.map { it.timeMs }
+        val timed = checkNotNull(BorrowedTimings.retime(words, sounds, other, other.map { BorrowedTimings.sound(it.text) })) { "Expected BorrowedTimings.retime(words, sounds, other, other.map { BorrowedTimings.sound(it.text) }) to be non-null" }.map { it.timeMs }
         assertTrue(timed.toString(), timed[0] in 8_000L..12_000L)
         // Never before the song starts.
         val early = listOf(LyricLine(1_000, "Four five six"), LyricLine(30_000, "Seven eight nine"))
-        assertEquals(0L, BorrowedTimings.retime(words, sounds, early, early.map { BorrowedTimings.sound(it.text) })!![0].timeMs)
+        assertEquals(0L, checkNotNull(BorrowedTimings.retime(words, sounds, early, early.map { BorrowedTimings.sound(it.text) })) { "Expected BorrowedTimings.retime(words, sounds, early, early.map { BorrowedTimings.sound(it.text) }) to be non-null" }[0].timeMs)
     }
 
     @Test
@@ -59,7 +59,7 @@ class BorrowedTimingsTest {
     @Test
     fun twoLinesThereStartingTogetherCountOnceAndTheNextIsTimedBetween() {
         val other = listOf(LyricLine(10_000, "One two three"), LyricLine(20_000, "Four five six"), LyricLine(20_000, "Seven eight nine"), LyricLine(40_000, "Ten eleven twelve"))
-        val timed = BorrowedTimings.retime(words, sounds, other, other.map { BorrowedTimings.sound(it.text) })!!.map { it.timeMs }
+        val timed = checkNotNull(BorrowedTimings.retime(words, sounds, other, other.map { BorrowedTimings.sound(it.text) })) { "Expected BorrowedTimings.retime(words, sounds, other, other.map { BorrowedTimings.sound(it.text) }) to be non-null" }.map { it.timeMs }
         // The second at 20 s stands in for nothing, so the third is placed by the letters before it.
         assertTrue(timed.toString(), timed[2] in 21_000L..39_000L)
         assertEquals(40_000L, timed[3])

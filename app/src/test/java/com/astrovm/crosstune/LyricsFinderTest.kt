@@ -470,7 +470,7 @@ class LyricsFinderTest {
     }
 
     /** The iTunes Store's songs named [title], as it answered a search for it alone, trimmed to what's read. */
-    private fun storeSongs(title: String) = javaClass.getResource("/itunes/${title.lowercase().replace(' ', '-')}.json")!!.readText()
+    private fun storeSongs(title: String) = checkNotNull(javaClass.getResource("/itunes/${title.lowercase().replace(' ', '-')}.json")) { "Expected javaClass.getResource(\"/itunes/\${title.lowercase().replace(' ', '-')}.json\") to be non-null" }.readText()
 
     /** LRCLIB with [words] for songs by [artist] alone, the iTunes Store as it answered for [title]; nothing anywhere else. */
     private fun onlyBy(artist: String, title: String, words: String) {
@@ -556,7 +556,7 @@ class LyricsFinderTest {
     }
 
     /** Apple Music's credits for the store's song [id], as its page lists them. */
-    private fun credits(id: Long) = javaClass.getResource("/applemusic/$id.html")!!.readText()
+    private fun credits(id: Long) = checkNotNull(javaClass.getResource("/applemusic/$id.html")) { "Expected javaClass.getResource(\"/applemusic/\$id.html\") to be non-null" }.readText()
 
     @Test
     fun aCoverItsTitleDoesntSayIsOneHasTheOriginalsWordsWhenWrittenBySame() {

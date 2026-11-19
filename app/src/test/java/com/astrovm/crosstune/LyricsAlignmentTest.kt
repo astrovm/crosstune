@@ -69,7 +69,7 @@ class LyricsAlignmentTest {
 
     private fun layoutOf(node: SemanticsNode): TextLayoutResult {
         val results = mutableListOf<TextLayoutResult>()
-        node.config[SemanticsActions.GetTextLayoutResult].action!!(results)
+        checkNotNull(node.config[SemanticsActions.GetTextLayoutResult].action) { "Expected node.config[SemanticsActions.GetTextLayoutResult].action to be non-null" }(results)
         return results.single()
     }
 
