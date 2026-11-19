@@ -567,9 +567,6 @@ internal object SongNames {
             (bracketTag.matchesIn(name) + dashTag.matchesIn(name)).any { onlyInstrumental(it.groupValues[1]) }
     }
 
-    /** Whether [a] and [b] name one album, as "Album (Instrumental)" and "Album (Instrumentals)" do. */
-    fun sameAlbum(a: String, b: String) = normalize(a.replace(instrumentals, "")) == normalize(b.replace(instrumentals, ""))
-
     /** Whether a [tag], what's in brackets or after a dash, says the whole recording is an instrumental. */
     private fun onlyInstrumental(tag: String): Boolean {
         val said = instrumentalWord.find(tag) ?: return false

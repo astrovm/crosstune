@@ -21,6 +21,11 @@ internal object RecordingKey {
 
     private const val INSTRUMENTAL_ALBUM_PREFIX = "album:"
 
+    private val pluralInstrumental = Regex("(?<=instrumental)s\\b", RegexOption.IGNORE_CASE)
+
+    /** Whether [a] and [b] name one album, as "Album (Instrumental)" and "Album (Instrumentals)" do. */
+    fun sameAlbum(a: String, b: String) = SongNames.normalize(a.replace(pluralInstrumental, "")) == SongNames.normalize(b.replace(pluralInstrumental, ""))
+
     private fun instrumentalAlbumKey(song: MusicMetadata): String? =
         song.instrumentalAlbum?.let { INSTRUMENTAL_ALBUM_PREFIX + SongNames.normalize(it) }
 
