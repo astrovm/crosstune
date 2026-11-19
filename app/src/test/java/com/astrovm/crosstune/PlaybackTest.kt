@@ -1202,6 +1202,21 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
+    fun playByPackageDoesNotAskASessionWithoutPlaybackState() {
+        val radio = player(RadioNotice.PACKAGE, "Simple Radio", "Blue 100.7 FM", null)
+        val paused = checkNotNull(radio.playbackState)
+        shadowOf(radio).setPlaybackState(null)
+        shadowOf(sessions).addController(radio)
+        playback.playApp(RadioNotice.PACKAGE)
+        assertEquals(emptyList<String>(), asked())
+
+        shadowOf(radio).setPlaybackState(paused)
+        playback.playApp(RadioNotice.PACKAGE)
+        assertEquals(listOf("play"), asked())
+    }
+
+    @Test
     fun aRouteChangeAloneUpdatesTheNotifiedRadioStation() {
         allow()
         sounding()

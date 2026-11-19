@@ -639,7 +639,10 @@ internal class MediaSessionPlayback(
     }
 
     override fun playApp(app: String) {
-        runCatching { activeSessions().filter { it.packageName == app }.sortedWith(nearestFirst).firstOrNull()?.clockCommand("play") { play() } }
+        runCatching {
+            activeSessions().filter { it.packageName == app && it.playbackState != null }
+                .minWithOrNull(nearestFirst)?.clockCommand("play") { play() }
+        }
     }
 
     override suspend fun resume(song: MusicMetadata, app: String?): Boolean {

@@ -139,15 +139,17 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     // Between one song and the next the app says nothing for a moment, so it stays as it was till it
     // does, or a while passes without it.
     var between by remember { mutableStateOf<Following?>(null) }
-    LaunchedEffect(following) {
-        if (following != null) {
-            between = following
-        } else {
-            delay(BETWEEN_SONGS_MS)
-            between = null
+    LaunchedEffect(following, player.stationOnly) {
+        when {
+            player.stationOnly -> between = null
+            following != null -> between = following
+            else -> {
+                delay(BETWEEN_SONGS_MS)
+                between = null
+            }
         }
     }
-    val listed = (following ?: between)?.takeIf { it.from != null || it.upNext.isNotEmpty() }
+    val listed = (following ?: between)?.takeIf { !player.stationOnly && (it.from != null || it.upNext.isNotEmpty()) }
     var upNext by rememberSaveable { mutableStateOf(false) }
     // Gone with the list, it stays gone, rather than open again over the next one.
     LaunchedEffect(listed == null) { if (listed == null) upNext = false }

@@ -1622,6 +1622,36 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aStaleQueueActionCannotControlAReadOnlyStationPlayer() {
+        val state = MutableStateFlow<Following?>(following(app = station.app, upNext = listOf(Queued("Next song", "Band", id = 7))))
+        val playback = FakePlayback().apply { appPlaying[station.app] = state }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(listOf(7L), model.uiState.player?.following?.upNext?.mapNotNull { it.id })
+
+        state.value = null
+        playback.unnamed.value = station.copy(reportsState = false)
+        idle()
+        assertEquals(true, model.uiState.player?.stationOnly)
+        model.playerPlayQueued(7)
+        model.playerPlayLater(0)
+        assertTrue(playback.queuedPlayed.isEmpty())
+    }
+
+    @Test
+    fun aReadOnlyStationWithoutAnAppLabelUsesItsPackageName() {
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        playback.unnamed.value = station.copy(label = null, reportsState = false)
+        idle()
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(station.app, model.uiState.player?.stationAppLabel)
+        assertEquals(true, model.uiState.player?.stationOnly)
+    }
+
+    @Test
     fun sameNamedStationsFollowTheNewAppAndOnlyWhenItReportsState() {
         val other = station.copy(app = "com.example.radio", label = "Other Radio")
         val playback = FakePlayback().apply {

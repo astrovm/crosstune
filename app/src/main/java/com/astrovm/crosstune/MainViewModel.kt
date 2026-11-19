@@ -2156,7 +2156,7 @@ internal class MainViewModel(
 
     /** Has the app play one of the songs it has up next now, which the player then shows. */
     fun playerPlayQueued(id: Long) {
-        val player = uiState.player ?: return
+        val player = uiState.player?.takeUnless { it.stationOnly } ?: return
         uiState = uiState.copy(player = player.copy(played = true))
         playback?.playQueued(player.song, id, player.askedOf)
         movedOn(player.app)
@@ -2164,7 +2164,7 @@ internal class MainViewModel(
 
     /** Plays the list on from the song up next at [index], one it still has to ask the app for. */
     fun playerPlayLater(index: Int) {
-        val player = uiState.player ?: return
+        val player = uiState.player?.takeUnless { it.stationOnly } ?: return
         val apps = player.following?.upNext.orEmpty().count { it.id != null }
         uiState = uiState.copy(player = player.copy(played = true))
         viewModelScope.launch { playQueue?.playFrom(index - apps) }
