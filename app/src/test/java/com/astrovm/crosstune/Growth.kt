@@ -4,6 +4,7 @@ import java.io.File
 import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
+import java.lang.management.ManagementFactory
 
 /**
  * Whether reading takes work in step with what's read, told by how the work grows. Each text is read at a length and at
@@ -73,7 +74,8 @@ internal object Growth {
      * for, and work on the JVM's own threads, like the garbage collector's, go unseen. In two runs of the
      * growth tests, 8,834 readings, the threads beside took 107 µs at most, as the JDK cleaned up after the garbage
      * collector. A reading that hands a squared reader's work on 1,000 letters to another thread
-     * leaves it 4.3 ms, and on 4,000 letters, 67 ms.
+     * leaves it 4.3 ms, and on 4,000 letters, 67 ms. That is for a JVM that runs at the speed of a plain machine: where it
+     * runs slower, the limit grows by how much ([slowdown]).
      */
     const val BESIDE_NANOS = 1_000_000L
 
@@ -120,12 +122,61 @@ internal object Growth {
     private fun <T> reading(text: T, read: (T) -> Any?, name: String): Reading {
         val counted = stepsOf(text, read)
         val took = checkNotNull(beside).invoke() as Long
-        check(took <= BESIDE_NANOS) {
+        val limit = besideLimit(SLOWDOWN)
+        check(took <= limit) {
             "$name: other threads took ${"%.2f".format(took / MILLI)} ms of processor time as it read, most of it ${checkNotNull(busiest).invoke()}, " +
-                "past the ${"%.2f".format(BESIDE_NANOS / MILLI)} ms a reading may leave them: work on another thread isn't counted"
+                "past the ${"%.2f".format(limit / MILLI)} ms a reading may leave them (${"%.2f".format(BESIDE_NANOS / MILLI)} ms, " +
+                "times ${"%.1f".format(SLOWDOWN)} for how much slower this JVM runs): work on another thread isn't counted"
         }
         return Reading(counted, took)
     }
+
+    /** The processor time the threads beside may take as a reading is counted, where this JVM runs [slowdown] times slower than the line was set on. */
+    fun besideLimit(slowdown: Double): Long = (BESIDE_NANOS * slowdown).toLong()
+
+    /**
+     * How many times slower than on the machines [BESIDE_NANOS] was set on this JVM runs, never below 1, told by how long
+     * [SPIN_NANOS] says a fixed piece of work should take its thread: under emulation, as the Linux x86-64 box runs on an
+     * Apple Silicon Mac, every thread takes several times the processor time for the same work, the JVM's own idle ones
+     * too, and a limit that doesn't grow with it fails where nothing is wrong. A reading that hands work to another
+     * thread takes as much longer there, so it fails by the same margin.
+     */
+    fun slowdown(spinNanos: Long): Double = (spinNanos.toDouble() / SPIN_NANOS).coerceAtLeast(1.0)
+
+    /** The processor time, in nanoseconds, the fixed piece of work takes this thread, at best of a few tries once it's warm. */
+    private fun spin(): Long {
+        val threads = ManagementFactory.getThreadMXBean()
+        var sink = 0
+        fun once(): Long {
+            val start = threads.currentThreadCpuTime
+            val array = IntArray(SPIN_LENGTH)
+            repeat(SPIN_LAPS) { lap -> for (each in array.indices) array[each] = array[each] * 31 + each + lap }
+            sink += array[SPIN_LENGTH / 2]
+            return threads.currentThreadCpuTime - start
+        }
+        repeat(SPIN_TRIES) { once() }
+        val best = (1..SPIN_TRIES).minOf { once() }
+        check(sink != 0 || best >= 0)
+        return best
+    }
+
+    /** How much slower this JVM runs, measured once. The growth log's directory keeps it, beside the readings it scales. */
+    private val SLOWDOWN: Double by lazy {
+        val took = spin()
+        File("${log.path}.speed").also { it.parentFile?.mkdirs() }.writeText("spin\t$took\nslowdown\t${slowdown(took)}\n")
+        slowdown(took)
+    }
+
+    private const val SPIN_LENGTH = 1 shl 14
+    private const val SPIN_LAPS = 256
+    private const val SPIN_TRIES = 5
+
+    /**
+     * The processor time, in nanoseconds, [spin] takes at the speed of a plain machine: 4.3 ms on the machine the readings'
+     * time beside was measured on, in runs the same to 1%, and a little over it, so a machine a bit slower isn't scaled.
+     * Under emulation on that machine (qemu-x86_64) it took 34 to 124 ms, and the threads beside up to 1.6 ms.
+     */
+    const val SPIN_NANOS = 5_000_000L
 
     private const val MILLI = 1e6
     private const val MICRO = 1_000
