@@ -44,7 +44,14 @@ class ChordWikiBrowserCheck : Instrumentation() {
         override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
     }
 
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); start() }
+    /** How long one page may take: the app's own 18 s by default. `-e wait_ms N` lengthens it to see how long a check really takes. */
+    private var waitMs = ChordWikiBrowser.WAIT_MS
+
+    override fun onCreate(arguments: Bundle?) {
+        waitMs = arguments?.getString("wait_ms")?.toLongOrNull() ?: ChordWikiBrowser.WAIT_MS
+        super.onCreate(arguments)
+        start()
+    }
 
     override fun onStart() {
         val oldFactory = MainActivity.chordWikiFactory
@@ -59,7 +66,7 @@ class ChordWikiBrowserCheck : Instrumentation() {
             runOnMainSync {
                 MainActivity.chordWikiFactory = { host ->
                     creations.incrementAndGet()
-                    ChordWikiBrowser(host, onPageCreated = page@ { web, observation ->
+                    ChordWikiBrowser(host, waitMs = waitMs, onPageCreated = page@ { web, observation ->
                         val probe = probeRead?.takeIf { it.observation === observation } ?: return@page
                         val recording = probe.capture
                         val started = probe.started
@@ -90,7 +97,7 @@ class ChordWikiBrowserCheck : Instrumentation() {
                         probeRead = ProbeRead(observation, recording, started)
                         val result = runCatching {
                             runBlocking {
-                                withTimeout(20_000L) {
+                                withTimeout(waitMs + 2_000L) {
                                     withContext(Dispatchers.Main + observation) {
                                         checkNotNull(pages).page(chordWikiEditUrl("練習用ページ"))
                                     }
@@ -110,6 +117,8 @@ class ChordWikiBrowserCheck : Instrumentation() {
                             .put("page_events", JSONArray(recorded.events.map { event ->
                                 JSONObject().also { json -> event.forEach { (key, value) -> json.put(key, value) } }
                             }))
+                            .put("blocked_requests", recorded.events.count { it["decision"] == "app_response" })
+                            .put("wait_ms", waitMs)
                             .put("events_truncated", recorded.truncated)
                             .put("pending_callbacks", recorded.pending)
                             .put("callback_failed", recorded.failed)
@@ -188,7 +197,7 @@ class ChordWikiBrowserCheck : Instrumentation() {
 
     /** No URL, query, path, cookie or unknown host label is kept. */
     private fun hostName(uri: Uri): String = uri.host.takeIf {
-        it in setOf("ja.chordwiki.org", "challenges.cloudflare.com", "brunhild.challenges.cloudflare.com")
+        it in setOf("ja.chordwiki.org", "challenges.cloudflare.com", "brunhild.challenges.cloudflare.com", "cse.google.com", "www.google.com")
     } ?: "other"
 
     private fun wikiPages(activity: MainActivity): ChordWikiPages {

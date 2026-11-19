@@ -1931,6 +1931,34 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun wikiMissesAreKeptApartFromSheetsAndAnOldOneIsLetGo() {
+        noOtherChordSites()
+        val sheets = LookupCache(File.createTempFile("wiki-sheets", ".json").apply { delete(); deleteOnExit() }, Dispatchers.Unconfined)
+        val misses = LookupCache(File.createTempFile("wiki-misses", ".json").apply { delete(); deleteOnExit() }, Dispatchers.Unconfined, maxEntries = 1)
+        var clock = 1_000L
+        var calls = 0
+        var published = false
+        val finder = ChordFinder(
+            fake.client(), lookups, sheets, ChordWikiPages { url -> calls++; if (published && url == chordWikiEditUrl("川の道")) chordPro else "" },
+            chordWikiPauseMs = 0, now = { clock }, misses = misses
+        )
+        chords(kawa, japanese, finder)
+        val first = calls
+        assertTrue(first > 0)
+        // The miss is in its own cache, so a list of them can't push a sheet out of the sheets'.
+        assertTrue(runBlocking { misses.entries().single().first.startsWith("wiki-miss:") })
+        assertTrue(runBlocking { sheets.entries().none { it.first.startsWith("wiki-miss:") } })
+        chords(kawa, japanese, finder)
+        assertEquals(first, calls)
+        // A day on, it's looked up again, and the old note is dropped rather than left to fill the cache.
+        clock += LookupCache.DAY_MS
+        published = true
+        assertTrue(chords(kawa, japanese, finder) is ChordFinder.Chords.Found)
+        assertTrue(calls > first)
+        assertTrue(runBlocking { misses.entries().isEmpty() })
+    }
+
+    @Test
     fun wikiMissKeysKeepDigitAndNullBoundariesSeparate() {
         noOtherChordSites()
         val pairs = listOf(

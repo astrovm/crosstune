@@ -145,7 +145,9 @@ internal class ChordFinder(
     /** A pause between ChordWiki's pages, so a lookup goes no faster than a person opening them. */
     private val chordWikiPauseMs: Long = CHORD_WIKI_PAUSE_MS,
     private val debugLogging: Boolean = false,
-    private val now: () -> Long = System::currentTimeMillis
+    private val now: () -> Long = System::currentTimeMillis,
+    /** Songs ChordWiki had no sheet for, apart from [cache], so a long list of misses doesn't push real sheets out of it. */
+    private val misses: LookupCache? = cache
 ) {
     /** A song's chords, or why there are none to show. */
     sealed interface Chords {
@@ -286,8 +288,8 @@ internal class ChordFinder(
         val tried = looked.getOrThrow()
         if (tried.sheet == null && !tried.incompleteTitle) {
             note("wiki none")
-            cache?.put(key, now().toString())
-            cache?.save()
+            misses?.put(key, now().toString())
+            misses?.save()
         }
         return tried
     }
@@ -300,9 +302,16 @@ internal class ChordFinder(
     }
 
     private suspend fun hasWikiMiss(key: String): Boolean {
-        val saved = cache?.get(key)?.toLongOrNull() ?: return false
+        val store = misses ?: return false
+        val saved = store.get(key)?.toLongOrNull() ?: return false
         val time = now()
-        return time >= saved && time - saved < LookupCache.DAY_MS
+        return (time >= saved && time - saved < LookupCache.DAY_MS).also { kept ->
+            // A day old, or from a clock that has since gone back, it's no use to anyone: let it go.
+            if (!kept) {
+                store.discard(key, saved.toString())
+                store.save()
+            }
+        }
     }
 
     /** A changed lyric text needs its own sheet match, even when the song name stays the same. */

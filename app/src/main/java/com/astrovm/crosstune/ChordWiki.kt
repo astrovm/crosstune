@@ -21,6 +21,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -48,39 +51,50 @@ internal class WikiObservation : AbstractCoroutineContextElement(WikiObservation
     companion object Key : CoroutineContext.Key<WikiObservation>
 }
 
-/** The retained lookup uses the current screen, and releases its pages with that screen. */
+/**
+ * The retained lookup uses the current screen, and releases its pages with that screen. A page whose
+ * screen goes away is opened again on the next one, so turning the phone doesn't end a lookup.
+ */
 internal class ChordWikiHost : ViewModel(), ChordWikiPages {
     private var activity: Activity? = null
-    private var pages: ChordWikiPages? = null
+    private val pages = MutableStateFlow<ChordWikiPages?>(null)
     private val requests = mutableSetOf<Job>()
 
     fun attach(host: Activity, factory: (Activity) -> ChordWikiPages) {
         activity?.let(::detach)
         activity = host
-        pages = factory(host)
+        pages.value = factory(host)
     }
 
     fun detach(host: Activity) {
         if (activity !== host) return
         activity = null
-        pages = null
+        pages.value = null
         requests.toList().forEach { it.cancel() }
     }
 
+    /** Waits for a screen when there is none, which the caller's own limit ends. */
     override suspend fun page(url: String): String = withContext(Dispatchers.Main.immediate) {
-        val current = pages ?: throw IOException("ChordWiki has nowhere to show")
-        coroutineScope {
-            val request = async(start = CoroutineStart.UNDISPATCHED) { current.page(url) }
-            requests.add(request)
-            try {
-                request.await()
+        var answer: String? = null
+        while (answer == null) {
+            val current = pages.filterNotNull().first()
+            answer = try {
+                coroutineScope {
+                    val request = async(start = CoroutineStart.UNDISPATCHED) { current.page(url) }
+                    requests.add(request)
+                    try {
+                        request.await()
+                    } finally {
+                        requests.remove(request)
+                    }
+                }
             } catch (e: CancellationException) {
+                // Only the caller's own cancellation ends the lookup. A lost screen asks the next one.
                 currentCoroutineContext().ensureActive()
-                throw IOException("ChordWiki has nowhere to show", e)
-            } finally {
-                requests.remove(request)
+                null
             }
         }
+        answer
     }
 }
 
@@ -190,11 +204,11 @@ internal class ChordWikiBrowser(
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 onRequest?.invoke(request.url.toString())
-                if (allowed(request.url)) return null
+                if (chordWikiAllowed(request.url)) return null
                 return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
             }
 
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !allowed(request.url)
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !chordWikiAllowed(request.url)
 
             override fun onPageFinished(view: WebView, loaded: String) {
                 ask(view, started, observation, ::finish)
@@ -256,10 +270,11 @@ internal class ChordWikiBrowser(
         web.destroy()
     }
 
-    private companion object {
-        val pageGate = Mutex()
-        fun allowed(uri: Uri): Boolean = uri.scheme == "https" && uri.host in setOf("ja.chordwiki.org", "challenges.cloudflare.com") && (uri.port == -1 || uri.port == 443)
-        const val GAP_MS = 750L
+    internal companion object {
+        private val pageGate = Mutex()
+        private const val GAP_MS = 750L
+
+        /** How long a page may take before the lookup gives up on it. */
         const val WAIT_MS = 18_000L
 
         /** The editor's text, the links to sheets, and the words on screen. Not the page's scripts. */
@@ -314,6 +329,17 @@ internal class ChordWikiBrowser(
         """.trimIndent()
     }
 }
+
+/**
+ * ChordWiki, its Cloudflare check, and Google's custom search, which is what ChordWiki's own search page
+ * lists songs with: measured in a browser, a search page shows no hits without cse.google.com and
+ * www.google.com. Its ads and analytics, and every other host, stay out.
+ */
+private val CHORD_WIKI_HOSTS = setOf("ja.chordwiki.org", "challenges.cloudflare.com", "cse.google.com", "www.google.com")
+
+/** Whether the hidden page may reach [uri]: one of [CHORD_WIKI_HOSTS], over HTTPS on its usual port. */
+internal fun chordWikiAllowed(uri: Uri): Boolean =
+    uri.scheme == "https" && uri.host?.lowercase() in CHORD_WIKI_HOSTS && (uri.port == -1 || uri.port == 443)
 
 /** The edit page for [title], whose editor holds the sheet as ChordPro. */
 internal fun chordWikiEditUrl(title: String): String = "https://ja.chordwiki.org/wiki.cgi?c=edit&t=${chordWikiEncode(title)}"

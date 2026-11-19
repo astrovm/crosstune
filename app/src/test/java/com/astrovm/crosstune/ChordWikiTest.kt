@@ -42,7 +42,7 @@ import java.time.Duration
 @RunWith(RobolectricTestRunner::class)
 class ChordWikiTest {
     @Test
-    fun replacingTheHostCancelsItsPageAndAnOldDetachCannotClearTheNewHost() {
+    fun replacingTheHostMovesItsPageToTheNewHostAndAnOldDetachCannotClearIt() {
         val first = Robolectric.buildActivity(Activity::class.java).setup().get()
         val second = Robolectric.buildActivity(Activity::class.java).setup().get()
         val host = ChordWikiHost()
@@ -52,27 +52,53 @@ class ChordWikiTest {
         shadowOf(Looper.getMainLooper()).idle()
         val firstPage = findWeb(first.window.decorView)
         host.attach(second) { ChordWikiBrowser(it, gapMs = 60_000, waitMs = 60_000) }
+        shadowOf(Looper.getMainLooper()).idle()
         assertNull(firstPage.parent)
-        shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(firstResult?.exceptionOrNull() is IOException)
+        assertNull(firstResult)
+        // The same lookup goes on in the new screen, and an old screen's late detach leaves it be.
+        val moved = findWeb(second.window.decorView)
         host.detach(first)
-        val done = CompletableDeferred<String>()
-        CoroutineScope(Dispatchers.Main).launch { done.complete(host.page("https://ja.chordwiki.org/")) }
+        assertEquals(second.window.decorView, moved.rootView)
+        answer(moved, page(source = "[C]川", hasEditor = true))
         shadowOf(Looper.getMainLooper()).idle()
-        val ready = findWeb(second.window.decorView)
-        answer(ready, page(source = "[C]川", hasEditor = true))
+        assertEquals("[C]川", firstResult?.getOrNull())
+        assertNull(moved.parent)
+    }
+
+    @Test
+    fun aLookupWhoseScreenIsGoneWaitsForTheNextScreenAndEndsWithItsCaller() {
+        val first = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val second = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val host = ChordWikiHost()
+        var result: Result<String>? = null
+        // No screen yet: it waits instead of failing, so a lookup started during a turn of the phone survives it.
+        val waiting = CoroutineScope(Dispatchers.Main).launch { result = runCatching { host.page("https://ja.chordwiki.org/") } }
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals("[C]川", done.within())
-        assertNull(ready.parent)
-        var secondResult: Result<String>? = null
-        CoroutineScope(Dispatchers.Main).launch { secondResult = runCatching { host.page("https://ja.chordwiki.org/") } }
+        assertNull(result)
+        host.attach(first) { ChordWikiBrowser(it, gapMs = 60_000, waitMs = 60_000) }
         shadowOf(Looper.getMainLooper()).idle()
-        val secondPage = findWeb(second.window.decorView)
-        assertNull(findWebOrNull(first.window.decorView))
+        val page = findWeb(first.window.decorView)
+        // The screen goes for good: the page goes with it, and the lookup waits again.
+        host.detach(first)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(page.parent)
+        assertNull(result)
+        host.attach(second) { ChordWikiBrowser(it, gapMs = 60_000, waitMs = 60_000) }
+        shadowOf(Looper.getMainLooper()).idle()
+        val again = findWeb(second.window.decorView)
+        answer(again, page(source = "[G]海", hasEditor = true))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("[G]海", result?.getOrNull())
+        waiting.cancel()
+
+        // Its caller giving up ends it, with no screen to keep it.
         host.detach(second)
-        assertNull(secondPage.parent)
+        var cancelled: Result<String>? = null
+        val giving = CoroutineScope(Dispatchers.Main).launch { cancelled = runCatching { host.page("https://ja.chordwiki.org/") } }
         shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(secondResult?.exceptionOrNull() is IOException)
+        giving.cancel()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(cancelled?.exceptionOrNull() is kotlinx.coroutines.CancellationException)
     }
 
     @Test
@@ -392,6 +418,27 @@ class ChordWikiTest {
         } finally {
             job.cancel()
         }
+    }
+
+    @Test
+    fun aSearchPageMayReachGoogleCustomSearchWhichListsItsHitsAndNothingElseOfGoogle() {
+        fun allowed(url: String) = chordWikiAllowed(Uri.parse(url))
+        // Measured in a browser: the hits of search.html are drawn by these two hosts' scripts.
+        assertTrue(allowed("https://cse.google.com/cse.js?cx=partner"))
+        assertTrue(allowed("https://www.google.com/cse/element/v1?rsz=filtered_cse"))
+        assertTrue(allowed("https://WWW.Google.com/cse/static/element/x.css"))
+        // Its ads, analytics, pictures and every look-alike stay blocked.
+        for (url in listOf(
+            "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+            "https://www.googletagmanager.com/gtag/js",
+            "https://encrypted-tbn0.gstatic.com/images?q=1",
+            "https://clients1.google.com/complete/search",
+            "https://www.google.com.evil.example/cse",
+            "http://www.google.com/cse",
+            "https://www.google.com:8443/cse",
+            "https://google.com/",
+            "data:text/plain,hello",
+        )) assertFalse(url, allowed(url))
     }
 
     @Test
