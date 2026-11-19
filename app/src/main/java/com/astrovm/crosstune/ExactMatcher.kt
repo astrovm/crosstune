@@ -813,11 +813,8 @@ internal class ExactMatcher(
         val aliases = videos.filter { isTheSongsVideo(it, names) && isOwnVideo(it, names) && it.lengthMs != null && sameLength(it, names) }
             .mapNotNull { video ->
                 val halves = video.name.split(" - ").takeIf { it.size == 2 } ?: return@mapNotNull null
-                when (title) {
-                    SongNames.normalize(halves[0]) -> SongNames.normalize(halves[1])
-                    SongNames.normalize(halves[1]) -> SongNames.normalize(halves[0])
-                    else -> null
-                }
+                val own = halves.indexOfFirst { SongNames.normalize(it) == title }
+                halves.getOrNull(1 - own)?.takeIf { own >= 0 }?.let(SongNames::normalize)
             }.filter { it.isNotEmpty() }.toSet()
         return rows.singleOrNull { SongNames.normalize(it.name) in aliases && SongNames.normalize(it.details.getOrNull(1).orEmpty()) == album }
     }

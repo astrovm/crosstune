@@ -504,6 +504,9 @@ class MatcherCasesTest {
         )
         assertEquals("song1", find(search))
         assertEquals("song1", find(search.copy(picked = SAYS_NONE)))
+        // The video may write the Latin title first.
+        val latinFirst = search.copy(what = "video writes the Latin title first", videos = listOf(video("The Rest Of Time - 用餘生去愛", "4:21", "Jacky Cheung")))
+        assertEquals("song1", find(latinFirst))
         val ambiguous = listOf(
             search.copy(what = "another album", songs = listOf(search.songs[0], row("用餘生去愛", "Another Album", "Jacky Cheung", "4:15"))),
             search.copy(what = "store has no album", album = ""),
