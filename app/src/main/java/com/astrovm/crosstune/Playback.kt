@@ -849,11 +849,14 @@ internal class MediaSessionPlayback(
         val eligible = all.orEmpty().filter { it.packageName != context.packageName && !it.leftBehind() }
         val playing = eligible.filter { it.playbackState?.state == PlaybackState.STATE_PLAYING && (sounding || it.remote()) }
         if (playing.isNotEmpty() || !sounding) return playing
-        // The phone's sound does not identify its source. Simple Radio puts up a foreground media
-        // notification for the exact session and takes it down at pause, even when the title stays.
+        // The phone's sound does not say whose it is: Android withholds the app from the audio playback
+        // configurations an ordinary app can read, and a session with no state has no clock to follow.
+        // So the sound only counts when this session is the one candidate: no other session without
+        // state could be the source. Simple Radio also puts up a foreground media notification for the
+        // exact session and takes it down at pause, even when the title stays.
         val notices = radioNotices.value
-        val radio = eligible.singleOrNull {
-            it.packageName == RadioNotice.PACKAGE && it.playbackState == null && it.local() && it.sessionToken in notices &&
+        val radio = eligible.filter { it.playbackState == null }.singleOrNull()?.takeIf {
+            it.packageName == RadioNotice.PACKAGE && it.local() && it.sessionToken in notices &&
                 !it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).isNullOrBlank()
         }
         return listOfNotNull(radio)
