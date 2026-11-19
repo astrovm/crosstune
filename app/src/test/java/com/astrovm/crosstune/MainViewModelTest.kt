@@ -488,6 +488,23 @@ class MainViewModelTest {
     /** A file with no title, as a player may name one: nothing a tap could take for a song, so a tap opens what was heard, or the player. */
     private val untitled = Unnamed("com.example.untitled", "Untitled Player", null, said = false)
 
+    @Test
+    fun aStationWithoutPlaybackStateDoesNotStartAutomaticRecognition() {
+        val hears = EarsOnThePhone(heardSong())
+        val playback = FakePlayback().apply { aloud = true }
+        val model = radioModel(hears, playback, mayCapture = { true })
+        playback.unnamed.value = station.copy(reportsState = false)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(station.name, model.uiState.playingUnnamed?.playing?.name)
+        assertNull(model.uiState.playingUnnamed?.heard)
+        assertTrue(hears.asked.isEmpty())
+
+        playback.unnamed.value = station
+        idle()
+        assertEquals(1, hears.asked.size)
+    }
+
     /** A model on [untitled] playing in [playback], with its bar in sight, and the song [ears] heard first in it shown. */
     private fun untitledHeard(ears: EarsOnThePhone, playback: FakePlayback = FakePlayback()): MainViewModel {
         val model = radioModel(ears, playback)
@@ -528,7 +545,7 @@ class MainViewModelTest {
     fun aSkipASeekOrASongUpNextPlayedFromThePlayerDropsTheSongHeard() {
         val controls = listOf<Pair<String, (MainViewModel) -> Unit>>(
             "next" to { it.playerSkip(true) }, "back" to { it.playerSkip(false) }, "seek" to { it.playerSeek(90_000) },
-            "queued" to { it.playerPlayQueued(7) }, "later" to { it.playerPlayLater(1) }
+            "queued" to { it.playerPlayQueued(7, 0) }, "later" to { it.playerPlayLater(1) }
         )
         for ((name, control) in controls) {
             // The app doesn't say it moved, as some don't: what was sent is enough.
@@ -560,9 +577,10 @@ class MainViewModelTest {
         idle()
         assertEquals(ears.answers[0], model.uiState.playingUnnamed?.heard)
         // The station's player plays a song up next there: the file plays on, and so does the song heard in it.
-        model.playerPlayQueued(7)
+        model.playerPlayQueued(7, 41)
         idle()
         assertEquals(listOf<String?>(station.app), playback.controlledApps)
+        assertEquals(listOf<Int?>(41), playback.queuedSessions)
         assertEquals(ears.answers[0], model.uiState.playingUnnamed?.heard)
         assertEquals(1, ears.asked.size)
     }
@@ -1602,6 +1620,80 @@ class MainViewModelTest {
     }
 
     @Test
+    fun anOpenStationPlayerStopsOfferingTransportWhenTheSameStationLosesState() {
+        val state = MutableStateFlow<Following?>(following(app = station.app))
+        val playback = FakePlayback().apply { appPlaying[station.app] = state }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(true, model.uiState.player?.following?.clock?.playing)
+
+        state.value = null
+        playback.unnamed.value = station.copy(reportsState = false)
+        idle()
+        assertNull(model.uiState.player?.following)
+        model.playerPlayPause()
+        assertTrue(playback.appsPlayed.isEmpty())
+        assertTrue(playback.plays.isEmpty())
+        assertEquals(true, model.uiState.player?.stationOnly)
+        assertEquals(station.played.title, model.uiState.player?.song?.title)
+    }
+
+    @Test
+    fun aStaleQueueActionCannotControlAReadOnlyStationPlayer() {
+        val state = MutableStateFlow<Following?>(following(app = station.app, upNext = listOf(Queued("Next song", "Band", id = 7))))
+        val playback = FakePlayback().apply { appPlaying[station.app] = state }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(listOf(7L), model.uiState.player?.following?.upNext?.mapNotNull { it.id })
+
+        state.value = null
+        playback.unnamed.value = station.copy(reportsState = false)
+        idle()
+        assertEquals(true, model.uiState.player?.stationOnly)
+        model.playerPlayQueued(7, 0)
+        model.playerPlayLater(0)
+        assertTrue(playback.queuedPlayed.isEmpty())
+    }
+
+    @Test
+    fun aReadOnlyStationWithoutAnAppLabelUsesItsPackageName() {
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        playback.unnamed.value = station.copy(label = null, reportsState = false)
+        idle()
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(station.app, model.uiState.player?.stationAppLabel)
+        assertEquals(true, model.uiState.player?.stationOnly)
+    }
+
+    @Test
+    fun sameNamedStationsFollowTheNewAppAndOnlyWhenItReportsState() {
+        val other = station.copy(app = "com.example.radio", label = "Other Radio")
+        val playback = FakePlayback().apply {
+            appPlaying[station.app] = MutableStateFlow(following(app = station.app))
+            appPlaying[other.app] = MutableStateFlow(following(app = other.app))
+        }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        assertEquals(station.app, model.uiState.playingUnnamed?.following?.appPackage)
+
+        playback.unnamed.value = other
+        idle()
+        assertEquals(other.app, model.uiState.playingUnnamed?.following?.appPackage)
+
+        playback.unnamed.value = other.copy(reportsState = false)
+        idle()
+        assertNull(model.uiState.playingUnnamed?.following)
+        assertEquals(false, model.uiState.playingUnnamed?.canControl)
+
+        playback.unnamed.value = other
+        idle()
+        assertEquals(other.app, model.uiState.playingUnnamed?.following?.appPackage)
+    }
+
+    @Test
     fun aStationBackAfterASongPlayedOverItIsNotShownAsItWasTillItsAppSaysHowItIs() {
         val playback = FakePlayback()
         val radio = MutableStateFlow<Following?>(Following(PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = false))
@@ -1710,8 +1802,9 @@ class MainViewModelTest {
     fun aStationsButtonsAskItsAppByPackageOnTheBarAndInItsPlayer() {
         val playback = FakePlayback()
         val model = stationPlaying(EarsOnThePhone(Heard.Nothing), playback)
+        playback.unnamed.value = station.copy(session = 41)
         playback.playing.value = Following(
-            PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = true, canSkipNext = true, shuffle = false, repeat = Repeat.OFF, like = AppAction("like", "Like", 0)
+            PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = true, canSkipNext = true, shuffle = false, repeat = Repeat.OFF, like = AppAction("like", "Like", 0), session = 41
         )
         idle()
         model.playingNowPlayPause()
@@ -1723,11 +1816,16 @@ class MainViewModelTest {
         model.playerShuffle()
         model.playerRepeat()
         model.playerLike()
-        model.playerPlayQueued(3)
+        model.playerPlayQueued(3, 41)
         model.playerSeek(1_000)
         assertEquals(listOf<String?>(station.app, station.app), playback.playedApps)
         assertEquals(List<String?>(6) { station.app }, playback.controlledApps)
         assertEquals(listOf<String?>(station.app), playback.seekedApps)
+        assertTrue(41 in playback.followedSessions)
+        assertEquals(listOf<Int?>(41, 41), playback.playedSessions)
+        assertEquals(List<Int?>(5) { 41 }, playback.controlledSessions)
+        assertEquals(listOf<Int?>(41), playback.queuedSessions)
+        assertEquals(listOf<Int?>(41), playback.controlSeekSessions)
     }
 
     @Test
@@ -2059,6 +2157,61 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aSongsSleepTimerFollowsItInTheSessionItsPlayerFollows() {
+        val playback = FakePlayback().apply { playing.value = following().copy(session = 7) }
+        val scope = MainScope()
+        val model = playingModel(playback, sleepTimer = SleepTimer(playback, scope))
+        assertEquals(7, model.uiState.player?.following?.session)
+        val followed = playback.followedSessions.size
+        model.playerSleep(null)
+        idle()
+        assertEquals(listOf<Int?>(7), playback.followedSessions.drop(followed))
+        scope.cancel()
+    }
+
+    @Test
+    fun anotherSessionOfTheSameAppSayingTheSameStationIsTakenUpOnItsOwnSession() {
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(station.played, model.uiState.player?.song)
+        assertNull(model.uiState.player?.session)
+        playback.unnamed.value = station.copy(session = 9)
+        idle()
+        assertEquals(9, model.uiState.player?.session)
+    }
+
+    @Test
+    fun theSameSessionSayingTheSameStationAgainKeepsItsPlayerOnIt() {
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        playback.unnamed.value = station.copy(session = 9)
+        idle()
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(9, model.uiState.player?.session)
+        val followed = playback.followed.size
+        // Only where it plays changed: the same session on the same station, with nothing new to follow.
+        playback.unnamed.value = station.copy(session = 9, where = Place.CAST)
+        idle()
+        assertEquals(followed, playback.followed.size)
+        assertEquals(9, model.uiState.player?.session)
+    }
+
+    @Test
+    fun theBarFollowsTheNewSessionWhenAnAppStartsAnotherForTheSameStation() {
+        val playback = FakePlayback()
+        radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        idle()
+        assertEquals(null, playback.followedSessions.last())
+        // The old session is gone and the app made a new one: the bar must follow that one, or its buttons reach nothing.
+        playback.unnamed.value = station.copy(session = 9)
+        idle()
+        assertEquals(9, playback.followedSessions.last())
+    }
+
+    @Test
     fun aStationsSleepTimerFollowsItInItsApp() {
         val playback = FakePlayback().apply { playing.value = following(app = station.app) }
         val scope = MainScope()
@@ -2218,7 +2371,7 @@ class MainViewModelTest {
             onThePhone = Heard.Song(song, null, app = "com.spotify")
         }
         val source = object : PlaybackSource by playback {
-            override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = playback.follow(song, app).distinctUntilChanged()
+            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = playback.follow(song, app, session).distinctUntilChanged()
         }
         val model = model(playback = source)
         model.viewModelScope.launch { model.watchPlayingNow() }
@@ -2339,7 +2492,7 @@ class MainViewModelTest {
         model.playerShuffle()
         model.playerRepeat()
         model.playerLike()
-        model.playerPlayQueued(1)
+        model.playerPlayQueued(1, 0)
         model.playerPlayLater(0)
         model.playerMoveQueued(0, 1)
         model.playerCard()
@@ -2429,7 +2582,7 @@ class MainViewModelTest {
         assertEquals(listOf(Repeat.ALL), playback.repeated.toList())
         model.playerLike()
         assertEquals(1, playback.liked)
-        model.playerPlayQueued(7)
+        model.playerPlayQueued(7, 0)
         assertEquals(listOf(7L), playback.queuedPlayed.toList())
         model.playerSeek(4_000)
         assertEquals(listOf(4_000L), playback.seeks.toList())
@@ -4085,7 +4238,7 @@ class MainViewModelTest {
         val playback = FakePlayback().apply { access = true }
         val answers = MutableSharedFlow<Following?>(extraBufferCapacity = 1)
         val source = object : PlaybackSource by playback {
-            override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = answers
+            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = answers
         }
         val model = ytMusicModel(source)
         val effects = mutableListOf<Effect>()

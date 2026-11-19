@@ -177,14 +177,14 @@ internal class MainViewModel(
             }
 
             // Played on from behind where it can be; one that only plays in front is brought there for it, covered the same way.
-            override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
+            override fun playPause(song: MusicMetadata, play: Boolean, app: String?, session: Int?) {
                 qobuzNumbers?.off()
                 leftJob?.cancel()
-                if (!play) return source.playPause(song, false, app)
+                if (!play) return source.playPause(song, false, app, session)
                 viewModelScope.launch {
-                    if (source.resume(song, app)) return@launch
+                    if (source.resume(song, app, session)) return@launch
                     if (uiState.canFloatOverApps) uiState = uiState.copy(coveringApp = true)
-                    if (!source.bringToFront(song, app)) uncover()
+                    if (!source.bringToFront(song, app, session)) uncover()
                 }
             }
 
@@ -1154,12 +1154,14 @@ internal class MainViewModel(
         merge<Unnamed?>(source.unnamedUpdates().filterNotNull(), source.nowPlayingUpdates().filterNotNull().map { null })
             // Paused, it isn't said to play; ask the last one's app whether it still has it.
             .onStart { previous?.let { emit(it) } }
-            .distinctUntilChanged { was, now -> was?.app == now?.app && was?.played == now?.played }
+            // The session too: the same app can start another for the same station, and the bar's buttons follow that one.
+            .distinctUntilChangedBy { station -> station?.let { listOf(it.app, it.played, it.reportsState, it.session) } }
             .collectLatest { unnamed ->
                 followedUnnamed = null
                 showUnnamed()
-                if (unnamed == null) return@collectLatest
-                source.follow(unnamed.played, unnamed.app).collect { following ->
+                // The notification identifies the station, but there is no clock or transport to follow by name.
+                if (unnamed?.reportsState != true) return@collectLatest
+                source.follow(unnamed.played, unnamed.app, unnamed.session).collect { following ->
                     followedUnnamed = following?.let { unnamed to it }
                     checkHeard(following)
                     showUnnamed()
@@ -1221,7 +1223,7 @@ internal class MainViewModel(
      */
     private fun showUnnamed() {
         val shown = liveUnnamed ?: followedUnnamed?.first?.takeIf { heardNow == null }
-        val following = followedUnnamed?.takeIf { (followed) -> shown != null && followed.app == shown.app && followed.played == shown.played }?.second
+        val following = followedUnnamed?.takeIf { (followed) -> shown?.reportsState == true && followed.app == shown.app && followed.played == shown.played }?.second
         val was = uiState.playingUnnamed?.takeIf { it.playing == shown }
         val heard = was?.heard?.takeIf { liveUnnamed != null }
         uiState = uiState.copy(playingUnnamed = shown?.let { PlayingUnnamed(it, heard, following) })
@@ -1272,8 +1274,9 @@ internal class MainViewModel(
                 showUnnamed()
             }
             // Paused, nothing plays to hear; nor on a speaker it's cast to, which the phone doesn't play.
+            // A stateless station's notification identifies its session, but not whose audio is playing.
             // Moved on, as by a skip, it's listened to again at once, the listen under way stopped.
-            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight && !it.away } }
+            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight && !it.away && it.reportsState } }
             .combine(byEarAgain) { unnamed, again -> unnamed?.let { it to again } }
             .distinctUntilChanged()
             .collectLatest { listened -> if (listened != null) nameByEar(source) }
@@ -1379,6 +1382,7 @@ internal class MainViewModel(
             // No longer where it could be, the bar no longer shows it either.
             if (!fits(heard)) forgetHeardByEar()
         }
+        if (!playing.playing.reportsState) return peekPlayingUnnamed()
         val song = playing.playing.asSong?.takeIf { cantName(playing.playing) } ?: return peekPlayingUnnamed()
         if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
         if (uiState.player?.song != song) openPlayer(song, playing.playing.app, played = true)
@@ -1420,7 +1424,7 @@ internal class MainViewModel(
     /** The player on what an app plays with no song named, as the app names it, with its buttons, as a swipe up from the bar opens it. */
     fun peekPlayingUnnamed() {
         val unnamed = uiState.playingUnnamed?.playing ?: return
-        openPlayer(unnamed.played, unnamed.app, played = true, songless = true)
+        openPlayer(unnamed.played, unnamed.app, played = true, unnamed = unnamed)
     }
 
     private fun showPlayingNow() {
@@ -1448,22 +1452,25 @@ internal class MainViewModel(
 
     /** Pauses the song playing now, or plays it again: as its button shows, playing when its app doesn't say where it is. */
     fun playingNowPlayPause() {
-        val (song, following, app) = onTheBar() ?: return
-        playback?.playPause(song, following?.clock?.playing == false, app)
+        val bar = onTheBar() ?: return
+        playback?.playPause(bar.song, bar.following?.clock?.playing == false, bar.app, bar.session)
     }
 
     fun playingNowSkip() {
-        val (song, _, app) = onTheBar() ?: return
-        playback?.skip(song, true, app)
-        movedOn(app)
+        val bar = onTheBar() ?: return
+        playback?.skip(bar.song, true, bar.app, bar.session)
+        movedOn(bar.app)
     }
 
     /**
      * What the bar's buttons are for: the song playing now, or what an app plays with no song named, as the app
      * names it, asked of that app by package, so they reach it whatever it calls it, even nothing.
      */
-    private fun onTheBar(): Triple<MusicMetadata, Following?, String?>? =
-        uiState.playingNow?.let { Triple(it.song, it.following, null) } ?: uiState.playingUnnamed?.let { Triple(it.playing.played, it.following, it.playing.app) }
+    private data class BarTarget(val song: MusicMetadata, val following: Following?, val app: String?, val session: Int?)
+
+    private fun onTheBar(): BarTarget? =
+        uiState.playingNow?.let { BarTarget(it.song, it.following, null, it.following?.session) }
+            ?: uiState.playingUnnamed?.takeIf { it.canControl }?.let { BarTarget(it.playing.played, it.following, it.playing.app, it.playing.session) }
 
     /**
      * Shows [song] as a result, like a pasted link, by the Shazam page [appleMusicId] names when it's
@@ -1969,11 +1976,15 @@ internal class MainViewModel(
 
     private var playerJob: Job? = null
 
-    /** Opens the player on [song], asked of [app] at [link], and follows it there as it plays; [songless] when it names no song, see [PlayerState.songless]. */
-    private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false, songless: Boolean = false) {
+    /** Opens the player on [song], asked of [app] at [link], and follows it there as it plays; [unnamed] when it names no song. */
+    private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false, unnamed: Unnamed? = null) {
         // The app may be on another song as it's asked, which isn't the one it goes on to play.
         val over = playback?.takeIf { !played && it.hasAccess() }?.nowPlaying()?.takeIf { sameApp(app, it.app, interception::isInstalled) }?.metadata
-        uiState = uiState.copy(player = PlayerState(song, app, link, played = played, over = over, songless = songless), canFollowApps = playback?.hasAccess() == true)
+        val stationApp = unnamed?.takeUnless { it.reportsState }?.let { it.label ?: it.app }
+        uiState = uiState.copy(
+            player = PlayerState(song, app, link, played = played, over = over, songless = unnamed != null, stationAppLabel = stationApp, session = unnamed?.session),
+            canFollowApps = playback?.hasAccess() == true
+        )
         followPlayer()
         peekWords()
     }
@@ -2017,11 +2028,15 @@ internal class MainViewModel(
         playerJob?.cancel()
         playerJob = null
         val opened = uiState.player ?: return
-        val song = opened.song
         val source = playback?.takeIf { it.hasAccess() } ?: return
+        if (opened.stationOnly) {
+            playerJob = viewModelScope.launch { followStationDisplay(source) }
+            return
+        }
+        val song = opened.song
         playerJob = viewModelScope.launch {
             // What names no song is only told apart by the app that plays it.
-            combine(source.follow(song, opened.askedOf), source.nowPlayingUpdates(), source.unnamedUpdates(), ::Triple).collect { (following, playing, unnamed) ->
+            combine(source.follow(song, opened.askedOf, opened.session), source.nowPlayingUpdates(), source.unnamedUpdates(), ::Triple).collect { (following, playing, unnamed) ->
                 val player = uiState.player ?: return@collect
                 val played = player.played || following?.clock?.playing == true
                 // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
@@ -2032,6 +2047,18 @@ internal class MainViewModel(
                 if (next != null) return@collect openPlayer(next.metadata, next.app ?: player.following?.appPackage ?: player.app, played = true)
                 if (tookUpUnnamed(unnamed, playing, following, played, song)) return@collect
                 uiState = uiState.copy(player = player.withCurrentCover(playing, unnamed, following).copy(following = following, played = played))
+            }
+        }
+    }
+
+    /** A stateless station has no transport to follow. Keep its display only while it is current. */
+    private suspend fun followStationDisplay(source: PlaybackSource) {
+        source.unnamedUpdates().collect { station ->
+            val player = uiState.player?.takeIf { it.stationOnly } ?: return@collect
+            if (station == null || station.app != player.app || station.reportsState) {
+                closePlayer()
+            } else {
+                uiState = uiState.copy(player = player.copy(song = station.played, stationAppLabel = station.label ?: station.app, session = station.session))
             }
         }
     }
@@ -2049,14 +2076,16 @@ internal class MainViewModel(
 
     /**
      * Opens the player on [unnamed], what an app plays with no song named, e.g. the next station or a file
-     * with no tags, when the app went on to it from [song] once it [played], as it would to the next song;
-     * not while a song is [playing], or [song] is still [following]. Only in the player's own app: what
-     * another app plays is no next song of this one.
+     * with no tags, when the app went on to it from [song] once it [played]. What reports no state has
+     * no transport to follow, even if it has the same title or another session can still be [following].
+     * Only in the player's own app, and only when no named song is [playing].
      */
     private fun tookUpUnnamed(unnamed: Unnamed?, playing: Heard.Song?, following: Following?, played: Boolean, song: MusicMetadata): Boolean {
         val app = uiState.player?.let { it.following?.appPackage ?: it.app }
-        val next = unnamed?.takeIf { playing == null && following == null && played && uiState.practice == null && it.played.copy(artworkUrl = song.artworkUrl) != song && it.app == app } ?: return false
-        openPlayer(next.played, next.app, played = true, songless = true)
+        val next = unnamed?.takeIf { playing == null && played && uiState.practice == null && it.app == app } ?: return false
+        val sameSong = next.session == uiState.player?.session && next.played.copy(artworkUrl = song.artworkUrl) == song
+        if (next.reportsState && (following != null || sameSong)) return false
+        openPlayer(next.played, next.app, played = true, unnamed = next)
         return true
     }
 
@@ -2107,9 +2136,10 @@ internal class MainViewModel(
      */
     fun playerPlayPause() {
         val player = uiState.player ?: return
+        if (player.stationOnly) return
         val following = player.following ?: return run {
             if (player.songless) {
-                player.app?.let { playback?.playApp(it) }
+                player.app?.let { playback?.playApp(it, player.session) }
                 return
             }
             // Still being asked for, a second ask would start it over.
@@ -2118,7 +2148,7 @@ internal class MainViewModel(
                 if (playback?.playSong(player.song, player.app, player.link) == false && uiState.phone == Phone.TV) player.app?.let { app -> player.link?.let { playback.openSong(app, it) } }
             }
         }
-        playback?.playPause(player.song, !following.clock.playing, player.askedOf)
+        playback?.playPause(player.song, !following.clock.playing, player.askedOf, following.session)
     }
 
     /** Has the app go on to its [next] song, or back to the one before, which the player then shows. */
@@ -2127,7 +2157,7 @@ internal class MainViewModel(
         val following = player.following ?: return
         if (!(if (next) following.canSkipNext else following.canSkipPrevious)) return
         uiState = uiState.copy(player = player.copy(played = true))
-        playback?.skip(player.song, next, player.askedOf)
+        playback?.skip(player.song, next, player.askedOf, following.session)
         movedOn(player.app)
     }
 
@@ -2135,34 +2165,34 @@ internal class MainViewModel(
     fun playerShuffle() {
         val player = uiState.player ?: return
         val shuffles = player.following?.shuffle ?: return
-        playback?.shuffle(player.song, !shuffles, player.askedOf)
+        playback?.shuffle(player.song, !shuffles, player.askedOf, player.following.session)
     }
 
     /** Has the app repeat the next way, as music apps go round them: not at all, all of its list, then the song. */
     fun playerRepeat() {
         val player = uiState.player ?: return
         val repeats = player.following?.repeat ?: return
-        playback?.repeat(player.song, Repeat.entries[(repeats.ordinal + 1) % Repeat.entries.size], player.askedOf)
+        playback?.repeat(player.song, Repeat.entries[(repeats.ordinal + 1) % Repeat.entries.size], player.askedOf, player.following.session)
     }
 
     /** Presses the app's own like for the player's song. */
     fun playerLike() {
         val player = uiState.player ?: return
         if (player.following?.like == null) return
-        playback?.like(player.song, player.askedOf)
+        playback?.like(player.song, player.askedOf, player.following.session)
     }
 
-    /** Has the app play one of the songs it has up next now, which the player then shows. */
-    fun playerPlayQueued(id: Long) {
-        val player = uiState.player ?: return
+    /** Plays the song up next from the session that supplied the row. */
+    fun playerPlayQueued(id: Long, session: Int) {
+        val player = uiState.player?.takeUnless { it.stationOnly } ?: return
         uiState = uiState.copy(player = player.copy(played = true))
-        playback?.playQueued(player.song, id, player.askedOf)
+        playback?.playQueued(player.song, id, player.askedOf, session)
         movedOn(player.app)
     }
 
     /** Plays the list on from the song up next at [index], one it still has to ask the app for. */
     fun playerPlayLater(index: Int) {
-        val player = uiState.player ?: return
+        val player = uiState.player?.takeUnless { it.stationOnly } ?: return
         val apps = player.following?.upNext.orEmpty().count { it.id != null }
         uiState = uiState.copy(player = player.copy(played = true))
         viewModelScope.launch { playQueue?.playFrom(index - apps) }
@@ -2196,7 +2226,7 @@ internal class MainViewModel(
     fun playerSleep(minutes: Int?) {
         val timer = sleepTimer ?: return
         if (minutes != null) return timer.after(minutes)
-        uiState.player?.let { timer.afterSong(it.song, it.askedOf) }
+        uiState.player?.let { timer.afterSong(it.song, it.askedOf, it.following?.session ?: it.session) }
     }
 
     fun playerSleepOff() {
@@ -2206,7 +2236,7 @@ internal class MainViewModel(
     fun playerSeek(positionMs: Long) {
         val player = uiState.player ?: return
         if (player.following?.canSeek != true) return
-        playback?.seekTo(player.song, positionMs, player.askedOf)
+        playback?.seekTo(player.song, positionMs, player.askedOf, player.following.session)
         movedOn(player.app)
     }
 
@@ -4530,7 +4560,7 @@ internal class MainViewModel(
         val before = uiState.lyricsFor?.let { shown -> playing?.let { Before(shown, inApp(it.clock.positionAt(now())), it.appPackage) } }
             ?: when (val first = playback?.whatPlays()) {
                 is WhatPlays.Named -> first.song.clock?.let { Before(first.song.metadata, it.positionAt(now()), app = first.song.app) }
-                is WhatPlays.Nameless -> Before(first.playing.played, 0, first.playing.app, songless = true)
+                is WhatPlays.Nameless -> first.playing.takeIf { it.reportsState }?.let { Before(it.played, 0, it.app, songless = true) }
                 null -> null
             }
         cards.start(song, before)

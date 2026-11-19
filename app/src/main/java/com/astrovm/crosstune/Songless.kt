@@ -21,7 +21,9 @@ internal data class Unnamed(
     private val artist: String = "",
     val where: Place = Place.PHONE,
     val said: Boolean = name != null,
-    private val caption: Boolean = false
+    private val caption: Boolean = false,
+    val reportsState: Boolean = true,
+    val session: Int? = null
 ) {
     /** What it plays as the app names it, which its buttons and the player follow it there by, never as a song. */
     val played: MusicMetadata get() = MusicMetadata(name.orEmpty(), artist, artworkUrl = artworkUrl, unnamed = true)

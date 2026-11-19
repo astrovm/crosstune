@@ -30,11 +30,11 @@ internal class QueueOrder(
 
     /** [source], with what's up next in the order, and on to the order's next song when skipped. */
     fun ordering(source: PlaybackSource): PlaybackSource = object : PlaybackSource by source {
-        override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = combine(source.follow(song, app), order) { following, order -> following?.inOrder(order) }
+        override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = combine(source.follow(song, app, session), order) { following, order -> following?.inOrder(order) }
 
-        override fun skip(song: MusicMetadata, next: Boolean, app: String?) {
+        override fun skip(song: MusicMetadata, next: Boolean, app: String?, session: Int?) {
             val first = order.value.firstOrNull()?.id
-            if (next && first != null) playback.playQueued(song, first, app) else source.skip(song, next, app)
+            if (next && first != null) playback.playQueued(song, first, app, session) else source.skip(song, next, app, session)
         }
     }
 
