@@ -105,8 +105,9 @@ internal object Readings {
      * 9 for successive old kana pairs in けふけふ.
      * 10 for an old ほ said お in kana alone.
      * 11 for standalone old kana read with the built-in dictionary.
+     * 12 for a suffix that follows a word it can't join, 等 after a verb, 桜 after a counter, and 千夜.
      */
-    const val VERSION = 11
+    const val VERSION = 12
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -593,6 +594,8 @@ internal object Readings {
     /** Whether UniDic keeps whole, as the word [b], what IPADIC breaks up, [a]: kanji, 逢ひ in 逢 and ひ, or old kana, けふ in け and ふ. */
     private fun keptWhole(a: List<Piece>, b: List<Piece>): Boolean {
         val whole = b.singleOrNull() ?: return false
+        // 千夜 is a thousand nights, せんや, whatever name UniDic has for it.
+        if (a.size == 2 && a[0].subkind in NUMBERS && a[1].surface == "夜") return false
         return a.size > 1 && (whole.surface.any(::isHan) || Furigana.modernKana(whole.surface, listOfNotNull(whole.spoken)) != null)
     }
 
@@ -807,6 +810,10 @@ internal object Readings {
             // A prefix of kanji goes before a word with kanji, 今世紀 or 前前前世; before one in kana, 今となり, it's a word.
             val strayBefore = last?.takeIf { it.kind == "接頭詞" && it.surface.all(::isHan) && piece.surface.none(::isHan) }?.let { alone(it.surface) }
             val next = pieces.getOrNull(index + 1)
+            // A suffix said with a voice after a word it can't be part of is the noun it is alone: いつか日, 一度星.
+            val apart = last?.takeIf { standsApart(it, piece) }?.let { alone(piece.surface) }
+            // A noun said with a voice after a number and a counter: 千本桜 せんぼんざくら, 二枚刃 にまいば.
+            val afterCount = last?.takeIf { piece.surface in COUNTED_VOICED && endsInCount(it, out.getOrNull(out.lastIndex - 1)) }
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
             when {
@@ -830,9 +837,20 @@ internal object Readings {
                     out += piece.read("いろ")
                 // 君 is くん after a name, 太郎君; after anything else it's you, 何度君と, きみ.
                 piece.surface == "君" && piece.kana == "くん" && (last == null || !namedBy(last)) -> out += piece.read("きみ")
-                // 手 after a katakana word and before を is a hand, not a suffix naming a person.
-                piece.surface == "手" && piece.kana == "しゅ" && last != null && inKatakana(last) &&
-                    pieces.getOrNull(index + 1)?.surface == "を" -> out += piece.read("て", "名詞", "一般")
+                // 手 after a katakana word and before を, or after a pronoun and before any particle, is a hand, not a suffix naming a person.
+                piece.surface == "手" && piece.kana == "しゅ" && last != null &&
+                    ((inKatakana(last) && next?.surface == "を") || (last.subkind == "代名詞" && next?.kind == "助詞")) ->
+                    out += piece.read("て", "名詞", "一般")
+                apart != null -> out += piece.read(apart, "名詞", "一般")
+                afterCount != null -> {
+                    // The number, its counter and the noun are one word: 二枚刃, 千本桜.
+                    val head = listOfNotNull(out.getOrNull(out.lastIndex - 1)?.takeIf { afterCount.surface.length == 1 }, afterCount)
+                    repeat(head.size) { out.removeAt(out.lastIndex) }
+                    out += Piece(head.joinToString("") { it.surface } + piece.surface, head.joinToString("") { it.kana } + voiced(piece.kana), "名詞", "一般", reader = Reader.RULES)
+                }
+                // 等 after a verb, an adjective or a particle can't be a name, ひとし: it's など.
+                piece.surface == "等" && piece.kana == "ひとし" && last != null && (last.kind in INFLECTED || last.kind in GRAMMAR) ->
+                    out += piece.read("など", "名詞", "一般")
                 // An adjective's stem can't go on with て or た: 愛して and 楽して are the verbs, あいして and らくして.
                 last != null && stemOfVerb(last, piece) -> {
                     out[out.lastIndex] = last.read(tokenizer.tokenize(last.surface.dropLast(1)).joinToString("") { hiragana(it.reading ?: it.surface) } + "し", "動詞", "自立")
@@ -860,6 +878,35 @@ internal object Readings {
         if (number.subkind !in NUMBERS || !piece.counts()) return null
         return ranInto(number.kana, piece.surface, piece.kana)
     }
+
+    /**
+     * Whether [piece], a suffix of one kanji said with a voice, 日 as び or 星 as ぼし, stands after [last] with no word
+     * to be the second half of: one the dictionary takes for a name or an adverb in kana, いつか日 and いつの日, or how
+     * many times, 一度星 and いちど星 (a number and 度, or its kana). Then the suffix is the noun it is alone, ひ and ほし.
+     */
+    private fun standsApart(last: Piece, piece: Piece): Boolean {
+        if (piece.subkind != "接尾" || piece.surface.singleOrNull()?.let(::isHan) != true || piece.kana.first() !in VOICED) return false
+        val timesWord = (last.subkind == "接尾" && last.surface == "度") || (last.surface.all(::isSaid) && last.kana in TIMES)
+        return timesWord || (last.subkind in setOf("副詞可能", "固有名詞") && last.surface.all(::isSaid))
+    }
+
+    /** How many times, said in kana: いちど, なんど. */
+    private val TIMES = listOf("いち", "に", "さん", "よん", "ご", "ろく", "なな", "はち", "きゅう", "じゅう", "なん", "いく").map { it + "ど" }.toSet()
+
+    /** Nouns said with a voice after a number and its counter, as the second half of a word: 千本桜, 二枚刃. */
+    private val COUNTED_VOICED = setOf("桜", "刃")
+
+    /** Whether [last] is a counter after a number, one kanji after [before], 本 after 百, or a number's kanji and a counter in one word, 千本. */
+    private fun endsInCount(last: Piece, before: Piece?): Boolean {
+        val numerals = "一二三四五六七八九十百千何"
+        if (last.surface.length == 1) return last.counts() && before?.subkind in NUMBERS
+        return last.surface.dropLast(1).all { it in numerals } && isHan(last.surface.last()) && last.surface.last() !in numerals
+    }
+
+    /** [kana] with its first kana said with a voice: さくら as ざくら, は as ば. */
+    private fun voiced(kana: String): String = VOICING[kana.first()]?.let { it + kana.drop(1) } ?: kana
+
+    private val VOICING = "かがきぎくぐけげこごさざしじすずせぜそぞただちぢつづてでとどはばひびふぶへべほぼ".chunked(2).associate { it[0] to it[1] }
 
     /**
      * How a number read [number] sounds with the counter [counter], read [kana], when they run together:
