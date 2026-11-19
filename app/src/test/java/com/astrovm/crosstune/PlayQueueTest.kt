@@ -731,6 +731,21 @@ class PlayQueueTest {
     }
 
     @Test
+    fun aStaleSessionCannotAdvanceTheNextPart() {
+        val queue = queue()
+        val playback = queue.skipping(phone)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
+        queue.playing()
+        for (number in 1..50) plays(number, 99L + number)
+        val last = MusicMetadata("Song 50", "Band")
+        phone.sessionSongs[0] = last
+        playback.skip(last, true, music, 99)
+        assertTrue(phone.listsAsked.isEmpty())
+        playback.skip(last, true, music, 0)
+        assertEquals(listOf(music to "https://music.youtube.com/watch?v=Song 51&list=TL"), phone.listsAsked)
+    }
+
+    @Test
     fun aPartPlayedBackAndOnAgainEndsOnItsLastSong() {
         val queue = queue()
         val playback = queue.skipping(phone)

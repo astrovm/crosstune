@@ -307,6 +307,76 @@ class ListeningTest {
     }
 
     @Test
+    fun aStationWithoutPlaybackStateOpensItsAppInsteadOfOfferingPlay() {
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
+        }
+        MainActivity.playbackFactory = { radio }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertFalse(described(string(R.string.lyrics_pause)))
+        assertFalse(described(string(R.string.lyrics_next_song)))
+        composeRule.runOnIdle {
+            controllerModel().playingNowPlayPause()
+            controllerModel().playingNowSkip()
+        }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitForDescription(string(R.string.open_app_button, "Simple Radio"))
+        assertFalse(described(string(R.string.lyrics_play)))
+        assertFalse(described(string(R.string.lyrics_pause)))
+        composeRule.runOnIdle { controllerModel().playerPlayPause() }
+        assertTrue(radio.appsPlayed.isEmpty())
+        assertTrue(radio.plays.isEmpty())
+        assertTrue(radio.skips.isEmpty())
+    }
+
+    @Test
+    fun aStatelessStationWithNoMicrophoneDoesNotFollowAPausedSessionWithTheSameName() {
+        val radio = FakePlayback().apply {
+            access = true
+            val station = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
+            unnamed.value = station
+            playing.value = Following(PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = false), "Simple Radio", canSeek = true, appPackage = station.app)
+        }
+        MainActivity.playbackFactory = { radio }
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertNull(controllerModel().uiState.playingUnnamed?.following)
+        assertFalse(described(string(R.string.lyrics_play)))
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitForDescription(string(R.string.open_app_button, "Simple Radio"))
+        assertEquals(true, controllerModel().uiState.player?.songless)
+        assertEquals("Simple Radio", controllerModel().uiState.player?.stationAppLabel)
+        assertNull(controllerModel().uiState.player?.following)
+        assertNull(controllerModel().uiState.result)
+    }
+
+    @Test
+    fun theOpenStationPlayerUpdatesWithoutFollowingAnUnverifiedSession() {
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
+        }
+        MainActivity.playbackFactory = { radio }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitForDescription(string(R.string.open_app_button, "Simple Radio"))
+
+        val next = requireNotNull(radio.unnamed.value).copy(name = "Another FM")
+        composeRule.runOnIdle { radio.unnamed.value = next }
+        composeRule.waitForIdle()
+        assertEquals("Another FM", controllerModel().uiState.player?.song?.title)
+        assertNull(controllerModel().uiState.player?.following)
+        assertFalse(described(string(R.string.lyrics_play)))
+
+        composeRule.runOnIdle { radio.unnamed.value = next.copy(reportsState = true) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player == null && barShown() }
+    }
+
+    @Test
     fun aStationIsListenedToOnlyWhileItsBarIsInSightNotUnderItsPlayer() {
         val radio = FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "Fake FM") }
         MainActivity.playbackFactory = { radio }

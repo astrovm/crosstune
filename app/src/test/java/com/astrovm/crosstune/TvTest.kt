@@ -18,6 +18,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isEnabled
@@ -29,6 +30,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.isRoot
@@ -694,5 +696,101 @@ class TvTest {
         bar.assertIsFocused()
         pressOnFocused(Key.DirectionUp)
         bar.assertIsNotFocused()
+    }
+    private fun openStation() = composeRule.onNode(hasContentDescription(string(R.string.open_app_button, "Simple Radio")) and hasClickAction())
+
+    private fun stationPlayerGone() =
+        composeRule.onAllNodes(hasContentDescription(string(R.string.open_app_button, "Simple Radio"))).fetchSemanticsNodes().isEmpty()
+
+    private fun model() = ViewModelProvider(checkNotNull(controller).get())[MainViewModel::class.java]
+
+    @Test
+    fun onATvAStationWithNoStateStartsOnItsOpenButtonKeepsItAsTheStationChangesAndBackLandsOnTheBar() {
+        // Simple Radio names only the station and reports no state, so its player has the one button.
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
+        }
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { SongHearing { Heard.Nothing } }
+        launch()
+        composeRule.waitUntil(5_000) { shown("Blue 100.7 FM") }
+        // The bar doesn't take the remote just by showing.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsNotFocused()
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        composeRule.waitUntil(5_000) { openStation().isDisplayed() }
+        // A filled button with its icon and one word, not an icon alone, and the remote is already on it.
+        assertTrue(shown(string(R.string.open_button)))
+        val icon = composeRule.onNodeWithTag(OPEN_STATION_ICON_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val word = composeRule.onNodeWithTag(OPEN_STATION_WORD_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(icon.right > icon.left && icon.right < word.left)
+        openStation().assertIsFocused()
+
+        composeRule.runOnIdle { radio.unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Rock & Pop", reportsState = false) }
+        composeRule.waitUntil(5_000) { shown("Rock & Pop") }
+        openStation().assertIsFocused()
+
+        // Back closes the player and the remote lands on the station's bar, which stays, each time.
+        repeat(2) {
+            if (it > 0) {
+                composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+                composeRule.waitUntil(5_000) { openStation().isDisplayed() }
+                openStation().assertIsFocused()
+            }
+            checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+            composeRule.waitUntil(5_000) { stationPlayerGone() }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsFocused()
+        }
+
+        // The remote was handed back once: a bar that comes and goes on its own doesn't take it again.
+        composeRule.runOnIdle { radio.unnamed.value = null }
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(NOW_PLAYING_TAG).fetchSemanticsNodes().isEmpty() }
+        composeRule.runOnIdle { radio.unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false) }
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(NOW_PLAYING_TAG).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsNotFocused()
+    }
+
+    @Test
+    fun onATvAStationThatLosesItsPlayerToAppReportedStateHandsTheRemoteToItsBar() {
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
+        }
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { SongHearing { Heard.Nothing } }
+        launch()
+        composeRule.waitUntil(5_000) { shown("Blue 100.7 FM") }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        composeRule.waitUntil(5_000) { openStation().isDisplayed() }
+        openStation().assertIsFocused()
+        // Once the app reports its state the read-only player has nothing left to show, so it closes.
+        composeRule.runOnIdle { radio.unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = true) }
+        composeRule.waitUntil(5_000) { stationPlayerGone() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsFocused()
+    }
+
+    @Test
+    fun onATvAPlayerThatIsNotAStationLeavesTheRemoteWhereAndroidPutsIt() {
+        MainActivity.playbackFactory = {
+            FakePlayback().apply {
+                access = true
+                onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, 1_000, SystemClock.elapsedRealtime())
+                playing.value = Following(
+                    PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "Music",
+                    canSeek = true, canSkipNext = true, appPackage = MusicService.YOUTUBE_MUSIC.packageName
+                )
+            }
+        }
+        launch()
+        composeRule.waitUntil(5_000) { shown("Demo") }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        composeRule.waitUntil(5_000) { model().uiState.player != null }
+        composeRule.runOnIdle { model().closePlayer() }
+        composeRule.waitUntil(5_000) { model().uiState.player == null }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsNotFocused()
     }
 }
