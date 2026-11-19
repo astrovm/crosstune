@@ -376,23 +376,23 @@ class PlayQueueTest {
             PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music,
             upNext = listOf(Queued("Song 2", "Band", 2), Queued("Radio", "Someone", 99), Queued("Song 3", "Band", 3))
         )
-        val seen = runBlocking { followed.follow(MusicMetadata("Song 1", "Band")).first() }!!
+        val seen = checkNotNull(runBlocking { followed.follow(MusicMetadata("Song 1", "Band")).first() }) { "Expected runBlocking { followed.follow(MusicMetadata(\"Song 1\", \"Band\")).first() } to be non-null" }
         assertEquals("Road Trip", seen.from)
         assertEquals(listOf(Queued("Song 2", "Band", 2)) + tracks.drop(50).map { Queued(it.title, it.artist) }, seen.upNext)
         // A song not of the list is as the app has it.
-        val other = runBlocking { followed.follow(MusicMetadata("Other", "Someone")).first() }!!
+        val other = checkNotNull(runBlocking { followed.follow(MusicMetadata("Other", "Someone")).first() }) { "Expected runBlocking { followed.follow(MusicMetadata(\"Other\", \"Someone\")).first() } to be non-null" }
         assertNull(other.from)
         assertEquals(3, other.upNext.size)
         // Nor is one of its songs in another app.
-        phone.playing.value = phone.playing.value!!.copy(appPackage = MusicService.TIDAL.packageName)
-        assertNull(runBlocking { followed.follow(MusicMetadata("Song 1", "Band")).first() }!!.from)
+        phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(appPackage = MusicService.TIDAL.packageName)
+        assertNull(checkNotNull(runBlocking { followed.follow(MusicMetadata("Song 1", "Band")).first() }) { "Expected runBlocking { followed.follow(MusicMetadata(\"Song 1\", \"Band\")).first() } to be non-null" }.from)
         // Nothing playing, nothing shown.
         phone.playing.value = null
         assertNull(runBlocking { followed.follow(MusicMetadata("Song 1", "Band")).first() })
         // Stopped, it's from nothing.
         phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
         queue.stop()
-        assertNull(runBlocking { followed.follow(MusicMetadata("Song 1", "Band")).first() }!!.from)
+        assertNull(checkNotNull(runBlocking { followed.follow(MusicMetadata("Song 1", "Band")).first() }) { "Expected runBlocking { followed.follow(MusicMetadata(\"Song 1\", \"Band\")).first() } to be non-null" }.from)
     }
 
     @Test
@@ -401,7 +401,7 @@ class PlayQueueTest {
         val songs = tracks.take(4).mapIndexed { index, song -> song.copy(artworkUrl = "https://covers.example/${index + 1}.jpg".takeIf { index != 2 }) }
         runBlocking { queue.play(songs, MusicService.TIDAL, tidal, 1, songs.take(1), "Road Trip") }
         phone.playing.value = Following(PlaybackClock(0, 0), "TIDAL", canSeek = true, appPackage = tidal)
-        fun next(playing: Int = 1, queue: PlayQueue = this.queue()) = runBlocking { queue.skipping(phone).follow(MusicMetadata("Song $playing", "Band")).first() }!!.upNext
+        fun next(playing: Int = 1, queue: PlayQueue = this.queue()) = checkNotNull(runBlocking { queue.skipping(phone).follow(MusicMetadata("Song $playing", "Band")).first() }) { "Expected runBlocking { queue.skipping(phone).follow(MusicMetadata(\"Song \$playing\", \"Band\")).first() } to be non-null" }.upNext
         // Each with its cover, when it has one.
         assertEquals(listOf(Queued("Song 2", "Band", art = "https://covers.example/2.jpg"), Queued("Song 3", "Band"), Queued("Song 4", "Band", art = "https://covers.example/4.jpg")), next(queue = queue))
         runBlocking { queue.move(2, 0) }
@@ -469,7 +469,7 @@ class PlayQueueTest {
         file.writeText("""{"tracks":[["Song 1","Band",""],["Song 2","Band",""]],"service":"TIDAL","app":"$tidal","to":1,"part":[["Song 1","Band",""]],"heard":[]}""")
         val queue = queue().also { it.resume() }
         phone.playing.value = Following(PlaybackClock(0, 0), "TIDAL", canSeek = true, appPackage = tidal)
-        assertEquals(listOf(Queued("Song 2", "Band")), runBlocking { queue.skipping(phone).follow(MusicMetadata("Song 1", "Band")).first() }!!.upNext)
+        assertEquals(listOf(Queued("Song 2", "Band")), checkNotNull(runBlocking { queue.skipping(phone).follow(MusicMetadata("Song 1", "Band")).first() }) { "Expected runBlocking { queue.skipping(phone).follow(MusicMetadata(\"Song 1\", \"Band\")).first() } to be non-null" }.upNext)
     }
 
     @Test
@@ -560,7 +560,7 @@ class PlayQueueTest {
         val queue = queue()
         runBlocking { queue.play(tracks.take(3), MusicService.TIDAL, tidal, 1, tracks.take(1), "Road Trip") }
         phone.playing.value = Following(PlaybackClock(0, 0), "TIDAL", canSeek = true, appPackage = tidal, upNext = listOf(Queued("Radio", "Someone", 99)))
-        val seen = runBlocking { queue.skipping(phone).follow(MusicMetadata("Song 1", "Band")).first() }!!
+        val seen = checkNotNull(runBlocking { queue.skipping(phone).follow(MusicMetadata("Song 1", "Band")).first() }) { "Expected runBlocking { queue.skipping(phone).follow(MusicMetadata(\"Song 1\", \"Band\")).first() } to be non-null" }
         assertEquals(listOf(Queued("Song 2", "Band"), Queued("Song 3", "Band")), seen.upNext)
     }
 

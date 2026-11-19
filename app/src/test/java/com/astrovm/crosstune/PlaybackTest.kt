@@ -391,11 +391,11 @@ class PlaybackTest {
         val raining = MusicMetadata("It's Raining Men", "The Weather Girls")
         val seen = followed(raining)
         // It's the song, waiting at its start, as long as the song is, and the ad's length is never kept as one of the song's.
-        assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), seen.last()!!.clock)
-        assertTrue(seen.last()!!.ad)
-        assertEquals(325_474L, seen.last()!!.durationMs)
-        assertEquals(325_474L, playback.nowPlaying()!!.metadata.lengthMs)
-        assertNull(playback.nowPlaying()!!.offsetMs)
+        assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
+        assertTrue(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.ad)
+        assertEquals(325_474L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
+        assertEquals(325_474L, checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.metadata.lengthMs)
+        assertNull(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.offsetMs)
         assertEquals("com.google.android.apps.youtube.music:duration:325474", playback.recording(raining)?.recordingId)
         assertEquals(listOf(325_474L), lengths.known("It's Raining Men", "The Weather Girls"))
         // Then the song itself starts over from 0, and plays.
@@ -404,9 +404,9 @@ class PlaybackTest {
         shadowOf(music).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT + 15_069).setActions(PlaybackState.ACTION_SEEK_TO).build())
         shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(PlaybackClock(0, PLAYED_AT + 15_069), seen.last()!!.clock)
-        assertFalse(seen.last()!!.ad)
-        assertEquals(325_474L, seen.last()!!.durationMs)
+        assertEquals(PlaybackClock(0, PLAYED_AT + 15_069), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
+        assertFalse(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.ad)
+        assertEquals(325_474L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
     }
 
     @Test
@@ -417,7 +417,7 @@ class PlaybackTest {
             position = 5_000, duration = 17_066)
         shadowOf(sessions).addController(music)
         val asked = MusicMetadata("Cross My Heart", "Jody Watley", lengthMs = 210_674)
-        assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), followed(asked).last()!!.clock)
+        assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), checkNotNull(followed(asked).last()) { "Expected followed(asked).last() to be non-null" }.clock)
         assertEquals(210_674L, playback.recording(asked)?.lengthMs)
     }
 
@@ -429,7 +429,7 @@ class PlaybackTest {
             position = 1_000, duration = duration).also { ShadowMediaSessionManager.reset(); shadowOf(sessions).addController(it) }
         // Just before each song, YouTube Music says it's 0 long for a moment: the song, where it says.
         said(0)
-        assertEquals(PlaybackClock(1_000, PLAYED_AT), followed(asked).last()!!.clock)
+        assertEquals(PlaybackClock(1_000, PLAYED_AT), checkNotNull(followed(asked).last()) { "Expected followed(asked).last() to be non-null" }.clock)
         // As long as the longest ad, it's a version of the song, though a longer one played before.
         SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)).of("Cross My Heart", "Jody Watley", 210_674)
         said(LONGEST_AD_MS)
@@ -447,8 +447,8 @@ class PlaybackTest {
         val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Her Majesty", "The Beatles", album = "Abbey Road", duration = 23_000)
         shadowOf(sessions).addController(music)
         val majesty = MusicMetadata("Her Majesty", "The Beatles")
-        assertEquals(PlaybackClock(42_000, PLAYED_AT), followed(majesty).last()!!.clock)
-        assertEquals(23_000L, playback.nowPlaying()!!.metadata.lengthMs)
+        assertEquals(PlaybackClock(42_000, PLAYED_AT), checkNotNull(followed(majesty).last()) { "Expected followed(majesty).last() to be non-null" }.clock)
+        assertEquals(23_000L, checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.metadata.lengthMs)
         // Nor a song said shorter in another app, where no ads play under a song's name.
         val lengths = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
         lengths.of("Bizarre Love Triangle", "New Order", 262_000)
@@ -464,13 +464,13 @@ class PlaybackTest {
         val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours", duration = 220_000)
         shadowOf(sessions).addController(music)
         val seen = followed()
-        assertEquals(220_000L, seen.last()!!.durationMs)
+        assertEquals(220_000L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
         val longer = MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 221_000).build()
         shadowOf(music).setMetadata(longer)
         shadowOf(music).executeOnMetadataChanged(longer)
         shadowOf(Looper.getMainLooper()).idle()
         // Still followed, as long as it was, and keyed the same; any app saying so the next day too.
-        assertEquals(220_000L, seen.last()!!.durationMs)
+        assertEquals(220_000L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
         val played = MusicMetadata("Blinding Lights", "The Weeknd")
         assertEquals("com.google.android.apps.youtube.music:duration:220000", playback.recording(played)?.recordingId)
         assertEquals(220_000L, playback.recording(played)?.lengthMs)
@@ -690,13 +690,13 @@ class PlaybackTest {
         val youtube = player("com.google.android.youtube", "YouTube", "Blinding Lights", null)
         shadowOf(sessions).addController(youtube)
         val seen = followed()
-        assertTrue(seen.last()!!.clock.playing)
+        assertTrue(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.playing)
 
         shadowOf(youtube).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 50_000, 0f, 0).build())
         shadowOf(Looper.getMainLooper()).idle()
         // Paused, at 0 speed, it's still followed, just not moving; with no time of its own, it's now.
-        assertEquals(PlaybackClock(50_000, NOW, 1f, false), seen.last()!!.clock)
-        assertFalse(seen.last()!!.canSeek)
+        assertEquals(PlaybackClock(50_000, NOW, 1f, false), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
+        assertFalse(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.canSeek)
 
         // A video that won't play, e.g. in the background without an account, plays nothing to follow.
         shadowOf(youtube).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_ERROR, 0, 1f, 0).build())
@@ -705,7 +705,7 @@ class PlaybackTest {
         // Back to playing, then gone quiet with no state at all.
         shadowOf(youtube).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT).build())
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(1_000L, seen.last()!!.clock.positionMs)
+        assertEquals(1_000L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
         shadowOf(youtube).executeOnPlaybackStateChanged(null)
         shadowOf(Looper.getMainLooper()).idle()
         assertNull(seen.last())
@@ -724,50 +724,50 @@ class PlaybackTest {
         }
 
         says(PlaybackState.STATE_PAUSED, 51_600, PLAYED_AT + 10_000)
-        assertEquals(PlaybackClock(52_000, PLAYED_AT + 10_000, 1f, false), seen.last()!!.clock)
+        assertEquals(PlaybackClock(52_000, PLAYED_AT + 10_000, 1f, false), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         // Played again from where it said, it goes on from where it really stopped.
         says(PlaybackState.STATE_PLAYING, 51_600, PLAYED_AT + 20_000)
-        assertEquals(PlaybackClock(52_000, PLAYED_AT + 20_000, 1f, true), seen.last()!!.clock)
+        assertEquals(PlaybackClock(52_000, PLAYED_AT + 20_000, 1f, true), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         // The same again, e.g. as the app names the song anew, changes nothing.
-        shadowOf(music).executeOnMetadataChanged(music.metadata!!)
+        shadowOf(music).executeOnMetadataChanged(checkNotNull(music.metadata) { "Expected music.metadata to be non-null" })
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(52_000L, seen.last()!!.clock.positionMs)
+        assertEquals(52_000L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
 
         // Moved elsewhere, it's where the app says.
         says(PlaybackState.STATE_PLAYING, 90_000, PLAYED_AT + 25_000)
-        assertEquals(90_000L, seen.last()!!.clock.positionMs)
+        assertEquals(90_000L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
         // Said to pause right where it was, or ahead, or well behind, e.g. moved back as it paused, it's believed.
         says(PlaybackState.STATE_PAUSED, 95_000, PLAYED_AT + 30_000)
-        assertEquals(95_000L, seen.last()!!.clock.positionMs)
+        assertEquals(95_000L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
         says(PlaybackState.STATE_PLAYING, 95_000, PLAYED_AT + 40_000)
         says(PlaybackState.STATE_PAUSED, 100_500, PLAYED_AT + 45_000)
-        assertEquals(100_500L, seen.last()!!.clock.positionMs)
+        assertEquals(100_500L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
         says(PlaybackState.STATE_PLAYING, 100_500, PLAYED_AT + 50_000)
         says(PlaybackState.STATE_PAUSED, 105_500 - STALE_CLOCK_MS - 1, PLAYED_AT + 55_000)
-        assertEquals(105_500 - STALE_CLOCK_MS - 1, seen.last()!!.clock.positionMs)
+        assertEquals(105_500 - STALE_CLOCK_MS - 1, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
         // Up to a second behind is still taken as where it stopped.
         says(PlaybackState.STATE_PLAYING, 110_000, PLAYED_AT + 60_000)
         says(PlaybackState.STATE_PAUSED, 115_000 - STALE_CLOCK_MS, PLAYED_AT + 65_000)
-        assertEquals(115_000L, seen.last()!!.clock.positionMs)
+        assertEquals(115_000L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
         // Moved while paused, it's where it was moved to.
         says(PlaybackState.STATE_PAUSED, 30_000, PLAYED_AT + 70_000)
-        assertEquals(30_000L, seen.last()!!.clock.positionMs)
+        assertEquals(30_000L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
         // Played again from a moment behind where it stopped, up to two seconds, it plays on from where it stopped.
         says(PlaybackState.STATE_PLAYING, 30_000 - STALE_CLOCK_MS, PLAYED_AT + 75_000)
-        assertEquals(PlaybackClock(30_000, PLAYED_AT + 75_000, 1f, true), seen.last()!!.clock)
+        assertEquals(PlaybackClock(30_000, PLAYED_AT + 75_000, 1f, true), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         says(PlaybackState.STATE_PAUSED, 40_000, PLAYED_AT + 85_000)
         says(PlaybackState.STATE_PLAYING, 39_999, PLAYED_AT + 90_000)
-        assertEquals(40_000L, seen.last()!!.clock.positionMs)
+        assertEquals(40_000L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
         // Further behind, or right there, or ahead, it's where the app says.
         says(PlaybackState.STATE_PAUSED, 50_000, PLAYED_AT + 95_000)
         says(PlaybackState.STATE_PLAYING, 50_000 - STALE_CLOCK_MS - 1, PLAYED_AT + 100_000)
-        assertEquals(50_000 - STALE_CLOCK_MS - 1, seen.last()!!.clock.positionMs)
+        assertEquals(50_000 - STALE_CLOCK_MS - 1, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
         says(PlaybackState.STATE_PAUSED, 60_000, PLAYED_AT + 105_000)
         says(PlaybackState.STATE_PLAYING, 60_000, PLAYED_AT + 110_000)
-        assertEquals(60_000L, seen.last()!!.clock.positionMs)
+        assertEquals(60_000L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
         says(PlaybackState.STATE_PAUSED, 70_000, PLAYED_AT + 115_000)
         says(PlaybackState.STATE_PLAYING, 70_500, PLAYED_AT + 120_000)
-        assertEquals(70_500L, seen.last()!!.clock.positionMs)
+        assertEquals(70_500L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock.positionMs)
     }
 
     @Test
@@ -782,34 +782,34 @@ class PlaybackTest {
             shadowOf(Looper.getMainLooper()).idle()
         }
         val started = PlaybackClock(0, PLAYED_AT, 1f, true)
-        assertEquals(started, seen.last()!!.clock)
+        assertEquals(started, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
 
         says(0, PLAYED_AT + 700)
-        assertEquals(started, seen.last()!!.clock)
+        assertEquals(started, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         says(899, PLAYED_AT + 900)
-        assertEquals(started, seen.last()!!.clock)
+        assertEquals(started, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         // Up to a second behind, it's still where it was playing on to.
         says(1_000, PLAYED_AT + 1_000 + STALE_CLOCK_MS)
-        assertEquals(started, seen.last()!!.clock)
+        assertEquals(started, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         // Right where it was playing on to, or ahead, it's believed.
         says(2_000, PLAYED_AT + 2_000)
-        assertEquals(PlaybackClock(2_000, PLAYED_AT + 2_000, 1f, true), seen.last()!!.clock)
+        assertEquals(PlaybackClock(2_000, PLAYED_AT + 2_000, 1f, true), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         says(3_200, PLAYED_AT + 3_000)
-        assertEquals(PlaybackClock(3_200, PLAYED_AT + 3_000, 1f, true), seen.last()!!.clock)
+        assertEquals(PlaybackClock(3_200, PLAYED_AT + 3_000, 1f, true), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         // Further back is a move to an earlier part.
         says(4_200 - STALE_CLOCK_MS - 1, PLAYED_AT + 4_000)
-        assertEquals(PlaybackClock(4_200 - STALE_CLOCK_MS - 1, PLAYED_AT + 4_000, 1f, true), seen.last()!!.clock)
+        assertEquals(PlaybackClock(4_200 - STALE_CLOCK_MS - 1, PLAYED_AT + 4_000, 1f, true), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         // Played at another speed, it's believed even a moment back.
         says(5_000, PLAYED_AT + 6_000, 1.5f)
-        assertEquals(PlaybackClock(5_000, PLAYED_AT + 6_000, 1.5f, true), seen.last()!!.clock)
+        assertEquals(PlaybackClock(5_000, PLAYED_AT + 6_000, 1.5f, true), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
 
         // Moved a moment back by Crosstune, e.g. to the start of the line being sung, it's where it was moved to.
         playback.seekTo(song, 6_000)
         says(6_000, PLAYED_AT + 7_000, 1.5f)
-        assertEquals(PlaybackClock(6_000, PLAYED_AT + 7_000, 1.5f, true), seen.last()!!.clock)
+        assertEquals(PlaybackClock(6_000, PLAYED_AT + 7_000, 1.5f, true), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         // And from then on, a moment back is stale again.
         says(6_000, PLAYED_AT + 7_500, 1.5f)
-        assertEquals(PlaybackClock(6_000, PLAYED_AT + 7_000, 1.5f, true), seen.last()!!.clock)
+        assertEquals(PlaybackClock(6_000, PLAYED_AT + 7_000, 1.5f, true), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
     }
 
     @Test
@@ -834,7 +834,7 @@ class PlaybackTest {
         val seen = followed()
         says(0, PLAYED_AT + 100)
         says(0, PLAYED_AT + 800)
-        assertEquals(PlaybackClock(0, PLAYED_AT, 1f, true), seen.last()!!.clock)
+        assertEquals(PlaybackClock(0, PLAYED_AT, 1f, true), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         collecting.forEach(Job::cancel)
         // Another screen picks it up as far behind, even said just now.
         says(NOW - 5 - PLAYED_AT - 800, NOW - 5)
@@ -853,7 +853,7 @@ class PlaybackTest {
 
         // Played from the start again in the app, it's right, so it's where the app says.
         says(0, NOW - 30_000)
-        assertEquals(PlaybackClock(30_000, NOW, 1f, true), pickedUp().let { it!!.copy(positionMs = it.positionAt(NOW), atMs = NOW) })
+        assertEquals(PlaybackClock(30_000, NOW, 1f, true), pickedUp().let { checkNotNull(it) { "Expected it to be non-null" }.copy(positionMs = it.positionAt(NOW), atMs = NOW) })
 
         // Another app it didn't happen in is where it says.
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Save Your Tears", "The Weeknd", position = NOW - 5 - PLAYED_AT - 800, at = NOW - 5))
@@ -879,7 +879,7 @@ class PlaybackTest {
         says(0, PLAYED_AT, 2f)
         val seen = followed()
         says(0, PLAYED_AT + 400, 2f)
-        assertEquals(PlaybackClock(0, PLAYED_AT, 2f, true), seen.last()!!.clock)
+        assertEquals(PlaybackClock(0, PLAYED_AT, 2f, true), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         collecting.forEach(Job::cancel)
         // Picked up later, it's those 800 ms ahead, where the first said it would be.
         says(2 * (NOW - PLAYED_AT - 400), NOW, 2f)
@@ -1004,7 +1004,7 @@ class PlaybackTest {
         shadowOf(sessions).addController(controller)
         assertEquals("com.google.android.apps.youtube.music:video-one", playback.nowPlaying()?.metadata?.recordingId)
         assertEquals(link, playback.nowPlaying()?.metadata?.url)
-        val other = playback.nowPlaying()!!.metadata.copy(recordingId = "com.google.android.apps.youtube.music:video-two")
+        val other = checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.metadata.copy(recordingId = "com.google.android.apps.youtube.music:video-two")
         assertNull(followed(other).last())
         val uriId = player("com.spotify.music", "Spotify", "Demo", "Band", art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to "spotify:track:4Z8W4fKeB5YxbusRsdQVPb"))
         shadowOf(sessions).clearControllers()
@@ -1524,7 +1524,7 @@ class PlaybackTest {
         assertNull(MusicService.QOBUZ.appSearch(MusicService.QOBUZ.searchUrl("Song"), asking = "Song"))
         assertNull(MusicService.searchIn(MusicService.SPOTIFY.packageName, "https://open.spotify.com/track/x", "Song"))
         assertNull(MusicService.searchIn(bandcamp, "https://band.bandcamp.com/track/song", null))
-        val intent = MusicService.searchIn(bandcamp, "https://band.bandcamp.com/track/song", "Song Band")!!
+        val intent = checkNotNull(MusicService.searchIn(bandcamp, "https://band.bandcamp.com/track/song", "Song Band")) { "Expected MusicService.searchIn(bandcamp, \"https://band.bandcamp.com/track/song\", \"Song Band\") to be non-null" }
         assertEquals(Intent.ACTION_SEARCH, intent.action)
         assertEquals(ComponentName(bandcamp, MusicService.BANDCAMP_SEARCH_ACTIVITY), intent.component)
         assertEquals("Song Band", intent.getStringExtra(SearchManager.QUERY))
@@ -1590,7 +1590,7 @@ class PlaybackTest {
         val back = shadowOf(notice.notification.contentIntent).savedIntent
         assertEquals(MainActivity::class.java.name, back.component?.className)
         assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT, back.flags and (Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-        assertEquals(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS, returnNoticeMode(notice.notification.contentIntent!!))
+        assertEquals(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS, returnNoticeMode(checkNotNull(notice.notification.contentIntent) { "Expected notice.notification.contentIntent to be non-null" }))
         app.dismissReturnToCard()
         assertTrue(app.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
     }
@@ -1602,7 +1602,7 @@ class PlaybackTest {
         ShadowSettings.setCanDrawOverlays(false)
         playback.comesBack()
         val notice = app.getSystemService(NotificationManager::class.java).activeNotifications.single()
-        assertEquals(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS, returnNoticeMode(notice.notification.contentIntent!!))
+        assertEquals(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS, returnNoticeMode(checkNotNull(notice.notification.contentIntent) { "Expected notice.notification.contentIntent to be non-null" }))
     }
 
     @Test
@@ -3162,7 +3162,7 @@ class PlaybackTest {
         // Spotify, first, is paused on the song, and YouTube Music plays it.
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED))
         shadowOf(sessions).addController(player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours"))
-        assertEquals("com.google.android.apps.youtube.music", followed().last()!!.appPackage)
+        assertEquals("com.google.android.apps.youtube.music", checkNotNull(followed().last()) { "Expected followed().last() to be non-null" }.appPackage)
         assertEquals("com.google.android.apps.youtube.music", playback.appFor(song)?.packageName)
         assertNull(playback.appFor(MusicMetadata("Other", "Band")))
     }
@@ -3294,10 +3294,10 @@ class PlaybackTest {
     fun theAppPlayingItSaysHowLongTheSongIsWhenItKnows() {
         allow()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", duration = 200_000))
-        assertEquals(200_000L, followed().last()!!.durationMs)
+        assertEquals(200_000L, checkNotNull(followed().last()) { "Expected followed().last() to be non-null" }.durationMs)
         // One that says nothing of it, or nothing sensible, has none.
         shadowOf(sessions).addController(player("com.soundcloud.android", "SoundCloud", "Other Song", "Band", duration = 0))
-        assertNull(followed(MusicMetadata("Other Song", "Band")).last()!!.durationMs)
+        assertNull(checkNotNull(followed(MusicMetadata("Other Song", "Band")).last()) { "Expected followed(MusicMetadata(\"Other Song\", \"Band\")).last() to be non-null" }.durationMs)
     }
 
     @Test
@@ -3307,16 +3307,16 @@ class PlaybackTest {
         val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", actions = skips)
         shadowOf(sessions).addController(spotify)
         val seen = followed()
-        assertTrue(seen.last()!!.canSkipNext)
-        assertTrue(seen.last()!!.canSkipPrevious)
-        assertFalse(seen.last()!!.canSeek)
+        assertTrue(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.canSkipNext)
+        assertTrue(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.canSkipPrevious)
+        assertFalse(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.canSeek)
         shadowOf(spotify).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT).setActions(PlaybackState.ACTION_SKIP_TO_NEXT).build())
         shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(seen.last()!!.canSkipNext)
-        assertFalse(seen.last()!!.canSkipPrevious)
+        assertTrue(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.canSkipNext)
+        assertFalse(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.canSkipPrevious)
         shadowOf(spotify).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT).build())
         shadowOf(Looper.getMainLooper()).idle()
-        assertFalse(seen.last()!!.canSkipNext)
+        assertFalse(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.canSkipNext)
     }
 
     @Test
@@ -3379,14 +3379,14 @@ class PlaybackTest {
         shadowOf(sessions).addController(spotify)
         // One that can't be told to shows nothing of it.
         val seen = followed()
-        assertNull(seen.last()!!.shuffle)
+        assertNull(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.shuffle)
         modes.on = false
         modes.watching.single()()
-        assertEquals(false, seen.last()!!.shuffle)
+        assertEquals(false, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.shuffle)
         // Turned on in the app, it shows at once, though nothing else changed.
         modes.on = true
         modes.watching.single()()
-        assertEquals(true, seen.last()!!.shuffle)
+        assertEquals(true, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.shuffle)
 
         playback.shuffle(song, on = false)
         assertEquals(listOf("com.spotify.music" to false), modes.told)
@@ -3413,11 +3413,11 @@ class PlaybackTest {
         val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd")
         shadowOf(sessions).addController(spotify)
         val seen = followed()
-        assertNull(seen.last()!!.repeat)
+        assertNull(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.repeat)
         // Changed in the app, it shows at once, though nothing else changed.
         modes.repeats = Repeat.ONE
         modes.watching.single()()
-        assertEquals(Repeat.ONE, seen.last()!!.repeat)
+        assertEquals(Repeat.ONE, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.repeat)
 
         playback.repeat(song, Repeat.ALL)
         assertEquals(listOf("com.spotify.music" to Repeat.ALL), modes.toldRepeat)
@@ -3496,21 +3496,21 @@ class PlaybackTest {
         shadowOf(sessions).addController(music)
         val seen = followed()
         // An app's other buttons aren't its like.
-        assertNull(seen.last()!!.like)
+        assertNull(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.like)
         // As the app names and draws it, which changes once it's liked.
         shadowOf(music).executeOnPlaybackStateChanged(state(like("Like", 1)))
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(AppAction("thumbs_up_action", "Like", 1), seen.last()!!.like)
+        assertEquals(AppAction("thumbs_up_action", "Like", 1), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.like)
         shadowOf(music).executeOnPlaybackStateChanged(state(like("Remove like", 2)))
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(AppAction("thumbs_up_action", "Remove like", 2), seen.last()!!.like)
+        assertEquals(AppAction("thumbs_up_action", "Remove like", 2), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.like)
         // TIDAL's and Amazon Music's are theirs.
         shadowOf(music).executeOnPlaybackStateChanged(state(PlaybackState.CustomAction.Builder("com.aspiro.tidal.player.action.TOGGLE_FAVORITE", "Add to My Collection", 4).build()))
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals("Add to My Collection", seen.last()!!.like?.name)
+        assertEquals("Add to My Collection", checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.like?.name)
         shadowOf(music).executeOnPlaybackStateChanged(state(PlaybackState.CustomAction.Builder("waze.thumbUp", "Thumbs up on", 5).build()))
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals("Thumbs up on", seen.last()!!.like?.name)
+        assertEquals("Thumbs up on", checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.like?.name)
 
         // Spotify's is one of two, the second once the song's in the user's collection.
         shadowOf(music).executeOnPlaybackStateChanged(state(PlaybackState.CustomAction.Builder("ADD_TO", "Add to collection", 6).build()))
@@ -3542,7 +3542,7 @@ class PlaybackTest {
         shadowOf(sessions).addController(music)
         val seen = followed()
         // No queue, nothing next.
-        assertEquals(emptyList<Queued>(), seen.last()!!.upNext)
+        assertEquals(emptyList<Queued>(), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.upNext)
         val item = { id: Long, title: String, artist: String?, icon: String? ->
             MediaSession.QueueItem(
                 MediaDescription.Builder().setMediaId("$id").setTitle(title).apply { if (artist != null) setSubtitle(artist) }.setIconUri(icon?.let(android.net.Uri::parse)).build(),
@@ -3560,17 +3560,17 @@ class PlaybackTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(
             listOf(Queued("Save Your Tears", "The Weeknd", 3, "https://yt3.googleusercontent.com/cover=w180-h180-l90-rj"), Queued("Untitled", "", 4, "content://covers/4")),
-            seen.last()!!.upNext
+            checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.upNext
         )
         // First in its queue, all the rest is next.
         shadowOf(music).executeOnPlaybackStateChanged(at(1, PlaybackState.STATE_PLAYING))
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(listOf(3L, 4L), seen.last()!!.upNext.drop(1).map { it.id })
-        assertEquals("Blinding Lights", seen.last()!!.upNext.first().title)
+        assertEquals(listOf(3L, 4L), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.upNext.drop(1).map { it.id })
+        assertEquals("Blinding Lights", checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.upNext.first().title)
         // Not saying where in it it is, there's no telling what's next.
         shadowOf(music).executeOnPlaybackStateChanged(at(9, PlaybackState.STATE_PLAYING))
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(emptyList<Queued>(), seen.last()!!.upNext)
+        assertEquals(emptyList<Queued>(), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.upNext)
 
         // Robolectric doesn't pass what's asked on to the app, so this only checks asking is safe, playing or paused; the phone shows the rest.
         playback.playQueued(song, 3)

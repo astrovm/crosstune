@@ -54,7 +54,7 @@ class QueueOrderTest {
     }
 
     /** What's up next as the player shows it, in the order, which is what a song's moved in. */
-    private fun following() = runBlocking { ordered.follow(song).first() }!!
+    private fun following() = checkNotNull(runBlocking { ordered.follow(song).first() }) { "Expected runBlocking { ordered.follow(song).first() } to be non-null" }
 
     private fun shown() = following().upNext
 
