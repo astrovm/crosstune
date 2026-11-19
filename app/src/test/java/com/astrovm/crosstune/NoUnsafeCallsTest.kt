@@ -2,20 +2,23 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.io.File
 
 /**
- * A value that may be null is handled, never asserted with `!!`: when it is null after all, the app
- * crashes instead of doing what it does without it. detekt's rule for this needs the whole classpath
- * resolved, so the app's code is read here instead, without its comments and strings.
+ * A value that may be null is handled, never asserted to be non-null: when it is null after all, the app
+ * crashes instead of doing what it does without it. Read the code without comments and strings too,
+ * so unresolved types cannot hide an assertion from detekt.
  */
 class NoUnsafeCallsTest {
     @Test
-    fun theAppsCodeNeverAssertsAValueIsThere() {
-        val found = AppPatterns.sources("src/main/java").flatMap { file ->
+    fun codeNeverAssertsAValueIsThere() {
+        val roots = listOf(File("src/main/java")) + File("src").listFiles().orEmpty()
+            .filter { it.isDirectory && it.name.contains("test", ignoreCase = true) }
+        val found = roots.flatMap { AppPatterns.sources(it.path) }.flatMap { file ->
             val source = file.readText()
             val code = Code(source, java = file.extension == "java").read()
             assertEquals(file.name, source.lines().size, code.lines().size)
-            code.lines().withIndex().filter { "!!" in it.value }.map { "${file.name}:${it.index + 1}" }
+            code.lines().withIndex().filter { "!".repeat(2) in it.value }.map { "${file.path}:${it.index + 1}" }
         }.toList()
         assertEquals(emptyList<String>(), found)
     }
@@ -34,22 +37,24 @@ class NoUnsafeCallsTest {
 
     @Test
     fun onlyTheCodeIsRead() {
+        val assertion = "!".repeat(2)
         val source = """
-            val a = b!! // c!!
-            /* d!!
-            */ val e = "f!!" + '!' + '\'' + ""${'"'}g!!""${'"'}${'"'} + "${'$'}{h!!.let { "i!!" }}" + "\"j!!"
+            val a = b${assertion} // c${assertion}
+            /* d${assertion}
+            */ val e = "f${assertion}" + '!' + '\'' + ""${'"'}g${assertion}""${'"'}${'"'} + "${'$'}{h${assertion}.let { "i${assertion}" }}" + "\"j${assertion}"
         """.trimIndent()
         val code = Code(source)
-        assertEquals("val a = b!! \n\n val e =  +  +  +  + h!!.let {  } + ", code.read())
+        assertEquals("val a = b${assertion} \n\n val e =  +  +  +  + h${assertion}.let {  } + ", code.read())
         assertEquals(listOf(3), code.endsInAQuote)
     }
 
     @Test
     fun javaIsReadAsJava() {
         // Java has no templates, and reads escapes in a text block.
-        val source = "String a = \"${'$'}{b!!}\" + \"\"\"\n  c!!\\\"\"\"\"; boolean d = !!e;"
+        val assertion = "!".repeat(2)
+        val source = "String a = \"${'$'}{b${assertion}}\" + \"\"\"\n  c${assertion}\\\"\"\"\"; boolean d = ${assertion}e;"
         val code = Code(source, java = true)
-        assertEquals("String a =  + \n; boolean d = !!e;", code.read())
+        assertEquals("String a =  + \n; boolean d = ${assertion}e;", code.read())
         assertEquals(emptyList<Int>(), code.endsInAQuote)
     }
 

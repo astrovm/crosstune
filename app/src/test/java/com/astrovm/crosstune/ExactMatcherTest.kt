@@ -115,7 +115,7 @@ class ExactMatcherTest {
                 }
             )
         }
-        assertNull(runBlocking { matcher().cover(MusicMetadata("!!!", "Adele")) })
+        assertNull(runBlocking { matcher().cover(MusicMetadata("!\u0021!", "Adele")) })
     }
 
     @Test
@@ -164,7 +164,7 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().cover(song) })
         fake.handler = { throw IOException("offline") }
         assertNull(runBlocking { matcher().cover(song) })
-        assertNull(runBlocking { matcher().cover(MusicMetadata("!!!", "Hollies")) })
+        assertNull(runBlocking { matcher().cover(MusicMetadata("!\u0021!", "Hollies")) })
     }
 
     @Test

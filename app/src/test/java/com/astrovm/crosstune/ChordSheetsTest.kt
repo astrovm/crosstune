@@ -357,7 +357,7 @@ class ChordSheetsTest {
         val other = sheet(SheetLine("Walking down the river road", listOf(Chord(0, "G"))), SheetLine("Singing to the morning light", listOf(Chord(0, "D"))))
         assertNull(ChordSheets.place(other, texts))
         // Words in no script at all are not read in Latin letters either.
-        assertNull(ChordSheets.place(other, listOf("12345", "67890", "…", "!!!!!!")))
+        assertNull(ChordSheets.place(other, listOf("12345", "67890", "…", "!\u0021!\u0021!\u0021")))
     }
 
     @Test

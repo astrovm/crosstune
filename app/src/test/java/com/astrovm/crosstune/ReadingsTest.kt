@@ -1622,7 +1622,7 @@ class ReadingsTest {
     @Test
     fun marksAloneAreNoWordsToLookUp() {
         assertEquals(emptyList<Word>(), Readings.words("♪ … ♪", Script.JAPANESE))
-        assertEquals(emptyList<Word>(), Readings.words("123 !!", Script.JAPANESE))
+        assertEquals(emptyList<Word>(), Readings.words("123 !\u0021", Script.JAPANESE))
     }
 
     @Test

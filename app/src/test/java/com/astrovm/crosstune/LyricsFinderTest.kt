@@ -1537,7 +1537,7 @@ class LyricsFinderTest {
             found(hatsukoi)
         )
         // Punctuation isn't who played, and neither is a colon with no label.
-        val marks = listOf(sung, "???: still here", "!!!: still here")
+        val marks = listOf(sung, "???: still here", "!\u0021!: still here")
         japaneseSong(netEase = netEase, lyric = timed(marks))
         assertEquals(
             Lyrics.Found(marks.joinToString("\n"), marks.mapIndexed { index, line -> LyricLine(10_000L + index * 1_000, line) }, source = LyricsFinder.NETEASE),

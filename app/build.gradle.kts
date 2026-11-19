@@ -315,6 +315,35 @@ tasks.register<JavaExec>("detekt") {
     )
 }
 
+// detekt's null-safety rule needs the test classpath to resolve types. NoUnsafeCallsTest also checks
+// the source without type resolution, so an unresolved type cannot hide an assertion.
+val detektTests = tasks.register<JavaExec>("detektTests") {
+    group = "verification"
+    description = "Checks test sources for unsafe calls on nullable values."
+    val testSources = fileTree("src") {
+        include("test*/**/*.kt", "androidTest*/**/*.kt", "sharedTest*/**/*.kt")
+    }
+    val config = rootProject.layout.projectDirectory.file("config/detekt/tests.yml")
+    val report = layout.buildDirectory.file("reports/detekt/tests.txt")
+    inputs.files(testSources, config).withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.file(report)
+    dependsOn("compileDebugUnitTestKotlin")
+    classpath = detektCli
+    mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
+    jvmArgs("--sun-misc-unsafe-memory-access=allow")
+    doFirst {
+        val testClasspath = tasks.named<Test>("testDebugUnitTest").get().classpath
+        args(
+            "--input", testSources.files.joinToString(",") { it.path },
+            "--config", config.asFile.path,
+            "--classpath", testClasspath.asPath,
+            "--jvm-target", "17",
+            "--report", "txt:" + report.get().asFile.path,
+        )
+    }
+}
+tasks.named("detekt") { dependsOn(detektTests) }
+
 // The store's screenshots and the site's clips, drawn on this computer frame by frame: one test
 // class per language, side by side. scripts/shots/shots.py runs it, with the visuals drawn ahead.
 val shots = tasks.register<Test>("shots") {
