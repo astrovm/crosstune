@@ -54,7 +54,7 @@ internal class CachedSavedReadings(
             val cut = sungCut + checkedCut
             val kept = card.ruby ?: listOf(Ruby(card.text))
             val keptAt = kept.runningFold(0) { at, part -> at + part.text.length }
-            val parts = keptOver(kept, current.parts, over = true) { index -> cut.any { it.start < keptAt[index + 1] && keptAt[index] < it.end } } ?: current.parts
+            val parts = keptOver(kept, current.parts, over = true) { index -> cut.any { (keptAt[index] until keptAt[index + 1]).intersect(it.start until it.end).isNotEmpty() } } ?: current.parts
             return card.readBy(Readings.readAs(named(parts, cut), Script.JAPANESE))
         }
 

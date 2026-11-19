@@ -3088,6 +3088,26 @@ class MainViewModelTest {
     }
 
     @Test
+    fun anOldLineReadsTheWordNextToACutStretchWithTheNewDictionary() {
+        val song = MusicMetadata("Counters", "Band")
+        val text = "三本三匹"
+        val line = SavedLine(
+            text, reading = "さんもとさんひき", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("三", "さん"), Ruby("本", "もと"), Ruby("三匹", "さんひき"))
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.putCachedSung(song, listOf(text), version = 3, answer = """[[0,"本","もとと"]]""")
+        }
+        idle()
+        // The stretch of 三本 stays as the card had it. 三匹 right after it is the dictionary's.
+        assertEquals("さんもとさんびき", model.uiState.savedLines.single().reading)
+        assertEquals(listOf(Ruby("三", "さん"), Ruby("本", "もと"), Ruby("三匹", "さんびき")), model.uiState.savedLines.single().ruby)
+    }
+
+    @Test
     fun anOldLineNamesTheCachedFixItKeptWhereTheNewDictionaryJoinsItsParts() {
         val song = MusicMetadata("Counters", "Band")
         val text = "三本と三匹"
