@@ -681,7 +681,7 @@ internal class MediaSessionPlayback(
     override fun playQueued(song: MusicMetadata, id: Long, app: String?, session: Int?) = moveOn(song, app, session) { skipToQueueItem(id) }
 
     /** Has the app playing [song], [named] when it is, go on to another, as [move] asks it, and play it. */
-    private fun moveOn(song: MusicMetadata, named: String?, session: Int? = null, move: MediaController.TransportControls.() -> Unit) {
+    private fun moveOn(song: MusicMetadata, named: String?, session: Int?, move: MediaController.TransportControls.() -> Unit) {
         // Taken back meanwhile, the song just keeps on as it was.
         runCatching {
             val app = appFor(song, app = named, session = session) ?: return
