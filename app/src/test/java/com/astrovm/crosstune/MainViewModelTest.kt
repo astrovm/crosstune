@@ -41,6 +41,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.json.JSONArray
+import org.json.JSONObject
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowSystemClock
@@ -2933,6 +2935,104 @@ class MainViewModelTest {
         assertEquals(20_000L, two.nextMs)
         assertEquals(20_000L, two.endMs)
     }
+
+    @Test
+    fun anOldJapaneseLineIsReadAgainInPracticeWithoutOpeningItsSong() {
+        val song = MusicMetadata("Three Flowers", "Demo Band")
+        val text = "三本の花"
+        val line = SavedLine(
+            text, reading = "さんほんのはな", romanized = "sanhon no hana", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("三本", "さんほん"), Ruby("の"), Ruby("花", "はな")), interval = 12, due = 123L
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        assertNull(store.load().single().readWith)
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.putCachedSung(song, listOf(text), version = 4, answer = "[]")
+        }
+        model.startPractice()
+        idle()
+
+        assertNull(model.uiState.lyricsFor)
+        assertEquals("さんぼんのはな", model.uiState.practice?.line?.reading)
+        assertEquals("sanbon no hana", model.uiState.practice?.line?.romanized)
+        assertEquals(12, model.uiState.practice?.line?.interval)
+        assertEquals(123L, model.uiState.practice?.line?.due)
+        assertEquals(Readings.VERSION, store.load().single().readWith)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineStaysAsKeptWithoutAnExactCachedAnswerOrIfItWasEdited() {
+        val text = "三本の花"
+        val parts = listOf(Ruby("三本", "さんほん"), Ruby("の"), Ruby("花", "はな"))
+        val noLyrics = SavedLine(text, reading = "さんほんのはな", title = "No lyrics", artist = "Band", ruby = parts)
+        val noSung = noLyrics.copy(title = "No sung readings")
+        val corrupt = noLyrics.copy(title = "Broken cache")
+        val oldNone = noLyrics.copy(title = "Old none")
+        val different = noLyrics.copy(title = "Different line")
+        val otherTake = noLyrics.copy(title = "Other take", lengthMs = 80_000L)
+        val edited = noLyrics.copy(title = "Edited", reading = "さんほんのか", readByHand = true, ruby = parts.dropLast(1) + Ruby("花", "か"))
+        val word = noLyrics.copy(title = "Word", text = "三本", reading = "さんほん", ruby = parts.take(1), line = text)
+        val chinese = noLyrics.copy(title = "Chinese", text = "你好", reading = "nǐ hǎo", ruby = listOf(Ruby("你", "nǐ"), Ruby("好", "hǎo")))
+        val kept = listOf(noLyrics, noSung, corrupt, oldNone, different, otherTake, edited, word, chinese)
+        val store = SavedLinesStore(prefs())
+        store.addAll(kept)
+
+        val model = modelWithReadingCache { lyrics, sung ->
+            kept.filter { it != noLyrics }.forEach { line ->
+                lyrics.putCachedLyrics(MusicMetadata(line.title, line.artist), if (line == different) "三本の花に" else line.text)
+            }
+            sung.putCachedSung(MusicMetadata(noLyrics.title, noLyrics.artist), listOf(text), version = 4, answer = "[]")
+            sung.putCachedSung(MusicMetadata(noSung.title, noSung.artist), listOf("違う歌詞", text), version = 4, answer = "[]")
+            sung.putCachedSung(MusicMetadata(corrupt.title, corrupt.artist), listOf(text), version = 4, answer = "not json")
+            sung.putCachedSung(MusicMetadata(oldNone.title, oldNone.artist), listOf(text), version = 3, answer = "[]")
+            sung.putCachedSung(MusicMetadata(different.title, different.artist), listOf("三本の花に"), version = 4, answer = "[]")
+            for (line in listOf(otherTake, edited, word, chinese)) {
+                sung.putCachedSung(MusicMetadata(line.title, line.artist), listOf(line.text), version = 4, answer = "[]")
+            }
+        }
+        idle()
+        assertEquals(kept, model.uiState.savedLines)
+        assertEquals(kept, store.load())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun aKeptLineDoesNotTakeAnArbitraryReadingWhenTwoCachedOccurrencesDisagree() {
+        val song = MusicMetadata("Two cities", "Band")
+        val text = "都会の三本"
+        val line = SavedLine(
+            text, reading = "まちのさんほん", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("三本", "さんほん"))
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, "$text\n$text")
+            sung.putCachedSung(song, listOf(text, text), version = 4, answer = """[[0,"都会","まち"],[1,"都会","みやこ"]]""")
+        }
+        idle()
+        assertEquals(line, model.uiState.savedLines.single())
+        assertEquals(line, store.load().single())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    private fun modelWithReadingCache(fill: suspend (LookupCache, LookupCache) -> Unit): MainViewModel {
+        val lyrics = LookupCache(File(app.cacheDir, "old-practice-lyrics.json"), Dispatchers.Unconfined)
+        val sung = LookupCache(File(app.cacheDir, "old-practice-sung.json"), Dispatchers.Unconfined)
+        runBlocking { fill(lyrics, sung) }
+        fake.handler = { error("Practice must not request ${it.url}") }
+        val client = fake.client()
+        return model(lyricsFinder = LyricsFinder(client, "test", cache = lyrics), sungReadings = SungReadings(client, sung))
+    }
+
+    private suspend fun LookupCache.putCachedLyrics(song: MusicMetadata, text: String) =
+        put("16\u0000${RecordingKey.of(song.copy(lengthMs = 60_000))}", JSONObject().put("words", text).put("lines", JSONArray()).toString())
+
+    private suspend fun LookupCache.putCachedSung(song: MusicMetadata, lines: List<String>, version: Int, answer: String) =
+        put("utaten|$version|${SongNames.normalize(song.title)}|${SongNames.normalize(song.artist)}|${lines.hashCode()}", answer)
 
     @Test
     fun aLineTimedAgainKeepsItsIntroOnlyWithNoAppPlayingIt() {
