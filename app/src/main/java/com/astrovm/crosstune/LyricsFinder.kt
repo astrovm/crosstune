@@ -644,10 +644,9 @@ internal class LyricsFinder(
         val words = fromCache(kept)?.first ?: return null
         // A different recording can lend its words. Its instrumental votes apply to that recording, unless both are
         // on the one instrumental album: then the mark is the album's, whatever each app says the length is.
-        val sameRecording = key.substringAfter('\u0000') == recording
-        return if (words.markedInstrumental && !sameRecording && metadata.instrumentalAlbum == null && !SongNames.saysInstrumental(metadata.title, metadata.artist)) {
-            words.copy(markedInstrumental = false)
-        } else words
+        val sameRecording = key.substringAfter('\u0000') == recording || metadata.instrumentalAlbum != null
+        val lent = words.markedInstrumental && !sameRecording
+        return if (lent && !SongNames.saysInstrumental(metadata.title, metadata.artist)) words.copy(markedInstrumental = false) else words
     }
 
     /** The sheets on the phone for [song]. The reading cache keys use the whole sheet as shown, timed or plain. */
