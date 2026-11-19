@@ -699,7 +699,7 @@ class ExactMatcherTest {
     }
 
     private fun appleSong(title: String, artist: String, lengthMs: Long = 312_000, id: Long = 7, album: String? = null) =
-        """{"trackId":$id,"trackName":"$title","artistName":"$artist","trackTimeMillis":$lengthMs${album?.let { ""","collectionName":"$it"""" }.orEmpty()}}"""
+        """{"trackId":$id,"trackName":"$title","artistName":"$artist","trackTimeMillis":$lengthMs${album?.let { ""","collectionName":"$it${'"'}""" }.orEmpty()}}"""
 
     @Test
     fun aBusyOrFailingServiceIsNoAnswerRatherThanNotThere() {

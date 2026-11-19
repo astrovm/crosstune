@@ -27,9 +27,18 @@ internal object Takes {
      * [title] says it's another version, a cover, karaoke, a remix, by a word or a mark anywhere in it, but not for the word
      * "live", which a song's own name may hold, as "Live Forever" does: a live take says so in a tag, which [saysAnotherTake] reads.
      */
-    fun saysAnotherVersionBesidesLive(title: String): Boolean = SongNames.saysAnotherVersion(liveWord.replace(title, " "), "", "")
+    fun saysAnotherVersionBesidesLive(title: String): Boolean = SongNames.saysAnotherVersion(withoutLiveWord(title), "", "")
 
-    private val liveWord = phoneRegex("""(?i)(?<![a-z0-9])live(?![a-z0-9])""")
+    /** [title] with each whole word "live" taken out, as a space, and what's around it left as it was. */
+    private fun withoutLiveWord(title: String): String = buildString {
+        var at = 0
+        while (at < title.length) {
+            val end = (at until title.length).firstOrNull { !title[it].isAsciiLetterOrDigit() } ?: title.length
+            if (end == at) append(title[at++]) else append(title.substring(at, end).let { if (it.equals("live", ignoreCase = true)) " " else it }).also { at = end }
+        }
+    }
+
+    private fun Char.isAsciiLetterOrDigit() = this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9'
 
     /** The text of each tag in [name]: what's inside brackets, and what follows a dash set apart by spaces. */
     private fun tagsOf(name: String): List<String> {
@@ -42,14 +51,18 @@ internal object Takes {
                 char in TAG_BRACKET_CLOSES && depth > 0 -> if (--depth == 0) tags += name.substring(start, at)
             }
         }
-        val dashed = name.split(spacedDash).drop(1)
-        return tags + dashed
+        return tags + afterSpacedDashes(name)
     }
 
     /** The brackets that hold a tag; 「」 hold a show's name, or a quote. */
     private const val TAG_BRACKET_OPENS = "([【〔（［"
     private const val TAG_BRACKET_CLOSES = ")]】〕）］"
-    private val spacedDash = phoneRegex("""\s[${TitleDelimiters.DASHES}]\s""")
+
+    /** What follows each dash set apart by spaces in [name], up to the next one. */
+    private fun afterSpacedDashes(name: String): List<String> {
+        val cuts = (1 until name.lastIndex).filter { name[it] in TitleDelimiters.DASHES && name[it - 1].isWhitespace() && name[it + 1].isWhitespace() }
+        return cuts.mapIndexed { i, cut -> name.substring(cut + 1, cuts.getOrElse(i + 1) { name.length }) }
+    }
     private val marks = phoneRegex("""\p{M}+""")
     private val wordSplit = phoneRegex("""[^a-z0-9]+""")
 
