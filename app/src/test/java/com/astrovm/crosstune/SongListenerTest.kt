@@ -130,10 +130,10 @@ class SongListenerTest {
         val other = Shazam(fake.client(), computeDispatcher = Dispatchers.Unconfined)
         listOf({ """{"resultCount":0,"results":[]}""" }, { """{"results":[{"trackTimeMillis":0}]}""" }, { "{}" }, { "not json" }, { throw IOException("offline") }).forEach {
             store = it
-            assertEquals(unknown, runBlocking { other.recognize(ShortArray(16_000), 16_000) })
+            assertEquals(unknown, runBlocking { other.recognize(ShortArray(16_000) { 1 }, 16_000) })
         }
         fake.handler = { request -> if (request.url.host == "itunes.apple.com") FakeSpotify.html(request, "busy", code = 503) else FakeSpotify.html(request, MATCH) }
-        assertEquals(unknown, runBlocking { other.recognize(ShortArray(16_000), 16_000) })
+        assertEquals(unknown, runBlocking { other.recognize(ShortArray(16_000) { 1 }, 16_000) })
         assertEquals(6, fake.requestedUrls.count { it.startsWith("https://itunes.apple.com/") })
         // Without Apple Music, there's nothing to ask.
         fake.requestedUrls.clear()
@@ -204,6 +204,49 @@ class SongListenerTest {
         }
         answer("<html>Oops</html>")
         assertEquals(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE), heard())
+    }
+
+    @Test
+    fun shazamsRealAnswerToSilenceIsNoMatchAndNotAFailure() {
+        // What Shazam answered the fingerprint of a silent recording on a Samsung SM-S908E with the media volume at 0 (#1095):
+        // HTTP 200 and no matches. Shazam's own app is for when it can't be reached, and it was.
+        answer(checkNotNull(javaClass.getResource("/shazam/silence.json")) { "Expected javaClass.getResource(\"/shazam/silence.json\") to be non-null" }.readText())
+        assertEquals(Heard.Nothing, heard())
+    }
+
+    @Test
+    fun aSilentRecordingIsNoMatchWithoutAskingShazam() {
+        answer("", code = 503)
+        assertEquals(Heard.Nothing, heard(ShortArray(48_000)))
+        // Only the part heard counts: sound further on, not yet recorded, doesn't make it a recording to send.
+        assertEquals(Heard.Nothing, runBlocking { shazam.recognize(ShortArray(48_000).also { it[40_000] = 5 }, 30_000, keepIfOffline = true) })
+        assertEquals(0, fake.requestedUrls.size)
+        // One sample of sound is enough to ask.
+        assertEquals(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE), heard(ShortArray(48_000).also { it[47_999] = 1 }))
+        assertEquals(1, askedShazam())
+    }
+
+    @Test
+    fun aListenThatHearsOnlySilenceIsNothingAndAsksShazamNothing() {
+        // The phone's own sound at volume 0, or a muted microphone, is zeros for the whole listen.
+        answer("", code = 429)
+        repeat(4) { microphone.playSecond(0) ; microphone.playSecond(0); microphone.playSecond(0) }
+        assertEquals(Heard.Nothing, runBlocking { listener.listen() })
+        assertEquals(0, fake.requestedUrls.size)
+        assertTrue(microphone.closed)
+        // Sound that comes in after the silence is asked about, with all of it.
+        val later = FakeMicrophone().apply { repeat(3) { playSecond(0) }; play(3.0) }
+        answer(MATCH)
+        assertTrue(runBlocking { SongListener(later, shazam).listen() } is Heard.Song)
+        assertEquals(1, askedShazam())
+    }
+
+    @Test
+    fun aShazamThatCantBeReachedIsNotedWithItsStatus() {
+        TimingLog.clear()
+        answer("", code = 429)
+        assertEquals(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE), heard())
+        assertTrue(TimingLog.lastMinute(), "shazam answered 429" in TimingLog.lastMinute())
     }
 
     @Test
