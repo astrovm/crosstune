@@ -526,12 +526,16 @@ internal class MainViewModel(
                 read.forEach { (key, words) -> if (key !in kept) kept[key] = words }
             }
         }
-        // Lines kept and read by an older dictionary are read as this one reads them, songs opened again or not.
-        if (uiState.savedLines.any { it.readByOlder }) {
+        val readingCache = if (lyricsFinder != null && sungReadings != null) CachedSavedReadings(lyricsFinder, sungReadings, tutor) else null
+        // Read older lines again without opening their songs. Before dictionary versions were saved, only the caches can tell how they were sung.
+        if (uiState.savedLines.any { it.readByOlder || (readingCache != null && it.needsCachedReading) }) {
             viewModelScope.launch {
                 // As they were read: with UniDic, when it's on the phone; never fetched for this.
                 uniDic?.let { if (Readings.uniDic == null) Readings.uniDic = it.tokenizer(fetch = false) }
-                savedLinesStore.change(systemDispatcher, ::readAgain)?.let { fresh ->
+                savedLinesStore.change(systemDispatcher) { kept ->
+                    val versioned = readAgain(kept) ?: kept
+                    readingCache?.refresh(versioned) ?: versioned.takeIf { it != kept }
+                }?.let { fresh ->
                     // A session started while this ran copied the old lines. It shows these, and keeps its order and schedule.
                     uiState = uiState.copy(savedLines = fresh, practice = uiState.practice?.withReadings(fresh))
                 }

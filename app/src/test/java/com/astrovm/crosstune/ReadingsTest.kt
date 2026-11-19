@@ -1143,6 +1143,30 @@ class ReadingsTest {
     }
 
     @Test
+    fun aKeptFixIsMadeAtTheOnePlaceItWasKeptFor() {
+        val twice = Readings.of(listOf("本と本"), Script.JAPANESE).single()
+        // Not copied to the other 本, though ours read both alike.
+        val (once, none) = Readings.correctedWhereKept(twice, listOf(ReadingFix(0, "本", "ぼん", Reader.SUNG)))
+        assertEquals(listOf(Ruby("本", "ぼん", Reader.SUNG), Ruby("と"), Ruby("本", "ほん")), once.parts)
+        assertEquals(emptyList<Int>(), none.map { it.start })
+        // The next 本 for the next fix, and never the same one twice.
+        val both = Readings.correctedWhereKept(twice, listOf(ReadingFix(0, "本", "ぼん", Reader.SUNG), ReadingFix(0, "本", "ぽん", Reader.SUNG))).first
+        assertEquals("ぼんとぽん", both.reading)
+        assertEquals(twice, Readings.correctedWhereKept(twice, emptyList()).first)
+        // Where ours join the stretch's words, it's one part; where it cuts through one of ours, it's left, and said where.
+        val joined = Readings.of(listOf("三本の花"), Script.JAPANESE).single()
+        assertEquals(Ruby("三本", "さんぼん"), joined.parts.first())
+        val (made, cut) = Readings.correctedWhereKept(joined, listOf(ReadingFix(0, "三本", "さんぽん", Reader.SUNG)))
+        assertEquals(Ruby("三本", "さんぽん", Reader.SUNG), made.parts.first())
+        assertEquals(emptyList<Int>(), cut.map { it.start })
+        val (same, left) = Readings.correctedWhereKept(joined, listOf(ReadingFix(0, "本", "ぽん", Reader.SUNG)))
+        assertEquals(joined, same)
+        assertEquals(listOf(1 to 2), left.map { it.start to it.end })
+        assertEquals(listOf("ぽん"), left.map { it.fix.reading })
+    }
+
+
+    @Test
     fun aSungReadingIsMadeWhereItsKanjiAreHoweverTheDictionarySplitThem() {
         fun line(vararg parts: Ruby) = LineReading(parts.toList(), parts.joinToString("") { it.reading ?: it.text }, "")
         // UtaTen reads as one what the dictionary split in two: 闇間 is やみま, not 闇 and 間 read やみかん.

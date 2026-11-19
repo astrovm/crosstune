@@ -245,6 +245,43 @@ class FlashcardsTest {
 
     private fun savedLine(text: String) = SavedLinesStore(prefs()).load().first { it.text == text }
 
+    @Test
+    fun anOldCardShowsTheNewDictionaryAndTheSungReadingOffline() {
+        val song = MusicMetadata("Old Counters", "Band", lengthMs = 60_000)
+        val text = "都会の三本の花と存在"
+        val lines = listOf("雨が降る", text)
+        saved("""{"text":"$text","title":"${song.title}","artist":"${song.artist}","reading":"まちのさんほんのはなとこと","romanized":"machi no sanhon no hana to koto",
+            "ruby":[["都会","まち"],["の",null],["三本","さんほん"],["の",null],["花","はな"],["と",null],["存在","こと"]]}""")
+        val lyrics = LookupCache(File(app.cacheDir, "lyrics.json"), Dispatchers.Unconfined)
+        val sung = LookupCache(File(app.cacheDir, "sung_readings.json"), Dispatchers.Unconfined)
+        val answers = LookupCache(File(app.cacheDir, "chatgpt_answers.json"), Dispatchers.Unconfined)
+        runBlocking {
+            lyrics.put("16\u0000${RecordingKey.of(song)}", """{"words":"雨が降る\n${text}かな","lines":[[1000,"雨が降る"],[2000,"$text"]]}""")
+            val key = "oldcounters|band|${lines.hashCode()}"
+            sung.put("utaten|3|$key", """[[1,"都会","まち"]]""")
+            sung.put("utaten|4|$key", "[]")
+            answers.put("readings|old-model|${song.title}|Band|${lines.hashCode()}", """[{"line":2,"kanji":"存在","reading":"こと"}]""")
+            answers.put("readings|bad-model|${song.title}|Band|${lines.hashCode()}", "bad cache entry")
+            answers.put("readings|other-model|${song.title}|Other Band|${lines.hashCode()}", """[{"line":2,"kanji":"存在","reading":"もの"}]""")
+            answers.put("unrelated|old-model|${song.title}|Band|${lines.hashCode()}", """[{"line":2,"kanji":"存在","reading":"もの"}]""")
+            lyrics.save()
+            sung.save()
+            answers.save()
+        }
+
+        launch()
+        practiseAll(1)
+        click(string(R.string.practice_show))
+        waitUntil { onCard("machi no sanbon no hana to koto") }
+        assertFalse(onCard("machi no sanhon no hana to koto"))
+        assertNull(model().uiState.lyricsFor)
+        assertTrue(fake.requestedUrls.none { "lrclib.net" in it || "utaten.com" in it || "chatgpt.com" in it })
+        val stored = savedLine(text)
+        assertEquals(Ruby("都会", "まち", Reader.SUNG), stored.ruby?.first())
+        assertEquals(Ruby("存在", "こと", Reader.CHATGPT), stored.ruby?.last())
+        assertEquals(Readings.VERSION, stored.readWith)
+    }
+
     /** A line to check or not among those to choose. */
     private fun line(text: String) = composeRule.onNode(isToggleable() and hasText(text))
 

@@ -34,8 +34,7 @@ internal class SungReadings(
         read: List<LineReading>,
         stillWanted: () -> Boolean = { true },
     ): List<ReadingFix>? {
-        val key = cacheKey(song, lines, CACHE_VERSION)
-        cache?.get(key)?.let { kept -> fromCache(kept)?.let { return it } }
+        kept(song, lines, CACHE_VERSION)?.let { return it }
         // Version 3 kept real readings under its own key. Only its "none" was a page UtaTen doesn't write.
         keptFromBefore(song, lines)?.let { return it }
         if (!stillWanted()) return null
@@ -47,14 +46,25 @@ internal class SungReadings(
             }
         } ?: return null
         if (!stillWanted()) return null
-        keep(key, fixes)
+        keep(cacheKey(song, lines, CACHE_VERSION), fixes)
         return fixes
     }
 
     /** Readings version 3 kept for [song]'s [lines], when it kept some. None from then is asked again. */
-    private suspend fun keptFromBefore(song: MusicMetadata, lines: List<String>): List<ReadingFix>? {
-        val kept = cache?.get(cacheKey(song, lines, BEFORE_NONE_WAS_A_PAGE)) ?: return null
-        return fromCache(kept)?.takeIf { it.isNotEmpty() }
+    private suspend fun keptFromBefore(song: MusicMetadata, lines: List<String>): List<ReadingFix>? =
+        kept(song, lines, BEFORE_NONE_WAS_A_PAGE)?.takeIf { it.isNotEmpty() }
+
+    /** All positive answers, even ones later lost by the site. Only the current cache can confirm "none". Never asks the site. */
+    suspend fun cachedForSavedLines(song: MusicMetadata, lines: List<String>): List<List<ReadingFix>> {
+        // Only looked at: a line that nothing confirms is looked at again at every start, and that is no use of what's kept.
+        val current = kept(song, lines, CACHE_VERSION, used = false)
+        val earlier = (FIRST_CACHE_VERSION until CACHE_VERSION).mapNotNull { kept(song, lines, it, used = false) }
+        return (earlier + listOfNotNull(current)).filter { it.isNotEmpty() }.ifEmpty { listOfNotNull(current) }
+    }
+
+    private suspend fun kept(song: MusicMetadata, lines: List<String>, version: Int, used: Boolean = true): List<ReadingFix>? {
+        val key = cacheKey(song, lines, version)
+        return (if (used) cache?.get(key) else cache?.peek(key))?.let(::fromCache)
     }
 
     private suspend fun keep(key: String, fixes: List<ReadingFix>) {
@@ -168,6 +178,8 @@ internal class SungReadings(
 
         /** The cache version that could keep "none" for a page UtaTen doesn't write. Readings it kept are still used. */
         private const val BEFORE_NONE_WAS_A_PAGE = 3
+
+        private const val FIRST_CACHE_VERSION = 1
 
         /** What its search says when it finds no words. */
         private const val NONE_FOUND = "歌詞が見つかりませんでした"

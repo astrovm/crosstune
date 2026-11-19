@@ -387,7 +387,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
      * and kept on the caller's; worked out again from those kept then when lines are kept otherwise meanwhile, so
      * nothing kept meanwhile is lost. Null, and none kept, when [change] gives none.
      */
-    suspend fun change(on: CoroutineDispatcher, change: (List<SavedLine>) -> List<SavedLine>?): List<SavedLine>? {
+    suspend fun change(on: CoroutineDispatcher, change: suspend (List<SavedLine>) -> List<SavedLine>?): List<SavedLine>? {
         while (true) {
             val since = preferences.getString(KEY, null)
             val changed = withContext(on) { change(load(since)) } ?: return null
@@ -623,6 +623,10 @@ internal fun readAgain(kept: List<SavedLine>): List<SavedLine>? {
         if (older(line)) line.copy(ruby = line.marked(Script.JAPANESE)).rereadAs(line.readBy(Readings.of(listOf(line.text), Script.JAPANESE).first()), Script.JAPANESE) else line
     }
 }
+
+/** Legacy full lines only. An old hand edit can't reliably be told apart from the old dictionary's reading (Issue #963). */
+internal val SavedLine.needsCachedReading: Boolean
+    get() = readWith == null && line == null && !readByHand && wasReadAsJapanese()
 
 /**
  * Whether this line was read as Japanese. Kana in the line, or in a reading kept for it, says so.

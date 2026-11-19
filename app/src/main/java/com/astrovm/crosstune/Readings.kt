@@ -1081,12 +1081,7 @@ internal object Readings {
 
     /** Each fix where its kanji are next in [line], then the same kanji again when ours read them alike. */
     private fun whereSung(line: String, parts: List<Ruby>, starts: List<Int>, fixes: List<ReadingFix>): List<Sung> {
-        val sung = mutableListOf<Sung>()
-        for (fix in fixes) {
-            if (fix.kanji.isEmpty()) continue
-            val at = findKanji(line, fix.kanji).firstOrNull { free(sung, it, fix.kanji.length) } ?: continue
-            sung += sungAt(starts, at, fix)
-        }
+        val sung = whereKept(line, starts, fixes).toMutableList()
         // A copy: fixes added here are the same kanji, not a new word to copy again.
         for (first in sung.toList().distinctBy { it.fix.kanji }) {
             sung += findKanji(line, first.fix.kanji)
@@ -1095,6 +1090,37 @@ internal object Readings {
                 .filter { readOver(parts, it) == readOver(parts, first) }
         }
         return sung
+    }
+
+    /** Each fix where its kanji are next in [line] that no other fix took. */
+    private fun whereKept(line: String, starts: List<Int>, fixes: List<ReadingFix>): List<Sung> {
+        val sung = mutableListOf<Sung>()
+        for (fix in fixes) {
+            if (fix.kanji.isEmpty()) continue
+            val at = findKanji(line, fix.kanji).firstOrNull { free(sung, it, fix.kanji.length) } ?: continue
+            sung += sungAt(starts, at, fix)
+        }
+        return sung
+    }
+
+    /** A fix [kept] for one stretch of a line, [start] to [end]. */
+    class Kept(val start: Int, val end: Int, val fix: ReadingFix)
+
+    /**
+     * [line] with [fixes], answers kept for it and not asked again, made each at the one place it was kept for: one that
+     * names a word again takes the next place that word stands, never one an earlier fix took, and is never copied to
+     * another that ours read alike. Made where our parts split the line at both ends of the stretch, joined into one part
+     * when they cover more than one. Not made, and given back instead, where it cuts through the middle of one of ours.
+     */
+    fun correctedWhereKept(line: LineReading, fixes: List<ReadingFix>): Pair<LineReading, List<Kept>> {
+        val parts = line.parts
+        val starts = parts.runningFold(0) { at, part -> at + part.text.length }
+        val text = parts.joinToString("") { it.text }
+        val (whole, cut) = whereKept(text, starts, fixes).partition { starts[it.first] == it.start && starts[it.last + 1] == it.end }
+        val out = parts.map { listOf(it) }.toMutableList()
+        coverWhole(text, parts, out, whole)
+        val made = out.flatten()
+        return (if (made == parts) line else readAs(made)) to cut.map { Kept(it.start, it.end, it.fix) }
     }
 
     /** Each place [kanji] stands in [line]. */

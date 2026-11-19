@@ -31,6 +31,19 @@ class LookupCacheTest {
     }
 
     @Test
+    fun peekingAtAnAnswerDoesntCountAsUsingIt() = runBlocking {
+        val cache = LookupCache(file, Dispatchers.Unconfined, maxEntries = 2)
+        cache.put("a", "1")
+        cache.put("b", "2")
+        assertEquals("1", cache.peek("a"))
+        assertNull(cache.peek("missing"))
+        // Still the oldest, so it's the one that goes to make room.
+        cache.put("c", "3")
+        assertNull(cache.get("a"))
+        assertEquals("2", cache.get("b"))
+    }
+
+    @Test
     fun whatsUsedOftenStaysLongest() = runBlocking {
         val cache = LookupCache(file, Dispatchers.Unconfined, maxEntries = 2)
         cache.put("a", "1")
