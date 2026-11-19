@@ -56,13 +56,16 @@ internal class SungReadings(
 
     /** All positive answers, even ones later lost by the site. Only the current cache can confirm "none". Never asks the site. */
     suspend fun cachedForSavedLines(song: MusicMetadata, lines: List<String>): List<List<ReadingFix>> {
-        val current = kept(song, lines, CACHE_VERSION)
-        val earlier = (FIRST_CACHE_VERSION until CACHE_VERSION).mapNotNull { kept(song, lines, it) }
+        // Only looked at: a line that nothing confirms is looked at again at every start, and that is no use of what's kept.
+        val current = kept(song, lines, CACHE_VERSION, used = false)
+        val earlier = (FIRST_CACHE_VERSION until CACHE_VERSION).mapNotNull { kept(song, lines, it, used = false) }
         return (earlier + listOfNotNull(current)).filter { it.isNotEmpty() }.ifEmpty { listOfNotNull(current) }
     }
 
-    private suspend fun kept(song: MusicMetadata, lines: List<String>, version: Int): List<ReadingFix>? =
-        cache?.get(cacheKey(song, lines, version))?.let(::fromCache)
+    private suspend fun kept(song: MusicMetadata, lines: List<String>, version: Int, used: Boolean = true): List<ReadingFix>? {
+        val key = cacheKey(song, lines, version)
+        return (if (used) cache?.get(key) else cache?.peek(key))?.let(::fromCache)
+    }
 
     private suspend fun keep(key: String, fixes: List<ReadingFix>) {
         val cache = cache ?: return

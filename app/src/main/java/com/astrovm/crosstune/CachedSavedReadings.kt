@@ -27,7 +27,9 @@ internal class CachedSavedReadings(
             if (matches.isEmpty()) continue
             val sungByLine = sung.cachedForSavedLines(song, sheet).map { fixes -> fixes.groupBy { it.line } }
             if (sungByLine.isEmpty()) continue
-            val checked = tutor?.cachedReadingFixes(song, sheet).orEmpty().map { fixes -> fixes.groupBy { it.line } }.ifEmpty { listOf(emptyMap()) }
+            // ChatGPT may have put a line right and lost the answer since: then nothing can tell its fix from the old dictionary's.
+            val kept = if (tutor == null) emptyList() else tutor.cachedReadingFixes(song, sheet) ?: continue
+            val checked = kept.map { fixes -> fixes.groupBy { it.line } }.ifEmpty { listOf(emptyMap()) }
             for ((index, text) in matches) {
                 // Two occurrences or old answers can disagree. Don't guess which reading the card kept.
                 val possible = answers.getOrPut(text) { mutableSetOf() }

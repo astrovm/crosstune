@@ -3106,13 +3106,76 @@ class MainViewModelTest {
         assertTrue(fake.requestedUrls.isEmpty())
     }
 
-    private fun modelWithReadingCache(fill: suspend (LookupCache, LookupCache) -> Unit): MainViewModel {
+    /** With [tutored], ChatGPT's answers kept on the phone are the ones it fills. */
+    private fun modelWithReadingCache(tutored: (suspend (LookupCache) -> Unit)? = null, fill: suspend (LookupCache, LookupCache) -> Unit): MainViewModel {
         val lyrics = LookupCache(File(app.cacheDir, "old-practice-lyrics.json"), Dispatchers.Unconfined)
         val sung = LookupCache(File(app.cacheDir, "old-practice-sung.json"), Dispatchers.Unconfined)
         runBlocking { fill(lyrics, sung) }
         fake.handler = { error("Practice must not request ${it.url}") }
         val client = fake.client()
-        return model(lyricsFinder = LyricsFinder(client, "test", cache = lyrics), sungReadings = SungReadings(client, sung))
+        val tutor = tutored?.let { fillAnswers ->
+            val answers = LookupCache(File(app.cacheDir, "old-practice-answers.json"), Dispatchers.Unconfined)
+            runBlocking { fillAnswers(answers) }
+            ChatGptTutor(ChatGpt(client, File(app.cacheDir, "old-practice-chatgpt.json"), app.packageName, Dispatchers.Unconfined), answers)
+        }
+        return model(lyricsFinder = LyricsFinder(client, "test", cache = lyrics), sungReadings = SungReadings(client, sung), tutor = tutor)
+    }
+
+    @Test
+    fun anOldLineStaysAsKeptWhenChatGptKeptAnswersForOtherSongsButNotThisOne() {
+        // ChatGPT may have put 都会 right, and its answer for these words has since been dropped to make room.
+        val song = MusicMetadata("Two cities", "Band")
+        val text = "都会の三本"
+        val line = SavedLine(
+            text, reading = "みやこのさんほん", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("都会", "みやこ"), Ruby("の"), Ruby("三本", "さんほん"))
+        )
+        SavedLinesStore(prefs()).addAll(listOf(line))
+        val model = modelWithReadingCache(tutored = { it.put("readings|gpt-x|Another song|Band|42", "[]") }) { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.putCachedSung(song, listOf(text), version = 4, answer = "[]")
+        }
+        idle()
+        assertEquals(line, model.uiState.savedLines.single())
+        assertEquals(line, SavedLinesStore(prefs()).load().single())
+    }
+
+    @Test
+    fun anOldLineIsReadAgainWhenChatGptNeverKeptAnyAnswer() {
+        val song = MusicMetadata("Three Flowers", "Demo Band")
+        val text = "三本の花"
+        val line = SavedLine(
+            text, reading = "さんほんのはな", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("三本", "さんほん"), Ruby("の"), Ruby("花", "はな"))
+        )
+        SavedLinesStore(prefs()).addAll(listOf(line))
+        val model = modelWithReadingCache(tutored = { it.put("translation|gpt-x|Another song", "[]") }) { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.putCachedSung(song, listOf(text), version = 4, answer = "[]")
+        }
+        idle()
+        assertEquals("さんぼんのはな", model.uiState.savedLines.single().reading)
+    }
+
+    @Test
+    fun aLineThatNoCachedAnswerCoversIsLookedAtAgainWithoutCountingAsUsedAgain() {
+        val song = MusicMetadata("Counters", "Band")
+        val text = "三本の花"
+        val line = SavedLine(text, reading = "さんほんのはな", title = song.title, artist = song.artist, ruby = listOf(Ruby("三本", "さんほん"), Ruby("の"), Ruby("花", "はな")))
+        SavedLinesStore(prefs()).addAll(listOf(line))
+        // Kept by an older version, with ChatGPT's answers kept for other songs only: nothing can confirm the line.
+        val sungKey = "utaten|2|${SongNames.normalize(song.title)}|${SongNames.normalize(song.artist)}|${listOf(text).hashCode()}"
+        lateinit var kept: LookupCache
+        lateinit var before: List<Pair<String, String>>
+        modelWithReadingCache(tutored = { it.put("readings|gpt-x|Another song|Band|42", "[]") }) { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.put(sungKey, "[]")
+            sung.put("other", "newer")
+            kept = sung
+            before = sung.entries()
+        }
+        idle()
+        assertEquals(before, runBlocking { kept.entries() })
     }
 
     private suspend fun LookupCache.putCachedLyrics(song: MusicMetadata, text: String, version: Int = 16) =

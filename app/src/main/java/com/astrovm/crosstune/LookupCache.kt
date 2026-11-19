@@ -69,6 +69,9 @@ internal class LookupCache(
         }
     }
 
+    /** What's kept for [key], without counting as used: for looking, not for using. */
+    suspend fun peek(key: String): String? = loaded().let { entries -> synchronized(entries) { entries[key]?.value } }
+
     /** All that's kept, the longest unused first. */
     suspend fun entries(): List<Pair<String, String>> = loaded().let { entries -> synchronized(entries) { entries.map { (key, entry) -> key to entry.value } } }
 

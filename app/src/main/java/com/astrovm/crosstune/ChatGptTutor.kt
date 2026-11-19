@@ -190,18 +190,25 @@ internal class ChatGptTutor(
         return Readings.corrected(read, readingFixes(fixes))
     }
 
-    /** Answers kept for this exact sheet, from any model, even if signed out now. Never asks ChatGPT. */
-    suspend fun cachedReadingFixes(song: MusicMetadata, lines: List<String>): List<List<ReadingFix>> {
+    /**
+     * Answers kept for this exact sheet, from any model, even if signed out now. Never asks ChatGPT. Null when it kept
+     * answers for other sheets but none for this one: it may have put a line right here, and the answer has since gone.
+     */
+    suspend fun cachedReadingFixes(song: MusicMetadata, lines: List<String>): List<List<ReadingFix>>? {
         val suffix = readingKey(song, lines)
-        return cache.entries().mapNotNull { (key, value) ->
+        val kept = cache.entries().mapNotNull { (key, value) ->
             val fields = key.split('|', limit = 3)
-            if (fields.first() != "readings" || fields.getOrNull(2) != suffix) return@mapNotNull null
+            if (fields.first() != "readings") return@mapNotNull null
+            fields.getOrNull(2) to value
+        }
+        val mine = kept.filter { it.first == suffix }.mapNotNull { (_, value) ->
             try {
                 readingFixes(value)
             } catch (_: JSONException) {
                 null
             }
         }
+        return mine.takeIf { it.isNotEmpty() || kept.isEmpty() }
     }
 
     private fun readingKey(song: MusicMetadata, lines: List<String>) = "${song.title}|${song.artist}|${lines.hashCode()}"
