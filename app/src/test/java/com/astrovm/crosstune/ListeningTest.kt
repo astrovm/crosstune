@@ -175,7 +175,7 @@ class ListeningTest {
         val current = requireNotNull(controller).get()
         assertSame(model, ViewModelProvider(current)[MainViewModel::class.java])
         var result: Result<String>? = null
-        kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { result = runCatching { pages.page("https://ja.chordwiki.org/") } }
+        val lookup = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { result = runCatching { pages.page("https://ja.chordwiki.org/") } }
         shadowOf(Looper.getMainLooper()).idle()
         val old = wikiWeb(oldRoot)
         val live = wikiWeb(current.window.decorView)
@@ -183,19 +183,18 @@ class ListeningTest {
         prefs().edit().putString("theme", "DARK").commit()
         controller = requireNotNull(controller).recreate()
         shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(result?.exceptionOrNull() is IOException)
+        // The lookup's screen is gone, so it isn't over: the same page opens on the next one.
+        assertNull(result)
         assertNull(live?.parent)
         val themed = requireNotNull(controller).get()
         assertSame(model, ViewModelProvider(themed)[MainViewModel::class.java])
-        val themedJob = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { pages.page("https://ja.chordwiki.org/") }
-        shadowOf(Looper.getMainLooper()).idle()
         assertNull(wikiWeb(current.window.decorView))
         assertNotNull(wikiWeb(themed.window.decorView))
-        themedJob.cancel()
+        lookup.cancel()
     }
 
     @Test
-    fun destroyingTheActivityRemovesItsPendingWikiPage() {
+    fun destroyingTheActivityRemovesItsPendingWikiPageAndKeepsTheLookupWaiting() {
         val activity = launch()
         val pages = wikiPages(activity)
         val root = activity.window.decorView
@@ -207,13 +206,13 @@ class ListeningTest {
         requireNotNull(controller).pause().stop().destroy()
         shadowOf(Looper.getMainLooper()).idle()
         val removed = page?.parent == null
-        val failed = result?.exceptionOrNull() is IOException
+        val waiting = result == null && job.isActive
         job.cancel()
-        assertTrue("page removed=$removed; request failed=$failed", removed && failed)
+        assertTrue("page removed=$removed; request waiting=$waiting", removed && waiting)
     }
 
     @Test
-    fun wikiRequestWithoutAnActivityFailsWithoutOpeningAPage() {
+    fun wikiRequestWithoutAnActivityWaitsWithoutOpeningAPage() {
         val activity = launch()
         val pages = wikiPages(activity)
         val root = activity.window.decorView
@@ -221,10 +220,10 @@ class ListeningTest {
         var result: Result<String>? = null
         val job = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { result = runCatching { pages.page("https://ja.chordwiki.org/") } }
         shadowOf(Looper.getMainLooper()).idle()
-        val failure = result?.exceptionOrNull()
+        val waiting = result == null && job.isActive
         val old = wikiWeb(root)
         job.cancel()
-        assertTrue("failure=$failure; destroyed decor has page=${old != null}", failure is IOException && old == null)
+        assertTrue("waiting=$waiting; destroyed decor has page=${old != null}", waiting && old == null)
     }
 
     @get:Rule
