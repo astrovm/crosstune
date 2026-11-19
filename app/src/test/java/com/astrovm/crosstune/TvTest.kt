@@ -18,6 +18,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isEnabled
@@ -694,5 +695,34 @@ class TvTest {
         bar.assertIsFocused()
         pressOnFocused(Key.DirectionUp)
         bar.assertIsNotFocused()
+    }
+    private fun openStation() = composeRule.onNode(hasContentDescription(string(R.string.open_app_button, "Simple Radio")) and hasClickAction())
+
+    @Test
+    fun onATvAStationWithNoStateStartsOnItsOpenButtonKeepsItAsTheStationChangesAndBackLandsOnTheBar() {
+        // Simple Radio names only the station and reports no state, so its player has the one button.
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
+        }
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { SongHearing { Heard.Nothing } }
+        launch()
+        composeRule.waitUntil(5_000) { shown("Blue 100.7 FM") }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        composeRule.waitUntil(5_000) { openStation().isDisplayed() }
+        // A filled button with its icon and one word, not an icon alone, and the remote is already on it.
+        assertTrue(shown(string(R.string.open_button)))
+        openStation().assertIsFocused()
+
+        composeRule.runOnIdle { radio.unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Rock & Pop", reportsState = false) }
+        composeRule.waitUntil(5_000) { shown("Rock & Pop") }
+        openStation().assertIsFocused()
+
+        // Back closes the player and the remote lands on the station's bar, which stays.
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(hasContentDescription(string(R.string.open_app_button, "Simple Radio"))).fetchSemanticsNodes().isEmpty() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsFocused()
     }
 }

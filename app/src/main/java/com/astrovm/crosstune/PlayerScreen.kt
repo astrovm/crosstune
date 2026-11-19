@@ -56,6 +56,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -67,6 +69,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -74,6 +77,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -168,6 +172,15 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
         }
     }
     val fromTop = remember { FocusRequester() }
+    val openStation = remember { FocusRequester() }
+    // A station with no state has nothing else to press, so on a TV the remote starts on its one button, and keeps it as the station changes.
+    LaunchedEffect(player.stationOnly) { if (player.stationOnly && state.phone == Phone.TV) openStation.requestFocus() }
+    // Closed, the remote goes back to the station's bar, which is still there, rather than nowhere.
+    val barFocus = LocalBarFocus.current
+    val handsBack by rememberUpdatedState(player.stationOnly && state.phone == Phone.TV)
+    DisposableEffect(barFocus) {
+        onDispose { if (handsBack) barFocus?.owed = true }
+    }
     val fromTools = remember { FocusRequester() }
     // Which of them opened it, null till one did, so the remote is back there once it's put away,
     // rather than anywhere, as the song it was on went.
@@ -261,9 +274,17 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             }
         }
         if (player.stationOnly) {
+            // The one thing to do here, so it's a filled button, with the app's name for a reader; the remote starts on it.
+            val openApp = stringResource(R.string.open_app_button, player.byLine)
             Box(Modifier.fillMaxWidth().moves("buttons", moving).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                FilledIconButton(onClick = actions.onPlayerOpenApp, modifier = Modifier.size(72.dp)) {
-                    AppIcon(R.drawable.ic_open_in_new, contentDescription = stringResource(R.string.open_app_button, player.byLine))
+                Button(
+                    onClick = actions.onPlayerOpenApp,
+                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                    modifier = Modifier.heightIn(min = 52.dp).focusRequester(openStation).semantics { contentDescription = openApp }
+                ) {
+                    AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text(stringResource(R.string.open_button))
                 }
             }
         } else PlayerButtons(following, actions, Modifier.moves("buttons", moving))

@@ -104,6 +104,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -154,6 +156,14 @@ internal const val PRACTICE_BADGE_TAG = "practice-badge"
 internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
 internal const val NOW_PLAYING_TAG = "now_playing"
+
+/** The bar of what's playing, for a player that closes to hand the remote back to it: [owed] till the bar has taken it. */
+internal class BarFocus {
+    val requester = FocusRequester()
+    var owed by mutableStateOf(false)
+}
+
+internal val LocalBarFocus = staticCompositionLocalOf<BarFocus?> { null }
 
 /** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
 internal const val CARD_TOOLS_TAG = "card_tools"
@@ -521,7 +531,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     // way back, a screen starts afresh, as it always has.
     val kept = rememberSaveableStateHolder()
     LaunchedEffect(screen) { if (screen != Screen.FIX_STEP) Screen.entries.filter { it != screen }.forEach { kept.removeState(it.name) } }
-    CompositionLocalProvider(LocalCovers provides actions.covers) {
+    val barFocus = remember { BarFocus() }
+    CompositionLocalProvider(LocalCovers provides actions.covers, LocalBarFocus provides barFocus) {
     WithOverlays(inside = state.phone == Phone.TV) {
     CompositionLocalProvider(LocalLayerSwipe provides layers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
@@ -875,7 +886,15 @@ private fun PlayingBar(
 ) {
     val playing = following?.clock?.playing != false
     // The buttons sit inside the bar's own tap target, where a remote's search from the bar never looks.
-    val bar = remember { FocusRequester() }
+    val handed = LocalBarFocus.current
+    val bar = handed?.requester ?: remember { FocusRequester() }
+    // Once the player that covered it is gone, the remote comes back to it.
+    LaunchedEffect(handed?.owed) {
+        if (handed?.owed != true) return@LaunchedEffect
+        withFrameNanos {}
+        runCatching { bar.requestFocus() }
+        handed.owed = false
+    }
     val playPause = remember { FocusRequester() }
     Surface(
         onClick = onOpen,
