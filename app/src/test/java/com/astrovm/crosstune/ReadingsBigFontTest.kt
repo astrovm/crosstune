@@ -61,7 +61,7 @@ class ReadingsBigFontTest {
             MaterialTheme(colorScheme = colors) {
                 Box(Modifier.background(Color.Black)) {
                     Column(Modifier.width(400.dp)) {
-                        if (chords) ChordedLine(LyricLine(0, text), null, LineChords(over = listOf(Chord(0, "Am"), Chord(2, "F"))), null, false, style, parts, READING_SCALE)
+                        if (chords) ChordedLine(LyricLine(0, text), null, LineChords(over = listOf(Chord(0, "Am"), Chord(2, "F"))), null, style, parts, READING_SCALE)
                         else RubyLine(parts, style)
                     }
                 }
