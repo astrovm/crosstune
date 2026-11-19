@@ -635,12 +635,15 @@ internal class LyricsFinder(
      */
     private suspend fun keptUnderName(metadata: MusicMetadata): Lyrics.Found? {
         val names = cachedNames(metadata)
-        val (key, kept) = cache?.entries()?.lastOrNull { (key) ->
+        val candidates = cache?.entries().orEmpty().filter { (key) ->
             key.isCachedUnder(names) && RecordingKey.sameInstrumentalAlbum(key, metadata)
-        } ?: return null
+        }
+        // The very recording's own words come first, kept under an older cache version or not.
+        val recording = RecordingKey.of(metadata)
+        val (key, kept) = candidates.lastOrNull { (key) -> key.substringAfter('\u0000') == recording } ?: candidates.lastOrNull() ?: return null
         val words = fromCache(kept)?.first ?: return null
         // A different recording can lend its words. Its instrumental votes apply to that recording.
-        val sameRecording = key.substringAfter('\u0000') == RecordingKey.of(metadata)
+        val sameRecording = key.substringAfter('\u0000') == recording
         return if (words.markedInstrumental && !sameRecording && !SongNames.saysInstrumental(metadata.title, metadata.artist)) {
             words.copy(markedInstrumental = false)
         } else words
@@ -1769,8 +1772,9 @@ internal class LyricsFinder(
             if (!SongNames.same(title, metadata.title) || SongNames.artists(artist).none { it in SongNames.artists(metadata.artist) }) return false
             val playedAlbum = metadata.instrumentalAlbum
             val copyAlbum = json.optString("albumName")
-            if ((playedAlbum != null || SongNames.albumOfInstrumentals(copyAlbum)) &&
-                SongNames.normalize(playedAlbum.orEmpty()) != SongNames.normalize(copyAlbum)) return false
+            // A copy with no album says nothing against the played one: it goes by its length and title, as it always did.
+            if (copyAlbum.isNotBlank() && (playedAlbum != null || SongNames.albumOfInstrumentals(copyAlbum)) &&
+                !SongNames.sameAlbum(playedAlbum.orEmpty(), copyAlbum)) return false
             val copyMs = lengthMs() ?: return true
             val playingMs = metadata.lengthMs ?: return true
             return abs(copyMs - playingMs) <= SAME_LENGTH_MS

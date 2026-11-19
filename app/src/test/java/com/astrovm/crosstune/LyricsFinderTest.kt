@@ -134,6 +134,44 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun copiesWithNoAlbumNameStillCountByTheirLengthOnAnAlbumOfInstrumentals() {
+        val album = "Album (Instrumentals)"
+        val sung = onAlbum(lasting(timedOnLrclib, 200.0), "Album")
+        // LRCLIB's instrumental copies often carry no album at all, or write the album's name a little differently.
+        val blank = lasting(instrumentalCopy(), 200.0)
+        val spelled = onAlbum(lasting(instrumentalCopy(), 200.0), "Album (Instrumental)")
+        for (marked in listOf(listOf(blank, blank), listOf(blank, spelled))) {
+            respond((listOf(sung) + marked).joinToString(",", "[", "]"))
+            assertEquals("First\nSecond", heldBack(found(song.copy(lengthMs = 200_000, instrumentalAlbum = album))))
+        }
+        // A blank album is no excuse for another length.
+        val longer = lasting(instrumentalCopy(), 320.0)
+        respond("[$sung,$longer,$longer]")
+        assertEquals(null, heldBack(found(song.copy(lengthMs = 200_000, instrumentalAlbum = album))))
+    }
+
+    @Test
+    fun offlineTheExactRecordingsWordsKeepTheirMarkOverANewerOtherRecordings() {
+        val file = File.createTempFile("lyrics", ".json")
+        try {
+            val cache = LookupCache(file, Dispatchers.Unconfined)
+            val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
+            val played = song.copy(lengthMs = 200_000, recordingId = "app:instrumental")
+            val other = played.copy(lengthMs = 201_000, recordingId = "app:sung")
+            fake.handler = { throw IOException("offline") }
+            runBlocking {
+                cache.put("16\u0000${RecordingKey.of(played)}", """{"words":"Exact words","lines":[],"marked":true}""")
+                cache.put("${LyricsFinder.CACHE_VERSION}\u0000${RecordingKey.of(other)}", """{"words":"Other words","lines":[],"marked":false}""")
+                val kept = finder.lyricsOf(played) as Lyrics.Found
+                assertEquals("Exact words", kept.words)
+                assertEquals(true, kept.markedInstrumental)
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
     fun aKaraokeAlbumKeepsTheLyricsAvailableToSingWith() {
         val album = "Album (Karaoke Version)"
         val sung = onAlbum(lasting(timedOnLrclib, 200.0), "Album")
