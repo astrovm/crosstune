@@ -1773,8 +1773,8 @@ internal class LyricsFinder(
             val playedAlbum = metadata.instrumentalAlbum
             val copyAlbum = json.optString("albumName")
             // A copy with no album says nothing against the played one: it goes by its length and title, as it always did.
-            if (copyAlbum.isNotBlank() && (playedAlbum != null || SongNames.albumOfInstrumentals(copyAlbum)) &&
-                !RecordingKey.sameAlbum(playedAlbum.orEmpty(), copyAlbum)) return false
+            val albumsMatter = playedAlbum != null || SongNames.albumOfInstrumentals(copyAlbum)
+            if (copyAlbum.isNotBlank() && albumsMatter && !RecordingKey.sameAlbum(playedAlbum.orEmpty(), copyAlbum)) return false
             val copyMs = lengthMs() ?: return true
             val playingMs = metadata.lengthMs ?: return true
             return abs(copyMs - playingMs) <= SAME_LENGTH_MS
