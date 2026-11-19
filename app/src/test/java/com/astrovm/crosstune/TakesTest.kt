@@ -48,4 +48,23 @@ class TakesTest {
         assertTrue(Takes.saysAnotherVersionBesidesLive("Fake Song Acoustic"))
         assertTrue(Takes.saysAnotherVersionBesidesLive("偽の歌 (カラオケ)"))
     }
+
+    @Test
+    fun aTagIsReadWhereverItsBracketsAndDashesAre() {
+        // A bracket may open the name, close without opening, or hold another.
+        assertEquals(Takes.Take.LIVE, Takes.saysAnotherTake("(Live) 偽の歌"))
+        assertEquals(Takes.Take.LIVE, Takes.saysAnotherTake("偽の歌) (Live)"))
+        assertEquals(Takes.Take.LIVE, Takes.saysAnotherTake("偽の歌 (Live (Remix))"))
+        assertNull(Takes.saysAnotherTake("偽の歌 (2019 (Single) Version)"))
+        // A dash sets a tag apart only with a space on each side; each tag ends where the next dash does.
+        assertEquals(Takes.Take.LIVE, Takes.saysAnotherTake("偽の歌 - Live"))
+        assertNull(Takes.saysAnotherTake("偽の歌 -Live"))
+        assertNull(Takes.saysAnotherTake("偽の歌- Live"))
+        assertNull(Takes.saysAnotherTake("偽の歌 Live - "))
+        assertNull(Takes.saysAnotherTake("- Live"))
+        assertEquals(Takes.Take.LIVE, Takes.saysAnotherTake("偽の歌 -  - Live"))
+        assertEquals(Takes.Take.OTHER, Takes.saysAnotherTake("偽の歌 - Hello Remix - Z"))
+        assertEquals(Takes.Take.LIVE, Takes.saysAnotherTake("偽の歌 - Z - Live"))
+        assertEquals(Takes.Take.OTHER, Takes.saysAnotherTake("偽の歌 - Short"))
+    }
 }

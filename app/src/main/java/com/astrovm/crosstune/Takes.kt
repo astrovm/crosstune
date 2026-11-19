@@ -27,18 +27,7 @@ internal object Takes {
      * [title] says it's another version, a cover, karaoke, a remix, by a word or a mark anywhere in it, but not for the word
      * "live", which a song's own name may hold, as "Live Forever" does: a live take says so in a tag, which [saysAnotherTake] reads.
      */
-    fun saysAnotherVersionBesidesLive(title: String): Boolean = SongNames.saysAnotherVersion(withoutLiveWord(title), "", "")
-
-    /** [title] with each whole word "live" taken out, as a space, and what's around it left as it was. */
-    private fun withoutLiveWord(title: String): String = buildString {
-        var at = 0
-        while (at < title.length) {
-            val end = (at until title.length).firstOrNull { !title[it].isAsciiLetterOrDigit() } ?: title.length
-            if (end == at) append(title[at++]) else append(title.substring(at, end).let { if (it.equals("live", ignoreCase = true)) " " else it }).also { at = end }
-        }
-    }
-
-    private fun Char.isAsciiLetterOrDigit() = this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9'
+    fun saysAnotherVersionBesidesLive(title: String): Boolean = SongNames.saysAnotherVersion(title, "live", "")
 
     /** The text of each tag in [name]: what's inside brackets, and what follows a dash set apart by spaces. */
     private fun tagsOf(name: String): List<String> {

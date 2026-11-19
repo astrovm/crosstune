@@ -589,6 +589,13 @@ class ExactMatcherTest {
         assertEquals(url("live0000000"), find(row("残酷な天使のテーゼ (ライブ)", "live0000000", length = "4:11"), apple = twoLengths))
         // But a karaoke row stays out where Apple knows two lengths, as it's as long as the studio song, whichever.
         assertNull(find(row("残酷な天使のテーゼ (オフ・ヴォーカル)", "karaoke0000", length = "4:11"), apple = twoLengths))
+        // Recordings of one length, or within three seconds of each other, are one recording: a live row isn't the song then.
+        fun editions(vararg lengthsMs: Long) = lengthsMs.withIndex().joinToString(",") { (at, ms) -> appleSong("A Cruel Angel's Thesis", "Yoko Takahashi", ms, id = 7L + at, album = "Album $at") }
+        assertNull(find(row("残酷な天使のテーゼ (ライブ)", "live0000000"), apple = editions(245_000, 245_000)))
+        assertNull(find(row("残酷な天使のテーゼ (ライブ)", "live0000000"), apple = editions(245_000, 248_000)))
+        assertEquals(url("live0000000"), find(row("残酷な天使のテーゼ (ライブ)", "live0000000"), apple = editions(245_000, 248_001)))
+        // A title's other letters, or marks, don't make a Latin spelling another script's.
+        assertNull(find(row("Café 〇", "mark0000000")))
         // Another song by the artist, as long, with nothing to say it isn't, opens: no evidence takes it away (Issues #945, #983).
         assertEquals(url("other000000"), find(row("魂のルフラン", "other000000", length = "4:04")))
     }
