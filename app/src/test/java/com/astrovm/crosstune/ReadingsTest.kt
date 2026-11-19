@@ -1182,6 +1182,10 @@ class ReadingsTest {
         assertEquals(emptyList<Int>(), cut(listOf(Ruby("食べ物", "たべもの")), "物", "もの").second.map { it.start })
         // The fix is the run itself, with kana around it: 食 た in 食べる.
         assertEquals(emptyList<Int>(), cut(listOf(Ruby("食べる", "たべる")), "食", "た").second.map { it.start })
+        // The place counts from the start of the part, not of the line: 三本 is the second part here.
+        val later = listOf(Ruby("花", "はな"), Ruby("の"), Ruby("三本", "さんぼん"))
+        assertEquals(emptyList<Int>(), cut(later, "本", "ぼん").second.map { it.start })
+        assertEquals(listOf(3), cut(later, "本", "ぽん").second.map { it.start })
         // A reading the part doesn't hold at that place is the card's to keep, as it was: ぽん is not at the end of さんぼん.
         val (same, left) = cut(joined, "本", "ぽん")
         assertEquals(line(*joined.toTypedArray()), same)
