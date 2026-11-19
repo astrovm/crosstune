@@ -20,7 +20,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -51,6 +50,9 @@ internal class WikiObservation : AbstractCoroutineContextElement(WikiObservation
     companion object Key : CoroutineContext.Key<WikiObservation>
 }
 
+/** Why a page was cancelled: its screen went away, which isn't its caller giving up. */
+private class ScreenLost : CancellationException("The screen went away")
+
 /**
  * The retained lookup uses the current screen, and releases its pages with that screen. A page whose
  * screen goes away is opened again on the next one, so turning the phone doesn't end a lookup.
@@ -70,7 +72,7 @@ internal class ChordWikiHost : ViewModel(), ChordWikiPages {
         if (activity !== host) return
         activity = null
         pages.value = null
-        requests.toList().forEach { it.cancel() }
+        requests.toList().forEach { it.cancel(ScreenLost()) }
     }
 
     /** Waits for a screen when there is none, which the caller's own limit ends. */
@@ -88,9 +90,8 @@ internal class ChordWikiHost : ViewModel(), ChordWikiPages {
                         requests.remove(request)
                     }
                 }
-            } catch (e: CancellationException) {
+            } catch (e: ScreenLost) {
                 // Only the caller's own cancellation ends the lookup. A lost screen asks the next one.
-                currentCoroutineContext().ensureActive()
                 null
             }
         }

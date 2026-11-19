@@ -102,6 +102,24 @@ class ChordWikiTest {
     }
 
     @Test
+    fun aCallerGivingUpWhileItsPageIsOpenDoesNotAskAgain() {
+        val screen = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val host = ChordWikiHost()
+        val release = kotlinx.coroutines.CompletableDeferred<String>()
+        var asked = 0
+        host.attach(screen) { ChordWikiPages { asked++; release.await() } }
+        var result: Result<String>? = null
+        val caller = CoroutineScope(Dispatchers.Main).launch { result = runCatching { host.page("https://ja.chordwiki.org/") } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, asked)
+        caller.cancel()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(result?.exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        // Its own cancellation isn't a lost screen: nothing opens the page a second time.
+        assertEquals(1, asked)
+    }
+
+    @Test
     fun addressesUseTheSheetTheEditorAndTheSearch() {
         assertEquals("https://ja.chordwiki.org/wiki.cgi?c=edit&t=Human+System", chordWikiEditUrl("Human System"))
         assertEquals("https://ja.chordwiki.org/search.html?q=Human+System+TM", chordWikiSearchUrl("Human System TM"))

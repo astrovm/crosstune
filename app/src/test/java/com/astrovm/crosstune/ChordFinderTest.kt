@@ -1934,7 +1934,8 @@ Singing to the morning light</div>"""
     fun wikiMissesAreKeptApartFromSheetsAndAnOldOneIsLetGo() {
         noOtherChordSites()
         val sheets = LookupCache(File.createTempFile("wiki-sheets", ".json").apply { delete(); deleteOnExit() }, Dispatchers.Unconfined)
-        val misses = LookupCache(File.createTempFile("wiki-misses", ".json").apply { delete(); deleteOnExit() }, Dispatchers.Unconfined, maxEntries = 1)
+        val missFile = File.createTempFile("wiki-misses", ".json").apply { delete(); deleteOnExit() }
+        val misses = LookupCache(missFile, Dispatchers.Unconfined, maxEntries = 1)
         var clock = 1_000L
         var calls = 0
         var published = false
@@ -1950,12 +1951,16 @@ Singing to the morning light</div>"""
         assertTrue(runBlocking { sheets.entries().none { it.first.startsWith("wiki-miss:") } })
         chords(kawa, japanese, finder)
         assertEquals(first, calls)
-        // A day on, it's looked up again, and the old note is dropped rather than left to fill the cache.
+        // A note still good is kept, not let go as it's used.
+        assertEquals(1, runBlocking { misses.entries().size })
+        assertEquals(1, runBlocking { LookupCache(missFile, Dispatchers.Unconfined).entries().size })
+        // A day on, it's looked up again, and the old note is dropped, from the file too, rather than left to fill the cache.
         clock += LookupCache.DAY_MS
         published = true
         assertTrue(chords(kawa, japanese, finder) is ChordFinder.Chords.Found)
         assertTrue(calls > first)
         assertTrue(runBlocking { misses.entries().isEmpty() })
+        assertTrue(runBlocking { LookupCache(missFile, Dispatchers.Unconfined).entries().isEmpty() })
     }
 
     @Test
