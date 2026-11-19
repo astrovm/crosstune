@@ -510,6 +510,7 @@ class MatcherCasesTest {
         val ambiguous = listOf(
             search.copy(what = "another album", songs = listOf(search.songs[0], row("用餘生去愛", "Another Album", "Jacky Cheung", "4:15"))),
             search.copy(what = "store has no album", album = ""),
+            search.copy(what = "no album anywhere", album = "", songs = listOf(search.songs[0], row("用餘生去愛", "", "Jacky Cheung", "4:15"))),
             search.copy(what = "only Deezer knows a length", lengthMs = null, deezerSeconds = 254),
             search.copy(what = "another edition", editions = listOf("Live at Budokan" to 254_239)),
             search.copy(what = "link has another length", linkMs = 300_000),

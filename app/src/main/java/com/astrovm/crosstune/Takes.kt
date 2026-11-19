@@ -18,7 +18,7 @@ internal object Takes {
      * tag does.
      */
     fun saysAnotherTake(name: String, artists: Collection<String> = emptyList()): Take? {
-        val named = artists.flatMap(SongNames::artistNames).map(SongNames::normalize).filter(String::isNotEmpty)
+        val named = artists.flatMap(SongNames::artistNames).map(SongNames::normalize)
         val takes = tagsOf(name).filter { tag -> SongNames.normalize(tag).let { letters -> named.none { letters == it } } }.mapNotNull(::takeOfTag)
         return takes.firstOrNull { it == Take.LIVE } ?: takes.firstOrNull()
     }
@@ -47,10 +47,10 @@ internal object Takes {
     private const val TAG_BRACKET_OPENS = "([【〔（［"
     private const val TAG_BRACKET_CLOSES = ")]】〕）］"
 
-    /** What follows each dash set apart by spaces in [name], up to the next one. */
+    /** What starts at each dash set apart by spaces in [name], up to the next one. */
     private fun afterSpacedDashes(name: String): List<String> {
         val cuts = (1 until name.lastIndex).filter { name[it] in TitleDelimiters.DASHES && name[it - 1].isWhitespace() && name[it + 1].isWhitespace() }
-        return cuts.mapIndexed { i, cut -> name.substring(cut + 1, cuts.getOrElse(i + 1) { name.length }) }
+        return cuts.zip(cuts.drop(1) + name.length) { from, to -> name.substring(from, to) }
     }
     private val marks = phoneRegex("""\p{M}+""")
     private val wordSplit = phoneRegex("""[^a-z0-9]+""")

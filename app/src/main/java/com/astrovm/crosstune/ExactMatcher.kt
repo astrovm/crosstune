@@ -814,7 +814,7 @@ internal class ExactMatcher(
             .mapNotNull { video ->
                 val halves = video.name.split(" - ").takeIf { it.size == 2 } ?: return@mapNotNull null
                 val own = halves.indexOfFirst { SongNames.normalize(it) == title }
-                halves.getOrNull(1 - own)?.takeIf { own >= 0 }?.let(SongNames::normalize)
+                halves.getOrNull(1 - own)?.let(SongNames::normalize)
             }.filter { it.isNotEmpty() }.toSet()
         return rows.singleOrNull { SongNames.normalize(it.name) in aliases && SongNames.normalize(it.details.getOrNull(1).orEmpty()) == album }
     }
@@ -956,7 +956,7 @@ internal class ExactMatcher(
         val takeOnAlbum: Boolean
     ) {
         /** Apple, or Deezer, knows recordings of the song that differ in length: a live take may be one. */
-        val severalRecordings = lengthsMs.size > 1 && lengthsMs.max() - lengthsMs.min() > SAME_SONG_LENGTH_MS
+        val severalRecordings = lengthsMs.any { one -> lengthsMs.any { other -> one - other > SAME_SONG_LENGTH_MS } }
 
         val romanizedJapanese by lazy {
             japaneseTitle?.let { Readings.of(listOf(it), Script.JAPANESE).single().typed }
