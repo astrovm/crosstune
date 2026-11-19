@@ -1204,6 +1204,10 @@ class ReadingsTest {
         assertEquals(listOf(2), left(Ruby("飛び立つ", "ゆく"), kanji = "立", reading = "く"))
         // The fix cuts through two parts, so no one part holds it.
         assertEquals(listOf(1), left(Ruby("三本", "さんぼん"), Ruby("目", "め"), kanji = "本目", reading = "ぼんめ"))
+        // The fix reaches from kanji into the kana after them, 食べ in 食べる, so no one piece of the part has it all.
+        assertEquals(listOf(0), left(Ruby("食べる", "たべる"), kanji = "食べ", reading = "たべ"))
+        // Or it names kana alone, べ, which no reading is laid over.
+        assertEquals(listOf(1), left(Ruby("食べる", "たべる"), kanji = "べ", reading = "べ"))
         // A part with no reading holds nothing.
         assertEquals(listOf(1), left(Ruby("三本"), kanji = "本", reading = "ぼん"))
     }
