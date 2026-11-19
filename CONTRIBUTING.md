@@ -70,7 +70,7 @@ The version is set explicitly in `app/build.gradle.kts`: `versionName` is `X.Y.Z
 flowchart LR
   tag[Tag vX.Y.Z] --> release[release.yml]
   release -->|edit 1| internal[Internal testing<br/>no review]
-  internal -->|edit 2: one review| testing[PLAY_TRACKS<br/>beta, alpha<br/>+ listing]
+  internal -->|edit 2: one review| testing[Open testing<br/>PLAY_TRACKS: beta<br/>+ listing]
   dispatch[Promote to production<br/>run by hand] --> promote[promote.yml]
   testing -.-> promote
   promote -->|edit 3: its own review| production[Production]
@@ -80,7 +80,7 @@ Google Play cancels a review in progress when a new edit is committed, unless th
 
 | Repository variable | Value |
 | --- | --- |
-| `PLAY_TRACKS` | The testing tracks each release goes to, with commas between. `beta` (open testing) when it isn't set. `beta,alpha` sends closed testing the same release in the same edit: until production launches, closed testing is where people get the app, so drop `alpha` after. It can't name `production` or `internal`, or a form factor's, such as `tv:production` |
+| `PLAY_TRACKS` | The testing tracks each release goes to, with commas between. `beta` (open testing) when it isn't set, and set to `beta`: releases go internal testing, then open testing, then production. It can't name `production` or `internal`, or a form factor's, such as `tv:production` |
 | `PLAY_LANGUAGES` | The listing's languages each release sends: folders of `fastlane/metadata/android`, with spaces between. `en-US` when it isn't set |
 
 It needs these repository secrets:
