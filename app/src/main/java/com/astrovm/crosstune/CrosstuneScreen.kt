@@ -189,7 +189,7 @@ internal data class ScreenActions(
     val onPlayerRepeat: () -> Unit = {},
     val onPlayerLike: () -> Unit = {},
     /** Plays one of the songs up next now, by the app's number for it. */
-    val onPlayerPlayQueued: (Long) -> Unit = {},
+    val onPlayerPlayQueued: (Long, Int) -> Unit = { _, _ -> },
     /** Plays the list on from the song up next at this place, one Crosstune still has to ask for. */
     val onPlayerPlayLater: (Int) -> Unit = {},
     /** Moves the song up next at one place to another. */

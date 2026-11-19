@@ -488,6 +488,23 @@ class MainViewModelTest {
     /** A file with no title, as a player may name one: nothing a tap could take for a song, so a tap opens what was heard, or the player. */
     private val untitled = Unnamed("com.example.untitled", "Untitled Player", null, said = false)
 
+    @Test
+    fun aStationWithoutPlaybackStateDoesNotStartAutomaticRecognition() {
+        val hears = EarsOnThePhone(heardSong())
+        val playback = FakePlayback().apply { aloud = true }
+        val model = radioModel(hears, playback, mayCapture = { true })
+        playback.unnamed.value = station.copy(reportsState = false)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(station.name, model.uiState.playingUnnamed?.playing?.name)
+        assertNull(model.uiState.playingUnnamed?.heard)
+        assertTrue(hears.asked.isEmpty())
+
+        playback.unnamed.value = station
+        idle()
+        assertEquals(1, hears.asked.size)
+    }
+
     /** A model on [untitled] playing in [playback], with its bar in sight, and the song [ears] heard first in it shown. */
     private fun untitledHeard(ears: EarsOnThePhone, playback: FakePlayback = FakePlayback()): MainViewModel {
         val model = radioModel(ears, playback)
@@ -528,7 +545,7 @@ class MainViewModelTest {
     fun aSkipASeekOrASongUpNextPlayedFromThePlayerDropsTheSongHeard() {
         val controls = listOf<Pair<String, (MainViewModel) -> Unit>>(
             "next" to { it.playerSkip(true) }, "back" to { it.playerSkip(false) }, "seek" to { it.playerSeek(90_000) },
-            "queued" to { it.playerPlayQueued(7) }, "later" to { it.playerPlayLater(1) }
+            "queued" to { it.playerPlayQueued(7, 0) }, "later" to { it.playerPlayLater(1) }
         )
         for ((name, control) in controls) {
             // The app doesn't say it moved, as some don't: what was sent is enough.
@@ -560,9 +577,10 @@ class MainViewModelTest {
         idle()
         assertEquals(ears.answers[0], model.uiState.playingUnnamed?.heard)
         // The station's player plays a song up next there: the file plays on, and so does the song heard in it.
-        model.playerPlayQueued(7)
+        model.playerPlayQueued(7, 41)
         idle()
         assertEquals(listOf<String?>(station.app), playback.controlledApps)
+        assertEquals(listOf<Int?>(41), playback.queuedSessions)
         assertEquals(ears.answers[0], model.uiState.playingUnnamed?.heard)
         assertEquals(1, ears.asked.size)
     }
@@ -1634,7 +1652,7 @@ class MainViewModelTest {
         playback.unnamed.value = station.copy(reportsState = false)
         idle()
         assertEquals(true, model.uiState.player?.stationOnly)
-        model.playerPlayQueued(7)
+        model.playerPlayQueued(7, 0)
         model.playerPlayLater(0)
         assertTrue(playback.queuedPlayed.isEmpty())
     }
@@ -1797,7 +1815,7 @@ class MainViewModelTest {
         model.playerShuffle()
         model.playerRepeat()
         model.playerLike()
-        model.playerPlayQueued(3)
+        model.playerPlayQueued(3, 0)
         model.playerSeek(1_000)
         assertEquals(listOf<String?>(station.app, station.app), playback.playedApps)
         assertEquals(List<String?>(6) { station.app }, playback.controlledApps)
@@ -2413,7 +2431,7 @@ class MainViewModelTest {
         model.playerShuffle()
         model.playerRepeat()
         model.playerLike()
-        model.playerPlayQueued(1)
+        model.playerPlayQueued(1, 0)
         model.playerPlayLater(0)
         model.playerMoveQueued(0, 1)
         model.playerCard()
@@ -2503,7 +2521,7 @@ class MainViewModelTest {
         assertEquals(listOf(Repeat.ALL), playback.repeated.toList())
         model.playerLike()
         assertEquals(1, playback.liked)
-        model.playerPlayQueued(7)
+        model.playerPlayQueued(7, 0)
         assertEquals(listOf(7L), playback.queuedPlayed.toList())
         model.playerSeek(4_000)
         assertEquals(listOf(4_000L), playback.seeks.toList())

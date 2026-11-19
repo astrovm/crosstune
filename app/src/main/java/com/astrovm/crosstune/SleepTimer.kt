@@ -62,7 +62,7 @@ internal class SleepTimer(
     private fun pauseWhatPlays() {
         when (val first = playback.whatPlays()) {
             is WhatPlays.Named -> playback.playPause(first.song.metadata, false)
-            is WhatPlays.Nameless -> playback.playPause(first.playing.played, false, first.playing.app)
+            is WhatPlays.Nameless -> if (first.playing.reportsState) playback.playPause(first.playing.played, false, first.playing.app)
             null -> Unit
         }
     }

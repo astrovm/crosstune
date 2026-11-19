@@ -1257,8 +1257,9 @@ internal class MainViewModel(
                 showUnnamed()
             }
             // Paused, nothing plays to hear; nor on a speaker it's cast to, which the phone doesn't play.
+            // A stateless station's notification identifies its session, but not whose audio is playing.
             // Moved on, as by a skip, it's listened to again at once, the listen under way stopped.
-            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight && !it.away } }
+            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight && !it.away && it.reportsState } }
             .combine(byEarAgain) { unnamed, again -> unnamed?.let { it to again } }
             .distinctUntilChanged()
             .collectLatest { listened -> if (listened != null) nameByEar(source) }
@@ -2154,11 +2155,11 @@ internal class MainViewModel(
         playback?.like(player.song, player.askedOf)
     }
 
-    /** Has the app play one of the songs it has up next now, which the player then shows. */
-    fun playerPlayQueued(id: Long) {
+    /** Plays the song up next from the session that supplied the row. */
+    fun playerPlayQueued(id: Long, session: Int) {
         val player = uiState.player?.takeUnless { it.stationOnly } ?: return
         uiState = uiState.copy(player = player.copy(played = true))
-        playback?.playQueued(player.song, id, player.askedOf)
+        playback?.playQueued(player.song, id, player.askedOf, session)
         movedOn(player.app)
     }
 

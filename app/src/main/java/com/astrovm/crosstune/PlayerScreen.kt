@@ -721,7 +721,7 @@ private fun UpNextList(player: PlayerState, cover: String?, following: Following
                     ) {
                         asked = keys[index]
                         // One the app has plays at once; a list's still to ask for, from there on.
-                        if (id != null) actions.onPlayerPlayQueued(id) else actions.onPlayerPlayLater(index)
+                        if (id != null) actions.onPlayerPlayQueued(id, following.session) else actions.onPlayerPlayLater(index)
                     }
                 }
             }

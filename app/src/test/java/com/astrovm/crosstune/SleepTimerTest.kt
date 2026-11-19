@@ -120,8 +120,8 @@ class SleepTimerTest {
     }
 
     /** A radio station playing in its own app, with no song named, and nothing else playing. */
-    private fun stationPlays(): Unnamed {
-        val station = Unnamed("com.example.radio", "Fake Radio", "Fake FM")
+    private fun stationPlays(reportsState: Boolean = true): Unnamed {
+        val station = Unnamed("com.example.radio", "Fake Radio", "Fake FM", reportsState = reportsState)
         phone.appPlaying[station.app] = MutableStateFlow(Following(PlaybackClock(0, SystemClock.elapsedRealtime(), 1f, true), "Fake Radio", canSeek = false))
         phone.unnamed.value = station
         // The song's app lets go of it as the station takes over.
@@ -177,6 +177,21 @@ class SleepTimerTest {
         station = stationPlays()
         assertEquals(listOf(false, false), phone.plays)
         assertEquals(listOf<String?>(station.app, station.app), phone.playedApps)
+        assertNull(timer.set.value)
+    }
+
+    @Test
+    fun neitherTimerSendsPauseForAStationWithoutPlaybackState() {
+        timer.after(1)
+        stationPlays(reportsState = false)
+        passes(60_000)
+        assertTrue(phone.plays.isEmpty())
+        assertNull(timer.set.value)
+
+        plays(10_000)
+        timer.afterSong(song)
+        stationPlays(reportsState = false)
+        assertTrue(phone.plays.isEmpty())
         assertNull(timer.set.value)
     }
 

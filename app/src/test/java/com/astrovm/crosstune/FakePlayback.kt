@@ -364,8 +364,11 @@ internal class FakePlayback : PlaybackSource {
         controlledApps += app
     }
 
-    override fun playQueued(song: MusicMetadata, id: Long, app: String?) {
+    val queuedSessions: MutableList<Int?> = CopyOnWriteArrayList()
+
+    override fun playQueued(song: MusicMetadata, id: Long, app: String?, session: Int?) {
         queuedPlayed += id
+        queuedSessions += session
         controlledApps += app
     }
 

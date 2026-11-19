@@ -34,6 +34,7 @@ import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationManagerCompat
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -42,6 +43,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.net.URI
@@ -3519,6 +3521,28 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
+    fun bringingAPlayerForwardDoesNotSendPlayAfterItsSessionLosesState() = runTest {
+        val radio = RadioNotice.PACKAGE
+        allow()
+        val original = player(radio, "Simple Radio", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        val other = player(radio, "Simple Radio", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(original)
+        val icon = ComponentName(radio, "$radio.RadioActivity")
+        shadowOf(app.packageManager).addActivityIfNotPresent(icon)
+        shadowOf(app.packageManager).addIntentFilterForActivity(icon, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+
+        val brought = async(start = CoroutineStart.UNDISPATCHED) { playback.bringToFront(song, radio) }
+        assertEquals(icon, shadowOf(app).nextStartedActivity.component)
+        shadowOf(original).setPlaybackState(null)
+        shadowOf(sessions).addController(other)
+
+        assertFalse(brought.await())
+        assertTrue(asked().isEmpty())
+        assertTrue(shadowOf(original).getCallbacks().isEmpty())
+    }
+
+    @Test
     fun theAppPlayingItSaysHowLongTheSongIsWhenItKnows() {
         allow()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", duration = 200_000))
@@ -3572,6 +3596,24 @@ class PlaybackTest {
         playback.skip(MusicMetadata("Other", "Band"), next = true)
         playback.playQueued(MusicMetadata("Other", "Band"), 3)
         assertEquals(emptyList<String>(), asked())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun aQueueTapDoesNotMoveToAnotherSessionWithTheSameTitle() {
+        val radio = RadioNotice.PACKAGE
+        allow()
+        val original = player(radio, "Simple Radio", song.title, song.artist)
+        val other = player(radio, "Simple Radio", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(original)
+        shadowOf(sessions).addController(other)
+        val session = requireNotNull(followed().last()).session
+        playback.playQueued(song, 3, radio, session)
+        assertEquals(listOf("skipToQueueItem 3"), asked())
+
+        shadowOf(original).setPlaybackState(null)
+        playback.playQueued(song, 3, radio, session)
+        assertTrue(asked().isEmpty())
     }
 
     /** A music app's shuffle and repeat as the app has them, what it's told, and who's watching them. */

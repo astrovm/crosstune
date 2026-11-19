@@ -274,8 +274,8 @@ internal interface PlaybackSource {
     /** Presses the own like of the app playing [song], [app] when named, which likes it there, or no longer, as the app has it. */
     fun like(song: MusicMetadata, app: String? = null)
 
-    /** Has the app playing [song], [app] when named, play the one numbered [id] in its queue now. */
-    fun playQueued(song: MusicMetadata, id: Long, app: String? = null)
+    /** Has the app playing [song] play [id] in its queue. When given, [session] identifies the queue's owner. */
+    fun playQueued(song: MusicMetadata, id: Long, app: String? = null, session: Int? = null)
 
     /**
      * Has [app] find [song] by its name and play it, in the background, or YouTube Music play its
@@ -666,8 +666,11 @@ internal class MediaSessionPlayback(
             opened = playing.packageName
             // Back in front, YouTube Music puts the song where it was, paused; asked to play before that, it starts it over.
             withTimeoutOrNull(startMs) { back.await() }
-            runCatching { playing.clockCommand("play") { play() } }
-            return true
+            // While waiting, the app can lose its playback state or replace this session.
+            return runCatching {
+                val current = appFor(song, app = playing.packageName, token = playing.sessionToken) ?: return false
+                current.clockCommand("play") { play() }
+            }.isSuccess
         } finally {
             playing.unregisterCallback(callback)
         }
@@ -675,14 +678,16 @@ internal class MediaSessionPlayback(
 
     override fun skip(song: MusicMetadata, next: Boolean, app: String?) = moveOn(song, app) { if (next) skipToNext() else skipToPrevious() }
 
-    override fun playQueued(song: MusicMetadata, id: Long, app: String?) = moveOn(song, app) { skipToQueueItem(id) }
+    override fun playQueued(song: MusicMetadata, id: Long, app: String?, session: Int?) = moveOn(song, app, session) { skipToQueueItem(id) }
 
     /** Has the app playing [song], [named] when it is, go on to another, as [move] asks it, and play it. */
-    private fun moveOn(song: MusicMetadata, named: String?, move: MediaController.TransportControls.() -> Unit) {
+    private fun moveOn(song: MusicMetadata, named: String?, session: Int? = null, move: MediaController.TransportControls.() -> Unit) {
         // Taken back meanwhile, the song just keeps on as it was.
         runCatching {
-            val app = appFor(song, app = named) ?: return
-            val paused = app.playbackState?.state != PlaybackState.STATE_PLAYING
+            val active = activeSessions()
+            val candidates = if (session == null) active else active.filter { sessionNumbers.peek(it.sessionToken) == session }
+            val app = appFor(song, candidates, app = named) ?: return
+            val paused = (app.playbackState ?: return).state != PlaybackState.STATE_PLAYING
             app.transportControls.run {
                 move()
                 // Paused, the song moved on to would wait unheard, with the words still on the last one.
