@@ -8,7 +8,7 @@ av==19.0.2
     # via faster-whisper
 click==8.5.1
     # via huggingface-hub
-ctranslate2==4.8.5
+ctranslate2==4.9.0
     # via faster-whisper
 faster-whisper==1.2.1
     # via -r /tmp/crosstune-smart/requirements.txt
@@ -22,9 +22,9 @@ h11==0.16.0
     # via httpcore2
 hf-xet==1.8.0
     # via huggingface-hub
-httpcore2==2.16.0
+httpcore2==2.16.2
     # via httpx2
-httpx2==2.16.0
+httpx2==2.16.2
     # via huggingface-hub
 huggingface-hub==2.4.0
     # via
@@ -34,11 +34,11 @@ idna==3.20
     # via
     #   anyio
     #   httpx2
-numpy==2.5.4
+numpy==2.5.5
     # via
     #   ctranslate2
     #   onnxruntime
-onnxruntime==1.31.1
+onnxruntime==1.32.0
     # via faster-whisper
 packaging==26.3
     # via
