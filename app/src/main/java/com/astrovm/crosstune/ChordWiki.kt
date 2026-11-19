@@ -279,7 +279,7 @@ internal class ChordWikiBrowser(
          * The editor's text, the links to sheets, and the words on screen. Not the page's scripts.
          *
          * It never looks for Cloudflare's own elements or frames. Measured on a phone with no ChordWiki cookie,
-         * asking the page for the check's elements (by id) made the check fail every time, 14 runs in 14, and
+         * asking the page for the check's elements (by id) made the check fail every time, 13 runs in 13, and
          * leaving them alone made it pass every time, so what the check is has to come from the words.
          */
         fun readPage(): String = """
