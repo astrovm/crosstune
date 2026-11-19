@@ -8050,7 +8050,7 @@ class MainActivityTest {
         val activity = launch(trackLink())
 
         waitUntil { activity.isFinishing }
-        assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
+        assertEquals("https://www.deezer.com/track/123", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertEquals(1, fake.requestedUrls.count { it.startsWith("https://api.deezer.com/search") })
     }
 
