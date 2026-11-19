@@ -1495,6 +1495,12 @@ class ReadingsTest {
             assertEquals("$withUniDic", "せんぼんざくら よるにまぎれ", read("千本桜 夜ニ紛レ"))
             assertEquals("$withUniDic", "ひゃっぽんざくらがさく", read("百本桜が咲く"))
             assertEquals("$withUniDic", "かたるにまいば", read("騙る二枚刃"))
+            // One word, as it's spelled in romaji and over the kanji.
+            val word = if (withUniDic) TestUniDic.reading { reading("千本桜") } else reading("千本桜")
+            assertEquals("$withUniDic", listOf(Ruby("千本桜", "せんぼんざくら")), word.parts)
+            assertEquals("$withUniDic", "senbonzakura", word.romanized)
+            val blade = if (withUniDic) TestUniDic.reading { reading("二枚刃") } else reading("二枚刃")
+            assertEquals("$withUniDic", listOf(Ruby("二枚刃", "にまいば")), blade.parts)
             // 桜 and 刃 after anything else are as they are alone.
             assertEquals("$withUniDic", "はるのさくら", read("春の桜"))
             assertEquals("$withUniDic", "さくらがさく", read("桜が咲く"))

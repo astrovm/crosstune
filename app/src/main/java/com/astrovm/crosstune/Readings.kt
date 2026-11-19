@@ -813,7 +813,7 @@ internal object Readings {
             // A suffix said with a voice after a word it can't be part of is the noun it is alone: いつか日, 一度星.
             val apart = last?.takeIf { standsApart(it, piece) }?.let { alone(piece.surface) }
             // A noun said with a voice after a number and a counter: 千本桜 せんぼんざくら, 二枚刃 にまいば.
-            val afterCount = last != null && piece.surface in COUNTED_VOICED && endsInCount(last, out.getOrNull(out.lastIndex - 1))
+            val afterCount = last?.takeIf { piece.surface in COUNTED_VOICED && endsInCount(it, out.getOrNull(out.lastIndex - 1)) }
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
             when {
@@ -842,7 +842,12 @@ internal object Readings {
                     ((inKatakana(last) && next?.surface == "を") || (last.subkind == "代名詞" && next?.kind == "助詞")) ->
                     out += piece.read("て", "名詞", "一般")
                 apart != null -> out += piece.read(apart, "名詞", "一般")
-                afterCount -> out += piece.read(voiced(piece.kana))
+                afterCount != null -> {
+                    // The number, its counter and the noun are one word: 二枚刃, 千本桜.
+                    val head = listOfNotNull(out.getOrNull(out.lastIndex - 1)?.takeIf { afterCount.surface.length == 1 }, afterCount)
+                    repeat(head.size) { out.removeAt(out.lastIndex) }
+                    out += Piece(head.joinToString("") { it.surface } + piece.surface, head.joinToString("") { it.kana } + voiced(piece.kana), "名詞", "一般", reader = Reader.RULES)
+                }
                 // 等 after a verb, an adjective or a particle can't be a name, ひとし: it's など.
                 piece.surface == "等" && piece.kana == "ひとし" && last != null && (last.kind in INFLECTED || last.kind in GRAMMAR) ->
                     out += piece.read("など", "名詞", "一般")

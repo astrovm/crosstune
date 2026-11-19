@@ -17,7 +17,7 @@
 # A row the app now reads otherwise is a regression, and the command exits 1.
 # A change you mean drops that lock: python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA
 # audit: 3562 lines, 14896 right readings, sha256 4e49d9218ae49dcc
-# rows: 7337
+# rows: 7331
    夜の孤独	夜		よる	夜=よる	yoru|yoru	夜=よる	both
    時代のエク	時代		じだい	時代=じだい	jidai|jidai	時代=じだい	both
    硝子のディ	硝子		がらす	硝子=がらす	garasu|garasu	硝子=がらす	both
@@ -259,7 +259,6 @@
  風が時間ととも	時間		じかん	時間=じかん	jikan|jikan	時間=じかん	both
  風を待ち侘びる	待		ま	待=ま		待=ま	both
  飛び立つ	立		た	立=た		立=た	both
- 騙る二枚刃	二枚刃		にまいば	二=に|枚=まい|刃=ば		二枚刃=にまいば	both
 !」に逢いたいか	逢		あ	逢=あ		逢=あ	both
 !凛と煌く視線は	煌		きらめ	煌=きらめ		煌=きらめ	unidic
 !心に刻んだ夢を	刻		きざ	刻=きざ		刻=きざ	both
@@ -488,12 +487,10 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 いたら大人になっ	大人		おとな	大人=おとな	otona|otona	大人=おとな	both
 いたら歩いていけ	歩		ある	歩=ある		歩=ある	both
 いだけ秘めて見	秘		ひ	秘=ひ		秘=ひ	both
-いちど星にひか	星		ほし	星=ほし	hoshi|hoshi	星=ほし	both
 いった貴方の心	貴方		あなた	貴方=あなた	anata|anata	貴方=あなた	both
 いつか出会える あ	出会		であ	出会=であ		出会=であ	both
 いつか実を結び	実		み	実=み	mi|mi	実=み	both
 いつか恋人に会え	恋人		こいびと	恋人=こいびと	koibito|koibito	恋人=こいびと	both
-いつか日が昇る	日		ひ	日=ひ	hi|hi	日=ひ	ipadic
 いつか日が昇るま	日		ひ	日=ひ	hi|hi	日=ひ	unidic
 いつか本当になる	本当		ほんとう	本当=ほんとう		本当=ほんとう	both
 いつか来るお別れ	来		く	来=く		来=く	both
@@ -503,7 +500,7 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 いつか誰（だれ	誰		だれ	誰=だれ	dare|dare	誰=だれ	both
 いつの日にか	日		ひ	日=ひ	hi|hi	日=ひ	both
 いつの日にかめ	日		ひ	日=ひ	hi|hi	日=ひ	both
-いつの日も こ	日		ひ	日=ひ	hi|hi	日=ひ	both
+いつの日も こ	日		ひ	日=ひ	hi|hi	日=ひ	unidic
 いつの日も..	日		ひ	日=ひ	hi|hi	日=ひ	unidic
 いつの間にかこん	間		ま	間=ま		間=ま	both
 いつの間にかどう	間		ま	間=ま		間=ま	both
@@ -1612,7 +1609,7 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 った 未来のため	未来		みらい	未来=みらい	mirai|mirai	未来=みらい	both
 った 確かな予感	確		たし	確=たし		確=たし	both
 ったら言葉の銃口	言葉		ことば	言葉=ことば	kotoba|kotoba	言葉=ことば	both
-っちの人に	人		ひと	人=ひと	hito|hito	人=ひと	both
+っちの人に	人		ひと	人=ひと	hito|hito	人=ひと	unidic
 っちゃ嫌	嫌		いや	嫌=いや	iya|iya	嫌=いや	both
 って 不思議なもの	不思議		ふしぎ	不思議=ふしぎ		不思議=ふしぎ	both
 って 全て誇れる	全		すべ	全=すべ		全=すべ	both
@@ -3543,7 +3540,7 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 人生一から	人生		じんせい	人生=じんせい	jinsee|jinsei	人生=じんせい	both
 人生一から始	一		いち	一=いち	ichi|ichi	一=いち	both
 人知れず儚い 	人知		ひとし	人知=ひとし		人知=ひとし	both
-人舞う千夜	千夜		せんや	千=せん|夜=や	sen'ya|sen'ya	千夜=せんや	both
+人舞う千夜	千夜		せんや	千=せん|夜=や	sen'ya|sen'ya	千夜=せんや	ipadic
 人間だから	人間		にんげん	人間=にんげん		人間=にんげん	both
 今 ひと	今		いま	今=いま	ima|ima	今=いま	both
 今 痛い	今		いま	今=いま	ima|ima	今=いま	both
@@ -3671,7 +3668,6 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 低体温のフロ	体温		たいおん	体温=たいおん	taion|taion	体温=たいおん	both
 体ごと宙に浮か	宙		ちゅう	宙=ちゅう	chuu|chuu	宙=ちゅう	both
 体中が熱くなって	熱		あつ	熱=あつ		熱=あつ	both
-何かが叶う等……	等		など	等=など	nado|nado	等=など	both
 何かが欲しい	欲		ほ	欲=ほ		欲=ほ	both
 何かを変	何		なに	何=なに	nani|nani	何=なに	both
 何かを変える事が	変		か	変=か		変=か	both
@@ -3846,7 +3842,6 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 僕らを誰が止め	誰		だれ	誰=だれ	dare|dare	誰=だれ	both
 僕ら手を	僕		ぼく	僕=ぼく		僕=ぼく	both
 僕ら手を叩い	手		て	手=て	te|te	手=て	unidic
-僕ら手を叩いて	手		て	手=て	te|te	手=て	ipadic
 僕ら春荒	僕		ぼく	僕=ぼく		僕=ぼく	both
 僕ら春荒れ	春荒		はるあ	春=はる|荒=あ		春荒=はるあ	both
 僕ら春風	僕		ぼく	僕=ぼく		僕=ぼく	both
@@ -4075,7 +4070,6 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 北極の中に	中		なか	中=なか	naka|naka	中=なか	both
 十回の夜を過ご	夜		よる	夜=よる	yoru|yoru	夜=よる	both
 千回の夜を過ご	夜		よる	夜=よる	yoru|yoru	夜=よる	both
-千本桜 夜ニ	千本桜		せんぼんざくら	千本=せんぼん|桜=ざくら		千本桜=せんぼんざくら	both
 午前二時 フミ	午前二時		ごぜんにじ	午前=ごぜん|二=に|時=じ		午前二時=ごぜんにじ	both
 半端なくラ	半端		はんぱ	半端=はんぱ	hanpa|hanpa	半端=はんぱ	both
 単位の傷も	傷		きず	傷=きず	kizu|kizu	傷=きず	both
