@@ -215,10 +215,10 @@ class PlayerScreenTest {
 
     @Test
     fun theListItPlaysFromOpensWhatPlaysNext() {
-        val played = mutableListOf<Long>()
+        val played = mutableListOf<Pair<Long, Int>>()
         val later = mutableListOf<Int>()
-        player(ScreenActions(onPlayerPlayQueued = { played += it }, onPlayerPlayLater = { later += it })) {
-            it.copy(from = "Road trip", upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", "")))
+        player(ScreenActions(onPlayerPlayQueued = { id, session -> played += id to session }, onPlayerPlayLater = { later += it })) {
+            it.copy(from = "Road trip", upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", "")), session = 42)
         }
         val upNext = context.getString(R.string.player_up_next)
         compose.onNodeWithContentDescription("$upNext, Road trip").performClick()
@@ -231,7 +231,7 @@ class PlayerScreenTest {
         none(asked)
         compose.onNodeWithText("Next Song").performClick()
         compose.waitForIdle()
-        assertEquals(listOf(7L), played)
+        assertEquals(listOf(7L to 42), played)
         compose.onNodeWithText("Next Song").assertExists()
         compose.onNode(asked).assertExists()
         // Never played, it stops saying so after a while.
@@ -301,6 +301,25 @@ class PlayerScreenTest {
         compose.mainClock.advanceTimeBy(200)
         compose.waitForIdle()
         none(hasText("After"))
+    }
+
+    @Test
+    fun aReadOnlyStationForgetsTheQueueEvenIfTheNextPlayerHasNotStartedFollowing() {
+        player { it.copy(upNext = listOf(Queued("Old queued song", "Band", 7))) }
+        val upNext = context.getString(R.string.player_up_next)
+        compose.onNodeWithContentDescription(upNext).performClick()
+        compose.onNodeWithText("Old queued song").assertExists()
+
+        showing {
+            it.copy(player = PlayerState(MusicMetadata("Blue 100.7 FM", ""), RadioNotice.PACKAGE, songless = true, stationAppLabel = "Simple Radio"))
+        }
+        compose.onNodeWithContentDescription(context.getString(R.string.open_app_button, "Simple Radio")).assertExists()
+        none(hasContentDescription(upNext))
+        none(hasText("Old queued song"))
+
+        // The next player may replace the station before the screen sees it close. Its app has not reported a queue yet.
+        showing { it.copy(player = PlayerState(MusicMetadata("Another song", "Band"), null)) }
+        none(hasContentDescription(upNext))
     }
 
     @Test
@@ -421,7 +440,7 @@ class PlayerScreenTest {
     fun theRemoteGoesThroughWhatsNextAndTheSleepTimerAndBack() {
         val played = mutableListOf<Long>()
         val asked = mutableListOf<Int?>()
-        player(ScreenActions(onPlayerPlayQueued = { played += it }, onPlayerSleep = { asked += it })) {
+        player(ScreenActions(onPlayerPlayQueued = { id, _ -> played += id }, onPlayerSleep = { asked += it })) {
             it.copy(upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", "")))
         }
         fun press(node: androidx.compose.ui.test.SemanticsNodeInteraction, key: Key) {
