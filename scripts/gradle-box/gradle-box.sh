@@ -66,6 +66,13 @@ containerfile=$here/Containerfile
 # The tag is a hash of the Containerfile. A change builds a new image. A match reuses the old one.
 image_id=$(python3 -c 'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' "$containerfile")
 image=localhost/crosstune-gradle-box:$image_id
+host=$(uname -s)
+platform=()
+if [[ $host == Darwin && $(sysctl -n hw.optional.arm64 2>/dev/null) == 1 ]]; then
+    # Robolectric's Linux native runtime runs on amd64.
+    platform=(--platform linux/amd64)
+    image+=-amd64
+fi
 root=$(git -C "$here" rev-parse --show-toplevel)
 root=$(cd "$root" && pwd -P)
 checkouts=("$root")
@@ -83,14 +90,27 @@ done
 also=(${unique_also[@]+"${unique_also[@]}"})
 common=$(cd "$root" && cd "$(git rev-parse --git-common-dir)" && pwd)
 state=${GRADLE_BOX_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/crosstune-gradle-box}
-sdk=${ANDROID_HOME:-$HOME/Android/Sdk}
+asked_sdk=${GRADLE_BOX_ANDROID_HOME:-${ANDROID_HOME:-}}
+sdk=${asked_sdk:-$HOME/Android/Sdk}
 # Where Android Studio puts it on a Mac.
-[[ -d $sdk || -n ${ANDROID_HOME:-} || ! -d $HOME/Library/Android/sdk ]] || sdk=$HOME/Library/Android/sdk
+[[ -d $sdk || -n $asked_sdk || ! -d $HOME/Library/Android/sdk ]] || sdk=$HOME/Library/Android/sdk
 key=$HOME/.android/debug.keystore
 
 if [[ ! -d $sdk ]]; then
-    echo "gradle-box: no Android SDK at $sdk, set ANDROID_HOME" >&2
+    echo "gradle-box: no Android SDK at $sdk. Check GRADLE_BOX_ANDROID_HOME or ANDROID_HOME." >&2
     exit 1
+fi
+sdk=$(cd "$sdk" && pwd -P)
+if [[ $host == Darwin ]]; then
+    for tool in "$sdk"/build-tools/*/aapt2 "$sdk"/cmake/*/bin/cmake; do
+        [[ -f $tool ]] || continue
+        # A Mach-O SDK tool cannot run inside the Linux container.
+        case $(LC_ALL=C od -An -N4 -tx1 "$tool" | tr -d '[:space:]') in
+            feedface|feedfacf|cefaedfe|cffaedfe|cafebabe|bebafeca|cafebabf|bfbafeca)
+                echo "gradle-box: $tool is a macOS binary. Set GRADLE_BOX_ANDROID_HOME to a Linux Android SDK." >&2
+                exit 1;;
+        esac
+    done
 fi
 
 # flock(1) isn't on a Mac. The lock is on the open file, so it stays with this shell, which keeps the
@@ -123,7 +143,7 @@ ensure_box_image() {
         echo "gradle-box: building $image" >&2
         local start
         start=$(date +%s)
-        nice -n 10 podman build -t "$image" -f "$containerfile" "$(dirname "$containerfile")"
+        nice -n 10 podman build "${platform[@]+"${platform[@]}"}" -t "$image" -f "$containerfile" "$(dirname "$containerfile")"
         echo "gradle-box: image built in $(( $(date +%s) - start ))s" >&2
     fi
     exec 8>&-
@@ -190,7 +210,8 @@ mv "$state/checkouts.$$" "$checkout_ticket"
 echo "$memory" > "$state/ticket.$$"
 mv "$state/ticket.$$" "$ticket"
 exec 7>&-
-trap 'rm -f "$ticket" "$checkout_ticket"' EXIT
+sdk_properties=
+trap 'rm -f "$ticket" "$checkout_ticket"; if [[ -n $sdk_properties ]]; then rm -f "$sdk_properties"; fi' EXIT
 
 # How many asked before this build and aren't done, and the memory they asked for, added up. A ticket
 # with nothing in it is from a checkout whose script doesn't write it: that one asked for 16 or less.
@@ -288,7 +309,7 @@ bytes() {
 if [[ -d $seed/wrapper && ! -d $home/wrapper ]]; then
     copy "$seed/wrapper" "$home/wrapper"
 fi
-box=(--rm --cpus "$cpus" --memory "$limit" --memory-swap "$limit"
+box=(--rm "${platform[@]+"${platform[@]}"}" --cpus "$cpus" --memory "$limit" --memory-swap "$limit"
     -v "$root:$root" -v "$sdk:$sdk:ro" -v "$home:$home"
     -w "$root" -e "ANDROID_HOME=$sdk" -e "GRADLE_USER_HOME=$home")
 if [[ -n ${GRADLE_BOX_MEMORY_HIGH:-} ]]; then
@@ -311,6 +332,15 @@ fi
 for dir in ${also[@]+"${also[@]}"}; do
     box+=(-v "$dir:$dir")
 done
+# AGP reads local.properties before the environment. The checkout may name an SDK, NDK or CMake
+# from the host. The box uses its own SDK settings, including for each extra checkout.
+if [[ $host == Darwin || -n ${GRADLE_BOX_ANDROID_HOME:-} ]]; then
+    for dir in "${checkouts[@]}"; do
+        [[ -f $dir/local.properties ]] || continue
+        [[ -n $sdk_properties ]] || sdk_properties=$(mktemp "$state/local-properties.XXXXXXXX")
+        box+=(-v "$sdk_properties:$dir/local.properties:ro")
+    done
+fi
 # The same key as builds outside the box, so its APKs install over theirs.
 [[ -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
 
