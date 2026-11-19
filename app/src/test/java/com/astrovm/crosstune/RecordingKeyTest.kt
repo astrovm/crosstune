@@ -17,6 +17,9 @@ class RecordingKeyTest {
         assertEquals(album, RecordingKey.asPlayed(opened.copy(recordingId = opaque.recordingId), opaque).instrumentalAlbum)
         val approximate = song.copy(recordingId = "deezer:duration:200000")
         assertNull(RecordingKey.asPlayed(opened.copy(recordingId = approximate.recordingId), approximate).instrumentalAlbum)
+        // A player that names no recording says nothing of the one opened, whatever the opened one names.
+        assertNull(RecordingKey.asPlayed(opened.copy(recordingId = "deezer:123"), song.copy(lengthMs = 200_000)).instrumentalAlbum)
+        assertNull(RecordingKey.asPlayed(opened, song.copy(recordingId = "player:other")).instrumentalAlbum)
     }
 
     @Test fun anAppThatGivesNoLinkLeavesTheOneTheSongWasOpenedBy() {

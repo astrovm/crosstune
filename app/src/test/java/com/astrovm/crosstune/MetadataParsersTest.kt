@@ -961,6 +961,13 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun deezerPlaylistRowsKeepAnInstrumentalAlbumOnlyWhenItsNameSaysSo() {
+        val tracks = """[{"title":"A","album":{"title":"Album (Instrumentals)"}},{"title":"B","album":{"title":"Album"}},{"title":"C"}]"""
+        val listed = checkNotNull(MetadataParsers.deezer(json("""{"title":"Mix","tracks":{"data":$tracks}}"""), ItemType.PLAYLIST)).tracks
+        assertEquals(listOf("Album (Instrumentals)", null, null), listed.map { it.instrumentalAlbum })
+    }
+
+    @Test
     fun tidalSoundCloudAndBandcampPagesLackingPartsGiveWhatIsThere() {
         assertNull(MetadataParsers.tidal("<html></html>", ItemType.TRACK))
         assertNull(MetadataParsers.tidal("<title>  on TIDAL</title>", ItemType.TRACK))

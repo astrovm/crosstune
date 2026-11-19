@@ -134,6 +134,17 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun copiesOnAnOrdinaryAlbumStillCountForARecordingWithNoInstrumentalAlbum() {
+        // No album of instrumentals is named for the song playing, so an ordinary album's name says nothing against a copy.
+        val sung = onAlbum(lasting(timedOnLrclib, 200.0), "Album")
+        val marked = onAlbum(lasting(instrumentalCopy(), 200.0), "Another Album")
+        respond("[$sung,$marked,$marked]")
+        assertEquals("First\nSecond", heldBack(found(song.copy(lengthMs = 200_000))))
+        // Unless the recording playing is named as on an album of instrumentals: then only that album's copies are its own.
+        assertEquals(null, heldBack(found(song.copy(lengthMs = 200_000, instrumentalAlbum = "Album (Instrumentals)"))))
+    }
+
+    @Test
     fun copiesWithNoAlbumNameStillCountByTheirLengthOnAnAlbumOfInstrumentals() {
         val album = "Album (Instrumentals)"
         val sung = onAlbum(lasting(timedOnLrclib, 200.0), "Album")
