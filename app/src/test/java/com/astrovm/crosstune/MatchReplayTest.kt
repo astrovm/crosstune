@@ -67,8 +67,10 @@ class MatchReplayTest {
         return when {
             url.host == "itunes.apple.com" && url.encodedPath == "/search" ->
                 FakeSpotify.html(request, JSONObject().put("results", if (url.queryParameter("country") == "US") song.getJSONArray("us") else JSONArray()).toString())
-            url.host == "itunes.apple.com" -> song.getJSONObject("native").optJSONObject(url.queryParameter("country").orEmpty())?.takeIf { names }
-                ?.let { FakeSpotify.html(request, JSONObject().put("results", JSONArray().put(it)).toString()) }
+            // A lookup in the US store names the song as its search did; the other stores, with their own names, when served.
+            url.host == "itunes.apple.com" -> url.queryParameter("country").orEmpty().let { store ->
+                if (store == "US") song.getJSONArray("us").optJSONObject(0) else song.getJSONObject("native").optJSONObject(store)?.takeIf { names }
+            }?.let { FakeSpotify.html(request, JSONObject().put("results", JSONArray().put(it)).toString()) }
                 ?: FakeSpotify.html(request, """{"results":[]}""")
             url.host == "api.deezer.com" -> FakeSpotify.html(request, JSONObject().put("data", song.getJSONArray("deezer")).toString())
             url.host == "music.youtube.com" -> {

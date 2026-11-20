@@ -39,8 +39,10 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * Version 7 requires an accented Latin row to name the song.
  * Version 8 doesn't take a row in another script that says it's a live, karaoke or other take for the studio song, and
  * can use an artist's video and a matching store album to name a song in another script.
+ * Version 9 learns the US store's name for a song another store found, so YouTube Music's row by Kenshi Yonezu is Lemon
+ * by 米津玄師, where a fan's lyrics video was found.
  */
-internal const val MATCH_VERSION = 8
+internal const val MATCH_VERSION = 9
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -146,14 +148,14 @@ internal class ExactMatcher(
      * A search's answer: what it found, or else, on YouTube, the songs and videos it turned up for
      * ChatGPT to pick from, given its own while, as it takes a few seconds.
      */
-    private class Answer(val url: String?, val toPick: ToPick? = null)
+    private class Answer(val url: String?, val toPick: ToPick? = null, val final: Boolean = true)
 
     private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthsMs: List<Long>)
 
     /**
      * What [target] has for [metadata]. A search that failed or timed out is asked once more when
      * [retrying], e.g. for a queue, where one song in fifty must not be lost to a slow moment; an
-     * answer of "none" is final.
+     * answer of "none" is final, unless what would have proved the song failed: then it's no answer.
      */
     private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false, retrying: Boolean = false): Match {
         repeat(if (retrying) 2 else 1) {
@@ -178,7 +180,10 @@ internal class ExactMatcher(
                     null
                 }
             }
-            if (answer != null) return answer.url?.let(Match::Found) ?: answer.toPick?.let { picked(it) } ?: Match.Missing
+            if (answer != null) {
+                val match = answer.url?.let(Match::Found) ?: answer.toPick?.let { picked(it) } ?: Match.Missing
+                if (match != Match.Missing || answer.final) return match
+            }
         }
         return Match.Failed
     }
@@ -682,7 +687,7 @@ internal class ExactMatcher(
         videos.map(::row).firstOrNull { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
             ?.let { return Answer(watchUrl + it.id) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
-        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
+        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), final = names.complete)
     }
 
     /** Keep a recording note separate when an unbracketed guest credit runs up to it. */
@@ -953,7 +958,9 @@ internal class ExactMatcher(
         val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, japaneseTitle: String?,
         val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?,
         /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
-        val takeOnAlbum: Boolean
+        val takeOnAlbum: Boolean,
+        /** Every store asked answered: when one failed, a name or a length that would have proved a row may be missing. */
+        val complete: Boolean
     ) {
         /** Apple, or Deezer, knows recordings of the song that differ in length: a live take may be one. */
         val severalRecordings = lengthsMs.any { one -> lengthsMs.any { other -> one - other > SAME_SONG_LENGTH_MS } }
@@ -969,14 +976,18 @@ internal class ExactMatcher(
         val titles = mutableSetOf(metadata.title)
         val artists = mutableSetOf(metadata.artist)
         var japaneseTitle: String? = null
-        val found = appleSong(metadata)
+        val asked = Asked()
+        val found = appleSong(metadata, asked)
         val song = found?.song
         // Every edition it has, as the album's take of a song is often a minute longer than the single's, and a
         // music app may have only the single's.
         val lengthsMs = found?.editions.orEmpty().mapNotNull { it.optLong("trackTimeMillis").takeIf { length -> length > 0 } }.toMutableList()
         song?.optLong("trackId")?.takeIf { it > 0 }?.let { id ->
+            // And by the US store's name, in Latin letters as YouTube Music writes it, when another store found it: Japan's
+            // finds Lemon by 米津玄師, which only the US store names Kenshi Yonezu, as YouTube Music does.
+            val stores = NAMING_STORES + listOfNotNull("US".takeIf { it != found.store })
             val elsewhere = coroutineScope {
-                NAMING_STORES.map { store -> async { answering { appleLookup(id, store) } } }.awaitAll()
+                stores.map { store -> async { asked.answer { appleLookup(id, store) } } }.awaitAll()
             }
             japaneseTitle = elsewhere[NAMING_STORES.indexOf("JP")]?.optString("trackName")?.takeIf(String::isNotBlank)
             (listOf(song) + elsewhere.filterNotNull()).forEach {
@@ -985,7 +996,7 @@ internal class ExactMatcher(
             }
         }
         if (lengthsMs.isEmpty()) {
-            answering {
+            asked.answer {
                 searchDeezer(metadata).firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
                     ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
             }?.let(lengthsMs::add)
@@ -998,7 +1009,7 @@ internal class ExactMatcher(
             val collection = it.optString("collectionName")
             liveAlbum(collection) || Takes.saysAnotherTake(collection) != null
         }
-        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum)
+        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum, !asked.failed)
     }
 
     /**
@@ -1008,15 +1019,15 @@ internal class ExactMatcher(
      * at once, for a song named in Chinese, Japanese or Korean, the stores that name it as its own
      * country does, as only Taiwan's credits 光年之外 to 鄧紫棋, where the rest say G.E.M.
      */
-    private suspend fun appleSong(metadata: MusicMetadata): AppleSong? {
+    private suspend fun appleSong(metadata: MusicMetadata, asked: Asked): AppleSong? {
         val stores = listOf(country.takeIf { it.length == 2 }, "US").distinct()
-        stores.firstNotNullOfOrNull { appleSong(metadata, it) }?.let { return it }
+        stores.firstNotNullOfOrNull { appleSong(metadata, it, asked) }?.let { return it }
         if ((metadata.title + metadata.artist).none { Character.UnicodeScript.of(it.code) in EAST_ASIAN }) return null
-        return coroutineScope { (NAMING_STORES - stores.toSet()).map { store -> async { appleSong(metadata, store) } }.awaitAll() }.firstNotNullOfOrNull { it }
+        return coroutineScope { (NAMING_STORES - stores.toSet()).map { store -> async { appleSong(metadata, store, asked) } }.awaitAll() }.firstNotNullOfOrNull { it }
     }
 
-    /** The [song] Apple has, and all its [editions] in the same store: its album's take, its single's, its remasters. */
-    private class AppleSong(val song: JSONObject, val editions: List<JSONObject>)
+    /** The [song] Apple has, and all its [editions] in the same [store], the US one when none is named: its album's take, its single's, its remasters. */
+    private class AppleSong(val song: JSONObject, val editions: List<JSONObject>, val store: String)
 
     private fun linkedAppleEdition(metadata: MusicMetadata, editions: List<JSONObject>): LinkedEdition? {
         val length = metadata.lengthMs ?: return null
@@ -1027,7 +1038,7 @@ internal class ExactMatcher(
         return LinkedEdition(chosen.optLong("trackTimeMillis"), saysLive(chosen.optString("trackName")) || liveAlbum(chosen.optString("collectionName")))
     }
 
-    private suspend fun appleSong(metadata: MusicMetadata, store: String?): AppleSong? = answering {
+    private suspend fun appleSong(metadata: MusicMetadata, store: String?, asked: Asked): AppleSong? = asked.answer {
         val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
             .addQueryParameter("term", searchQuery(metadata))
             .addQueryParameter("entity", "song")
@@ -1043,7 +1054,7 @@ internal class ExactMatcher(
             ?: results.firstOrNull { inLatinLetters(metadata, it) }
             ?: results.firstOrNull { song -> metadata.lengthMs?.let { kotlin.math.abs(song.optLong("trackTimeMillis") - it) <= SAME_RECORDING_LENGTH_MS } != false }
                 ?.takeIf { namedAtHome(metadata, it) }
-        song?.let { AppleSong(it, listOf(it) + results.filter { other -> other !== it && matches(metadata, other.optString("trackName"), other.optString("artistName")) }) }
+        song?.let { AppleSong(it, listOf(it) + results.filter { other -> other !== it && matches(metadata, other.optString("trackName"), other.optString("artistName")) }, store ?: "US") }
     }
 
     /**
@@ -1074,13 +1085,22 @@ internal class ExactMatcher(
         return fetchJson(url.toString()).optJSONArray("results")?.optJSONObject(0)
     }
 
-    /** [lookUp]'s answer, or null when it failed, so one of many asked at once doesn't sink the rest. */
-    private suspend fun <T> answering(lookUp: suspend () -> T?): T? = try {
-        lookUp()
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null
+    /** The stores asked for a song's names, and whether one of them failed to answer. */
+    private class Asked {
+        @Volatile
+        var failed = false
+            private set
+
+        /** [lookUp]'s answer, or null when it failed, so one of many asked at once doesn't sink the rest; which is kept in [failed]. */
+        suspend fun <T> answer(lookUp: suspend () -> T?): T? = try {
+            lookUp()
+        } catch (_: IOException) {
+            failed = true
+            null
+        } catch (_: JSONException) {
+            failed = true
+            null
+        }
     }
 
     /** As long as the song, or one of its editions, give or take what another release of it adds; true when either isn't known. */
