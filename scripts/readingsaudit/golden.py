@@ -22,6 +22,7 @@ GOLDEN_FILE = audit.ROOT / GOLDEN_REL
 # readings. SungReadings.kt matches UtaTen's readings to the line for the shown layers.
 READING_SOURCES = (
     "app/src/main/java/com/astrovm/crosstune/Readings.kt",
+    "app/src/main/java/com/astrovm/crosstune/SmallKanaTokenizer.kt",
     "app/src/main/java/com/astrovm/crosstune/SungReadings.kt",
     "app/src/main/java/com/astrovm/crosstune/PageParts.kt",
     "app/src/main/java/com/astrovm/crosstune/Furigana.kt",
