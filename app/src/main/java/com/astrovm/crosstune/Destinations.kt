@@ -156,6 +156,9 @@ internal class DestinationStore(
     fun hasDefault(all: List<Destination> = allDestinations()): Boolean = find(preferences.getString(KEY_DEFAULT, null), all) != null
 
     fun setDefault(destination: Destination) {
+        val saved = preferences.getString(KEY_DEFAULT, null)
+        // The build standing in for a service chosen before, chosen again, keeps the service's key, so its own app takes over once installed.
+        if (destination is Destination.Service && saved == destination.service.name && find(saved, allDestinations()) == destination) return
         preferences.edit { putString(KEY_DEFAULT, destination.key) }
     }
 

@@ -7227,6 +7227,18 @@ class MainActivityTest {
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.SPOTIFY.packageName })
         launch()
         assertFalse(DestinationStore(prefs()).hasDefault())
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
+
+        // The only one a build patched from YouTube Music: saved as the service, so YouTube Music's own app takes over once there.
+        freshInstall()
+        shadowOf(app.packageManager).removePackage(MusicService.SPOTIFY.packageName)
+        shadowOf(app.packageManager).removePackage(MusicService.DEEZER.packageName)
+        val morphe = "app.morphe.android.apps.youtube.music"
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = morphe })
+        val activity = launch()
+        waitUntil(TIMEOUT_MS) { prefs().getString("default_target", null) != null }
+        assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC, morphe), ViewModelProvider(activity)[MainViewModel::class.java].uiState.defaultDestination)
     }
 
     @Test

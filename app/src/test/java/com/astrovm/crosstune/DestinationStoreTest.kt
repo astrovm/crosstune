@@ -72,17 +72,26 @@ class DestinationStoreTest {
         assertEquals(inMorphe, patched.defaultDestination())
         preferences.edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         assertEquals(inMorphe, patched.defaultDestination())
+        // Chosen again as it stands, it keeps the service's key, as saving the default again in settings does.
+        patched.setDefault(inMorphe)
+        assertEquals("YOUTUBE_MUSIC", preferences.getString("default_target", null))
         // With the own app there too, each build comes right after its service, and plain services keep their own key and app.
         installed += MusicService.YOUTUBE_MUSIC.packageName
         assertEquals(listOf(music, inMorphe), patched.allDestinations().filterIsInstance<Destination.Service>().filter { it.service == MusicService.YOUTUBE_MUSIC })
+        // So the service chosen before is its own app now, and the build is a choice of its own.
+        assertEquals(music, patched.defaultDestination())
+        patched.setDefault(inMorphe)
+        assertEquals(inMorphe.key, preferences.getString("default_target", null))
         installed -= MusicService.YOUTUBE_MUSIC.packageName
         assertEquals(morphe, inMorphe.packageName)
         assertEquals(MusicService.YOUTUBE_MUSIC.packageName, music.packageName)
         assertEquals("YOUTUBE_MUSIC@$morphe", inMorphe.key)
         assertEquals("YOUTUBE_MUSIC", music.key)
 
-        // Chosen as the default and as a rule, it comes back as itself.
+        // Chosen as the default over another app, and as a rule, it comes back as itself.
+        patched.setDefault(deezer)
         patched.setDefault(inMorphe)
+        assertEquals(inMorphe.key, preferences.getString("default_target", null))
         patched.setRule(MusicService.SPOTIFY, inMorphe)
         assertEquals(inMorphe, patched.defaultDestination())
         assertEquals(inMorphe, patched.rule(MusicService.SPOTIFY))

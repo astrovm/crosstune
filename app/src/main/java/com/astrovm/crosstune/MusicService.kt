@@ -187,7 +187,7 @@ internal enum class MusicService(
          */
         fun buildName(packageName: String): String =
             if (packageName == YOUTUBE_TV) "TV"
-            else packageName.substringBefore(".android").substringAfterLast('.').let { BUILD_NAMES[it] ?: it.replaceFirstChar(Char::uppercase) }
+            else packageName.substringBefore(".android").substringAfterLast('.').let { BUILD_NAMES[it] ?: (it.take(1).uppercase() + it.drop(1)) }
 
         private val BUILD_NAMES = mapOf("revanced" to "ReVanced", "rvx" to "RVX")
 

@@ -702,8 +702,9 @@ internal class MainViewModel(
      */
     private fun pickTheOnlyMusicApp() {
         if (uiState.hasDefault) return
-        val only = (uiState.installed - MusicService.YOUTUBE).singleOrNull()?.let(Destination::Service)?.takeIf { it in uiState.destinations } ?: return
-        selectDefault(only)
+        val only = (uiState.installed - MusicService.YOUTUBE).singleOrNull() ?: return
+        // Saved as the service, which a build patched from it stands for while its own app isn't there.
+        if (uiState.destinations.any { it is Destination.Service && it.service == only }) selectDefault(Destination.Service(only))
     }
 
     /** Without an app songs play in yet, the first one picked on a song becomes it. */
