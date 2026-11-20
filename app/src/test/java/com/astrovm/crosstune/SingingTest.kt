@@ -818,15 +818,17 @@ class SingingTest {
     fun pickedUpPartwayWordsKeptFarOffMoveAgainByAWhileHeardALittleFurther() {
         // Kept 17 s off by the first while, the next hears the words two seconds further off, as a take's
         // pace differs: little next to how far off they are, so they move, as a second while agreeing would.
-        val times = listOf(1, 3, 5, 7, 40, 43)
+        val times = listOf(1, 3, 5, 40, 42, 44)
         lyricsTimedFor(null, times)
         var whiles = 0
         singing.answer = { sungAt(times, times.map { if (whiles == 0) 17_000L else 19_000L }).also { whiles++ } }
         openLyrics()
         plays(positionMs = 3_000)
-        waitUntil { singing.hears == 1 && model().uiState.lyricLines[4].timeMs == 57_000L }
+        // Heard from just before the first line it's sung by.
+        passes(1_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 57_000L }
         passes(60_000)
-        waitUntil { singing.hears == 2 && model().uiState.lyricLines[4].timeMs == 59_000L }
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 59_000L }
         assertTrue(model().uiState.lyricsSynced)
     }
 
