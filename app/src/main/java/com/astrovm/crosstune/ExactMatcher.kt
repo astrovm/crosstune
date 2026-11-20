@@ -168,19 +168,7 @@ internal class ExactMatcher(
         repeat(if (retrying) 2 else 1) {
             val answer = withTimeoutOrNull(timeoutMs) {
                 try {
-                    when (target) {
-                        MusicService.APPLE_MUSIC -> Answer(findOnAppleMusic(metadata))
-                        MusicService.DEEZER -> Answer(findOnDeezer(metadata))
-                        MusicService.BANDCAMP -> Answer(findOnBandcamp(metadata))
-                        MusicService.TIDAL -> Answer(findOnTidal(metadata))
-                        MusicService.SPOTIFY -> Answer(findOnSpotify(metadata))
-                        MusicService.SOUNDCLOUD -> Answer(findOnSoundCloud(metadata))
-                        MusicService.AUDIOMACK -> Answer(findOnAudiomack(metadata))
-                        MusicService.QOBUZ -> Answer(findOnQobuz(metadata))
-                        MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
-                        // YouTube.
-                        else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
-                    }
+                    findOn(target, metadata, loosely)
                 } catch (_: IOException) {
                     null
                 } catch (_: JSONException) {
@@ -193,6 +181,20 @@ internal class ExactMatcher(
             }
         }
         return Looked(Match.Failed)
+    }
+
+    private suspend fun findOn(target: MusicService, metadata: MusicMetadata, loosely: Boolean): Answer = when (target) {
+        MusicService.APPLE_MUSIC -> Answer(findOnAppleMusic(metadata))
+        MusicService.DEEZER -> Answer(findOnDeezer(metadata))
+        MusicService.BANDCAMP -> Answer(findOnBandcamp(metadata))
+        MusicService.TIDAL -> Answer(findOnTidal(metadata))
+        MusicService.SPOTIFY -> Answer(findOnSpotify(metadata))
+        MusicService.SOUNDCLOUD -> Answer(findOnSoundCloud(metadata))
+        MusicService.AUDIOMACK -> Answer(findOnAudiomack(metadata))
+        MusicService.QOBUZ -> Answer(findOnQobuz(metadata))
+        MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
+        // YouTube.
+        else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
     }
 
     /** The song ChatGPT picks among the songs, then the videos; no answer in time is no answer. */
