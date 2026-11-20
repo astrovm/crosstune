@@ -96,6 +96,14 @@ class DestinationStoreTest {
         assertEquals(inMorphe, patched.defaultDestination())
         assertEquals(inMorphe, patched.rule(MusicService.SPOTIFY))
         assertTrue(patched.hasDefault())
+        // A rule chosen again as it stands keeps the service's key the same way, for a service's links and a frontend's.
+        patched.setRule(MusicService.DEEZER, music)
+        patched.setRule(MusicService.DEEZER, inMorphe)
+        assertEquals("YOUTUBE_MUSIC", preferences.getString("rule_DEEZER", null))
+        patched.setRule(Frontend.entries.first(), music)
+        patched.setRule(Frontend.entries.first(), inMorphe)
+        assertEquals("YOUTUBE_MUSIC", preferences.getString("rule_frontend_${Frontend.entries.first().name}", null))
+        assertEquals(inMorphe, patched.rule(Frontend.entries.first()))
 
         // Uninstalled, the choice is its service again, not nothing.
         installed.clear()

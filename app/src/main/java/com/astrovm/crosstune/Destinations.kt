@@ -155,21 +155,22 @@ internal class DestinationStore(
     /** False until the user picks a default, e.g. during first-run setup. */
     fun hasDefault(all: List<Destination> = allDestinations()): Boolean = find(preferences.getString(KEY_DEFAULT, null), all) != null
 
-    fun setDefault(destination: Destination) {
-        val saved = preferences.getString(KEY_DEFAULT, null)
-        // The build standing in for a service chosen before, chosen again, keeps the service's key, so its own app takes over once installed.
-        if (destination is Destination.Service && saved == destination.service.name && find(saved, allDestinations()) == destination) return
-        preferences.edit { putString(KEY_DEFAULT, destination.key) }
-    }
+    fun setDefault(destination: Destination) = choose(KEY_DEFAULT, destination)
 
     /** The destination chosen for links from [source], or null to use the default. */
     fun rule(source: MusicService, all: List<Destination> = allDestinations()): Destination? =
         find(preferences.getString(ruleKey(source), null), all)
 
-    fun setRule(source: MusicService, destination: Destination?) {
-        preferences.edit {
-            if (destination == null) remove(ruleKey(source)) else putString(ruleKey(source), destination.key)
-        }
+    fun setRule(source: MusicService, destination: Destination?) = choose(ruleKey(source), destination)
+
+    /**
+     * Saves [destination] under [key], or forgets it when null. The build standing in for a service chosen
+     * before, chosen again, keeps the service's key, so its own app takes over once installed.
+     */
+    private fun choose(key: String, destination: Destination?) {
+        val saved = preferences.getString(key, null)
+        if (destination is Destination.Service && saved == destination.service.name && find(saved, allDestinations()) == destination) return
+        preferences.edit { if (destination == null) remove(key) else putString(key, destination.key) }
     }
 
     // A build that was chosen and is gone falls back to its service, and a service without its own app to the build that stands for it.
@@ -191,11 +192,7 @@ internal class DestinationStore(
     fun rule(frontend: Frontend, all: List<Destination> = allDestinations()): Destination? =
         find(preferences.getString(frontendRuleKey(frontend), null), all)
 
-    fun setRule(frontend: Frontend, destination: Destination?) {
-        preferences.edit {
-            if (destination == null) remove(frontendRuleKey(frontend)) else putString(frontendRuleKey(frontend), destination.key)
-        }
-    }
+    fun setRule(frontend: Frontend, destination: Destination?) = choose(frontendRuleKey(frontend), destination)
 
     private fun frontendRuleKey(frontend: Frontend) = "rule_frontend_${frontend.name}"
 
