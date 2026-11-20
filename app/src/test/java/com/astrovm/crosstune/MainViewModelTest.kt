@@ -35,6 +35,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -489,7 +490,8 @@ class MainViewModelTest {
     private val untitled = Unnamed("com.example.untitled", "Untitled Player", null, said = false)
 
     @Test
-    fun aStationWithoutPlaybackStateDoesNotStartAutomaticRecognition() {
+    fun aStationWithoutPlaybackStateIsNamedByEarAndATapOpensTheSongHeard() {
+        // Simple Radio says only the station's name (Issue #1000): what it plays is heard, as for any station.
         val hears = EarsOnThePhone(heardSong())
         val playback = FakePlayback().apply { aloud = true }
         val model = radioModel(hears, playback, mayCapture = { true })
@@ -497,12 +499,31 @@ class MainViewModelTest {
         model.playingBarInSight(true)
         idle()
         assertEquals(station.name, model.uiState.playingUnnamed?.playing?.name)
-        assertNull(model.uiState.playingUnnamed?.heard)
+        assertEquals(1, hears.asked.size)
+        assertEquals(hears.answers[0], model.uiState.playingUnnamed?.heard)
+        assertNull(model.uiState.playingUnnamed?.following)
+
+        model.openPlayingUnnamed()
+        idle()
+        // The song heard opens, as a Shazam result, not the station's player.
+        assertTrue(model.uiState.linkText.contains("1234"))
+        assertNotEquals(true, model.uiState.player?.stationOnly)
+    }
+
+    @Test
+    fun aStationWithoutPlaybackStateIsNotListenedToOutOfSightOrAfterItStops() {
+        val hears = EarsOnThePhone(heardSong())
+        val playback = FakePlayback().apply { aloud = true }
+        val model = radioModel(hears, playback, mayCapture = { true })
+        playback.unnamed.value = station.copy(reportsState = false)
+        idle()
         assertTrue(hears.asked.isEmpty())
 
-        playback.unnamed.value = station
+        playback.unnamed.value = null
+        model.playingBarInSight(true)
         idle()
-        assertEquals(1, hears.asked.size)
+        assertTrue(hears.asked.isEmpty())
+        assertNull(model.uiState.playingUnnamed)
     }
 
     /** A model on [untitled] playing in [playback], with its bar in sight, and the song [ears] heard first in it shown. */

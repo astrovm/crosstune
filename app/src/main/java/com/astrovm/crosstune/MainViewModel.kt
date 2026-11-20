@@ -1274,9 +1274,10 @@ internal class MainViewModel(
                 showUnnamed()
             }
             // Paused, nothing plays to hear; nor on a speaker it's cast to, which the phone doesn't play.
-            // A stateless station's notification identifies its session, but not whose audio is playing.
+            // A station that says nothing of its state shows only while the phone plays sound and no other app's
+            // session can be playing it, so that sound is taken for the station's, and it's heard too.
             // Moved on, as by a skip, it's listened to again at once, the listen under way stopped.
-            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight && !it.away && it.reportsState } }
+            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight && !it.away } }
             .combine(byEarAgain) { unnamed, again -> unnamed?.let { it to again } }
             .distinctUntilChanged()
             .collectLatest { listened -> if (listened != null) nameByEar(source) }
