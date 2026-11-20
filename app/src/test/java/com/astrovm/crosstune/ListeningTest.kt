@@ -4937,11 +4937,11 @@ class ListeningTest {
         assertTrue(shadowOf(service).isStoppedBySelf)
         assertTrue(windowViews(service).none { (it.layoutParams as WindowManager.LayoutParams).type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY })
         // Crosstune is told, so it doesn't listen along for words that aren't there.
-        composeRule.waitForIdle()
+        composeRule.settle(controller?.get())
         val listens = hearing.listens
         hearing.song("Demo", 4.0)
         Thread.sleep(200)
-        composeRule.waitForIdle()
+        composeRule.settle(controller?.get())
         assertEquals(listens, hearing.listens)
     }
 
