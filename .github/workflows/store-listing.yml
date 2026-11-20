@@ -1,8 +1,9 @@
 name: Store listing
 
 # Sends the Google Play listing (name, descriptions, screenshots, banner) from fastlane/metadata/android, on its
-# own. Each release sends the listing already, in the same edit as the release, so Google reviews both at once.
-# This is for the times between, by hand: each run that isn't a check goes to Google's review. See "Releasing"
+# own. Promote to production sends the listing already, from the release's tag, in the same edit as the release
+# (or the release job does, when PLAY_TRACKS names testing tracks), so Google reviews both at once. This is for
+# the times between, by hand: each run that isn't a check goes to Google's review. See "Releasing"
 # in CONTRIBUTING.md.
 on:
   workflow_dispatch:

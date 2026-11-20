@@ -1,16 +1,17 @@
 name: Promote to production
 
-# Sends a release from open testing on to Google Play's production, with its English release notes, in an edit
-# of its own: production never goes to Google's review with a testing track. The release is the one on the
-# first track of the PLAY_TRACKS repository variable (beta when it isn't set). A version not on that track is
-# refused with an error, and so is one older than production's. So is one with no tag on origin, one while Play
-# has a version code that no tag has, and one whose bundle on Play isn't the App Bundle the Release workflow made:
-# its SHA-256 is in the release's notes. See "Releasing" in CONTRIBUTING.md.
+# Sends a release from internal testing on to Google Play's production, with its English release notes and the
+# store listing in the languages of PLAY_LANGUAGES, in one edit: one review a release. Production never goes to
+# Google's review with a testing track. When the PLAY_TRACKS repository variable names testing tracks, the
+# release comes from the first of them instead, with only its notes, as the listing went to review with them.
+# A version not on that track is refused with an error, and so is one older than production's. So is one with
+# no tag on origin, one while Play has a version code that no tag has, and one whose bundle on Play isn't the
+# App Bundle the Release workflow made: its SHA-256 is in the release's notes. See "Releasing" in CONTRIBUTING.md.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to send to production, as in its tag (e.g. 2.26.0)"
+        description: "Version to send to production, without its tag's v (e.g. 2.26.0)"
         required: true
         type: string
 
@@ -35,28 +36,41 @@ jobs:
       group: google-play
       cancel-in-progress: false
     steps:
-      # Only the tools that talk to Google Play and the English release notes, so none of the app's build code
-      # is checked out where the Play key is. Every version's notes are on main. play.sh lists the tags on origin
-      # itself, with no token.
+      # Only the tools that talk to Google Play, from this workflow's own commit, and the store text from the
+      # release's own tag, so none of the app's build code is checked out where the Play key is. The tag's notes
+      # and listing are the ones of the version production gets, never a later main's. play.sh lists the tags on
+      # origin itself, with no token.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          path: tools
           persist-credentials: false
-          sparse-checkout: |
-            .github/play
-            fastlane/metadata/android/en-US/changelogs
+          sparse-checkout: .github/play
+          sparse-checkout-cone-mode: false
+
+      # A full tag name: a bare one would take a branch of the same name over the tag.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/v${{ inputs.version }}
+          path: release
+          persist-credentials: false
+          sparse-checkout: fastlane/metadata/android
           sparse-checkout-cone-mode: false
 
       # Bundler and fastlane at the versions Gemfile.lock pins and checks, before the key is there: installing a
       # gem runs its own code.
       - name: Install fastlane
-        run: .github/play/play.sh setup
+        run: tools/.github/play/play.sh setup
 
       # The commit asks Google Play to keep a review in progress. While one is, Play refuses it, nothing is
-      # sent, and the job says to re-run it when the review ends.
+      # sent, and the job says to re-run it when the review ends. Go once the release is on internal testing.
       - name: Send the release to production
+        working-directory: release
         env:
           PLAY_KEY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          # Testing tracks, only when the release goes to review there first. None when it isn't set.
           PLAY_TRACKS: ${{ vars.PLAY_TRACKS }}
+          # The listing's languages: folders of fastlane/metadata/android, with spaces between.
+          PLAY_LANGUAGES: ${{ vars.PLAY_LANGUAGES }}
           # Reads the release's notes, which are public. This job has no permissions, so the token can do nothing
           # else: it only lifts the limit on requests with no token.
           GH_TOKEN: ${{ github.token }}
@@ -66,4 +80,4 @@ jobs:
             echo "::notice::PLAY_SERVICE_ACCOUNT_JSON isn't set, so nothing was sent to Google Play"
             exit 0
           fi
-          .github/play/play.sh production "$VERSION"
+          ../tools/.github/play/play.sh production "$VERSION"

@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
-# Sends the app to Google Play with fastlane supply. release.yml, promote.yml and store-listing.yml run it from
-# a checkout with only this folder and the store text, so none of the app's build code is where the Play key is.
+# Sends the app to Google Play with fastlane supply. release.yml, promote.yml and store-listing.yml check out
+# only this folder and the store text, so none of the app's build code is where the Play key is. promote.yml and
+# store-listing.yml take this folder from their own commit, and the store text from the version they send.
 #
-#   play.sh release TAG        Crosstune-TAG.aab to internal testing, which Google doesn't review. Then one edit
-#                              sends that release on to each track in PLAY_TRACKS, with the listing. So each
-#                              release goes to Google's review once.
-#   play.sh production VERSION The release VERSION (2.26.0) on the first track in PLAY_TRACKS goes on to
-#                              production, with its English release notes, in an edit of its own. Any other
-#                              version is refused. Before anything is sent, its tag v2.26.0 has to be on
-#                              origin, no version code on Play may lack a tag (as for a release), and the bundle
-#                              Play has as that version code has to be the one the Release workflow made: its
-#                              SHA-256 is in the GitHub release's notes, "App Bundle SHA-256: `...`".
+#   play.sh release TAG        Crosstune-TAG.aab to internal testing, which Google doesn't review. That's all,
+#                              unless PLAY_TRACKS names testing tracks: then one more edit sends that release on
+#                              to each of them, with the listing, and that edit goes to Google's review.
+#   play.sh production VERSION The release VERSION (2.26.0) on internal testing goes on to production, with its
+#                              English release notes and the listing, in one edit, so one review takes them all.
+#                              When PLAY_TRACKS names testing tracks, it comes from the first of them instead,
+#                              with only its notes, as the listing went there. Any other version is refused.
+#                              Before anything is sent, its tag v2.26.0 has to be on origin, no version code on
+#                              Play may lack a tag (as for a release), and the bundle Play has as that version
+#                              code has to be the one the Release workflow made: its SHA-256 is in the GitHub
+#                              release's notes, "App Bundle SHA-256: `...`".
 #   play.sh listing            The listing alone. CHECK_ONLY=true only asks Play whether it would take it.
 #   play.sh setup              Bundler and the gems Gemfile.lock pins, in a step before the key is there.
 #
-# It reads PLAY_KEY_JSON (the key), PLAY_TRACKS (testing tracks, with commas or spaces between,
-# default beta), PLAY_LANGUAGES (folders of fastlane/metadata/android, default en-US) and CHECK_ONLY, from the
+# It reads PLAY_KEY_JSON (the key), PLAY_TRACKS (testing tracks, with commas or spaces between, none when it's
+# unset or empty), PLAY_LANGUAGES (folders of fastlane/metadata/android, default en-US) and CHECK_ONLY, from the
 # working directory. production reads GITHUB_REPOSITORY, GITHUB_API_URL (GitHub sets both) and, when it is set,
 # GH_TOKEN, which a job with no permissions can pass: the release of a public repository is public, and a token
 # only lifts the limit on requests with no token.
@@ -33,7 +36,7 @@ set -euo pipefail
 
 # A tag with a suffix, as in v2.27.0-rc.1, has the version code of 2.27.0, and Play takes each version code
 # once. Sent to Play, it would keep 2.27.0 itself out. release.yml doesn't run this for one; this is the same
-# check, before the key is used. Testers on Play get each version on the testing tracks.
+# check, before the key is used. Testers on Play get each version on internal testing.
 if [[ "${1:-}" == release && "${2:-}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+[-.][0-9A-Za-z.-]+$ ]]; then
   echo "::notice::$2 has a suffix, so it isn't sent to Google Play:" \
     "Play takes each version code once, and the version without the suffix needs it"
@@ -84,13 +87,10 @@ if [[ -z "${PLAY_KEY_JSON:-}" ]]; then
   exit 1
 fi
 
-# The testing tracks a release goes to. Production has its own step, and internal testing always comes first.
-play_tracks="${PLAY_TRACKS:-beta}"
+# The testing tracks a release goes to after internal testing, none by default. Production has its own step,
+# and internal testing always comes first.
+play_tracks="${PLAY_TRACKS:-}"
 read -r -a tracks <<< "${play_tracks//,/ }"
-if [[ ${#tracks[@]} == 0 ]]; then
-  echo "::error::PLAY_TRACKS names no track"
-  exit 1
-fi
 for track in "${tracks[@]}"; do
   # A form factor's tracks too, such as tv:production.
   if [[ "$track" =~ (^|:)(production|internal)$ || ! "$track" =~ ^[A-Za-z0-9:_-]+$ ]]; then
@@ -205,19 +205,28 @@ copy_listing() {
   done
 }
 
+# The tracks a release or a promotion reads for strays and newer versions: internal testing, then each track in
+# PLAY_TRACKS, with commas between. Production is read too, by play.rb.
+searched() {
+  local IFS=,
+  echo "internal${tracks[*]:+,${tracks[*]}}"
+}
+
 release() {
   local tag="$1" code found known
   code="$(version_code "$tag")"
   known="$(tag_codes)"
   copy_notes "$work/notes" "$code"
-  copy_listing "$work/listing"
+  if [[ ${#tracks[@]} -gt 0 ]]; then
+    copy_listing "$work/listing"
+  fi
 
   # Internal testing first: Google doesn't review it, so testers there get each release in minutes, and the
   # track never sits on an old version. While a review is in progress, Play takes no commit, this one included.
   # A re-run finds the bundle there already. Before anything is sent, Play is asked what internal testing, each
   # track in PLAY_TRACKS and production have, and a newer version on any of them stops the job.
   found=0
-  play plan "$key" "$package" "$(IFS=,; echo "internal,${tracks[*]}")" "$code" "Crosstune-$tag.aab" "$known" ||
+  play plan "$key" "$package" "$(searched)" "$code" "Crosstune-$tag.aab" "$known" ||
     found=$?
   case "$found" in
     0) echo "Internal testing already has this bundle as $code, so it isn't sent again" ;;
@@ -242,6 +251,11 @@ release() {
     *) exit "$found" ;;
   esac
 
+  # With no testing tracks, the release waits on internal testing for promote.yml, which takes the listing
+  # along to production.
+  if [[ ${#tracks[@]} == 0 ]]; then
+    return
+  fi
   # One edit, so Google reviews the release on every testing track and the listing at once. The release
   # carries its notes along.
   local IFS=,
@@ -256,8 +270,16 @@ production() {
   known="$(tag_codes "$tag")"
   fetch_release "$tag" "$work/release.json"
   copy_notes "$work/notes" "$code"
-  play promotion "$key" "$package" "${tracks[0]}" "$(IFS=,; echo "internal,${tracks[*]}")" "$code" "$known" \
-    "$work/release.json" "$tag" "$work/notes"
+  if [[ ${#tracks[@]} -gt 0 ]]; then
+    # The listing went to review with the testing tracks already.
+    play promotion "$key" "$package" "${tracks[0]}" "$(searched)" "$code" "$known" \
+      "$work/release.json" "$tag" "$work/notes"
+  else
+    # The listing goes with the release, in one folder, as supply reads one folder an edit.
+    copy_listing "$work/notes"
+    play promotion "$key" "$package" internal internal "$code" "$known" \
+      "$work/release.json" "$tag" "$work/notes" "$work/notes"
+  fi
 }
 
 listing() {
