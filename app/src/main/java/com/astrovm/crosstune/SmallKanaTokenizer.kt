@@ -42,11 +42,11 @@ internal class SmallKanaTokenizer(private val words: () -> Map<String, String>) 
         if (tokens.none { wrongStart(text, it.position, it.isKnown, it.surface) }) return tokens
         // Kuromoji reads a line in parts that each end at a 。 or 、, so each part is searched again alone.
         var from = 0
-        return text.split(PART_END).filter(String::isNotEmpty).flatMap { part ->
+        return (text.indices.filter { text[it] in "。、" }.map { it + 1 } + text.length).distinct().flatMap { end ->
             val at = from
-            from += part.length
-            val own = tokens.filter { it.position in at until from }
-            if (own.none { wrongStart(text, it.position, it.isKnown, it.surface) }) own else searched(part, at) ?: own
+            from = end
+            val own = tokens.filter { it.position in at until end }
+            if (own.none { wrongStart(text, it.position, it.isKnown, it.surface) }) own else searched(text.substring(at, end), at) ?: own
         }
     }
 
@@ -123,8 +123,6 @@ internal class SmallKanaTokenizer(private val words: () -> Map<String, String>) 
         Token(wordId, surface, ViterbiNode.Type.KNOWN, position, dictionary)
 
     private companion object {
-        val PART_END = Regex("(?<=[。、])")
-
         const val SMALL_KANA = "ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ"
 
         fun smallAfterKana(text: String, at: Int) = at in 1 until text.length && text[at] in SMALL_KANA && Readings.isKana(text[at - 1])
