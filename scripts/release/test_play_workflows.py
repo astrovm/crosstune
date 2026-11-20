@@ -122,7 +122,7 @@ class PlayWorkflowsTest(unittest.TestCase):
         triggers = text[text.index("\non:\n"):text.index("\npermissions:")]
         self.assertEqual(["workflow_dispatch:"], re.findall(r"^  (\S+:)$", triggers, re.MULTILINE))
         self.assertIn("version:", triggers)
-        self.assertIn('.github/play/play.sh production "$VERSION"', text)
+        self.assertIn('../tools/.github/play/play.sh production "$VERSION"', text)
 
     def test_a_release_names_no_track_itself(self):
         job = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))["play"]
@@ -134,8 +134,22 @@ class PlayWorkflowsTest(unittest.TestCase):
         # reads the listing's languages, as the release job does.
         job = jobs((WORKFLOWS / "promote.yml").read_text(encoding="utf-8"))["production"]
         self.assertIn("PLAY_LANGUAGES: ${{ vars.PLAY_LANGUAGES }}", job)
-        checkout = job.split("uses: actions/checkout@")[1].split("\n      - ")[0]
-        self.assertIn("            fastlane/metadata/android\n", checkout)
+        checkouts = [part.split("\n      - ")[0] for part in job.split("uses: actions/checkout@")[1:]]
+        self.assertEqual(2, len(checkouts))
+        tools, release = checkouts
+        self.assertIn("sparse-checkout: .github/play\n", tools)
+        self.assertNotIn("fastlane", tools)
+
+    def test_promote_sends_the_notes_and_listing_of_the_tag_it_ships(self):
+        # The listing and notes come from the release's own tag, never from main as it is when someone runs
+        # promote: main may already describe features the version doesn't have.
+        job = jobs((WORKFLOWS / "promote.yml").read_text(encoding="utf-8"))["production"]
+        release = job.split("uses: actions/checkout@")[2].split("\n      - ")[0]
+        self.assertIn("ref: v${{ inputs.version }}\n", release)
+        self.assertIn("path: release\n", release)
+        self.assertIn("sparse-checkout: fastlane/metadata/android\n", release)
+        send = job[job.index("- name: Send the release to production"):]
+        self.assertIn("working-directory: release\n", send)
 
     def test_no_testing_track_is_the_default(self):
         # Unset or empty, PLAY_TRACKS names no testing track: a release stops at internal testing, and goes to
