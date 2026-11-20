@@ -2165,10 +2165,13 @@ class PracticeCardsTest {
         waitForThePlayer("the player takes over")
     }
 
+    // Issue #937: TIDAL without an account stops at its preview's end, 29952 ms, on a line at 43 s. It's left out only for
+    // lines it can't reach, from there on in that song: a line at 12 s, in that song or another, still tries it first.
     @Test
-    fun stopShortDoesNotExcludeEarlierLinesOrOtherSongs() {
+    fun stopShortLeavesTheAppOutOnlyPastWhereItStopped() {
         val tidal = MusicService.TIDAL.packageName
         replays(tidal, start = 43_270, from = 65, fromPlaying = true, Said(117, 29_952), Said(168, 29_952))
+        val first = MusicMetadata(line().title, line().artist)
         val cards = cards()
         cards.start(null, before = null)
         waitForThePlayer("the first line falls back")
@@ -2180,12 +2183,19 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitFor("the earlier line is prepared") { playback.seeks.contains(12_000L) && practice?.sound == LineSound.PLAYED }
         cards.stop()
-        val other = line("Other", start = 13_000).copy(title = "Other song")
+        val other = line("Other", start = 12_000).copy(title = "Other song")
         playback.sessionSongs[0] = MusicMetadata(other.title, other.artist)
         shows { it.copy(savedLines = listOf(other)) }
         cards.start(null, before = null)
-        waitFor("the other song is prepared") { playback.seeks.contains(13_000L) && practice?.sound == LineSound.PLAYED }
-        assertEquals(listOf(43_270L, 12_000L, 13_000L), playback.seeks.toList())
+        waitFor("the other song is prepared") { playback.seeks.size == 3 && practice?.sound == LineSound.PLAYED }
+        cards.stop()
+        // Back in the first song, a line from a little before where TIDAL stopped on can't be reached in it: the player plays it.
+        playback.sessionSongs[0] = first
+        val shown = player.shown.size
+        shows { it.copy(savedLines = listOf(line("Later", start = 29_952 - LineWindow.SEEK_SLACK_MS))) }
+        cards.start(null, before = null)
+        waitFor("the later line falls back") { player.shown.size > shown }
+        assertEquals(listOf(43_270L, 12_000L, 12_000L), playback.seeks.toList())
         assertNoAppBroughtUp()
     }
 
