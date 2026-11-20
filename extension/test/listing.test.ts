@@ -33,7 +33,10 @@ test("each store listing names every site the lyrics are looked for on", () => {
 test("the stores' answers, README and every privacy page name them too", () => {
   namesEverySite(read("extension/store/README.md"), "extension/store/README.md");
   const readme = read("README.md");
-  namesEverySite(readme.slice(readme.indexOf("The [browser extension]")), "README's Privacy");
+  const privacy = readme.slice(readme.indexOf("## Privacy"));
+  const extension = privacy.indexOf("The [browser extension]");
+  assert.ok(extension >= 0, "README's Privacy has no line on the browser extension");
+  namesEverySite(privacy.slice(extension), "README's Privacy");
   const strings = readdirSync(new URL("site/strings/", repo)).filter((name) => name.endsWith(".json"));
   assert.equal(strings.length, 16);
   for (const name of strings) {
