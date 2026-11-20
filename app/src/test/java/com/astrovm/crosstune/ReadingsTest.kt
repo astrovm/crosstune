@@ -537,7 +537,7 @@ class ReadingsTest {
         for ((line, expected) in lines) assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
         // A word JMdict has in kanji is read so, as IPADIC reads the kanji.
         assertEquals(listOf(Reader.JMDICT), Readings.words("あのじゅぎょう", Script.JAPANESE).last().by)
-        for (line in lines.keys + listOf("これじゃひとりぼっち", "うっせぇうっせぇうっせぇわ", "クソだりぃな", "きょねんのゆめ")) {
+        for (line in lines.keys + listOf("これじゃひとりぼっち", "うっせぇうっせぇうっせぇわ", "クソだりぃな", "きょねんのゆめ", "まばたきみたいないっしゅん")) {
             for (words in listOf(Readings.words(line, Script.JAPANESE), TestUniDic.reading { Readings.words(line, Script.JAPANESE) })) {
                 assertTrue("$line: $words", words.none { it.text.first() in "ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ" })
             }

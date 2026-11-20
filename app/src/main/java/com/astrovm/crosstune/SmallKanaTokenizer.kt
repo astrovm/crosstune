@@ -41,23 +41,25 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     fun tokenize(text: String): List<Token> {
         val tokens = plain.tokenize(text)
         val out = ArrayList<Token>(tokens.size)
-        var first = 0
-        while (first < tokens.size) {
+        var next = 0
+        for (wrong in tokens.indices.filter { wrongStart(text, tokens[it]) }) {
+            if (wrong < next) continue
             // A word that starts wrong is searched again with the word before it, as the kana it starts on is said
-            // with that word's last; words that start wrong one after another are searched again together.
-            var last = first
-            while (last + 1 < tokens.size && wrongStart(text, tokens[last + 1])) last++
-            if (last == first) {
-                out += tokens[first++]
-                continue
-            }
-            // A small っ at the end doubles the kana after it, so that word is searched again with it, にっ and き.
+            // with that word's last, and with the one before that while that one starts on a small kana too, っし in
+            // ないっしゅん, so the search knows what kana it comes after.
+            var first = wrong - 1
+            while (first > next && smallAfterKana(text, tokens[first].position)) first--
+            // Words that start wrong one after another are searched again together, and a small っ at the end doubles
+            // the kana after it, so that word is searched again with it, にっ and き.
+            var last = wrong
             while (last + 1 < tokens.size && (tokens[last].surface.last() in "っッ" || wrongStart(text, tokens[last + 1]))) last++
+            out += tokens.subList(next, first)
             val from = tokens[first].position
             val to = tokens[last].position + tokens[last].surface.length
             out += searched(text.substring(from, to), from) ?: tokens.subList(first, last + 1)
-            first = last + 1
+            next = last + 1
         }
+        out += tokens.subList(next, tokens.size)
         return out
     }
 
