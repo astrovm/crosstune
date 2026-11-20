@@ -98,6 +98,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.NonRestartableComposable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -537,8 +538,12 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     LaunchedEffect(screen) { if (screen != Screen.FIX_STEP) Screen.entries.filter { it != screen }.forEach { kept.removeState(it.name) } }
     val barFocus = remember { BarFocus() }
     // Back on a screen, with a remote, it goes back to what it was on there, once the screen left is gone.
-    val focuses = remember { Screen.entries.associateWith { ScreenFocus() } }
+    val focuses = remember { ScreenFocuses(screen) }
+    // Noted as the app turns to another screen, while the remote is still on what it was on.
+    SideEffect { focuses.turnTo(screen) }
     var anyFocused by remember { mutableStateOf(false) }
+    // A dialog or sheet shown keeps the remote, as one that shows again on the screen come back to does.
+    var overlaid by remember { mutableStateOf(false) }
     var settled by remember { mutableStateOf(screen) }
     val remote by rememberUpdatedState(state.phone == Phone.TV)
     LaunchedEffect(moving.currentState) {
@@ -548,10 +553,10 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         if (!remote || now.depth < 0 || from.depth <= now.depth) return@LaunchedEffect
         withFrameNanos {}
         // Unless the screen took it for itself, as the bar does from a station's player.
-        if (!anyFocused) focuses.getValue(now).restore()
+        if (!anyFocused && !overlaid) focuses.of(now).restore()
     }
     CompositionLocalProvider(LocalCovers provides actions.covers, LocalBarFocus provides barFocus) {
-    WithOverlays(inside = state.phone == Phone.TV) {
+    WithOverlays(inside = state.phone == Phone.TV, onOverlaid = { overlaid = it }) {
     CompositionLocalProvider(LocalLayerSwipe provides layers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
         modifier = Modifier.onFocusChanged { anyFocused = it.hasFocus },
@@ -565,7 +570,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             else slideAlong(forward = targetState.depth > initialState.depth)
         }
     ) { shown ->
-        CompositionLocalProvider(LocalScreenFocus provides focuses.getValue(shown)) {
+        CompositionLocalProvider(LocalScreenFocus provides focuses.of(shown)) {
         kept.SaveableStateProvider(shown.name) {
             // if/else rather than an exhaustive when, which compiles an unreachable branch into composables.
             if (shown == Screen.FIX_STEP) {
@@ -775,7 +780,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         titleLeading = { AppLogo() },
         actions = {
             // The words of what's playing, which open over everything rather than look a link up, so they're not in the field.
-            IconButton(onClick = actions.onLyricsNow, enabled = !state.isLoading && !state.isMatching) {
+            IconButton(onClick = actions.onLyricsNow, enabled = !state.isLoading && !state.isMatching, modifier = Modifier.returnsFocus(Screen.LYRICS)) {
                 AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.tile_lyrics_label))
             }
             // Saved lines, a tap from what there is to practise, with how many are due.

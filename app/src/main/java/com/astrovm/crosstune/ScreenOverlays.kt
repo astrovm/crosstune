@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -73,11 +74,16 @@ private class Overlay(val content: State<@Composable () -> Unit>, val opener: Fo
     val focus = FocusRequester()
 }
 
-/** Draws [content], the screen, with room over it for [ScreenAlert]s and [ScreenSheet]s, where [inside]. */
+/**
+ * Draws [content], the screen, with room over it for [ScreenAlert]s and [ScreenSheet]s, where [inside];
+ * [onOverlaid] is told whether any is shown, as that changes.
+ */
 @Composable
-internal fun WithOverlays(inside: Boolean, content: @Composable () -> Unit) {
+internal fun WithOverlays(inside: Boolean, onOverlaid: ((Boolean) -> Unit)? = null, content: @Composable () -> Unit) {
     if (!inside) return content()
     val overlays = remember { Overlays(FocusRequester()) }
+    val overlaid = overlays.shown.isNotEmpty()
+    if (onOverlaid != null) SideEffect { onOverlaid(overlaid) }
     CompositionLocalProvider(LocalOverlays provides overlays) {
         Box {
             Box(Modifier.focusRequester(overlays.screen).focusGroup()) { content() }

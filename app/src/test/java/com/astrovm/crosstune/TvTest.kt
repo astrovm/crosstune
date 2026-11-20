@@ -657,6 +657,45 @@ class TvTest {
     }
 
     @Test
+    fun onATvBackLandsOnTheWordsButtonThatOpenedAScreenNotOnSettingsPassedBefore() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasContentDescription(string(R.string.tile_lyrics_label)))
+        settings().requestFocus()
+        words.requestFocus()
+        // As the words of what's playing open a screen, by way of listening or the microphone's steps.
+        composeRule.runOnIdle { model().openFixes() }
+        val onMain = { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitUntil(5_000) { !onMain() }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { onMain() }
+        composeRule.waitForIdle()
+        words.assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackFromPracticeLandsOnTheRowThatStartedIt() {
+        prefs().edit().putString("saved_lines", """[{"text":"夜の空","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val practice = composeRule.onNode(hasContentDescription(string(R.string.saved_practice), substring = true) and hasClickAction())
+        practice.requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        val all = hasText(string(R.string.practice_all_songs)) and hasClickAction()
+        val song = hasText("Demo") and hasClickAction()
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(all).fetchSemanticsNodes().isNotEmpty() }
+        for (row in listOf(song, all)) {
+            composeRule.onNode(row).requestFocus()
+            pressOnFocused(Key.DirectionCenter)
+            composeRule.waitUntil(5_000) { model().uiState.practice != null && composeRule.onAllNodes(all).fetchSemanticsNodes().isEmpty() }
+            checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+            composeRule.waitUntil(5_000) { composeRule.onAllNodes(all).fetchSemanticsNodes().isNotEmpty() }
+            composeRule.waitForIdle()
+            composeRule.onNode(row).assertIsFocused()
+        }
+    }
+
+    @Test
     fun onATvBackFromTheStepsASettingOpensLandsOnThatSetting() {
         settingsByRemote()
         val follow = composeRule.onNode(hasText(string(R.string.setting_lyrics_follow)))
