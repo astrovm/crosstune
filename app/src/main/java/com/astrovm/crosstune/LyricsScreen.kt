@@ -1665,9 +1665,17 @@ internal fun Following.ahead(ms: Long) = copy(clock = clock.copy(positionMs = cl
  */
 @Composable
 internal fun rememberSungLine(lines: List<LyricLine>, following: Following?, byEar: Boolean): Int {
-    fun sung() = following?.takeIf { it.timingKnown }?.let { SyncedLyrics.indexAt(lines, it.clock.positionAt(SystemClock.elapsedRealtime()), byEar) } ?: -1
+    fun position() = following?.takeIf { it.timingKnown }?.clock?.positionAt(SystemClock.elapsedRealtime())
+    fun sung() = position()?.let { SyncedLyrics.indexAt(lines, it, byEar) } ?: -1
+    val followed = remember { arrayOfNulls<Following>(1) }
     val active by produceState(sung(), following, lines, byEar) {
-        value = sung()
+        // Lines put a little later as the singing's heard would light the one before again for a moment,
+        // back and forth: the line lit stays lit till its new time comes, as it's that close. Moved by
+        // the player, as a line tapped, it's lit at once.
+        val lit = value
+        val moved = followed[0] == following
+        followed[0] = following
+        value = sung().takeUnless { moved && it == lit - 1 && lines.getOrNull(lit).let { line -> line != null && position()?.let { line.timeMs - it < MainViewModel.WORDS_OFF_MS } == true } } ?: lit
         val changes = SyncedLyrics.changes(lines, byEar)
         while (following?.timingKnown == true) {
             delay(following.clock.untilMs(SystemClock.elapsedRealtime()) { SyncedLyrics.nextAfter(changes, it) } ?: break)

@@ -2438,6 +2438,8 @@ internal class MainViewModel(
     /** Whether no singing was heard where the words are timed, and none found yet: no line is shown sung till it is. */
     private var unheard = false
     private var heardThisTime = false
+    /** How far off a whole while heard last put the words, far enough off to say they're off themselves, with the app's clock unsure: they move once another while agrees. */
+    private var farOffMs: Long? = null
     /** Whether the words are being lined up to the singing, through the song, with the app's clock sure; lines heard so far stay till it's done. */
     private var liningUp = false
     /** Whether the speech model, offered to be fetched by hand, was turned down; it isn't offered again till Crosstune opens again. */
@@ -3329,7 +3331,7 @@ internal class MainViewModel(
             }
             singingTries = 0
             TimingLog.note("sung $shift off, clock sure $clockSure, first $first")
-            if (!clockSure) placeThisTime(song, sung, clock, shown, shift)
+            if (!clockSure) placeThisTime(song, sung, clock, shown, shift, whole = true)
             else if (placeForGood(song, lines, sung, clock, shown, shift, first)) return
         }
     }
@@ -3373,7 +3375,7 @@ internal class MainViewModel(
     /** The lines heard in [sung] put where they're sung, [shift] off as a whole, before the rest of the while is in. */
     private fun placeHeard(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long) {
         doubtTiming(false)
-        if (!clockSure) placeThisTime(song, sung, clock, shown, shift)
+        if (!clockSure) placeThisTime(song, sung, clock, shown, shift, whole = false)
         else placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L))
     }
 
@@ -3419,12 +3421,21 @@ internal class MainViewModel(
      * Heard [WORDS_OFF_MS] off or more, it's the words that are off, not the clock, so what's heard
      * this time is kept, and they start where they're sung next time; still unsure, it isn't done.
      * That's a problem found too: a song is mostly picked up playing, the words opened after it started.
+     * But in a music app, one while alone can be matched to the wrong lines, as a chorus heard seconds
+     * from where it's sung, or a line the speech model hears over and over: words timed for another take
+     * are off all through the song, so they move that far only once a later while, [whole] or its first
+     * seconds, is heard about as far off. Till then they stay where they are, even after lines heard near.
      */
-    private fun placeThisTime(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long) {
+    private fun placeThisTime(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long, whole: Boolean) {
         heardThisTime = true
         val placed = SungAlignment.linesMs(sung, clock::positionAt, shown, shift).ifEmpty { mapOf(shown.indexOfFirst { it.timeMs + shift >= clock.positionAt(sung.startedAtMs) }.coerceAtLeast(0) to null) }
         val heard = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
-        if (abs(shift) >= WORDS_OFF_MS) {
+        val far = abs(shift) >= WORDS_OFF_MS
+        // A video's words are often seconds off, timed for the release without its intro: one while says so.
+        val agreed = far && (appFollowing?.video == true || farOffMs?.let { abs(it - shift) < SUNG_OFF_MS } == true)
+        if (whole) farOffMs = shift.takeIf { far && !agreed }
+        if (far) {
+            if (!agreed) return
             // The words kept so for the first time are a problem found, as those heard off with the clock sure are.
             val first = syncPoints.isEmpty()
             setSync(song, heard)
@@ -3495,6 +3506,7 @@ internal class MainViewModel(
             // Each time it's played again, the singing may be heard a few more times.
             if (!clockSure || heardPoints.isNotEmpty()) {
                 heardThisTime = false
+                farOffMs = null
                 singingTries = 0
             }
             clockSure = true
@@ -3502,6 +3514,7 @@ internal class MainViewModel(
         } else if (last == null || abs(clock.positionAt(at) - last.positionAt(at)) > SAME_CLOCK_MS) {
             clockSure = false
             heardThisTime = false
+            farOffMs = null
             singingTries = 0
         }
     }
@@ -3727,6 +3740,7 @@ internal class MainViewModel(
         lastAppClock = null
         forgetHeard()
         heardThisTime = false
+        farOffMs = null
         liningUp = false
         appFollowing = null
         playedIn = null
