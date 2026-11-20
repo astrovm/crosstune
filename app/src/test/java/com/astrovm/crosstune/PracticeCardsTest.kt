@@ -2189,8 +2189,14 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitFor("the other song is prepared") { playback.seeks.size == 3 && practice?.sound == LineSound.PLAYED }
         cards.stop()
-        // Back in the first song, a line from a little before where TIDAL stopped on can't be reached in it: the player plays it.
+        // Back in the first song, a line that starts before where TIDAL stopped but goes on past it would be cut there: the player plays it.
         playback.sessionSongs[0] = first
+        val crossing = player.shown.size
+        shows { it.copy(savedLines = listOf(line("Crossing", start = 26_000))) }
+        cards.start(null, before = null)
+        waitFor("the line going past the stop falls back") { player.shown.size > crossing }
+        cards.stop()
+        // A line from a little before where TIDAL stopped on can't be reached in it either.
         val shown = player.shown.size
         shows { it.copy(savedLines = listOf(line("Later", start = 29_952 - LineWindow.SEEK_SLACK_MS))) }
         cards.start(null, before = null)

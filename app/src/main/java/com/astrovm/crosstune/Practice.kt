@@ -161,8 +161,8 @@ internal class PracticeCards(
 
     /**
      * Where each app said it stopped short, in each song, by package: TIDAL without an account at its 30 s preview's end.
-     * Lines from there on can't be reached in it, so it's left out of them until Crosstune starts again. Lines before that
-     * place, and other songs, still try it first (Issue #937).
+     * Lines that go on past there can't be played out in it, so it's left out of them until Crosstune starts again. Lines
+     * that end before that place, and other songs, still try it first (Issue #937).
      */
     private val stoppedAt = mutableMapOf<Pair<String, MusicMetadata>, Long>()
 
@@ -291,10 +291,14 @@ internal class PracticeCards(
         return candidates
     }
 
-    /** False when [app] stopped short in [song] before, at or a little before where [line] starts, see [stoppedAt]. */
+    /**
+     * False when [app] stopped short in [song] before [line] ends, see [stoppedAt]: it would stop inside the line, and the
+     * line be heard cut and then again from the player. So is a line from a little before where it stopped, as apps round.
+     */
     private fun reaches(app: String?, song: MusicMetadata, state: Following?, line: SavedLine): Boolean {
         val stop = app?.let { stoppedAt[it to song] } ?: return true
-        return LineWindow.of(line, lead = if (state?.video == true) line.leadMs else 0L).start < stop - LineWindow.SEEK_SLACK_MS
+        val window = LineWindow.of(line, lead = if (state?.video == true) line.leadMs else 0L)
+        return window.start < stop - LineWindow.SEEK_SLACK_MS && window.end <= stop
     }
 
     /** Notes that [app] stopped short at [positionMs] in [song], keeping the earliest such place. */
