@@ -209,6 +209,28 @@ class TvPlayTest {
     }
 
     @Test
+    fun backOnTheCoversMainScreenTheBarShowsWhatYouTubePlaysAndOpensItsPlayer() {
+        launch()
+        val floating = playCovered()
+        // YouTube starts once it's covered, with Crosstune itself out of sight behind it (Issue #1105).
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, app = MusicService.YOUTUBE_TV)
+        playing()
+        waitUntil { shown("Demo one") }
+        // The bar has a pause button too, so the player is told by its cover.
+        fun onPlayer() = composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty()
+        pressBack(floating.get())
+        waitUntil { onPlayer() }
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        waitUntil { composeRule.onAllNodes(hasTestTag(NOW_PLAYING_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(shown("Demo"))
+        // Selected with the remote, it opens the player again, still over YouTube.
+        composeRule.onNode(hasTestTag(NOW_PLAYING_TAG)).performSemanticsAction(SemanticsActions.OnClick)
+        waitUntil { onPlayer() }
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
+    }
+
+    @Test
     fun backBeforeTheWordsOpenGoesBackInCrosstuneToo() {
         launch()
         val floating = playCovered()
