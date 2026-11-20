@@ -1143,6 +1143,82 @@ class ReadingsTest {
     }
 
     @Test
+    fun aKeptFixIsMadeAtTheOnePlaceItWasKeptFor() {
+        val twice = Readings.of(listOf("本と本"), Script.JAPANESE).single()
+        // Not copied to the other 本, though ours read both alike.
+        val (once, none) = Readings.correctedWhereKept(twice, listOf(ReadingFix(0, "本", "ぼん", Reader.SUNG)))
+        assertEquals(listOf(Ruby("本", "ぼん", Reader.SUNG), Ruby("と"), Ruby("本", "ほん")), once.parts)
+        assertEquals(emptyList<Int>(), none.map { it.start })
+        // The next 本 for the next fix, and never the same one twice.
+        val both = Readings.correctedWhereKept(twice, listOf(ReadingFix(0, "本", "ぼん", Reader.SUNG), ReadingFix(0, "本", "ぽん", Reader.SUNG))).first
+        assertEquals("ぼんとぽん", both.reading)
+        assertEquals(twice, Readings.correctedWhereKept(twice, emptyList()).first)
+        // Where ours join the stretch's words, it's one part; where it cuts through one of ours, it's left, and said where.
+        val joined = Readings.of(listOf("三本の花"), Script.JAPANESE).single()
+        assertEquals(Ruby("三本", "さんぼん"), joined.parts.first())
+        val (made, cut) = Readings.correctedWhereKept(joined, listOf(ReadingFix(0, "三本", "さんぽん", Reader.SUNG)))
+        assertEquals(Ruby("三本", "さんぽん", Reader.SUNG), made.parts.first())
+        assertEquals(emptyList<Int>(), cut.map { it.start })
+        val (same, left) = Readings.correctedWhereKept(joined, listOf(ReadingFix(0, "本", "ぽん", Reader.SUNG)))
+        assertEquals(joined, same)
+        assertEquals(listOf(1 to 2), left.map { it.start to it.end })
+        assertEquals(listOf("ぽん"), left.map { it.fix.reading })
+    }
+
+
+    @Test
+    fun aKeptFixThatCutsThroughAPartIsLeftAloneWhenThePartAlreadyReadsItSo() {
+        fun line(vararg parts: Ruby) = LineReading(parts.toList(), parts.joinToString("") { it.reading ?: it.text }, "")
+        fun cut(parts: List<Ruby>, kanji: String, reading: String) =
+            Readings.correctedWhereKept(line(*parts.toTypedArray()), listOf(ReadingFix(0, kanji, reading, Reader.SUNG)))
+        // The end of a run of kanji: 三本 さんぼん ends in ぼん, so there is nothing to keep and nothing to make.
+        val joined = listOf(Ruby("三本", "さんぼん"), Ruby("の"), Ruby("花", "はな"))
+        val (agreed, none) = cut(joined, "本", "ぼん")
+        assertEquals(joined, agreed.parts)
+        assertEquals(emptyList<Int>(), none.map { it.start })
+        // The start of one: 三 さん begins 三本 さんぼん. Katakana says the same.
+        assertEquals(emptyList<Int>(), cut(joined, "三", "サン").second.map { it.start })
+        // Kana among the kanji give the place too: 食べ物 たべもの, 物 at the end of its run.
+        assertEquals(emptyList<Int>(), cut(listOf(Ruby("食べ物", "たべもの")), "物", "もの").second.map { it.start })
+        // The fix is the run itself, with kana around it: 食 た in 食べる.
+        assertEquals(emptyList<Int>(), cut(listOf(Ruby("食べる", "たべる")), "食", "た").second.map { it.start })
+        // The place counts from the start of the part, not of the line: 三本 is the second part here.
+        val later = listOf(Ruby("花", "はな"), Ruby("の"), Ruby("三本", "さんぼん"))
+        assertEquals(emptyList<Int>(), cut(later, "本", "ぼん").second.map { it.start })
+        assertEquals(listOf(3), cut(later, "本", "ぽん").second.map { it.start })
+        assertEquals(emptyList<Int>(), cut(later, "三", "さん").second.map { it.start })
+        // A reading the part doesn't hold at that place is the card's to keep, as it was: ぽん is not at the end of さんぼん.
+        val (same, left) = cut(joined, "本", "ぽん")
+        assertEquals(line(*joined.toTypedArray()), same)
+        assertEquals(listOf(1 to 2), left.map { it.start to it.end })
+        // Nor at the other end: さん is not at the end, and ぼん is not at the start.
+        assertEquals(listOf(0), cut(joined, "三", "ぼん").second.map { it.start })
+        assertEquals(listOf(1), cut(joined, "本", "さん").second.map { it.start })
+        // The fix's reading is all the part has: nothing is left for the other kanji, so it can't hold.
+        assertEquals(listOf(1), cut(listOf(Ruby("三本", "ぼん")), "本", "ぼん").second.map { it.start })
+    }
+
+    @Test
+    fun aKeptFixThatCutsThroughAPartIsNotTakenToAgreeWhenItsPlaceIsNotKnown() {
+        fun line(vararg parts: Ruby) = LineReading(parts.toList(), parts.joinToString("") { it.reading ?: it.text }, "")
+        fun left(vararg parts: Ruby, kanji: String, reading: String) =
+            Readings.correctedWhereKept(line(*parts), listOf(ReadingFix(0, kanji, reading, Reader.SUNG))).second.map { it.start }
+        // In the middle of a run: 二 に is inside いちにさん, but where one kanji's reading stops can't be told.
+        assertEquals(listOf(1), left(Ruby("一二三", "いちにさん"), kanji = "二", reading = "に"))
+        // A reading shared with the kana: 飛び立 ゆく is not laid over 立 alone, so ゆく ending in く says nothing.
+        assertEquals(listOf(2), left(Ruby("飛び立つ", "ゆく"), kanji = "立", reading = "く"))
+        // The fix cuts through two parts, so no one part holds it.
+        assertEquals(listOf(1), left(Ruby("三本", "さんぼん"), Ruby("目", "め"), kanji = "本目", reading = "ぼんめ"))
+        // The fix reaches from kanji into the kana after them, 食べ in 食べる, so no one piece of the part has it all.
+        assertEquals(listOf(0), left(Ruby("食べる", "たべる"), kanji = "食べ", reading = "たべ"))
+        // Or it names kana alone, べ, which no reading is laid over.
+        assertEquals(listOf(1), left(Ruby("食べる", "たべる"), kanji = "べ", reading = "べ"))
+        // A part with no reading holds nothing.
+        assertEquals(listOf(1), left(Ruby("三本"), kanji = "本", reading = "ぼん"))
+    }
+
+
+    @Test
     fun aSungReadingIsMadeWhereItsKanjiAreHoweverTheDictionarySplitThem() {
         fun line(vararg parts: Ruby) = LineReading(parts.toList(), parts.joinToString("") { it.reading ?: it.text }, "")
         // UtaTen reads as one what the dictionary split in two: 闇間 is やみま, not 闇 and 間 read やみかん.
@@ -1365,6 +1441,81 @@ class ReadingsTest {
             assertEquals("いちばんぼしを", reading("一番星を").reading)
             // After a number it counts.
             assertEquals("さんにんで", reading("三人で").reading)
+        }
+    }
+
+    @Test
+    fun aHandAfterAPronounIsAHandNotASuffix() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            // IPADIC takes 手 for the suffix of a person, しゅ, after 僕ら: it is the hand, before any particle.
+            assertEquals("$withUniDic", "ぼくらてをたたいて", read("僕ら手を叩いて"))
+            assertEquals("$withUniDic", "ぼくらてがふるえる", read("僕ら手が震える"))
+            // A suffix a pronoun does take stays: あなた方, 私達 わたしたち.
+            assertEquals("$withUniDic", "あなたかたは", read("あなた方は"))
+            assertEquals("$withUniDic", "わたしたちは", read("私達は"))
+        }
+    }
+
+    @Test
+    fun aSuffixSaidWithAVoiceAfterAWordItCantJoinIsTheNounItIsAlone() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            // 日 after いつか and いつの is a day, ひ, not the び of a word's second half.
+            assertEquals("$withUniDic", "いつかひがのぼる", read("いつか日が昇る"))
+            assertEquals("$withUniDic", "いつのひも", read("いつの日も"))
+            // 星 after how many times is a star, ほし, as it's after 一度 or いちど.
+            assertEquals("$withUniDic", "いちどほしに", read("一度星に"))
+            assertEquals("$withUniDic", "もいちどほしにひかれ", read("もいちど星にひかれ"))
+            assertEquals("$withUniDic", "なんどほしに", read("何度星に"))
+            // After a word it's the second half of, it stays: 一番星, ガラス玉, and 日 after a kanji.
+            assertEquals("$withUniDic", "いちばんぼしを", read("一番星を"))
+            assertEquals("$withUniDic", "がらすだま", read("ガラス玉"))
+            // 一度 and 星 as words: 一度だけ stays.
+            assertEquals("$withUniDic", "いちどだけ", read("一度だけ"))
+        }
+    }
+
+    @Test
+    fun aKanjiAfterAVerbIsNotANameForHito() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            // 等 is ひとし, a name, but after a verb it's など.
+            assertEquals("$withUniDic", "かなうなど", read("叶う等"))
+            assertEquals("$withUniDic", "かなうなど…", read("叶う等…"))
+        }
+        // Where it follows a surname it's the name.
+        assertEquals("やまだひとし", reading("山田等").reading)
+    }
+
+    @Test
+    fun aNounAfterANumberAndACounterIsSaidWithAVoice() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            assertEquals("$withUniDic", "せんぼんざくら よるにまぎれ", read("千本桜 夜ニ紛レ"))
+            assertEquals("$withUniDic", "ひゃっぽんざくらがさく", read("百本桜が咲く"))
+            assertEquals("$withUniDic", "かたるにまいば", read("騙る二枚刃"))
+            // One word, as it's spelled in romaji and over the kanji.
+            val word = if (withUniDic) TestUniDic.reading { reading("千本桜") } else reading("千本桜")
+            assertEquals("$withUniDic", listOf(Ruby("千本桜", "せんぼんざくら")), word.parts)
+            assertEquals("$withUniDic", "senbonzakura", word.romanized)
+            val blade = if (withUniDic) TestUniDic.reading { reading("二枚刃") } else reading("二枚刃")
+            assertEquals("$withUniDic", listOf(Ruby("二枚刃", "にまいば")), blade.parts)
+            // 桜 and 刃 after anything else are as they are alone.
+            assertEquals("$withUniDic", "はるのさくら", read("春の桜"))
+            assertEquals("$withUniDic", "さくらがさく", read("桜が咲く"))
+            // Nor after a word of more than one kanji that is no number and counter.
+            assertEquals("$withUniDic", "せかいさくら", read("世界桜"))
+            assertEquals("$withUniDic", "はのひかり", read("刃の光"))
+        }
+    }
+
+    @Test
+    fun aThousandNightsIsSenYaWhateverNameUniDicHasForIt() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            assertEquals("$withUniDic", "ひとりまうせんや", read("一人舞う千夜"))
+            assertEquals("$withUniDic", "さんやのつき", read("三夜の月"))
         }
     }
 
@@ -1622,7 +1773,7 @@ class ReadingsTest {
     @Test
     fun marksAloneAreNoWordsToLookUp() {
         assertEquals(emptyList<Word>(), Readings.words("♪ … ♪", Script.JAPANESE))
-        assertEquals(emptyList<Word>(), Readings.words("123 !!", Script.JAPANESE))
+        assertEquals(emptyList<Word>(), Readings.words("123 !\u0021", Script.JAPANESE))
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.app.Activity
+import android.net.Uri
 import android.os.Looper
 import android.os.SystemClock
 import android.view.View
@@ -10,9 +11,21 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONException
@@ -20,6 +33,8 @@ import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.net.URLEncoder
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -27,6 +42,61 @@ import kotlin.coroutines.resumeWithException
 internal fun interface ChordWikiPages {
     /** The page at [url], once it has loaded: its ChordPro text, or the search hits when it has no editor. */
     suspend fun page(url: String): String
+}
+
+/** The last observation of the page currently being read, scoped to one lookup. */
+internal class WikiObservation : AbstractCoroutineContextElement(WikiObservation) {
+    @Volatile var check = ChordWikiCheck.NONE
+    companion object Key : CoroutineContext.Key<WikiObservation>
+}
+
+/** Why a page was cancelled: its screen went away, which isn't its caller giving up. */
+private class ScreenLost : CancellationException("The screen went away")
+
+/**
+ * The retained lookup uses the current screen, and releases its pages with that screen. A page whose
+ * screen goes away is opened again on the next one, so turning the phone doesn't end a lookup.
+ */
+internal class ChordWikiHost : ViewModel(), ChordWikiPages {
+    private var activity: Activity? = null
+    private val pages = MutableStateFlow<ChordWikiPages?>(null)
+    private val requests = mutableSetOf<Job>()
+
+    fun attach(host: Activity, factory: (Activity) -> ChordWikiPages) {
+        activity?.let(::detach)
+        activity = host
+        pages.value = factory(host)
+    }
+
+    fun detach(host: Activity) {
+        if (activity !== host) return
+        activity = null
+        pages.value = null
+        requests.toList().forEach { it.cancel(ScreenLost()) }
+    }
+
+    /** Waits for a screen when there is none, which the caller's own limit ends. */
+    override suspend fun page(url: String): String = withContext(Dispatchers.Main.immediate) {
+        var answer: String? = null
+        while (answer == null) {
+            val current = pages.filterNotNull().first()
+            answer = try {
+                coroutineScope {
+                    val request = async(start = CoroutineStart.UNDISPATCHED) { current.page(url) }
+                    requests.add(request)
+                    try {
+                        request.await()
+                    } finally {
+                        requests.remove(request)
+                    }
+                }
+            } catch (e: ScreenLost) {
+                // Only the caller's own cancellation ends the lookup. A lost screen asks the next one.
+                null
+            }
+        }
+        answer
+    }
 }
 
 /** One song a ChordWiki search lists: its title, its singer, and the page that names them. */
@@ -82,16 +152,20 @@ internal class ChordWikiBrowser(
     private val gapMs: Long = GAP_MS,
     private val waitMs: Long = WAIT_MS,
     private val screen: () -> ViewGroup? = { host.window?.decorView as? ViewGroup },
-    /** Pictures and fonts. Off only while a lookup is measured without them. */
-    private val loadPictures: Boolean = true,
     /** Each address the page asks for, so a measurement can see images and fonts. */
     private val onRequest: ((String) -> Unit)? = null,
+    /** Install a measurement client for this lookup after setup and before the first request. */
+    private val onPageCreated: ((WebView, WikiObservation?) -> Unit)? = null,
 ) : ChordWikiPages {
     override suspend fun page(url: String): String = withContext(Dispatchers.Main.immediate) {
-        suspendCancellableCoroutine { cont -> open(url, cont) }
+        pageGate.withLock {
+            val observation = currentCoroutineContext()[WikiObservation]
+            observation?.check = ChordWikiCheck.NONE
+            suspendCancellableCoroutine { cont -> open(url, cont, observation) }
+        }
     }
 
-    private fun open(url: String, cont: CancellableContinuation<String>) {
+    private fun open(url: String, cont: CancellableContinuation<String>, observation: WikiObservation?) {
         val root = screen()
         if (root == null) {
             cont.resumeWithException(IOException("ChordWiki has nowhere to show"))
@@ -101,9 +175,9 @@ internal class ChordWikiBrowser(
         val settings = web.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        // Pictures stay for a real lookup. A measurement can turn them off and see whether the editor still arrives.
-        settings.loadsImagesAutomatically = loadPictures
-        settings.blockNetworkImage = !loadPictures
+        // Verification pages can need images and fonts before they expose the editor.
+        settings.loadsImagesAutomatically = true
+        settings.blockNetworkImage = false
         web.alpha = 0f
         web.isClickable = false
         // Not focusable at all, which takes touch mode with it: a view can't be focusable in touch mode and not otherwise.
@@ -129,24 +203,27 @@ internal class ChordWikiBrowser(
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 onRequest?.invoke(request.url.toString())
-                if (loadPictures || !skipsPicture(request)) return null
+                if (chordWikiAllowed(request.url)) return null
                 return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
             }
 
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !chordWikiMayNavigate(request.url)
+
             override fun onPageFinished(view: WebView, loaded: String) {
-                ask(view, started, ::finish)
+                ask(view, started, observation, ::finish)
             }
         }
+        onPageCreated?.invoke(web, observation)
         web.loadUrl(url)
-        web.postDelayed({ if (!settled) ask(web, started, ::finish) }, gapMs)
+        web.postDelayed({ if (!settled) ask(web, started, observation, ::finish) }, gapMs)
     }
 
-    private fun ask(web: WebView, started: Long, finish: (Result<String>) -> Unit) {
+    private fun ask(web: WebView, started: Long, observation: WikiObservation?, finish: (Result<String>) -> Unit) {
         if (web.parent == null) return
-        web.evaluateJavascript(readPage()) { value -> read(web, started, value, finish) }
+        web.evaluateJavascript(readPage()) { value -> read(web, started, value, observation, finish) }
     }
 
-    private fun read(web: WebView, started: Long, value: String?, finish: (Result<String>) -> Unit) {
+    private fun read(web: WebView, started: Long, value: String?, observation: WikiObservation?, finish: (Result<String>) -> Unit) {
         if (web.parent == null) return
         val seen = jsResult(value)?.let {
             try {
@@ -157,37 +234,28 @@ internal class ChordWikiBrowser(
         }
         val timedOut = now() - started >= waitMs
         if (seen == null) {
-            again(web, started, timedOut, finish)
+            again(web, started, timedOut, observation, finish)
             return
         }
+        observation?.check = chordWikiCheck(seen)
         try {
             when (val look = chordWikiLook(seen, timedOut)) {
                 is ChordWikiLook.Ready -> finish(Result.success(look.body))
-                ChordWikiLook.Waiting -> again(web, started, timedOut, finish)
+                ChordWikiLook.Waiting -> again(web, started, timedOut, observation, finish)
             }
         } catch (e: IOException) {
             finish(Result.failure(e))
         }
     }
 
-    private fun again(web: WebView, started: Long, timedOut: Boolean, finish: (Result<String>) -> Unit) {
+    private fun again(web: WebView, started: Long, timedOut: Boolean, observation: WikiObservation?, finish: (Result<String>) -> Unit) {
         if (web.parent == null) return
         if (timedOut) {
             finish(Result.failure(IOException("ChordWiki didn't finish loading")))
             return
         }
-        web.postDelayed({ ask(web, started, finish) }, gapMs)
+        web.postDelayed({ ask(web, started, observation, finish) }, gapMs)
     }
-
-    /** An image or a font. The editor's text doesn't need either, and a measurement can leave them out. */
-    private fun skipsPicture(request: WebResourceRequest): Boolean {
-        val url = request.url.toString().substringBefore('?').lowercase()
-        val accept = request.requestHeaders["Accept"].orEmpty().lowercase()
-        return pictureFile(url) || accept.startsWith("image/") || "font/" in accept
-    }
-
-    private fun pictureFile(url: String): Boolean =
-        listOf(".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".avif", ".bmp", ".woff", ".woff2", ".ttf", ".otf", ".eot").any(url::endsWith)
 
     /** The view belongs to the main thread. Cancelling a lookup runs on whatever thread the other sites finished on. */
     private fun detach(web: WebView) {
@@ -201,11 +269,20 @@ internal class ChordWikiBrowser(
         web.destroy()
     }
 
-    private companion object {
-        const val GAP_MS = 750L
+    internal companion object {
+        private val pageGate = Mutex()
+        private const val GAP_MS = 750L
+
+        /** How long a page may take before the lookup gives up on it. */
         const val WAIT_MS = 18_000L
 
-        /** The editor's text, the links to sheets, and the words on screen. Not the page's scripts. */
+        /**
+         * The editor's text, the links to sheets, and the words on screen. Not the page's scripts.
+         *
+         * It never looks for Cloudflare's own elements or frames. Measured on a phone with no ChordWiki cookie,
+         * asking the page for the check's elements (by id) made the check fail every time, 13 runs in 13, and
+         * leaving them alone made it pass every time, so what the check is has to come from the words.
+         */
         fun readPage(): String = """
             (function(){
               var areas=document.getElementsByTagName('textarea');
@@ -234,6 +311,30 @@ internal class ChordWikiBrowser(
         """.trimIndent()
     }
 }
+
+/**
+ * ChordWiki, its Cloudflare check, and Google's custom search, which is what ChordWiki's own search page
+ * lists songs with: measured in a browser, a search page shows no hits without cse.google.com and
+ * www.google.com. Its ads and analytics, and every other host, stay out.
+ */
+private val CHORD_WIKI_HOSTS = setOf("ja.chordwiki.org", "challenges.cloudflare.com", "cse.google.com", "www.google.com")
+
+/** The check also asks its own subdomain, "brunhild.challenges.cloudflare.com" (seen on a phone, once for each check). */
+private const val CHECK_SUBDOMAINS = ".challenges.cloudflare.com"
+
+/** Whether the hidden page may reach [uri]: one of [CHORD_WIKI_HOSTS] or a subdomain of the check's, over HTTPS on its usual port. */
+internal fun chordWikiAllowed(uri: Uri): Boolean {
+    val host = uri.host?.lowercase() ?: return false
+    return uri.scheme == "https" && (uri.port == -1 || uri.port == 443) && (host in CHORD_WIKI_HOSTS || host.endsWith(CHECK_SUBDOMAINS))
+}
+
+/**
+ * Whether the hidden page may move to [uri]: where it may fetch from, or a page with no address of its
+ * own, like a frame the check builds. An app's own link scheme, or any other site, it may not.
+ */
+internal fun chordWikiMayNavigate(uri: Uri): Boolean = chordWikiAllowed(uri) || uri.scheme?.lowercase() in LOCAL_SCHEMES
+
+private val LOCAL_SCHEMES = setOf("about", "blob", "data", "javascript")
 
 /** The edit page for [title], whose editor holds the sheet as ChordPro. */
 internal fun chordWikiEditUrl(title: String): String = "https://ja.chordwiki.org/wiki.cgi?c=edit&t=${chordWikiEncode(title)}"
@@ -280,9 +381,12 @@ internal fun chordWikiCheck(title: String, text: String): ChordWikiCheck {
     return ChordWikiCheck.NONE
 }
 
+internal fun chordWikiCheck(seen: ChordWikiSeen): ChordWikiCheck =
+    if (seen.hasEditor) ChordWikiCheck.NONE else chordWikiCheck(seen.title, seen.text)
+
 /**
  * What to do with [seen]. An editor is the sheet, even an empty one. A check keeps being waited on
- * until [timedOut], and one a person has to click is then given up, not answered for them.
+ * until [timedOut]. A check a person has to click is given up at once.
  */
 internal fun chordWikiLook(seen: ChordWikiSeen, timedOut: Boolean): ChordWikiLook {
     if (seen.href.isBlank() || seen.href.startsWith("about:")) {
@@ -290,10 +394,10 @@ internal fun chordWikiLook(seen: ChordWikiSeen, timedOut: Boolean): ChordWikiLoo
         return ChordWikiLook.Waiting
     }
     if (seen.hasEditor) return ChordWikiLook.Ready(seen.source)
-    val check = chordWikiCheck(seen.title, seen.text)
+    val check = chordWikiCheck(seen)
     if (check != ChordWikiCheck.NONE) {
-        if (!timedOut) return ChordWikiLook.Waiting
-        throw ChordWikiStopped(check)
+        if (check == ChordWikiCheck.INTERACTIVE || timedOut) throw ChordWikiStopped(check)
+        return ChordWikiLook.Waiting
     }
     // The menu's links are there before the search has answered, and its words are too. Only a song's
     // link, or the search saying nothing matched, is the answer.
@@ -448,16 +552,19 @@ internal class ChordWikiStopped(val check: ChordWikiCheck) : IOException(
 )
 
 private val INTERACTIVE = listOf(
-    "verify you are human",
-    "i'm not a robot",
-    "i’m not a robot",
-    "cf-turnstile",
-    "hcaptcha",
-    "私はロボットではありません",
-    "人間であることを確認"
+    "click the checkbox",
+    "select the checkbox",
+    "check the box",
+    "チェックボックスをクリック",
+    "チェックボックスを選択"
 )
 
 private val AUTOMATIC = listOf(
+    "verify you are human",
+    "i'm not a robot",
+    "i’m not a robot",
+    "私はロボットではありません",
+    "人間であることを確認",
     "just a moment",
     "checking your browser",
     "enable javascript",

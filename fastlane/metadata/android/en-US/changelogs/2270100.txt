@@ -1,6 +1,4 @@
-Radio song titles no longer show an extra dash at the end.
-Temporary playback problems no longer block a music app from later practice cards.
-Offline downloads retry when you switch to another unmetered network.
-Live and Cover tags no longer make different song names match.
-The privacy policy explains Apple Music song searches more clearly.
-Players with no artist no longer receive controls for a different song with a similar title.
+Lyrics no longer jump back and forth when you open them partway through a song.
+Lines timed word by word light calmly, and lyrics come back when the singing starts late.
+Naming a song falls back to Shazam when the player can't tell, and never sends silence.
+Radio stations show the right song, and Japanese readings get old kana right.

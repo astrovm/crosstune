@@ -221,25 +221,25 @@ internal class CastPlayback(
     // Cast to a TV, what plays is known without Android's say.
     override fun hasAccess() = source.hasAccess() || (route.value != null && cast.target.value != null)
 
-    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = track(song, app).following()
+    override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = track(song, app, session).following()
 
-    fun track(song: MusicMetadata, app: String? = null) = Track(song, app)
+    fun track(song: MusicMetadata, app: String? = null, session: Int? = null) = Track(song, app, session)
 
     data class Observation(val following: Following?, val playing: Heard.Song?, val unnamed: Unnamed? = null)
 
     /** The song a screen follows. When the TV moves on, this keeps watching the same handoff. */
-    inner class Track(private val song: MusicMetadata, private val app: String?) {
+    inner class Track(private val song: MusicMetadata, private val app: String?, private val session: Int?) {
         private var followed = route.value?.takeIf { app == null && it.target != null && sameSong(it.song, song) }?.handoff
 
         fun following(): Flow<Following?> = updates(
-            local = { source.follow(song, app) },
+            local = { source.follow(song, app, session) },
             remote = { target -> followingOnTv(target, song) }
         )
 
         fun observation(includeUnnamed: Boolean = false): Flow<Observation> = updates(
             local = {
                 val unnamed = if (includeUnnamed) source.unnamedUpdates() else flowOf(null)
-                combine(source.follow(song, app), source.nowPlayingUpdates(), unnamed, ::Observation)
+                combine(source.follow(song, app, session), source.nowPlayingUpdates(), unnamed, ::Observation)
             },
             remote = { target ->
                 val playing = target.state?.let { Heard.Song(it.metadata(), null) }
@@ -273,20 +273,20 @@ internal class CastPlayback(
         )
     }
 
-    override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) =
-        if (isCasting(song, app)) cast.send(CastCommand.Seek(positionMs)) else source.seekTo(song, positionMs, app)
+    override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?, session: Int?) =
+        if (isCasting(song, app)) cast.send(CastCommand.Seek(positionMs)) else source.seekTo(song, positionMs, app, session)
 
-    override fun playPause(song: MusicMetadata, play: Boolean, app: String?) =
-        if (isCasting(song, app)) cast.send(if (play) CastCommand.Play else CastCommand.Pause) else source.playPause(song, play, app)
+    override fun playPause(song: MusicMetadata, play: Boolean, app: String?, session: Int?) =
+        if (isCasting(song, app)) cast.send(if (play) CastCommand.Play else CastCommand.Pause) else source.playPause(song, play, app, session)
 
-    override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
-        if (!isCasting(song, app)) return source.resume(song, app)
+    override suspend fun resume(song: MusicMetadata, app: String?, session: Int?): Boolean {
+        if (!isCasting(song, app)) return source.resume(song, app, session)
         cast.send(CastCommand.Play)
         return true
     }
 
-    override fun skip(song: MusicMetadata, next: Boolean, app: String?) =
-        if (isCasting(song, app)) cast.send(if (next) CastCommand.Next else CastCommand.Previous) else source.skip(song, next, app)
+    override fun skip(song: MusicMetadata, next: Boolean, app: String?, session: Int?) =
+        if (isCasting(song, app)) cast.send(if (next) CastCommand.Next else CastCommand.Previous) else source.skip(song, next, app, session)
 
     // The song is the TV's: asked to play, the phone's app must not start it again.
     override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean) =

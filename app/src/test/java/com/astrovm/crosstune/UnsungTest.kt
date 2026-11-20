@@ -130,7 +130,7 @@ class UnsungTest {
             .putBoolean("play_right_away", false).putBoolean("visuals", false).putBoolean("auto_reports", true).commit()
     }
 
-    private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+    private fun model() = ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
 
     private fun waitUntil(condition: () -> Boolean) =
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
@@ -253,7 +253,7 @@ class UnsungTest {
         passes(MainViewModel.VOICE_PAUSE_MS)
         // A voice heard would change nothing, so none is listened for.
         assertEquals(0, singing.hears)
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         genre = "Jazz"
@@ -265,7 +265,7 @@ class UnsungTest {
         assertEquals(2, singing.hears)
         assertEquals(emptyList<String>(), problems())
         // So is one LRCLIB marks instrumental.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         genre = null
@@ -396,7 +396,7 @@ class UnsungTest {
         assertEquals(0, singing.hears)
         assertFalse(shows(R.string.lyrics_instrumental))
         // Nor without the speech model, once that's known.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
@@ -438,7 +438,7 @@ class UnsungTest {
         openLyrics(::showsWords)
         assertEquals(0, singing.hears)
         // Nor without the speech model.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
@@ -626,7 +626,7 @@ class UnsungTest {
         waitUntil { showsWords() }
         assertEquals(1, singing.hears)
         // Nor does a listen that never ends hide them.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         singing.reset()
@@ -751,7 +751,7 @@ class UnsungTest {
                 plays()
                 openAnywhere { showsWords() || shows(R.string.lyrics_instrumental) }
                 passes(MainViewModel.HELD_MS)
-                controller!!.destroyAndSettle()
+                checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
                 File(app.cacheDir, "kept_words.json").delete()
                 singing.reset()
             }
@@ -848,7 +848,7 @@ class UnsungTest {
         assertTrue(shows(R.string.lyrics_instrumental))
         assertEquals(emptyList<String>(), problems())
         // Without the speech model, it's taken for one as it always was.
-        controller!!.destroyAndSettle()
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         File(app.cacheDir, "lyrics.json").delete()
         singing.missing = true
         openLyrics(shown = R.string.lyrics_instrumental)

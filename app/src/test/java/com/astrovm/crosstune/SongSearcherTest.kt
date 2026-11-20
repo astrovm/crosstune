@@ -218,7 +218,7 @@ class SongSearcherTest {
     @Test
     fun aCoverThatIsBlankIsNoCoverAndWordsMadeOfMarksAreNoMoreThanTheRest() {
         respond("""{"data":[{"id":1,"title":"Song","link":"https://www.deezer.com/track/1","artist":{"name":"Band"},"album":{"cover_big":""}}]}""")
-        assertEquals(listOf(MusicMetadata("Song", "Band", url = "https://www.deezer.com/track/1")), found(" Song !! "))
+        assertEquals(listOf(MusicMetadata("Song", "Band", url = "https://www.deezer.com/track/1")), found(" Song !\u0021 "))
     }
 
     @Test

@@ -40,7 +40,7 @@ class HistoryStoreTest {
         store.remember(url, "DEEZER", PreparedLink("https://www.deezer.com/search/Title", exact = false, matchingEnabled = true))
         // The old exact link is looked for again. The destination's ordinary search stays.
         val old = org.json.JSONArray(preferences.getString(HistoryStore.KEY_HISTORY, null))
-        old.getJSONObject(0).getJSONObject("destinations").getJSONObject("YOUTUBE_MUSIC").put("matcher", 5)
+        old.getJSONObject(0).getJSONObject("destinations").getJSONObject("YOUTUBE_MUSIC").put("matcher", 7)
         preferences.edit().putString(HistoryStore.KEY_HISTORY, old.toString()).commit()
         assertEquals(setOf("DEEZER"), HistoryStore(preferences).load().first().destinationLinks.keys)
     }
@@ -90,7 +90,7 @@ class HistoryStoreTest {
         // Another artist's song of that name, an album of it, or a name with no letters to tell, are others.
         val cover = found.copy(link = found.link.copy(url = "$searched%20cover", id = "cover"), metadata = found.metadata.copy(artist = "Someone"))
         val album = HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.ALBUM, "3", "https://www.deezer.com/album/3"), MusicMetadata("Plastic Love", "Mariya Takeuchi", ItemType.ALBUM))
-        val noLetters = HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "4", "https://www.deezer.com/track/4"), MusicMetadata("!!!", "Mariya Takeuchi"))
+        val noLetters = HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "4", "https://www.deezer.com/track/4"), MusicMetadata("!\u0021!", "Mariya Takeuchi"))
         val noLettersEither = HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "5", "https://www.deezer.com/track/5"), MusicMetadata("???", "Mariya Takeuchi"))
         listOf(cover, album, noLetters, noLettersEither).forEach(store::add)
         assertEquals(6, HistoryStore(preferences).load().size)

@@ -15,6 +15,13 @@ plugins {
     id("pl.droidsonroids.pitest")
 }
 
+abstract class DetektTestClasspath : CommandLineArgumentProvider {
+    @get:Classpath
+    abstract val files: ConfigurableFileCollection
+
+    override fun asArguments() = listOf("--classpath", files.asPath)
+}
+
 // projectM comes as a submodule. A checkout without it, like GitHub's own code scanning, still
 // builds, just with no visuals: they need the native library, and the app runs fine without it.
 val projectM = rootProject.file("third_party/projectm/CMakeLists.txt").exists()
@@ -24,7 +31,7 @@ android {
     namespace = "com.astrovm.crosstune"
     compileSdk = 37
 
-    // The framework fixture and its JVM failure-path tests use the same cleanup and wait code.
+    // The Android fixtures and their JVM tests share these helpers.
     sourceSets.named("test") { kotlin.directories += "src/sharedTest/kotlin" }
     sourceSets.named("androidTest") { kotlin.directories += "src/sharedTest/kotlin" }
 
@@ -277,7 +284,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
-    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("org.robolectric:robolectric:4.18")
     testImplementation("androidx.test:core:1.7.0")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.glance:glance-appwidget-testing:1.2.0")
@@ -349,6 +356,44 @@ tasks.register<JavaExec>("detekt") {
     )
 }
 
+// detekt's null-safety rule needs the test classpath to resolve types. NoUnsafeCallsTest also checks
+// the source without type resolution, so an unresolved type cannot hide an assertion.
+val detektTests = tasks.register<JavaExec>("detektTests") {
+    group = "verification"
+    description = "Checks test sources for unsafe calls on nullable values."
+    val testSources = fileTree("src") {
+        include("test*/**/*.kt", "*Test*/**/*.kt")
+    }
+    val config = rootProject.layout.projectDirectory.file("config/detekt/tests.yml")
+    val report = layout.buildDirectory.file("reports/detekt/tests.txt")
+    inputs.files(testSources, config).withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.file(report)
+    dependsOn("compileDebugUnitTestKotlin")
+    classpath = detektCli
+    mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
+    jvmArgs("--sun-misc-unsafe-memory-access=allow")
+    args(
+        "--input", layout.projectDirectory.dir("src").asFile.path,
+        "--includes", "**/test*/**/*.kt,**/*Test*/**/*.kt",
+        "--config", config.asFile.path,
+        "--jvm-target", "17",
+        "--report", "txt:" + report.get().asFile.path,
+    )
+    argumentProviders.add(objects.newInstance<DetektTestClasspath>().apply {
+        files.from(tasks.named<Test>("testDebugUnitTest").get().classpath)
+    })
+}
+val noUnsafeCalls = tasks.register<Test>("noUnsafeCalls") {
+    group = "verification"
+    description = "Checks source for null assertions even where detekt cannot resolve the type."
+    val unitTests = tasks.named<Test>("testDebugUnitTest").get()
+    testClassesDirs = unitTests.testClassesDirs
+    classpath = unitTests.classpath
+    filter.includeTestsMatching("com.astrovm.crosstune.NoUnsafeCallsTest")
+    inputs.files(fileTree("src") { include("**/*.kt", "**/*.java") }).withPathSensitivity(PathSensitivity.RELATIVE)
+}
+tasks.named("detekt") { dependsOn(detektTests, noUnsafeCalls) }
+
 // The store's screenshots and the site's clips, drawn on this computer frame by frame: one test
 // class per language, side by side. scripts/shots/shots.py runs it, with the visuals drawn ahead.
 val shots = tasks.register<Test>("shots") {
@@ -382,7 +427,7 @@ val songCheck = tasks.register<Test>("songCheck") {
 // before it was all there, and so ran on Android's empty stubs instead. One configuration each, as
 // Gradle would otherwise keep only the newest of one library's versions.
 val robolectricRuntimes = files(
-    listOf("8.0.0_r4-robolectric-r1-i7", "9-robolectric-4913185-2-i7", "10-robolectric-5803371-i7", "11-robolectric-6757853-i7", "12-robolectric-7732740-i7", "12.1-robolectric-8229987-i7", "13-robolectric-9030017-i7", "14-robolectric-10818077-i7", "16-robolectric-13921718-i7").map {
+    listOf("8.0.0_r4-robolectric-r1-i7", "9-robolectric-4913185-2-i7", "10-robolectric-5803371-i7", "11-robolectric-6757853-i7", "12-robolectric-7732740-i7", "12.1-robolectric-8229987-i7", "13-robolectric-9030017-i7", "14-robolectric-10818077-i7", "16-robolectric-13921718-2-i7").map {
         configurations.detachedConfiguration(dependencies.create("org.robolectric:android-all-instrumented:$it")).apply { isTransitive = false }
     }
 )

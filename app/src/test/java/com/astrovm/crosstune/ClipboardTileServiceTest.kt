@@ -41,7 +41,7 @@ class ClipboardTileServiceTest {
 
         service.onClick()
 
-        assertOpensClipboardFlow(shadowOf(launched!!).savedIntent)
+        assertOpensClipboardFlow(shadowOf(checkNotNull(launched) { "Expected launched to be non-null" }).savedIntent)
     }
 
     @Test

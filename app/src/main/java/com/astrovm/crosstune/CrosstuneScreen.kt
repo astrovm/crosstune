@@ -104,6 +104,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -155,6 +157,14 @@ internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
 internal const val NOW_PLAYING_TAG = "now_playing"
 
+/** The bar of what's playing, for a player that closes to hand the remote back to it: [owed] till the bar has taken it. */
+internal class BarFocus {
+    val requester = FocusRequester()
+    var owed by mutableStateOf(false)
+}
+
+internal val LocalBarFocus = staticCompositionLocalOf { BarFocus() }
+
 /** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
 internal const val CARD_TOOLS_TAG = "card_tools"
 
@@ -191,7 +201,7 @@ internal data class ScreenActions(
     val onPlayerRepeat: () -> Unit = {},
     val onPlayerLike: () -> Unit = {},
     /** Plays one of the songs up next now, by the app's number for it. */
-    val onPlayerPlayQueued: (Long) -> Unit = {},
+    val onPlayerPlayQueued: (Long, Int) -> Unit = { _, _ -> },
     /** Plays the list on from the song up next at this place, one Crosstune still has to ask for. */
     val onPlayerPlayLater: (Int) -> Unit = {},
     /** Moves the song up next at one place to another. */
@@ -523,7 +533,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     // way back, a screen starts afresh, as it always has.
     val kept = rememberSaveableStateHolder()
     LaunchedEffect(screen) { if (screen != Screen.FIX_STEP) Screen.entries.filter { it != screen }.forEach { kept.removeState(it.name) } }
-    CompositionLocalProvider(LocalCovers provides actions.covers) {
+    val barFocus = remember { BarFocus() }
+    CompositionLocalProvider(LocalCovers provides actions.covers, LocalBarFocus provides barFocus) {
     WithOverlays(inside = state.phone == Phone.TV) {
     CompositionLocalProvider(LocalLayerSwipe provides layers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
@@ -854,7 +865,8 @@ private fun UnnamedBar(now: PlayingUnnamed, actions: ScreenActions) {
     PlayingBar(
         name, credit.joinToString(" · "),
         song?.artworkUrl ?: now.playing.artworkUrl, now.following, now.following?.durationMs, actions.onOpenPlayingUnnamed, actions,
-        byLineMaxLines = if (heardNearby) 3 else 1
+        byLineMaxLines = if (heardNearby) 3 else 1,
+        transport = now.canControl
     )
 }
 
@@ -871,17 +883,26 @@ private fun PlayingBar(
     duration: Long?,
     onOpen: () -> Unit,
     actions: ScreenActions,
-    byLineMaxLines: Int = 1
+    byLineMaxLines: Int = 1,
+    transport: Boolean = true
 ) {
     val playing = following?.clock?.playing != false
     // The buttons sit inside the bar's own tap target, where a remote's search from the bar never looks.
-    val bar = remember { FocusRequester() }
+    val handed = LocalBarFocus.current
+    val bar = handed.requester
+    // Once the player that covered it is gone, the remote comes back to it.
+    LaunchedEffect(handed.owed) {
+        if (!handed.owed) return@LaunchedEffect
+        withFrameNanos {}
+        runCatching { bar.requestFocus() }
+        handed.owed = false
+    }
     val playPause = remember { FocusRequester() }
     Surface(
         onClick = onOpen,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG).swipeLayers()
-            .focusRequester(bar).focusProperties { right = playPause }
+            .focusRequester(bar).then(if (transport) Modifier.focusProperties { right = playPause } else Modifier)
     ) {
         Column(modifier = Modifier.navigationBarsPadding()) {
             Row(
@@ -899,17 +920,17 @@ private fun PlayingBar(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                IconButton(
-                    onClick = actions.onPlayingNowPlayPause,
-                    modifier = Modifier.size(52.dp).focusRequester(playPause).focusProperties { left = bar }
-                ) {
-                    AppIcon(
-                        if (playing) R.drawable.ic_pause else R.drawable.ic_play,
-                        contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play)
-                    )
-                }
-                IconButton(onClick = actions.onPlayingNowSkip, enabled = following?.canSkipNext != false, modifier = Modifier.size(52.dp)) {
-                    AppIcon(R.drawable.ic_skip_next, contentDescription = stringResource(R.string.lyrics_next_song))
+                if (transport) {
+                    IconButton(
+                        onClick = actions.onPlayingNowPlayPause,
+                        modifier = Modifier.size(52.dp).focusRequester(playPause).focusProperties { left = bar }
+                    ) {
+                        val (icon, label) = if (playing) R.drawable.ic_pause to R.string.lyrics_pause else R.drawable.ic_play to R.string.lyrics_play
+                        AppIcon(icon, contentDescription = stringResource(label))
+                    }
+                    IconButton(onClick = actions.onPlayingNowSkip, enabled = following?.canSkipNext != false, modifier = Modifier.size(52.dp)) {
+                        AppIcon(R.drawable.ic_skip_next, contentDescription = stringResource(R.string.lyrics_next_song))
+                    }
                 }
             }
             if (following != null && duration != null) PlayedSoFar(following, duration)

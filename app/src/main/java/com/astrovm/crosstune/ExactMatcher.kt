@@ -37,8 +37,10 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * 4, as Qobuz's songs are found in the phone's own store; 5, as another channel's video needs a known matching length.
  * Version 6 uses the link's length and an explicit recording label to choose an edition.
  * Version 7 requires an accented Latin row to name the song.
+ * Version 8 doesn't take a row in another script that says it's a live, karaoke or other take for the studio song, and
+ * can use an artist's video and a matching store album to name a song in another script.
  */
-internal const val MATCH_VERSION = 7
+internal const val MATCH_VERSION = 8
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -668,10 +670,14 @@ internal class ExactMatcher(
             videos.await() to names.await()
         }
         val rows = items.map(::row)
-        val named = rows.firstOrNull { isTheSong(it, names) && keepsRequestedRecording(recording, it) }
+        val named = rows.firstOrNull { isTheSong(it, names) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) }
         val abroad = rows.filter { isTheSongInAnotherScript(it, names) }
+        // A row the song's name names, but that says it's a take, is the song's, not its studio recording: no row only known by its
+        // artist and length takes its place, as the song may be written otherwise, and this one is the song by name.
+        val takeNamed = named == null && rows.any { isTheSong(it, names) && keepsRequestedRecording(recording, it) }
         val song = named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedEdition) ?: it }
-            ?: anotherScriptRecording(abroad, recording, names)
+            ?: videoNamesSong(metadata, abroad, videos.map(::row), names)
+            ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
         song?.let { return Answer(watchUrl + it.id) }
         videos.map(::row).firstOrNull { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
             ?.let { return Answer(watchUrl + it.id) }
@@ -796,6 +802,21 @@ internal class ExactMatcher(
             return rows.singleOrNull { keepsRequestedRecording(recording, it) && SongNames.bareTitle(it.name) == base }
         }
         return linkedEditionInAnotherScript(first, rows, names.linkedEdition) ?: first
+    }
+
+    /** An artist's video can name a store recording both ways, when its album and length also match. */
+    private fun videoNamesSong(metadata: MusicMetadata, rows: List<Row>, videos: List<Row>, names: Names): Row? {
+        if (rows.size < 2) return null
+        val album = names.corroboratingAlbum ?: return null
+        if (!plainLinkedTitle(metadata)) return null
+        val title = SongNames.normalize(metadata.title)
+        val aliases = videos.filter { isTheSongsVideo(it, names) && isOwnVideo(it, names) && it.lengthMs != null && sameLength(it, names) }
+            .mapNotNull { video ->
+                val halves = video.name.split(" - ").takeIf { it.size == 2 } ?: return@mapNotNull null
+                val own = halves.indexOfFirst { SongNames.normalize(it) == title }
+                halves.getOrNull(1 - own)?.let(SongNames::normalize)
+            }.toSet()
+        return rows.singleOrNull { SongNames.normalize(it.name) in aliases && SongNames.normalize(it.details.getOrNull(1).orEmpty()) == album }
     }
 
     /** Keep an explicit title ahead of any inference from the length. */
@@ -928,7 +949,15 @@ internal class ExactMatcher(
      * there, so its Japanese, Korean and Chinese stores give 終わらない歌 for Owaranai Uta, 봄날 for
      * Spring Day and 松原みき for Miki Matsubara. Deezer gives its length when Apple doesn't have it.
      */
-    private class Names(val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, japaneseTitle: String?, val linkedEdition: LinkedEdition?) {
+    private class Names(
+        val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, japaneseTitle: String?,
+        val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?,
+        /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
+        val takeOnAlbum: Boolean
+    ) {
+        /** Apple, or Deezer, knows recordings of the song that differ in length: a live take may be one. */
+        val severalRecordings = lengthsMs.any { one -> lengthsMs.any { other -> one - other > SAME_SONG_LENGTH_MS } }
+
         val romanizedJapanese by lazy {
             japaneseTitle?.let { Readings.of(listOf(it), Script.JAPANESE).single().typed }
         }
@@ -961,7 +990,15 @@ internal class ExactMatcher(
                     ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
             }?.let(lengthsMs::add)
         }
-        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()))
+        val album = found?.editions?.singleOrNull()?.takeIf {
+            matches(metadata, it.optString("trackName"), it.optString("artistName")) &&
+                metadata.lengthMs?.let { length -> sameRecordingLength(it.optLong("trackTimeMillis"), length) } != false
+        }?.optString("collectionName")?.let(SongNames::normalize)?.takeIf(String::isNotEmpty)
+        val takeOnAlbum = found?.editions.orEmpty().any {
+            val collection = it.optString("collectionName")
+            liveAlbum(collection) || Takes.saysAnotherTake(collection) != null
+        }
+        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum)
     }
 
     /**
@@ -1077,11 +1114,31 @@ internal class ExactMatcher(
         val length = row.lengthMs ?: return false
         if (row.id == null || names.lengthsMs.none { kotlin.math.abs(length - it) <= SAME_SONG_LENGTH_MS }) return false
         if (row.name.none { it.isLetter() && it.code > 0x7f }) return false
-        val anotherScript = row.name.codePoints().filter(Character::isLetter).anyMatch { Character.UnicodeScript.of(it) !in NO_OTHER_SCRIPT }
+        val anotherScript = namedInAnotherScript(row.name)
         if (!anotherScript && !sameLatinSpelling(row.name, names)) return false
+        if (isAnotherTake(row, names)) return false
         val wanted = names.artists.flatMap(SongNames::artists).toSet()
         return SongNames.artists(row.details.first()).any(wanted::contains)
     }
+
+    /**
+     * [row] says it's a live, karaoke or other take, by a tag or by the live album it's on, and nothing says the song is that
+     * take: not its names, nor the albums Apple has it on. A live take may be as long as the studio's, a karaoke one always is,
+     * so its length shows nothing; but where Apple knows recordings of different lengths, a live row may be one of them.
+     */
+    private fun isAnotherTake(row: Row, names: Names): Boolean {
+        val album = row.details.getOrNull(1).orEmpty()
+        val take = Takes.saysAnotherTake(row.name, names.artists + row.details.first()) ?: Takes.Take.LIVE.takeIf { liveAlbum(album) } ?: return false
+        if (names.takeOnAlbum || names.titles.any(::saysTake)) return false
+        return take == Takes.Take.OTHER || !names.severalRecordings
+    }
+
+    /** A title with a tag, or a word, that says it's a take of the song and not the song itself, in any script. */
+    private fun saysTake(title: String): Boolean =
+        saysLive(title) || Takes.saysAnotherTake(title) != null || Takes.saysAnotherVersionBesidesLive(title)
+
+    private fun namedInAnotherScript(name: String): Boolean =
+        name.codePoints().filter(Character::isLetter).anyMatch { Character.UnicodeScript.of(it) !in NO_OTHER_SCRIPT }
 
     /** A Latin title can use another spelling of the same whole title, including a title the Japanese store names. */
     private fun sameLatinSpelling(title: String, names: Names): Boolean {
@@ -1131,9 +1188,12 @@ internal class ExactMatcher(
         if (written.fold(SongNames.normalize(outside)) { left, name -> left.replace(name, "") }.any { it.code > 0x7f }) return false
         // A channel is the artist's own by its whole name, maybe with what YouTube adds to one:
         // "Band - Topic", "BandVEVO".
+        return isOwnVideo(row, names) || names.artists.any { artistIn(it, row.name) } && row.lengthMs != null && names.lengthsMs.isNotEmpty() && sameLength(row, names)
+    }
+
+    private fun isOwnVideo(row: Row, names: Names): Boolean {
         val uploader = SongNames.normalize(SongNames.withoutArticle(row.details.first()))
-        val own = names.artists.flatMap(SongNames::artists).any { it == uploader || uploader.startsWith(it) && uploader.removePrefix(it) in CHANNEL_SUFFIXES }
-        return own || names.artists.any { artistIn(it, row.name) } && row.lengthMs != null && names.lengthsMs.isNotEmpty() && sameLength(row, names)
+        return names.artists.flatMap(SongNames::artists).any { it == uploader || uploader.startsWith(it) && uploader.removePrefix(it) in CHANNEL_SUFFIXES }
     }
 
     /**

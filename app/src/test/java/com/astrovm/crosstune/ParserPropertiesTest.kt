@@ -184,9 +184,9 @@ class ParserPropertiesTest {
         val random = Random(307)
         repeat(500) {
             val a = random.text("abcde", 0, 60)
-            assertEquals(a, a.indices.toList(), BorrowedTimings.lineUp(a, a)!!.toList())
+            assertEquals(a, a.indices.toList(), checkNotNull(BorrowedTimings.lineUp(a, a)) { "Expected BorrowedTimings.lineUp(a, a) to be non-null" }.toList())
             val b = if (random.nextBoolean()) random.broken(a).lowercase().filter { it in "abcde" } else random.text("abcde", 0, 60)
-            val matched = BorrowedTimings.lineUp(a, b)!!
+            val matched = checkNotNull(BorrowedTimings.lineUp(a, b)) { "Expected BorrowedTimings.lineUp(a, b) to be non-null" }
             assertEquals(b.length, matched.size)
             val pairs = matched.withIndex().filter { it.value >= 0 }
             assertTrue("$a / $b", pairs.all { (j, i) -> a[i] == b[j] })

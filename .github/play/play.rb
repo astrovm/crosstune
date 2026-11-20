@@ -13,10 +13,12 @@
 #     Else it exits 0 when the first TRACK has AAB itself as CODE: a re-run. 4 when Play has AAB as CODE, but
 #     not there: sent in a run whose commit Play refused. 3 when Play has no bundle as CODE. It stops when Play
 #     has another bundle as CODE (sent by hand, or the same tag built or signed again).
-#   ruby play.rb promotion KEY PACKAGE FROM TRACK[,TRACK...] CODE TAGS RELEASE TAG NOTES
+#   ruby play.rb promotion KEY PACKAGE FROM TRACK[,TRACK...] CODE TAGS RELEASE TAG NOTES [LISTING]
 #     What a promotion of CODE from the track FROM to production needs, before it sends anything. RELEASE is the
 #     GitHub release of TAG as JSON, TAGS as for plan, and the TRACKs (internal testing first) are the ones plan
-#     reads. NOTES holds the English changelog. It sends CODE only when RELEASE is TAG's, final and not a draft,
+#     reads. NOTES holds the English changelog. LISTING, when named, is NOTES too, with the listing's folders
+#     by language beside it: the listing goes in the same edit, so one review takes both. It sends CODE only
+#     when RELEASE is TAG's, final and not a draft,
 #     and its notes have the SHA-256 of the App
 #     Bundle in a line "App Bundle SHA-256: `...`", which the Release workflow writes; when no version code on
 #     any TRACK or production lacks a tag, as for plan; when FROM has a release with CODE; and when the bundle
@@ -27,7 +29,8 @@
 #     One edit. With --from, the release CODE on that track goes on to each --to track. With no --from, the
 #     bundle Play has as CODE goes on them, and none may have it already. Either way, it stops when a --to
 #     track has a version code above CODE. With the listing in DIR (folders by language, as play.sh makes
-#     them) and the release notes in DIR/en-US/changelogs/CODE.txt. Then the edit is committed, or with
+#     them) and the release notes in DIR/en-US/changelogs/CODE.txt. With both, they name one DIR, which holds
+#     both, as supply reads one folder an edit. Then the edit is committed, or with
 #     --check-only only checked. supply can only promote to one track a run, so this drives supply's own client
 #     and uploader in one edit.
 require "digest"
@@ -51,7 +54,17 @@ module Crosstune
     # supply's uploader, with the client that holds the edit in reach.
     class Edit
       def self.uploader_class
-        @uploader_class ||= Class.new(Supply::Uploader) { public :client }
+        @uploader_class ||= Class.new(Supply::Uploader) do
+          public :client
+
+          # Release notes only in the languages that have them. A listing's folder beside them has none, and
+          # supply would send its language empty notes.
+          def all_languages
+            super.select do |language|
+              File.directory?(File.join(metadata_path, language, Supply::CHANGELOGS_FOLDER_NAME))
+            end
+          end
+        end
       end
 
       def initialize(options)
@@ -206,9 +219,12 @@ module Crosstune
         end
       end
 
-      # Each language's words and pictures. sync_image_upload sends only the pictures that changed.
+      # Each language's words and pictures. sync_image_upload sends only the pictures that changed. A folder
+      # with no title is only release notes.
       def send_listing(listing)
         Dir.children(listing).sort.each do |language|
+          next unless File.file?(File.join(listing, language, "title.txt"))
+
           @uploader.upload_metadata(language, client.listing_for_language(language))
           @uploader.upload_images(language)
           @uploader.upload_screenshots(language)
@@ -269,13 +285,16 @@ module Crosstune
     end
 
     def promotion(argv)
-      key, package, from, tracks, code, tags, release, tag, notes = argv
-      abort("usage: play.rb promotion KEY PACKAGE FROM TRACK[,TRACK...] CODE TAGS RELEASE TAG NOTES") unless notes
+      key, package, from, tracks, code, tags, release, tag, notes, listing = argv
+      unless notes && argv.size <= 10
+        abort("usage: play.rb promotion KEY PACKAGE FROM TRACK[,TRACK...] CODE TAGS RELEASE TAG NOTES [LISTING]")
+      end
       require_supply
       # Parse the release before opening Play. Verify Play in the edit that sends it.
       digest = bundle_digest(release, tag)
       proof = { tracks: tracks.split(","), tags: tags.split(",").map { |t| Integer(t, 10) }, digest: digest, tag: tag }
       options = { key: key, package: package, from: from, to: [PRODUCTION], code: code, notes: notes, promotion: proof }
+      options[:listing] = listing if listing
       check_edit(options)
       send_edit(options)
     end
@@ -304,7 +323,9 @@ module Crosstune
       abort("Name --code with --to") if !to.empty? && !options[:code]
       abort("Name --to with --code") if to.empty? && options[:code]
       abort("Release notes go to one track at a time") if options[:notes] && to.size != 1
-      abort("Release notes and the listing go in separate edits") if options[:notes] && options[:listing]
+      # supply reads the notes and the listing from one folder an edit.
+      notes, listing = options.values_at(:notes, :listing).map { |dir| dir && File.expand_path(dir) }
+      abort("Release notes and the listing go in one folder") if notes && listing && notes != listing
       abort("Nothing to send") if to.empty? && !options[:listing]
       production = to.any? { |track| PlayReviewGuard.production?(track) }
       if production && (!options[:promotion] || !options[:from])
@@ -381,7 +402,8 @@ module Crosstune
       when "edit" then edit(argv)
       else
         abort("usage: play.rb supply ARGS... | plan KEY PACKAGE TRACK[,TRACK...] CODE AAB TAGS | " \
-              "promotion KEY PACKAGE FROM TRACK[,TRACK...] CODE TAGS RELEASE TAG NOTES | edit KEY PACKAGE ...")
+              "promotion KEY PACKAGE FROM TRACK[,TRACK...] CODE TAGS RELEASE TAG NOTES [LISTING] | " \
+              "edit KEY PACKAGE ...")
       end
     end
   end

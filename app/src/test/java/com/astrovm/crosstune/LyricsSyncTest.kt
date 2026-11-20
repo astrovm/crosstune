@@ -262,7 +262,7 @@ class LyricsSyncTest {
     fun keptLinesMissingTheirPointsOrWithBrokenOnesKeepWhatIsLeft() {
         val store = LyricsSyncStore(prefs)
         store.save(song, lines, listOf(SyncPoint(10_000, 12_000)))
-        val all = JSONObject(prefs.getString("lyrics_sync", null)!!)
+        val all = JSONObject(checkNotNull(prefs.getString("lyrics_sync", null)) { "Expected saved lyrics sync" })
         val key = all.keys().next()
         val kept = all.getJSONObject(key)
         kept.put("points", JSONArray("""[3, [30000, 33000]]"""))

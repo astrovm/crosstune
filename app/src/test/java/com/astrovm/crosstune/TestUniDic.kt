@@ -9,7 +9,7 @@ import java.util.zip.ZipFile
  */
 internal object TestUniDic {
     val jar: File = File(
-        TestUniDic::class.java.classLoader!!.getResource("com/atilika/kuromoji/unidic/connectionCosts.bin")!!.path.removePrefix("file:").substringBefore("!")
+        checkNotNull(checkNotNull(TestUniDic::class.java.classLoader) { "Expected TestUniDic::class.java.classLoader to be non-null" }.getResource("com/atilika/kuromoji/unidic/connectionCosts.bin")) { "Expected TestUniDic::class.java.classLoader.getResource(\"com/atilika/kuromoji/unidic/connectionCosts.bin\") to be non-null" }.path.removePrefix("file:").substringBefore("!")
     )
 
     /** Unpacked once for all the tests run here, which may each have it loaded again. */

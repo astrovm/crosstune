@@ -15,6 +15,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.time.Duration
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.json.JSONArray
+import org.json.JSONObject
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowSystemClock
@@ -400,7 +403,7 @@ class MainViewModelTest {
         val model = model(oneTap = OneTapSetup(app, listOf(shell)))
         assertFalse(model.uiState.canSetUpInOneTap)
         shell.ready = true
-        shell.changed!!.invoke()
+        checkNotNull(shell.changed) { "Expected shell.changed to be non-null" }.invoke()
         assertTrue(model.uiState.canSetUpInOneTap)
         // Cleared, it stops listening.
         model.onClearedForTest()
@@ -442,6 +445,8 @@ class MainViewModelTest {
         var holdNearby: CompletableDeferred<Unit>? = null
         /** Holds a listen to what plays, once asked, till it's completed. */
         var holdPlaying: CompletableDeferred<Unit>? = null
+        /** How many listens to what plays were stopped while held. */
+        var stopped = 0
         override suspend fun listen(): Heard {
             nearby++
             holdNearby?.await()
@@ -452,7 +457,12 @@ class MainViewModelTest {
             this.whileAloud += whileAloud
             // Listened to over and over with no time going by is a loop: it stops here, so the test fails on the count, at once.
             if (listensNow.loops()) awaitCancellation()
-            holdPlaying?.await()
+            try {
+                holdPlaying?.await()
+            } catch (e: CancellationException) {
+                stopped++
+                throw e
+            }
             return answers[minOf(asked.size, answers.size) - 1]
         }
     }
@@ -485,6 +495,69 @@ class MainViewModelTest {
 
     /** A file with no title, as a player may name one: nothing a tap could take for a song, so a tap opens what was heard, or the player. */
     private val untitled = Unnamed("com.example.untitled", "Untitled Player", null, said = false)
+
+    @Test
+    fun aStationWithoutPlaybackStateIsNamedByEarAndATapOpensTheSongHeard() {
+        // Simple Radio says only the station's name (Issue #1000): what it plays is heard, as for any station.
+        val hears = EarsOnThePhone(heardSong())
+        val playback = FakePlayback().apply { aloud = true }
+        val model = radioModel(hears, playback, mayCapture = { true })
+        playback.unnamed.value = station.copy(reportsState = false)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(station.name, model.uiState.playingUnnamed?.playing?.name)
+        assertEquals(1, hears.asked.size)
+        assertEquals(hears.answers[0], model.uiState.playingUnnamed?.heard)
+        assertNull(model.uiState.playingUnnamed?.following)
+
+        model.openPlayingUnnamed()
+        idle()
+        // The song heard opens, as a Shazam result: its card, not the station's player.
+        assertTrue(model.uiState.linkText.contains("1234"))
+        assertNull(model.uiState.player)
+    }
+
+    @Test
+    fun aStationWithoutPlaybackStateIsListenedToOnlyInSightAndItsListenStopsWhenItGoes() {
+        val hears = EarsOnThePhone(heardSong())
+        val playback = FakePlayback().apply { aloud = true }
+        val model = radioModel(hears, playback, mayCapture = { true })
+        hears.holdPlaying = CompletableDeferred()
+        playback.unnamed.value = station.copy(reportsState = false)
+        idle()
+        assertTrue(hears.asked.isEmpty())
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(1, hears.asked.size)
+
+        // Simple Radio takes its notification down as it stops: the listen under way stops with it, and none starts.
+        playback.unnamed.value = null
+        idle()
+        assertEquals(1, hears.stopped)
+        checkNotNull(hears.holdPlaying).complete(Unit)
+        idle()
+        assertEquals(1, hears.asked.size)
+        assertNull(model.uiState.playingUnnamed)
+    }
+
+    @Test
+    fun aStationWithoutPlaybackStateOpensItsPlayerForASongHeardATapWouldntOpen() {
+        // One that may be another song playing in the room, and one that may be over by now: never the station's
+        // name as a song, which it doesn't say it plays.
+        for (heard in listOf(heardSong().copy(inRoom = true), heardSong(lengthMs = null))) {
+            val playback = FakePlayback().apply { aloud = true }
+            val model = radioModel(EarsOnThePhone(heard), playback, mayCapture = { true })
+            playback.unnamed.value = station.copy(reportsState = false)
+            model.playingBarInSight(true)
+            idle()
+            assertEquals(heard, model.uiState.playingUnnamed?.heard)
+            model.openPlayingUnnamed()
+            idle()
+            assertNull(model.uiState.result)
+            assertFalse(model.uiState.linkText.contains("1234"))
+            assertTrue(checkNotNull(model.uiState.player).stationOnly)
+        }
+    }
 
     /** A model on [untitled] playing in [playback], with its bar in sight, and the song [ears] heard first in it shown. */
     private fun untitledHeard(ears: EarsOnThePhone, playback: FakePlayback = FakePlayback()): MainViewModel {
@@ -526,7 +599,7 @@ class MainViewModelTest {
     fun aSkipASeekOrASongUpNextPlayedFromThePlayerDropsTheSongHeard() {
         val controls = listOf<Pair<String, (MainViewModel) -> Unit>>(
             "next" to { it.playerSkip(true) }, "back" to { it.playerSkip(false) }, "seek" to { it.playerSeek(90_000) },
-            "queued" to { it.playerPlayQueued(7) }, "later" to { it.playerPlayLater(1) }
+            "queued" to { it.playerPlayQueued(7, 0) }, "later" to { it.playerPlayLater(1) }
         )
         for ((name, control) in controls) {
             // The app doesn't say it moved, as some don't: what was sent is enough.
@@ -558,9 +631,10 @@ class MainViewModelTest {
         idle()
         assertEquals(ears.answers[0], model.uiState.playingUnnamed?.heard)
         // The station's player plays a song up next there: the file plays on, and so does the song heard in it.
-        model.playerPlayQueued(7)
+        model.playerPlayQueued(7, 41)
         idle()
         assertEquals(listOf<String?>(station.app), playback.controlledApps)
+        assertEquals(listOf<Int?>(41), playback.queuedSessions)
         assertEquals(ears.answers[0], model.uiState.playingUnnamed?.heard)
         assertEquals(1, ears.asked.size)
     }
@@ -1600,6 +1674,80 @@ class MainViewModelTest {
     }
 
     @Test
+    fun anOpenStationPlayerStopsOfferingTransportWhenTheSameStationLosesState() {
+        val state = MutableStateFlow<Following?>(following(app = station.app))
+        val playback = FakePlayback().apply { appPlaying[station.app] = state }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(true, model.uiState.player?.following?.clock?.playing)
+
+        state.value = null
+        playback.unnamed.value = station.copy(reportsState = false)
+        idle()
+        assertNull(model.uiState.player?.following)
+        model.playerPlayPause()
+        assertTrue(playback.appsPlayed.isEmpty())
+        assertTrue(playback.plays.isEmpty())
+        assertEquals(true, model.uiState.player?.stationOnly)
+        assertEquals(station.played.title, model.uiState.player?.song?.title)
+    }
+
+    @Test
+    fun aStaleQueueActionCannotControlAReadOnlyStationPlayer() {
+        val state = MutableStateFlow<Following?>(following(app = station.app, upNext = listOf(Queued("Next song", "Band", id = 7))))
+        val playback = FakePlayback().apply { appPlaying[station.app] = state }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(listOf(7L), model.uiState.player?.following?.upNext?.mapNotNull { it.id })
+
+        state.value = null
+        playback.unnamed.value = station.copy(reportsState = false)
+        idle()
+        assertEquals(true, model.uiState.player?.stationOnly)
+        model.playerPlayQueued(7, 0)
+        model.playerPlayLater(0)
+        assertTrue(playback.queuedPlayed.isEmpty())
+    }
+
+    @Test
+    fun aReadOnlyStationWithoutAnAppLabelUsesItsPackageName() {
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        playback.unnamed.value = station.copy(label = null, reportsState = false)
+        idle()
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(station.app, model.uiState.player?.stationAppLabel)
+        assertEquals(true, model.uiState.player?.stationOnly)
+    }
+
+    @Test
+    fun sameNamedStationsFollowTheNewAppAndOnlyWhenItReportsState() {
+        val other = station.copy(app = "com.example.radio", label = "Other Radio")
+        val playback = FakePlayback().apply {
+            appPlaying[station.app] = MutableStateFlow(following(app = station.app))
+            appPlaying[other.app] = MutableStateFlow(following(app = other.app))
+        }
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        assertEquals(station.app, model.uiState.playingUnnamed?.following?.appPackage)
+
+        playback.unnamed.value = other
+        idle()
+        assertEquals(other.app, model.uiState.playingUnnamed?.following?.appPackage)
+
+        playback.unnamed.value = other.copy(reportsState = false)
+        idle()
+        assertNull(model.uiState.playingUnnamed?.following)
+        assertEquals(false, model.uiState.playingUnnamed?.canControl)
+
+        playback.unnamed.value = other
+        idle()
+        assertEquals(other.app, model.uiState.playingUnnamed?.following?.appPackage)
+    }
+
+    @Test
     fun aStationBackAfterASongPlayedOverItIsNotShownAsItWasTillItsAppSaysHowItIs() {
         val playback = FakePlayback()
         val radio = MutableStateFlow<Following?>(Following(PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = false))
@@ -1708,8 +1856,9 @@ class MainViewModelTest {
     fun aStationsButtonsAskItsAppByPackageOnTheBarAndInItsPlayer() {
         val playback = FakePlayback()
         val model = stationPlaying(EarsOnThePhone(Heard.Nothing), playback)
+        playback.unnamed.value = station.copy(session = 41)
         playback.playing.value = Following(
-            PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = true, canSkipNext = true, shuffle = false, repeat = Repeat.OFF, like = AppAction("like", "Like", 0)
+            PlaybackClock(1_000, 0, playing = true), "VRadio", canSeek = true, canSkipNext = true, shuffle = false, repeat = Repeat.OFF, like = AppAction("like", "Like", 0), session = 41
         )
         idle()
         model.playingNowPlayPause()
@@ -1721,11 +1870,16 @@ class MainViewModelTest {
         model.playerShuffle()
         model.playerRepeat()
         model.playerLike()
-        model.playerPlayQueued(3)
+        model.playerPlayQueued(3, 41)
         model.playerSeek(1_000)
         assertEquals(listOf<String?>(station.app, station.app), playback.playedApps)
         assertEquals(List<String?>(6) { station.app }, playback.controlledApps)
         assertEquals(listOf<String?>(station.app), playback.seekedApps)
+        assertTrue(41 in playback.followedSessions)
+        assertEquals(listOf<Int?>(41, 41), playback.playedSessions)
+        assertEquals(List<Int?>(5) { 41 }, playback.controlledSessions)
+        assertEquals(listOf<Int?>(41), playback.queuedSessions)
+        assertEquals(listOf<Int?>(41), playback.controlSeekSessions)
     }
 
     @Test
@@ -2057,6 +2211,61 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aSongsSleepTimerFollowsItInTheSessionItsPlayerFollows() {
+        val playback = FakePlayback().apply { playing.value = following().copy(session = 7) }
+        val scope = MainScope()
+        val model = playingModel(playback, sleepTimer = SleepTimer(playback, scope))
+        assertEquals(7, model.uiState.player?.following?.session)
+        val followed = playback.followedSessions.size
+        model.playerSleep(null)
+        idle()
+        assertEquals(listOf<Int?>(7), playback.followedSessions.drop(followed))
+        scope.cancel()
+    }
+
+    @Test
+    fun anotherSessionOfTheSameAppSayingTheSameStationIsTakenUpOnItsOwnSession() {
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(station.played, model.uiState.player?.song)
+        assertNull(model.uiState.player?.session)
+        playback.unnamed.value = station.copy(session = 9)
+        idle()
+        assertEquals(9, model.uiState.player?.session)
+    }
+
+    @Test
+    fun theSameSessionSayingTheSameStationAgainKeepsItsPlayerOnIt() {
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        playback.unnamed.value = station.copy(session = 9)
+        idle()
+        model.peekPlayingUnnamed()
+        idle()
+        assertEquals(9, model.uiState.player?.session)
+        val followed = playback.followed.size
+        // Only where it plays changed: the same session on the same station, with nothing new to follow.
+        playback.unnamed.value = station.copy(session = 9, where = Place.CAST)
+        idle()
+        assertEquals(followed, playback.followed.size)
+        assertEquals(9, model.uiState.player?.session)
+    }
+
+    @Test
+    fun theBarFollowsTheNewSessionWhenAnAppStartsAnotherForTheSameStation() {
+        val playback = FakePlayback()
+        radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        idle()
+        assertEquals(null, playback.followedSessions.last())
+        // The old session is gone and the app made a new one: the bar must follow that one, or its buttons reach nothing.
+        playback.unnamed.value = station.copy(session = 9)
+        idle()
+        assertEquals(9, playback.followedSessions.last())
+    }
+
+    @Test
     fun aStationsSleepTimerFollowsItInItsApp() {
         val playback = FakePlayback().apply { playing.value = following(app = station.app) }
         val scope = MainScope()
@@ -2216,7 +2425,7 @@ class MainViewModelTest {
             onThePhone = Heard.Song(song, null, app = "com.spotify")
         }
         val source = object : PlaybackSource by playback {
-            override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = playback.follow(song, app).distinctUntilChanged()
+            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = playback.follow(song, app, session).distinctUntilChanged()
         }
         val model = model(playback = source)
         model.viewModelScope.launch { model.watchPlayingNow() }
@@ -2314,6 +2523,24 @@ class MainViewModelTest {
     }
 
     @Test
+    fun silenceIsNoSongFoundAndOnlyShazamBeingOutOfReachOpensAnotherApp() {
+        val effects = mutableListOf<Effect>()
+        val silent = EarsOnThePhone(Heard.Nothing)
+        val model = radioModel(silent)
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        model.listen()
+        idle()
+        assertEquals(AppError.NO_MATCH, model.uiState.error)
+        assertTrue(effects.isEmpty())
+        // Shazam failing to answer is the other case: another app is opened to name it (#1095).
+        silent.heardNearby = Heard.Failed(AppError.RECOGNITION_UNAVAILABLE)
+        model.listen()
+        idle()
+        assertEquals(AppError.RECOGNITION_UNAVAILABLE, model.uiState.error)
+        assertEquals(listOf<Effect>(Effect.RecognizeElsewhere), effects)
+    }
+
+    @Test
     fun withNoAccessNothingPlayingIsShown() {
         val playback = FakePlayback()
         val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
@@ -2337,7 +2564,7 @@ class MainViewModelTest {
         model.playerShuffle()
         model.playerRepeat()
         model.playerLike()
-        model.playerPlayQueued(1)
+        model.playerPlayQueued(1, 0)
         model.playerPlayLater(0)
         model.playerMoveQueued(0, 1)
         model.playerCard()
@@ -2427,7 +2654,7 @@ class MainViewModelTest {
         assertEquals(listOf(Repeat.ALL), playback.repeated.toList())
         model.playerLike()
         assertEquals(1, playback.liked)
-        model.playerPlayQueued(7)
+        model.playerPlayQueued(7, 0)
         assertEquals(listOf(7L), playback.queuedPlayed.toList())
         model.playerSeek(4_000)
         assertEquals(listOf(4_000L), playback.seeks.toList())
@@ -2935,6 +3162,365 @@ class MainViewModelTest {
     }
 
     @Test
+    fun anOldJapaneseLineIsReadAgainInPracticeWithoutOpeningItsSong() {
+        val song = MusicMetadata("Three Flowers", "Demo Band")
+        val text = "三本の花"
+        val line = SavedLine(
+            text, reading = "さんほんのはな", romanized = "sanhon no hana", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("三本", "さんほん"), Ruby("の"), Ruby("花", "はな")), interval = 12, due = 123L
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        assertNull(store.load().single().readWith)
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.putCachedSung(song, listOf(text), version = 4, answer = "[]")
+        }
+        model.startPractice()
+        idle()
+
+        assertNull(model.uiState.lyricsFor)
+        assertEquals("さんぼんのはな", model.uiState.practice?.line?.reading)
+        assertEquals("sanbon no hana", model.uiState.practice?.line?.romanized)
+        assertEquals(12, model.uiState.practice?.line?.interval)
+        assertEquals(123L, model.uiState.practice?.line?.due)
+        assertEquals(Readings.VERSION, store.load().single().readWith)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineStaysAsKeptWithoutAnExactCachedAnswerOrIfItWasEdited() {
+        val text = "三本の花"
+        val parts = listOf(Ruby("三本", "さんほん"), Ruby("の"), Ruby("花", "はな"))
+        val noLyrics = SavedLine(text, reading = "さんほんのはな", title = "No lyrics", artist = "Band", ruby = parts)
+        val noSung = noLyrics.copy(title = "No sung readings")
+        val corrupt = noLyrics.copy(title = "Broken cache")
+        val oldNone = noLyrics.copy(title = "Old none")
+        val olderNone = noLyrics.copy(title = "Older none")
+        val different = noLyrics.copy(title = "Different line")
+        val otherTake = noLyrics.copy(title = "Other take", lengthMs = 80_000L)
+        val current = noLyrics.copy(title = "Current dictionary", readWith = Readings.VERSION)
+        val edited = noLyrics.copy(title = "Edited", reading = "さんほんのか", readByHand = true, ruby = parts.dropLast(1) + Ruby("花", "か"))
+        val word = noLyrics.copy(title = "Word", text = "三本", reading = "さんほん", ruby = parts.take(1), line = text)
+        val chinese = noLyrics.copy(title = "Chinese", text = "你好", reading = "nǐ hǎo", ruby = listOf(Ruby("你", "nǐ"), Ruby("好", "hǎo")))
+        val kept = listOf(noLyrics, noSung, corrupt, oldNone, olderNone, different, otherTake, current, edited, word, chinese)
+        val store = SavedLinesStore(prefs())
+        store.addAll(kept)
+        val raw = prefs().getString("saved_lines", null) + " "
+        prefs().edit().putString("saved_lines", raw).commit()
+
+        val model = modelWithReadingCache { lyrics, sung ->
+            kept.filter { it != noLyrics }.forEach { line ->
+                lyrics.putCachedLyrics(MusicMetadata(line.title, line.artist), if (line == different) "三本の花に" else line.text)
+            }
+            sung.putCachedSung(MusicMetadata(noLyrics.title, noLyrics.artist), listOf(text), version = 4, answer = "[]")
+            sung.putCachedSung(MusicMetadata(noSung.title, noSung.artist), listOf("違う歌詞", text), version = 4, answer = "[]")
+            sung.putCachedSung(MusicMetadata(corrupt.title, corrupt.artist), listOf(text), version = 4, answer = "not json")
+            sung.putCachedSung(MusicMetadata(oldNone.title, oldNone.artist), listOf(text), version = 3, answer = "[]")
+            sung.putCachedSung(MusicMetadata(olderNone.title, olderNone.artist), listOf(text), version = 2, answer = "[]")
+            sung.putCachedSung(MusicMetadata(different.title, different.artist), listOf("三本の花に"), version = 4, answer = "[]")
+            for (line in listOf(otherTake, current, edited, word, chinese)) {
+                sung.putCachedSung(MusicMetadata(line.title, line.artist), listOf(line.text), version = 4, answer = "[]")
+            }
+        }
+        idle()
+        assertEquals(kept, model.uiState.savedLines)
+        assertEquals(kept, store.load())
+        assertEquals(raw, prefs().getString("saved_lines", null))
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldCompatibleLyricsCacheStillRefreshesAKeptLine() {
+        val song = MusicMetadata("City Counters", "Band", lengthMs = 60_000L + SAME_RECORDING_LENGTH_MS)
+        val text = "都会の三本"
+        val line = SavedLine(text, reading = "まちのさんほん", title = song.title, artist = song.artist, lengthMs = song.lengthMs)
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text, version = 13)
+            sung.putCachedSung(song, listOf(text), version = 2, answer = """[[0,"都会","まち"]]""")
+        }
+        idle()
+        val refreshed = model.uiState.savedLines.single()
+        assertEquals("まちのさんぼん", refreshed.reading)
+        assertEquals(Ruby("都会", "まち", Reader.SUNG), refreshed.ruby?.first())
+        assertEquals(refreshed, store.load().single())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineIgnoresARecordingWhosePayloadHasTheWrongLength() {
+        val song = MusicMetadata("City Counters", "Band", lengthMs = 60_000L)
+        val text = "都会の三本"
+        val line = SavedLine(text, reading = "まちのさんほん", title = song.title, artist = song.artist, lengthMs = song.lengthMs)
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            val key = "16\u0000${RecordingKey.of(song.copy(lengthMs = null))}"
+            lyrics.put(key, """{"words":"$text","lines":[],"length":80000}""")
+            sung.putCachedSung(song, listOf(text), version = 4, answer = "[]")
+        }
+        idle()
+        assertEquals(line, model.uiState.savedLines.single())
+        assertEquals(line, store.load().single())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineStaysAsKeptWhenPositiveCachedVersionsDisagree() {
+        val song = MusicMetadata("Two cities", "Band")
+        val text = "都会の三本"
+        val line = SavedLine(text, reading = "まちのさんほん", title = song.title, artist = song.artist)
+        val unambiguous = line.copy(text = "三本の花", reading = "さんほんのはな")
+        val lines = listOf(text, unambiguous.text)
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line, unambiguous))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, lines.joinToString("\n"))
+            sung.putCachedSung(song, lines, version = 2, answer = """[[0,"都会","まち"]]""")
+            sung.putCachedSung(song, lines, version = 3, answer = """[[0,"都会","みやこ"]]""")
+            sung.putCachedSung(song, lines, version = 4, answer = """[[0,"都会","まち"]]""")
+        }
+        idle()
+        assertEquals(line, model.uiState.savedLines.first())
+        assertEquals("さんぼんのはな", model.uiState.savedLines.last().reading)
+        assertEquals(model.uiState.savedLines, store.load())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineKeepsItsCachedPronunciationWhenTheNewDictionaryJoinsItsParts() {
+        val song = MusicMetadata("Counters", "Band")
+        val text = "三本と三匹"
+        val line = SavedLine(
+            text, reading = "さんもととさんひき", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("三", "さん"), Ruby("本", "もと"), Ruby("と"), Ruby("三匹", "さんひき"))
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text, version = 6)
+            sung.putCachedSung(song, listOf(text), version = 1, answer = """[[0,"本","もとと"]]""")
+        }
+        idle()
+        val refreshed = model.uiState.savedLines.single()
+        // The fix's 本 cuts through the dictionary's 三本, so that stretch stays as the card had it, and no fix is named for it.
+        assertEquals("さんもととさんびき", refreshed.reading)
+        assertEquals(Ruby("本", "もと"), refreshed.ruby?.get(1))
+        assertEquals(refreshed, store.load().single())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineReadsTheWordNextToACutStretchWithTheNewDictionary() {
+        val song = MusicMetadata("Counters", "Band")
+        val text = "三本三匹"
+        val line = SavedLine(
+            text, reading = "さんもとさんひき", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("三", "さん"), Ruby("本", "もと"), Ruby("三匹", "さんひき"))
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.putCachedSung(song, listOf(text), version = 3, answer = """[[0,"本","もとと"]]""")
+        }
+        idle()
+        // The stretch of 三本 stays as the card had it. 三匹 right after it is the dictionary's.
+        assertEquals("さんもとさんびき", model.uiState.savedLines.single().reading)
+        assertEquals(listOf(Ruby("三", "さん"), Ruby("本", "もと"), Ruby("三匹", "さんびき")), model.uiState.savedLines.single().ruby)
+    }
+
+    @Test
+    fun anOldLineNamesTheCachedFixItKeptWhereTheNewDictionaryJoinsItsParts() {
+        val song = MusicMetadata("Counters", "Band")
+        val text = "三本と三匹"
+        val line = SavedLine(
+            text, reading = "さんもととさんひき", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("三", "さん"), Ruby("本", "もと"), Ruby("と"), Ruby("三匹", "さんひき"))
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text, version = 6)
+            sung.putCachedSung(song, listOf(text), version = 1, answer = """[[0,"本","もと"]]""")
+        }
+        idle()
+        val refreshed = model.uiState.savedLines.single()
+        assertEquals("さんもととさんびき", refreshed.reading)
+        assertEquals(Ruby("本", "もと", Reader.SUNG), refreshed.ruby?.get(1))
+        assertEquals(refreshed, store.load().single())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineJoinsTheCachedFixOverTheWordsTheNewDictionaryJoins() {
+        val song = MusicMetadata("Counters", "Band")
+        val text = "三本の花"
+        val line = SavedLine(
+            text, reading = "さんほんのはな", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("三", "さん"), Ruby("本", "ほん"), Ruby("の"), Ruby("花", "はな"))
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.putCachedSung(song, listOf(text), version = 3, answer = """[[0,"三本","さんぽん"]]""")
+        }
+        idle()
+        val refreshed = model.uiState.savedLines.single()
+        assertEquals("さんぽんのはな", refreshed.reading)
+        assertEquals(Ruby("三本", "さんぽん", Reader.SUNG), refreshed.ruby?.first())
+        assertEquals(refreshed, store.load().single())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineKeepsACachedFixForTheOneWordItWasKeptFor() {
+        val song = MusicMetadata("Same Word", "Band")
+        val text = "本と本"
+        val line = SavedLine(
+            text, reading = "ほんとほん", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("本", "ほん"), Ruby("と"), Ruby("本", "ほん"))
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.putCachedSung(song, listOf(text), version = 3, answer = """[[0,"本","ぼん"]]""")
+        }
+        idle()
+        val refreshed = model.uiState.savedLines.single()
+        assertEquals("ぼんとほん", refreshed.reading)
+        assertEquals(listOf(Ruby("本", "ぼん", Reader.SUNG), Ruby("と"), Ruby("本", "ほん")), refreshed.ruby)
+        assertEquals(refreshed, store.load().single())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anOldLineDoesNotBorrowTheCachedPronunciationOfAnEarlierOccurrence() {
+        val song = MusicMetadata("More Counters", "Band")
+        val text = "本と三本の花"
+        val line = SavedLine(
+            text, reading = "ほんとさんほんのはな", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("本", "ほん"), Ruby("と"), Ruby("三", "さん"), Ruby("本", "ほん"), Ruby("の"), Ruby("花", "はな"))
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.putCachedSung(song, listOf(text), version = 3, answer = """[[0,"本","ほん"],[0,"本","ぼん"]]""")
+        }
+        idle()
+        val refreshed = model.uiState.savedLines.single()
+        // The second fix, ぼん, cuts through the dictionary's 三本, which already reads さんぼん: the card takes that. The first
+        // fix, ほん, is the dictionary's own reading already, and is not lent to the 本 of 三本.
+        assertEquals("ほんとさんぼんのはな", refreshed.reading)
+        assertEquals(listOf(Ruby("本", "ほん"), Ruby("と"), Ruby("三本", "さんぼん"), Ruby("の"), Ruby("花", "はな")), refreshed.ruby)
+        assertEquals(refreshed, store.load().single())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun aKeptLineDoesNotTakeAnArbitraryReadingWhenTwoCachedOccurrencesDisagree() {
+        val song = MusicMetadata("Two cities", "Band")
+        val text = "都会の三本"
+        val line = SavedLine(
+            text, reading = "まちのさんほん", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("三本", "さんほん"))
+        )
+        val store = SavedLinesStore(prefs())
+        store.addAll(listOf(line))
+        val model = modelWithReadingCache { lyrics, sung ->
+            lyrics.putCachedLyrics(song, "$text\n$text")
+            sung.putCachedSung(song, listOf(text, text), version = 4, answer = """[[0,"都会","まち"],[1,"都会","みやこ"]]""")
+        }
+        idle()
+        assertEquals(line, model.uiState.savedLines.single())
+        assertEquals(line, store.load().single())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    /** With [tutored], ChatGPT's answers kept on the phone are the ones it fills. */
+    private fun modelWithReadingCache(tutored: (suspend (LookupCache) -> Unit)? = null, fill: suspend (LookupCache, LookupCache) -> Unit): MainViewModel {
+        val lyrics = LookupCache(File(app.cacheDir, "old-practice-lyrics.json"), Dispatchers.Unconfined)
+        val sung = LookupCache(File(app.cacheDir, "old-practice-sung.json"), Dispatchers.Unconfined)
+        runBlocking { fill(lyrics, sung) }
+        fake.handler = { error("Practice must not request ${it.url}") }
+        val client = fake.client()
+        val tutor = tutored?.let { fillAnswers ->
+            val answers = LookupCache(File(app.cacheDir, "old-practice-answers.json"), Dispatchers.Unconfined)
+            runBlocking { fillAnswers(answers) }
+            ChatGptTutor(ChatGpt(client, File(app.cacheDir, "old-practice-chatgpt.json"), app.packageName, Dispatchers.Unconfined), answers)
+        }
+        return model(lyricsFinder = LyricsFinder(client, "test", cache = lyrics), sungReadings = SungReadings(client, sung), tutor = tutor)
+    }
+
+    @Test
+    fun anOldLineStaysAsKeptWhenChatGptKeptAnswersForOtherSongsButNotThisOne() {
+        // ChatGPT may have put 都会 right, and its answer for these words has since been dropped to make room.
+        val song = MusicMetadata("Two cities", "Band")
+        val text = "都会の三本"
+        val line = SavedLine(
+            text, reading = "みやこのさんほん", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("都会", "みやこ"), Ruby("の"), Ruby("三本", "さんほん"))
+        )
+        SavedLinesStore(prefs()).addAll(listOf(line))
+        val model = modelWithReadingCache(tutored = { it.put("readings|gpt-x|Another song|Band|42", "[]") }) { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.putCachedSung(song, listOf(text), version = 4, answer = "[]")
+        }
+        idle()
+        assertEquals(line, model.uiState.savedLines.single())
+        assertEquals(line, SavedLinesStore(prefs()).load().single())
+    }
+
+    @Test
+    fun anOldLineIsReadAgainWhenChatGptNeverKeptAnyAnswer() {
+        val song = MusicMetadata("Three Flowers", "Demo Band")
+        val text = "三本の花"
+        val line = SavedLine(
+            text, reading = "さんほんのはな", title = song.title, artist = song.artist,
+            ruby = listOf(Ruby("三本", "さんほん"), Ruby("の"), Ruby("花", "はな"))
+        )
+        SavedLinesStore(prefs()).addAll(listOf(line))
+        val model = modelWithReadingCache(tutored = { it.put("translation|gpt-x|Another song", "[]") }) { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.putCachedSung(song, listOf(text), version = 4, answer = "[]")
+        }
+        idle()
+        assertEquals("さんぼんのはな", model.uiState.savedLines.single().reading)
+    }
+
+    @Test
+    fun aLineThatNoCachedAnswerCoversIsLookedAtAgainWithoutCountingAsUsedAgain() {
+        val song = MusicMetadata("Counters", "Band")
+        val text = "三本の花"
+        val line = SavedLine(text, reading = "さんほんのはな", title = song.title, artist = song.artist, ruby = listOf(Ruby("三本", "さんほん"), Ruby("の"), Ruby("花", "はな")))
+        SavedLinesStore(prefs()).addAll(listOf(line))
+        // Kept by an older version, with ChatGPT's answers kept for other songs only: nothing can confirm the line.
+        val sungKey = "utaten|2|${SongNames.normalize(song.title)}|${SongNames.normalize(song.artist)}|${listOf(text).hashCode()}"
+        lateinit var kept: LookupCache
+        lateinit var before: List<Pair<String, String>>
+        modelWithReadingCache(tutored = { it.put("readings|gpt-x|Another song|Band|42", "[]") }) { lyrics, sung ->
+            lyrics.putCachedLyrics(song, text)
+            sung.put(sungKey, "[]")
+            sung.put("other", "newer")
+            kept = sung
+            before = sung.entries()
+        }
+        idle()
+        assertEquals(before, runBlocking { kept.entries() })
+    }
+
+    private suspend fun LookupCache.putCachedLyrics(song: MusicMetadata, text: String, version: Int = 16) =
+        put("$version\u0000${RecordingKey.of(song.copy(lengthMs = 60_000))}", JSONObject().put("words", text).put("lines", JSONArray()).toString())
+
+    private suspend fun LookupCache.putCachedSung(song: MusicMetadata, lines: List<String>, version: Int, answer: String) =
+        put("utaten|$version|${SongNames.normalize(song.title)}|${SongNames.normalize(song.artist)}|${lines.hashCode()}", answer)
+
+    @Test
     fun aLineTimedAgainKeepsItsIntroOnlyWithNoAppPlayingIt() {
         // Kept from a video whose song starts 3 s in, before the words had times.
         val kept = SavedLine("Two", translation = null, title = "Hush", artist = "Band", leadMs = 3_000, app = "com.video")
@@ -3100,7 +3686,7 @@ class MainViewModelTest {
         fake.handler = { request ->
             val asked = request.url.queryParameter("q").orEmpty()
             when {
-                openAi.answer(request) != null -> openAi.answer(request)!!
+                openAi.answer(request) != null -> checkNotNull(openAi.answer(request)) { "Expected openAi.answer(request) to be non-null" }
                 request.url.host == "api.deezer.com" -> {
                     val tracks = catalogue.filter { (title, _) -> title in asked }.entries.joinToString(",") { (title, artist) ->
                         """{"id":${title.length},"title":"$title","link":"https://www.deezer.com/track/${title.length}","artist":{"name":"$artist"},"album":{"cover_big":"https://cdn/$title.jpg"}}"""
@@ -3217,7 +3803,7 @@ class MainViewModelTest {
         assertEquals(listOf("Hush", "Moon", "Stars"), model.uiState.songSearch.map { it.title })
         assertFalse(model.uiState.isAskingForSongs)
         model.playlistFromSearch()
-        val playlist = model.uiState.result!!
+        val playlist = checkNotNull(model.uiState.result) { "Expected model.uiState.result to be non-null" }
         assertEquals(ItemType.PLAYLIST, playlist.type)
         assertEquals("quiet songs about hush and moon", playlist.title)
         assertEquals(listOf("Hush", "Moon", "Stars"), playlist.tracks.map { it.title })
@@ -3386,24 +3972,24 @@ class MainViewModelTest {
         assertTrue(model.uiState.listeningAlong)
         idle()
         assertEquals(1, ears.asked)
-        val first = model.uiState.following!!
+        val first = checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }
         assertNull(first.app)
         assertTrue(first.clock.playing)
         assertTrue(first.clock.positionAt(android.os.SystemClock.elapsedRealtime()) >= 12_000)
         // Heard nothing: the music most likely stopped, so the words stop where they are.
         pass(8_500)
         assertEquals(2, ears.asked)
-        assertFalse(model.uiState.following!!.clock.playing)
+        assertFalse(checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }.clock.playing)
         // Heard again, far from where the words are, it's where the song is now.
         ears.queue.add(heardNow(at = 50_000))
         pass(8_500)
-        assertTrue(model.uiState.following!!.clock.playing)
-        assertTrue(model.uiState.following!!.clock.positionAt(android.os.SystemClock.elapsedRealtime()) >= 50_000)
+        assertTrue(checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }.clock.playing)
+        assertTrue(checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }.clock.positionAt(android.os.SystemClock.elapsedRealtime()) >= 50_000)
         // Heard a moment off, nothing moves.
-        val placed = model.uiState.following!!.clock
+        val placed = checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }.clock
         ears.queue.add(heardNow(at = 50_000 + 8_500 + 700))
         pass(8_500)
-        assertEquals(placed, model.uiState.following!!.clock)
+        assertEquals(placed, checkNotNull(model.uiState.following) { "Expected model.uiState.following to be non-null" }.clock)
         // The next song takes over the words, and joins Recent.
         val next = MusicMetadata("Moon", "Luna")
         ears.queue.add(heardNow(of = next, at = 1_000, match = "m2", appleMusicId = "1234"))
@@ -3545,7 +4131,7 @@ class MainViewModelTest {
         assertTrue(opened != null)
         model.openPlayerApp()
         idle()
-        assertEquals(Effect.Show(opened!!, finishAfterOpen = false, saysWhenItFails = false), effects.last())
+        assertEquals(Effect.Show(checkNotNull(opened) { "Expected opened to be non-null" }, finishAfterOpen = false, saysWhenItFails = false), effects.last())
         assertEquals(2, effects.size)
     }
 
@@ -3724,7 +4310,7 @@ class MainViewModelTest {
         val playback = FakePlayback().apply { access = true }
         val answers = MutableSharedFlow<Following?>(extraBufferCapacity = 1)
         val source = object : PlaybackSource by playback {
-            override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = answers
+            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = answers
         }
         val model = ytMusicModel(source)
         val effects = mutableListOf<Effect>()

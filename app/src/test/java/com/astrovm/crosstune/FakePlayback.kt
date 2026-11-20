@@ -75,6 +75,7 @@ internal class FakePlayback : PlaybackSource {
 
     /** The app each follow was asked for, null for any. */
     val followedApps: MutableList<String?> = CopyOnWriteArrayList()
+    val followedSessions: MutableList<Int?> = CopyOnWriteArrayList()
 
     /** Till done, following says nothing, as an app may take a moment to say what it plays. */
     @Volatile
@@ -103,14 +104,14 @@ internal class FakePlayback : PlaybackSource {
     }
 
     private fun forSession(flow: MutableStateFlow<Following?>): PlaybackSource = object : PlaybackSource by this {
-        override fun follow(song: MusicMetadata, app: String?) = followed(song, app, flow.map { it?.copy(session = number(flow)) }, sessionSongs[number(flow)])
-        override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
+        override fun follow(song: MusicMetadata, app: String?, session: Int?) = followed(song, app, flow.map { it?.copy(session = number(flow)) }, sessionSongs[number(flow)])
+        override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?, session: Int?) {
             seeks += positionMs
             seekedApps += app
             seekedSessions += number(flow)
             if (number(flow) !in ignoredSeeks) moved(flow, { _, _ -> positionMs }, { it.playing })
         }
-        override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
+        override fun playPause(song: MusicMetadata, play: Boolean, app: String?, session: Int?) {
             plays += play
             playedApps += app
             playedSongs += song
@@ -123,7 +124,10 @@ internal class FakePlayback : PlaybackSource {
         }
     }
 
-    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = followed(song, app, app?.let(appPlaying::get) ?: playing)
+    override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> {
+        followedSessions += session
+        return followed(song, app, app?.let(appPlaying::get) ?: playing)
+    }
 
     private fun followed(song: MusicMetadata, app: String?, from: Flow<Following?>, ownSong: MusicMetadata? = null): Flow<Following?> {
         followed += song
@@ -161,6 +165,17 @@ internal class FakePlayback : PlaybackSource {
 
     override fun nowPlaying() = (whatPlays() as? WhatPlays.Named)?.song
 
+    /** Whether the artist on the player bar came from a title with no separate artist field. */
+    var artistReadFromTitle = false
+
+    override fun songForRecognition() = nowPlaying()?.takeUnless { artistReadFromTitle }
+
+    override fun playsHereWithoutSong(): Boolean = when (val first = whatPlays()) {
+        is WhatPlays.Named -> songWhere == Place.PHONE && artistReadFromTitle
+        is WhatPlays.Nameless -> !first.playing.away
+        null -> false
+    }
+
     override fun recording(song: MusicMetadata) = onThePhone?.metadata
 
     /** Whether what's on the phone is yet to be said, as by a session slow to answer: [nowPlayingUpdates] says nothing till it's false. */
@@ -178,7 +193,7 @@ internal class FakePlayback : PlaybackSource {
      */
     val unnamed = MutableStateFlow<Unnamed?>(null)
 
-    private fun playingOnly(unnamed: Unnamed?, following: Following?) = unnamed?.takeIf { following?.clock?.playing != false }
+    private fun playingOnly(unnamed: Unnamed?, following: Following?) = unnamed?.takeIf { !it.reportsState || following?.clock?.playing != false }
 
     /** Where [onThePhone] plays: on the phone, cast to a TV by its music app, or on another device, as KDE Connect shows a computer's. */
     var songWhere = Place.PHONE
@@ -248,16 +263,21 @@ internal class FakePlayback : PlaybackSource {
         if (obeys) flow.value = now.copy(clock = PlaybackClock(positionMs(now.clock, at), at, now.clock.speed, playing(now.clock)))
     }
 
-    override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
+    val controlSeekSessions: MutableList<Int?> = CopyOnWriteArrayList()
+    val playedSessions: MutableList<Int?> = CopyOnWriteArrayList()
+
+    override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?, session: Int?) {
         seeks += positionMs
         seekedApps += app
+        controlSeekSessions += session
         moved(app, { _, _ -> positionMs }, { it.playing })
     }
 
-    override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
+    override fun playPause(song: MusicMetadata, play: Boolean, app: String?, session: Int?) {
         plays += play
         playedApps += app
         playedSongs += song
+        playedSessions += session
         moved(app, { clock, at -> clock.positionAt(at) }, { play })
         onPlay(app, play)
     }
@@ -268,7 +288,7 @@ internal class FakePlayback : PlaybackSource {
     /** Each app asked, by package, to play whatever it has. */
     val appsPlayed: MutableList<String> = CopyOnWriteArrayList()
 
-    override fun playApp(app: String) {
+    override fun playApp(app: String, session: Int?) {
         appsPlayed += app
     }
 
@@ -278,9 +298,10 @@ internal class FakePlayback : PlaybackSource {
     }
 
     // Asked to play on, as the phone's, it does unless it only plays in front.
-    override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
+    override suspend fun resume(song: MusicMetadata, app: String?, session: Int?): Boolean {
         plays += true
         playedApps += app
+        playedSessions += session
         onPlay(app, true)
         return startsInBackground.also { if (!it) onlyInFront = true }
     }
@@ -288,7 +309,7 @@ internal class FakePlayback : PlaybackSource {
     /** Each song an app was brought to the front to play on. */
     val broughtToFront: MutableList<MusicMetadata> = CopyOnWriteArrayList()
 
-    override suspend fun bringToFront(song: MusicMetadata, app: String?): Boolean {
+    override suspend fun bringToFront(song: MusicMetadata, app: String?, session: Int?): Boolean {
         if (!opens) return false
         broughtToFront += song
         return true
@@ -343,29 +364,37 @@ internal class FakePlayback : PlaybackSource {
 
     /** The app each control other than play, pause and seek was sent to, null for any: skips, shuffle, repeat, like and a queued song. */
     val controlledApps: MutableList<String?> = CopyOnWriteArrayList()
+    val controlledSessions: MutableList<Int?> = CopyOnWriteArrayList()
 
-    override fun skip(song: MusicMetadata, next: Boolean, app: String?) {
+    override fun skip(song: MusicMetadata, next: Boolean, app: String?, session: Int?) {
         skips += next
         controlledApps += app
+        controlledSessions += session
     }
 
-    override fun shuffle(song: MusicMetadata, on: Boolean, app: String?) {
+    override fun shuffle(song: MusicMetadata, on: Boolean, app: String?, session: Int?) {
         shuffled += on
         controlledApps += app
+        controlledSessions += session
     }
 
-    override fun repeat(song: MusicMetadata, how: Repeat, app: String?) {
+    override fun repeat(song: MusicMetadata, how: Repeat, app: String?, session: Int?) {
         repeated += how
         controlledApps += app
+        controlledSessions += session
     }
 
-    override fun like(song: MusicMetadata, app: String?) {
+    override fun like(song: MusicMetadata, app: String?, session: Int?) {
         liked++
         controlledApps += app
+        controlledSessions += session
     }
 
-    override fun playQueued(song: MusicMetadata, id: Long, app: String?) {
+    val queuedSessions: MutableList<Int?> = CopyOnWriteArrayList()
+
+    override fun playQueued(song: MusicMetadata, id: Long, app: String?, session: Int?) {
         queuedPlayed += id
+        queuedSessions += session
         controlledApps += app
     }
 

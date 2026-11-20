@@ -252,8 +252,8 @@ class MilkdropTest {
         val shipped = app.assets.list("milkdrop-textures").orEmpty().sorted()
         assertTrue(shipped.isNotEmpty())
         fun bytes(name: String) = app.assets.open("milkdrop-textures/$name").use { it.readBytes() }
-        val dir = milkdropTextures(app)!!
-        assertEquals(shipped, dir.list()!!.filterNot { it.startsWith(".") }.sorted())
+        val dir = checkNotNull(milkdropTextures(app)) { "Expected milkdropTextures(app) to be non-null" }
+        assertEquals(shipped, checkNotNull(dir.list()) { "Expected dir.list() to be non-null" }.filterNot { it.startsWith(".") }.sorted())
         shipped.forEach { assertArrayEquals(bytes(it), File(dir, it).readBytes()) }
         // Already copied, they're left as they are.
         File(dir, shipped[0]).writeText("changed")
@@ -271,7 +271,7 @@ class MilkdropTest {
     fun theTapHearsWhatThePhonePlays() {
         val tap = OutputMixTap.open()
         assertNotNull(tap)
-        val visualizer = Shadow.extract<ShadowVisualizer>(visualizerOf(tap!!))
+        val visualizer = Shadow.extract<ShadowVisualizer>(visualizerOf(checkNotNull(tap) { "Expected tap to be non-null" }))
         visualizer.setSource(object : ShadowVisualizer.VisualizerSource {
             override fun getWaveForm(waveform: ByteArray): Int {
                 waveform.fill(7)
@@ -314,7 +314,7 @@ class MilkdropTest {
         }
         assertNotNull(tap)
         val samples = ByteArray(OutputMixTap.SAMPLES)
-        assertEquals(OutputMixTap.SAMPLES, tap!!.read(samples))
+        assertEquals(OutputMixTap.SAMPLES, checkNotNull(tap) { "Expected tap to be non-null" }.read(samples))
         assertArrayEquals(ByteArray(OutputMixTap.SAMPLES) { 7 }, samples)
         tap.close()
     }
@@ -332,8 +332,8 @@ class MilkdropTest {
                 override val rateHz = 44_100
             }
         }
-        val visuals = sound.open()!!
-        val shazam = sound.open()!!
+        val visuals = checkNotNull(sound.open()) { "Expected sound.open() to be non-null" }
+        val shazam = checkNotNull(sound.open()) { "Expected sound.open() to be non-null" }
         assertEquals(1, made)
         assertEquals(44_100, shazam.rateHz)
         val heard = ByteArray(4)
@@ -348,7 +348,7 @@ class MilkdropTest {
         // Let go once nothing needs it, and opened again when something does.
         visuals.close()
         assertEquals(1, released)
-        sound.open()!!.close()
+        checkNotNull(sound.open()) { "Expected sound.open() to be non-null" }.close()
         assertEquals(2, made)
         assertEquals(2, released)
         // A phone that won't share its sound gives none, and is asked again next time.
@@ -619,7 +619,7 @@ class MilkdropTest {
         // Left on the next frame or so, not two seconds later.
         assertTrue(changes[2].first - changes[1].first <= 100)
         // Tried again once the phone's not busy, it's left within two seconds as too slow, and that's remembered.
-        assertTrue(changes[3].first >= busyFrom!! + 4_000)
+        assertTrue(changes[3].first >= checkNotNull(busyFrom) { "Expected busyFrom to be non-null" } + 4_000)
         assertTrue(changes[4].first - changes[3].first <= 2_000)
         assertEquals(mapOf("a" to 0), tooSharp)
     }

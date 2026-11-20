@@ -29,6 +29,16 @@ class OfflineSongsTest {
     private val list = MusicMetadata("Mix", "", ItemType.PLAYLIST, url = "https://open.spotify.com/playlist/9", tracks = listOf(song, other))
 
     @Test
+    fun anInstrumentalAlbumAndTheSungRecordingStaySeparateAcrossRestart() = runBlocking {
+        val instrumental = song.copy(instrumentalAlbum = "Album (Instrumentals)")
+        val kept = songs()
+        assertTrue(kept.keep(song).id != kept.keep(instrumental).id)
+        val reopened = songs()
+        assertEquals(listOf(song), reopened.has(song)?.songs)
+        assertEquals(listOf(instrumental), reopened.has(instrumental)?.songs)
+    }
+
+    @Test
     fun aSongKeptWithoutItsSungReadingsStaysSoAcrossRestartsUntilItHasThem() = runBlocking {
         val mix = songs().keep(list)
         songs().saved(mix.id, song, unread = true)
@@ -57,11 +67,11 @@ class OfflineSongsTest {
         // What a song needs is kept for each one that keeps it, and so is its cover.
         withContext(Pinning(kept.id)) { words.put("song", "words") }
         withContext(Pinning(mix.id)) { words.get("song"); words.put("other", "more words") }
-        covers.keep(song.artworkUrl!!)
-        covers.keep(other.artworkUrl!!)
+        covers.keep(checkNotNull(song.artworkUrl) { "Expected song.artworkUrl to be non-null" })
+        covers.keep(checkNotNull(other.artworkUrl) { "Expected other.artworkUrl to be non-null" })
         songs.saved(mix.id, song)
         songs.saved(mix.id, other)
-        assertTrue(songs.has(list)!!.done)
+        assertTrue(checkNotNull(songs.has(list)) { "Expected songs.has(list) to be non-null" }.done)
         assertEquals(("song" + "words" + "other" + "more words").length + covers.keptSize(), songs.size())
 
         // Across restarts, songs and all.
@@ -71,8 +81,8 @@ class OfflineSongsTest {
         // Let go, the list's song the other still keeps stays, with its cover.
         restarted.letGo(mix.id)
         assertEquals(listOf(kept), restarted.all())
-        assertEquals(("song" + "words").length.toLong() + File(dir, "covers").listFiles()!!.sumOf { it.length() }, restarted.size())
-        assertEquals(1, File(dir, "covers").listFiles()!!.size)
+        assertEquals(("song" + "words").length.toLong() + checkNotNull(File(dir, "covers").listFiles()) { "Expected File(dir, \"covers\").listFiles() to be non-null" }.sumOf { it.length() }, restarted.size())
+        assertEquals(1, checkNotNull(File(dir, "covers").listFiles()) { "Expected File(dir, \"covers\").listFiles() to be non-null" }.size)
         restarted.letGo(kept.id)
         assertEquals(0L, restarted.size())
         assertEquals(emptyList<KeptOffline>(), songs().all())

@@ -135,9 +135,9 @@ class FlashcardsTest {
         composeRule.waitForIdle()
     }
 
-    private fun model() = androidx.lifecycle.ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+    private fun model() = androidx.lifecycle.ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
 
-    private fun practice() = model().uiState.practice!!
+    private fun practice() = checkNotNull(model().uiState.practice) { "Expected model().uiState.practice to be non-null" }
 
     /** Waits for [condition], the phone's clock moving on a little each time, for what waits on it. */
     private fun waitUntil(condition: () -> Boolean) =
@@ -188,7 +188,7 @@ class FlashcardsTest {
     private fun inEditor() = composeRule.onNode(hasSetTextAction()).assertExists()
 
     private fun pressBack() {
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
     }
 
@@ -244,6 +244,43 @@ class FlashcardsTest {
     private fun saved(vararg lines: String) = prefs().edit().putString("saved_lines", lines.joinToString(",", "[", "]")).commit()
 
     private fun savedLine(text: String) = SavedLinesStore(prefs()).load().first { it.text == text }
+
+    @Test
+    fun anOldCardShowsTheNewDictionaryAndTheSungReadingOffline() {
+        val song = MusicMetadata("Old Counters", "Band", lengthMs = 60_000)
+        val text = "都会の三本の花と存在"
+        val lines = listOf("雨が降る", text)
+        saved("""{"text":"$text","title":"${song.title}","artist":"${song.artist}","reading":"まちのさんほんのはなとこと","romanized":"machi no sanhon no hana to koto",
+            "ruby":[["都会","まち"],["の",null],["三本","さんほん"],["の",null],["花","はな"],["と",null],["存在","こと"]]}""")
+        val lyrics = LookupCache(File(app.cacheDir, "lyrics.json"), Dispatchers.Unconfined)
+        val sung = LookupCache(File(app.cacheDir, "sung_readings.json"), Dispatchers.Unconfined)
+        val answers = LookupCache(File(app.cacheDir, "chatgpt_answers.json"), Dispatchers.Unconfined)
+        runBlocking {
+            lyrics.put("16\u0000${RecordingKey.of(song)}", """{"words":"雨が降る\n${text}かな","lines":[[1000,"雨が降る"],[2000,"$text"]]}""")
+            val key = "oldcounters|band|${lines.hashCode()}"
+            sung.put("utaten|3|$key", """[[1,"都会","まち"]]""")
+            sung.put("utaten|4|$key", "[]")
+            answers.put("readings|old-model|${song.title}|Band|${lines.hashCode()}", """[{"line":2,"kanji":"存在","reading":"こと"}]""")
+            answers.put("readings|bad-model|${song.title}|Band|${lines.hashCode()}", "bad cache entry")
+            answers.put("readings|other-model|${song.title}|Other Band|${lines.hashCode()}", """[{"line":2,"kanji":"存在","reading":"もの"}]""")
+            answers.put("unrelated|old-model|${song.title}|Band|${lines.hashCode()}", """[{"line":2,"kanji":"存在","reading":"もの"}]""")
+            lyrics.save()
+            sung.save()
+            answers.save()
+        }
+
+        launch()
+        practiseAll(1)
+        click(string(R.string.practice_show))
+        waitUntil { onCard("machi no sanbon no hana to koto") }
+        assertFalse(onCard("machi no sanhon no hana to koto"))
+        assertNull(model().uiState.lyricsFor)
+        assertTrue(fake.requestedUrls.none { "lrclib.net" in it || "utaten.com" in it || "chatgpt.com" in it })
+        val stored = savedLine(text)
+        assertEquals(Ruby("都会", "まち", Reader.SUNG), stored.ruby?.first())
+        assertEquals(Ruby("存在", "こと", Reader.CHATGPT), stored.ruby?.last())
+        assertEquals(Readings.VERSION, stored.readWith)
+    }
 
     /** A line to check or not among those to choose. */
     private fun line(text: String) = composeRule.onNode(isToggleable() and hasText(text))
@@ -463,7 +500,7 @@ class FlashcardsTest {
         click(string(R.string.back_button))
         assertTrue(shown(string(R.string.card_type_new)))
         click(string(R.string.practice_fix_reading))
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertTrue(shown(string(R.string.card_type_new)))
         assertEquals("よのそら", savedLine("夜の空").reading)
@@ -486,7 +523,7 @@ class FlashcardsTest {
         )
         // The app has the song open, but plays an ad first, so the card waits for it there.
         appHas("Other", atMs = 0, playing = false)
-        phone.playing.value = phone.playing.value!!.copy(ad = true)
+        phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(ad = true)
         launch()
         // Due, practice is a tap away from the main screen, saying how many.
         practiseAll(2)
@@ -945,7 +982,7 @@ class FlashcardsTest {
         click(string(R.string.practice_show))
         waitUntil { practice().sound == LineSound.PLAYING }
         val pauses = linePlayer.pauses
-        controller!!.pause().stop()
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         waitUntil { practice().sound == LineSound.PLAYED }
         assertTrue(linePlayer.pauses > pauses)
     }
@@ -1024,7 +1061,7 @@ class FlashcardsTest {
         waitUntil { practice().line?.text == "Lost" && practice().sound == LineSound.NONE }
         assertTrue(phone.songsAsked.isEmpty())
         // Already this song, and it won't move, and YouTube has no video of it. It isn't asked for, and the card has no sound.
-        appHas(practice().line!!.title, canSeek = false)
+        appHas(checkNotNull(practice().line) { "Expected practice().line to be non-null" }.title, canSeek = false)
         click(string(R.string.floating_close))
         waitUntil { model().uiState.practice == null }
         practiseAll(1)
@@ -1033,7 +1070,7 @@ class FlashcardsTest {
         assertNull(model().uiState.practice?.video)
         assertFalse(described(string(R.string.practice_play)))
         // Stopped while a line plays, the app pauses it. The app that wouldn't move is skipped for a week, so another one has it.
-        val playing = practice().line!!
+        val playing = checkNotNull(practice().line) { "Expected practice().line to be non-null" }
         appHas(playing.title, atMs = 0, app = "com.example.player")
         click(string(R.string.floating_close))
         waitUntil { model().uiState.practice == null }
@@ -1312,7 +1349,7 @@ class FlashcardsTest {
         click(string(R.string.saved_practice))
         assertTrue(shown(string(R.string.practice_all_songs)) && shown("Demo"))
         // Back, it's the main screen.
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertFalse(shown(string(R.string.practice_all_songs)))
         assertTrue(described(string(R.string.saved_practice)))

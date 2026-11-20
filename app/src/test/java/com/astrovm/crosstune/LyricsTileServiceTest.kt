@@ -41,7 +41,7 @@ class LyricsTileServiceTest {
 
         service.onClick()
 
-        assertListensForLyrics(shadowOf(launched!!).savedIntent)
+        assertListensForLyrics(shadowOf(checkNotNull(launched) { "Expected launched to be non-null" }).savedIntent)
     }
 
     @Test

@@ -456,7 +456,7 @@ class SungWordsTest {
         assertFalse(store.heard(MusicMetadata("Other", "Band"), song))
         // Saved again, it's still one.
         store.save(demo, song)
-        assertEquals(1, prefs.getString("sung_heard", null)!!.split('\n').size)
+        assertEquals(1, checkNotNull(prefs.getString("sung_heard", null)) { "Expected prefs.getString(\"sung_heard\", null) to be non-null" }.split('\n').size)
     }
 
     @Test
@@ -503,7 +503,7 @@ class SungWordsTest {
         assertEquals(listOf(File("model")), models)
         assertEquals("es", words.language)
         // 16 kHz, as whisper.cpp hears, from -1 to 1.
-        val samples = words.samples!!
+        val samples = checkNotNull(words.samples) { "Expected words.samples to be non-null" }
         assertEquals(16_000 * SingingListener.SECONDS, samples.size)
         assertEquals(99 / 32768f, samples[99])
         assertEquals(0f, samples[100])
@@ -667,8 +667,8 @@ class SungWordsTest {
         // Pieces that don't fill the reads evenly: the last read takes only what's left.
         val microphone = FakeMicrophone().apply { play(7.0001); play(13.0) }
         val words = FakeWords(listOf(HeardWord("Oh", 320)))
-        assertEquals(1, listener(microphone, hearing = words).hear(null, null)!!.words.size)
-        assertEquals(16_000 * SingingListener.SECONDS, words.samples!!.size)
+        assertEquals(1, checkNotNull(listener(microphone, hearing = words).hear(null, null)) { "Expected listener(microphone, hearing = words).hear(null, null) to be non-null" }.words.size)
+        assertEquals(16_000 * SingingListener.SECONDS, checkNotNull(words.samples) { "Expected words.samples to be non-null" }.size)
     }
 
     @Test
@@ -715,7 +715,7 @@ class SungWordsTest {
         assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = null).hear(null, null))
         // One that isn't closed needn't be.
         val open = WordHearing { _, _ -> listOf(HeardWord("Oh", 320)) }
-        assertEquals(1, listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null, null)!!.words.size)
+        assertEquals(1, checkNotNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null, null)) { "Expected listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hea... to be non-null" }.words.size)
     }
 
     @Test
@@ -769,10 +769,10 @@ class SungWordsTest {
     @Test
     fun theModelIsFetchedOnceAndKept() = runBlocking {
         val fake = serving()
-        val file = whisper(fake).file()!!
+        val file = checkNotNull(whisper(fake).file()) { "Expected whisper(fake).file() to be non-null" }
         assertEquals(String(modelBytes), file.readText())
         assertEquals(listOf("https://models.test/tiny.bin"), fake.requestedUrls)
-        assertEquals(listOf("ggml-tiny-q5_1.bin"), file.parentFile!!.list()!!.toList())
+        assertEquals(listOf("ggml-tiny-q5_1.bin"), checkNotNull(checkNotNull(file.parentFile) { "Expected file.parentFile to be non-null" }.list()) { "Expected file.parentFile.list() to be non-null" }.toList())
         // Kept, it isn't fetched again, even where it couldn't be.
         assertEquals(file, whisper(fake, mayFetch = false).file())
         assertEquals(1, fake.requestedUrls.size)
@@ -788,7 +788,7 @@ class SungWordsTest {
     @Test
     fun askedForByHandTheModelIsFetchedOnAnyNetworkAndKept() = runBlocking {
         val fake = serving()
-        val file = whisper(fake, mayFetch = false).fetchAnyway()!!
+        val file = checkNotNull(whisper(fake, mayFetch = false).fetchAnyway()) { "Expected whisper(fake, mayFetch = false).fetchAnyway() to be non-null" }
         assertEquals(String(modelBytes), file.readText())
         // There now, it's used without fetching it again.
         assertEquals(file, whisper(fake, mayFetch = false).fetchAnyway())
@@ -799,7 +799,7 @@ class SungWordsTest {
     @Test
     fun oneNotAsTriedIsntKeptWhenFetchedByHandEither() = runBlocking {
         assertNull(whisper(serving(), mayFetch = false, sha256 = "0".repeat(64)).fetchAnyway())
-        assertEquals(emptyList<String>(), File(folder.root, "whisper").list()!!.toList())
+        assertEquals(emptyList<String>(), checkNotNull(File(folder.root, "whisper").list()) { "Expected File(folder.root, \"whisper\").list() to be non-null" }.toList())
     }
 
     @Test
@@ -807,7 +807,7 @@ class SungWordsTest {
         assertNull(whisper(serving(), sha256 = "0".repeat(64)).file())
         assertNull(whisper(serving(code = 404)).file())
         assertNull(whisper(FakeSpotify().apply { handler = { FakeSpotify.brokenBody(it) } }).file())
-        assertEquals(emptyList<String>(), File(folder.root, "whisper").list()!!.toList())
+        assertEquals(emptyList<String>(), checkNotNull(File(folder.root, "whisper").list()) { "Expected File(folder.root, \"whisper\").list() to be non-null" }.toList())
     }
 
     @Test

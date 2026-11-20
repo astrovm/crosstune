@@ -121,7 +121,7 @@ Singing to the morning light</div>"""
     private fun netEase(vararg songs: Pair<String, List<String>>) = JSONObject().put(
         "result",
         JSONObject().put("songs", JSONArray(songs.map { (name, artists) -> JSONObject().put("name", name).put("artists", JSONArray(artists.map { JSONObject().put("name", it) })) }))
-    ).toString()
+    ).put("code", 200).toString()
 
     /** U-FRET answering [searches] by what's searched for, and [pages] otherwise. */
     private fun uFret(searches: Map<String, String>, pages: Map<String, String>): (Request) -> okhttp3.Response = { request ->
@@ -286,7 +286,7 @@ Singing to the morning light</div>"""
         jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), jTotalPages)
         val pages = fake.handler
         fake.handler = { request ->
-            if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else pages(request)
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""") else pages(request)
         }
         assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(named, japanese) as ChordFinder.Chords.Found).sheet.url)
     }
@@ -349,7 +349,7 @@ Singing to the morning light</div>"""
             jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), pages)
             val site = fake.handler
             fake.handler = { request ->
-                if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else site(request)
+                if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""") else site(request)
             }
             assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(song, japanese) as ChordFinder.Chords.Found).sheet.url)
         }
@@ -917,8 +917,8 @@ Singing to the morning light</div>"""
             }
         }
         val found = chords(river, english) as ChordFinder.Chords.Found
-        assertEquals(listOf("G", "Dm7*"), ChordSheets.place(found.sheet, english)!![0].over.map { it.name })
-        assertEquals(listOf("Am"), ChordSheets.place(found.sheet, english)!![1].over.map { it.name })
+        assertEquals(listOf("G", "Dm7*"), checkNotNull(ChordSheets.place(found.sheet, english)) { "Expected ChordSheets.place(found.sheet, english) to be non-null" }[0].over.map { it.name })
+        assertEquals(listOf("Am"), checkNotNull(ChordSheets.place(found.sheet, english)) { "Expected ChordSheets.place(found.sheet, english) to be non-null" }[1].over.map { it.name })
     }
 
     @Test
@@ -933,7 +933,7 @@ Singing to the morning light</div>"""
             )
         }
         val found = chords(river, english) as ChordFinder.Chords.Found
-        assertEquals(listOf("G", "Dº"), ChordSheets.place(found.sheet, english)!![0].over.map { it.name })
+        assertEquals(listOf("G", "Dº"), checkNotNull(ChordSheets.place(found.sheet, english)) { "Expected ChordSheets.place(found.sheet, english) to be non-null" }[0].over.map { it.name })
     }
 
     @Test
@@ -950,7 +950,7 @@ Singing to the morning light</div>"""
             val found = chords(river, english) as ChordFinder.Chords.Found
             assertEquals("https://acordes.lacuerda.net/walkers/river_road.shtml", found.sheet.url)
             assertEquals(listOf("River Road The Walkers", "River Road"), fake.requestedUrls.filter { "/busca.php" in it }.map { it.toHttpUrl().queryParameter("exp") })
-            assertEquals(listOf("G", "C"), ChordSheets.place(found.sheet, english)!![0].over.map { it.name })
+            assertEquals(listOf("G", "C"), checkNotNull(ChordSheets.place(found.sheet, english)) { "Expected ChordSheets.place(found.sheet, english) to be non-null" }[0].over.map { it.name })
         }
     }
 
@@ -1519,7 +1519,7 @@ Singing to the morning light</div>"""
                 "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch())
                 "music.j-total.net" -> FakeSpotify.html(request, "")
                 "www.ufret.jp" -> FakeSpotify.html(request, "")
-                "music.163.com" -> FakeSpotify.html(request, """{"result":{}}""")
+                "music.163.com" -> FakeSpotify.html(request, """{"result":{"songCount":0},"code":200}""")
                 "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
                 else -> answer(request, emptyMap())
             }
@@ -1600,7 +1600,7 @@ Singing to the morning light</div>"""
         val sites = fake.handler
         // Named in Japanese by NetEase, so the edit page is that name and the search is never opened.
         fake.handler = { request ->
-            if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else sites(request)
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""") else sites(request)
         }
         var edits = 0
         val found = chords(
@@ -1791,6 +1791,239 @@ Singing to the morning light</div>"""
         val slow = withWiki(ChordWikiPages { delay(1_000); chordPro })
         // Out of time with no check seen is not said to be the check.
         assertEquals(ChordFinder.Chords.Unavailable, runBlocking { slow.chordsOf(kawa, japanese, timeoutMs = 40) })
+    }
+
+    @Test
+    fun aDefiniteWikiMissExpiresAfterOneDayAndErrorsAreRetried() {
+        noOtherChordSites()
+        val file = File.createTempFile("chords", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        var clock = 1_000L
+        var calls = 0
+        val pages = ChordWikiPages { calls++; "" }
+        val finder = ChordFinder(fake.client(), lookups, cache, pages, chordWikiPauseMs = 0, now = { clock })
+        chords(kawa, japanese, finder)
+        val first = calls
+        assertTrue(first > 0)
+        clock += LookupCache.DAY_MS - 1
+        chords(kawa, japanese, finder)
+        assertEquals(first, calls)
+        clock++
+        chords(kawa, japanese, finder)
+        assertEquals(first * 2, calls)
+        val other = MusicMetadata("別の歌", "歩く人")
+        var errors = 0
+        val failing = ChordFinder(fake.client(), lookups, cache, ChordWikiPages { errors++; throw IOException("offline") }, chordWikiPauseMs = 0, now = { clock })
+        chords(other, japanese, failing)
+        chords(other, japanese, failing)
+        assertEquals(2, errors)
+        for (check in listOf(ChordWikiCheck.AUTOMATIC, ChordWikiCheck.INTERACTIVE)) {
+            var checks = 0
+            val checked = ChordFinder(fake.client(), lookups, cache, ChordWikiPages { checks++; throw ChordWikiStopped(check) }, chordWikiPauseMs = 0, now = { clock })
+            chords(other, japanese, checked)
+            chords(other, japanese, checked)
+            assertEquals(2, checks)
+        }
+    }
+
+    @Test
+    fun aWikiMissCanBeRetriedAfterTheLocalizedNameLookupRecovers() {
+        noOtherChordSites()
+        val sites = fake.handler
+        var catalogReady = false
+        fake.handler = { request ->
+            if (request.url.host != "music.163.com") sites(request)
+            else if (catalogReady) FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""")
+            else FakeSpotify.html(request, "Temporarily unavailable", code = 503)
+        }
+        val cacheFile = File.createTempFile("chords-names", ".json").apply { delete(); deleteOnExit() }
+        val finder = withWiki(
+            ChordWikiPages { url -> if (url == chordWikiEditUrl("川の道")) chordPro else "" },
+            LookupCache(cacheFile, Dispatchers.Unconfined)
+        )
+        val song = MusicMetadata("Kawa no Michi", "歩く人")
+        assertFalse(chords(song, japanese, finder) is ChordFinder.Chords.Found)
+        catalogReady = true
+        val found = chords(song, japanese, finder) as? ChordFinder.Chords.Found
+        assertEquals(chordWikiViewUrl("川の道"), found?.sheet?.url)
+    }
+
+    @Test
+    fun aMissingLocalizedTitleIsCachedOnlyWhenBothCatalogsAnswer() {
+        val song = MusicMetadata("Kawa no Michi", "歩く人")
+        for (badHost in listOf(null, "music.163.com", "itunes.apple.com")) {
+            noOtherChordSites()
+            val sites = fake.handler
+            var catalogReady = false
+            fake.handler = { request ->
+                when {
+                    !catalogReady && request.url.host == badHost -> FakeSpotify.html(request, "<html>bad</html>")
+                    catalogReady && request.url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""")
+                    else -> sites(request)
+                }
+            }
+            val cacheFile = File.createTempFile("chords-catalogs", ".json").apply { delete(); deleteOnExit() }
+            val cache = LookupCache(cacheFile, Dispatchers.Unconfined)
+            val finder = withWiki(ChordWikiPages { url -> if (url == chordWikiEditUrl("川の道")) chordPro else "" }, cache)
+            assertEquals(badHost, ChordFinder.Chords.None, chords(song, japanese, finder))
+            assertEquals(badHost, badHost == null, runBlocking { cache.entries().any { it.first.startsWith("wiki-miss:") } })
+
+            catalogReady = true
+            val found = chords(song, japanese, finder) as? ChordFinder.Chords.Found
+            assertEquals(badHost, chordWikiViewUrl("川の道").takeIf { badHost != null }, found?.sheet?.url)
+        }
+    }
+
+    @Test
+    fun aWikiMissWithAnIncompleteCatalogCanBeRetriedEvenWithAnAlternateTitle() {
+        val song = MusicMetadata("Kawa no Michi", "歩く人")
+        val cases = listOf(
+            "music.163.com" to "<html>bad</html>",
+            "music.163.com" to """{"code":500,"message":"unavailable"}""",
+            "music.163.com" to """{"result":{"songs":[]}}""",
+            "itunes.apple.com" to """{"errorMessage":"unavailable"}""",
+            "itunes.apple.com" to """{"results":[],"errorMessage":"unavailable"}"""
+        )
+        for ((badHost, bad) in cases) {
+            noOtherChordSites()
+            val sites = fake.handler
+            var recovered = false
+            fake.handler = { request ->
+                when {
+                    recovered && request.url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]},"code":200}""")
+                    !recovered && request.url.host == badHost -> FakeSpotify.html(request, bad)
+                    !recovered && request.url.host == "itunes.apple.com" && badHost == "music.163.com" ->
+                        FakeSpotify.html(request, """{"results":[{"trackName":"海の歌","artistName":"歩く人"}]}""")
+                    else -> sites(request)
+                }
+            }
+            val cacheFile = File.createTempFile("chords-incomplete", ".json").apply { delete(); deleteOnExit() }
+            val cache = LookupCache(cacheFile, Dispatchers.Unconfined)
+            val finder = withWiki(ChordWikiPages { url -> if (url == chordWikiEditUrl("川の道")) chordPro else "" }, cache)
+            assertEquals(bad, ChordFinder.Chords.None, chords(song, japanese, finder))
+            assertFalse(bad, runBlocking { cache.entries().any { it.first.startsWith("wiki-miss:") } })
+            recovered = true
+            val found = chords(song, japanese, finder) as? ChordFinder.Chords.Found
+            assertEquals(bad, chordWikiViewUrl("川の道"), found?.sheet?.url)
+        }
+    }
+
+    @Test
+    fun aWikiMissSurvivesReloadButNotChangedLyricsOrAClockRollback() {
+        noOtherChordSites()
+        val file = File.createTempFile("wiki-miss", ".json").apply { delete(); deleteOnExit() }
+        var clock = 1_000L
+        var calls = 0
+        val pages = ChordWikiPages { calls++; "" }
+        fun fresh() = ChordFinder(fake.client(), lookups, LookupCache(file, Dispatchers.Unconfined), pages, chordWikiPauseMs = 0, now = { clock })
+        val words = listOf("川AB", "C")
+        chords(kawa, words, fresh())
+        val first = calls
+        assertTrue(first > 0)
+        chords(kawa, words, fresh())
+        assertEquals(first, calls)
+        // The concatenated letters are the same, but these are different lines.
+        chords(kawa, listOf("川A", "BC"), fresh())
+        assertEquals(first * 2, calls)
+        clock = 0
+        chords(kawa, words, fresh())
+        assertEquals(first * 3, calls)
+    }
+
+    @Test
+    fun wikiMissesAreKeptApartFromSheetsAndAnOldOneIsLetGo() {
+        noOtherChordSites()
+        val sheets = LookupCache(File.createTempFile("wiki-sheets", ".json").apply { delete(); deleteOnExit() }, Dispatchers.Unconfined)
+        val missFile = File.createTempFile("wiki-misses", ".json").apply { delete(); deleteOnExit() }
+        val misses = LookupCache(missFile, Dispatchers.Unconfined, maxEntries = 1)
+        var clock = 1_000L
+        var calls = 0
+        var published = false
+        val finder = ChordFinder(
+            fake.client(), lookups, sheets, ChordWikiPages { url -> calls++; if (published && url == chordWikiEditUrl("川の道")) chordPro else "" },
+            chordWikiPauseMs = 0, now = { clock }, misses = misses
+        )
+        chords(kawa, japanese, finder)
+        val first = calls
+        assertTrue(first > 0)
+        // The miss is in its own cache, so a list of them can't push a sheet out of the sheets'.
+        assertTrue(runBlocking { misses.entries().single().first.startsWith("wiki-miss:") })
+        assertTrue(runBlocking { sheets.entries().none { it.first.startsWith("wiki-miss:") } })
+        chords(kawa, japanese, finder)
+        assertEquals(first, calls)
+        // A note still good is kept, not let go as it's used.
+        assertEquals(1, runBlocking { misses.entries().size })
+        assertEquals(1, runBlocking { LookupCache(missFile, Dispatchers.Unconfined).entries().size })
+        // A day on, it's looked up again, and the old note is dropped, from the file too, rather than left to fill the cache.
+        clock += LookupCache.DAY_MS
+        published = true
+        assertTrue(chords(kawa, japanese, finder) is ChordFinder.Chords.Found)
+        assertTrue(calls > first)
+        assertTrue(runBlocking { misses.entries().isEmpty() })
+        assertTrue(runBlocking { LookupCache(missFile, Dispatchers.Unconfined).entries().isEmpty() })
+    }
+
+    @Test
+    fun wikiMissKeysKeepDigitAndNullBoundariesSeparate() {
+        noOtherChordSites()
+        val pairs = listOf(
+            listOf("a\u0000b", "c") to listOf("a", "b\u0000c"),
+            listOf("2", "abcdefghij1z") to listOf("12abcdefghij", "z")
+        )
+        for ((firstWords, secondWords) in pairs) {
+            val file = File.createTempFile("wiki-framing", ".json").apply { delete(); deleteOnExit() }
+            var calls = 0
+            val pages = ChordWikiPages { calls++; "" }
+            val finder = ChordFinder(fake.client(), lookups, LookupCache(file, Dispatchers.Unconfined), pages, chordWikiPauseMs = 0, now = { 1_000L })
+            chords(kawa, firstWords, finder)
+            val first = calls
+            assertTrue(first > 0)
+            chords(kawa, secondWords, finder)
+            assertEquals(first * 2, calls)
+            chords(kawa, firstWords, finder)
+            assertEquals(first * 2, calls)
+        }
+    }
+
+    @Test
+    fun aDefaultClockMissIsSavedAtTheCurrentTimeAndReusedAfterReload() {
+        noOtherChordSites()
+        val file = File.createTempFile("wiki-clock", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        var calls = 0
+        val pages = ChordWikiPages { calls++; "" }
+        val before = System.currentTimeMillis()
+        assertTrue("The wall clock must distinguish the zero-time mutant", before > 0L)
+        chords(kawa, japanese, ChordFinder(fake.client(), lookups, cache, pages, chordWikiPauseMs = 0))
+        val after = System.currentTimeMillis()
+        val timestamp = runBlocking { cache.entries().single { it.first.startsWith("wiki-miss:") }.second.toLong() }
+        assertTrue("Saved miss time $timestamp must be between $before and $after", timestamp in minOf(before, after)..maxOf(before, after))
+        val first = calls
+        assertTrue(first > 0)
+        val reopened = ChordFinder(fake.client(), lookups, LookupCache(file, Dispatchers.Unconfined), pages, chordWikiPauseMs = 0)
+        chords(kawa, japanese, reopened)
+        assertEquals(first, calls)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun aLateAutomaticCheckSurvivesTheTotalDeadline() = kotlinx.coroutines.test.runTest {
+        noOtherChordSites()
+        var calls = 0
+        var observedAt = 0L
+        val pages = ChordWikiPages {
+            calls++
+            if (calls == 1) { delay(19_000); "" } else {
+                observedAt = testScheduler.currentTime
+                kotlinx.coroutines.currentCoroutineContext()[WikiObservation]?.check = ChordWikiCheck.AUTOMATIC
+                delay(18_000)
+                ""
+            }
+        }
+        val finder = ChordFinder(fake.client(), kotlinx.coroutines.test.StandardTestDispatcher(testScheduler), chordWiki = pages, chordWikiPauseMs = 0)
+        assertEquals(ChordFinder.Chords.WikiTimedOut, finder.chordsOf(kawa, japanese, timeoutMs = 20_000))
+        assertEquals(19_000L, observedAt)
+        assertEquals(2, calls)
     }
 
     @Test

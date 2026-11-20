@@ -147,6 +147,18 @@ class GrowthTest {
     }
 
     @Test
+    fun theLimitOnOtherThreadsGrowsWithHowMuchSlowerTheJvmRunsAndNeverShrinks() {
+        // Emulated, as the Linux x86-64 box runs on an Apple Silicon Mac, each thread takes several times the processor time
+        // for the same work, the JVM's idle ones too: 1.08 ms from the Reference Handler on a reading that did nothing.
+        val native = Growth.SPIN_NANOS
+        assertEquals(1.0, Growth.slowdown(native / 2), 0.0)
+        assertEquals(1.0, Growth.slowdown(native), 0.0)
+        assertEquals(8.0, Growth.slowdown(native * 8), 1e-9)
+        assertEquals(Growth.BESIDE_NANOS, Growth.besideLimit(1.0))
+        assertEquals(8 * Growth.BESIDE_NANOS, Growth.besideLimit(8.0))
+    }
+
+    @Test
     fun repeatedlyPreparingAMatcherCountsThePhonesInputCopies() {
         val pattern = java.util.regex.Pattern.compile("^a")
         val preparations = mapOf<String, (java.util.regex.Matcher, String) -> java.util.regex.Matcher>(

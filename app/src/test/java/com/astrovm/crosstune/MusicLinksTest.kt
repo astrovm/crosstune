@@ -130,20 +130,20 @@ class MusicLinksTest {
     fun invidiousAndPipedLinksOnAnySiteAreYouTubeVideos() {
         val id = "4NRXx6U8ABQ"
         listOf("https://yewtu.be/watch?v=$id&t=5", "https://piped.example.org/watch?v=$id").forEach { url ->
-            val parsed = link(url)!!
+            val parsed = checkNotNull(link(url)) { "Expected link(url) to be non-null" }
             assertEquals(url, MusicService.YOUTUBE, parsed.service)
             assertEquals("https://www.youtube.com/watch?v=$id", parsed.url)
             assertEquals(true, parsed.viaFrontend)
         }
         // The popular sites' other video paths count too, but not on any site.
-        assertEquals("https://www.youtube.com/watch?v=$id", link("https://inv.nadeko.net/shorts/$id")!!.url)
-        assertEquals("https://www.youtube.com/watch?v=$id", link("https://piped.video/embed/$id")!!.url)
+        assertEquals("https://www.youtube.com/watch?v=$id", checkNotNull(link("https://inv.nadeko.net/shorts/$id")) { "Expected link(\"https://inv.nadeko.net/shorts/\$id\") to be non-null" }.url)
+        assertEquals("https://www.youtube.com/watch?v=$id", checkNotNull(link("https://piped.video/embed/$id")) { "Expected link(\"https://piped.video/embed/\$id\") to be non-null" }.url)
         assertNull(link("https://example.org/embed/$id"))
         assertNull(link("https://piped.video/playlist?list=PL1"))
         // Only a video's watch page counts, and only with a real video ID.
         assertNull(link("https://yewtu.be/watch?v=short"))
         assertNull(link("https://yewtu.be/channel/$id"))
-        assertEquals(false, link("https://www.youtube.com/watch?v=$id")!!.viaFrontend)
+        assertEquals(false, checkNotNull(link("https://www.youtube.com/watch?v=$id")) { "Expected link(\"https://www.youtube.com/watch?v=\$id\") to be non-null" }.viaFrontend)
     }
 
     @Test
@@ -378,13 +378,13 @@ class MusicLinksTest {
         assertNull(link("https://music.youtube.com/browse/FEmusic_home"))
         assertNull(link("https://www.youtube.com/channel/UCT77P4HLpV7B2sbmuxa_djQ"))
 
-        val playlist = link("https://www.youtube.com/playlist?list=$list")!!
+        val playlist = checkNotNull(link("https://www.youtube.com/playlist?list=$list")) { "Expected link(\"https://www.youtube.com/playlist?list=\$list\") to be non-null" }
         assertEquals("https://music.youtube.com/playlist?list=$list", playlist.youtubePlaylistOn(MusicService.YOUTUBE_MUSIC))
         assertEquals("https://www.youtube.com/playlist?list=$list", playlist.youtubePlaylistOn(MusicService.YOUTUBE))
         assertNull(playlist.youtubePlaylistOn(MusicService.SPOTIFY))
         assertNull(playlist.youtubePlaylistOn(null))
-        assertNull(link("https://www.youtube.com/watch?v=4NRXx6U8ABQ")!!.youtubePlaylistOn(MusicService.YOUTUBE_MUSIC))
-        assertNull(link("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")!!.youtubePlaylistOn(MusicService.YOUTUBE_MUSIC))
+        assertNull(checkNotNull(link("https://www.youtube.com/watch?v=4NRXx6U8ABQ")) { "Expected link(\"https://www.youtube.com/watch?v=4NRXx6U8ABQ\") to be non-null" }.youtubePlaylistOn(MusicService.YOUTUBE_MUSIC))
+        assertNull(checkNotNull(link("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")) { "Expected link(\"https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M\") to be non-null" }.youtubePlaylistOn(MusicService.YOUTUBE_MUSIC))
     }
 
     @Test
@@ -394,15 +394,15 @@ class MusicLinksTest {
         assertLink("https://music.youtube.com/watch?v=$video&si=x", MusicService.YOUTUBE_MUSIC, ItemType.TRACK, video, "https://music.youtube.com/watch?v=$video")
 
         // The same video plays in both apps, so one opens as itself in the other.
-        val fromMusic = link("https://music.youtube.com/watch?v=$video")!!
+        val fromMusic = checkNotNull(link("https://music.youtube.com/watch?v=$video")) { "Expected link(\"https://music.youtube.com/watch?v=\$video\") to be non-null" }
         assertEquals("https://www.youtube.com/watch?v=$video", fromMusic.youtubeVideoOn(MusicService.YOUTUBE))
         assertEquals("https://music.youtube.com/watch?v=$video", fromMusic.youtubeVideoOn(MusicService.YOUTUBE_MUSIC))
         assertNull(fromMusic.youtubeVideoOn(MusicService.SPOTIFY))
         assertNull(fromMusic.youtubeVideoOn(null))
         // Anything but a video stays where it is, including a playlist both apps share.
-        val list = link("https://music.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI")!!
+        val list = checkNotNull(link("https://music.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI")) { "Expected link(\"https://music.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI\") to be non-null" }
         assertNull(list.youtubeVideoOn(MusicService.YOUTUBE))
-        assertNull(link("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")!!.youtubeVideoOn(MusicService.YOUTUBE))
+        assertNull(checkNotNull(link("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")) { "Expected link(\"https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC\") to be non-null" }.youtubeVideoOn(MusicService.YOUTUBE))
     }
 
     @Test

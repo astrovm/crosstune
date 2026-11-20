@@ -436,7 +436,7 @@ class ReminderBellTest {
         backToTheList()
         click(app.getString(R.string.back_button))
         shell.ready = true
-        shell.changed!!()
+        checkNotNull(shell.changed) { "Expected shell.changed to be non-null" }()
         openSettings()
         composeRule.onNodeWithTextScrolled(app.getString(R.string.practice_reminders))
         click(app.getString(R.string.allow_button))

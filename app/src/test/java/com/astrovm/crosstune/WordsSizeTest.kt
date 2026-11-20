@@ -53,7 +53,7 @@ class WordsSizeTest {
     private fun layoutOf(text: String): TextLayoutResult {
         val node = composeRule.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().first()
         val results = mutableListOf<TextLayoutResult>()
-        node.config[SemanticsActions.GetTextLayoutResult].action!!(results)
+        checkNotNull(node.config[SemanticsActions.GetTextLayoutResult].action) { "Expected node.config[SemanticsActions.GetTextLayoutResult].action to be non-null" }(results)
         return results.single()
     }
 

@@ -46,12 +46,12 @@ class UniDicTest {
     @Test
     fun itsFetchedOnceAndOnlyItsFilesAreKept() = runBlocking {
         val fake = serving()
-        val tokenizer = uniDic(fake).tokenizer(fetch = true)!!
+        val tokenizer = checkNotNull(uniDic(fake).tokenizer(fetch = true)) { "Expected uniDic(fake).tokenizer(fetch = true) to be non-null" }
         assertEquals("コボシ", tokenizer.tokenize("溢した").first().pronunciation)
         assertEquals(listOf("https://maven.test/unidic.jar"), fake.requestedUrls)
         // The jar's gone once unpacked, and its classes, which the app has, were left in it.
-        assertEquals(listOf("files"), dir.list()!!.toList())
-        assertEquals(NAMES, File(dir, "files").list()!!.sorted())
+        assertEquals(listOf("files"), checkNotNull(dir.list()) { "Expected dir.list() to be non-null" }.toList())
+        assertEquals(NAMES, checkNotNull(File(dir, "files").list()) { "Expected File(dir, \"files\").list() to be non-null" }.sorted())
         // Kept, it's read from there, without fetching it again, even where it couldn't be.
         assertNotNull(uniDic(fake, mayFetch = false).tokenizer(fetch = false))
         assertEquals(1, fake.requestedUrls.size)
@@ -117,7 +117,7 @@ class UniDicTest {
         // As tried, but no jar at all.
         val notAJar = "not a jar".toByteArray()
         assertNull(uniDic(serving(notAJar), sha256 = sha256(notAJar)).tokenizer(fetch = true))
-        assertEquals(emptyList<String>(), dir.list()!!.toList())
+        assertEquals(emptyList<String>(), checkNotNull(dir.list()) { "Expected dir.list() to be non-null" }.toList())
     }
 
     @Test
@@ -133,7 +133,7 @@ class UniDicTest {
         }.toByteArray()
         assertNull(uniDic(serving(bytes), sha256 = sha256(bytes)).tokenizer(fetch = true))
         assertFalse(File(folder.root, "outside.bin").exists())
-        assertEquals(emptyList<String>(), dir.list()!!.toList())
+        assertEquals(emptyList<String>(), checkNotNull(dir.list()) { "Expected dir.list() to be non-null" }.toList())
     }
 
     @Test

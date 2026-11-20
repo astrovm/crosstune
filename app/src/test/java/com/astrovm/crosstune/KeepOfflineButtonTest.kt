@@ -150,7 +150,7 @@ class KeepOfflineButtonTest {
     private fun ink(icon: Int): Int {
         val size = (ICON_DP * app.resources.displayMetrics.density).roundToInt()
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        app.getDrawable(icon)!!.apply { setBounds(0, 0, size, size) }.draw(Canvas(bitmap))
+        checkNotNull(app.getDrawable(icon)) { "Expected app.getDrawable(icon) to be non-null" }.apply { setBounds(0, 0, size, size) }.draw(Canvas(bitmap))
         return (0 until size).sumOf { y -> (0 until size).count { x -> bitmap.getPixel(x, y) ushr 24 > 128 } }
     }
 

@@ -73,7 +73,10 @@ class MatcherCasesTest {
         val slow: Boolean = false,
         val chooses: ((List<String>) -> Int?)? = null,
         val knownWrong: Int? = null
-    )
+    ) {
+        /** What this branch opens: what [main] did, unless [CHANGED] says what changed for this case. */
+        val opens: String? get() = if (what in CHANGED) CHANGED.getValue(what) else main
+    }
 
     private fun row(name: String, album: String = "Fake Album", artist: String = "Fake Band", length: String = "1:30") = "$name | $artist • $album • $length"
 
@@ -492,10 +495,46 @@ class MatcherCasesTest {
     }
 
     @Test
+    fun anArtistsVideoCanNameTheSongInAnotherScript() {
+        val search = Case(
+            "video names both titles", "song1", title = "The Rest of Time", artist = "Jacky Cheung",
+            album = "Wake Up Dreaming", lengthMs = 254_239,
+            songs = listOf(row("人在雨中", "擁友", "Jacky Cheung", "4:13"), row("用餘生去愛", "Wake Up Dreaming", "Jacky Cheung", "4:15")),
+            videos = listOf(video("用餘生去愛 - The Rest Of Time", "4:21", "Jacky Cheung"))
+        )
+        assertEquals("song1", find(search))
+        assertEquals("song1", find(search.copy(picked = SAYS_NONE)))
+        // The video may write the Latin title first.
+        val latinFirst = search.copy(what = "video writes the Latin title first", videos = listOf(video("The Rest Of Time - 用餘生去愛", "4:21", "Jacky Cheung")))
+        assertEquals("song1", find(latinFirst))
+        val ambiguous = listOf(
+            search.copy(what = "another album", songs = listOf(search.songs[0], row("用餘生去愛", "Another Album", "Jacky Cheung", "4:15"))),
+            search.copy(what = "store has no album", album = ""),
+            search.copy(what = "no album anywhere", album = "", songs = listOf(search.songs[0], row("用餘生去愛", "", "Jacky Cheung", "4:15"))),
+            search.copy(what = "only Deezer knows a length", lengthMs = null, deezerSeconds = 254),
+            search.copy(what = "another edition", editions = listOf("Live at Budokan" to 254_239)),
+            search.copy(what = "link has another length", linkMs = 300_000),
+            search.copy(what = "fan video", videos = listOf(video("用餘生去愛 - The Rest Of Time", "4:21", "Fan"))),
+            search.copy(what = "video has no time", videos = listOf(video("用餘生去愛 - The Rest Of Time", "", "Jacky Cheung"))),
+            search.copy(what = "video too long", videos = listOf(video("用餘生去愛 - The Rest Of Time", "5:21", "Jacky Cheung"))),
+            search.copy(what = "live video", videos = listOf(video("用餘生去愛 - The Rest Of Time (Live)", "4:21", "Jacky Cheung"))),
+            search.copy(what = "video names a different Latin song", videos = listOf(video("用餘生去愛 - Another Song", "4:21", "Jacky Cheung"))),
+            search.copy(what = "title has a version", title = "The Rest of Time (Instrumental)"),
+            search.copy(what = "another video name", videos = listOf(video("別的歌 - The Rest Of Time", "4:21", "Jacky Cheung"))),
+            search.copy(what = "another row version", songs = listOf(search.songs[0], row("用餘生去愛 (Live)", "Wake Up Dreaming", "Jacky Cheung", "4:15"))),
+            search.copy(what = "two identical candidates", songs = listOf(search.songs[0], search.songs[1], search.songs[1]))
+        )
+        assertEquals(emptyList<String>(), ambiguous.mapNotNull { case ->
+            val actual = find(case)
+            "${case.what}: $actual".takeIf { actual != "song0" }
+        })
+    }
+
+    @Test
     fun everyInputTheReviewsTriedOpensWhatMainDid() {
         val cases = tenth + ninth + plain + eighth + seventh + sixth + fifth + fourth + third + second + first + before
-        val wrong = cases.map { it to find(it) }.filter { (case, found) -> found != case.main }
-            .map { (case, found) -> "${case.what}: ${case.main}, not $found" + (case.knownWrong?.let { ", where main is wrong: Issue #$it" } ?: "") }
+        val wrong = cases.map { it to find(it) }.filter { (case, found) -> found != case.opens }
+            .map { (case, found) -> "${case.what}: ${case.opens}, not $found" + (case.knownWrong?.let { ", where main is wrong: Issue #$it" } ?: "") }
         assertEquals(emptyList<String>(), wrong)
     }
 
@@ -1044,6 +1083,45 @@ class MatcherCasesTest {
         ))))))))).toString()
 
     private companion object {
+        /**
+         * What the cases above open now, where it isn't what main opened: the row that says it's a live, karaoke or other take
+         * of the song is no longer taken for it (Issues #945, #983 and #992).
+         */
+        val CHANGED: Map<String, String?> = mapOf(
+            "9 budokan" to "song1",
+            "9 budokan picked" to "song1",
+            "9 op size" to "song1",
+            "9 op size picked" to "song1",
+            "plain live" to "song1",
+            "plain live asked" to "song1",
+            "plain first plain" to "song1",
+            "plain song's subtitle" to "song1",
+            "plain song's credit" to "song1",
+            "plain tagged" to "song1",
+            "plain other script" to "song1",
+            "plain live album" to null,
+            "plain live in name" to "song1",
+            "plain not as close" to "song1",
+            "plain not as close though shorter" to "song1",
+            "plain closer though longer" to "song1",
+            "plain plain's length unknown in kanji" to null,
+            "1 rightly doubted" to "song1",
+            "1 rightly doubted cyrillic" to "song1",
+            "1 pick in its script" to "song1",
+            "1 pick passes" to "song1",
+            "1 pick fails" to "song1",
+            "1 pick another song" to "song1",
+            "9 live half" to null,
+            "2 live half" to null,
+            "4 ライヴ" to null,
+            "4 1999 ライヴ" to null,
+            "4 カヴァー" to null,
+            "3 tv size first" to "song1",
+            "5 Live at Budokan" to null,
+            "5 own album instrumental" to null,
+            "945 karaoke" to null
+        )
+
         /**
          * [name] written otherwise, one way at a time, as stores and uploaders write the same song: romaji with a macron
          * or without the long vowel, a stroke or a joined letter, katakana for hiragana and back, a numeral, & for と and

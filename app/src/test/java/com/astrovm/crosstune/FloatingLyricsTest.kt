@@ -156,7 +156,7 @@ class FloatingLyricsTest {
     /** How [text] is drawn: its size and color. */
     private fun styleOf(text: String): TextStyle {
         val results = mutableListOf<TextLayoutResult>()
-        compose.onNodeWithText(text).fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!(results)
+        checkNotNull(compose.onNodeWithText(text).fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action) { "Expected compose.onNodeWithText(text).fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].ac... to be non-null" }(results)
         return results.single().layoutInput.style
     }
 

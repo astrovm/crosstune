@@ -668,7 +668,7 @@ class CastViewModelTest {
         val holding = CompletableDeferred<Unit>()
         val answer = CompletableDeferred<Boolean>()
         val source = object : PlaybackSource by playback {
-            override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
+            override suspend fun resume(song: MusicMetadata, app: String?, session: Int?): Boolean {
                 holding.complete(Unit)
                 return answer.await()
             }

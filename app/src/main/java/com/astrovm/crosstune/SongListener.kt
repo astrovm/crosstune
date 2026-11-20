@@ -82,6 +82,10 @@ internal class Shazam(
 ) {
     /** The first [count] of [samples], mono 16 kHz. [keepIfOffline] allows one retry of the fingerprint. */
     suspend fun recognize(samples: ShortArray, count: Int, keepIfOffline: Boolean = false): Heard {
+        // Nothing but zeros is a muted microphone or a phone playing at volume 0. Shazam answers it with no
+        // match, and it can't match anything, so it isn't sent: a busy Shazam must not make silence look
+        // like Shazam being out of reach, which hands the listen over to another app.
+        if ((0 until count).none { samples[it].toInt() != 0 }) return Heard.Nothing
         val uri = withContext(computeDispatcher) { Busy.during { ShazamSignature.uri(samples, count) } }
         val heard = send(uri)
         return if (keepIfOffline && heard == Heard.Failed(AppError.NETWORK)) Heard.Unsent { send(uri) } else heard
@@ -100,7 +104,12 @@ internal class Shazam(
         return try {
             client.newCall(request).answer(ioDispatcher) { response ->
                 // Too many requests, or the server failing: another app may still name it.
-                if (!response.isSuccessful) Heard.Failed(AppError.RECOGNITION_UNAVAILABLE) else parse(response.body.stringAtMost())
+                if (!response.isSuccessful) {
+                    TimingLog.note("shazam answered ${response.code}")
+                    Heard.Failed(AppError.RECOGNITION_UNAVAILABLE)
+                } else {
+                    parse(response.body.stringAtMost())
+                }
             }.let { heard -> if (heard is Heard.Song) withLength(heard) else heard }
         } catch (_: IOException) {
             Heard.Failed(AppError.NETWORK)
@@ -364,6 +373,9 @@ internal class PlayedSound(
 internal fun interface SongHearing {
     suspend fun listen(): Heard
 
+    /** Names the song, using audio when [acceptPlaying] rejects the playing app's identification. */
+    suspend fun listen(acceptPlaying: suspend (Heard.Song) -> Boolean): Heard = listen()
+
     /**
      * What an app on the phone plays, heard rather than as the app says, to tell how far the app is from
      * the words; by the microphone too, when the phone won't share its sound, unless not [byMicrophone].
@@ -373,9 +385,9 @@ internal fun interface SongHearing {
 }
 
 /**
- * Names the song an app on the phone is playing straight from that app, which is instant and exact,
- * and only listens with [hearing] when none is. An app that can't say where in the song it is, as
- * for a video, is still listened to for that, through [played], the phone's own sound, which the
+ * Names the song from the playing app when it gives a song and artist. Uses [hearing] for nearby
+ * sound when the app gives no song and artist. An app that can't say where in the song it is,
+ * as for a video, is still listened to for that, through [played], the phone's own sound, which the
  * microphone hears poorly, and not at all through headphones; with the microphone only when the
  * phone won't share its sound. Nothing heard, it's named as the app does.
  */
@@ -384,12 +396,30 @@ internal class PlayingFirst(
     private val hearing: SongHearing,
     private val played: SongHearing = hearing
 ) : SongHearing {
-    override suspend fun listen(): Heard {
-        // With no song named, even while an app plays one it doesn't name, the microphone names one
-        // nearby: naming what the phone plays is the bar's to do.
-        val playing = playback.nowPlaying() ?: return hearing.listen()
-        if (playing.clock != null) return playing
-        return listenToPlaying() as? Heard.Song ?: playing
+    override suspend fun listen(): Heard = listen { true }
+
+    override suspend fun listen(acceptPlaying: suspend (Heard.Song) -> Boolean): Heard {
+        val playing = playback.songForRecognition() ?: return hearing.listen()
+        // An app that can't say where in the song it is is heard first: an audio match names the song and
+        // finds its clock before we need the app's title.
+        var around = if (playing.clock == null) hearPlaying() else null
+        around?.let {
+            if (it.phone is Heard.Song) return it.phone
+            (it.room?.let(::roomForPlaying) as? Heard.Song)?.let { song -> return song }
+        }
+        if (acceptPlaying(playing)) return playing
+        // The catalog doesn't know the app's name, so the sound may name the song better. When it doesn't,
+        // as with headphones or silence, the app's name is still the best there is.
+        around = around ?: hearPlaying()
+        return (around.room ?: around.phone) as? Heard.Song ?: playing
+    }
+
+    /** What the phone's own sound says, and what the room's does when the phone won't share it. */
+    private class Around(val phone: Heard, val room: Heard?)
+
+    private suspend fun hearPlaying(): Around {
+        val phone = played.listen()
+        return Around(phone, if (phone == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else null)
     }
 
     override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
@@ -397,9 +427,13 @@ internal class PlayingFirst(
         if (!byMicrophone || heard != Heard.Failed(AppError.MICROPHONE)) return heard
         // Through headphones or muted, the microphone hears nothing of it: no more use than none at all.
         val room = (if (whileAloud) aloud() else hearing.listen()) ?: return heard
+        return roomForPlaying(room)
+    }
+
+    private fun roomForPlaying(room: Heard): Heard {
         // The microphone hears the room too: another song playing there isn't the one the phone plays.
         // With no song named to tell, the one heard may be either.
-        val playing = playback.nowPlaying()?.metadata ?: return (room as? Heard.Song)?.copy(inRoom = true) ?: room
+        val playing = playback.songForRecognition()?.metadata ?: return (room as? Heard.Song)?.copy(inRoom = true) ?: room
         return room.takeIf { it !is Heard.Song || SongNames.names(playing.title, playing.artist, it.metadata) } ?: Heard.Nothing
     }
 

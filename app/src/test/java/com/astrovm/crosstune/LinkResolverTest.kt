@@ -15,7 +15,7 @@ class LinkResolverTest {
     private val fake = FakeSpotify()
     private val resolver = LinkResolver(fake.client())
 
-    private fun resolve(text: String): Resolution = runBlocking { resolver.resolve(MusicLinks.parse(text)!!) }
+    private fun resolve(text: String): Resolution = runBlocking { resolver.resolve(checkNotNull(MusicLinks.parse(text)) { "Expected MusicLinks.parse(text) to be non-null" }) }
 
     private fun respond(body: String, code: Int = 200) {
         fake.handler = { request: Request -> FakeSpotify.html(request, body, code = code) }

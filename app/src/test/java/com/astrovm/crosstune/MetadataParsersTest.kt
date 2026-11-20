@@ -12,6 +12,16 @@ import org.robolectric.RobolectricTestRunner
 class MetadataParsersTest {
 
     @Test
+    fun trackLinksRetainTheInstrumentalAlbumWhenItsNameSaysSo() {
+        val album = "Fixture Album (Instrumentals)"
+        val apple = json("""{"results":[{"trackName":"Song","artistName":"Artist","collectionName":"$album"}]}""")
+        val deezer = json("""{"title":"Song","artist":{"name":"Artist"},"album":{"title":"$album"}}""")
+        assertEquals(album, MetadataParsers.appleMusic(apple, ItemType.TRACK)?.instrumentalAlbum)
+        assertEquals(album, MetadataParsers.deezer(deezer, ItemType.TRACK)?.instrumentalAlbum)
+        assertNull(MetadataParsers.deezer(deezer, ItemType.ALBUM)?.instrumentalAlbum)
+    }
+
+    @Test
     fun readsTagsInAnyAttributeOrderAndQuoteStyle() {
         val html = """
             <meta content='Carly Rae Jepsen · Cut To The Feeling · Song · 2017' property='og:description'>
@@ -626,14 +636,14 @@ class MetadataParsersTest {
             {"title":"","contentDescriptor":{"kind":"song"}},
             {"title":"Dos","artistName":"Other","contentDescriptor":{"kind":"song"}},1]}]}]}"""
         val html = """<meta property="og:title" content="Hits on Apple Music"><script type="application/json" id="serialized-server-data">$pageData</script>"""
-        assertEquals(listOf(MusicMetadata("Uno", "Artist"), MusicMetadata("Dos", "Other")), MetadataParsers.applePlaylist(html)!!.tracks)
+        assertEquals(listOf(MusicMetadata("Uno", "Artist"), MusicMetadata("Dos", "Other")), checkNotNull(MetadataParsers.applePlaylist(html)) { "Expected MetadataParsers.applePlaylist(html) to be non-null" }.tracks)
         val broken = """<meta property="og:title" content="Hits on Apple Music"><script type="application/json" id="serialized-server-data">{nope</script>"""
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.applePlaylist(broken)!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.applePlaylist(broken)) { "Expected MetadataParsers.applePlaylist(broken) to be non-null" }.tracks)
 
         val deezer = json("""{"title":"Top","tracks":{"data":[{"title":"Boston","artist":{"name":"Stella"}},{"title":""},{"title":"Solo"},"x"]}}""")
-        assertEquals(listOf(MusicMetadata("Boston", "Stella"), MusicMetadata("Solo", "")), MetadataParsers.deezer(deezer, ItemType.PLAYLIST)!!.tracks)
+        assertEquals(listOf(MusicMetadata("Boston", "Stella"), MusicMetadata("Solo", "")), checkNotNull(MetadataParsers.deezer(deezer, ItemType.PLAYLIST)) { "Expected MetadataParsers.deezer(deezer, ItemType.PLAYLIST) to be non-null" }.tracks)
         // Albums list theirs the same way.
-        assertEquals(listOf(MusicMetadata("Boston", "Stella"), MusicMetadata("Solo", "")), MetadataParsers.deezer(deezer, ItemType.ALBUM)!!.tracks)
+        assertEquals(listOf(MusicMetadata("Boston", "Stella"), MusicMetadata("Solo", "")), checkNotNull(MetadataParsers.deezer(deezer, ItemType.ALBUM)) { "Expected MetadataParsers.deezer(deezer, ItemType.ALBUM) to be non-null" }.tracks)
     }
 
     @Test
@@ -643,16 +653,16 @@ class MetadataParsersTest {
             {"wrapperType":"track","trackName":"Alone Again","artistName":"The Weeknd"},
             {"wrapperType":"track","trackName":""},
             {"wrapperType":"artist","artistName":"Not a song"}]}""")
-        assertEquals(listOf(MusicMetadata("Alone Again", "The Weeknd")), MetadataParsers.appleMusic(lookup, ItemType.ALBUM)!!.tracks)
+        assertEquals(listOf(MusicMetadata("Alone Again", "The Weeknd")), checkNotNull(MetadataParsers.appleMusic(lookup, ItemType.ALBUM)) { "Expected MetadataParsers.appleMusic(lookup, ItemType.ALBUM) to be non-null" }.tracks)
 
         val album = """{"name":"Volume Alpha","byArtist":{"name":"C418"},"track":{"itemListElement":[{"item":{"name":"Key"}},{"item":{"name":""}},{}]}}"""
         fun page(data: String) = """<meta property="og:title" content="Volume Alpha, by C418"><script type="application/ld+json" id="tralbum-jsonld">$data</script>"""
-        assertEquals(listOf(MusicMetadata("Key", "C418")), MetadataParsers.bandcamp(page(album), ItemType.ALBUM)!!.tracks)
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(page("{nope"), ItemType.ALBUM)!!.tracks)
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(page("""{"name":"x"}"""), ItemType.ALBUM)!!.tracks)
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp("""<meta property="og:title" content="Volume Alpha, by C418">""", ItemType.ALBUM)!!.tracks)
+        assertEquals(listOf(MusicMetadata("Key", "C418")), checkNotNull(MetadataParsers.bandcamp(page(album), ItemType.ALBUM)) { "Expected MetadataParsers.bandcamp(page(album), ItemType.ALBUM) to be non-null" }.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.bandcamp(page("{nope"), ItemType.ALBUM)) { "Expected MetadataParsers.bandcamp(page(\"{nope\"), ItemType.ALBUM) to be non-null" }.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.bandcamp(page("""{"name":"x"}"""), ItemType.ALBUM)) { "Expected MetadataParsers.bandcamp(page(\"\"\"{\"name\":\"x\"}\"\"\"), ItemType.ALBUM) to be non-null" }.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.bandcamp("""<meta property="og:title" content="Volume Alpha, by C418">""", ItemType.ALBUM)) { "Expected MetadataParsers.bandcamp(\"\"\"<meta property=\"og:title\" content=\"Volume Alpha, by C418\">\"\"\", ItemTy... to be non-null" }.tracks)
         // A single song's page doesn't list songs.
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(page(album), ItemType.TRACK)!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.bandcamp(page(album), ItemType.TRACK)) { "Expected MetadataParsers.bandcamp(page(album), ItemType.TRACK) to be non-null" }.tracks)
     }
 
     @Test
@@ -668,8 +678,8 @@ class MetadataParsersTest {
             MusicMetadata("Road Trip", "", ItemType.PLAYLIST, "https://i.ytimg.com/x.jpg", listOf(MusicMetadata("Song", "Artist"), MusicMetadata("Other Song", "Band"))),
             MetadataParsers.youtubePlaylist(html)
         )
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.youtubePlaylist("""<meta property="og:title" content="X"><script>var ytInitialData = {nope;</script>""")!!.tracks)
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.youtubePlaylist("""<meta property="og:title" content="X">""")!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.youtubePlaylist("""<meta property="og:title" content="X"><script>var ytInitialData = {nope;</script>""")) { "Expected MetadataParsers.youtubePlaylist(\"\"\"<meta property=\"og:title\" content=\"X\"><script>var ytInitialDat... to be non-null" }.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.youtubePlaylist("""<meta property="og:title" content="X">""")) { "Expected MetadataParsers.youtubePlaylist(\"\"\"<meta property=\"og:title\" content=\"X\">\"\"\") to be non-null" }.tracks)
         assertNull(MetadataParsers.youtubePlaylist("<html></html>"))
     }
 
@@ -704,14 +714,14 @@ class MetadataParsersTest {
         assertEquals(emptyMap<String, String>(), MetadataParsers.spotifyCovers(page("{}")))
         assertEquals(emptyMap<String, String>(), MetadataParsers.spotifyCovers("<html></html>"))
         val playlist = """<meta property="og:title" content="Road Trip"/><meta name="music:song_count" content="150"/>"""
-        assertEquals(150, MetadataParsers.spotify(playlist, ItemType.PLAYLIST)!!.trackCount)
+        assertEquals(150, checkNotNull(MetadataParsers.spotify(playlist, ItemType.PLAYLIST)) { "Expected MetadataParsers.spotify(playlist, ItemType.PLAYLIST) to be non-null" }.trackCount)
 
         // Apple Music: each song's cover, at a size for a list.
         val pageData = """{"x":[{"title":"Uno","artistName":"Artist","contentDescriptor":{"kind":"song"},
             "artwork":{"dictionary":{"url":"https://is1-ssl.mzstatic.com/image/thumb/a.jpg/{w}x{h}bb.{f}"}}}]}"""
         assertEquals(
             listOf(MusicMetadata("Uno", "Artist", artworkUrl = "https://is1-ssl.mzstatic.com/image/thumb/a.jpg/300x300bb.jpg")),
-            MetadataParsers.applePlaylist("""<meta property="og:title" content="Hits"><script type="application/json" id="serialized-server-data">$pageData</script>""")!!.tracks
+            checkNotNull(MetadataParsers.applePlaylist("""<meta property="og:title" content="Hits"><script type="application/json" id="serialized-server-data">$pageData</script>""")) { "Expected MetadataParsers.applePlaylist(\"\"\"<meta property=\"og:title\" content=\"Hits\"><script type=\"applicati... to be non-null" }.tracks
         )
 
         // Deezer: each song's album cover, and how many there are past the ones listed.
@@ -726,7 +736,7 @@ class MetadataParsersTest {
             "metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"Band - Topic"}}]}]}}}}}}"""
         assertEquals(
             listOf(MusicMetadata("Song", "Band", artworkUrl = "https://i.ytimg.com/vi/abcdefghijk/mqdefault.jpg", url = "https://www.youtube.com/watch?v=abcdefghijk")),
-            MetadataParsers.youtubePlaylist("""<meta property="og:title" content="X"><script>var ytInitialData = {"a":[$lockup]};</script>""")!!.tracks
+            checkNotNull(MetadataParsers.youtubePlaylist("""<meta property="og:title" content="X"><script>var ytInitialData = {"a":[$lockup]};</script>""")) { "Expected MetadataParsers.youtubePlaylist(\"\"\"<meta property=\"og:title\" content=\"X\"><script>var ytInitialDat... to be non-null" }.tracks
         )
     }
 
@@ -758,13 +768,13 @@ class MetadataParsersTest {
         // No description, no artist.
         assertEquals(MusicMetadata("Song", ""), MetadataParsers.spotify(og("Song"), ItemType.TRACK))
         // "by" the album's artist is only dropped when the title also has the album's name after a dash.
-        assertEquals("Name by Band", MetadataParsers.spotify(og("Name by Band", "Band · album · 2020"), ItemType.ALBUM)!!.title)
-        assertEquals("Name - Album by Other", MetadataParsers.spotify(og("Name - Album by Other", "Band · album · 2020"), ItemType.ALBUM)!!.title)
-        assertEquals("Name", MetadataParsers.spotify(og("Name - Album by Band", "Band · album · 2020"), ItemType.ALBUM)!!.title)
+        assertEquals("Name by Band", checkNotNull(MetadataParsers.spotify(og("Name by Band", "Band · album · 2020"), ItemType.ALBUM)) { "Expected MetadataParsers.spotify(og(\"Name by Band\", \"Band · album · 2020\"), ItemType.ALBUM) to be non-null" }.title)
+        assertEquals("Name - Album by Other", checkNotNull(MetadataParsers.spotify(og("Name - Album by Other", "Band · album · 2020"), ItemType.ALBUM)) { "Expected MetadataParsers.spotify(og(\"Name - Album by Other\", \"Band · album · 2020\"), ItemType.ALBUM) to be non-null" }.title)
+        assertEquals("Name", checkNotNull(MetadataParsers.spotify(og("Name - Album by Band", "Band · album · 2020"), ItemType.ALBUM)) { "Expected MetadataParsers.spotify(og(\"Name - Album by Band\", \"Band · album · 2020\"), ItemType.ALBUM) to be non-null" }.title)
         // A count too big to be one is no count.
         val huge = og("Album", "Band · album · 2020") + """<meta name="music:song_count" content="99999999999">"""
-        assertNull(MetadataParsers.spotify(huge, ItemType.ALBUM)!!.trackCount)
-        assertEquals(12, MetadataParsers.spotify(og("Album", "Band · album · 2020") + """<meta name="music:song_count" content="12">""", ItemType.ALBUM)!!.trackCount)
+        assertNull(checkNotNull(MetadataParsers.spotify(huge, ItemType.ALBUM)) { "Expected MetadataParsers.spotify(huge, ItemType.ALBUM) to be non-null" }.trackCount)
+        assertEquals(12, checkNotNull(MetadataParsers.spotify(og("Album", "Band · album · 2020") + """<meta name="music:song_count" content="12">""", ItemType.ALBUM)) { "Expected MetadataParsers.spotify(og(\"Album\", \"Band · album · 2020\") + \"\"\"<meta name=\"music:song_count\" con... to be non-null" }.trackCount)
     }
 
     @Test
@@ -803,19 +813,19 @@ class MetadataParsersTest {
         assertNull(named(""""longBylineText":${runs("Band")}"""))
         assertNull(named(""""title":${runs("(Official Video)")},"longBylineText":${runs("Band")}""", "OMV"))
         // A song's length counts hours, minutes and seconds, and only those.
-        assertEquals(3_723_000L, named("""$song,"lengthText":${runs("1:02:03")}""")!!.lengthMs)
-        assertEquals(262_000L, named("""$song,"lengthText":${runs("4:22")}""")!!.lengthMs)
-        assertNull(named("""$song,"lengthText":${runs("4")}""")!!.lengthMs)
-        assertNull(named("""$song,"lengthText":${runs("1:2:3:4")}""")!!.lengthMs)
-        assertNull(named(song)!!.lengthMs)
+        assertEquals(3_723_000L, checkNotNull(named("""$song,"lengthText":${runs("1:02:03")}""")) { "Expected named(\"\"\"\$song,\"lengthText\":\${runs(\"1:02:03\")}\"\"\") to be non-null" }.lengthMs)
+        assertEquals(262_000L, checkNotNull(named("""$song,"lengthText":${runs("4:22")}""")) { "Expected named(\"\"\"\$song,\"lengthText\":\${runs(\"4:22\")}\"\"\") to be non-null" }.lengthMs)
+        assertNull(checkNotNull(named("""$song,"lengthText":${runs("4")}""")) { "Expected named(\"\"\"\$song,\"lengthText\":\${runs(\"4\")}\"\"\") to be non-null" }.lengthMs)
+        assertNull(checkNotNull(named("""$song,"lengthText":${runs("1:2:3:4")}""")) { "Expected named(\"\"\"\$song,\"lengthText\":\${runs(\"1:2:3:4\")}\"\"\") to be non-null" }.lengthMs)
+        assertNull(checkNotNull(named(song)) { "Expected named(song) to be non-null" }.lengthMs)
         // The cover is the last picture, if it has an address.
-        assertNull(named(song)!!.artworkUrl)
-        assertNull(named("""$song,"thumbnail":{}""")!!.artworkUrl)
-        assertNull(named("""$song,"thumbnail":{"thumbnails":[]}""")!!.artworkUrl)
-        assertNull(named("""$song,"thumbnail":{"thumbnails":[{"url":"https://a"},{}]}""")!!.artworkUrl)
-        assertEquals("https://b", named("""$song,"thumbnail":{"thumbnails":[{"url":"https://a"},{"url":"https://b"}]}""")!!.artworkUrl)
+        assertNull(checkNotNull(named(song)) { "Expected named(song) to be non-null" }.artworkUrl)
+        assertNull(checkNotNull(named("""$song,"thumbnail":{}""")) { "Expected named(\"\"\"\$song,\"thumbnail\":{}\"\"\") to be non-null" }.artworkUrl)
+        assertNull(checkNotNull(named("""$song,"thumbnail":{"thumbnails":[]}""")) { "Expected named(\"\"\"\$song,\"thumbnail\":{\"thumbnails\":[]}\"\"\") to be non-null" }.artworkUrl)
+        assertNull(checkNotNull(named("""$song,"thumbnail":{"thumbnails":[{"url":"https://a"},{}]}""")) { "Expected named(\"\"\"\$song,\"thumbnail\":{\"thumbnails\":[{\"url\":\"https://a\"},{}]}\"\"\") to be non-null" }.artworkUrl)
+        assertEquals("https://b", checkNotNull(named("""$song,"thumbnail":{"thumbnails":[{"url":"https://a"},{"url":"https://b"}]}""")) { "Expected named(\"\"\"\$song,\"thumbnail\":{\"thumbnails\":[{\"url\":\"https://a\"},{\"url\":\"https://b\"}]}\"\"\") to be non-null" }.artworkUrl)
         // Someone's upload has no length to read.
-        assertNull(named("""$song,"lengthText":${runs("4:22")}""", "UGC")!!.lengthMs)
+        assertNull(checkNotNull(named("""$song,"lengthText":${runs("4:22")}""", "UGC")) { "Expected named(\"\"\"\$song,\"lengthText\":\${runs(\"4:22\")}\"\"\", \"UGC\") to be non-null" }.lengthMs)
     }
 
     @Test
@@ -825,8 +835,8 @@ class MetadataParsersTest {
         assertNull(named("{}"))
         val withTitle = """"title":${runs("Pocket Park")}"""
         assertEquals(MusicMetadata("Pocket Park", "", ItemType.ALBUM), named("{$withTitle}"))
-        assertNull(named("{$withTitle,\"thumbnail\":{\"thumbnails\":[]}}")!!.artworkUrl)
-        assertNull(named("{$withTitle,\"thumbnail\":{\"thumbnails\":[{}]}}")!!.artworkUrl)
+        assertNull(checkNotNull(named("{$withTitle,\"thumbnail\":{\"thumbnails\":[]}}")) { "Expected named(\"{\$withTitle,\\\"thumbnail\\\":{\\\"thumbnails\\\":[]}}\") to be non-null" }.artworkUrl)
+        assertNull(checkNotNull(named("{$withTitle,\"thumbnail\":{\"thumbnails\":[{}]}}")) { "Expected named(\"{\$withTitle,\\\"thumbnail\\\":{\\\"thumbnails\\\":[{}]}}\") to be non-null" }.artworkUrl)
         // Rows with no name for a song aren't songs.
         val row = { columns: String -> """{"musicResponsiveListItemRenderer":$columns}""" }
         val rows = listOf(
@@ -834,7 +844,7 @@ class MetadataParsersTest {
             row("""{"flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":${runs(" ")}}}]}"""),
             row("""{"flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{}}]}"""),
         )
-        assertEquals(emptyList<MusicMetadata>(), named("{$withTitle}", ""","contents":[${rows.joinToString(",")}]""")!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(named("{$withTitle}", ""","contents":[${rows.joinToString(",")}]""")) { "Expected named(\"{\$withTitle}\", \"\"\",\"contents\":[\${rows.joinToString(\",\")}]\"\"\") to be non-null" }.tracks)
         // An artist's page is just the name.
         assertEquals(MusicMetadata("Band", "", ItemType.ARTIST), MetadataParsers.youtubeMusicPage(json("""{"a":[{"musicVisualHeaderRenderer":{"title":${runs("Band")}}}]}"""), ItemType.ARTIST))
         assertNull(MetadataParsers.youtubeMusicPage(json("""{"a":[{"musicVisualHeaderRenderer":{}}]}"""), ItemType.ARTIST))
@@ -882,17 +892,17 @@ class MetadataParsersTest {
             // No title, no song; not a video, not looked into.
             lockup("\"metadata\":{}"), lockup("\"contentId\":\"x\""), lockup(metadata(""), "LOCKUP_CONTENT_TYPE_PLAYLIST")
         )
-        val videos = MetadataParsers.youtubePlaylist(page("""{"items":[${lockups.joinToString(",")},5]}"""))!!.tracks
+        val videos = checkNotNull(MetadataParsers.youtubePlaylist(page("""{"items":[${lockups.joinToString(",")},5]}"""))) { "Expected MetadataParsers.youtubePlaylist(page(\"\"\"{\"items\":[\${lockups.joinToString(\",\")},5]}\"\"\")) to be non-null" }.tracks
         assertEquals(List(8) { MusicMetadata("Song", "") }, videos)
         // With an id, a video has its picture and link.
-        val withId = MetadataParsers.youtubePlaylist(page("""{"items":[${lockup("\"contentId\":\"abc\"," + metadata(""))}]}"""))!!.tracks.single()
+        val withId = checkNotNull(MetadataParsers.youtubePlaylist(page("""{"items":[${lockup("\"contentId\":\"abc\"," + metadata(""))}]}"""))) { "Expected MetadataParsers.youtubePlaylist(page(\"\"\"{\"items\":[\${lockup(\"\\\"contentId\\\":\\\"abc\\\",\" + metadata(\"\"... to be non-null" }.tracks.single()
         assertEquals("https://www.youtube.com/watch?v=abc", withId.url)
         assertEquals("https://i.ytimg.com/vi/abc/mqdefault.jpg", withId.artworkUrl)
         // No title for the playlist, or nothing in its data to read, still gives what's there.
         assertNull(MetadataParsers.youtubePlaylist(page(null, title = null)))
         assertNull(MetadataParsers.youtubePlaylist(page(null, title = " ")))
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.youtubePlaylist(page(null))!!.tracks)
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.youtubePlaylist(page("{"))!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.youtubePlaylist(page(null))) { "Expected MetadataParsers.youtubePlaylist(page(null)) to be non-null" }.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.youtubePlaylist(page("{"))) { "Expected MetadataParsers.youtubePlaylist(page(\"{\")) to be non-null" }.tracks)
     }
 
     @Test
@@ -901,21 +911,21 @@ class MetadataParsersTest {
         assertNull(MetadataParsers.appleMusic(json("""{"results":[]}"""), ItemType.TRACK))
         // An album's songs are the track results after it; anything else there is left out.
         val album = json("""{"results":[{"collectionName":"Album - EP","artistName":"Band"},5,{"wrapperType":"collection"},{"wrapperType":"track","trackName":""},{"wrapperType":"track","trackName":"One","artistName":"Band"}]}""")
-        assertEquals(listOf(MusicMetadata("One", "Band")), MetadataParsers.appleMusic(album, ItemType.ALBUM)!!.tracks)
+        assertEquals(listOf(MusicMetadata("One", "Band")), checkNotNull(MetadataParsers.appleMusic(album, ItemType.ALBUM)) { "Expected MetadataParsers.appleMusic(album, ItemType.ALBUM) to be non-null" }.tracks)
         // A playlist is named by its page.
         fun playlist(data: String?, title: String? = "Mix on Apple Music") =
             og(title) + (data?.let { """<script type="application/json" id="serialized-server-data">$it</script>""" } ?: "")
         assertNull(MetadataParsers.applePlaylist(playlist(null, title = null)))
         assertNull(MetadataParsers.applePlaylist(playlist(null, title = "   ")))
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.applePlaylist(playlist(null))!!.tracks)
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.applePlaylist(playlist("{"))!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.applePlaylist(playlist(null))) { "Expected MetadataParsers.applePlaylist(playlist(null)) to be non-null" }.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.applePlaylist(playlist("{"))) { "Expected MetadataParsers.applePlaylist(playlist(\"{\")) to be non-null" }.tracks)
         fun song(title: String, artwork: String) = """{"title":"$title","artistName":"Band","contentDescriptor":{"kind":"song"}$artwork}"""
-        val songs = MetadataParsers.applePlaylist(
+        val songs = checkNotNull(MetadataParsers.applePlaylist(
             playlist(
                 """[${song("A", "")},${song("B", ""","artwork":{}""")},${song("C", ""","artwork":{"dictionary":{}}""")},${song("D", ""","artwork":{"dictionary":{"url":""}}""")},
                 ${song("E", ""","artwork":{"dictionary":{"url":"https://img/{w}x{h}bb.{f}"}}""")},${song("", "")},{"title":"Not a song"},7]"""
             )
-        )!!.tracks
+        )) { "Expected MetadataParsers.applePlaylist( playlist( \"\"\"[\${song(\"A\", \"\")},\${song(\"B\", \"\"\",\"artwork\":{}\"\"\")},\$... to be non-null" }.tracks
         assertEquals(listOf("A", "B", "C", "D", "E"), songs.map { it.title })
         assertEquals(listOf(null, null, null, null, "https://img/300x300bb.jpg"), songs.map { it.artworkUrl })
     }
@@ -937,17 +947,24 @@ class MetadataParsersTest {
     @Test
     fun deezerAnswersWithLessThanTheyShouldStillGiveTheirNameAndCover() {
         // Without a cover of its own, the album's.
-        assertEquals("https://c/album", MetadataParsers.deezer(json("""{"title":"Song","album":{"cover_big":"https://c/album"}}"""), ItemType.TRACK)!!.artworkUrl)
-        assertNull(MetadataParsers.deezer(json("""{"title":"Song","album":{}}"""), ItemType.TRACK)!!.artworkUrl)
-        assertEquals("https://c/own", MetadataParsers.deezer(json("""{"title":"Album","cover_big":"https://c/own","picture_big":"https://c/picture"}"""), ItemType.ALBUM)!!.artworkUrl)
-        assertEquals("https://c/picture", MetadataParsers.deezer(json("""{"name":"Band","picture_big":"https://c/picture"}"""), ItemType.ARTIST)!!.artworkUrl)
+        assertEquals("https://c/album", checkNotNull(MetadataParsers.deezer(json("""{"title":"Song","album":{"cover_big":"https://c/album"}}"""), ItemType.TRACK)) { "Expected MetadataParsers.deezer(json(\"\"\"{\"title\":\"Song\",\"album\":{\"cover_big\":\"https://c/album\"}}\"\"\"), Item... to be non-null" }.artworkUrl)
+        assertNull(checkNotNull(MetadataParsers.deezer(json("""{"title":"Song","album":{}}"""), ItemType.TRACK)) { "Expected MetadataParsers.deezer(json(\"\"\"{\"title\":\"Song\",\"album\":{}}\"\"\"), ItemType.TRACK) to be non-null" }.artworkUrl)
+        assertEquals("https://c/own", checkNotNull(MetadataParsers.deezer(json("""{"title":"Album","cover_big":"https://c/own","picture_big":"https://c/picture"}"""), ItemType.ALBUM)) { "Expected MetadataParsers.deezer(json(\"\"\"{\"title\":\"Album\",\"cover_big\":\"https://c/own\",\"picture_big\":\"https:... to be non-null" }.artworkUrl)
+        assertEquals("https://c/picture", checkNotNull(MetadataParsers.deezer(json("""{"name":"Band","picture_big":"https://c/picture"}"""), ItemType.ARTIST)) { "Expected MetadataParsers.deezer(json(\"\"\"{\"name\":\"Band\",\"picture_big\":\"https://c/picture\"}\"\"\"), ItemType.AR... to be non-null" }.artworkUrl)
         // The list of songs may be missing, or empty of anything with a name.
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.deezer(json("""{"title":"Mix","tracks":{}}"""), ItemType.PLAYLIST)!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.deezer(json("""{"title":"Mix","tracks":{}}"""), ItemType.PLAYLIST)) { "Expected MetadataParsers.deezer(json(\"\"\"{\"title\":\"Mix\",\"tracks\":{}}\"\"\"), ItemType.PLAYLIST) to be non-null" }.tracks)
         val tracks = """[5,{"title":""},{"title":"A","artist":{"name":"Band"},"album":{"cover_medium":"https://c/a"}},{"title":"B"},{"title":"C","album":{}},{"title":"D","album":{"cover_medium":""}}]"""
-        val listed = MetadataParsers.deezer(json("""{"title":"Mix","tracks":{"data":$tracks}}"""), ItemType.PLAYLIST)!!.tracks
+        val listed = checkNotNull(MetadataParsers.deezer(json("""{"title":"Mix","tracks":{"data":$tracks}}"""), ItemType.PLAYLIST)) { "Expected MetadataParsers.deezer(json(\"\"\"{\"title\":\"Mix\",\"tracks\":{\"data\":\$tracks}}\"\"\"), ItemType.PLAYLIST) to be non-null" }.tracks
         assertEquals(listOf("A", "B", "C", "D"), listed.map { it.title })
         assertEquals(listOf("Band", "", "", ""), listed.map { it.artist })
         assertEquals(listOf("https://c/a", null, null, null), listed.map { it.artworkUrl })
+    }
+
+    @Test
+    fun deezerPlaylistRowsKeepAnInstrumentalAlbumOnlyWhenItsNameSaysSo() {
+        val tracks = """[{"title":"A","album":{"title":"Album (Instrumentals)"}},{"title":"B","album":{"title":"Album"}},{"title":"C"}]"""
+        val listed = checkNotNull(MetadataParsers.deezer(json("""{"title":"Mix","tracks":{"data":$tracks}}"""), ItemType.PLAYLIST)).tracks
+        assertEquals(listOf("Album (Instrumentals)", null, null), listed.map { it.instrumentalAlbum })
     }
 
     @Test
@@ -962,14 +979,14 @@ class MetadataParsersTest {
         assertNull(MetadataParsers.bandcamp("<html></html>", ItemType.ALBUM))
         assertNull(MetadataParsers.bandcamp(og(" "), ItemType.ALBUM))
         fun album(data: String?, image: String = "") = og("Volume Alpha, by C418") + image + (data?.let { """<script type="application/ld+json" id="x">$it</script>""" } ?: "")
-        assertNull(MetadataParsers.bandcamp(album(null, """<meta property="og:image" content=" ">"""), ItemType.ALBUM)!!.artworkUrl)
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(album(null), ItemType.ALBUM)!!.tracks)
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(album("not json"), ItemType.ALBUM)!!.tracks)
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(album("""{"byArtist":{"name":"C418"}}"""), ItemType.ALBUM)!!.tracks)
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(album("""{"track":{}}"""), ItemType.ALBUM)!!.tracks)
-        val listed = MetadataParsers.bandcamp(
+        assertNull(checkNotNull(MetadataParsers.bandcamp(album(null, """<meta property="og:image" content=" ">"""), ItemType.ALBUM)) { "Expected MetadataParsers.bandcamp(album(null, \"\"\"<meta property=\"og:image\" content=\" \">\"\"\"), ItemType.ALBUM) to be non-null" }.artworkUrl)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.bandcamp(album(null), ItemType.ALBUM)) { "Expected MetadataParsers.bandcamp(album(null), ItemType.ALBUM) to be non-null" }.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.bandcamp(album("not json"), ItemType.ALBUM)) { "Expected MetadataParsers.bandcamp(album(\"not json\"), ItemType.ALBUM) to be non-null" }.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.bandcamp(album("""{"byArtist":{"name":"C418"}}"""), ItemType.ALBUM)) { "Expected MetadataParsers.bandcamp(album(\"\"\"{\"byArtist\":{\"name\":\"C418\"}}\"\"\"), ItemType.ALBUM) to be non-null" }.tracks)
+        assertEquals(emptyList<MusicMetadata>(), checkNotNull(MetadataParsers.bandcamp(album("""{"track":{}}"""), ItemType.ALBUM)) { "Expected MetadataParsers.bandcamp(album(\"\"\"{\"track\":{}}\"\"\"), ItemType.ALBUM) to be non-null" }.tracks)
+        val listed = checkNotNull(MetadataParsers.bandcamp(
             album("""{"track":{"itemListElement":[5,{},{"item":{}},{"item":{"name":""}},{"item":{"name":"Key"}}]}}"""), ItemType.ALBUM
-        )!!.tracks
+        )) { "Expected MetadataParsers.bandcamp( album(\"\"\"{\"track\":{\"itemListElement\":[5,{},{\"item\":{}},{\"item\":{\"name\":... to be non-null" }.tracks
         assertEquals(listOf(MusicMetadata("Key", "")), listed)
     }
 }

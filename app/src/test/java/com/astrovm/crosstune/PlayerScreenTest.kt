@@ -129,7 +129,7 @@ class PlayerScreenTest {
         shown = UiState(canFollowApps = true, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following(paused)))
         compose.setContent {
             inputModes = LocalInputModeManager.current
-            back = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            back = checkNotNull(LocalOnBackPressedDispatcherOwner.current) { "Expected LocalOnBackPressedDispatcherOwner.current to be non-null" }.onBackPressedDispatcher
             CrosstuneTheme { PlayerScreen(shown, actions) }
         }
     }
@@ -166,12 +166,12 @@ class PlayerScreenTest {
         // On, it says which way, as the icon draws it.
         val how = { text: String -> SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, text) }
         none(how(context.getString(R.string.player_repeat_all)))
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(repeat = Repeat.ALL))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(repeat = Repeat.ALL))) }
         compose.onNode(hasContentDescription(name) and how(context.getString(R.string.player_repeat_all))).assertIsOn()
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(repeat = Repeat.ONE))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(repeat = Repeat.ONE))) }
         compose.onNode(hasContentDescription(name) and how(context.getString(R.string.player_repeat_one))).assertIsOn()
         // An app that doesn't say has none.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(repeat = null))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(repeat = null))) }
         none(hasContentDescription(name))
     }
 
@@ -188,7 +188,7 @@ class PlayerScreenTest {
         cover.performTouchInput { swipeRight() }
         compose.waitForIdle()
         assertEquals(listOf(true), skips)
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(canSkipPrevious = true))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(canSkipPrevious = true))) }
         cover.performTouchInput { swipeRight() }
         compose.waitForIdle()
         assertEquals(listOf(true, false), skips)
@@ -206,19 +206,19 @@ class PlayerScreenTest {
         compose.onNodeWithContentDescription("Like").performClick()
         assertEquals(1, likes)
         // An app whose drawing can't be had gets a thumb up, still named as the app names it.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(appPackage = "com.example.gone", like = AppAction("thumbs_up_action", "Gefällt mir", 1)))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(appPackage = "com.example.gone", like = AppAction("thumbs_up_action", "Gefällt mir", 1)))) }
         compose.onNodeWithContentDescription("Gefällt mir").performClick()
         assertEquals(2, likes)
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(like = null))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(like = null))) }
         none(hasContentDescription("Gefällt mir"))
     }
 
     @Test
     fun theListItPlaysFromOpensWhatPlaysNext() {
-        val played = mutableListOf<Long>()
+        val played = mutableListOf<Pair<Long, Int>>()
         val later = mutableListOf<Int>()
-        player(ScreenActions(onPlayerPlayQueued = { played += it }, onPlayerPlayLater = { later += it })) {
-            it.copy(from = "Road trip", upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", "")))
+        player(ScreenActions(onPlayerPlayQueued = { id, session -> played += id to session }, onPlayerPlayLater = { later += it })) {
+            it.copy(from = "Road trip", upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", "")), session = 42)
         }
         val upNext = context.getString(R.string.player_up_next)
         compose.onNodeWithContentDescription("$upNext, Road trip").performClick()
@@ -231,7 +231,7 @@ class PlayerScreenTest {
         none(asked)
         compose.onNodeWithText("Next Song").performClick()
         compose.waitForIdle()
-        assertEquals(listOf(7L), played)
+        assertEquals(listOf(7L to 42), played)
         compose.onNodeWithText("Next Song").assertExists()
         compose.onNode(asked).assertExists()
         // Never played, it stops saying so after a while.
@@ -256,7 +256,7 @@ class PlayerScreenTest {
         compose.waitForIdle()
         none(hasText("Later Song"))
         // Not played from a list, it's only what's next.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(from = null))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(from = null))) }
         compose.onNodeWithContentDescription(upNext).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(upNext).assertExists()
@@ -264,21 +264,21 @@ class PlayerScreenTest {
         compose.onNode(handle).performClick()
         compose.waitForIdle()
         // Played from a list, with nothing after it, it's only the list's name and the song playing.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(from = "Road trip", upNext = emptyList()))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(from = "Road trip", upNext = emptyList()))) }
         compose.onNodeWithContentDescription("$upNext, Road trip").performClick()
         compose.waitForIdle()
         compose.onNodeWithText(context.getString(R.string.player_playing_from)).assertExists()
         compose.onNode(handle).performClick()
         compose.waitForIdle()
         // With nothing after it, there's nothing to open.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(from = null))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(from = null))) }
         none(hasContentDescription(upNext))
         // Gone with the list while open, it stays gone once there's another.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(upNext = listOf(Queued("Next Song", "Band", 7))))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(upNext = listOf(Queued("Next Song", "Band", 7))))) }
         compose.onNodeWithContentDescription(upNext).performClick()
         compose.waitForIdle()
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(upNext = emptyList()))) }
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(upNext = listOf(Queued("Next Song", "Band", 7))))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(upNext = emptyList()))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(upNext = listOf(Queued("Next Song", "Band", 7))))) }
         none(hasText("Next Song"))
     }
 
@@ -288,19 +288,38 @@ class PlayerScreenTest {
         val upNext = context.getString(R.string.player_up_next)
         compose.onNodeWithContentDescription(upNext).performClick()
         compose.waitForIdle()
-        val following = shown.player!!.following!!
+        val following = checkNotNull(checkNotNull(shown.player) { "Expected shown.player to be non-null" }.following) { "Expected shown.player.following to be non-null" }
         // Between them, the app says nothing for a moment.
-        showing { it.copy(player = it.player!!.copy(song = MusicMetadata("Next Song", "Band"), following = null)) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(song = MusicMetadata("Next Song", "Band"), following = null)) }
         compose.onNodeWithText(upNext).assertExists()
-        showing { it.copy(player = it.player!!.copy(following = following.copy(upNext = listOf(Queued("After", "Band", 8))))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = following.copy(upNext = listOf(Queued("After", "Band", 8))))) }
         compose.onNodeWithText("After").assertExists()
         // Saying nothing on, there's nothing up next.
-        showing { it.copy(player = it.player!!.copy(following = null)) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = null)) }
         compose.mainClock.advanceTimeBy(1_900)
         compose.onNodeWithText("After").assertExists()
         compose.mainClock.advanceTimeBy(200)
         compose.waitForIdle()
         none(hasText("After"))
+    }
+
+    @Test
+    fun aReadOnlyStationForgetsTheQueueEvenIfTheNextPlayerHasNotStartedFollowing() {
+        player { it.copy(upNext = listOf(Queued("Old queued song", "Band", 7))) }
+        val upNext = context.getString(R.string.player_up_next)
+        compose.onNodeWithContentDescription(upNext).performClick()
+        compose.onNodeWithText("Old queued song").assertExists()
+
+        showing {
+            it.copy(player = PlayerState(MusicMetadata("Blue 100.7 FM", ""), RadioNotice.PACKAGE, songless = true, stationAppLabel = "Simple Radio"))
+        }
+        compose.onNodeWithContentDescription(context.getString(R.string.open_app_button, "Simple Radio")).assertExists()
+        none(hasContentDescription(upNext))
+        none(hasText("Old queued song"))
+
+        // The next player may replace the station before the screen sees it close. Its app has not reported a queue yet.
+        showing { it.copy(player = PlayerState(MusicMetadata("Another song", "Band"), null)) }
+        none(hasContentDescription(upNext))
     }
 
     @Test
@@ -421,7 +440,7 @@ class PlayerScreenTest {
     fun theRemoteGoesThroughWhatsNextAndTheSleepTimerAndBack() {
         val played = mutableListOf<Long>()
         val asked = mutableListOf<Int?>()
-        player(ScreenActions(onPlayerPlayQueued = { played += it }, onPlayerSleep = { asked += it })) {
+        player(ScreenActions(onPlayerPlayQueued = { id, _ -> played += id }, onPlayerSleep = { asked += it })) {
             it.copy(upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", "")))
         }
         fun press(node: androidx.compose.ui.test.SemanticsNodeInteraction, key: Key) {
@@ -460,7 +479,7 @@ class PlayerScreenTest {
         sleep.assertIsFocused()
 
         // Opened from the list's name up top, it's back there.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(from = "Road trip"))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(from = "Road trip"))) }
         val list = compose.onNodeWithContentDescription("${context.getString(R.string.player_up_next)}, Road trip")
         list.requestFocus()
         press(list, Key.DirectionCenter)
@@ -497,7 +516,7 @@ class PlayerScreenTest {
         compose.onNodeWithText(context.getString(R.string.player_sleep_off)).performClick()
         assertEquals(1, off)
         // A song of no known length has no end to pause at.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(durationMs = null))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(durationMs = null))) }
         compose.onNodeWithContentDescription(name).performClick()
         compose.waitForIdle()
         none(hasText(context.getString(R.string.player_sleep_song_end)))
@@ -511,24 +530,24 @@ class PlayerScreenTest {
         // Words not found yet, it's only their button.
         compose.onNodeWithContentDescription(lyrics).performClick()
         assertEquals(1, opened)
-        showing { it.copy(player = it.player!!.copy(lines = listOf(LyricLine(1_000, "One"), LyricLine(20_000, "Two"), LyricLine(40_000, "Three")))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(lines = listOf(LyricLine(1_000, "One"), LyricLine(20_000, "Two"), LyricLine(40_000, "Three")))) }
         compose.onNodeWithText("Two").performClick()
         assertEquals(2, opened)
         none(hasText("One"))
         // Before the singing, the first.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(clock = PlaybackClock(0, 0, playing = false)))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(clock = PlaybackClock(0, 0, playing = false)))) }
         compose.onNodeWithText("One").assertExists()
         // A video's clock may be the video's, so it shows none.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(video = true))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(video = true))) }
         none(hasText("One"))
         compose.onNodeWithContentDescription(lyrics).assertExists()
         // Words without times show their first line; a blank one, nothing.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(video = false), lines = listOf(LyricLine(0, "Untimed")))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(following = checkNotNull(it.player.following) { "Expected it.player.following to be non-null" }.copy(video = false), lines = listOf(LyricLine(0, "Untimed")))) }
         compose.onNodeWithText("Untimed").assertExists()
-        showing { it.copy(player = it.player!!.copy(lines = listOf(LyricLine(0, " ")))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(lines = listOf(LyricLine(0, " ")))) }
         compose.onNodeWithContentDescription(lyrics).assertExists()
         // Between verses, the last one sung stays up.
-        showing { it.copy(player = it.player!!.copy(lines = listOf(LyricLine(1_000, "One"), LyricLine(20_000, ""), LyricLine(40_000, "Three")))) }
+        showing { it.copy(player = checkNotNull(it.player) { "Expected it.player to be non-null" }.copy(lines = listOf(LyricLine(1_000, "One"), LyricLine(20_000, ""), LyricLine(40_000, "Three")))) }
         compose.onNodeWithText("One").assertExists()
     }
 

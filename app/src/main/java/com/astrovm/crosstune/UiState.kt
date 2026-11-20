@@ -277,7 +277,7 @@ internal data class UiState(
 
     /** The song the screen is about, that casting would hand to a TV: the words shown, the player's, or the card's. */
     val songToCast: MusicMetadata?
-        get() = (lyricsFor ?: player?.song ?: result)?.takeIf { it.type == ItemType.TRACK }
+        get() = (lyricsFor ?: player?.takeUnless { it.stationOnly }?.song ?: result)?.takeIf { it.type == ItemType.TRACK }
 
     /** Whether the Cast button shows: a TV with Crosstune is around, or one is cast to, and there's a song to hand it. */
     val canCast: Boolean
@@ -407,7 +407,9 @@ internal data class NowPlaying(val song: MusicMetadata, val following: Following
  * by its sound or the microphone. The app's own name for a song always comes before it. [following]
  * it in the app, for its buttons and where it is, as for a song.
  */
-internal data class PlayingUnnamed(val playing: Unnamed, val heard: Heard.Song? = null, val following: Following? = null)
+internal data class PlayingUnnamed(val playing: Unnamed, val heard: Heard.Song? = null, val following: Following? = null) {
+    val canControl: Boolean get() = playing.reportsState
+}
 
 /**
  * The player's [song], asked of the music app [app], by package, with its [link] there for YouTube
@@ -428,10 +430,14 @@ internal data class PlayerState(
      * It plays what the app names no song for, e.g. a radio station, as the app names it: its buttons
      * and where it is, but nothing that takes it for a song, no card, words, link or search.
      */
-    val songless: Boolean = false
+    val songless: Boolean = false,
+    val stationAppLabel: String? = null,
+    val session: Int? = null
 ) {
+    val stationOnly: Boolean get() = stationAppLabel != null
+
     /** Who it's by, as shown under its name: for what names no song, the app that plays it. */
-    val byLine: String get() = if (songless) following?.app.orEmpty() else song.artist
+    val byLine: String get() = if (songless) (following?.app ?: stationAppLabel).orEmpty() else song.artist
 }
 
 internal data class Practice(

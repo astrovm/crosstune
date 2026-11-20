@@ -56,6 +56,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -67,6 +69,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -74,6 +77,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -119,6 +123,8 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 internal const val PLAYER_COVER_TAG = "player-cover"
+internal const val OPEN_STATION_ICON_TAG = "open-station-icon"
+internal const val OPEN_STATION_WORD_TAG = "open-station-word"
 
 /**
  * Crosstune's player: the song playing in its music app, behind, with its cover, where it is, and
@@ -139,15 +145,17 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     // Between one song and the next the app says nothing for a moment, so it stays as it was till it
     // does, or a while passes without it.
     var between by remember { mutableStateOf<Following?>(null) }
-    LaunchedEffect(following) {
-        if (following != null) {
-            between = following
-        } else {
-            delay(BETWEEN_SONGS_MS)
-            between = null
+    LaunchedEffect(following, player.stationOnly) {
+        when {
+            player.stationOnly -> between = null
+            following != null -> between = following
+            else -> {
+                delay(BETWEEN_SONGS_MS)
+                between = null
+            }
         }
     }
-    val listed = (following ?: between)?.takeIf { it.from != null || it.upNext.isNotEmpty() }
+    val listed = (following ?: between)?.takeIf { !player.stationOnly && (it.from != null || it.upNext.isNotEmpty()) }
     var upNext by rememberSaveable { mutableStateOf(false) }
     // Gone with the list, it stays gone, rather than open again over the next one.
     LaunchedEffect(listed == null) { if (listed == null) upNext = false }
@@ -166,6 +174,15 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
         }
     }
     val fromTop = remember { FocusRequester() }
+    val openStation = remember { FocusRequester() }
+    // A station with no state has nothing else to press, so on a TV the remote starts on its one button, and keeps it as the station changes.
+    LaunchedEffect(player.stationOnly) { if (player.stationOnly && state.phone == Phone.TV) openStation.requestFocus() }
+    // Closed, the remote goes back to the station's bar, which is still there, rather than nowhere.
+    val barFocus = LocalBarFocus.current
+    val handsBack by rememberUpdatedState(player.stationOnly && state.phone == Phone.TV)
+    DisposableEffect(barFocus) {
+        onDispose { if (handsBack) barFocus.owed = true }
+    }
     val fromTools = remember { FocusRequester() }
     // Which of them opened it, null till one did, so the remote is back there once it's put away,
     // rather than anywhere, as the song it was on went.
@@ -258,7 +275,21 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                 !player.played && app != null -> PlayerWaiting(app)
             }
         }
-        PlayerButtons(following, actions, Modifier.moves("buttons", moving))
+        if (player.stationOnly) {
+            // The one thing to do here, so it's a filled button, with the app's name for a reader; the remote starts on it.
+            val openApp = stringResource(R.string.open_app_button, player.byLine)
+            Box(Modifier.fillMaxWidth().moves("buttons", moving).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                Button(
+                    onClick = actions.onPlayerOpenApp,
+                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                    modifier = Modifier.heightIn(min = 52.dp).focusRequester(openStation).semantics { contentDescription = openApp }
+                ) {
+                    AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize).testTag(OPEN_STATION_ICON_TAG))
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text(stringResource(R.string.open_button), modifier = Modifier.testTag(OPEN_STATION_WORD_TAG))
+                }
+            }
+        } else PlayerButtons(following, actions, Modifier.moves("buttons", moving))
     }
     // The lesser tools, small, under the buttons: where it plays on one side, the rest on the other.
     val tools: @Composable () -> Unit = {
@@ -275,7 +306,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                 AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
             }
             if (state.canCast) CastButton(state, actions.onCast)
-            SleepButton(state.sleep, songEnds = following?.durationMs != null, actions)
+            if (!player.stationOnly) SleepButton(state.sleep, songEnds = following?.durationMs != null, actions)
             if (listed != null) IconButton(onClick = { openUpNext(false) }, modifier = Modifier.focusRequester(fromTools)) {
                 AppIcon(R.drawable.ic_queue_music, contentDescription = stringResource(R.string.player_up_next))
             }
@@ -714,7 +745,7 @@ private fun UpNextList(player: PlayerState, cover: String?, following: Following
                     ) {
                         asked = keys[index]
                         // One the app has plays at once; a list's still to ask for, from there on.
-                        if (id != null) actions.onPlayerPlayQueued(id) else actions.onPlayerPlayLater(index)
+                        if (id != null) actions.onPlayerPlayQueued(id, following.session) else actions.onPlayerPlayLater(index)
                     }
                 }
             }

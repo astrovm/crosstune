@@ -47,7 +47,7 @@ class AppWakerTest {
     fun cancellingAWakeDisconnectsTheAppEvenBeforeItAnswers() {
         val job = scope.launch { waker.wake(listOf(PACKAGE)) }
         shadowOf(Looper.getMainLooper()).idle()
-        val browser = Browser.latest!!
+        val browser = checkNotNull(Browser.latest) { "Expected Browser.latest to be non-null" }
         assertTrue(browser.connected)
         job.cancel()
         shadowOf(Looper.getMainLooper()).idle()
@@ -61,10 +61,10 @@ class AppWakerTest {
     fun cancellingAnOlderWakeLeavesTheNewerOneAlone() {
         val first = scope.launch { waker.wake(listOf(PACKAGE)) }
         shadowOf(Looper.getMainLooper()).idle()
-        val old = Browser.latest!!
+        val old = checkNotNull(Browser.latest) { "Expected Browser.latest to be non-null" }
         val second = scope.launch { waker.wake(listOf(PACKAGE)) }
         shadowOf(Looper.getMainLooper()).idle()
-        val next = Browser.latest!!
+        val next = checkNotNull(Browser.latest) { "Expected Browser.latest to be non-null" }
         assertTrue(old.disconnected)
         first.cancel()
         shadowOf(Looper.getMainLooper()).idle()
@@ -79,18 +79,18 @@ class AppWakerTest {
         var result: Any? = "waiting"
         val job = scope.launch { result = waker.wake(listOf(PACKAGE)) }
         shadowOf(Looper.getMainLooper()).idle()
-        val browser = Browser.latest!!
+        val browser = checkNotNull(Browser.latest) { "Expected Browser.latest to be non-null" }
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(6))
         assertTrue(job.isCompleted)
         assertNull(result)
         assertTrue(browser.disconnected)
         val refused = scope.launch { result = waker.wake(listOf(PACKAGE)) }
         shadowOf(Looper.getMainLooper()).idle()
-        Browser.latest!!.callback.onConnectionFailed()
+        checkNotNull(Browser.latest) { "Expected Browser.latest to be non-null" }.callback.onConnectionFailed()
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(refused.isCompleted)
         assertNull(result)
-        assertTrue(Browser.latest!!.disconnected)
+        assertTrue(checkNotNull(Browser.latest) { "Expected Browser.latest to be non-null" }.disconnected)
     }
 
     @Test
@@ -98,11 +98,11 @@ class AppWakerTest {
         var result: Any? = null
         val job = scope.launch { result = waker.wake(listOf("com.example.missing", PACKAGE)) }
         shadowOf(Looper.getMainLooper()).idle()
-        val browser = Browser.latest!!
+        val browser = checkNotNull(Browser.latest) { "Expected Browser.latest to be non-null" }
         browser.callback.onConnected()
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(job.isCompleted)
-        assertEquals(android.media.session.MediaController::class.java, result!!::class.java)
+        assertEquals(android.media.session.MediaController::class.java, checkNotNull(result) { "Expected result to be non-null" }::class.java)
         assertFalse(browser.disconnected)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(31))
         assertTrue(browser.disconnected)

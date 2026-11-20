@@ -169,7 +169,7 @@ class CrosstuneWidgetTest {
         assertEquals(listOf("Track", "Album"), songs.map { it.title })
         assertEquals("Band, Spotify", songs[0].subtitle)
         assertEquals("${app.getString(R.string.type_album)}, Deezer", songs[1].subtitle)
-        assertEquals(CrosstuneWidget.COVER_PIXELS, songs[0].cover!!.width)
+        assertEquals(CrosstuneWidget.COVER_PIXELS, checkNotNull(songs[0].cover) { "Expected songs[0].cover to be non-null" }.width)
         assertNull(songs[1].cover)
     }
 

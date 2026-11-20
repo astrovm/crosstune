@@ -168,7 +168,7 @@ internal class ChatGptTutor(
     suspend fun checkReadings(song: MusicMetadata, lines: List<String>, read: List<LineReading>): List<LineReading>? {
         val model = chatGpt.model() ?: return null
         // Kept for these words: another copy of the song may have other lines.
-        val key = "readings|$model|${song.title}|${song.artist}|${lines.hashCode()}"
+        val key = "readings|$model|${readingKey(song, lines)}"
         val fixes = cache.get(key) ?: run {
             val asked = JSONArray()
             lines.forEachIndexed { index, line ->
@@ -187,9 +187,34 @@ internal class ChatGptTutor(
             cache.save()
             array
         }
-        return Readings.corrected(read, JSONArray(fixes).let { list ->
-            (0 until list.length()).mapNotNull { list.optJSONObject(it) }.map { ReadingFix(it.optInt("line") - 1, it.optString("kanji"), it.optString("reading"), Reader.CHATGPT) }
-        })
+        return Readings.corrected(read, readingFixes(fixes))
+    }
+
+    /**
+     * Answers kept for this exact sheet, from any model, even if signed out now. Never asks ChatGPT. Null when it kept
+     * answers for other sheets but none for this one: it may have put a line right here, and the answer has since gone.
+     */
+    suspend fun cachedReadingFixes(song: MusicMetadata, lines: List<String>): List<List<ReadingFix>>? {
+        val suffix = readingKey(song, lines)
+        val kept = cache.entries().mapNotNull { (key, value) ->
+            val fields = key.split('|', limit = 3)
+            if (fields.first() != "readings") return@mapNotNull null
+            fields.getOrNull(2) to value
+        }
+        val mine = kept.filter { it.first == suffix }.mapNotNull { (_, value) ->
+            try {
+                readingFixes(value)
+            } catch (_: JSONException) {
+                null
+            }
+        }
+        return mine.takeIf { it.isNotEmpty() || kept.isEmpty() }
+    }
+
+    private fun readingKey(song: MusicMetadata, lines: List<String>) = "${song.title}|${song.artist}|${lines.hashCode()}"
+
+    private fun readingFixes(json: String): List<ReadingFix> = JSONArray(json).let { list ->
+        (0 until list.length()).mapNotNull { list.optJSONObject(it) }.map { ReadingFix(it.optInt("line") - 1, it.optString("kanji"), it.optString("reading"), Reader.CHATGPT) }
     }
 
     /** Songs that match [description], what someone remembers about them, most likely first, as title to artist. */

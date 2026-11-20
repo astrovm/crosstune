@@ -76,7 +76,7 @@ jobs:
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "25"
@@ -241,7 +241,7 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "25"
@@ -359,9 +359,10 @@ jobs:
           fi
           gh release create "$TAG" "Crosstune-$TAG.apk" "Crosstune-$TAG-foss.apk" "Crosstune-$TAG.aab" "${args[@]}"
 
-  # Sends the signed App Bundle and its release notes to Google Play's internal testing, then the same release
-  # on to each testing track in the PLAY_TRACKS repository variable (beta when it isn't set), with the store
-  # listing, in one edit: one review a release. Production is a step of its own, promote.yml. Skipped until the
+  # Sends the signed App Bundle and its release notes to Google Play's internal testing, which Google doesn't
+  # review. Production is a step of its own, promote.yml, which takes the store listing along: one review a
+  # release. When the PLAY_TRACKS repository variable names testing tracks, one more edit sends the release on
+  # to them with the listing, and that edit goes to review instead. Skipped until the
   # PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing" in CONTRIBUTING.md. Skipped for a pre-release too:
   # Play takes each version code once, and v2.27.0-rc.1 has the one of 2.27.0, which 2.27.0 itself needs.
   # A test version never goes to Play. When Play has a newer version, as for an older tag's release run again,
@@ -404,7 +405,7 @@ jobs:
       - name: Upload to Google Play
         env:
           PLAY_KEY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          # The testing tracks, with commas between, e.g. "beta,alpha" to send closed testing the same release.
+          # Testing tracks after internal testing, with commas between, e.g. "beta,alpha". None when it isn't set.
           PLAY_TRACKS: ${{ vars.PLAY_TRACKS }}
           # The listing's languages: folders of fastlane/metadata/android, with spaces between.
           PLAY_LANGUAGES: ${{ vars.PLAY_LANGUAGES }}
