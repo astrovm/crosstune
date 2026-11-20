@@ -15,6 +15,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.time.Duration
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -444,6 +445,8 @@ class MainViewModelTest {
         var holdNearby: CompletableDeferred<Unit>? = null
         /** Holds a listen to what plays, once asked, till it's completed. */
         var holdPlaying: CompletableDeferred<Unit>? = null
+        /** How many listens to what plays were stopped while held. */
+        var stopped = 0
         override suspend fun listen(): Heard {
             nearby++
             holdNearby?.await()
@@ -454,7 +457,12 @@ class MainViewModelTest {
             this.whileAloud += whileAloud
             // Listened to over and over with no time going by is a loop: it stops here, so the test fails on the count, at once.
             if (listensNow.loops()) awaitCancellation()
-            holdPlaying?.await()
+            try {
+                holdPlaying?.await()
+            } catch (e: CancellationException) {
+                stopped++
+                throw e
+            }
             return answers[minOf(asked.size, answers.size) - 1]
         }
     }
@@ -489,7 +497,8 @@ class MainViewModelTest {
     private val untitled = Unnamed("com.example.untitled", "Untitled Player", null, said = false)
 
     @Test
-    fun aStationWithoutPlaybackStateDoesNotStartAutomaticRecognition() {
+    fun aStationWithoutPlaybackStateIsNamedByEarAndATapOpensTheSongHeard() {
+        // Simple Radio says only the station's name (Issue #1000): what it plays is heard, as for any station.
         val hears = EarsOnThePhone(heardSong())
         val playback = FakePlayback().apply { aloud = true }
         val model = radioModel(hears, playback, mayCapture = { true })
@@ -497,12 +506,57 @@ class MainViewModelTest {
         model.playingBarInSight(true)
         idle()
         assertEquals(station.name, model.uiState.playingUnnamed?.playing?.name)
-        assertNull(model.uiState.playingUnnamed?.heard)
-        assertTrue(hears.asked.isEmpty())
+        assertEquals(1, hears.asked.size)
+        assertEquals(hears.answers[0], model.uiState.playingUnnamed?.heard)
+        assertNull(model.uiState.playingUnnamed?.following)
 
-        playback.unnamed.value = station
+        model.openPlayingUnnamed()
+        idle()
+        // The song heard opens, as a Shazam result: its card, not the station's player.
+        assertTrue(model.uiState.linkText.contains("1234"))
+        assertNull(model.uiState.player)
+    }
+
+    @Test
+    fun aStationWithoutPlaybackStateIsListenedToOnlyInSightAndItsListenStopsWhenItGoes() {
+        val hears = EarsOnThePhone(heardSong())
+        val playback = FakePlayback().apply { aloud = true }
+        val model = radioModel(hears, playback, mayCapture = { true })
+        hears.holdPlaying = CompletableDeferred()
+        playback.unnamed.value = station.copy(reportsState = false)
+        idle()
+        assertTrue(hears.asked.isEmpty())
+        model.playingBarInSight(true)
         idle()
         assertEquals(1, hears.asked.size)
+
+        // Simple Radio takes its notification down as it stops: the listen under way stops with it, and none starts.
+        playback.unnamed.value = null
+        idle()
+        assertEquals(1, hears.stopped)
+        checkNotNull(hears.holdPlaying).complete(Unit)
+        idle()
+        assertEquals(1, hears.asked.size)
+        assertNull(model.uiState.playingUnnamed)
+    }
+
+    @Test
+    fun aStationWithoutPlaybackStateOpensItsPlayerForASongHeardATapWouldntOpen() {
+        // One that may be another song playing in the room, and one that may be over by now: never the station's
+        // name as a song, which it doesn't say it plays.
+        for (heard in listOf(heardSong().copy(inRoom = true), heardSong(lengthMs = null))) {
+            val playback = FakePlayback().apply { aloud = true }
+            val model = radioModel(EarsOnThePhone(heard), playback, mayCapture = { true })
+            playback.unnamed.value = station.copy(reportsState = false)
+            model.playingBarInSight(true)
+            idle()
+            assertEquals(heard, model.uiState.playingUnnamed?.heard)
+            model.openPlayingUnnamed()
+            idle()
+            assertNull(model.uiState.result)
+            assertFalse(model.uiState.linkText.contains("1234"))
+            assertTrue(checkNotNull(model.uiState.player).stationOnly)
+        }
     }
 
     /** A model on [untitled] playing in [playback], with its bar in sight, and the song [ears] heard first in it shown. */
