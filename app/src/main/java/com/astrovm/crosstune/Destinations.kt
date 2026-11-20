@@ -89,9 +89,14 @@ internal class DestinationStore(
 
     fun allDestinations(): List<Destination> = services() + frontends() + customDestinations()
 
-    /** Each service, then the builds patched from it that are installed, each an app of its own. */
+    /**
+     * Each service, then the builds patched from it that are installed, each an app of its own. Without its
+     * own app, a service opens in such a build, so that build alone stands for it, e.g. YouTube's TV app on a
+     * TV, rather than two rows that open the same app.
+     */
     private fun services(): List<Destination.Service> = MusicService.entries.flatMap { service ->
-        listOf(Destination.Service(service)) + service.builds.filter(isInstalled).map { Destination.Service(service, it) }
+        val builds = service.builds.filter(isInstalled).map { Destination.Service(service, it) }
+        if (builds.isNotEmpty() && !isInstalled(service.packageName)) builds else listOf(Destination.Service(service)) + builds
     }
 
     private fun frontends(): List<Destination.Alternative> {
@@ -145,7 +150,7 @@ internal class DestinationStore(
      * given, so reading every choice at once can share one list.
      */
     fun defaultDestination(all: List<Destination> = allDestinations()): Destination =
-        find(preferences.getString(KEY_DEFAULT, null), all) ?: Destination.Service(MusicService.YOUTUBE_MUSIC)
+        find(preferences.getString(KEY_DEFAULT, null), all) ?: find(MusicService.YOUTUBE_MUSIC.name, all) ?: Destination.Service(MusicService.YOUTUBE_MUSIC)
 
     /** False until the user picks a default, e.g. during first-run setup. */
     fun hasDefault(all: List<Destination> = allDestinations()): Boolean = find(preferences.getString(KEY_DEFAULT, null), all) != null
@@ -164,9 +169,11 @@ internal class DestinationStore(
         }
     }
 
-    // A build that was chosen and is gone falls back to its service.
+    // A build that was chosen and is gone falls back to its service, and a service without its own app to the build that stands for it.
     private fun find(key: String?, all: List<Destination>): Destination? = key?.let { wanted ->
-        all.firstOrNull { it.key == wanted } ?: all.firstOrNull { it.key == wanted.substringBefore(Destination.BUILD_SEPARATOR) }
+        val service = wanted.substringBefore(Destination.BUILD_SEPARATOR)
+        all.firstOrNull { it.key == wanted } ?: all.firstOrNull { it.key == service }
+            ?: all.firstOrNull { it is Destination.Service && it.service.name == service }
     }
 
     private fun saveCustom(list: List<Destination.Custom>) {

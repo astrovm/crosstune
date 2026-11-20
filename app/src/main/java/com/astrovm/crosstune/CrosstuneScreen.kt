@@ -592,8 +592,10 @@ private val RISING = setOf(Screen.LYRICS, Screen.PLAYER)
 @Composable
 internal fun Destination.label(): String =
     if (this is Destination.Service) {
-        // A patched build is named as Android shows it, e.g. "YT Music Morphe", as it has no name of ours.
-        build?.let { appLabel(it) } ?: stringResource(service.labelRes)
+        // A patched build is named as Android shows it, e.g. "YT Music Morphe", as it has no name of ours, and
+        // one left with its service's app's own name, beside that app, gets a word to tell the two apart.
+        build?.let { build -> appLabel(build)?.let { if (it == appLabel(service.packageName)) "$it ${MusicService.buildName(build)}" else it } }
+            ?: stringResource(service.labelRes)
     } else if (this is Destination.Alternative) {
         frontend.label
     } else {

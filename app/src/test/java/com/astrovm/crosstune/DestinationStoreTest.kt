@@ -21,6 +21,16 @@ class DestinationStoreTest {
     private val deezer = Destination.Service(MusicService.DEEZER)
 
     @Test
+    fun aBuildIsToldFromItsServicesAppByAWordOfItsOwn() {
+        assertEquals("TV", MusicService.buildName(MusicService.YOUTUBE_TV))
+        assertEquals("ReVanced", MusicService.buildName("app.revanced.android.youtube"))
+        assertEquals("RVX", MusicService.buildName("app.rvx.android.apps.youtube.music"))
+        assertEquals("Morphe", MusicService.buildName("app.morphe.android.youtube"))
+        // One no list knows goes by its patcher's part of the package.
+        assertEquals("Piko", MusicService.buildName("app.piko.android.youtube"))
+    }
+
+    @Test
     fun frontendAppsAreOfferedOnlyWhenInstalledAndWebFrontendsOnTheirSite() {
         val onlyNewPipe = DestinationStore(preferences) { it == "org.schabi.newpipe" }
         val alternatives = onlyNewPipe.allDestinations().filterIsInstance<Destination.Alternative>()
@@ -54,10 +64,18 @@ class DestinationStoreTest {
         val music = Destination.Service(MusicService.YOUTUBE_MUSIC)
         val inMorphe = Destination.Service(MusicService.YOUTUBE_MUSIC, morphe)
 
-        // Each build comes right after its service, and plain services keep their own key and app.
+        // Without the service's own app, which would open the build anyway, the build alone stands for it.
         val services = patched.allDestinations().filterIsInstance<Destination.Service>()
-        assertEquals(listOf(music, inMorphe), services.filter { it.service == MusicService.YOUTUBE_MUSIC })
-        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE), Destination.Service(MusicService.YOUTUBE, "app.revanced.android.youtube")), services.filter { it.service == MusicService.YOUTUBE })
+        assertEquals(listOf(inMorphe), services.filter { it.service == MusicService.YOUTUBE_MUSIC })
+        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE, "app.revanced.android.youtube")), services.filter { it.service == MusicService.YOUTUBE })
+        // The service chosen before, or as the first default, is that build now.
+        assertEquals(inMorphe, patched.defaultDestination())
+        preferences.edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        assertEquals(inMorphe, patched.defaultDestination())
+        // With the own app there too, each build comes right after its service, and plain services keep their own key and app.
+        installed += MusicService.YOUTUBE_MUSIC.packageName
+        assertEquals(listOf(music, inMorphe), patched.allDestinations().filterIsInstance<Destination.Service>().filter { it.service == MusicService.YOUTUBE_MUSIC })
+        installed -= MusicService.YOUTUBE_MUSIC.packageName
         assertEquals(morphe, inMorphe.packageName)
         assertEquals(MusicService.YOUTUBE_MUSIC.packageName, music.packageName)
         assertEquals("YOUTUBE_MUSIC@$morphe", inMorphe.key)
