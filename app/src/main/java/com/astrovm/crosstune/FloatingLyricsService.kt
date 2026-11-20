@@ -279,7 +279,8 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
     /** All of Crosstune's screen, covering the app playing, until Back leaves Crosstune's main screen, as it would leave Crosstune. */
     private fun cover(host: FloatingHost) {
-        if (!Settings.canDrawOverlays(this)) return stopSelf()
+        // Not allowed any more: Crosstune is told, so it doesn't go on as if it covered the app.
+        if (!Settings.canDrawOverlays(this)) return close()
         covering = true
         val content = ComposeView(this).apply {
             setContent {
