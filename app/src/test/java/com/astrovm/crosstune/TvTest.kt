@@ -657,6 +657,20 @@ class TvTest {
     }
 
     @Test
+    fun onATvBackFromTheFixListToSettingsLandsOnTheSettingTheRemoteWasOn() {
+        settingsByRemote()
+        val follow = composeRule.onNode(hasText(string(R.string.setting_lyrics_follow)))
+        follow.performScrollTo().requestFocus()
+        // The fix list is as deep as settings, and goes back to it when opened over it.
+        composeRule.runOnIdle { model().openFixes() }
+        composeRule.waitUntil(5_000) { shown(string(R.string.fix_title)) && !shown(string(R.string.setting_lyrics_follow)) }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { shown(string(R.string.setting_lyrics_follow)) }
+        composeRule.waitForIdle()
+        follow.assertIsFocused()
+    }
+
+    @Test
     fun onATvBackLandsOnTheWordsButtonThatOpenedAScreenNotOnSettingsPassedBefore() {
         launch()
         composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }

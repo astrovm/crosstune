@@ -123,6 +123,30 @@ class ReturningFocusTest {
     }
 
     @Test
+    fun aRenamedButtonIsStillTheOneGoneBackToWhenAnotherTakesItsOldKey() {
+        var key by mutableStateOf<Any>("tool")
+        var other by mutableStateOf(false)
+        compose.setContent {
+            CompositionLocalProvider(LocalScreenFocus provides screen) {
+                Column {
+                    Box(Modifier.size(48.dp).returnsFocus(key).testTag("tool").focusable())
+                    if (other) Box(Modifier.size(48.dp).returnsFocus("tool").testTag("other").focusable())
+                    CompositionLocalProvider(LocalScreenFocus provides null) { Box(Modifier.size(48.dp).testTag("loose").focusable()) }
+                }
+            }
+        }
+        compose.onNodeWithTag("tool").requestFocus()
+        compose.runOnIdle { screen.left() }
+        key = "renamed"
+        compose.waitForIdle()
+        other = true
+        compose.waitForIdle()
+        compose.onNodeWithTag("loose").requestFocus()
+        compose.runOnIdle { assertTrue(screen.restore()) }
+        compose.onNodeWithTag("tool").assertIsFocused()
+    }
+
+    @Test
     fun aScreenWithNothingToGoBackToTakesNothing() {
         compose.setContent {
             CompositionLocalProvider(LocalScreenFocus provides screen) { Box(Modifier.size(48.dp).testTag("plain").focusable()) }

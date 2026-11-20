@@ -1289,7 +1289,8 @@ class FlashcardsTest {
         // TalkBack, which can't swipe, removes it with an action of its own.
         fun removeByAction(title: String) {
             val row = song(title).fetchSemanticsNode()
-            composeRule.runOnUiThread { row.config[SemanticsActions.CustomActions].single { it.label == string(R.string.remove_button) }.action() }
+            // Done, it says so, or TalkBack would tell the user it failed.
+            assertTrue(composeRule.runOnUiThread<Boolean> { row.config[SemanticsActions.CustomActions].single { it.label == string(R.string.remove_button) }.action() })
             composeRule.waitForIdle()
         }
         // Swiped away, all its lines go, until undone.

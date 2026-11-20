@@ -539,8 +539,13 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     val barFocus = remember { BarFocus() }
     // Back on a screen, with a remote, it goes back to what it was on there, once the screen left is gone.
     val focuses = remember { ScreenFocuses(screen) }
-    // Noted as the app turns to another screen, while the remote is still on what it was on.
-    SideEffect { focuses.turnTo(screen) }
+    // Noted as the app turns to another screen, while the remote is still on what it was on, with
+    // where each screen goes back to, as one at the same depth, like settings under the fix list, can be.
+    val backOf = remember { mutableMapOf<Screen, Screen?>() }
+    SideEffect {
+        focuses.turnTo(screen)
+        backOf[screen] = layers.backTo
+    }
     // A dialog or sheet shown keeps the remote, as one that shows again on the screen come back to does.
     var overlaid by remember { mutableStateOf(false) }
     var settled by remember { mutableStateOf(screen) }
@@ -549,7 +554,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         val from = settled
         val now = moving.currentState
         settled = now
-        if (!remote || now.depth < 0 || from.depth <= now.depth) return@LaunchedEffect
+        if (!remote || now != backOf[from]) return@LaunchedEffect
         withFrameNanos {}
         // Not by whether something has it, as Android hands it to the link field once what had it is gone. A dialog
         // or sheet keeps it, and the bar takes it for itself from a station's player.

@@ -123,7 +123,7 @@ private fun PracticeRow(
     title: String,
     due: Int,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier,
     below: String? = null,
     edit: (() -> Unit)? = null,
     leading: @Composable () -> Unit
