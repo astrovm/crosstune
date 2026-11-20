@@ -427,8 +427,10 @@ class TvPlayTest {
         val floating = playCovered(canDraw = false)
         assertTrue(overlays(floating.get()).isEmpty())
         assertTrue(shadowOf(floating.get()).isStoppedBySelf)
-        // Crosstune is told, so it stops watching what plays for a cover that isn't there; the player still follows the song it opened.
-        waitUntil { playback.nowPlayingWatchers < watchersBehindTheCover }
+        // Crosstune is told, so it stops watching what plays for a cover that isn't there. What's left is the
+        // player's own follow of the song it opened, three watchers.
+        assertTrue(watchersBehindTheCover > 3)
+        waitUntil { playback.nowPlayingWatchers == 3 }
     }
 
     @Test

@@ -155,7 +155,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    /** Closed from its notification or its own button, rather than by Crosstune coming back in sight. */
+    /** Closed from its notification or its own button, or no longer allowed over other apps, rather than by Crosstune coming back in sight. */
     private fun close() {
         host?.closed()
         stopSelf()
@@ -230,8 +230,8 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     }
 
     private fun show(host: FloatingHost) {
-        // Taken back in Android's settings since Crosstune was left, so there's nothing to float on.
-        if (!Settings.canDrawOverlays(this)) return stopSelf()
+        // Taken back in Android's settings since Crosstune was left, so there's nothing to float on, and Crosstune is told.
+        if (!Settings.canDrawOverlays(this)) return close()
         place(host.state.floating)
         val content = ComposeView(this).apply {
             setContent {
