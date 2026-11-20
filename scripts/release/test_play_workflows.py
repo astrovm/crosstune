@@ -139,6 +139,8 @@ class PlayWorkflowsTest(unittest.TestCase):
         tools, release = checkouts
         self.assertIn("sparse-checkout: .github/play\n", tools)
         self.assertNotIn("fastlane", tools)
+        # The tools never come from the tag: an old tag's play.sh would ship with an old flow.
+        self.assertNotIn(".github/play", release)
 
     def test_promote_sends_the_notes_and_listing_of_the_tag_it_ships(self):
         # The listing and notes come from the release's own tag, never from main as it is when someone runs
