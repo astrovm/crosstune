@@ -208,7 +208,7 @@ internal object Readings {
     /** Small vowels that draw out the word in kana before them, ありがと and ぉ, go with it, as one word read as that one. */
     private fun drawnOut(pieces: List<Piece>) = pieces.fold(ArrayList<Piece>()) { out, piece ->
         val before = out.lastOrNull()
-        if (before != null && isKana(before.surface.last()) && piece.surface.all { it in SmallKanaTokenizer.SMALL_VOWELS }) {
+        if (before != null && "${before.surface.last()}${piece.surface}".zipWithNext().all { (a, b) -> SmallKanaTokenizer.drawsOut(a, b) }) {
             out[out.lastIndex] = before.drawnOutBy(piece)
         } else {
             out += piece

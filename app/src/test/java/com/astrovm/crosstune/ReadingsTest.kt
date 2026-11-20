@@ -565,6 +565,12 @@ class ReadingsTest {
             }
         }
         assertEquals("arigatoo", Readings.of(listOf("ありがとぉ"), Script.JAPANESE).single().typed)
+        // A small vowel that makes a sound with the kana before, ぃ in でぃ and ぇ in ふぇ, is said with it, not drawn out.
+        for (line in listOf("めでぃあ", "かふぇてらす")) {
+            val words = Readings.words(line, Script.JAPANESE).map { it.text }
+            assertTrue("$line: $words", words.any { "でぃ" in it || "ふぇ" in it })
+        }
+        assertEquals("（risei adiosu）", Readings.of(listOf("（理性アディオス）"), Script.JAPANESE).single().typed)
     }
 
     @Test

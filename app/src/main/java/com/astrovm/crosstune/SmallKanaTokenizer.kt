@@ -21,7 +21,7 @@ import com.atilika.kuromoji.viterbi.ViterbiSearcher
  * けいひ for 経費, as IPADIC knows few words in kana. The rest of the line stays as Kuromoji split it.
  *
  * Small vowels that draw a word out, ありがとぉ, can still be a word of their own: Readings puts them with the
- * word before, which keeps its reading.
+ * word before, which keeps its reading. A small vowel that makes a sound with the kana before, でぃ, is said with it.
  */
 internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : Tokenizer.Builder() {
     private val plain: Tokenizer = build()
@@ -134,7 +134,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
      */
     private fun spanning(text: String, at: Int, nodes: List<ViterbiNode>): List<ViterbiNode> {
         val end = when {
-            smallAfterKana(text, at) && text[at] in SMALL_VOWELS -> (at..text.length).first { it == text.length || text[it] !in SMALL_VOWELS }
+            drawsOut(text, at) -> (at..text.length).first { it == text.length || !drawsOut(text, it) }
             !saidWith(text, at + 1) || nodes.any { it.surface.length > 1 } -> return emptyList()
             else -> {
                 var end = at + 1
@@ -163,25 +163,34 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         Token(wordId, surface, ViterbiNode.Type.KNOWN, position, dictionary)
 
     internal companion object {
-        /** Small kana that draw out the vowel before them, ありがとぉ, rather than make a sound with it. */
-        const val SMALL_VOWELS = "ぁぃぅぇぉァィゥェォ"
         private const val SMALL_KANA = "ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ"
+        private val VOWELS = listOf("あかさたなはまやらわがざだばぱぁゃゎ", "いきしちにひみりぎじぢびぴぃ", "うくすつぬふむゆるぐずづぶぷぅゅゔ", "えけせてねへめれげぜでべぺぇ", "おこそとのほもよろをごぞどぼぽぉょ")
 
-        fun smallAfterKana(text: String, at: Int) = at in 1 until text.length && text[at] in SMALL_KANA && Readings.isKana(text[at - 1])
+        private fun smallAfterKana(text: String, at: Int) = at in 1 until text.length && text[at] in SMALL_KANA && Readings.isKana(text[at - 1])
 
-        /** A small kana at [at] said with the kana before it, as ゃ in しゃ, unlike a small vowel that draws it out. */
-        private fun saidWith(text: String, at: Int) = smallAfterKana(text, at) && text[at] !in SMALL_VOWELS
+        /**
+         * Whether [small] after [before] draws out its vowel, とぉ and めぇ, rather than make a sound with it, as ぃ
+         * does in でぃ and ぇ in ふぇ.
+         */
+        fun drawsOut(before: Char, small: Char) = small in "ぁぃぅぇぉァィゥェォ" && vowel(small).let { it >= 0 && it == vowel(before) }
+
+        private fun vowel(kana: Char) = Readings.hiragana(kana.toString()).single().let { c -> VOWELS.indexOfFirst { c in it } }
+
+        private fun drawsOut(text: String, at: Int) = smallAfterKana(text, at) && drawsOut(text[at - 1], text[at])
+
+        /** A small kana at [at] said with the kana before it, as ゃ in しゃ and ぃ in でぃ. */
+        private fun saidWith(text: String, at: Int) = smallAfterKana(text, at) && !drawsOut(text, at)
 
         private fun wrongStart(text: String, token: Token) = wrongStart(text, token.position, token.isKnown, token.surface)
 
         /**
-         * A word at [at] that starts on a small kana after another kana, but small vowels alone, which go with the
-         * word before, and IPADIC's own words that start with っ: って and っぽい, and っ alone after て or で, as in
-         * 消えてった.
+         * A word at [at] that starts on a small kana after another kana, but small vowels alone that draw out the
+         * word before, as they go with it, and IPADIC's own words that start with っ: って and っぽい, and っ alone after
+         * て or で, as in 消えてった.
          */
         private fun wrongStart(text: String, at: Int, known: Boolean, surface: String) = when {
             !smallAfterKana(text, at) -> false
-            text[at] in SMALL_VOWELS -> surface.any { it !in SMALL_VOWELS }
+            drawsOut(text, at) -> surface.indices.any { !drawsOut(text, at + it) }
             else -> !(known && (surface.length > 1 || text[at - 1] in "てで"))
         }
     }
