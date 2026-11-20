@@ -368,7 +368,7 @@ val detektTests = tasks.register<JavaExec>("detektTests") {
     val report = layout.buildDirectory.file("reports/detekt/tests.txt")
     inputs.files(testSources, config).withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.file(report)
-    dependsOn("compileDebugUnitTestKotlin")
+    dependsOn("compilePlayDebugUnitTestKotlin")
     classpath = detektCli
     mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
     jvmArgs("--sun-misc-unsafe-memory-access=allow")
@@ -380,13 +380,13 @@ val detektTests = tasks.register<JavaExec>("detektTests") {
         "--report", "txt:" + report.get().asFile.path,
     )
     argumentProviders.add(objects.newInstance<DetektTestClasspath>().apply {
-        files.from(tasks.named<Test>("testDebugUnitTest").get().classpath)
+        files.from(tasks.named<Test>("testPlayDebugUnitTest").get().classpath)
     })
 }
 val noUnsafeCalls = tasks.register<Test>("noUnsafeCalls") {
     group = "verification"
     description = "Checks source for null assertions even where detekt cannot resolve the type."
-    val unitTests = tasks.named<Test>("testDebugUnitTest").get()
+    val unitTests = tasks.named<Test>("testPlayDebugUnitTest").get()
     testClassesDirs = unitTests.testClassesDirs
     classpath = unitTests.classpath
     filter.includeTestsMatching("com.astrovm.crosstune.NoUnsafeCallsTest")

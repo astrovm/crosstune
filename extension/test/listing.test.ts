@@ -30,10 +30,9 @@ test("each store listing names every site the lyrics are looked for on", () => {
   for (const [locale, { description }] of Object.entries(listing)) namesEverySite(description, `listing.json's ${locale}`);
 });
 
-test("the stores' answers, README and every privacy page name them too", () => {
+// README's Privacy is a summary that links the privacy page, so the sites are named there.
+test("the stores' answers and every privacy page name them too", () => {
   namesEverySite(read("extension/store/README.md"), "extension/store/README.md");
-  const readme = read("README.md");
-  namesEverySite(readme.slice(readme.indexOf("The [browser extension]")), "README's Privacy");
   const strings = readdirSync(new URL("site/strings/", repo)).filter((name) => name.endsWith(".json"));
   assert.equal(strings.length, 16);
   for (const name of strings) {
