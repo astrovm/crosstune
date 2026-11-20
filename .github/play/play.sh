@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Sends the app to Google Play with fastlane supply. release.yml, promote.yml and store-listing.yml run it from
-# a checkout with only this folder and the store text, so none of the app's build code is where the Play key is.
+# Sends the app to Google Play with fastlane supply. release.yml, promote.yml and store-listing.yml check out
+# only this folder and the store text, so none of the app's build code is where the Play key is. promote.yml and
+# store-listing.yml take this folder from their own commit, and the store text from the version they send.
 #
 #   play.sh release TAG        Crosstune-TAG.aab to internal testing, which Google doesn't review. That's all,
 #                              unless PLAY_TRACKS names testing tracks: then one more edit sends that release on

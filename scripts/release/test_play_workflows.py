@@ -147,7 +147,7 @@ class PlayWorkflowsTest(unittest.TestCase):
         # promote: main may already describe features the version doesn't have.
         job = jobs((WORKFLOWS / "promote.yml").read_text(encoding="utf-8"))["production"]
         release = job.split("uses: actions/checkout@")[2].split("\n      - ")[0]
-        self.assertIn("ref: v${{ inputs.version }}\n", release)
+        self.assertIn("ref: refs/tags/v${{ inputs.version }}\n", release)
         self.assertIn("path: release\n", release)
         self.assertIn("sparse-checkout: fastlane/metadata/android\n", release)
         send = job[job.index("- name: Send the release to production"):]

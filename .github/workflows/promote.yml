@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to send to production, as in its tag (e.g. 2.26.0)"
+        description: "Version to send to production, without its tag's v (e.g. 2.26.0)"
         required: true
         type: string
 
@@ -47,9 +47,10 @@ jobs:
           sparse-checkout: .github/play
           sparse-checkout-cone-mode: false
 
+      # A full tag name: a bare one would take a branch of the same name over the tag.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: v${{ inputs.version }}
+          ref: refs/tags/v${{ inputs.version }}
           path: release
           persist-credentials: false
           sparse-checkout: fastlane/metadata/android
