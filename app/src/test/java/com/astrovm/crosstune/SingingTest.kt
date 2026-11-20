@@ -783,6 +783,28 @@ class SingingTest {
     }
 
     @Test
+    fun linesHeardALittleLaterDontTakeTheLitLineBack() {
+        // As on the Samsung: a line just lit, then the singing heard puts the lines a second and a half later.
+        // The line lit stays lit till its new time, not the one before it again for a moment.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val heard = CompletableDeferred<Sung?>()
+        singing.answer = { heard.await() }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 }
+        passes(2_300)
+        // The line now sung is lit: the wait for it runs on the real clock.
+        waitUntil { "lit 1 " in TimingLog.lastMinute() }
+        TimingLog.clear()
+        heard.complete(sungAt(times, times.map { 1_500L }))
+        waitUntil { model().uiState.lyricLines[1].timeMs == 6_500L }
+        composeRule.waitForIdle()
+        passes(1_000)
+        assertFalse(TimingLog.lastMinute(), Regex("lit 0 ").containsMatchIn(TimingLog.lastMinute()))
+    }
+
+    @Test
     fun pickedUpPartwayWordsHeardFarOffOfferToReportOnce() {
         heardFarOffTwice(FAR_MS)
         waitUntil { model().uiState.reportOffer }
