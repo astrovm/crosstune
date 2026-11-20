@@ -783,6 +783,54 @@ class SingingTest {
     }
 
     @Test
+    fun pickedUpPartwayOneWhileHeardFurtherOffThanNearLinesAreLookedAtMovesThem() {
+        // As Bizarre Love Triangle went, YouTube Music's words timed for another take: one while heard 22.8 s
+        // off, then 20.8 s, as the take's pace differs too. That far off, the lines heard are found only
+        // where by far the most words agree across the whole song, so a chorus sung elsewhere isn't.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 12_000L }) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[1].timeMs == 17_000L }
+        assertTrue(model().uiState.lyricsSynced)
+        assertTrue(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun pickedUpPartwayTwoWhilesHeardFarOffAgreeTheFurtherTheMoreTheyDrift() {
+        // Words timed for another take drift through the song: a second apart, nearly ten seconds off, they agree.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.answer = { sungAt(times, times.map { if (whiles == 0) 9_800L else 8_800L }).also { whiles++ } }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        passes(30_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 38_800L }
+        assertTrue(model().uiState.lyricsSynced)
+    }
+
+    @Test
+    fun pickedUpPartwayWordsKeptFarOffMoveAgainByAWhileHeardALittleFurther() {
+        // Kept 17 s off by the first while, the next hears the words two seconds further off, as a take's
+        // pace differs: little next to how far off they are, so they move, as a second while agreeing would.
+        val times = listOf(1, 3, 5, 7, 40, 43)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.answer = { sungAt(times, times.map { if (whiles == 0) 17_000L else 19_000L }).also { whiles++ } }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[4].timeMs == 57_000L }
+        passes(60_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[4].timeMs == 59_000L }
+        assertTrue(model().uiState.lyricsSynced)
+    }
+
+    @Test
     fun linesHeardALittleLaterDontTakeTheLitLineBack() {
         // As on the Samsung: a line just lit, then the singing heard puts the lines a second and a half later.
         // The line lit stays lit till its new time, not the one before it again for a moment.

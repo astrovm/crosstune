@@ -2439,7 +2439,7 @@ internal class MainViewModel(
     /** Whether no singing was heard where the words are timed, and none found yet: no line is shown sung till it is. */
     private var unheard = false
     private var heardThisTime = false
-    /** How far off a whole while heard last put the words, far enough off to say they're off themselves, with the app's clock unsure: they move once another while agrees. */
+    /** How far off the words as found a whole while heard last said they are, far enough off to say they're off themselves, with the app's clock unsure: they move once another while agrees. */
     private var farOffMs: Long? = null
     /** Whether the words are being lined up to the singing, through the song, with the app's clock sure; lines heard so far stay till it's done. */
     private var liningUp = false
@@ -3425,16 +3425,25 @@ internal class MainViewModel(
      * But in a music app, one while alone can be matched to the wrong lines, as a chorus heard seconds
      * from where it's sung, or a line the speech model hears over and over: words timed for another take
      * are off all through the song, so they move that far only once a later while, [whole] or its first
-     * seconds, is heard about as far off. Till then they stay where they are, even after lines heard near.
+     * seconds, is heard about as far off, or they were kept about as far off already: the further off, the
+     * more they drift, as the take's pace differs too. Till then they stay where they are, even after lines
+     * heard near. One while found further off than near lines are looked at is enough: that's found only
+     * where by far the most words heard agree, across the whole song.
      */
     private fun placeThisTime(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long, whole: Boolean) {
         heardThisTime = true
         val placed = SungAlignment.linesMs(sung, clock::positionAt, shown, shift).ifEmpty { mapOf(shown.indexOfFirst { it.timeMs + shift >= clock.positionAt(sung.startedAtMs) }.coerceAtLeast(0) to null) }
         val heard = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
         val far = abs(shift) >= WORDS_OFF_MS
+        // How far off the words as found are, by this while: the lines shown may be moved already.
+        val offMs = placed.keys.first().let { shift + shown[it].timeMs - foundLines[it].timeMs }
         // A video's words are often seconds off, timed for the release without its intro: one while says so.
-        val agreed = far && (appFollowing?.video == true || farOffMs?.let { abs(it - shift) < SUNG_OFF_MS } == true)
-        if (whole) farOffMs = shift.takeIf { far && !agreed }
+        // So does one found further off than near lines are looked at, as only where by far the most words
+        // heard agree, across the whole song, is: a chorus sung as much elsewhere isn't. Or else an earlier
+        // while said about as far, or the words were kept that far off already.
+        val agreed = far && (appFollowing?.video == true || abs(shift) > SungAlignment.MAX_SHIFT_MS ||
+            listOfNotNull(farOffMs, (offMs - shift).takeIf { syncPoints.isNotEmpty() }).any { abs(it - offMs) < agreeingMs(offMs) })
+        if (whole) farOffMs = offMs.takeIf { far && !agreed }
         if (far) {
             if (!agreed) return
             // The words kept so for the first time are a problem found, as those heard off with the clock sure are.
@@ -3446,6 +3455,12 @@ internal class MainViewModel(
         heardPoints = heard
         showPoints()
     }
+
+    /**
+     * How far apart two whiles may say words [offMs] off are and still agree: words timed for another take
+     * drift further off through the song, the further off they are, as its pace differs too.
+     */
+    private fun agreeingMs(offMs: Long) = maxOf(SUNG_OFF_MS, abs(offMs) / WORDS_OFF_DRIFT)
 
     /**
      * The lines heard in [sung] put where they're sung for good, the app's [clock] sure; the [first]
@@ -5920,6 +5935,8 @@ internal class MainViewModel(
         const val SUNG_OFF_MS = 1_000L
         /** Heard this far off, twice what an app's clock picked up partway can be behind, the words are off themselves. */
         const val WORDS_OFF_MS = 2_000L
+        /** Words heard off by more than this many times a while's drift from another are off by another amount: Bizarre Love Triangle, 22.8 s then 20.8 s. */
+        const val WORDS_OFF_DRIFT = 8
         /** Where the song is may drift this much while it's heard, and still be where it was. */
         const val STEADY_CLOCK_MS = 300L
 
