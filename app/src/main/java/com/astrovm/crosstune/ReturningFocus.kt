@@ -8,6 +8,8 @@ import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.focus.requestFocus
 import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.ObserverModifierNode
+import androidx.compose.ui.node.observeReads
 import androidx.compose.ui.node.currentValueOf
 
 /*
@@ -61,11 +63,19 @@ private data class ReturnsFocusElement(val key: Any) : ModifierNodeElement<Retur
     override fun update(node: ReturnsFocusNode) = node.rekey(key)
 }
 
-internal class ReturnsFocusNode(private var key: Any) : Modifier.Node(), FocusRequesterModifierNode, FocusEventModifierNode, CompositionLocalConsumerModifierNode {
+internal class ReturnsFocusNode(private var key: Any) :
+    Modifier.Node(), FocusRequesterModifierNode, FocusEventModifierNode, CompositionLocalConsumerModifierNode, ObserverModifierNode {
     private var screen: ScreenFocus? = null
 
-    override fun onAttach() {
-        screen = currentValueOf(LocalScreenFocus)?.also { it.add(key, this) }
+    override fun onAttach() = onObservedReadsChanged()
+
+    // Watched, so a node that ends up in another screen's keeping moves there.
+    override fun onObservedReadsChanged() = observeReads {
+        val now = currentValueOf(LocalScreenFocus)
+        if (now !== screen) {
+            screen?.remove(key, this)
+            screen = now?.also { it.add(key, this) }
+        }
     }
 
     override fun onDetach() {
