@@ -17,7 +17,7 @@ Te llega un link de un servicio de música y abrís la misma canción en tu app 
 <li>Letras sincronizadas: siguen tu app de música o escuchan junto con vos, flotan sobre otras apps y se ven con visuales de MilkDrop detrás. ¿Letra, tiempos o lectura mal? Reportalo con un toque desde la letra o en la palabra: le llega en privado al desarrollador.</li>
 <li>Aprendé las palabras con kana, pinyin, romaji y traducciones. Elegí qué mostrar en cada lado de las tarjetas. Varios tipos de tarjeta por línea, cada uno con su calendario. Un aviso diario.</li>
 <li>Iniciá sesión con tu plan pago de ChatGPT para traducir canciones enteras, explicar líneas, encontrar palabras que vale la pena aprender y buscar canciones describiéndolas.</li>
-<li>También en Android TV.</li>
+<li>También en Android TV, con Cast.</li>
 <li>Colores Material You (Android 12+).</li>
 </ul>
 

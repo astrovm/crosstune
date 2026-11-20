@@ -12,6 +12,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.astrovm.crosstune.ui.theme.Palette
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,6 +21,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -26,6 +29,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -49,6 +53,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.Mutex
 
 internal sealed interface Effect {
+    sealed interface Launch : Effect {
+        /** A Cast LOAD can be stopped or replaced while the screen is away. */
+        val castStillCurrent: (() -> Boolean)?
+    }
+
     /**
      * [packageName] is null for custom destinations, which open in whatever app handles the URL.
      * [atMs] is when it was asked, so one that waited while Crosstune was away isn't opened long after.
@@ -60,18 +69,30 @@ internal sealed interface Effect {
         val finishAfterOpen: Boolean,
         val atMs: Long = SystemClock.elapsedRealtime(),
         val asking: String? = null,
-        val qobuz: QobuzNumbers.Opening? = null
-    ) : Effect
+        val qobuz: QobuzNumbers.Opening? = null,
+        override val castStillCurrent: (() -> Boolean)? = null
+    ) : Launch
     data class Share(val url: String) : Effect
 
     /**
      * Brings [packageName] forward as it is, for a song it already plays, which opening it on the song would restart.
      * The player covers where an error would show, so it's left unsaid there.
      */
-    data class Show(val packageName: String, val finishAfterOpen: Boolean, val saysWhenItFails: Boolean = true) : Effect
+    data class Show(
+        val packageName: String,
+        val finishAfterOpen: Boolean,
+        val saysWhenItFails: Boolean = true,
+        override val castStillCurrent: (() -> Boolean)? = null
+    ) : Launch
 
     /** Shazam can't be reached, so another app that names songs, when there's one, listens instead. */
     data object RecognizeElsewhere : Effect
+
+    /** Asks which TV to cast to. */
+    data object ChooseTv : Effect
+
+    /** Shows the TV cast to, with the way to stop. */
+    data object ShowTv : Effect
 }
 
 /** Holds screen state across configuration changes and owns in-flight network work. */
@@ -152,18 +173,25 @@ internal class MainViewModel(
     private val sleepTimer: SleepTimer? = null,
     /** Tries Qobuz's other number for a song it doesn't play, see [QobuzNumbers]. */
     private val qobuzNumbers: QobuzNumbers? = null,
+    /** The TVs this phone casts songs to; none in a build without Google Play Services. */
+    private val cast: CastSender = NoCast,
     /** The songs, albums and playlists kept for offline; nullable so tests need none. */
     private val offline: OfflineSongs? = null,
     /** Makes the small YouTube player a card's line plays in when its music app can't move to it; nullable so tests need none. */
     newLinePlayer: (() -> LinePlayer)? = null,
     practiceClockLog: PracticeClockLog = PracticeClockLog(false)
 ) : ViewModel() {
+    private val phonePlayback = playback
+
+    /** Playback with the TV in the place of the app, for a song cast to it. */
+    private val casting: CastPlayback? = playback?.let { CastPlayback(it, cast, viewModelScope, now) }
+
     /**
      * An app opened on a song is covered rather than left, once Android lets Crosstune show over other
      * apps: on a TV, where brought in front of it, YouTube stops playing, and on a phone, when the app
      * only plays in front, as YouTube Music without Premium, which stops as soon as it's left.
      */
-    private val playback: PlaybackSource? = playback?.let { source ->
+    private val playback: PlaybackSource? = casting?.let { source ->
         object : PlaybackSource by source {
             // Covered as it's opened, while Crosstune's still in sight, which Android wants for the cover to listen along.
             override fun openSong(app: String, link: String): Boolean {
@@ -180,9 +208,11 @@ internal class MainViewModel(
             override fun playPause(song: MusicMetadata, play: Boolean, app: String?, session: Int?) {
                 qobuzNumbers?.off()
                 leftJob?.cancel()
+                resumeJob?.cancel()
                 if (!play) return source.playPause(song, false, app, session)
-                viewModelScope.launch {
+                resumeJob = viewModelScope.launch {
                     if (source.resume(song, app, session)) return@launch
+                    ensureActive()
                     if (uiState.canFloatOverApps) uiState = uiState.copy(coveringApp = true)
                     if (!source.bringToFront(song, app, session)) uncover()
                 }
@@ -373,6 +403,8 @@ internal class MainViewModel(
         sleepTimer?.let { timer -> viewModelScope.launch { timer.set.collect { uiState = uiState.copy(sleep = it) } } }
         // A force stop takes the alarm with it, until now.
         reminders?.arm()
+        viewModelScope.launch { cast.around.collect { uiState = uiState.copy(castAround = it) } }
+        viewModelScope.launch { cast.target.collect(::castTargetChanged) }
     }
 
     var uiState by screen
@@ -396,6 +428,7 @@ internal class MainViewModel(
     }.also(preferences::registerOnSharedPreferenceChangeListener)
 
     override fun onCleared() {
+        castReceiver?.stop()
         cards.release()
         stopWatchingOneTap?.invoke()
         preferences.unregisterOnSharedPreferenceChangeListener(visualsChanged)
@@ -441,7 +474,11 @@ internal class MainViewModel(
                 OneTapFix.FLOAT -> Need.Float
                 OneTapFix.EXACT -> Need.Exact
             }
-            uiState = uiState.copy(fixingInOneTap = null, fixes = if (worked) uiState.fixes else Fixes(list = uiState.fixes?.list == true, steps = listOf(need), failed = true))
+            uiState = uiState.copy(
+                fixingInOneTap = null,
+                fixes = if (worked) uiState.fixes else Fixes(list = uiState.fixes?.list == true, steps = listOf(need), failed = true),
+                canFloatOverApps = uiState.canFloatOverApps || worked && fix == OneTapFix.FLOAT
+            )
             refreshSystemState()
             refreshFollowing()
             // Allowed, the alarm is set again for the exact minute at once, and the problem goes.
@@ -508,7 +545,9 @@ internal class MainViewModel(
     }
 
     private val effectChannel = Channel<Effect>(Channel.BUFFERED)
-    val effects: Flow<Effect> = effectChannel.receiveAsFlow()
+    val effects: Flow<Effect> = effectChannel.receiveAsFlow().mapNotNull { effect ->
+        if (effect is Effect.Launch && effect.castStillCurrent?.invoke() == false) null else effect
+    }
 
     init {
         // A fresh install opens every source's links from the start, rather than in a setup first.
@@ -619,13 +658,27 @@ internal class MainViewModel(
     }
 
     private var job: Job? = null
+
+    /**
+     * Starts [block] as the screen's work, kept in [job] before it runs. Started at once on the main thread, it can run as
+     * far as handing over to newer work, as a lookup that plays what it found does; kept only after, it would take that
+     * work's place in [job], and the newer work could no longer be stopped.
+     */
+    private fun launchContent(block: suspend CoroutineScope.() -> Unit) {
+        val started = viewModelScope.launch(start = CoroutineStart.LAZY, block = block)
+        job = started
+        started.start()
+    }
     private var lastRequest: Request? = null
     private var pendingOpen = false
     /** A link opened in Crosstune plays as soon as it's found, once. */
     private var pendingPlay = false
 
     /** What was last looked up, and how, for Try again. */
-    private data class Request(val input: LinkInput, val openWhenReady: Boolean, val destination: Destination?, val here: Boolean)
+    /** Set for the next [resolve] alone: the song it finds plays whether or not that is set to be right away, as one cast to this TV does. */
+    private var playOnArrival = false
+
+    private data class Request(val input: LinkInput, val openWhenReady: Boolean, val destination: Destination?, val here: Boolean, val play: Boolean = false)
 
     /**
      * The user's choices and which sources Crosstune opens, which are quick to read, so anything
@@ -809,10 +862,10 @@ internal class MainViewModel(
         val tutor = tutor ?: return
         cancelContentWork()
         uiState = uiState.copy(isLoading = true, result = null, link = null, error = null, linkText = "")
-        job = viewModelScope.launch {
+        launchContent {
             val songs = tutor.songsLike(song)?.let { found(searcher, it) }.orEmpty()
             uiState = uiState.copy(isLoading = false)
-            if (songs.isEmpty()) return@launch showError(AppError.NO_SONGS_LIKE)
+            if (songs.isEmpty()) return@launchContent showError(AppError.NO_SONGS_LIKE)
             showSongList(song.title, songs, like = true)
         }
     }
@@ -971,7 +1024,8 @@ internal class MainViewModel(
     }
 
     fun retry() {
-        val (input, openWhenReady, destination, here) = lastRequest ?: return
+        val (input, openWhenReady, destination, here, play) = lastRequest ?: return
+        playOnArrival = play
         resolve(input, openWhenReady, destination, here = here)
     }
 
@@ -1036,7 +1090,7 @@ internal class MainViewModel(
         // microphone hears the room too; with no app playing, one on a speaker it's cast to, or to name a song, the
         // microphone hears what's nearby.
         val unnamed = lyrics && playback?.playsHereWithoutSong() == true
-        job = viewModelScope.launch {
+        launchContent {
             byEar?.cancelAndJoin()
             var checked: CheckedPlayerSong? = null
             val heard = try {
@@ -1090,7 +1144,7 @@ internal class MainViewModel(
         val (heard, lyrics) = held ?: return
         forgetHeld()
         uiState = uiState.copy(isLoading = true, error = null)
-        job = viewModelScope.launch {
+        launchContent {
             val named = heard.send()
             uiState = uiState.copy(isLoading = false)
             answer(named, lyrics)
@@ -1108,7 +1162,7 @@ internal class MainViewModel(
         followedNow = null
         liveUnnamed = null
         followedUnnamed = null
-        val source = playback?.takeIf { it.hasAccess() }
+        val source = phonePlayback?.takeIf { it.hasAccess() }
         if (source == null) {
             uiState = uiState.copy(playingNow = null, playingUnnamed = null)
             return
@@ -1454,12 +1508,12 @@ internal class MainViewModel(
     /** Pauses the song playing now, or plays it again: as its button shows, playing when its app doesn't say where it is. */
     fun playingNowPlayPause() {
         val bar = onTheBar() ?: return
-        playback?.playPause(bar.song, bar.following?.clock?.playing == false, bar.app, bar.session)
+        phonePlayback?.playPause(bar.song, bar.following?.clock?.playing == false, bar.app, bar.session)
     }
 
     fun playingNowSkip() {
         val bar = onTheBar() ?: return
-        playback?.skip(bar.song, true, bar.app, bar.session)
+        phonePlayback?.skip(bar.song, true, bar.app, bar.session)
         movedOn(bar.app)
     }
 
@@ -1516,10 +1570,12 @@ internal class MainViewModel(
         input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false,
         here: Boolean = false, underPlayer: Boolean = false, keepsWords: Boolean = false, checked: CheckedPlayerSong? = null
     ) {
+        val play = playOnArrival
+        playOnArrival = false
         cancelContentWork(closesPlayer = !underPlayer, keepsWords = keepsWords)
-        lastRequest = Request(input, openWhenReady, destination, here)
+        lastRequest = Request(input, openWhenReady, destination, here, play)
         pendingOpen = openWhenReady
-        pendingPlay = here && uiState.playsRightAway
+        pendingPlay = here && (play || uiState.playsRightAway)
         // A newer request always wins; the older call is cancelled rather than left to overwrite it.
         fun showLoading() {
             uiState = uiState.copy(
@@ -1538,14 +1594,16 @@ internal class MainViewModel(
         // target isn't known until it's followed, so it's always looked up.
         val link = (input as? LinkInput.Link)?.link
         val saved = link?.let(::savedAs)
-        job = viewModelScope.launch {
+        launchContent {
             // A video from another app that isn't music, like a tutorial, opens as it would without
             // Crosstune; one copied, or that YouTube Music can't tell about, e.g. offline, is let be.
             val video = link?.takeIf { (copied || here || openWhenReady && destination == null) && it.mayNotBeMusic }
             // Looked up while asking whether it's music, so a music video costs one wait, not two.
             val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input)) }
-            if (!lookupGoesOn(video, copied, lookup, ::showLoading)) return@launch
-            lookedUp(lookup.await(), saved, checked)
+            if (!lookupGoesOn(video, copied, lookup, ::showLoading)) return@launchContent
+            val resolution = lookup.await()
+            ensureActive()
+            lookedUp(resolution, saved, checked)
         }
     }
 
@@ -1555,6 +1613,7 @@ internal class MainViewModel(
      */
     private suspend fun lookupGoesOn(video: MusicLink?, copied: Boolean, lookup: Job, showLoading: () -> Unit): Boolean {
         val music = video?.let { matcher.isMusicVideo(it.id) }
+        currentCoroutineContext().ensureActive()
         if (copied) {
             if (video == null || music != true || !readyForCopy) {
                 lookup.cancel()
@@ -1675,7 +1734,7 @@ internal class MainViewModel(
         if (uiState.result == null || uiState.showDestinationPicker) return
         job?.cancel()
         uiState = uiState.copy(isMatching = false)
-        job = viewModelScope.launch { prepareResult() }
+        launchContent { prepareResult() }
     }
 
     private suspend fun prepareResult() {
@@ -1713,6 +1772,7 @@ internal class MainViewModel(
             pendingPlay = false
             // Whether its app is on the phone is only known once Android says, which a song from Recent can beat.
             snapshotFlow { uiState.systemStateKnown }.first { it }
+            currentCoroutineContext().ensureActive()
             if (uiState.canPlayResult) return playResult()
         }
         prepareDestination(uiState.resultDestination)
@@ -1844,7 +1904,7 @@ internal class MainViewModel(
             selectedDestination = destination ?: uiState.selectedDestination
         )
         job?.cancel()
-        job = viewModelScope.launch { open(chosen, finishAfterOpen, tapped = true) }
+        launchContent { open(chosen, finishAfterOpen, tapped = true) }
     }
 
     /**
@@ -1856,17 +1916,13 @@ internal class MainViewModel(
         val destination = uiState.resultDestination as? Destination.Service ?: return
         adoptDefault(destination)
         val song = uiState.result ?: return
-        // On a TV the song's words cover the app it plays in, which Android has to let them first.
-        if (uiState.phone == Phone.TV && !uiState.canFloatOverApps) {
-            // Allowed now, which only the activity looks up again when it resumes, so play goes on knowing it.
-            if (!fixInOneTap(OneTapFix.FLOAT) { setCanFloatOverApps(true); playResult() }) fixSteps(listOf(Need.Float))
-            return
-        }
+        val request = lastRequest
         job?.cancel()
-        job = viewModelScope.launch {
+        launchContent {
+            if (!prepareCoverForPlayback()) return@launchContent
             uiState = uiState.copy(playingResult = true)
             try {
-                val link = prepareDestination(destination) ?: return@launch
+                val link = prepareDestination(destination) ?: return@launchContent
                 // The link only a search when it was looked up and not found.
                 val exact = uiState.destinationUrls[destination]?.exact != false
                 val source = playback
@@ -1874,17 +1930,30 @@ internal class MainViewModel(
                 openPlayer(song, app, link)
                 // Already in that app, playing or paused, it carries on from where it is, not from the start.
                 val there = source?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(app, it.appPackage, interception::isInstalled) }
+                ensureActive()
                 if (there != null) {
                     if (!there.clock.playing) source.playPause(song, true)
-                    return@launch
+                    return@launchContent
                 }
                 // Asked by name, other apps find it; YouTube Music only plays its own link.
                 val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link, mustStart = true) == true
                 if (!playThere(song, app, link, asked, exact)) open(destination, finishAfterOpen = false, tapped = true)
             } finally {
-                uiState = uiState.copy(playingResult = false)
+                if (lastRequest === request) uiState = uiState.copy(playingResult = false)
             }
         }
+    }
+
+    /** On a TV the song's words cover the app it plays in, which Android has to allow first. */
+    private suspend fun prepareCoverForPlayback(): Boolean {
+        if (uiState.phone != Phone.TV || uiState.canFloatOverApps) return true
+        if (!fixInOneTap(OneTapFix.FLOAT)) {
+            fixSteps(listOf(Need.Float))
+            return false
+        }
+        snapshotFlow { uiState.fixingInOneTap }.first { it != OneTapFix.FLOAT }
+        currentCoroutineContext().ensureActive()
+        return uiState.canFloatOverApps
     }
 
     /**
@@ -1895,11 +1964,14 @@ internal class MainViewModel(
      * False, with the player closed, when it could be neither.
      */
     private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean): Boolean {
+        currentCoroutineContext().ensureActive()
         val source = playback?.takeIf { it.hasAccess() }
         if (asked && (source == null || playsAsAsked(source, song, app, link, exact))) return true
+        currentCoroutineContext().ensureActive()
         val back = source?.takeIf { exact && app != null && openWatched(it, song, app, link) } ?: return false.also { closePlayer() }
         // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does.
         seenPlaying(back, song, app, link, mustPlay = true)
+        currentCoroutineContext().ensureActive()
         back.comesBack()
         watchLeft(song)
         return true
@@ -1960,6 +2032,7 @@ internal class MainViewModel(
     private val playedAs = mutableMapOf<Pair<String, String>, MusicMetadata>()
 
     private var leftJob: Job? = null
+    private var resumeJob: Job? = null
 
     /**
      * An app that stops as soon as Crosstune comes back over it only plays in front, as YouTube Music without Premium,
@@ -1974,6 +2047,117 @@ internal class MainViewModel(
             if (withTimeoutOrNull(START_MS) { source.follow(song).first { it != null && !it.clock.playing } } != null) source.playPause(song, true)
         }
     }
+
+    // --- Casting ---
+
+    private var castReceiver: CastReceiver? = null
+
+    /** A TV keeps answering the same Cast session while Android makes its screen again. */
+    fun startCastReceiver(receiver: CastReceiver) {
+        if (castReceiver != null) return
+        castReceiver = receiver
+        receiver.start(::castLoad, ::castCommand)
+        viewModelScope.launch { snapshotFlow { castTv }.collect(receiver::publish) }
+    }
+
+    /** The song the user asked to cast before a TV was picked, handed over once one is. */
+    private var castWhenConnected: MusicMetadata? = null
+
+    private var castJob: Job? = null
+
+    /**
+     * The Cast button: the song the screen is about goes to the TV, which asks first which one when none is cast
+     * to. Pressed on the song already there, it shows the TV, with the way to stop.
+     */
+    fun cast() {
+        val song = uiState.songToCast ?: return
+        if (cast.target.value == null) {
+            castWhenConnected = song
+            effectChannel.trySend(Effect.ChooseTv)
+        } else if (casting?.isCasting(song) == true) {
+            effectChannel.trySend(Effect.ShowTv)
+        } else {
+            castTo(song)
+        }
+    }
+
+    private fun castTargetChanged(target: CastTarget?) {
+        uiState = uiState.copy(castingTo = target?.name)
+        if (target == null) {
+            castJob?.cancel()
+            return
+        }
+        castWhenConnected?.let { song ->
+            castWhenConnected = null
+            castTo(song)
+        }
+    }
+
+    /** Hands [song] to the TV, and stops it in the phone's app: from now on the phone's player is the TV's remote. */
+    private fun castTo(song: MusicMetadata) {
+        val tv = cast.target.value?.name ?: return
+        val link = uiState.linkToCast(song)
+        castJob?.cancel()
+        castJob = viewModelScope.launch {
+            val source = phonePlayback?.takeIf { it.hasAccess() }
+            val local = withTimeoutOrNull(APP_ASKED_MS) { source?.follow(song)?.firstOrNull() }
+            if (cast.target.value?.name != tv) return@launch
+            if (local?.clock?.playing == true) source?.playPause(song, false)
+            casting?.casting(song)
+            cast.load(CastSong(song.title, song.artist, link, song.artworkUrl, song.lengthMs))
+            openPlayer(song, app = null, link = link, played = true)
+            // The TV can supply a clock even when Android has not allowed notification access.
+            uiState.lyricsFor?.takeIf { sameSong(song, it) }?.let { shown ->
+                if (followJob == null && !uiState.isLoadingLyrics) follow(shown)
+                if (nextJob == null) watchNext(shown)
+            }
+        }
+    }
+
+    /** A phone cast [song] to this TV: it opens as a link opened here does, and plays. */
+    fun castLoad(song: CastSong) {
+        val input = song.link?.let { MusicLinks.parse(it) } ?: MusicLinks.recognizedSong(song.toMetadata())
+        val text = (input as? LinkInput.Link)?.link?.url ?: (input as? LinkInput.RecognizedSong)?.text.orEmpty()
+        // resolve() drops whatever was on the screen before, as it does for any other song.
+        uiState = uiState.copy(linkText = text, handlingIncomingLink = true, handingOff = false, afterLookup = AfterLookup.OPEN, leaveSettings = true)
+        playOnArrival = true
+        resolve(input, openWhenReady = false, here = true)
+    }
+
+    /** Something a phone casting to this TV asks of it. */
+    fun castCommand(command: CastCommand) {
+        val playing = uiState.player?.following?.clock?.playing
+        when (command) {
+            CastCommand.Play -> if (playing == false) playerPlayPause()
+            CastCommand.Pause -> if (playing == true) playerPlayPause()
+            CastCommand.Stop -> {
+                val song = uiState.player?.song
+                if (lastRequest?.play == true) clear() else cancelContentWork()
+                song?.let { playback?.playPause(it, false) }
+            }
+            is CastCommand.Seek -> playerSeek(command.positionMs)
+            CastCommand.Next -> playerSkip(true)
+            CastCommand.Previous -> playerSkip(false)
+            is CastCommand.Translation -> setTranslation(command.on)
+            is CastCommand.Readings -> setReadings(command.on)
+        }
+    }
+
+    /** What this TV plays, for the phones casting to it; null while it plays nothing. */
+    val castTv: CastTvState?
+        get() = uiState.player?.let { player ->
+            val following = player.following
+            CastTvState(
+                player.song.title,
+                player.song.artist,
+                following?.clock?.playing == true,
+                following?.clock?.positionAt(now()) ?: 0,
+                following?.durationMs ?: player.song.lengthMs,
+                following?.canSeek == true,
+                following?.canSkipNext == true,
+                following?.canSkipPrevious == true
+            )
+        }
 
     private var playerJob: Job? = null
 
@@ -2029,7 +2213,7 @@ internal class MainViewModel(
         playerJob?.cancel()
         playerJob = null
         val opened = uiState.player ?: return
-        val source = playback?.takeIf { it.hasAccess() } ?: return
+        val source = casting?.takeIf { it.hasAccess() } ?: return
         if (opened.stationOnly) {
             playerJob = viewModelScope.launch { followStationDisplay(source) }
             return
@@ -2037,7 +2221,7 @@ internal class MainViewModel(
         val song = opened.song
         playerJob = viewModelScope.launch {
             // What names no song is only told apart by the app that plays it.
-            combine(source.follow(song, opened.askedOf, opened.session), source.nowPlayingUpdates(), source.unnamedUpdates(), ::Triple).collect { (following, playing, unnamed) ->
+            source.track(song, opened.askedOf, opened.session).observation(includeUnnamed = true).collect { (following, playing, unnamed) ->
                 val player = uiState.player ?: return@collect
                 val played = player.played || following?.clock?.playing == true
                 // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
@@ -2259,6 +2443,7 @@ internal class MainViewModel(
     /** [tapped] is a tap on its button or in the picker, rather than a link that came in opening on its own. */
     private suspend fun open(destination: Destination, finishAfterOpen: Boolean, tapped: Boolean = false) {
         val url = prepareDestination(destination) ?: return
+        val castStillCurrent = castEffectGuard()
         val original = uiState.link?.takeIf { it.service != null }
         if (uiState.resultMissing) {
             when (uiState.notFoundAction) {
@@ -2271,7 +2456,7 @@ internal class MainViewModel(
                     return
                 }
                 NotFoundAction.ORIGINAL -> if (original != null) {
-                    effectChannel.send(opening(original.url, original.service?.packageName, finishAfterOpen))
+                    effectChannel.send(opening(original.url, original.service?.packageName, finishAfterOpen).copy(castStillCurrent = castStillCurrent))
                     return
                 }
                 NotFoundAction.SEARCH -> Unit
@@ -2282,8 +2467,15 @@ internal class MainViewModel(
         val there = uiState.result?.takeIf { tapped && it.type == ItemType.TRACK }?.let { song ->
             playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(destination.packageName, it.appPackage, interception::isInstalled) }
         }
-        if (there?.appPackage != null) return effectChannel.send(Effect.Show(there.appPackage, finishAfterOpen))
-        effectChannel.send(opening(url, destination.packageName, finishAfterOpen))
+        currentCoroutineContext().ensureActive()
+        if (there?.appPackage != null) return effectChannel.send(Effect.Show(there.appPackage, finishAfterOpen, castStillCurrent = castStillCurrent))
+        effectChannel.send(opening(url, destination.packageName, finishAfterOpen).copy(castStillCurrent = castStillCurrent))
+    }
+
+    private fun castEffectGuard(): (() -> Boolean)? {
+        val request = lastRequest?.takeIf { it.play } ?: return null
+        // Another LOAD of the same link replaces this request too.
+        return { lastRequest === request }
     }
 
     /** Searches where the result goes, though it wasn't found there, e.g. under another name. */
@@ -2452,6 +2644,9 @@ internal class MainViewModel(
     /** Set while Crosstune is out of sight with no words floating, when the words don't go on to the next song. */
     private var nextPaused = false
 
+    /** Kept while the words are out of sight, so they can catch up with their TV when shown again. */
+    private var lyricsTrack: CastPlayback.Track? = null
+
     /**
      * Fetches the shown song's words and shows them. A song with no words of its own says so
      * rather than showing nothing, so it isn't read as a lookup that hasn't answered. Timed words
@@ -2497,6 +2692,7 @@ internal class MainViewModel(
         leaveWords()
         keepShown()
         lyricsJob?.cancel()
+        lyricsTrack = casting?.track(song)
         stopLearning()
         stopFollowing()
         foundLines = emptyList()
@@ -2681,10 +2877,6 @@ internal class MainViewModel(
 
     /** Whether [song]'s words may still be timed anew: they're still shown, and no one has put them in time by hand. */
     private fun mayRetime(song: MusicMetadata) = uiState.lyricsFor?.let { sameSong(it, song) } == true && syncPoints.isEmpty() && handGap == null
-
-    private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
-        SongNames.titleNames(one.title).any { title -> SongNames.titleNames(other.title).any { SongNames.same(title, it) } } && SongNames.sameArtist(one.artist, other.artist) &&
-            (one.recordingId == null || other.recordingId == null || one.recordingId == other.recordingId)
 
     /** Where [song] is, as Crosstune last heard it, when that's the song it heard. */
     private fun heardFollowing(song: MusicMetadata): Following? =
@@ -3637,9 +3829,9 @@ internal class MainViewModel(
         leadSpeeds.clear()
         placeHeard()
         uiState = uiState.copy(following = heardFollowing(song))
-        val source = playback?.takeIf { it.hasAccess() } ?: return
+        val track = lyricsTrack?.takeIf { playback?.hasAccess() == true } ?: return
         followJob = viewModelScope.launch {
-            source.follow(song).collect { playing ->
+            track.following().collect { playing ->
                 if (playing?.clock?.playing == true && appFollowing?.clock?.playing != true) appPlaysAgain.tryEmit(Unit)
                 // The app stopped it, was closed or went on to another song: the words stop where it left
                 // them, rather than run on from where the song was heard before, until it's heard again.
@@ -3688,9 +3880,9 @@ internal class MainViewModel(
     private fun watchNext(song: MusicMetadata) {
         nextJob?.cancel()
         nextJob = null
-        val source = playback?.takeIf { it.hasAccess() && !nextPaused } ?: return
+        val track = lyricsTrack?.takeIf { playback?.hasAccess() == true && !nextPaused } ?: return
         nextJob = viewModelScope.launch {
-            combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).collect { (app, playing) ->
+            track.observation().collect { (app, playing) ->
                 if (app?.clock?.playing == true) shownPlayed = true
                 // Practice moves the music app from song to song, which the words stay out of.
                 if (uiState.practice != null) return@collect
@@ -4338,6 +4530,7 @@ internal class MainViewModel(
         lyricsJob = null
         nextJob?.cancel()
         nextJob = null
+        lyricsTrack = null
         shownPlayed = false
         uiState = uiState.copy(canSkipNext = false, canSkipPrevious = false)
         stopLearning()
@@ -5092,6 +5285,7 @@ internal class MainViewModel(
     }
 
     fun setReadings(on: Boolean) {
+        if (cast.target.value != null) cast.send(CastCommand.Readings(on))
         preferences.edit { putBoolean(KEY_READINGS, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(readings = on))
         learn()
@@ -5127,6 +5321,7 @@ internal class MainViewModel(
     }
 
     fun setTranslation(on: Boolean) {
+        if (cast.target.value != null) cast.send(CastCommand.Translation(on))
         preferences.edit { putBoolean(KEY_TRANSLATION, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(translation = on))
         learn()
@@ -5212,7 +5407,10 @@ internal class MainViewModel(
         uiState.destinationUrls[destination]?.let { return it.url.forSharing() }
         val match = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
-            matcher.lookFor(service, metadata).also { uiState = uiState.copy(isMatching = false) }
+            val found = matcher.lookFor(service, metadata)
+            currentCoroutineContext().ensureActive()
+            uiState = uiState.copy(isMatching = false)
+            found
         } else {
             null
         }
@@ -5302,15 +5500,15 @@ internal class MainViewModel(
 
     private fun openSaved(entry: HistoryEntry, finishAfterOpen: Boolean) {
         cancelContentWork()
-        job = viewModelScope.launch {
+        launchContent {
             val destination = destinationFor(entry)
-            val url = urlForHistory(entry, destination) ?: return@launch
+            val url = urlForHistory(entry, destination) ?: return@launchContent
             val prepared = uiState.history.firstOrNull { it.link.url == entry.link.url }?.destinationLinks?.get(destination.key)
             val service = destination.matchService
             if (prepared != null && prepared.url.forSharing() == url && !prepared.exact && prepared.matchingEnabled && service != null &&
                 canBeMissing(service, entry.metadata)
             ) {
-                return@launch openMissing(entry.metadata, entry.link, destination, url, finishAfterOpen)
+                return@launchContent openMissing(entry.metadata, entry.link, destination, url, finishAfterOpen)
             }
             effectChannel.send(opening(url, destination.packageName, finishAfterOpen, entry.metadata))
         }
@@ -5429,21 +5627,26 @@ internal class MainViewModel(
 
     /** A new song or an empty screen replaces every operation owned by the previous content. */
     private fun cancelContentWork(closesPlayer: Boolean = true, keepsWords: Boolean = false) {
-        job?.cancel()
-        job = null
         forgetHeld()
         lastRequest = null
+        linkWaits = false
+        job?.cancel()
+        job = null
         pendingOpen = false
         pendingPlay = false
         retryListens = false
         dismissSongSearch()
         if (!keepsWords) dismissLyrics()
         if (!keepsWords) alongByPhone = false
-        if (closesPlayer && !keepsWords) closePlayer()
+        if (closesPlayer && !keepsWords) {
+            leftJob?.cancel()
+            resumeJob?.cancel()
+            closePlayer()
+        }
         cancelTrackWork()
         coverJob?.cancel()
         coverJob = null
-        uiState = uiState.copy(isLoading = false, isMatching = false, listening = false, canRetry = false)
+        uiState = uiState.copy(isLoading = false, isMatching = false, playingResult = false, listening = false, canRetry = false)
     }
 
     private fun cancelTrackWork() {
@@ -5536,7 +5739,7 @@ internal class MainViewModel(
     private suspend fun openAsIs(video: MusicLink) {
         pendingOpen = false
         val packageName = if (video.frontendUrl == null) MusicService.YOUTUBE.packageName else null
-        effectChannel.send(Effect.Open(video.frontendUrl ?: video.url, packageName, finishAfterOpen = true))
+        effectChannel.send(Effect.Open(video.frontendUrl ?: video.url, packageName, finishAfterOpen = true, castStillCurrent = castEffectGuard()))
     }
 
     fun setOnlyMusicVideos(enabled: Boolean) {

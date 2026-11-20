@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs ./gradlew for this checkout in a container, in turn with every other checkout on this machine.
 #
-#   scripts/gradle-box/gradle-box.sh :app:testDebugUnitTest --tests '*LyricsFinderTest*'
+#   scripts/gradle-box/gradle-box.sh :app:testPlayDebugUnitTest --tests '*LyricsFinderTest*'
 #   scripts/gradle-box/gradle-box.sh --also=/path/to/other/checkout :app:songCheck ...
 #
 # --also=DIR, before the rest, runs the same Gradle command in another checkout of this repository too, after this

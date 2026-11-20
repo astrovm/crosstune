@@ -106,7 +106,7 @@ jobs:
           name: mutants-part-${{ matrix.part }}
           path: |
             ${{ runner.temp }}/lived.txt
-            app/build/reports/pitest/debug/
+            app/build/reports/pitest/playDebug/
           retention-days: 14
           if-no-files-found: ignore
 
@@ -128,7 +128,7 @@ jobs:
           cache-read-only: true
 
       - name: Matcher cases in full
-        run: ./gradlew :app:testDebugUnitTest --tests com.astrovm.crosstune.MatcherCasesTest -PmatcherFull --build-cache --configuration-cache
+        run: ./gradlew :app:testPlayDebugUnitTest --tests com.astrovm.crosstune.MatcherCasesTest -PmatcherFull --build-cache --configuration-cache
 
       - name: Upload what opened
         if: always()
@@ -136,7 +136,7 @@ jobs:
         with:
           name: matcher-cases
           path: |
-            app/build/test-results/testDebugUnitTest/
+            app/build/test-results/testPlayDebugUnitTest/
             app/build/matcher-*-now.tsv
           retention-days: 14
           if-no-files-found: warn

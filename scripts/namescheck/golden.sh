@@ -20,8 +20,10 @@ git -C "$here" worktree add --detach "$tree" "$sha" >/dev/null
 trap 'git -C "$here" worktree remove --force "$tree"' EXIT
 tests=$tree/app/src/test/java/com/astrovm/crosstune
 cp "$here/app/src/test/java/com/astrovm/crosstune/NamePairs.kt" "$here/scripts/namescheck/NamesGoldenWriter.kt" "$tests/"
+task=:app:testDebugUnitTest
+if grep -Fq 'create("play")' "$tree/app/build.gradle.kts"; then task=:app:testPlayDebugUnitTest; fi
 # The box of that checkout, which mounts it; only the writer runs, so main's own tests stay out of it.
-(cd "$tree" && GRADLE_BOX_MEMORY=${GRADLE_BOX_MEMORY:-7} nice -n 10 scripts/gradle-box/gradle-box.sh --max-workers=2 :app:testDebugUnitTest --tests '*.NamesGoldenWriter')
+(cd "$tree" && GRADLE_BOX_MEMORY=${GRADLE_BOX_MEMORY:-7} nice -n 10 scripts/gradle-box/gradle-box.sh --max-workers=2 "$task" --tests '*.NamesGoldenWriter')
 gzip -9n < "$tree/app/build/names-golden.tsv" > "$here/app/src/test/resources/names-golden.tsv.gz"
 echo "Wrote app/src/test/resources/names-golden.tsv.gz from $sha: $(gzip -dc "$here/app/src/test/resources/names-golden.tsv.gz" | wc -l) lines"
 

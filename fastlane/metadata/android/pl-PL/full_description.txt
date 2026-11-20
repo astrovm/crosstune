@@ -17,7 +17,7 @@ Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kl
 <li>Teksty w rytm: podążają za Twoją aplikacją muzyczną albo słuchają razem z Tobą, unoszą się nad innymi aplikacjami i grają z wizualizacjami MilkDrop w tle. Złe słowa, tempo lub czytanie? Zgłoś to jednym dotknięciem w tekście lub na słowie: trafi prywatnie do twórcy.</li>
 <li>Ucz się słów dzięki kanie, pinyinowi, romaji i tłumaczeniom. Wybierz strony fiszki. Kilka rodzajów fiszek z wiersza, każdy z własnym planem. Codzienne przypomnienie.</li>
 <li>Zaloguj się płatnym planem ChatGPT, by tłumaczyć całe utwory, wyjaśniać wiersze, znajdować słowa warte nauki i szukać utworów po opisie.</li>
-<li>Też na Android TV.</li>
+<li>Android TV i Cast z telefonu.</li>
 <li>Kolory Material You (Android 12+).</li>
 </ul>
 

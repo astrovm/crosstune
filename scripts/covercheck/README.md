@@ -5,8 +5,8 @@ The instrumentation runner calls the app's real bitmap-cover reader on the main 
 Build the dev APK separately from the test APK, in the Gradle box:
 
 ```
-scripts/gradle-box/gradle-box.sh :app:assembleDebug
-scripts/gradle-box/gradle-box.sh :app:assembleDebugAndroidTest -PcrosstuneTestRunner=com.astrovm.crosstune.CoverEncodingCheck
+scripts/gradle-box/gradle-box.sh :app:assemblePlayDebug
+scripts/gradle-box/gradle-box.sh :app:assemblePlayDebugAndroidTest -PcrosstuneTestRunner=com.astrovm.crosstune.CoverEncodingCheck
 ```
 
 Or use `scripts/covercheck/build.sh` to build both APKs and record their hashes in `build/covercheck/`.

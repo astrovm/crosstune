@@ -23,17 +23,25 @@ main() {
     mkdir -p "$out"
     rm -f "$out/ready.json"
     git -C "$tree" submodule update --init --recursive
+    variant=""
+    apk_dir=debug
+    apk_name=app-debug
+    if grep -Fq 'create("play")' "$tree/app/build.gradle.kts"; then
+        variant=Play
+        apk_dir=play/debug
+        apk_name=app-play-debug
+    fi
     (
         cd "$tree"
-        nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh :app:assembleDebug
-        nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh :app:assembleDebugAndroidTest -PcrosstuneTestRunner=com.astrovm.crosstune.RecordingNameCheck
+        nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh ":app:assemble${variant}Debug"
+        nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh ":app:assemble${variant}DebugAndroidTest" -PcrosstuneTestRunner=com.astrovm.crosstune.RecordingNameCheck
     )
     [[ $(git -C "$tree" rev-parse HEAD) == "$sha" ]] || { echo "The source commit changed during the build" >&2; return 1; }
     if [[ $tree == "$here" ]]; then
         [[ -z $(git -C "$here" status --porcelain) ]] || { echo "The candidate changed during the build" >&2; return 1; }
     fi
-    cp "$tree/app/build/outputs/apk/debug/app-debug.apk" "$out/"
-    cp "$tree/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "$out/"
+    cp "$tree/app/build/outputs/apk/$apk_dir/$apk_name.apk" "$out/app-debug.apk"
+    cp "$tree/app/build/outputs/apk/androidTest/$apk_dir/$apk_name-androidTest.apk" "$out/app-debug-androidTest.apk"
     python3 - "$out" "$sha" "$tree" <<'PY'
 from pathlib import Path
 from hashlib import sha256

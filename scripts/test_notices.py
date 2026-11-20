@@ -115,9 +115,14 @@ class SourceBytesTest(unittest.TestCase):
             info = tarfile.TarInfo("jpeg-6b/README")
             info.size = len(data)
             archive.addfile(info, io.BytesIO(data))
-        served = {"https://example.com/a.jar": jar.getvalue(), "https://example.com/b.tar.gz": tarball.getvalue()}
+        served = {
+            "https://example.com/a.jar": jar.getvalue(),
+            "https://example.com/a.aar": jar.getvalue(),
+            "https://example.com/b.tar.gz": tarball.getvalue(),
+        }
         with mock.patch.object(notices, "download", served.__getitem__):
             self.assertEqual(b"notice\n", notices.source_bytes("https://example.com/a.jar!/META-INF/NOTICE.md"))
+            self.assertEqual(b"notice\n", notices.source_bytes("https://example.com/a.aar!/META-INF/NOTICE.md"))
             self.assertEqual(b"b\nc\n", notices.source_bytes("https://example.com/b.tar.gz!jpeg-6b/README#L2-L3"))
 
     def test_an_ndk_file_is_read_from_the_ndk_the_build_names(self):
@@ -140,6 +145,30 @@ class SourceBytesTest(unittest.TestCase):
 
 class ManifestTest(unittest.TestCase):
 
+    def test_play_texts_are_checked_and_fetched_in_the_play_folder(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            main = root / "main"
+            play_texts = root / "play"
+            main.mkdir()
+            play_texts.mkdir()
+            manifest = root / "manifest.txt"
+            jmdict = root / "jmdict.txt"
+            play = root / "play.txt"
+            manifest.write_text("")
+            jmdict.write_text("")
+            (root / "LICENSE").write_bytes(b"play licence\n")
+            play.write_text("cast.txt 0 LICENSE\n")
+            (play_texts / "cast.txt").write_bytes(b"stale\n")
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, JMDICT_MANIFEST=jmdict,
+                                     PLAY_MANIFEST=play, TEXTS=main, PLAY_TEXTS=play_texts), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(1, notices.main(["notices.py", "check-release"]))
+                self.assertEqual(0, notices.main(["notices.py", "fetch", "cast.txt"]))
+                self.assertEqual(0, notices.main(["notices.py", "check-release"]))
+            self.assertEqual(b"play licence\n", (play_texts / "cast.txt").read_bytes())
+            self.assertFalse((main / "cast.txt").exists())
+            self.assertIn(hashlib.sha256(b"play licence\n").hexdigest(), play.read_text())
+
     def test_check_fails_on_a_changed_text_and_fetch_writes_it_and_its_sha(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -147,10 +176,12 @@ class ManifestTest(unittest.TestCase):
             (root / "LICENSE").write_bytes(b"licence\n")
             (root / "texts/mit.txt").write_bytes(b"changed\n")
             manifest = root / "manifest.txt"
+            play = root / "notice-texts-play.txt"
+            play.touch()
             jmdict = root / "jmdict-notice-texts.txt"
             jmdict.touch()
             manifest.write_text("# name sha source\nmit.txt 0 LICENSE\n")
-            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, JMDICT_MANIFEST=jmdict, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, PLAY_MANIFEST=play, JMDICT_MANIFEST=jmdict, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(1, notices.main(["notices.py", "check"]))
                 self.assertEqual(0, notices.main(["notices.py", "fetch", "mit.txt"]))
                 self.assertEqual(0, notices.main(["notices.py", "check"]))
@@ -163,17 +194,19 @@ class ManifestTest(unittest.TestCase):
             (root / "texts").mkdir()
             (root / "LICENSE").write_bytes(b"licence\n")
             manifest = root / "manifest.txt"
+            play = root / "notice-texts-play.txt"
+            play.touch()
             jmdict = root / "jmdict-notice-texts.txt"
             jmdict.touch()
             manifest.write_text("mit.txt " + hashlib.sha256(b"licence\n").hexdigest() + " LICENSE\n")
-            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, JMDICT_MANIFEST=jmdict, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, PLAY_MANIFEST=play, JMDICT_MANIFEST=jmdict, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as stop:
                     notices.main(["notices.py", "check"])
             self.assertIn("mit.txt", str(stop.exception.code))
             self.assertNotIn("\n", str(stop.exception.code))
             (root / "texts/mit.txt").write_bytes(b"licence\n")
             (root / "LICENSE").unlink()
-            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, JMDICT_MANIFEST=jmdict, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, PLAY_MANIFEST=play, JMDICT_MANIFEST=jmdict, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as stop:
                     notices.main(["notices.py", "check"])
             self.assertIn("LICENSE", str(stop.exception.code))
@@ -198,6 +231,8 @@ class JmdictNoticesTest(unittest.TestCase):
         self.texts.mkdir()
         self.manifest = folder / "notice-texts.txt"
         self.jmdict = folder / "jmdict-notice-texts.txt"
+        self.play = folder / "notice-texts-play.txt"
+        self.play.touch()
         self.pinned = "pinned.txt"
         self.licence = "edrdg-licence.txt"
         self.documentation = "jmdict-documentation.txt"
@@ -206,7 +241,7 @@ class JmdictNoticesTest(unittest.TestCase):
         for name, data in ((self.pinned, b"pinned"), (self.licence, b"old"), (self.documentation, b"old")):
             (self.texts / name).write_bytes(data)
         self.enterContext(mock.patch.multiple(
-            notices, MANIFEST=self.manifest, JMDICT_MANIFEST=self.jmdict, TEXTS=self.texts,
+            notices, MANIFEST=self.manifest, JMDICT_MANIFEST=self.jmdict, PLAY_MANIFEST=self.play, TEXTS=self.texts,
         ))
 
     def test_the_dictionary_refresh_keeps_both_new_texts_and_their_digests(self):

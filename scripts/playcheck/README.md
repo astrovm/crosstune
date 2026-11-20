@@ -7,7 +7,7 @@
 `ArtistlessPlaybackCheck` creates temporary Android media sessions with invented names. It checks the real session selection, follower and transport controls. It makes no sound, opens no music app and sends no network request. A matching session must receive seek and pause. A different title must receive neither command.
 
 1. Hold the test device lock. Back up the stopped AVD and verify the copy before starting it. Restore that copy after the check.
-2. Build the dev APK with `scripts/gradle-box/gradle-box.sh :app:assembleDebug`. Build the test APK separately with `scripts/gradle-box/gradle-box.sh :app:assembleDebugAndroidTest -PcrosstuneTestRunner=com.astrovm.crosstune.ArtistlessPlaybackCheck`.
+2. Build the dev APK with `scripts/gradle-box/gradle-box.sh :app:assemblePlayDebug`. Build the test APK separately with `scripts/gradle-box/gradle-box.sh :app:assemblePlayDebugAndroidTest -PcrosstuneTestRunner=com.astrovm.crosstune.ArtistlessPlaybackCheck`.
 3. Verify both APK hashes. Install them with the SDK adb and an explicit test-device serial. The runner refuses the production package.
 4. Open the dev app with the pinned command from `device_open`. Allow notification access through Android's settings. Set media volume to zero.
 5. Run the fixture. Set `ANDROID_SERIAL` to that test device first:

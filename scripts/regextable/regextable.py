@@ -45,10 +45,10 @@ KOTLIN = ROOT / "app/src/main/java/com/astrovm/crosstune/PhoneRegexTable.kt"
 TEST_KOTLIN = ROOT / "app/src/test/java/com/astrovm/crosstune/PhoneRegexSets.kt"
 # The sets the app reads itself: the rest are TEST_KOTLIN's.
 APP_SETS = {"PHONE_SPACE", "PHONE_DIGIT", "PHONE_LINE_BREAK", "PHONE_LATIN_IGNORING_CASE", "PHONE_WORD_EDGE", "PHONE_NOT_WORD_EDGE"}
-CLASSES = ROOT / "app/build/intermediates/built_in_kotlinc/debugUnitTest/compileDebugUnitTestKotlin/classes"
+CLASSES = ROOT / "app/build/intermediates/built_in_kotlinc/playDebugUnitTest/compilePlayDebugUnitTestKotlin/classes"
 MAIN_CLASS = "com.astrovm.crosstune.RegexTableProbe"
 PATTERNS_CLASS = "com.astrovm.crosstune.PatternsProbe"
-APP_CLASSES = ROOT / "app/build/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"
+APP_CLASSES = ROOT / "app/build/intermediates/built_in_kotlinc/playDebug/compilePlayDebugKotlin/classes"
 # The test classes PatternsProbe runs with on the emulator.
 PATTERNS_TESTS = ("PatternsProbe", "TitleFuzz", "TitleProbes", "RegexTableProbe")
 DEVICE_JAR = "/data/local/tmp/regex-probe.jar"
@@ -201,7 +201,7 @@ def emulator(serial):
 def probe(serial):
     serial = emulator(serial)
     env = dict(os.environ, GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
-    subprocess.run(["nice", "-n", "10", "scripts/gradle-box/gradle-box.sh", "--max-workers=2", ":app:compileDebugUnitTestKotlin"], cwd=ROOT, env=env, check=True)
+    subprocess.run(["nice", "-n", "10", "scripts/gradle-box/gradle-box.sh", "--max-workers=2", ":app:compilePlayDebugUnitTestKotlin"], cwd=ROOT, env=env, check=True)
     stdlib = next(Path.home().glob(".cache/crosstune-gradle-box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/*/*/kotlin-stdlib-*[0-9].jar"))
     tools = max((SDK / "build-tools").iterdir())
     platform = max((SDK / "platforms").iterdir()) / "android.jar"
@@ -227,7 +227,7 @@ def probe(serial):
 
 def compiled():
     env = dict(os.environ, GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
-    subprocess.run(["nice", "-n", "10", "scripts/gradle-box/gradle-box.sh", "--max-workers=2", ":app:compileDebugUnitTestKotlin"], cwd=ROOT, env=env, check=True)
+    subprocess.run(["nice", "-n", "10", "scripts/gradle-box/gradle-box.sh", "--max-workers=2", ":app:compilePlayDebugUnitTestKotlin"], cwd=ROOT, env=env, check=True)
     stdlib = next(Path.home().glob(".cache/crosstune-gradle-box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/*/*/kotlin-stdlib-*[0-9].jar"))
     tools = max((SDK / "build-tools").iterdir())
     platform = max((SDK / "platforms").iterdir()) / "android.jar"
@@ -286,7 +286,7 @@ def patterns(serial, base):
             for found in (CLASSES / "com/astrovm/crosstune").glob(f"{name}*.class"):
                 shutil.copy(found, classes / "com/astrovm/crosstune" / found.name)
         shutil.make_archive(str(work / "classes"), "zip", classes)
-        ids = next(ROOT.glob("app/build/intermediates/*r_class_jar/debug/*/R.jar"))
+        ids = next(ROOT.glob("app/build/intermediates/*r_class_jar/playDebug/*/R.jar"))
         run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "dex.jar"), str(work / "classes.zip"), str(ids), str(stdlib))
         device = "/data/local/tmp/patterns-"
         run("adb", "-s", serial, "push", str(work / "dex.jar"), device + "probe.jar")

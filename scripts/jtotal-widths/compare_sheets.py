@@ -417,7 +417,7 @@ def app_run(directory, tag, old):
     TEST.write_text(source + f"\n// replay {tag} {time.time_ns()}\n", encoding="utf-8")
     try:
         subprocess.run(
-            ["nice", "-n", "10", str(REPO / "scripts/gradle-box/gradle-box.sh"), "--max-workers=2", ":app:testDebugUnitTest",
+            ["nice", "-n", "10", str(REPO / "scripts/gradle-box/gradle-box.sh"), "--max-workers=2", ":app:testPlayDebugUnitTest",
              "--tests", "com.astrovm.crosstune.CrawlDumpTest"],
             check=True, cwd=REPO,
         )

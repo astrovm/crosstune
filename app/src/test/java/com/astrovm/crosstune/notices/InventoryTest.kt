@@ -11,7 +11,8 @@ import java.io.File
 
 /** Each work's `covers:` lines in notices.txt, by its name. Only these tests read them; the app doesn't. */
 internal val coverLines: Map<String, List<String>> by lazy {
-    Notices.blocks(checkNotNull(Notices.open("notices.txt"))).associate { lines ->
+    val files = listOf("notices.txt", "notices-play.txt")
+    files.flatMap { Notices.blocks(checkNotNull(Notices.open(it))) }.associate { lines ->
         lines.first() to lines.filter { it.startsWith("covers: ") }.map { it.removePrefix("covers: ") }
     }
 }
@@ -26,7 +27,13 @@ internal data class Report(val uncovered: List<String>, val unclaimed: List<Stri
  * inside projectM, needs its own notice, as a line for the outer one names only its files and words.
  */
 internal fun check(notices: List<Notice>, parts: List<String>, marks: Map<String, List<String>>, own: List<String>, notBuilt: List<String>): Report {
-    val lines = notices.flatMap { notice -> coverLines[notice.name].orEmpty() + notice.texts.map { "file $TEXTS$it" } }.distinct()
+    val bundled = parts.toSet()
+    val lines = notices.flatMap { notice ->
+        coverLines[notice.name].orEmpty() + notice.texts.map { name ->
+            val play = "file app/src/play/resources/com/astrovm/crosstune/notices/$name"
+            play.takeIf(bundled::contains) ?: "file $TEXTS$name"
+        }
+    }.distinct()
     val (claims, plain) = (lines + own + notBuilt).partition { " ~ " in it }
     fun claimed(path: String, block: String) = claims.any { it.substringBefore(" ~ ") == "source $path" && it.substringAfter(" ~ ") in block }
     val uncovered = parts.filter { part -> (plain + claims.map { it.substringBefore(" ~ ") }).none { covers(it, part) } }
@@ -77,6 +84,7 @@ class InventoryTest {
         "file app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt",
         "file app/src/main/resources/com/astrovm/crosstune/jtotal-widths-mono.txt",
         "file app/src/main/resources/com/astrovm/crosstune/notices/notices.txt",
+        "file app/src/play/resources/com/astrovm/crosstune/notices/notices-play.txt",
         "file app/src/main/res/values/themes.xml",
         "file app/src/main/res/values-night/themes.xml",
         "file app/src/main/res/values-night-v31/themes.xml",

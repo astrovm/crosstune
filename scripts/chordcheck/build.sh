@@ -4,11 +4,11 @@
 main() {
     set -euo pipefail
     cd "$(dirname "$0")/../.."
-    nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh :app:assembleDebug
-    nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh :app:assembleDebugAndroidTest -PcrosstuneTestRunner=com.astrovm.crosstune.OfflineChordCheck
+    nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh :app:assemblePlayDebug
+    nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh :app:assemblePlayDebugAndroidTest -PcrosstuneTestRunner=com.astrovm.crosstune.OfflineChordCheck
     mkdir -p build/chordcheck
-    cp app/build/outputs/apk/debug/app-debug.apk build/chordcheck/
-    cp app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk build/chordcheck/
+    cp app/build/outputs/apk/play/debug/app-play-debug.apk build/chordcheck/app-debug.apk
+    cp app/build/outputs/apk/androidTest/play/debug/app-play-debug-androidTest.apk build/chordcheck/app-debug-androidTest.apk
     git rev-parse HEAD > build/chordcheck/head.txt
     python3 - <<'PY'
 from hashlib import sha256

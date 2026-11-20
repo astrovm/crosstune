@@ -1,0 +1,4 @@
+# Play-only licence texts. Each is copied from the SDK distribution.
+play-services-cast-framework-notices.txt b90d7103f9389ef799610bf27e184fa94dd524b5307987bc30ddae0ef55cd983 https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-cast-framework/23.0.0/play-services-cast-framework-23.0.0.aar!third_party_licenses.txt
+play-services-cast-tv-notices.txt 3a898abe1a8fbfd8faeea8c2ca64316d3829b27ec611dade966f3922931f0b51 https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-cast-tv/21.1.1/play-services-cast-tv-21.1.1.aar!third_party_licenses.txt
+play-services-flags-notices.txt 80f044f8fb4473537b5b2d4e52b42b525622b17c6eea0975416df38b807e4eeb https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-flags/18.1.0/play-services-flags-18.1.0.aar!third_party_licenses.txt

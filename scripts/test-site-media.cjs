@@ -95,7 +95,7 @@ test('generated event sequences always keep posters, sources and motion consiste
 });
 
 const answers = () => new Promise(setImmediate);
-const release = assets => () => Promise.resolve({ ok: true, json: () => Promise.resolve({ assets }) });
+const release = assets => () => Promise.resolve({ ok: true, json: () => Promise.resolve({ tag_name: 'v2.20.0', assets }) });
 test('the APK button downloads the newest release\'s APK, version in its name', async () => {
   const file = 'https://github.com/astrovm/crosstune/releases/download/v2.20.0/Crosstune-v2.20.0.apk';
   const p = page({ github: release([{ name: 'checksums.txt', browser_download_url: 'x' }, { name: 'Crosstune-v2.20.0.apk', browser_download_url: file }]) });

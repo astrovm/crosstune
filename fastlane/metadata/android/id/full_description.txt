@@ -17,7 +17,7 @@ Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lai
 <li>Lirik yang pas waktunya: mengikuti aplikasi musikmu atau ikut mendengarkan, melayang di atas aplikasi lain, dan diputar dengan visual MilkDrop di belakangnya. Lirik, waktu, atau bacaan salah? Laporkan sekali ketuk dari lirik atau di kata: terkirim secara pribadi ke pengembang.</li>
 <li>Pelajari kata dengan kana, pinyin, romaji dan terjemahan. Pilih isi tiap sisi kartu. Beberapa jenis kartu per baris, masing-masing dengan jadwal sendiri. Pengingat harian.</li>
 <li>Masuk dengan paket ChatGPT berbayar untuk menerjemahkan lagu utuh, menjelaskan baris, menemukan kata yang layak dipelajari, dan mencari lagu dengan mendeskripsikannya.</li>
-<li>Juga di Android TV.</li>
+<li>Android TV juga, via Cast.</li>
 <li>Warna Material You di Android 12 ke atas.</li>
 </ul>
 
