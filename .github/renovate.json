@@ -1,16 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    "group:all"
-  ],
-  "schedule": [
-    "* 0-3 */3 * *"
-  ],
+  "extends": ["config:recommended", "group:all"],
+  "schedule": ["* 0-3 */3 * *"],
   "timezone": "America/Argentina/Buenos_Aires",
   "minimumReleaseAge": "3 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
   "groupSingleUpdates": true,
+  "semanticCommits": "enabled",
   "hostRules": [
     {
       "matchHost": "repo.maven.apache.org",
@@ -19,22 +15,6 @@
     {
       "matchHost": "repo1.maven.org",
       "concurrentRequestLimit": 1
-    }
-  ],
-  "packageRules": [
-    {
-      "description": "A JDK major moves every pin at once (the box, setup-java, syncreplay, the docs), which test_jdk_pins.py holds equal; Renovate only moves the box, so the bump is made by hand.",
-      "matchDatasources": [
-        "docker"
-      ],
-      "matchPackageNames": [
-        "docker.io/library/eclipse-temurin",
-        "eclipse-temurin"
-      ],
-      "matchUpdateTypes": [
-        "major"
-      ],
-      "enabled": false
     }
   ]
 }
