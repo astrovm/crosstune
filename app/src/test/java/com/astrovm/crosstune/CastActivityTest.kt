@@ -286,7 +286,7 @@ class CastActivityTest {
         shell.answer.complete(Unit)
 
         waitUntil { playback.opened.isNotEmpty() }
-        assertEquals(MusicService.YOUTUBE_MUSIC.packageName to replacement, playback.opened.single())
+        assertEquals(listOf(MusicService.YOUTUBE_MUSIC.packageName to replacement), playback.opened.toList())
         assertEquals(1, shell.ran.count { "SYSTEM_ALERT_WINDOW" in it })
     }
 

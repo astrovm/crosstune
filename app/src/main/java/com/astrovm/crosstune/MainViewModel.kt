@@ -12,6 +12,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.astrovm.crosstune.ui.theme.Palette
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -656,6 +658,17 @@ internal class MainViewModel(
     }
 
     private var job: Job? = null
+
+    /**
+     * Starts [block] as the screen's work, kept in [job] before it runs. Started at once on the main thread, it can run as
+     * far as handing over to newer work, as a lookup that plays what it found does; kept only after, it would take that
+     * work's place in [job], and the newer work could no longer be stopped.
+     */
+    private fun launchContent(block: suspend CoroutineScope.() -> Unit) {
+        val started = viewModelScope.launch(start = CoroutineStart.LAZY, block = block)
+        job = started
+        started.start()
+    }
     private var lastRequest: Request? = null
     private var pendingOpen = false
     /** A link opened in Crosstune plays as soon as it's found, once. */
@@ -849,10 +862,10 @@ internal class MainViewModel(
         val tutor = tutor ?: return
         cancelContentWork()
         uiState = uiState.copy(isLoading = true, result = null, link = null, error = null, linkText = "")
-        job = viewModelScope.launch {
+        launchContent {
             val songs = tutor.songsLike(song)?.let { found(searcher, it) }.orEmpty()
             uiState = uiState.copy(isLoading = false)
-            if (songs.isEmpty()) return@launch showError(AppError.NO_SONGS_LIKE)
+            if (songs.isEmpty()) return@launchContent showError(AppError.NO_SONGS_LIKE)
             showSongList(song.title, songs, like = true)
         }
     }
@@ -1077,7 +1090,7 @@ internal class MainViewModel(
         // microphone hears the room too; with no app playing, one on a speaker it's cast to, or to name a song, the
         // microphone hears what's nearby.
         val unnamed = lyrics && playback?.playsHereWithoutSong() == true
-        job = viewModelScope.launch {
+        launchContent {
             byEar?.cancelAndJoin()
             var checked: CheckedPlayerSong? = null
             val heard = try {
@@ -1131,7 +1144,7 @@ internal class MainViewModel(
         val (heard, lyrics) = held ?: return
         forgetHeld()
         uiState = uiState.copy(isLoading = true, error = null)
-        job = viewModelScope.launch {
+        launchContent {
             val named = heard.send()
             uiState = uiState.copy(isLoading = false)
             answer(named, lyrics)
@@ -1581,13 +1594,13 @@ internal class MainViewModel(
         // target isn't known until it's followed, so it's always looked up.
         val link = (input as? LinkInput.Link)?.link
         val saved = link?.let(::savedAs)
-        job = viewModelScope.launch {
+        launchContent {
             // A video from another app that isn't music, like a tutorial, opens as it would without
             // Crosstune; one copied, or that YouTube Music can't tell about, e.g. offline, is let be.
             val video = link?.takeIf { (copied || here || openWhenReady && destination == null) && it.mayNotBeMusic }
             // Looked up while asking whether it's music, so a music video costs one wait, not two.
             val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input)) }
-            if (!lookupGoesOn(video, copied, lookup, ::showLoading)) return@launch
+            if (!lookupGoesOn(video, copied, lookup, ::showLoading)) return@launchContent
             val resolution = lookup.await()
             ensureActive()
             lookedUp(resolution, saved, checked)
@@ -1721,7 +1734,7 @@ internal class MainViewModel(
         if (uiState.result == null || uiState.showDestinationPicker) return
         job?.cancel()
         uiState = uiState.copy(isMatching = false)
-        job = viewModelScope.launch { prepareResult() }
+        launchContent { prepareResult() }
     }
 
     private suspend fun prepareResult() {
@@ -1891,7 +1904,7 @@ internal class MainViewModel(
             selectedDestination = destination ?: uiState.selectedDestination
         )
         job?.cancel()
-        job = viewModelScope.launch { open(chosen, finishAfterOpen, tapped = true) }
+        launchContent { open(chosen, finishAfterOpen, tapped = true) }
     }
 
     /**
@@ -1905,11 +1918,11 @@ internal class MainViewModel(
         val song = uiState.result ?: return
         val request = lastRequest
         job?.cancel()
-        job = viewModelScope.launch {
-            if (!prepareCoverForPlayback()) return@launch
+        launchContent {
+            if (!prepareCoverForPlayback()) return@launchContent
             uiState = uiState.copy(playingResult = true)
             try {
-                val link = prepareDestination(destination) ?: return@launch
+                val link = prepareDestination(destination) ?: return@launchContent
                 // The link only a search when it was looked up and not found.
                 val exact = uiState.destinationUrls[destination]?.exact != false
                 val source = playback
@@ -1920,7 +1933,7 @@ internal class MainViewModel(
                 ensureActive()
                 if (there != null) {
                     if (!there.clock.playing) source.playPause(song, true)
-                    return@launch
+                    return@launchContent
                 }
                 // Asked by name, other apps find it; YouTube Music only plays its own link.
                 val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link, mustStart = true) == true
@@ -5487,15 +5500,15 @@ internal class MainViewModel(
 
     private fun openSaved(entry: HistoryEntry, finishAfterOpen: Boolean) {
         cancelContentWork()
-        job = viewModelScope.launch {
+        launchContent {
             val destination = destinationFor(entry)
-            val url = urlForHistory(entry, destination) ?: return@launch
+            val url = urlForHistory(entry, destination) ?: return@launchContent
             val prepared = uiState.history.firstOrNull { it.link.url == entry.link.url }?.destinationLinks?.get(destination.key)
             val service = destination.matchService
             if (prepared != null && prepared.url.forSharing() == url && !prepared.exact && prepared.matchingEnabled && service != null &&
                 canBeMissing(service, entry.metadata)
             ) {
-                return@launch openMissing(entry.metadata, entry.link, destination, url, finishAfterOpen)
+                return@launchContent openMissing(entry.metadata, entry.link, destination, url, finishAfterOpen)
             }
             effectChannel.send(opening(url, destination.packageName, finishAfterOpen, entry.metadata))
         }
