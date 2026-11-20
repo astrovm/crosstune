@@ -29,7 +29,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    # One runner does what CI splits into jobs: lint and detekt (about 15 minutes), every unit test (about 13
+    # without a cache hit) and the release builds. v2.26.0 took 20 minutes; v2.27.1 was stopped at 30, in the tests.
+    timeout-minutes: 60
     outputs:
       prerelease: ${{ steps.tag.outputs.prerelease }}
     steps:
