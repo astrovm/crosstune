@@ -176,7 +176,8 @@ def start(name, window):
     # else that starts this emulator without flags can load it either.
     shutil.rmtree(avd_dir(name) / "snapshots" / "default_boot", ignore_errors=True)
     log_path = avd_dir(name) / "started.log"
-    # After a crash the emulator asks "send a crash report?" and waits for a tap nobody gives, so start would hang.
+    # After a crash the emulator asks "send a crash report?" and waits for a tap nobody gives, so start would wait
+    # BOOT_SECONDS and then fail.
     with log_path.open("w") as log:
         emulator = subprocess.Popen(
             [tool("emulator/emulator"), "-avd", name, "-port", str(DECLARED[name]["port"]), "-gpu", "host", "-no-snapshot",

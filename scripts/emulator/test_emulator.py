@@ -76,7 +76,9 @@ class EmulatorScriptTest(unittest.TestCase):
         result = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env, timeout=60, check=False)
         if marker is not None and result.returncode == 0 and not was_running:
             deadline = time.monotonic() + 10
-            while not marker.exists() and time.monotonic() < deadline:
+            while not marker.exists():
+                if time.monotonic() > deadline:
+                    self.fail(f"the fake emulator never booted: no {marker.name}")
                 time.sleep(0.01)
         return result
 
