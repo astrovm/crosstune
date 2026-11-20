@@ -68,8 +68,11 @@ class MatchReplayTest {
             url.host == "itunes.apple.com" && url.encodedPath == "/search" ->
                 FakeSpotify.html(request, JSONObject().put("results", if (url.queryParameter("country") == "US") song.getJSONArray("us") else JSONArray()).toString())
             // A lookup in the US store names the song as its search did; the other stores, with their own names, when served.
+            // Each by the song's id: one the store doesn't have is none.
             url.host == "itunes.apple.com" -> url.queryParameter("country").orEmpty().let { store ->
-                if (store == "US") song.getJSONArray("us").optJSONObject(0) else song.getJSONObject("native").optJSONObject(store)?.takeIf { names }
+                val id = url.queryParameter("id")?.toLongOrNull()
+                if (store == "US") song.getJSONArray("us").objects().firstOrNull { it.optLong("trackId") == id }
+                else song.getJSONObject("native").optJSONObject(store)?.takeIf { names && it.optLong("trackId") == id }
             }?.let { FakeSpotify.html(request, JSONObject().put("results", JSONArray().put(it)).toString()) }
                 ?: FakeSpotify.html(request, """{"results":[]}""")
             url.host == "api.deezer.com" -> FakeSpotify.html(request, JSONObject().put("data", song.getJSONArray("deezer")).toString())

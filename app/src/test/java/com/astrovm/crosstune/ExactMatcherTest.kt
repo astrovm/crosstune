@@ -691,15 +691,19 @@ class ExactMatcherTest {
         apple: Map<String, String> = emptyMap(),
         elsewhere: Map<String, String> = emptyMap(),
         deezer: String = "[]",
-        /** The stores whose lookups fail, as offline; the rest that don't have the song answer with none. */
-        failing: Set<String> = emptySet()
+        /** The stores whose searches and lookups fail, as offline; the rest that don't have the song answer with none. */
+        failing: Set<String> = emptySet(),
+        /** The stores Apple says don't exist, with a 400, as Iran's. */
+        noStore: Set<String> = emptySet()
     ) {
         fake.handler = { request ->
             val store = request.url.queryParameter("country").orEmpty()
             when {
+                request.url.host == "itunes.apple.com" && store in failing -> throw IOException("offline")
+                request.url.host == "itunes.apple.com" && store in noStore ->
+                    FakeSpotify.html(request, """{"errorMessage":"Invalid value(s) for key(s): [country]"}""", code = 400)
                 request.url.host == "itunes.apple.com" && request.url.encodedPath == "/search" ->
                     FakeSpotify.html(request, """{"results":[${apple[store].orEmpty()}]}""")
-                request.url.host == "itunes.apple.com" && store in failing -> throw IOException("offline")
                 request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[${elsewhere[store].orEmpty()}]}""")
                 request.url.host == "api.deezer.com" -> FakeSpotify.html(request, """{"data":$deezer}""")
                 else -> FakeSpotify.html(request, youTubeMusicPage(*(if (FakeSpotify.bodyOf(request).contains(VIDEOS_TAB)) videos else songs).toTypedArray()))
@@ -1145,11 +1149,27 @@ class ExactMatcherTest {
         // A failed lookup in one store doesn't lose the others' names.
         namesAndTabs(songs = listOf(youTubeMusicRow("終わらない歌", "THE BLUE HEARTS • THE BLUE HEARTS • 3:04", videoId = "song0000000")), apple = apple, elsewhere = japanese, failing = setOf("KR"))
         assertEquals("https://music.youtube.com/watch?v=song0000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
-        // But someone else's video isn't taken while one failed, as it may have named the artist's own row: it's asked again.
-        namesAndTabs(videos = listOf(youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "japan000000")), apple = apple, elsewhere = japanese, failing = setOf("KR"))
+        // Nor does it keep someone else's video from being taken, as Korea's store names no Japanese song as YouTube Music would.
+        val fans = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "japan000000")
+        namesAndTabs(videos = listOf(fans), apple = apple, elsewhere = japanese, failing = setOf("KR"))
+        assertEquals("https://music.youtube.com/watch?v=japan000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        // Nor does a failed search where another store found the song, or the user's country having no store, as Iran.
+        namesAndTabs(videos = listOf(fans), apple = mapOf("US" to appleSong("Owaranai Uta", "THE BLUE HEARTS", 184_000)), elsewhere = japanese, failing = setOf("AR"))
+        assertEquals("https://music.youtube.com/watch?v=japan000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        namesAndTabs(videos = listOf(fans), apple = mapOf("US" to appleSong("Owaranai Uta", "THE BLUE HEARTS", 184_000)), elsewhere = japanese, noStore = setOf("IR"))
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=japan000000"), runBlocking { matcher("IR").lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        // But it isn't taken while the US store's lookup failed, as it names songs in Latin letters as YouTube Music's rows
+        // do, and may have named the artist's own row: it's asked again.
+        namesAndTabs(videos = listOf(fans), apple = apple, elsewhere = japanese, failing = setOf("US"))
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        // Nor while Japan's failed, the store of the country its name is written in, as Taiwan's name for it says.
+        namesAndTabs(videos = listOf(fans), apple = apple, elsewhere = mapOf("TW" to japanese.getValue("JP")), failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        // Nor while every store's search failed, any of which could have found it.
+        namesAndTabs(videos = listOf(fans), failing = setOf("AR", "US"))
         assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
         // The artist's own still is.
-        namesAndTabs(videos = listOf(youTubeMusicRow("終わらない歌", "THE BLUE HEARTS • 1M views • 3:04", videoId = "own00000000")), apple = apple, elsewhere = japanese, failing = setOf("KR"))
+        namesAndTabs(videos = listOf(youTubeMusicRow("終わらない歌", "THE BLUE HEARTS • 1M views • 3:04", videoId = "own00000000")), apple = apple, elsewhere = japanese, failing = setOf("US"))
         assertEquals("https://music.youtube.com/watch?v=own00000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
     }
 

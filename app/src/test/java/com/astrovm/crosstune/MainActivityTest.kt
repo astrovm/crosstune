@@ -997,6 +997,9 @@ class MainActivityTest {
                     "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"First Song"}]}}},
                     {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
                     "playlistItemData":{"videoId":"first000000"}}}]}""")
+                // Apple and Deezer don't have the second song, and say so, as an answer that can't be read is no answer at all.
+                request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                request.url.host == "api.deezer.com" -> FakeSpotify.html(request, """{"data":[]}""")
                 else -> FakeSpotify.html(request, FakeSpotify.trackPage("$title | Spotify", type))
             }
         }

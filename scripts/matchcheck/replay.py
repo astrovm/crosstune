@@ -47,6 +47,21 @@ def ytm_path(out, query, params):
     return raw_path(out, collect.YTM_SEARCH, {"context": {"client": collect.YTM_CLIENT}, "query": query, "params": params})
 
 
+# What YouTube adds to an artist's own channel's name, as ExactMatcher's CHANNEL_SUFFIXES: "Band - Topic", "BandVEVO".
+CHANNEL_SUFFIXES = {"topic", "vevo", "official", "music", "tv"}
+LEADING_ARTICLE = re.compile(r"^the\s+", re.IGNORECASE)
+
+
+def own_channel(uploader, credits):
+    """Whether a video's channel is the artist's own, as ExactMatcher.isOwnVideo tells: one of the names in [credits], without
+    its article, maybe with what YouTube adds to it; or, as a credit itself, naming one of them."""
+    names = {analyze.normalize(LEADING_ARTICLE.sub("", part.strip())) for credit in credits for part in analyze.ARTIST_SPLIT.split(credit)}
+    names = {n for n in names if n} | {a for credit in credits for a in analyze.artists(credit)}
+    channel = analyze.normalize(LEADING_ARTICLE.sub("", uploader))
+    return bool(analyze.artists(uploader) & names) or any(
+        channel == a or channel.startswith(a) and channel[len(a):] in CHANNEL_SUFFIXES for a in names)
+
+
 def right_ids(song, results, videos):
     """The videoIds of the song results and videos that are the song."""
     native = {analyze.bare(n["title"]) for n in song["native"]} | {analyze.normalize(n["title"]) for n in song["native"]}
@@ -73,7 +88,7 @@ def right_ids(song, results, videos):
     for v in videos:
         if not v["id"] or not named(v) or says_another(v):
             continue
-        if analyze.artists(v["details"][0]) & wanted:
+        if own_channel(v["details"][0], [song["artist"]] + [n["artist"] for n in song["native"]]):
             ids.add(v["id"])
         elif any(a in analyze.normalize(v["name"]) for a in wanted):
             named_only.add(v["id"])
