@@ -4342,9 +4342,10 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         launch()
         resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
-        val play = hasContentDescription(string(R.string.play_in_background, "YouTube Music")) and isEnabled()
+        // YouTube Music isn't there, so the build patched from it stands for it, by its own name.
+        val play = hasContentDescription(string(R.string.play_in_background, "YT Music Morphe")) and isEnabled()
         waitUntil { composeRule.onAllNodes(play).fetchSemanticsNodes().isNotEmpty() }
-        // YouTube Music isn't there, so the build patched from it plays for it: what it played before isn't the song asked.
+        // What it played before isn't the song asked.
         phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = morphe)
         composeRule.onNode(play).performClick()
         waitForText(string(R.string.player_waiting, "YouTube Music"))
@@ -5524,6 +5525,23 @@ class MainActivityTest {
         assertEquals("DEEZER", prefs().getString("default_target", null))
         assertTrue(LinkInterception(app).isEnabled(MusicService.DEEZER))
         assertTrue(prefs().getBoolean("links_in_crosstune", false))
+    }
+
+    @Test
+    fun twoAppsWithOneNameAreToldApartInChooseApp() {
+        // YouTube, and a ReVanced build of it left with YouTube's own name.
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.YOUTUBE.packageName, "YouTube"))
+        shadowOf(app.packageManager).installPackage(installedApp("app.revanced.android.youtube", "YouTube"))
+        respondWithTrack("Song", "Artist · Song")
+        launch()
+        resolveTyped()
+        assertResultShown()
+        composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
+        composeRule.waitForIdle()
+        assertEquals(1, composeRule.onAllNodesWithText("YouTube").fetchSemanticsNodes().size)
+        composeRule.onAllNodesWithText("YouTube ReVanced").onLast().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText("YouTube ReVanced"))
     }
 
     @Test
@@ -7209,6 +7227,18 @@ class MainActivityTest {
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.SPOTIFY.packageName })
         launch()
         assertFalse(DestinationStore(prefs()).hasDefault())
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
+
+        // The only one a build patched from YouTube Music: saved as the service, so YouTube Music's own app takes over once there.
+        freshInstall()
+        shadowOf(app.packageManager).removePackage(MusicService.SPOTIFY.packageName)
+        shadowOf(app.packageManager).removePackage(MusicService.DEEZER.packageName)
+        val morphe = "app.morphe.android.apps.youtube.music"
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = morphe })
+        val activity = launch()
+        waitUntil(TIMEOUT_MS) { prefs().getString("default_target", null) != null }
+        assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC, morphe), ViewModelProvider(activity)[MainViewModel::class.java].uiState.defaultDestination)
     }
 
     @Test
