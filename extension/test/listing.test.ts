@@ -33,7 +33,14 @@ test("each store listing names every site the lyrics are looked for on", () => {
 test("the stores' answers, README and every privacy page name them too", () => {
   namesEverySite(read("extension/store/README.md"), "extension/store/README.md");
   const readme = read("README.md");
-  namesEverySite(readme.slice(readme.indexOf("The [browser extension]")), "README's Privacy");
+  const heading = readme.indexOf("\n## Privacy\n");
+  assert.ok(heading >= 0, "README has no Privacy section");
+  const privacy = readme.slice(heading + 1);
+  const extension = privacy.indexOf("The [browser extension]");
+  assert.ok(extension >= 0, "README's Privacy has no line on the browser extension");
+  // Only that line: a site named further down, in another section, doesn't count.
+  const end = privacy.indexOf("\n", extension);
+  namesEverySite(privacy.slice(extension, end < 0 ? undefined : end), "README's Privacy");
   const strings = readdirSync(new URL("site/strings/", repo)).filter((name) => name.endsWith(".json"));
   assert.equal(strings.length, 16);
   for (const name of strings) {

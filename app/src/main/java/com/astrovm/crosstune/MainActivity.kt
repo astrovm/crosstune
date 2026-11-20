@@ -54,6 +54,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
@@ -612,8 +613,12 @@ class MainActivity : ComponentActivity() {
         }
 
         val shortcuts = AppShortcuts(applicationContext, viewModel.artwork::load)
+        // What plays is watched while the screen is in sight: in front, or covering the app a song plays in, as
+        // on a TV, where it's the cover's window and this activity is stopped behind that app (Issue #1105).
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.RESUMED) { viewModel.watchPlayingNow() }
+            combine(lifecycle.currentStateFlow, snapshotFlow { viewModel.uiState.coveringApp }) { state, covering ->
+                covering || state.isAtLeast(Lifecycle.State.RESUMED)
+            }.distinctUntilChanged().collectLatest { inSight -> if (inSight) viewModel.watchPlayingNow() }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { connectionFactory(applicationContext).online().collect(viewModel::connectionChanged) }
