@@ -233,11 +233,17 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         // Where the lines are placed, in the song, each time that changes.
         val placed = JSONArray()
         var lastPlaced: List<Long>? = null
+        // The app's timing notes, as a report carries them, each where the song is when it's made: how far off each while was heard.
+        val notes = JSONArray()
+        val noted = HashSet<String>()
         var last = -1
         var atMs = fromMs
         while (atMs < lengthMs) {
             shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(STEP_MS))
             atMs = fromMs + ((SystemClock.elapsedRealtime() - startedAt) * playerSpeed).toLong()
+            for (note in TimingLog.lastMinute().lines()) {
+                if (note.isNotEmpty() && noted.add(note)) notes.put(JSONObject().put("at", atMs + behindMs).put("note", note.substringAfter(' ')))
+            }
             val state = model().uiState
             if (state.following?.timingKnown != lastKnown) known.put(JSONObject().put("at", atMs + behindMs).put("known", state.following?.timingKnown))
             lastKnown = state.following?.timingKnown
@@ -256,7 +262,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             last = index
         }
         val lines = JSONArray(model().uiState.lyricLines.map { it.text })
-        return JSONObject().put("lines", lines).put("shown", shown).put("placed", placed).put("known", known).put("heard", heardLog).put("lyricsSpeed", model().uiState.following?.clock?.speed)
+        return JSONObject().put("lines", lines).put("shown", shown).put("placed", placed).put("known", known).put("heard", heardLog).put("notes", notes).put("lyricsSpeed", model().uiState.following?.clock?.speed)
     }
 
     private fun model() = ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
