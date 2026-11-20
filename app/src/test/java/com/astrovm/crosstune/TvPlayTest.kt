@@ -130,7 +130,8 @@ class TvPlayTest {
 
     private fun shown(text: String) = composeRule.onAllNodes(hasText(text) or hasContentDescription(text)).fetchSemanticsNodes().isNotEmpty()
 
-    private fun onPlayer() = shown(string(R.string.lyrics_play)) || shown(string(R.string.lyrics_pause))
+    // The now-playing bar has a pause button too, so the player is told by its cover.
+    private fun onPlayer() = composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty()
 
     private fun click(text: String) {
         // Pressed as the remote does, which reaches what's below the TV's edge too, scrolling to it.
@@ -150,14 +151,20 @@ class TvPlayTest {
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube", canSeek = true, appPackage = MusicService.YOUTUBE_TV)
     }
 
+    /** What watched what plays once Crosstune was behind YouTube, before its cover came up. */
+    private var watchersBehindTheCover = 0
+
     /** Play pressed: YouTube opens on the song, Crosstune goes behind it, and the cover Crosstune started goes over it. */
-    private fun playCovered(): ServiceController<FloatingLyricsService> {
+    private fun playCovered(canDraw: Boolean = true): ServiceController<FloatingLyricsService> {
         click(play)
         waitUntil { shadowOf(app).peekNextStartedService() != null }
         val started = shadowOf(app).nextStartedService
         assertEquals(FloatingLyricsService::class.java.name, checkNotNull(started.component) { "Expected started.component to be non-null" }.className)
         assertTrue(started.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
         checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        watchersBehindTheCover = playback.nowPlayingWatchers
+        ShadowSettings.setCanDrawOverlays(canDraw)
         return Robolectric.buildService(FloatingLyricsService::class.java, started).create().startCommand(0, 1).also { composeRule.waitForIdle() }
     }
 
@@ -282,7 +289,7 @@ class TvPlayTest {
     }
 
     @Test
-    fun onATvBackFromPracticeOverTheWordsLandsOnTheirBar() {
+    fun onATvBackFromPracticeOverTheWordsLeavesTheRemoteOnThem() {
         prefs().edit().putString("saved_lines", """[{"text":"Demo one","translation":"Demo uno","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
         launch()
         val floating = playCovered()
@@ -295,9 +302,63 @@ class TvPlayTest {
         pressBack(floating.get())
         waitUntil { shown("Demo two") }
         composeRule.waitForIdle()
-        // Practice is drawn in the words' place, so they're the same screen; the words put the remote on their bar.
-        println("FOCUSED: " + composeRule.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Focused, true), useUnmergedTree = true).fetchSemanticsNodes().map { it.config })
-        composeRule.onNode(hasContentDescription(string(R.string.lyrics_pause)) and hasClickAction()).assertIsFocused()
+        // Practice is drawn in the words' place, the same screen, so nothing closes: the words give the remote somewhere to be.
+        assertEquals(1, composeRule.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun backOnTheCoversMainScreenTheBarShowsWhatYouTubePlaysAndOpensItsPlayer() {
+        launch()
+        val floating = playCovered()
+        // YouTube starts once it's covered, with Crosstune itself out of sight behind it (Issue #1105).
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, app = MusicService.YOUTUBE_TV)
+        playing()
+        waitUntil { shown("Demo one") }
+        // The bar has a pause button too, so the player is told by its cover.
+        fun onPlayer() = composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty()
+        pressBack(floating.get())
+        waitUntil { onPlayer() }
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        waitUntil { composeRule.onAllNodes(hasTestTag(NOW_PLAYING_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(shown("Demo"))
+        // Selected with the remote, it opens the player again, still over YouTube.
+        composeRule.onNode(hasTestTag(NOW_PLAYING_TAG)).performSemanticsAction(SemanticsActions.OnClick)
+        waitUntil { onPlayer() }
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
+        assertTrue(playback.nowPlayingWatchers > 0)
+        // Back to the main screen and out to YouTube: with nothing of Crosstune left on the TV, it stops watching.
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        pressBack(floating.get())
+        waitUntil { shadowOf(floating.get()).isStoppedBySelf }
+        waitUntil { playback.nowPlayingWatchers == 0 }
+    }
+
+    @Test
+    fun onATvBackFromThePlayerTheBarOpenedLandsOnTheBar() {
+        launch()
+        val floating = playCovered()
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, app = MusicService.YOUTUBE_TV)
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        playing()
+        waitUntil { shown("Demo one") }
+        pressBack(floating.get())
+        waitUntil { onPlayer() }
+        pressBack(floating.get())
+        waitUntil { !onPlayer() && composeRule.onAllNodes(hasTestTag(NOW_PLAYING_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitForIdle()
+        // Back from the player the card's Play opened, the remote is on Play, with the bar under it.
+        composeRule.onNode(hasContentDescription(play) and hasClickAction()).assertIsFocused()
+        // Opened from the bar, back from the player it's on the bar.
+        val bar = composeRule.onNode(hasTestTag(NOW_PLAYING_TAG))
+        bar.requestFocus()
+        bar.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { onPlayer() }
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        composeRule.waitForIdle()
+        bar.assertIsFocused()
     }
 
     @Test
@@ -480,12 +541,14 @@ class TvPlayTest {
     @Test
     fun withShowingOverOtherAppsTakenBackThereIsNoCover() {
         launch()
-        click(play)
-        waitUntil { shadowOf(app).peekNextStartedService() != null }
-        ShadowSettings.setCanDrawOverlays(false)
-        val floating = Robolectric.buildService(FloatingLyricsService::class.java, shadowOf(app).nextStartedService).create().startCommand(0, 1)
+        // Taken back while Crosstune is out of sight, behind YouTube.
+        val floating = playCovered(canDraw = false)
         assertTrue(overlays(floating.get()).isEmpty())
         assertTrue(shadowOf(floating.get()).isStoppedBySelf)
+        // Crosstune is told, so it stops watching what plays for a cover that isn't there. What's left is the
+        // player's own follow of the song it opened, three watchers.
+        assertTrue(watchersBehindTheCover > 3)
+        waitUntil { playback.nowPlayingWatchers == 3 }
     }
 
     @Test

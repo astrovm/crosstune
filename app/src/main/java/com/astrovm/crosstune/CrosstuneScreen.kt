@@ -541,7 +541,6 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     val focuses = remember { ScreenFocuses(screen) }
     // Noted as the app turns to another screen, while the remote is still on what it was on.
     SideEffect { focuses.turnTo(screen) }
-    var anyFocused by remember { mutableStateOf(false) }
     // A dialog or sheet shown keeps the remote, as one that shows again on the screen come back to does.
     var overlaid by remember { mutableStateOf(false) }
     var settled by remember { mutableStateOf(screen) }
@@ -552,14 +551,14 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         settled = now
         if (!remote || now.depth < 0 || from.depth <= now.depth) return@LaunchedEffect
         withFrameNanos {}
-        // Unless the screen took it for itself, as the bar does from a station's player.
-        if (!anyFocused && !overlaid) focuses.of(now).restore()
+        // Not by whether something has it, as Android hands it to the link field once what had it is gone. A dialog
+        // or sheet keeps it, and the bar takes it for itself from a station's player.
+        if (!overlaid && !barFocus.owed) focuses.of(now).restore()
     }
     CompositionLocalProvider(LocalCovers provides actions.covers, LocalBarFocus provides barFocus) {
     WithOverlays(inside = state.phone == Phone.TV, onOverlaid = { overlaid = it }) {
     CompositionLocalProvider(LocalLayerSwipe provides layers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
-        modifier = Modifier.onFocusChanged { anyFocused = it.hasFocus },
         transitionSpec = {
             // Setup and a link on its way out aren't places in the app, so they fade rather than slide.
             // The words rise over the song they're of, and sink back into it.
