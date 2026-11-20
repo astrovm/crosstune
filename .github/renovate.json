@@ -6,6 +6,7 @@
   "minimumReleaseAge": "3 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
   "groupSingleUpdates": true,
+  "semanticCommits": "enabled",
   "hostRules": [
     {
       "matchHost": "repo.maven.apache.org",
