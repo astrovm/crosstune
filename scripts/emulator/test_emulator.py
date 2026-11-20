@@ -6,6 +6,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from subprocess import CompletedProcess
@@ -66,7 +67,20 @@ class EmulatorScriptTest(unittest.TestCase):
             ANDROID_HOME=str(sdk or self.sdk), ANDROID_AVD_HOME=str(self.avds), FAKE=str(self.fake),
             EMULATOR_ABI="x86_64", EMULATOR_APP_WAIT="0",
         )
-        return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env, timeout=60, check=False)
+        # A start that starts an emulator returns before the fake one has run: it runs in the background, as the
+        # real one does, and touches its file last. Wait for that, or a test reads its log too early.
+        marker = None
+        if args[:1] == ("start",) and len(args) > 1 and args[1] in DECLARED:
+            marker = self.fake / f"booted.{DECLARED[args[1]]['port']}"
+        was_running = marker is not None and marker.exists()
+        result = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env, timeout=60, check=False)
+        if marker is not None and result.returncode == 0 and not was_running:
+            deadline = time.monotonic() + 10
+            while not marker.exists():
+                if time.monotonic() > deadline:
+                    self.fail(f"the fake emulator never booted: no {marker.name}")
+                time.sleep(0.01)
+        return result
 
     def asked(self):
         path = self.fake / "asked"
@@ -178,6 +192,14 @@ class EmulatorScriptTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         started = [a for a in self.asked() if a.startswith("emulator ")]
         self.assertRegex(started[0], r"-no-snapshot( |$)")
+
+    def test_start_never_asks_to_send_a_crash_report(self):
+        # After a crash the emulator asks "send a crash report?" and waits for a tap, so start would hang.
+        self.run_script("create", PHONE)
+        result = self.run_script("start", PHONE)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        started = [a for a in self.asked() if a.startswith("emulator ")]
+        self.assertRegex(started[0], r"-crash-report-mode never( |$)")
 
     def test_start_deletes_the_stale_quick_boot_snapshot(self):
         self.run_script("create", PHONE)

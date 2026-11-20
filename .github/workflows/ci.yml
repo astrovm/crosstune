@@ -60,7 +60,8 @@ jobs:
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
           fi
-          if grep -qE '^(extension/|\.github/workflows/ci\.yml$)' <<< "$files"; then
+          # The extension's tests also read README and the privacy page's strings.
+          if grep -qE '^(extension/|README\.md$|site/strings/|\.github/workflows/ci\.yml$)' <<< "$files"; then
             echo "extension=true" >> "$GITHUB_OUTPUT"
           else
             echo "extension=false" >> "$GITHUB_OUTPUT"
