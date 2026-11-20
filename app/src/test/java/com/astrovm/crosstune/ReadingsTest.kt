@@ -525,21 +525,52 @@ class ReadingsTest {
     }
 
     @Test
-    fun smallKanaRecoveryNeedsBothNounsAndTheirReadings() {
-        val text = "かいしゃのけいひ"
+    fun noWordOfALineInKanaStartsOnASmallKana() {
+        // IPADIC alone splits each of these before a small kana: じ and ゅぎょう, し and ゅくだい, に and っ and き.
+        val lines = mapOf(
+            "あのじゅぎょう" to listOf("あの" to "あの", "じゅぎょう" to "授業"),
+            "しゅくだいをともだち" to listOf("しゅくだい" to "宿題", "を" to "を", "ともだち" to "ともだち"),
+            "きょうしつのせんせい" to listOf("きょうしつ" to "教室", "の" to "の", "せんせい" to "せんせい"),
+            "いしゃのけいひ" to listOf("いしゃ" to "いしゃ", "の" to "の", "けいひ" to "経費"),
+            "にっきをかく" to listOf("にっき" to "にっき", "を" to "を", "かく" to "かく"),
+        )
+        for ((line, expected) in lines) assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
+        // A word JMdict has in kanji is read so, as IPADIC reads the kanji.
+        assertEquals(listOf(Reader.JMDICT), Readings.words("あのじゅぎょう", Script.JAPANESE).last().by)
+        for (line in lines.keys + listOf("これじゃひとりぼっち", "うっせぇうっせぇうっせぇわ", "クソだりぃな", "きょねんのゆめ")) {
+            for (words in listOf(Readings.words(line, Script.JAPANESE), TestUniDic.reading { Readings.words(line, Script.JAPANESE) })) {
+                assertTrue("$line: $words", words.none { it.text.first() in "ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ" })
+            }
+        }
+    }
+
+    @Test
+    fun wordsThatStartWithASmallTsuStay() {
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        assertEquals(listOf("きみ", "って", "こどもっぽい"), words("きみってこどもっぽい"))
+        // っ alone after て is ていく said short: 消えてった is 消えていった, and った its いった.
+        assertEquals(listOf("消えて", "った"), words("消えてった"))
+    }
+
+    @Test
+    fun onlyThePartOfALineSplitBeforeASmallKanaIsSearchedAgain() {
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        assertEquals(listOf("きょう", "は", "かいしゃ", "の", "けいひ"), words("きょうは、かいしゃのけいひ"))
+    }
+
+    @Test
+    fun aWordInKanaIsOfferedOnlyWhereIpadicReadsItsKanjiSo() {
         val cached = Readings.oldKanaRead
         val vocabulary = Readings.oldKana
-        val unsure = listOf("かいし", "ゃのけいひ")
-        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        fun words() = Readings.words("かいしゃのけいひ", Script.JAPANESE).map { it.text to it.lookup }
         try {
-            for (today in listOf(vocabulary.today - "かいしゃ", vocabulary.today - "けいひ", vocabulary.today + ("けいひ" to "携帯"))) {
-                Readings.oldKanaRead = Readings.OldKana(today, vocabulary.modern)
-                assertEquals(unsure, words(text))
-            }
+            // 携帯 is no けいひ, so the line is left with the words IPADIC knows in kana.
+            Readings.oldKanaRead = Readings.OldKana(vocabulary.today + ("けいひ" to "携帯"), vocabulary.modern)
+            assertTrue(words().none { it.second == "携帯" })
+            assertEquals("かいしゃ" to "会社", words().first())
         } finally {
             Readings.oldKanaRead = cached
         }
-        assertEquals(listOf("ちいさな", "ゃ"), words("ちいさなゃ"))
     }
 
     @Test

@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.icu.text.Transliterator
 import android.os.Build
 import androidx.annotation.RequiresApi
-import com.atilika.kuromoji.ipadic.Tokenizer
 import kotlin.math.abs
 
 /**
@@ -106,8 +105,9 @@ internal object Readings {
      * 10 for an old ほ said お in kana alone.
      * 11 for standalone old kana read with the built-in dictionary.
      * 12 for a suffix that follows a word it can't join, 等 after a verb, 桜 after a counter, and 千夜.
+     * 13 for any word in kana IPADIC starts on a small kana, じゅぎょう and いっしょ.
      */
-    const val VERSION = 12
+    const val VERSION = 13
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -156,7 +156,7 @@ internal object Readings {
 
     private fun letters(text: String) = text.filter(Char::isLetterOrDigit).lowercase()
 
-    private val tokenizer by lazy { Tokenizer() }
+    private val tokenizer by lazy { SmallKanaTokenizer { oldKana.today } }
 
     private fun japanese(line: String): LineReading {
         val given = givenReadings(line)
@@ -182,52 +182,11 @@ internal object Readings {
     // counting something, as 2 in 2人, as its kanji, 二人 ふたり, not a number on its own: they stay as written.
     private fun pieces(line: String): List<Piece> {
         val text = line.mapIndexed { at, c -> NEW_FORMS[c] ?: KANJI_DIGITS[c]?.takeIf { counts(line, at) } ?: c }.joinToString("")
-        val known = withSmallKana(okurigana(line, text, ipadicPieces(line, text)))
+        val known = okurigana(line, text, ipadicPieces(line, text))
         val other = uniDic
         val read = saidAsWritten(modernPieces(other?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known))
         return if (other == null) wholeOldKanaWord(line, read) ?: read else read
     }
-
-    /** Keep the small kana with its noun where the dictionaries can read both nouns around の. */
-    private fun withSmallKana(pieces: List<Piece>): List<Piece> {
-        if (pieces.none(Piece::startsWithUnreadSmallKana)) return pieces
-        val words = mutableListOf<Piece>()
-        for (piece in pieces) {
-            val pair = words.lastOrNull()?.let { before -> nounsWithSmallKana(before, piece) }
-            if (pair == null) {
-                words += piece
-            } else {
-                words.removeAt(words.lastIndex)
-                words += pair
-            }
-        }
-        return words
-    }
-
-    /** Kana alone can look like a verb and an unknown word, as かいし and ゃのけいひ. */
-    private fun nounsWithSmallKana(before: Piece, after: Piece): List<Piece>? {
-        if (!after.startsWithUnreadSmallKana || before.surface.any { it !in 'ぁ'..'ゖ' }) return null
-        val small = after.surface.takeWhile { it in SMALL_HIRAGANA }
-        val rest = after.surface.drop(small.length)
-        if (!rest.startsWith('の')) return null
-        val first = before.surface + small
-        val last = rest.drop(1)
-        val head = oldKana.today[first] ?: return null
-        val tail = oldKana.today[last] ?: return null
-        val tokens = tokenizer.tokenize("${head}の$tail")
-        val written = listOf(first, "の", last)
-        if (tokens.map { it.surface } != listOf(head, "の", tail) ||
-            tokens.map { it.partOfSpeechLevel1 } != listOf("名詞", "助詞", "名詞") ||
-            tokens.map { hiragana(it.reading.orEmpty()) } != written) return null
-        var end = before.end - before.surface.length
-        return tokens.zip(written) { token, kana ->
-            end += kana.length
-            Piece(kana, kana, token.partOfSpeechLevel1, token.partOfSpeechLevel2, token.baseForm,
-                drawnOutE(hiragana(token.pronunciation)), end, reader = Reader.JMDICT)
-        }
-    }
-
-    private const val SMALL_HIRAGANA = "ぁぃぅぇぉっゃゅょゎ"
 
     /** [line] as IPADIC splits [text], the line with its kanji made the dictionary's. */
     private fun ipadicPieces(line: String, text: String) = tokenizer.tokenize(text).map { token ->
@@ -241,7 +200,8 @@ internal object Readings {
                 token.baseForm?.takeIf { it != "*" } ?: token.surface,
                 token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) },
                 token.position + token.surface.length,
-                unread = reading == null
+                unread = reading == null,
+                reader = if (token is SmallKanaTokenizer.JmdictToken) Reader.JMDICT else Reader.IPADIC
             )
         }
 
@@ -758,8 +718,6 @@ internal object Readings {
         /** How it is spelled today, when it is in old kana and [Furigana.byRule] says it. */
         val today: String? = null
     ) {
-        val startsWithUnreadSmallKana get() = unread && surface.firstOrNull()?.let { it in SMALL_HIRAGANA } == true
-
         /** Kanji the dictionary can't read. */
         val unknown get() = unread && surface.any(::isHan)
 
