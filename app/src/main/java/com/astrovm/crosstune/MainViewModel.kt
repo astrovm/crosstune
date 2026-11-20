@@ -3421,10 +3421,10 @@ internal class MainViewModel(
      * Heard [WORDS_OFF_MS] off or more, it's the words that are off, not the clock, so what's heard
      * this time is kept, and they start where they're sung next time; still unsure, it isn't done.
      * That's a problem found too: a song is mostly picked up playing, the words opened after it started.
-     * But in a music app, the first while alone can be matched to the wrong lines, as a verse heard
-     * seconds from where it's sung: words timed for another take are off all through the song, so with
-     * nothing heard this time yet, they move only once a later while, [whole] or its first seconds, is
-     * heard about as far off. Till then they stay as they're timed.
+     * But in a music app, one while alone can be matched to the wrong lines, as a chorus heard seconds
+     * from where it's sung, or a line the speech model hears over and over: words timed for another take
+     * are off all through the song, so they move that far only once a later while, [whole] or its first
+     * seconds, is heard about as far off. Till then they stay where they are, even after lines heard near.
      */
     private fun placeThisTime(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long, whole: Boolean) {
         heardThisTime = true
@@ -3432,8 +3432,7 @@ internal class MainViewModel(
         val heard = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
         val far = abs(shift) >= WORDS_OFF_MS
         // A video's words are often seconds off, timed for the release without its intro: one while says so.
-        // Lines already heard this time say where the singing is, so words drifting off from there are believed too.
-        val agreed = far && (appFollowing?.video == true || heardPoints.isNotEmpty() || farOffMs?.let { abs(it - shift) < SUNG_OFF_MS } == true)
+        val agreed = far && (appFollowing?.video == true || farOffMs?.let { abs(it - shift) < SUNG_OFF_MS } == true)
         if (whole) farOffMs = shift.takeIf { far && !agreed }
         if (far) {
             if (!agreed) return

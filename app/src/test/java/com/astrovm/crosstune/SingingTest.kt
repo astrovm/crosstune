@@ -762,6 +762,27 @@ class SingingTest {
     }
 
     @Test
+    fun pickedUpPartwayOneWhileHeardFarOffAfterLinesHeardNearDoesntMoveThem() {
+        // As the replay of Never Gonna Give You Up went: the first lines heard a second late, then a while
+        // the speech model heard as one line over and over put the lines seconds later.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.answer = { sungAt(times, times.map { if (whiles == 1) 7_000L else 1_000L }).also { whiles++ } }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[0].timeMs == 3_000L }
+        val heardNear = model().uiState.lyricLines.map { it.timeMs }
+        passes(30_000)
+        waitUntil { singing.hears == 2 }
+        composeRule.waitForIdle()
+        // One while alone says that far off: the lines stay where the first while put them.
+        assertEquals(heardNear, model().uiState.lyricLines.map { it.timeMs })
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
     fun pickedUpPartwayWordsHeardFarOffOfferToReportOnce() {
         heardFarOffTwice(FAR_MS)
         waitUntil { model().uiState.reportOffer }
@@ -1356,8 +1377,9 @@ class SingingTest {
 
     @Test
     fun linesHeardOnlyByTheirFirstWordsAreAsFarOffAsTheFirstOfThem() {
-        // Three seconds late, two more than where they were put: the fourth line is the first to be heard.
-        assertEquals(listOf(3_000L, 6_000L, 9_000L, 33_000L, 36_000L, 39_000L), linesAfterOnlyFirstWordsAreHeard(3_000))
+        // Two and a half seconds late, a second and a half more than where they were put: the fourth line is the first to be heard.
+        // Two seconds more would be words off, which one while alone doesn't move (pickedUpPartwayOneWhileHeardFarOffAfterLinesHeardNearDoesntMoveThem).
+        assertEquals(listOf(3_000L, 6_000L, 9_000L, 32_500L, 35_500L, 38_500L), linesAfterOnlyFirstWordsAreHeard(2_500))
     }
 
     @Test
