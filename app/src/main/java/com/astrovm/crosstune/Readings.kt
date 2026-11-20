@@ -208,7 +208,13 @@ internal object Readings {
     /** Small vowels that draw out the word in kana before them, ありがと and ぉ, go with it, as one word read as that one. */
     private fun drawnOut(pieces: List<Piece>) = pieces.fold(ArrayList<Piece>()) { out, piece ->
         val before = out.lastOrNull()
-        if (before != null && "${before.surface.last()}${piece.surface}".zipWithNext().all { (a, b) -> SmallKanaTokenizer.drawsOut(a, b) }) {
+        val drawing = before != null && "${before.surface.last()}${piece.surface}".zipWithNext().all { (a, b) -> SmallKanaTokenizer.drawsOut(a, b) }
+        val word = out.getOrNull(out.lastIndex - 1)
+        if (before != null && drawing && before.surface.all { it == 'ー' } && word != null && isKana(word.surface.last())) {
+            // IPADIC can make ー a word of its own, すご and ー and ぃ: the ー draws out the word before as the vowel does.
+            out.removeAt(out.lastIndex)
+            out[out.lastIndex] = word.drawnOutBy(before).drawnOutBy(piece)
+        } else if (before != null && drawing) {
             out[out.lastIndex] = before.drawnOutBy(piece)
         } else {
             out += piece
@@ -747,8 +753,14 @@ internal object Readings {
         /** It read [kana] by Crosstune's own rules, as a word of [kind] and [subkind] when that changes too. */
         fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) = Piece(surface, kana, kind, subkind, base, null, end, reader = Reader.RULES, today = today)
 
-        /** It, drawn out by the small vowels of [small], said as long as they make it. */
-        fun drawnOutBy(small: Piece) = Piece(surface + small.surface, kana + small.kana, kind, subkind, base, spoken?.plus(small.kana), small.end, unread, reader, today)
+        /**
+         * It, drawn out by the small vowels of [small], said as long as they make it. Where its last kana and a small
+         * vowel would read as a sound of their own, とぅ as tu, the vowel is read full size: ありがとぅ is arigatou.
+         */
+        fun drawnOutBy(small: Piece): Piece {
+            val drawn = if ("${kana.last()}${small.kana.first()}" in YOUON) small.kana.map { it + 1 }.joinToString("") else small.kana
+            return Piece(surface + small.surface, kana + drawn, kind, subkind, base, spoken?.plus(drawn), small.end, unread, reader, today)
+        }
 
         /** It read [kana], and said [said]. */
         fun reading(kana: String, said: String) = Piece(surface, kana, kind, subkind, base, said, end, reader = reader, today = today)
@@ -1336,7 +1348,12 @@ internal object Readings {
      * 分かった is wakatta rather than waka ta, while particles stand alone. Brackets and marks sit
      * against what they're beside.
      */
-    private fun romajiWords(pieces: List<Piece>, kana: (Piece) -> String): List<String> = grouped(pieces).map { word -> word.joinToString("", transform = kana) }
+    private fun romajiWords(pieces: List<Piece>, kana: (Piece) -> String): List<String> =
+        grouped(pieces).map { word -> word.joinToString("", transform = kana) }.fold(ArrayList()) { words, word ->
+            // A word that ends on っ doubles the kana that starts the next, so they're one: いっ and しゅん are isshun.
+            if (words.lastOrNull()?.endsWith('っ') == true && word.firstOrNull()?.let { isKana(it) && it !in "っッー" } == true) words[words.lastIndex] += word else words += word
+            words
+        }
 
     /** The line [pieces] make in romaji, as it's said or [typed], with a space at most between words. */
     private fun romanizedLine(pieces: List<Piece>, typed: Boolean) =

@@ -556,6 +556,8 @@ class ReadingsTest {
             "きみがすきぃ" to listOf("きみ" to "きみ", "が" to "が", "すきぃ" to "すく"),
             "まってよぉぉ" to listOf("まって" to "まつ", "よぉぉ" to "よい"),
             "ズットォ" to listOf("ズットォ" to "ズットォ"),
+            // A small vowel that spells a long vowel draws it out too: ありがとぅ is ありがとう, not ありが and とぅ.
+            "ありがとぅ" to listOf("ありがとぅ" to "ありがと"),
         )
         for ((line, expected) in lines) assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
         for (line in lines.keys + listOf("やだぁ", "すきすきすきぃ", "あいたいよぉ")) {
@@ -565,12 +567,34 @@ class ReadingsTest {
             }
         }
         assertEquals("arigatoo", Readings.of(listOf("ありがとぉ"), Script.JAPANESE).single().typed)
+        assertEquals("arigatou", Readings.of(listOf("ありがとぅ"), Script.JAPANESE).single().typed)
+        // No word JMdict has in kanji is offered before a small vowel it may go on in: ちょうだぃ is no 長打.
+        assertTrue(Readings.words("ちょうだぃ", Script.JAPANESE).none { it.lookup == "長打" })
+        // おう and えい spelled small, and a vowel after ー, which draws out the kana before it too, stay with their word.
+        val longVowels = mapOf("せんせぃ" to listOf("せんせぃ"), "くださぃ" to listOf("くださぃ"), "ねーぇ" to listOf("ねーぇ"), "すごーぃ" to listOf("すごーぃ"))
+        for ((line, expected) in longVowels) {
+            assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text })
+            assertEquals(line, expected, TestUniDic.reading { Readings.words(line, Script.JAPANESE).map { it.text } })
+        }
         // A small vowel that makes a sound with the kana before, ぃ in でぃ and ぇ in ふぇ, is said with it, not drawn out.
         for (line in listOf("めでぃあ", "かふぇてらす")) {
             val words = Readings.words(line, Script.JAPANESE).map { it.text }
             assertTrue("$line: $words", words.any { "でぃ" in it || "ふぇ" in it })
         }
         assertEquals("（risei adiosu）", Readings.of(listOf("（理性アディオス）"), Script.JAPANESE).single().typed)
+    }
+
+    @Test
+    fun aWordThatEndsOnASmallTsuRunsIntoTheNextInRomaji() {
+        fun typed(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().typed
+        assertEquals("isshun no yume", typed("いっしゅんのゆめ"))
+        assertEquals("zukkyun", typed("ずっきゅん"))
+    }
+
+    @Test
+    fun aSmallKanaBeforeASmallVowelStillStartsNoWord() {
+        val words = Readings.words("でしょぅ", Script.JAPANESE).map { it.text }
+        assertTrue("$words", words.none { it.first() in "ぁぃぅぇぉっゃゅょゎ" })
     }
 
     @Test
