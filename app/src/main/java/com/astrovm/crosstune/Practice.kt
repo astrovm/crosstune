@@ -159,6 +159,13 @@ internal class PracticeCards(
     /** Where each app was sent lately, so a report of the last card's line isn't taken for where it stopped on this one. */
     private val sentPlaces = mutableMapOf<Pair<String?, Int>, SentPlaces>()
 
+    /**
+     * Where each app said it stopped short, in each song, by package: TIDAL without an account at its 30 s preview's end.
+     * Lines that go on past there can't be played out in it, so it's left out of them until Crosstune starts again. Lines
+     * that end before that place, and other songs, still try it first (Issue #937).
+     */
+    private val stoppedAt = mutableMapOf<Pair<String, MusicMetadata>, Long>()
+
     /** Apps a card stopped, kept paused a moment, see [keepStopped], by package. */
     private data class KeptPause(val app: String, val job: Job)
     private val keptStopped = ConcurrentHashMap<Pair<String?, Int>, KeptPause>()
@@ -273,14 +280,33 @@ internal class PracticeCards(
         val targets = matches.map { NativeTarget(it, counts[it.app] == 1) }
         val candidates = targets.filter { target ->
             val allowed = usable(target.app, line)
-            val accepted = allowed && fits(target.match.following, line)
-            val reason = if (!allowed) "service_policy" else if (!accepted) "outside_recording" else "candidate"
+            val reachable = allowed && reaches(target.app, song, target.match.following, line)
+            val accepted = reachable && fits(target.match.following, line)
+            val reason = if (!allowed) "service_policy" else if (!reachable) "stopped_short" else if (!accepted) "outside_recording" else "candidate"
             target.clockCandidate(line, accepted, reason)
             accepted
         }
             .sortedWith(compareByDescending<NativeTarget> { it.match.following?.let { state -> state.canSeek && !state.ad } == true }.thenByDescending { it.match.playing })
         pauseOthers(targets, candidates.firstOrNull()?.key, song, line)
         return candidates
+    }
+
+    /**
+     * False when [app] stopped short in [song] before [line] ends, see [stoppedAt]: it would stop inside the line, and the
+     * line be heard cut and then again from the player. So is a line from a little before where it stopped, as apps round.
+     */
+    private fun reaches(app: String?, song: MusicMetadata, state: Following?, line: SavedLine): Boolean {
+        val stop = app?.let { stoppedAt[it to song] } ?: return true
+        val window = LineWindow.of(line, lead = if (state?.video == true) line.leadMs else 0L)
+        return window.start < stop - LineWindow.SEEK_SLACK_MS && window.end <= stop
+    }
+
+    /**
+     * Notes that [app] stopped short at [positionMs] in [song]. It's only sent to lines that end by where it stopped before, see
+     * [reaches], and it stops short of a line's start, so a new place is always the earlier one.
+     */
+    private fun stoppedShort(app: String?, song: MusicMetadata, positionMs: Long) {
+        app?.let { stoppedAt[it to song] = positionMs }
     }
 
     private fun fits(state: Following?, line: SavedLine): Boolean =
@@ -411,6 +437,7 @@ internal class PracticeCards(
                 } else if (asks > 0) {
                     if (ready != null && ready.clock.atMs >= sentAt && window.stoppedShort(ready.clock, was)) {
                         step("${app ?: "the app"} stopped at ${ready.clock.positionMs} ms, short of the line")
+                        stoppedShort(app, song, ready.clock.positionMs)
                         reason = "stopped_short"
                         return@withTimeoutOrNull null
                     }
