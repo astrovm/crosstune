@@ -2197,18 +2197,46 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitFor("the line going past the stop falls back") { player.shown.size > crossing }
         cards.stop()
-        // One that ends right where TIDAL stopped, as the next line starts there, is played out in it.
-        shows { it.copy(savedLines = listOf(line("Up to the stop", start = 24_000).copy(nextMs = 29_952))) }
+        // One that ends right where TIDAL stopped, as the next line starts there, is played out in it. It was kept from a video,
+        // 2 s into it: TIDAL's song isn't one, so that lead isn't where the line is in it.
+        shows { it.copy(savedLines = listOf(line("Up to the stop", start = 24_000, lead = 2_000).copy(nextMs = 29_952))) }
         cards.start(null, before = null)
         waitFor("the line up to the stop is prepared") { playback.seeks.contains(24_000L) && practice?.sound == LineSound.PLAYED }
         cards.stop()
-        // A line from a little before where TIDAL stopped on can't be reached in it either.
+        // A line from a little before where TIDAL stopped on isn't sent to it either, even one that ends there: apps round where
+        // they say they are, so it may have stopped a moment before.
         val shown = player.shown.size
-        shows { it.copy(savedLines = listOf(line("Later", start = 29_952 - LineWindow.SEEK_SLACK_MS))) }
+        shows { it.copy(savedLines = listOf(line("Later", start = 29_952 - LineWindow.SEEK_SLACK_MS).copy(nextMs = 29_952))) }
         cards.start(null, before = null)
         waitFor("the later line falls back") { player.shown.size > shown }
         assertEquals(listOf(43_270L, 12_000L, 12_000L, 24_000L), playback.seeks.toList())
         assertNoAppBroughtUp()
+    }
+
+    // In a video, where the app stopped is in the video's time, as is the line with its lead: a line sung before that place
+    // in the song, but past it in the video, isn't sent to it.
+    @Test
+    fun aVideoThatStoppedShortIsJudgedWithItsLead() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        keep(line(start = 40_000, lead = 3_270))
+        appPlays(ytMusic, speed = 1f, positionMs = 65)
+        val flow = playback.appPlaying.getValue(ytMusic)
+        flow.value = checkNotNull(flow.value).copy(video = true)
+        answers(ytMusic, 65, true, Said(117, 29_952), Said(168, 29_952))
+        val cards = cards()
+        cards.start(null, before = null)
+        waitForThePlayer("the first line falls back")
+        assertTrue("$ytMusic stopped at 29952 ms, short of the line" in steps())
+        cards.stop()
+        playback.obeys = true
+        playback.onPlay = { _, _ -> }
+        // Sung from 22 s to 26.5 s, it's 26 s to 30.5 s in the video, past where it stopped.
+        val shown = player.shown.size
+        shows { it.copy(savedLines = listOf(line("Past it in the video", start = 22_000, lead = 4_000).copy(endMs = 26_000, nextMs = 26_500))) }
+        cards.start(null, before = null)
+        waitFor("the line past the stop in the video falls back") { player.shown.size > shown }
+        assertEquals(listOf(43_270L), playback.seeks.toList())
     }
 
     // TIDAL's answer may say it was made the very moment it was sent, as both clocks count in milliseconds: that's an answer too.

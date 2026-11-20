@@ -301,9 +301,12 @@ internal class PracticeCards(
         return window.start < stop - LineWindow.SEEK_SLACK_MS && window.end <= stop
     }
 
-    /** Notes that [app] stopped short at [positionMs] in [song], keeping the earliest such place. */
+    /**
+     * Notes that [app] stopped short at [positionMs] in [song]. It's only sent to lines that end by where it stopped before, see
+     * [reaches], and it stops short of a line's start, so a new place is always the earlier one.
+     */
     private fun stoppedShort(app: String?, song: MusicMetadata, positionMs: Long) {
-        app?.let { stoppedAt.merge(it to song, positionMs, ::minOf) }
+        app?.let { stoppedAt[it to song] = positionMs }
     }
 
     private fun fits(state: Following?, line: SavedLine): Boolean =
