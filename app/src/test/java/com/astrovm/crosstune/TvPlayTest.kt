@@ -145,14 +145,20 @@ class TvPlayTest {
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube", canSeek = true, appPackage = MusicService.YOUTUBE_TV)
     }
 
+    /** What watched what plays once Crosstune was behind YouTube, before its cover came up. */
+    private var watchersBehindTheCover = 0
+
     /** Play pressed: YouTube opens on the song, Crosstune goes behind it, and the cover Crosstune started goes over it. */
-    private fun playCovered(): ServiceController<FloatingLyricsService> {
+    private fun playCovered(canDraw: Boolean = true): ServiceController<FloatingLyricsService> {
         click(play)
         waitUntil { shadowOf(app).peekNextStartedService() != null }
         val started = shadowOf(app).nextStartedService
         assertEquals(FloatingLyricsService::class.java.name, checkNotNull(started.component) { "Expected started.component to be non-null" }.className)
         assertTrue(started.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
         checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        watchersBehindTheCover = playback.nowPlayingWatchers
+        ShadowSettings.setCanDrawOverlays(canDraw)
         return Robolectric.buildService(FloatingLyricsService::class.java, started).create().startCommand(0, 1).also { composeRule.waitForIdle() }
     }
 
@@ -206,6 +212,35 @@ class TvPlayTest {
         checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         composeRule.waitForIdle()
         assertFalse(shown("Demo one"))
+    }
+
+    @Test
+    fun backOnTheCoversMainScreenTheBarShowsWhatYouTubePlaysAndOpensItsPlayer() {
+        launch()
+        val floating = playCovered()
+        // YouTube starts once it's covered, with Crosstune itself out of sight behind it (Issue #1105).
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, app = MusicService.YOUTUBE_TV)
+        playing()
+        waitUntil { shown("Demo one") }
+        // The bar has a pause button too, so the player is told by its cover.
+        fun onPlayer() = composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty()
+        pressBack(floating.get())
+        waitUntil { onPlayer() }
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        waitUntil { composeRule.onAllNodes(hasTestTag(NOW_PLAYING_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(shown("Demo"))
+        // Selected with the remote, it opens the player again, still over YouTube.
+        composeRule.onNode(hasTestTag(NOW_PLAYING_TAG)).performSemanticsAction(SemanticsActions.OnClick)
+        waitUntil { onPlayer() }
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
+        assertTrue(playback.nowPlayingWatchers > 0)
+        // Back to the main screen and out to YouTube: with nothing of Crosstune left on the TV, it stops watching.
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        pressBack(floating.get())
+        waitUntil { shadowOf(floating.get()).isStoppedBySelf }
+        waitUntil { playback.nowPlayingWatchers == 0 }
     }
 
     @Test
@@ -388,12 +423,14 @@ class TvPlayTest {
     @Test
     fun withShowingOverOtherAppsTakenBackThereIsNoCover() {
         launch()
-        click(play)
-        waitUntil { shadowOf(app).peekNextStartedService() != null }
-        ShadowSettings.setCanDrawOverlays(false)
-        val floating = Robolectric.buildService(FloatingLyricsService::class.java, shadowOf(app).nextStartedService).create().startCommand(0, 1)
+        // Taken back while Crosstune is out of sight, behind YouTube.
+        val floating = playCovered(canDraw = false)
         assertTrue(overlays(floating.get()).isEmpty())
         assertTrue(shadowOf(floating.get()).isStoppedBySelf)
+        // Crosstune is told, so it stops watching what plays for a cover that isn't there. What's left is the
+        // player's own follow of the song it opened, three watchers.
+        assertTrue(watchersBehindTheCover > 3)
+        waitUntil { playback.nowPlayingWatchers == 3 }
     }
 
     @Test
