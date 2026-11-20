@@ -234,6 +234,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val placed = JSONArray()
         var lastPlaced: List<Long>? = null
         // The app's timing notes, as a report carries them, each where the song is when it's made: how far off each while was heard.
+        // Only this play's: a song replayed before it in the same run noted its own.
+        TimingLog.clear()
         val notes = JSONArray()
         val noted = HashSet<String>()
         var last = -1
