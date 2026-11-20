@@ -291,4 +291,15 @@ class CastTest {
         assertNull(UiState().linkToCast(song.copy(url = null)))
     }
 
+    @Test
+    fun aRadioStationThatNamesNoSongIsNeverHandedToTheTv() {
+        val song = MusicMetadata("Hush", "Band")
+        val station = PlayerState(MusicMetadata("Blue 100.7 FM", ""), RadioNotice.PACKAGE, songless = true, stationAppLabel = "Simple Radio")
+        val playing = UiState(player = station, castAround = true)
+        assertNull(playing.songToCast)
+        assertFalse(playing.canCast)
+        // The song's card under it still goes.
+        assertEquals(song, playing.copy(result = song).songToCast)
+        assertEquals(song, playing.copy(player = PlayerState(song, null)).songToCast)
+    }
 }
