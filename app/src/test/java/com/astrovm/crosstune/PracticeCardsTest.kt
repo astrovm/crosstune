@@ -2189,19 +2189,25 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitFor("the other song is prepared") { playback.seeks.size == 3 && practice?.sound == LineSound.PLAYED }
         cards.stop()
-        // Back in the first song, a line that starts before where TIDAL stopped but goes on past it would be cut there: the player plays it.
+        // Back in the first song, a line sung to before where TIDAL stopped, but whose tail goes on past it, would be cut there:
+        // the player plays it.
         playback.sessionSongs[0] = first
         val crossing = player.shown.size
-        shows { it.copy(savedLines = listOf(line("Crossing", start = 26_000))) }
+        shows { it.copy(savedLines = listOf(line("Crossing", start = 24_500))) }
         cards.start(null, before = null)
         waitFor("the line going past the stop falls back") { player.shown.size > crossing }
+        cards.stop()
+        // One that ends right where TIDAL stopped, as the next line starts there, is played out in it.
+        shows { it.copy(savedLines = listOf(line("Up to the stop", start = 24_000).copy(nextMs = 29_952))) }
+        cards.start(null, before = null)
+        waitFor("the line up to the stop is prepared") { playback.seeks.contains(24_000L) && practice?.sound == LineSound.PLAYED }
         cards.stop()
         // A line from a little before where TIDAL stopped on can't be reached in it either.
         val shown = player.shown.size
         shows { it.copy(savedLines = listOf(line("Later", start = 29_952 - LineWindow.SEEK_SLACK_MS))) }
         cards.start(null, before = null)
         waitFor("the later line falls back") { player.shown.size > shown }
-        assertEquals(listOf(43_270L, 12_000L, 12_000L), playback.seeks.toList())
+        assertEquals(listOf(43_270L, 12_000L, 12_000L, 24_000L), playback.seeks.toList())
         assertNoAppBroughtUp()
     }
 
