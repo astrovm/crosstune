@@ -59,7 +59,7 @@ def own_channel(uploader, credits):
     names = {n for n in names if n} | {a for credit in credits for a in analyze.artists(credit)}
     channel = analyze.normalize(LEADING_ARTICLE.sub("", uploader))
     return bool(analyze.artists(uploader) & names) or any(
-        channel == a or channel.startswith(a) and channel[len(a):] in CHANNEL_SUFFIXES for a in names)
+        channel == a or (channel.startswith(a) and channel[len(a):] in CHANNEL_SUFFIXES) for a in names)
 
 
 def right_ids(song, results, videos):
