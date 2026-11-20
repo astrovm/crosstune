@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.annotation.VisibleForTesting
 import com.atilika.kuromoji.dict.CharacterDefinitions
 import com.atilika.kuromoji.dict.ConnectionCosts
 import com.atilika.kuromoji.dict.InsertedDictionary
@@ -67,7 +68,8 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
      * [text] as Kuromoji searches it, bar the words that start wrong, with JMdict's words in kana offered too; null
      * when no way through it is left.
      */
-    private fun searched(text: String, offset: Int): List<Token>? {
+    @VisibleForTesting
+    internal fun searched(text: String, offset: Int): List<Token>? {
         val lattice = ViterbiLattice(text.length + 2).apply { addBos() }
         val reached = BooleanArray(text.length + 1).also { it[0] = true }
         val offered = HashSet<ViterbiNode>()
@@ -101,7 +103,8 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         for (end in at + 1..text.length) {
             val entry = doubleArrayTrie.lookup(text.substring(at, end), 0, 0)
             if (entry < 0) break
-            if (entry > 0) tokenInfoDictionary.lookupWordIds(entry).mapTo(known) { ViterbiNode(it, text.substring(at, end), tokenInfoDictionary, at, ViterbiNode.Type.KNOWN) }
+            // 0 says longer words go on from it, and IPADIC keeps no word under 0.
+            tokenInfoDictionary.lookupWordIds(entry).mapTo(known) { ViterbiNode(it, text.substring(at, end), tokenInfoDictionary, at, ViterbiNode.Type.KNOWN) }
         }
         if (!unknown) return known
         return known + characterDefinitions.lookupCategories(text[at]).withIndex().flatMap { (index, category) ->
@@ -120,7 +123,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         val words = words()
         return (at + 2..minOf(text.length, at + words.longestToday)).mapNotNull { end ->
             // A word may go on in a small vowel after it: ちょうだぃ is ちょうだい, not 長打 drawn out.
-            if (end < text.length && drawsOut(text, end)) return@mapNotNull null
+            if (drawsOut(text, end)) return@mapNotNull null
             val kana = text.substring(at, end)
             val written = words.today[kana]?.takeIf { it != kana } ?: return@mapNotNull null
             val word = plain.tokenize(written).singleOrNull()?.takeIf { it.isKnown && Readings.hiragana(it.reading) == kana }
@@ -133,22 +136,27 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
 
     /**
      * Words the dictionary doesn't know, for where [nodes] leave a small kana no way to be said: the small vowels
-     * at [at] that draw out the word before, and from [at] through the small kana right after it, and the kana a
-     * small っ doubles, when none of [nodes] holds them, so にっき, a word neither knows, is still one, not に and っき.
+     * at [at] that draw out the word before, and from [at] through the small kana said with it, the kana a small っ
+     * among them doubles and the small kana said with that, when none of [nodes] reaches as far. So にっき, a word
+     * neither knows, is still one, not に and っき, and so is ちゅっちゅ, not ち and ゅっちゅ. None starts on a small
+     * kana said with the kana before it.
      */
     private fun spanning(text: String, at: Int, nodes: List<ViterbiNode>): List<ViterbiNode> {
         val end = when {
             drawsOut(text, at) -> (at..text.length).first { it == text.length || !drawsOut(text, it) }
-            !saidWith(text, at + 1) || nodes.any { it.surface.length > 1 } -> return emptyList()
-            else -> {
-                var end = at + 1
-                while (saidWith(text, end)) end++
-                if (text[end - 1] in "っッ" && end < text.length && Readings.isKana(text[end])) end + 1 else end
-            }
+            saidWith(text, at) || !saidWith(text, at + 1) -> null
+            else -> saidThrough(text, at + 1).takeIf { end -> nodes.none { at + it.surface.length >= end } }
         }
-        val surface = text.substring(at, end)
-        return unknownDictionary.lookupWordIds(characterDefinitions.lookupCategories(text[at])[0])
-            .map { ViterbiNode(it, surface, unknownDictionary, at, ViterbiNode.Type.UNKNOWN) }
+        return listOfNotNull(end).flatMap { end ->
+            unknownDictionary.lookupWordIds(characterDefinitions.lookupCategories(text[at])[0])
+                .map { ViterbiNode(it, text.substring(at, end), unknownDictionary, at, ViterbiNode.Type.UNKNOWN) }
+        }
+    }
+
+    /** Where the small kana said with the kana before them end, from [from] on, past the kana a small っ among them doubles. */
+    private fun saidThrough(text: String, from: Int): Int {
+        val end = (from..text.length).first { !saidWith(text, it) }
+        return if (text[end - 1] in "っッ" && end < text.length && Readings.isKana(text[end])) saidThrough(text, end + 1) else end
     }
 
     /** Put [node], which starts at [at] in the text, where Kuromoji's lattice keeps it: by where it starts, and where it ends. */
@@ -192,16 +200,21 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         /** A small kana at [at] said with the kana before it, as ゃ in しゃ and ぃ in でぃ. */
         private fun saidWith(text: String, at: Int) = smallAfterKana(text, at) && !drawsOut(text, at)
 
+        /** Whether [surface] at [at] is a small っ alone with no kana after it to double, as in きゃっ or かいしゃっ！. */
+        fun cutsShort(text: String, at: Int, surface: String) = surface.length == 1 && surface[0] in "っッ" && text.getOrNull(at + 1)?.let(Readings::isKana) != true
+
         private fun wrongStart(text: String, token: Token) = wrongStart(text, token.position, token.isKnown, token.surface)
 
         /**
          * A word at [at] that starts on a small kana after another kana. Not small vowels alone that draw out the word
          * before, as they go with it, nor a word IPADIC has that starts there, as only its words that start with っ do:
-         * って, っぽい and っす. っ alone, which IPADIC has too, only after て or で, as ていく said short in 消えてった.
+         * って, っぽい and っす. っ alone, which IPADIC has too, only after て or で, as ていく said short in 消えてった,
+         * or where no kana follows for it to double: then it cuts the word before short, as in きゃっ, and goes with it.
          */
         private fun wrongStart(text: String, at: Int, known: Boolean, surface: String) = when {
             !smallAfterKana(text, at) -> false
             drawsOut(text, at) -> surface.indices.any { !drawsOut(text, at + it) }
+            cutsShort(text, at, surface) -> false
             else -> !(known && (surface.length > 1 || text[at - 1] in "てで"))
         }
     }

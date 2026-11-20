@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import com.atilika.kuromoji.ipadic.Tokenizer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -601,6 +602,55 @@ class ReadingsTest {
     fun aStraySmallKanaGoesWithTheKanaBeforeIt() {
         fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
         assertEquals(listOf("ちいさ", "なゃ"), words("ちいさなゃ"))
+    }
+
+    @Test
+    fun aSmallTsuGoesWithTheKanaItDoublesAndTheSmallKanaSaidWithThat() {
+        val lines = mapOf(
+            "ちゅっちゅ" to "chutchu", "きゃっきゃっ" to "kyakkya", "しゃっしゃっ" to "shassha", "にっきにっき" to "nikki nikki",
+            // With no kana after it to double, っ cuts the word before short, and goes with it.
+            "きゃっ" to "kya", "かいしゃっ" to "kaisha", "ちょっ！" to "cho！", "すごーっ" to "sugoo",
+        )
+        for ((line, typed) in lines) {
+            val words = Readings.words(line, Script.JAPANESE).map { it.text }
+            assertTrue("$line: $words", words.none { it.first() in "ぁぃぅぇぉっゃゅょゎ" })
+            assertEquals(line, typed, Readings.of(listOf(line), Script.JAPANESE).single().typed)
+        }
+        assertEquals(listOf("かいしゃっ"), Readings.words("かいしゃっ！", Script.JAPANESE).map { it.text })
+        // Before a word that starts wrong, a word IPADIC starts on っ is searched again with the word before it, so the
+        // search knows what kana that っ follows; but never with a word already searched again, にっき in にっきっしょゃ.
+        for (line in listOf("まってっゃ", "きみってゃん", "にっきっしょゃ")) {
+            val words = Readings.words(line, Script.JAPANESE).map { it.text }
+            assertTrue("$line: $words", words.none { it.first() in "ぁぃぅぇぉっゃゅょゎ" })
+        }
+    }
+
+    @Test
+    fun aLineWithNoWayToSayItsSmallKanaStaysAsKuromojiSplitIt() {
+        // りゅう leaves っ after it, which no word may start on, and no word the search knows holds both: Issue #1139.
+        assertEquals(listOf("り", "ゅうっなも"), Readings.words("りゅうっなも", Script.JAPANESE).map { it.text })
+    }
+
+    @Test
+    fun theSearchFindsWhatKuromojiDoesWhereNoWordStartsOnASmallKana() {
+        val kuromoji = Tokenizer()
+        val tokenizer = SmallKanaTokenizer { Readings.OldKana(emptyMap(), setOf("あ")) }
+        val lines = listOf(
+            "ジョンスミスさんは2024年にＸＹＺ社へ行った", "彁という字はない", "彁彁彁あ", "ABCアイウエオ123", "東京特許許可局で",
+            "ヴォルデモートとハリー・ポッター", "αβγとабв", "今日は　いい天気", "ｶﾀｶﾅとカタカナ", "!!??…♪", "ノートパソコンを買う",
+        )
+        for (line in lines) {
+            val searched = tokenizer.searched(line, 0)?.map { it.surface to it.allFeatures }
+            assertEquals(line, kuromoji.tokenize(line).map { it.surface to it.allFeatures }, searched)
+        }
+    }
+
+    @Test
+    fun aDrawnOutWordIsSaidAsTheDictionarySaysIt() {
+        // せんせい is said せんせー: drawn out, せんせーぃ.
+        val reading = Readings.of(listOf("せんせいぃ"), Script.JAPANESE).single()
+        assertEquals("senseei", reading.romanized)
+        assertEquals("senseii", reading.typed)
     }
 
     @Test

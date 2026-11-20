@@ -189,7 +189,7 @@ internal object Readings {
     }
 
     /** [line] as IPADIC splits [text], the line with its kanji made the dictionary's. */
-    private fun ipadicPieces(line: String, text: String) = drawnOut(tokenizer.tokenize(text).map { token ->
+    private fun ipadicPieces(line: String, text: String) = drawnOut(text, tokenizer.tokenize(text).map { token ->
             // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
             val reading = token.reading?.takeIf { it != "*" }
             Piece(
@@ -205,19 +205,25 @@ internal object Readings {
             )
         })
 
-    /** Small vowels that draw out the word in kana before them, ありがと and ぉ, go with it, as one word read as that one. */
-    private fun drawnOut(pieces: List<Piece>) = pieces.fold(ArrayList<Piece>()) { out, piece ->
+    /**
+     * Small vowels that draw out the word in kana before them, ありがと and ぉ, go with it, as one word read as that one, and so does
+     * a small っ alone that cuts it short, かいしゃ and っ at the end of [text].
+     */
+    private fun drawnOut(text: String, pieces: List<Piece>) = pieces.fold(ArrayList<Piece>()) { out, piece ->
         val before = out.lastOrNull()
-        val drawing = before != null && "${before.surface.last()}${piece.surface}".zipWithNext().all { (a, b) -> SmallKanaTokenizer.drawsOut(a, b) }
-        val word = out.getOrNull(out.lastIndex - 1)
-        if (before != null && drawing && before.surface.all { it == 'ー' } && word != null && isKana(word.surface.last())) {
-            // IPADIC can make ー a word of its own, すご and ー and ぃ: the ー draws out the word before as the vowel does.
-            out.removeAt(out.lastIndex)
-            out[out.lastIndex] = word.drawnOutBy(before).drawnOutBy(piece)
-        } else if (before != null && drawing) {
-            out[out.lastIndex] = before.drawnOutBy(piece)
-        } else {
-            out += piece
+        val drawing = before != null && (
+            "${before.surface.last()}${piece.surface}".zipWithNext().all { (a, b) -> SmallKanaTokenizer.drawsOut(a, b) } ||
+                SmallKanaTokenizer.cutsShort(text, piece.end - 1, piece.surface)
+            )
+        // IPADIC can make ー a word of its own, すご and ー and ぃ: the ー draws out the word before as the vowel does.
+        val word = out.getOrNull(out.lastIndex - 1)?.takeIf { isKana(it.surface.last()) && before?.surface?.all { c -> c == 'ー' } == true }
+        when {
+            before == null || !drawing -> out += piece
+            word != null -> {
+                out.removeAt(out.lastIndex)
+                out[out.lastIndex] = word.drawnOutBy(before).drawnOutBy(piece)
+            }
+            else -> out[out.lastIndex] = before.drawnOutBy(piece)
         }
         out
     }
