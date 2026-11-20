@@ -684,8 +684,11 @@ internal class ExactMatcher(
             ?: videoNamesSong(metadata, abroad, videos.map(::row), names)
             ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
         song?.let { return Answer(watchUrl + it.id) }
-        videos.map(::row).firstOrNull { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
-            ?.let { return Answer(watchUrl + it.id) }
+        // Someone else's video, e.g. a fan's lyrics video, only where every store answered: one that failed may have named the
+        // artist's own row, as only the US store names 米津玄師 Kenshi Yonezu.
+        videos.map(::row).firstOrNull {
+            isTheSongsVideo(it, names) && (names.complete || isOwnVideo(it, names)) && keepsRequestedRecording(recording, it, video = true)
+        }?.let { return Answer(watchUrl + it.id) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), final = names.complete)
     }

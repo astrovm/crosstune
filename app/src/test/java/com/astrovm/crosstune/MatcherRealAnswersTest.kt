@@ -28,8 +28,9 @@ class MatcherRealAnswersTest {
     /** What the matcher asked that no kept answer is for. */
     private val unkept: MutableList<String> = CopyOnWriteArrayList()
 
+    /** Which of Apple's answers fail, as offline. */
     @Volatile
-    private var appleDown = false
+    private var appleDown: (HttpUrl) -> Boolean = { false }
 
     @After
     fun askedOnlyWhatWasKept() = assertEquals(emptyList<String>(), unkept)
@@ -51,11 +52,24 @@ class MatcherRealAnswersTest {
         fake.handler = ::answer
         for (length in listOf(null, 256_000L, 280_000L)) {
             val song = LEMON.copy(lengthMs = length)
-            appleDown = true
+            appleDown = { true }
             assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
-            appleDown = false
+            appleDown = { false }
             assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         }
+    }
+
+    // Issue #1103: Japan's store finds the song, but the US store, the only one that names 米津玄師 Kenshi Yonezu, fails. Then
+    // J -KARAOKE's lyrics video, which names 米津玄師, isn't taken for it, and the song is asked again.
+    @Test
+    fun lemonOpensNoFansVideoWhenTheUsLookupFailed() {
+        val matcher = ExactMatcher(fake.client(), "US", missingForMs = 60 * 60_000L, timeoutMs = WHILE_MS)
+        fake.handler = ::answer
+        val song = LEMON.copy(lengthMs = 280_000L)
+        appleDown = { url -> url.encodedPath == "/lookup" && url.queryParameter("country") == "US" }
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        appleDown = { false }
+        assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
     }
 
     private fun find(song: MusicMetadata): String? {
@@ -67,7 +81,7 @@ class MatcherRealAnswersTest {
         val url = request.url
         val kept = when (url.host) {
             "itunes.apple.com" -> {
-                if (appleDown) throw IOException("Apple is down")
+                if (appleDown(url)) throw IOException("Apple is down")
                 apple(url)
             }
             "api.deezer.com" -> answers.getJSONObject("deezer").takeIf { url.encodedPath == "/search/track" && url.queryParameter("q") == TERM }
