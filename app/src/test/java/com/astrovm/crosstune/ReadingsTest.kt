@@ -545,6 +545,42 @@ class ReadingsTest {
     }
 
     @Test
+    fun aSmallVowelDrawsOutTheWordBeforeIt() {
+        // Each word as IPADIC splits it, with the small vowels after it that draw it out: looked up as it is.
+        val lines = mapOf(
+            "ありがとぉ" to listOf("ありがとぉ" to "ありがと"),
+            "おねがいぃ" to listOf("おねがいぃ" to "おねがい"),
+            "だめぇ" to listOf("だめぇ" to "だめ"),
+            "ほんとぉ" to listOf("ほんとぉ" to "ほんと"),
+            "しらないぃ" to listOf("しらないぃ" to "しる"),
+            "きみがすきぃ" to listOf("きみ" to "きみ", "が" to "が", "すきぃ" to "すく"),
+            "まってよぉぉ" to listOf("まって" to "まつ", "よぉぉ" to "よい"),
+            "ズットォ" to listOf("ズットォ" to "ズットォ"),
+        )
+        for ((line, expected) in lines) assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
+        for (line in lines.keys + listOf("やだぁ", "すきすきすきぃ", "あいたいよぉ")) {
+            for (words in listOf(Readings.words(line, Script.JAPANESE), TestUniDic.reading { Readings.words(line, Script.JAPANESE) })) {
+                assertTrue("$line: $words", words.none { it.text.first() in "ぁぃぅぇぉァィゥェォ" })
+                assertTrue("$line: $words", words.none { it.by == listOf(Reader.JMDICT) })
+            }
+        }
+        assertEquals("arigatoo", Readings.of(listOf("ありがとぉ"), Script.JAPANESE).single().typed)
+    }
+
+    @Test
+    fun aStraySmallKanaGoesWithTheKanaBeforeIt() {
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        assertEquals(listOf("ちいさ", "なゃ"), words("ちいさなゃ"))
+    }
+
+    @Test
+    fun aWordIsSearchedAgainOnlyBesideTheSmallKanaItStartedOn() {
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        // IPADIC has いじ and ょう: only those two are searched again, so これ and もう stay as they were.
+        assertEquals(listOf("きっと", "もう", "これ", "い", "じょう"), words("きっともうこれいじょう"))
+    }
+
+    @Test
     fun wordsThatStartWithASmallTsuStay() {
         fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
         assertEquals(listOf("きみ", "って", "こどもっぽい"), words("きみってこどもっぽい"))

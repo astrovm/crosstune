@@ -105,7 +105,7 @@ internal object Readings {
      * 10 for an old ほ said お in kana alone.
      * 11 for standalone old kana read with the built-in dictionary.
      * 12 for a suffix that follows a word it can't join, 等 after a verb, 桜 after a counter, and 千夜.
-     * 13 for any word in kana IPADIC starts on a small kana, じゅぎょう and いっしょ.
+     * 13 for any word in kana IPADIC starts on a small kana, じゅぎょう and いっしょ, and the small vowels that draw a word out, ありがとぉ.
      */
     const val VERSION = 13
 
@@ -156,7 +156,7 @@ internal object Readings {
 
     private fun letters(text: String) = text.filter(Char::isLetterOrDigit).lowercase()
 
-    private val tokenizer by lazy { SmallKanaTokenizer { oldKana.today } }
+    private val tokenizer by lazy { SmallKanaTokenizer { oldKana } }
 
     private fun japanese(line: String): LineReading {
         val given = givenReadings(line)
@@ -189,7 +189,7 @@ internal object Readings {
     }
 
     /** [line] as IPADIC splits [text], the line with its kanji made the dictionary's. */
-    private fun ipadicPieces(line: String, text: String) = tokenizer.tokenize(text).map { token ->
+    private fun ipadicPieces(line: String, text: String) = drawnOut(tokenizer.tokenize(text).map { token ->
             // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
             val reading = token.reading?.takeIf { it != "*" }
             Piece(
@@ -203,7 +203,18 @@ internal object Readings {
                 unread = reading == null,
                 reader = if (token is SmallKanaTokenizer.JmdictToken) Reader.JMDICT else Reader.IPADIC
             )
+        })
+
+    /** Small vowels that draw out the word in kana before them, ありがと and ぉ, go with it, as one word read as that one. */
+    private fun drawnOut(pieces: List<Piece>) = pieces.fold(ArrayList<Piece>()) { out, piece ->
+        val before = out.lastOrNull()
+        if (before != null && isKana(before.surface.last()) && piece.surface.all { it in SmallKanaTokenizer.SMALL_VOWELS }) {
+            out[out.lastIndex] = before.drawnOutBy(piece)
+        } else {
+            out += piece
         }
+        out
+    }
 
     /**
      * [pieces] of the line, where it writes the kana after a kanji in katakana, 夜ニ紛レ or 届カナイ,
@@ -735,6 +746,9 @@ internal object Readings {
 
         /** It read [kana] by Crosstune's own rules, as a word of [kind] and [subkind] when that changes too. */
         fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) = Piece(surface, kana, kind, subkind, base, null, end, reader = Reader.RULES, today = today)
+
+        /** It, drawn out by the small vowels of [small], said as long as they make it. */
+        fun drawnOutBy(small: Piece) = Piece(surface + small.surface, kana + small.kana, kind, subkind, base, spoken?.plus(small.kana), small.end, unread, reader, today)
 
         /** It read [kana], and said [said]. */
         fun reading(kana: String, said: String) = Piece(surface, kana, kind, subkind, base, said, end, reader = reader, today = today)
