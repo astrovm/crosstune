@@ -5,11 +5,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import worker from "./worker.js";
 
 /**
- * How README's Privacy section and the English privacy page name each column a report fills. A new column needs
- * its words here, and then in both, so the privacy text never leaves out what a report carries.
+ * How the English privacy page names each column a report fills. A new column needs its words here, and then on
+ * the page, so the privacy text never leaves out what a report carries.
  */
 const SAID = {
-  // Each is the words, or a list of ways either text may say it.
+  // Each is the words, or a list of ways the page may say it.
   version: "Crosstune and Android versions",
   android: "Crosstune and Android versions",
   title: "title",
@@ -71,10 +71,11 @@ test("every column a report fills has its words in the privacy text", async () =
   assert.deepEqual((await columns()).sort(), Object.keys(SAID).sort());
 });
 
-test("README's Privacy says what each report carries", () => {
-  const bullets = repo("README.md").split("\n").filter((line) => line.startsWith("- **Report a problem** in the lyrics") || line.startsWith("- Flagging a word's reading")).join("\n");
-  assert.ok(bullets.length > 0);
-  for (const [column, words] of Object.entries(SAID)) assert.ok(says(bullets, words), `README doesn't say ${column}: "${words}"`);
+test("README's Privacy names the only server, how long it keeps a report, and links the page that says what each carries", () => {
+  // README keeps a short summary. What each report carries, and what waits on the phone, is said once, on the page.
+  const readme = repo("README.md");
+  const privacy = readme.slice(readme.indexOf("## Privacy"), readme.indexOf("<details>"));
+  for (const words of ["only server", "keeps no IP address", "after 180 days", "(https://crosstune.cc/privacy/)"]) assert.ok(privacy.includes(words), words);
 });
 
 test("the English privacy page says what each report carries", () => {
@@ -84,16 +85,15 @@ test("the English privacy page says what each report carries", () => {
   for (const [column, words] of Object.entries(SAID)) assert.ok(says(paragraphs, words), `privacy_body doesn't say ${column}: "${words}"`);
 });
 
-test("the privacy text says a network's reports are counted for the day under a keyed code, that backups keep what's deleted, and how many lines by hand go", () => {
+test("the privacy page says a network's reports are counted for the day under a keyed code, that backups keep what's deleted, and how many lines by hand go", () => {
   // The app sends at most ReportBox.MAX_POINTS lines, those that tell most, and fewer to stay under MAX_BYTES. The Worker
   // counts each network's day under an HMAC key (limits.sql), and nothing else about the sender: no wider block, no carrier.
   // D1's Time Travel keeps deleted rows for up to 30 days, and can't be turned off.
   const box = repo("app/src/main/java/com/astrovm/crosstune/Feedback.kt");
   const points = box.match(/const val MAX_POINTS = (\d+)/)[1];
   const kb = box.match(/const val MAX_BYTES = (\d+) \* 1024/)[1];
-  const readme = repo("README.md").split("\n").find((line) => line.startsWith("- **Report a problem** in the lyrics"));
   const page = JSON.parse(repo("site/strings/en.json"))["privacy_body"].map(([, text]) => text).find((text) => text.startsWith("Report a problem, in the lyrics"));
-  for (const text of [readme, page]) {
+  for (const text of [page]) {
     assert.ok(text.includes(`(at most the ${points} that tell the most, fewer to stay under ${kb} KB)`), text);
     assert.ok(text.includes("how many reports one network can send, it counts them for the day under a code made with a secret key from the network part of the address, and deletes those counts the next day"), text);
     assert.ok(text.includes("Without the key, a code can't be traced back to the network."), text);
@@ -102,15 +102,14 @@ test("the privacy text says a network's reports are counted for the day under a 
   }
 });
 
-test("README and the privacy page say alike, with the app's numbers, what waits on the phone and what is deleted", () => {
+test("the privacy page says, with the app's numbers, what waits on the phone and what is deleted", () => {
   const app = repo("app/src/main/java/com/astrovm/crosstune/AutoReports.kt");
   const aDay = app.match(/const val FOUND_A_DAY = (\d+)/)[1];
   const kept = app.match(/const val MAX_OWED = (\d+)/)[1];
   const said = `A report Crosstune sends by itself that can't get there waits on your phone for the next start: the latest ${kept} put in time by hand, the latest ${kept} problems found, and every timing an earlier version kept. One the server never takes is deleted and never sent again. Each one kept from this version on carries a random id, made for that report alone and saying nothing about you or your phone, so the server keeps it once if it gets there twice. Turning automatic reports off deletes the problems found that wait; what you put in time by hand and the timings an earlier version kept stay, and go only once reports are on again. A report you send yourself with Send isn't kept: if it can't get there, Crosstune says so.`;
   const page = JSON.parse(repo("site/strings/en.json"))["privacy_body"].map(([, text]) => text);
-  for (const text of [repo("README.md"), page.join("\n")]) {
-    // README names the button in bold, as it does every name in the app.
-    assert.ok(text.replaceAll("**Send**", "Send").includes(said), said);
+  for (const text of [page.join("\n")]) {
+    assert.ok(text.includes(said), said);
     assert.ok(text.includes(`with words you put in time by hand, at most ${aDay} in a day; the rest wait on your phone for a later day.`) ||
       text.includes(`Problems Crosstune finds and words you put in time by hand go together, at most ${aDay} in a day; the rest wait on your phone for a later day.`), text);
   }
