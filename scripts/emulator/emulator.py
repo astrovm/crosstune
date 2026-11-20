@@ -2,7 +2,7 @@
 """The emulators Crosstune is tested on, made from emulators.json, so a wiped machine gets them back.
 
   python3 scripts/emulator/emulator.py create [NAME...] [--replace]   # the image and the emulator, safe to run twice
-  python3 scripts/emulator/emulator.py start NAME [--window]          # private sound, hardware graphics, cold boot, waits for boot
+  python3 scripts/emulator/emulator.py start NAME [--window]          # private sound, hardware graphics, cold boot, no crash-report question, waits for boot
   python3 scripts/emulator/emulator.py apps NAME                      # opens each missing app's Play page, one tap each
   python3 scripts/emulator/emulator.py check [NAME...]                # says what's missing, and fails if anything is
 
@@ -176,9 +176,11 @@ def start(name, window):
     # else that starts this emulator without flags can load it either.
     shutil.rmtree(avd_dir(name) / "snapshots" / "default_boot", ignore_errors=True)
     log_path = avd_dir(name) / "started.log"
+    # After a crash the emulator asks "send a crash report?" and waits for a tap nobody gives, so start would hang.
     with log_path.open("w") as log:
         emulator = subprocess.Popen(
-            [tool("emulator/emulator"), "-avd", name, "-port", str(DECLARED[name]["port"]), "-gpu", "host", "-no-snapshot", *options],
+            [tool("emulator/emulator"), "-avd", name, "-port", str(DECLARED[name]["port"]), "-gpu", "host", "-no-snapshot",
+             "-crash-report-mode", "never", *options],
             stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env={**os.environ, **env})
     deadline = time.monotonic() + BOOT_SECONDS
     while shell(name, "getprop", "sys.boot_completed") != "1":
