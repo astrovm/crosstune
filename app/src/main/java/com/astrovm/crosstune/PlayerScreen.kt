@@ -302,7 +302,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             }
             Spacer(Modifier.weight(1f))
             // With no line to show, the words are a button here instead.
-            if (hasWords && words.isEmpty()) IconButton(onClick = actions.onPlayerLyrics) {
+            if (hasWords && words.isEmpty()) IconButton(onClick = actions.onPlayerLyrics, modifier = Modifier.returnsFocus(Screen.LYRICS)) {
                 AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
             }
             if (!player.stationOnly) SleepButton(state.sleep, songEnds = following?.durationMs != null, actions)
@@ -537,7 +537,7 @@ private fun PlayerButtons(following: Following?, actions: ScreenActions, modifie
         IconButton(onClick = { actions.onPlayerSkip(false) }, enabled = following?.canSkipPrevious == true, modifier = Modifier.size(56.dp)) {
             AppIcon(R.drawable.ic_skip_previous, contentDescription = stringResource(R.string.lyrics_previous_song), modifier = Modifier.size(32.dp))
         }
-        FilledIconButton(onClick = actions.onPlayerPlayPause, modifier = Modifier.size(72.dp)) {
+        FilledIconButton(onClick = actions.onPlayerPlayPause, modifier = Modifier.returnsFocus().size(72.dp)) {
             AppIcon(
                 if (playing) R.drawable.ic_pause else R.drawable.ic_play,
                 contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play),
@@ -936,6 +936,7 @@ private fun LyricsPeek(lines: List<LyricLine>, byEar: Boolean, following: Follow
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
             .background(tint.copy(alpha = 0.24f))
+            .returnsFocus(Screen.LYRICS)
             .clickable(onClickLabel = name, onClick = onLyrics)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {

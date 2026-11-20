@@ -18,6 +18,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.hasTestTag
@@ -206,6 +207,41 @@ class TvPlayTest {
         checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         composeRule.waitForIdle()
         assertFalse(shown("Demo one"))
+    }
+
+    @Test
+    fun onATvBackFromTheWordsLandsOnPauseAndFromThePlayerOnPlay() {
+        launch()
+        val floating = playCovered()
+        // The remote's, as a TV is: Robolectric starts as a touch screen, where nothing takes focus.
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        playing()
+        waitUntil { shown("Demo one") }
+        // Back from the words, the remote is on the player's main button, rather than nowhere.
+        pressBack(floating.get())
+        waitUntil { onPlayer() }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_pause)) and hasClickAction()).assertIsFocused()
+        // Back from the player, it's on the card's Play, the way the user came.
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasContentDescription(play) and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackFromTheStepsPlayShowsFirstLandsOnPlay() {
+        ShadowSettings.setCanDrawOverlays(false)
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val playOnCard = composeRule.onNode(hasContentDescription(play) and hasClickAction())
+        playOnCard.requestFocus()
+        playOnCard.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play)).fetchSemanticsNodes().isEmpty() }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitForIdle()
+        playOnCard.assertIsFocused()
     }
 
     @Test

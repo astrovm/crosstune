@@ -11,6 +11,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -633,6 +634,39 @@ class TvTest {
         checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         visuals.assertIsFocused()
+    }
+
+    /** The rows of things to fix, each opening its steps; their click is labelled Fix. */
+    private fun fixRows() = composeRule.onAllNodes(SemanticsMatcher("opens its steps") { it.config.getOrElseNullable(SemanticsActions.OnClick) { null }?.label == string(R.string.fix_button) })
+
+    @Test
+    fun onATvBackFromAFixStepLandsOnTheRowThatOpenedIt() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        composeRule.runOnIdle { model().openFixes() }
+        composeRule.waitUntil(5_000) { shown(string(R.string.fix_title)) && fixRows().fetchSemanticsNodes().isNotEmpty() }
+        val row = fixRows()[0]
+        val title = row.fetchSemanticsNode().config[SemanticsProperties.Text].first().text
+        row.requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { fixRows().fetchSemanticsNodes().isEmpty() }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { fixRows().fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasText(title, substring = true) and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackFromTheStepsASettingOpensLandsOnThatSetting() {
+        settingsByRemote()
+        val follow = composeRule.onNode(hasText(string(R.string.setting_lyrics_follow)))
+        follow.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { shown(string(R.string.fix_step_turn_on, string(R.string.app_name))) }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { !shown(string(R.string.fix_step_turn_on, string(R.string.app_name))) }
+        composeRule.waitForIdle()
+        follow.assertIsFocused()
     }
 
     private fun button(id: Int) = composeRule.onNode(hasContentDescription(string(id)) and hasClickAction())

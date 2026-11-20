@@ -101,6 +101,7 @@ import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
@@ -164,6 +165,9 @@ internal class BarFocus {
 }
 
 internal val LocalBarFocus = staticCompositionLocalOf { BarFocus() }
+
+/** Where the remote comes back to the card's Open, when Play is its main button. */
+private const val OPEN_FOCUS = "open"
 
 /** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
 internal const val CARD_TOOLS_TAG = "card_tools"
@@ -532,10 +536,25 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     val kept = rememberSaveableStateHolder()
     LaunchedEffect(screen) { if (screen != Screen.FIX_STEP) Screen.entries.filter { it != screen }.forEach { kept.removeState(it.name) } }
     val barFocus = remember { BarFocus() }
+    // Back on a screen, with a remote, it goes back to what it was on there, once the screen left is gone.
+    val focuses = remember { Screen.entries.associateWith { ScreenFocus() } }
+    var anyFocused by remember { mutableStateOf(false) }
+    var settled by remember { mutableStateOf(screen) }
+    val remote by rememberUpdatedState(state.phone == Phone.TV)
+    LaunchedEffect(moving.currentState) {
+        val from = settled
+        val now = moving.currentState
+        settled = now
+        if (!remote || now.depth < 0 || from.depth <= now.depth) return@LaunchedEffect
+        withFrameNanos {}
+        // Unless the screen took it for itself, as the bar does from a station's player.
+        if (!anyFocused) focuses.getValue(now).restore()
+    }
     CompositionLocalProvider(LocalCovers provides actions.covers, LocalBarFocus provides barFocus) {
     WithOverlays(inside = state.phone == Phone.TV) {
     CompositionLocalProvider(LocalLayerSwipe provides layers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
+        modifier = Modifier.onFocusChanged { anyFocused = it.hasFocus },
         transitionSpec = {
             // Setup and a link on its way out aren't places in the app, so they fade rather than slide.
             // The words rise over the song they're of, and sink back into it.
@@ -546,6 +565,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             else slideAlong(forward = targetState.depth > initialState.depth)
         }
     ) { shown ->
+        CompositionLocalProvider(LocalScreenFocus provides focuses.getValue(shown)) {
         kept.SaveableStateProvider(shown.name) {
             // if/else rather than an exhaustive when, which compiles an unreachable branch into composables.
             if (shown == Screen.FIX_STEP) {
@@ -572,6 +592,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             } else {
                 MainScreen(state, actions, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true })
             }
+        }
         }
     }
     }
@@ -761,7 +782,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
             if (state.savedLines.any { it.practisable }) {
                 PracticeButton(state.savedLines.cardsDueCount(System.currentTimeMillis(), state.cardTypes), onOpenPractice)
             }
-            IconButton(onClick = onOpenSettings) {
+            IconButton(onClick = onOpenSettings, modifier = Modifier.returnsFocus(Screen.SETTINGS)) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))
             }
         },
@@ -900,7 +921,7 @@ private fun PlayingBar(
         onClick = onOpen,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG).swipeLayers()
-            .focusRequester(bar).then(if (transport) Modifier.focusProperties { right = playPause } else Modifier)
+            .focusRequester(bar).returnsFocus(Screen.PLAYER).then(if (transport) Modifier.focusProperties { right = playPause } else Modifier)
     ) {
         Column(modifier = Modifier.navigationBarsPadding()) {
             Row(
@@ -1578,7 +1599,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 onClick = actions.onPlayResult,
                 enabled = !state.playingResult && !state.isMatching,
                 interactionSource = press.source,
-                modifier = modifier.heightIn(min = 56.dp).then(press.modifier)
+                modifier = modifier.returnsFocus().heightIn(min = 56.dp).then(press.modifier)
             ) {
                 AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.size(ButtonDefaults.IconSpacing))
@@ -1591,9 +1612,9 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
         }
         val openButton = @Composable { modifier: Modifier ->
             if (canPlay) {
-                FilledTonalButton(onClick = main.onClick, enabled = main.enabled, interactionSource = press.source, modifier = modifier.then(mainModifier)) { label() }
+                FilledTonalButton(onClick = main.onClick, enabled = main.enabled, interactionSource = press.source, modifier = modifier.returnsFocus(OPEN_FOCUS).then(mainModifier)) { label() }
             } else {
-                Button(onClick = main.onClick, enabled = main.enabled, interactionSource = press.source, modifier = modifier.then(mainModifier)) { label() }
+                Button(onClick = main.onClick, enabled = main.enabled, interactionSource = press.source, modifier = modifier.returnsFocus().then(mainModifier)) { label() }
             }
         }
         if (stacked) {
@@ -1817,7 +1838,8 @@ private fun ToolAction(
         enabled = enabled,
         shape = MaterialTheme.shapes.medium,
         color = Color.Transparent,
-        contentColor = content
+        contentColor = content,
+        modifier = Modifier.returnsFocus(label)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -2253,6 +2275,6 @@ private fun PracticeButton(due: Int, onClick: () -> Unit) {
             if (due > 0) Badge(Modifier.offset(x = (-6).dp, y = 8.dp).testTag(PRACTICE_BADGE_TAG)) { Text(due.toString(), modifier = Modifier.clearAndSetSemantics { }) }
         }
     ) {
-        IconButton(onClick = onClick) { AppIcon(R.drawable.ic_school, contentDescription = description) }
+        IconButton(onClick = onClick, modifier = Modifier.returnsFocus(Screen.PRACTICE_LIST)) { AppIcon(R.drawable.ic_school, contentDescription = description) }
     }
 }
