@@ -297,6 +297,11 @@ internal class PracticeCards(
         return LineWindow.of(line, lead = if (state?.video == true) line.leadMs else 0L).start < stop - LineWindow.SEEK_SLACK_MS
     }
 
+    /** Notes that [app] stopped short at [positionMs] in [song], keeping the earliest such place. */
+    private fun stoppedShort(app: String?, song: MusicMetadata, positionMs: Long) {
+        app?.let { stoppedAt.merge(it to song, positionMs, ::minOf) }
+    }
+
     private fun fits(state: Following?, line: SavedLine): Boolean =
         state == null || LineWindow.of(line, lead = if (state.video) line.leadMs else 0L).within(state.durationMs) != null
 
@@ -425,7 +430,7 @@ internal class PracticeCards(
                 } else if (asks > 0) {
                     if (ready != null && ready.clock.atMs >= sentAt && window.stoppedShort(ready.clock, was)) {
                         step("${app ?: "the app"} stopped at ${ready.clock.positionMs} ms, short of the line")
-                        app?.let { stoppedAt.merge(it to song, ready.clock.positionMs, ::minOf) }
+                        stoppedShort(app, song, ready.clock.positionMs)
                         reason = "stopped_short"
                         return@withTimeoutOrNull null
                     }
