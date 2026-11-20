@@ -129,6 +129,24 @@ class PlayWorkflowsTest(unittest.TestCase):
         self.assertIn("PLAY_TRACKS: ${{ vars.PLAY_TRACKS }}", job)
         self.assertNotIn("production", job.split("run: |", 1)[1].replace("promote.yml sends a release to production", ""))
 
+    def test_promote_has_the_listing_it_sends_with_production(self):
+        # With no testing tracks, production takes the listing along, so the job checks out the store text and
+        # reads the listing's languages, as the release job does.
+        job = jobs((WORKFLOWS / "promote.yml").read_text(encoding="utf-8"))["production"]
+        self.assertIn("PLAY_LANGUAGES: ${{ vars.PLAY_LANGUAGES }}", job)
+        checkout = job.split("uses: actions/checkout@")[1].split("\n      - ")[0]
+        self.assertIn("            fastlane/metadata/android\n", checkout)
+
+    def test_no_testing_track_is_the_default(self):
+        # Unset or empty, PLAY_TRACKS names no testing track: a release stops at internal testing, and goes to
+        # production from there. No workflow names a track for it.
+        play_sh = (ROOT / ".github/play/play.sh").read_text(encoding="utf-8")
+        self.assertIn('play_tracks="${PLAY_TRACKS:-}"', play_sh)
+        self.assertNotIn("PLAY_TRACKS:-beta", play_sh)
+        for path in WORKFLOWS.glob("*.yml"):
+            with self.subTest(workflow=path.name):
+                self.assertNotRegex(path.read_text(encoding="utf-8"), r"PLAY_TRACKS: (?!\$\{\{ vars\.PLAY_TRACKS \}\})")
+
     def test_a_pre_release_is_never_the_latest_and_never_goes_to_play(self):
         text = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
         steps = jobs(text)
@@ -307,7 +325,7 @@ class PublishTest(unittest.TestCase):
         self.assertIn('echo "aab_sha256=$aab_sha256" >> "$GITHUB_OUTPUT"', sign)
 
     def test_promote_never_downloads_a_bundle(self):
-        # Production takes only a release already on the first testing track, from Play itself. It reads the
+        # Production takes only a release already on internal testing, or the first testing track, from Play itself. It reads the
         # release's notes from GitHub, never the bundle, and compares the digest there with the bundle Play has.
         play_sh = (ROOT / ".github/play/play.sh").read_text(encoding="utf-8")
         self.assertNotIn("releases/download", play_sh)

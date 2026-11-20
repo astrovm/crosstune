@@ -161,7 +161,9 @@ class PlayTest < Minitest::Test
   def env(extra)
     {
       "PLAY_KEY_JSON" => KEY,
-      "PLAY_TRACKS" => nil,
+      # As the repository had it before releases went from internal testing straight to production. The tests of
+      # no testing tracks unset it.
+      "PLAY_TRACKS" => "beta",
       "PLAY_LANGUAGES" => nil,
       "CHECK_ONLY" => nil,
       "GITHUB_ACTIONS" => "true",
@@ -231,6 +233,155 @@ class PlayTest < Minitest::Test
     notes = [{ "language" => "en-US", "text" => "Fake notes" }]
     assert_equal release(CODE, notes), saved["beta"]
     assert_nil saved["production"]
+  end
+
+  # PLAY_TRACKS unset, as the repository has it, or set empty.
+  NO_TRACKS = [{ "PLAY_TRACKS" => nil }, { "PLAY_TRACKS" => "" }, { "PLAY_TRACKS" => " , " }].freeze
+
+  def test_with_no_testing_tracks_a_release_goes_to_internal_testing_only
+    NO_TRACKS.each do |no_tracks|
+      tracks({})
+      File.write(@log, "")
+      output, status = play("release", TAG, env: no_tracks.merge("PLAY_LANGUAGES" => "en-US es"))
+      assert status.success?, output
+
+      # One edit, which Google doesn't review: no listing, and nothing on any other track.
+      assert_every_commit_keeps_the_review
+      assert_equal [["internal"]], committed_tracks
+      assert(requests.any? { |r| r["upload"] && r["path"].end_with?("/bundles") })
+      assert_empty listings
+      assert_equal %w[internal], saved.keys
+      assert_equal release(CODE, [{ "language" => "en-US", "text" => "Fake notes" }]), saved["internal"]
+    end
+  end
+
+  def test_with_no_testing_tracks_a_rerun_sends_nothing_again
+    tracks({ "internal" => release(CODE) }, [bundle])
+    output, status = play("release", TAG, env: { "PLAY_TRACKS" => nil })
+    assert status.success?, output
+
+    assert_includes output, "Internal testing already has this bundle as #{CODE}"
+    assert_empty commits
+  end
+
+  def test_with_no_testing_tracks_a_rerun_after_a_refused_commit_puts_the_bundle_on_internal_testing
+    tracks({ "production" => release(CODE - 10_000) }, [bundle])
+    output, status = play("release", TAG, env: { "PLAY_TRACKS" => nil })
+    assert status.success?, output
+
+    assert_equal [["internal"]], committed_tracks
+    refute(requests.any? { |r| r["upload"] })
+    assert_equal release(CODE, [{ "language" => "en-US", "text" => "Fake notes" }]), saved["internal"]
+  end
+
+  def test_with_no_testing_tracks_a_newer_version_or_a_stray_stops_the_release
+    { "internal" => CODE + 10_000, "production" => CODE + 10_000 }.each do |track, newer|
+      tracks({ track => release(newer) })
+      File.write(@log, "")
+      tags("v2.27.0") unless File.exist?(File.join(@origin, ".git/refs/tags/v2.27.0"))
+      output, status = play("release", TAG, env: { "PLAY_TRACKS" => nil })
+      refute status.success?, output
+      assert_includes output, "already has a version newer than #{CODE} on #{track} (#{newer})"
+      assert_empty commits
+    end
+    tracks({ "internal" => release(CODE - 500) })
+    output, status = play("release", TAG, env: { "PLAY_TRACKS" => nil })
+    refute status.success?, output
+    assert_includes output, "version code #{CODE - 500} on internal, and no tag has it"
+    assert_empty commits
+  end
+
+  def test_with_no_testing_tracks_production_comes_from_internal_testing_with_the_listing_and_notes_in_one_edit
+    NO_TRACKS.each do |no_tracks|
+      tracks({ "internal" => release(CODE, [{ "language" => "en-US", "text" => "Fake notes" }]),
+               "production" => release(CODE - 10_000) }, [bundle])
+      File.write(@log, "")
+      output, status = play("production", "2.26.0", env: no_tracks.merge("PLAY_LANGUAGES" => "en-US es"))
+      assert status.success?, output
+
+      # One commit: production, its notes and the listing in every language named, so one review takes them all.
+      assert_every_commit_keeps_the_review
+      assert_equal 1, commits.size
+      assert_equal [["production"]], committed_tracks
+      assert_equal %w[en-US es-419], listings.map { |r| r["path"].split("/").last }.sort
+      assert_equal [edit_of(commits.first)], listings.map { |r| edit_of(r) }.uniq
+      # Notes in English only: the listing's Spanish folder has none.
+      assert_equal release(CODE, [{ "language" => "en-US", "text" => "Fake notes" }]), saved["production"]
+      assert_equal %w[internal production], saved.keys.sort
+    end
+  end
+
+  def test_with_no_testing_tracks_the_listing_goes_to_production_even_with_no_english
+    tracks({ "internal" => release(CODE) }, [bundle])
+    output, status = play("production", "2.26.0", env: { "PLAY_TRACKS" => nil, "PLAY_LANGUAGES" => "es" })
+    assert status.success?, output
+
+    # The English folder holds only the notes, so no English listing is sent.
+    assert_equal %w[es-419], listings.map { |r| r["path"].split("/").last }
+    assert_equal release(CODE, [{ "language" => "en-US", "text" => "Fake notes" }]), saved["production"]
+  end
+
+  def promote_with_no_tracks
+    File.write(@log, "")
+    play("production", "2.26.0", env: { "PLAY_TRACKS" => nil })
+  end
+
+  def test_with_no_testing_tracks_promote_keeps_every_check
+    # Not on internal testing.
+    tracks({ "production" => release(CODE - 10_000) }, [bundle])
+    output, status = promote_with_no_tracks
+    assert_promotion_stopped(output, status, "Track 'internal' has no release with version code #{CODE}")
+    # A version code no tag has.
+    tracks({ "internal" => release(CODE), "production" => release(CODE - 500) }, [bundle])
+    output, status = promote_with_no_tracks
+    assert_promotion_stopped(output, status, "version code #{CODE - 500} on production, and no tag has it")
+    # Another bundle as the version code.
+    tracks({ "internal" => release(CODE) }, [bundle("a bundle made by hand")])
+    output, status = promote_with_no_tracks
+    assert_promotion_stopped(output, status, "isn't the App Bundle the Release workflow made")
+    # Back to an older version.
+    tags("v2.27.0")
+    tracks({ "internal" => release(CODE), "production" => release(CODE + 10_000) }, [bundle])
+    output, status = promote_with_no_tracks
+    assert_promotion_stopped(output, status, "already has a version newer than #{CODE} on production")
+    # No tag on origin.
+    git(@origin, "tag", "-d", TAG)
+    tracks({ "internal" => release(CODE) }, [bundle])
+    output, status = promote_with_no_tracks
+    assert_promotion_stopped(output, status, "The tag #{TAG} isn't on origin")
+    # A language with no listing, before Play is asked anything.
+    tags(TAG)
+    File.write(@log, "")
+    output, status = play("production", "2.26.0", env: { "PLAY_TRACKS" => nil, "PLAY_LANGUAGES" => "de" })
+    refute status.success?, output
+    assert_includes output, "No listing in fastlane/metadata/android/de"
+    assert_empty requests
+  end
+
+  def test_with_no_testing_tracks_a_review_in_progress_stops_the_release_and_the_promotion
+    # Play as each job finds it: nothing yet for the release, the release on internal testing for the promotion.
+    [[%w[release] + [TAG], {}, []], [%w[production 2.26.0], { "internal" => release(CODE) }, [bundle]]]
+      .each do |args, on_tracks, bundles|
+      tracks(on_tracks, bundles)
+      before = saved
+      File.write(@log, "")
+      output, status = play(*args, env: { "PLAY_TRACKS" => nil, "FAKE_PLAY_IN_REVIEW" => "1" })
+      refute status.success?, output
+
+      assert_includes output, "[!] #{IN_REVIEW}"
+      assert_equal 1, commits.size
+      assert_every_commit_keeps_the_review
+      assert_equal before, saved
+    end
+  end
+
+  def test_notes_and_a_listing_in_two_folders_never_share_an_edit
+    tracks({ "internal" => release(CODE) }, [bundle])
+    output, status = play_rb("edit", "--code", CODE.to_s, "--to", "alpha", "--notes", File.join(@dir, "a"),
+                             "--listing", File.join(@dir, "b"))
+    refute status.success?, output
+    assert_includes output, "Release notes and the listing go in one folder"
+    assert_empty requests
   end
 
   def test_a_release_goes_to_every_testing_track_named_in_one_edit
