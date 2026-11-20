@@ -123,9 +123,9 @@ private fun PracticeRow(
     title: String,
     due: Int,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     below: String? = null,
     edit: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
     leading: @Composable () -> Unit
 ) {
     Row(

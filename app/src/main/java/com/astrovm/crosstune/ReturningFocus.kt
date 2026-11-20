@@ -11,6 +11,7 @@ import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.ObserverModifierNode
 import androidx.compose.ui.node.observeReads
 import androidx.compose.ui.node.currentValueOf
+import androidx.compose.ui.platform.InspectorInfo
 
 /*
  * A screen that closes takes what the remote was on with it, and Android puts it nowhere: the next
@@ -76,6 +77,11 @@ private data class ReturnsFocusElement(val key: Any) : ModifierNodeElement<Retur
     override fun create() = ReturnsFocusNode(key)
 
     override fun update(node: ReturnsFocusNode) = node.rekey(key)
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "returnsFocus"
+        properties["key"] = key
+    }
 }
 
 internal class ReturnsFocusNode(private var key: Any) :
