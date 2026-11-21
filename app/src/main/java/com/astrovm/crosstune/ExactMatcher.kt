@@ -1009,18 +1009,14 @@ internal class ExactMatcher(
         val lengthsMs = found?.editions.orEmpty().mapNotNull { it.optLong("trackTimeMillis").takeIf { length -> length > 0 } }.toMutableList()
         var unanswered = emptyList<String>()
         song?.optLong("trackId")?.takeIf { it > 0 }?.let { id ->
-            // And by the US store's name, in Latin letters as YouTube Music writes it, when another store found it: Japan's
-            // finds Lemon by 米津玄師, which only the US store names Kenshi Yonezu, as YouTube Music does. A store whose
+            // And by the US store's name, in Latin letters as YouTube Music writes it, when another store found it under a
+            // name in another script: Japan's finds Lemon by 米津玄師, which only the US store names Kenshi Yonezu, as YouTube
+            // Music does. One found in Latin letters, as Argentina's Owaranai Uta, has that name already. A store whose
             // search already turned the song up isn't asked again.
-            val stores = NAMING_STORES + listOfNotNull("US".takeIf { it != found.store })
-            val elsewhere = coroutineScope {
-                stores.map { store ->
-                    async {
-                        val looking = Asked()
-                        (searched[store]?.firstOrNull { it.optLong("trackId") == id } ?: looking.answer { appleLookup(id, store) }) to looking.failed
-                    }
-                }.awaitAll()
-            }
+            // Found by the US store, its search has that name, so it isn't looked up either.
+            val written = song.optString("trackName") + song.optString("artistName")
+            val stores = NAMING_STORES + listOfNotNull("US".takeIf { SongNames.storesWriting(written).isNotEmpty() })
+            val elsewhere = namesIn(stores, id, searched)
             japaneseTitle = elsewhere[NAMING_STORES.indexOf("JP")].first?.optString("trackName")?.takeIf(String::isNotBlank)
             (listOf(song) + elsewhere.mapNotNull { it.first }).forEach {
                 titles += it.optString("trackName").ifBlank { null } ?: return@forEach
@@ -1028,14 +1024,9 @@ internal class ExactMatcher(
             }
             unanswered = stores.zip(elsewhere).filter { it.second.second }.map { it.first }
         }
-        val home = SongNames.homeStore((titles + artists).joinToString(""))
+        val homes = SongNames.storesWriting((titles + artists).joinToString(""))
         val asked = Asked()
-        if (lengthsMs.isEmpty()) {
-            asked.answer {
-                searchDeezer(metadata).firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
-                    ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
-            }?.let(lengthsMs::add)
-        }
+        if (lengthsMs.isEmpty()) asked.answer { deezerLength(metadata) }?.let(lengthsMs::add)
         val album = found?.editions?.singleOrNull()?.takeIf {
             matches(metadata, it.optString("trackName"), it.optString("artistName")) &&
                 metadata.lengthMs?.let { length -> sameRecordingLength(it.optLong("trackTimeMillis"), length) } != false
@@ -1044,9 +1035,28 @@ internal class ExactMatcher(
             val collection = it.optString("collectionName")
             liveAlbum(collection) || Takes.saysAnotherTake(collection) != null
         }
-        val complete = !(found == null && searching.failed) && unanswered.none { it == "US" || it == home } && !asked.failed
+        val complete = !(found == null && searching.failed) && unanswered.none { it == "US" || it in homes } && !asked.failed
         return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum, complete)
     }
+
+    /**
+     * Song [id]'s row in each of [stores]: the one its search turned up, in [searched], or else its lookup there; and
+     * whether that lookup failed.
+     */
+    private suspend fun namesIn(stores: List<String>, id: Long, searched: Map<String, List<JSONObject>>): List<Pair<JSONObject?, Boolean>> =
+        coroutineScope {
+            stores.map { store ->
+                async {
+                    val looking = Asked()
+                    (searched[store]?.firstOrNull { it.optLong("trackId") == id } ?: looking.answer { appleLookup(id, store) }) to looking.failed
+                }
+            }.awaitAll()
+        }
+
+    /** How long Deezer says [metadata]'s song is, when its search has it. */
+    private suspend fun deezerLength(metadata: MusicMetadata): Long? =
+        searchDeezer(metadata).firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
+            ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
 
     /**
      * The song on Apple Music, by its name, or one of the same name and artist with a tag, as "(with
@@ -1062,8 +1072,8 @@ internal class ExactMatcher(
         return coroutineScope { (NAMING_STORES - stores.toSet()).map { store -> async { appleSong(metadata, store, asked, searched) } }.awaitAll() }.firstNotNullOfOrNull { it }
     }
 
-    /** The [song] Apple has, and all its [editions] in the same [store], the US one when none is named: its album's take, its single's, its remasters. */
-    private class AppleSong(val song: JSONObject, val editions: List<JSONObject>, val store: String)
+    /** The [song] Apple has, and all its [editions] in the same store: its album's take, its single's, its remasters. */
+    private class AppleSong(val song: JSONObject, val editions: List<JSONObject>)
 
     private fun linkedAppleEdition(metadata: MusicMetadata, editions: List<JSONObject>): LinkedEdition? {
         val length = metadata.lengthMs ?: return null
@@ -1092,7 +1102,7 @@ internal class ExactMatcher(
             ?: results.firstOrNull { inLatinLetters(metadata, it) }
             ?: results.firstOrNull { song -> metadata.lengthMs?.let { kotlin.math.abs(song.optLong("trackTimeMillis") - it) <= SAME_RECORDING_LENGTH_MS } != false }
                 ?.takeIf { namedAtHome(metadata, it) }
-        song?.let { AppleSong(it, listOf(it) + results.filter { other -> other !== it && matches(metadata, other.optString("trackName"), other.optString("artistName")) }, store ?: "US") }
+        song?.let { AppleSong(it, listOf(it) + results.filter { other -> other !== it && matches(metadata, other.optString("trackName"), other.optString("artistName")) }) }
     }
 
     /**

@@ -36,6 +36,10 @@ class RightIdsTest(unittest.TestCase):
         video = {"id": "own00000000", "name": "Song", "details": ["Band VEVO", "1M views", "3:00"]}
         self.assertEqual(["own00000000"], replay.right_ids(song, [], [video]))
 
+    def test_a_channel_is_one_artist_or_the_whole_credit_never_a_credit_naming_one(self):
+        for channel, own in (("Band A & Band B", True), ("Band B - Topic", True), ("Band A & Someone", False), ("Someone x Band A", False)):
+            self.assertEqual(own, replay.own_channel(channel, ["Band A & Band B"]), channel)
+
 
 if __name__ == "__main__":
     unittest.main()

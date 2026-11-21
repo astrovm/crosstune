@@ -49,17 +49,24 @@ def ytm_path(out, query, params):
 
 # What YouTube adds to an artist's own channel's name, as ExactMatcher's CHANNEL_SUFFIXES: "Band - Topic", "BandVEVO".
 CHANNEL_SUFFIXES = {"topic", "vevo", "official", "music", "tv"}
+# SongNames' leadingArticle, artistSeparator and conjunction, which split a credit into its artists.
 LEADING_ARTICLE = re.compile(r"^the\s+", re.IGNORECASE)
+CREDIT_SEPARATOR = re.compile(r"\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*", re.IGNORECASE)
+CONJUNCTION = re.compile(r"\s+(?:and|y|und|et)\s+", re.IGNORECASE)
+
+
+def credited(credit):
+    """SongNames.artists: each artist in a credit, and the whole credit, without the article, normalized."""
+    names = [part for name in CREDIT_SEPARATOR.split(credit) if name.strip() for part in CONJUNCTION.split(name.strip())]
+    return {analyze.normalize(LEADING_ARTICLE.sub("", name)) for name in [*names, credit]} - {""}
 
 
 def own_channel(uploader, credits):
-    """Whether a video's channel is the artist's own, as ExactMatcher.isOwnVideo tells: one of the names in [credits], without
-    its article, maybe with what YouTube adds to it; or, as a credit itself, naming one of them."""
-    names = {analyze.normalize(LEADING_ARTICLE.sub("", part.strip())) for credit in credits for part in analyze.ARTIST_SPLIT.split(credit)}
-    names = {n for n in names if n} | {a for credit in credits for a in analyze.artists(credit)}
+    """Whether a video's channel is the artist's own, as ExactMatcher.isOwnVideo tells: the whole channel name, without its
+    article, is one of the artists in [credits], maybe with what YouTube adds to it."""
     channel = analyze.normalize(LEADING_ARTICLE.sub("", uploader))
-    return bool(analyze.artists(uploader) & names) or any(
-        channel == a or (channel.startswith(a) and channel[len(a):] in CHANNEL_SUFFIXES) for a in names)
+    names = {name for credit in credits for name in credited(credit)}
+    return any(channel == a or (channel.startswith(a) and channel[len(a):] in CHANNEL_SUFFIXES) for a in names)
 
 
 def right_ids(song, results, videos):
