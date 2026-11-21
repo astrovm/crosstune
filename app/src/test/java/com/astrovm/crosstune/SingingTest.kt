@@ -1680,6 +1680,27 @@ class SingingTest {
     }
 
     @Test
+    fun linesHeardOnlyByTheirFirstWordsMoveFromTheFirstLineSungSinceHearingStarted() {
+        // A seventh line, so three are heard after one sung just before the second hearing starts.
+        lines = lines + "Shadows fall away"
+        val times = listOf(2, 5, 8, 30, 33, 36, 39)
+        lyricsTimedFor(null, times)
+        // The first three heard a second late; the second hearing, from 29.5 s, tells only the first words of the last three,
+        // 1.8 s sooner than they're shown. The fourth, shown at 31 s, was sung at 29.2 s, before it: the fifth is the first heard.
+        singing.answer = {
+            if (singing.hears == 1) sungAt(times, times.map { 1_000L })
+            else heardFirstWords(29_500, (4..6).associateWith { times[it] * 1_000L - 800 })
+        }
+        openLyrics()
+        plays(positionMs = 1_800)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[2].timeMs == 9_000L }
+        passes(30_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[4].timeMs != 34_000L }
+        // The fifth is where it's sung, and those between it and the third stretch to meet it.
+        assertEquals(listOf(3_000L, 6_000L, 9_000L, 29_416L, 32_200L, 35_200L, 38_200L), model().uiState.lyricLines.map { it.timeMs })
+    }
+
+    @Test
     fun hearingStartsNowWhereALineJustPastIsTheFirstOfThoseLeftToHear() {
         // At 1.5 seconds in, the line at 0 is just as far past as hearing starts before a line, so the first words are heard now,
         // not from before the line at 4. A clock that barely moves, so where it is stays put.

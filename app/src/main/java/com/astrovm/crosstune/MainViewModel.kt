@@ -3962,7 +3962,7 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         val line = foundLines.getOrNull(index) ?: return
         val position = uiState.following?.clock?.positionAt(now()) ?: return
-        handTimed()
+        handTimed(song)
         val point = SyncPoint(line.timeMs, position.coerceAtLeast(0L))
         val hand = handGap
         if (syncPoints.isEmpty() && (hand == null || hand.lineMs == line.timeMs) && moveGap(song, point.songMs - point.lineMs, line.timeMs)) return
@@ -3979,16 +3979,16 @@ internal class MainViewModel(
 
     /** All the words [deltaMs] later in the song (earlier, when it's negative), for a song heard a little off. */
     fun nudgeSync(deltaMs: Long) {
-        if (uiState.lyricsFor != null && foundLines.isNotEmpty()) handTimed()
+        uiState.lyricsFor?.takeIf { foundLines.isNotEmpty() }?.let(::handTimed)
         nudge(deltaMs)
     }
 
     /** The words being put in time by hand: offered to be reported by itself now, while they're seen, but sent once they're left. */
-    private fun handTimed() {
+    private fun handTimed(song: MusicMetadata) {
         timedByHand = true
         // Kept so with the words, as the points or Shazam's gap moved are, past leaving them.
         keptByHand = true
-        uiState.lyricsFor?.let { syncStore.save(it, foundLines, withGuess(syncPoints), wordsPace, byHand = true) }
+        syncStore.save(song, foundLines, withGuess(syncPoints), wordsPace, byHand = true)
         // Put in time by hand, the singing isn't heard to put them in time too.
         liningUp = false
         singingJob?.cancel()
