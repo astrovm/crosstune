@@ -635,6 +635,16 @@ internal fun Destination.openLabel(): String =
     if (this is Destination.Service && build == null) stringResource(service.openLabelRes) else stringResource(R.string.open_in_custom, label())
 
 /**
+ * The music app [packageName] named as [Destination.label] names it: its service's name, or a patched build's own, e.g.
+ * "YT Music Morphe"; null when it's no service's app.
+ */
+@Composable
+internal fun musicAppLabel(packageName: String?): String? {
+    val service = MusicService.ofPackage(packageName) ?: return null
+    return packageName?.takeIf { it != service.packageName }?.let { buildLabel(service, it) } ?: stringResource(service.labelRes)
+}
+
+/**
  * A patched [build] of [service] named as Android shows it, e.g. "YT Music Morphe", as it has no name of ours, or null if
  * it's not installed. One left with its service's app's own name, beside that app, gets a word to tell the two apart.
  */
