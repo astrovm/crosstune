@@ -681,11 +681,19 @@ internal class LyricsFinder(
      */
     suspend fun retimed(metadata: MusicMetadata, found: Lyrics, timeoutMs: Long = TIMEOUT_MS): Lyrics {
         val answer = (found as? Lyrics.Found)?.let { words -> timedBetter(metadata, words, timeoutMs).copy(markedInstrumental = words.markedInstrumental) } ?: found
+        keep(metadata, answer)
+        return asJapanWrites(answer)
+    }
+
+    /**
+     * [found], kept for [metadata] for good, timed as they are: words put in time by hand keep the lines
+     * that timing is saved for, not the ones [retimed] found meanwhile.
+     */
+    suspend fun keep(metadata: MusicMetadata, found: Lyrics) {
         cache?.let { cache ->
-            toCache(answer)?.let { cache.put(cacheKey(metadata), it) }
+            toCache(found)?.let { cache.put(cacheKey(metadata), it) }
             cache.save()
         }
-        return asJapanWrites(answer)
     }
 
     /** [words], timed as a well-timed copy of the song times them, when there's one in time. */

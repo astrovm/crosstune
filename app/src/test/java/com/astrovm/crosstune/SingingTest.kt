@@ -41,6 +41,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
 
 /** The timed words lined up to the singing heard in what the phone plays. */
@@ -1019,6 +1020,52 @@ class SingingTest {
         composeRule.waitForIdle()
         assertEquals(times.map { it * 1_000L + 500L }, model().uiState.lyricLines.map { it.timeMs })
         assertEquals(byHand, prefs().getString("lyrics_sync", null))
+    }
+
+    @Test
+    fun wordsPutInTimeByHandArentTimedAnewByCopiesFoundWhenLookedUpAgain() {
+        // The remix's own words, three seconds apart; under the song's bare name, two copies that agree with each other, ten seconds later.
+        var copies = false
+        fun answer(title: String, shiftMs: Int, seconds: Int?): String {
+            val synced = lines.mapIndexed { index, line -> "[00:%05.2f] %s".format(Locale.ROOT, (index * 3_000 + shiftMs) / 1000.0, line) }.joinToString("\\n")
+            return """{"trackName":"$title","artistName":"Band",${seconds?.let { "\"duration\":$it," }.orEmpty()}"syncedLyrics":"$synced"}"""
+        }
+        fake.handler = { request ->
+            val url = request.url
+            FakeSpotify.html(
+                request,
+                when {
+                    url.host == "lrclib.net" && url.queryParameter("track_name") == "Demo (2018 Remix)" -> "[${answer("Demo (2018 Remix)", 0, null)}]"
+                    url.host == "lrclib.net" -> if (copies) "[${answer("Demo", 10_000, 200)},${answer("Demo", 10_600, 201)}]" else "[]"
+                    url.host == "music.163.com" -> """{"result":{"songs":[]}}"""
+                    url.host.endsWith("youtube.com") -> """{"title":"Demo (2018 Remix)","author_name":"Band"}"""
+                    else -> """{"results":[]}"""
+                }
+            )
+        }
+        val times = lines.indices.map { it * 3_000L }
+        openLyrics()
+        val song = checkNotNull(model().uiState.lyricsFor) { "Expected the words' song" }
+        val found = model().uiState.lyricLines
+        assertEquals(times, found.map { it.timeMs })
+        // Put in time by hand with Shazam's gap alone, which saves no points, only that they were (Issue #1164).
+        LyricsSyncStore(prefs()).save(song, found, emptyList(), byHand = true)
+        controller?.destroyAndSettle()
+        // Looked up again, as after the lookups change, and now the copies answer.
+        File(app.cacheDir, "lyrics.json").delete()
+        copies = true
+        val asked = fake.requestedUrls.size
+        openLyrics()
+        waitUntil { fake.requestedUrls.drop(asked).any { it.contains("track_name=Demo&") || it.endsWith("track_name=Demo") } }
+        composeRule.waitForIdle()
+        assertEquals(times, model().uiState.lyricLines.map { it.timeMs })
+        // And kept so: opened again once the words as shown aren't kept any more, as after the readings change, they're the
+        // same lines, so the mark that they were timed by hand still holds.
+        controller?.destroyAndSettle()
+        File(app.cacheDir, "kept_words.json").delete()
+        openLyrics()
+        assertEquals(times, model().uiState.lyricLines.map { it.timeMs })
+        assertTrue(LyricsSyncStore(prefs()).byHand(song, model().uiState.lyricLines))
     }
 
     @Test
