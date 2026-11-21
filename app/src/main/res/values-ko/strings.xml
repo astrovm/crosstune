@@ -53,7 +53,6 @@
     <string name="got_it_button">확인</string>
     <string name="chatgpt_channel">ChatGPT로 로그인</string>
     <string name="chatgpt_signing_in_notification">ChatGPT로 로그인하는 중</string>
-    <string name="next_button">다음</string>
     <string name="back_button">뒤로</string>
     <string name="setup_step">%2$d단계 중 %1$d단계</string>
     <string name="setup_sources_listening_note">%1$s에서 듣고 있으니 그 링크는 이미 그곳에서 열립니다.</string>
@@ -284,7 +283,6 @@
     <string name="song_search_title">노래</string>
     <string name="song_search_none">“%1$s”에 해당하는 노래가 없어요.</string>
     <string name="floating_background">배경</string>
-    <string name="floating_text_size">글자 크기</string>
     <string name="floating_float">다른 앱 위에 띄우기</string>
     <string name="floating_permission_title">앱 위에 가사 띄우기</string>
     <string name="floating_customize">맞춤 설정</string>

@@ -628,7 +628,6 @@ class TvPlayTest {
 
     @Test
     fun youTubesTvAppPlaysYouTubeMusicsSongs() {
-        assertTrue(MusicService.YOUTUBE_MUSIC in LinkInterception(app).installedServices())
         // Its phone app isn't on a TV, so YouTube's TV app stands in for it.
         assertTrue(sameApp(youTubeMusic, MusicService.YOUTUBE_TV, app::hasApp))
         assertFalse(MusicService.YOUTUBE_TV in MusicService.SPOTIFY.appPackages)

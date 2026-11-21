@@ -53,7 +53,6 @@
     <string name="got_it_button">知道了</string>
     <string name="chatgpt_channel">使用 ChatGPT 登录</string>
     <string name="chatgpt_signing_in_notification">正在使用 ChatGPT 登录</string>
-    <string name="next_button">下一步</string>
     <string name="back_button">返回</string>
     <string name="setup_step">第 %1$d 步，共 %2$d 步</string>
     <string name="setup_sources_listening_note">你在 %1$s 中收听，所以它的链接已经会在那里打开。</string>
@@ -284,7 +283,6 @@
     <string name="song_search_title">歌曲</string>
     <string name="song_search_none">没有找到与“%1$s”匹配的歌曲。</string>
     <string name="floating_background">背景</string>
-    <string name="floating_text_size">文字大小</string>
     <string name="floating_float">悬浮在其他应用上方</string>
     <string name="floating_permission_title">歌词悬浮在应用上方</string>
     <string name="floating_customize">自定义</string>

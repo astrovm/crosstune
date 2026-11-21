@@ -604,7 +604,7 @@ internal class ChordFinder(
             .build()
         // A search that finds nothing is answered with a 404 and its usual page.
         val results = ugStore(fetch(search.toString()) { code, body -> code == 404 && ugData.containsMatchIn(body) })?.optJSONObject("data")?.optJSONArray("results") ?: return emptyList()
-        return (0 until results.length()).mapNotNull { results.optJSONObject(it) }
+        return results.objects()
             .filter { it.optString("type") == "Chords" && named(it.optString("song_name"), title, byArtist(it.optString("artist_name"), song)) }
             .sortedWith(compareBy({ !SongNames.sameArtist(it.optString("artist_name"), song.artist) }, { -it.optInt("votes") }))
             .map { it.optString("tab_url") }
@@ -704,7 +704,7 @@ internal class ChordFinder(
         val search = CIFRA_CLUB_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("q", key).build()
         // Answered as a call to a function, which is taken off.
         val docs = JSONObject(fetch(search.toString()).substringAfter('(').substringBeforeLast(')')).optJSONObject("response")?.optJSONArray("docs") ?: return emptyList()
-        return (0 until docs.length()).mapNotNull { docs.optJSONObject(it) }
+        return docs.objects()
             .filter { it.optString("t") == CIFRA_CLUB_SONG && named(it.optString("m"), title, byArtist(it.optString("a"), song)) }
             .sortedBy { !SongNames.sameArtist(it.optString("a"), song.artist) }
             .map { "$CIFRA_CLUB_URL${it.optString("d")}/${it.optString("u")}/" }
@@ -779,7 +779,7 @@ internal class ChordFinder(
             .build()
         val answer = JSONObject(fetch(search.toString()))
         val list = answer.optJSONArray("results")
-        val found = list?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) } }.orEmpty()
+        val found = list.objects()
         val names = found.map { SongNames.bareTitle(it.optString("trackName")) to it.optString("artistName").trim() }.filter { (title) -> japanese(title) }
         return OtherNames(names.map { it.first }, names.map { it.second }, complete = list != null && !answer.has("errorMessage"))
     }
@@ -794,11 +794,11 @@ internal class ChordFinder(
         val answer = JSONObject(fetch(search.toString(), NETEASE_REFERER))
         val result = answer.optJSONObject("result")
         val list = result?.optJSONArray("songs")
-        val songs = list?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) } }.orEmpty()
+        val songs = list.objects()
         val titles = songs.map { SongNames.bareTitle(it.optString("name")) }.filter(::japanese).distinct().take(MAX_NAMES)
         val names = listOf(song.title) + titleParts(song.title)
         val artists = songs.filter { found -> names.any { SongNames.same(found.optString("name"), it) } }.flatMap { found ->
-            found.optJSONArray("artists")?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) }.map { it.optString("name") } }.orEmpty()
+            found.optJSONArray("artists").objects().map { it.optString("name") }
         }.distinct()
         val complete = answer.optInt("code", -1) == 200 && result != null &&
             (list != null || result.optInt("songCount", -1) == 0)

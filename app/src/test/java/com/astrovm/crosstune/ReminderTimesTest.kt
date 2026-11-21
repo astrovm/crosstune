@@ -10,14 +10,14 @@ import org.junit.Test
 class ReminderTimesTest {
     private fun check(zone: ZoneId, minute: Int, now: Long) {
         val context = "$zone $minute ${Instant.ofEpochMilli(now)}"
-        val latest = latestReminderAt(minute, now, zone)
+        val latest = latestReminderOccurrence(minute, now, zone).at
         val next = nextReminderAt(minute, now, zone)
         assertTrue(context, latest <= now)
         assertTrue(context, next > now)
         assertEquals(context, latest, nextReminderAt(minute, latest - 1, zone))
         assertEquals(context, next, nextReminderAt(minute, latest, zone))
-        assertEquals(context, latest, latestReminderAt(minute, next - 1, zone))
-        assertEquals(context, next, latestReminderAt(minute, next, zone))
+        assertEquals(context, latest, latestReminderOccurrence(minute, next - 1, zone).at)
+        assertEquals(context, next, latestReminderOccurrence(minute, next, zone).at)
     }
 
     @Test

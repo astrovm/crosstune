@@ -47,7 +47,7 @@ KOTLIN = ROOT / "app/src/main/java/com/astrovm/crosstune/PhoneRegexTable.kt"
 # The sets only the tests' pattern writer reads, kept out of the app.
 TEST_KOTLIN = ROOT / "app/src/test/java/com/astrovm/crosstune/PhoneRegexSets.kt"
 # The sets the app reads itself: the rest are TEST_KOTLIN's.
-APP_SETS = {"PHONE_SPACE", "PHONE_DIGIT", "PHONE_LINE_BREAK", "PHONE_LATIN_IGNORING_CASE", "PHONE_WORD_EDGE", "PHONE_NOT_WORD_EDGE"}
+APP_SETS = {"PHONE_SPACE", "PHONE_DIGIT", "PHONE_LINE_BREAK", "PHONE_WORD_EDGE", "PHONE_NOT_WORD_EDGE"}
 CLASSES = ROOT / "app/build/intermediates/built_in_kotlinc/debugUnitTest/compileDebugUnitTestKotlin/classes"
 MAIN_CLASS = "com.astrovm.crosstune.RegexTableProbe"
 PATTERNS_CLASS = "com.astrovm.crosstune.PatternsProbe"

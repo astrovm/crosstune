@@ -25,7 +25,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         val stored = preferences.getString(KEY_HISTORY, null) ?: return emptyList()
         known?.takeIf { it.first == stored }?.let { return it.second }
         val array = runCatching { JSONArray(stored) }.getOrNull() ?: return emptyList()
-        val entries = (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.toEntry() }
+        val entries = array.objects().mapNotNull { it.toEntry() }
         // Kept by a version that listed a song once per app it came from: only its latest stays.
         return entries.filterIndexed { index, entry -> entries.take(index).none { it.isSameAs(entry) } }.also { known = stored to it }
     }

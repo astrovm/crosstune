@@ -11,7 +11,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
-import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.text.Normalizer
@@ -59,15 +58,11 @@ internal class Translator(
         // One kept blank, as Google's answer to it once was, is asked again.
         words.filter { it !in found }.forEach { line -> cache.get(key(line))?.takeIf(String::isNotBlank)?.let { found[line] = it } }
         val missing = words.filter { it !in found }
-        return try {
+        return answeredOr(false) {
             missing.isEmpty() || service(missing) { line, translation ->
                 found[line] = translation
                 cache.put(key(line), translation)
             }
-        } catch (_: IOException) {
-            false
-        } catch (_: JSONException) {
-            false
         }
     }
 
@@ -182,7 +177,7 @@ internal class Translator(
         if (Locale.forLanguageTag(language).language != "en") return null
         val url = WIKTIONARY_URL.toHttpUrl().newBuilder().addPathSegment(word.lowercase(Locale.ROOT)).build()
         val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).get().build()
-        return try {
+        return answeredOr(null) {
             val entries = JSONObject(call(request))
             // The word's own language comes first; its first sense is the one most meant.
             val senses = entries.optJSONArray(entries.keys().asSequence().firstOrNull() ?: return null) ?: return null
@@ -195,10 +190,6 @@ internal class Translator(
                 // Wiktionary sends its page styling along with some definitions, which isn't text to show.
                 .map { it.copy(meaning = HtmlCompat.fromHtml(styleSheets.cutFrom(it.meaning), HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim()) }
                 .firstOrNull { it.meaning.isNotEmpty() }
-        } catch (_: IOException) {
-            null
-        } catch (_: JSONException) {
-            null
         }
     }
 

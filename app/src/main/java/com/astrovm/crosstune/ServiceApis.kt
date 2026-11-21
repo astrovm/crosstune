@@ -154,7 +154,7 @@ internal class ServiceApis(
             JSONTokener(response.body.stringAtMost()).nextValue()
         } as? JSONArray ?: throw JSONException("Not a list")
         val ids = answer.optJSONObject(0)?.optJSONArray("spotify_track_ids") ?: return emptyList()
-        return (0 until ids.length()).map(ids::optString).filter { it.isNotBlank() }
+        return ids.strings().filter { it.isNotBlank() }
     }
 
     /** A Spotify song's name, artist and length, from its own page, which anyone can read; null when it's gone. */
@@ -278,8 +278,6 @@ internal class ServiceApis(
         }
     }
 }
-
-internal fun JSONArray?.objects(): List<JSONObject> = this?.let { array -> (0 until array.length()).mapNotNull { array.optJSONObject(it) } }.orEmpty()
 
 /** A YouTube text, as it comes in pieces, "runs", put back together. */
 internal fun JSONObject?.runsText(): String = this?.optJSONArray("runs").objects().joinToString("") { it.optString("text") }

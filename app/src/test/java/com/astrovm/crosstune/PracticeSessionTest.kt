@@ -59,14 +59,6 @@ class PracticeSessionTest {
     }
 
     @Test
-    fun linesOfTheSameSongAreToldApart() {
-        assertTrue(sameSongOf(line("A1", "A"), line("A2", "A")))
-        assertFalse(sameSongOf(line("A1", "A"), line("B1", "B")))
-        assertFalse(sameSongOf(line("A1", "A"), null))
-        assertFalse(sameSongOf(line("A1", "A"), line("A1", "A").copy(artist = "Other band")))
-    }
-
-    @Test
     fun soundsAreNotWorthLearningButWordsAre() {
         listOf("La la la", "lalala", "Oh, oh, oh!", "Na na na na", "Yeah yeah", "ラララ", "ナナナー", "...", "♪", "Whoa-oh", "Mmm").forEach {
             assertTrue(it, isFiller(it))

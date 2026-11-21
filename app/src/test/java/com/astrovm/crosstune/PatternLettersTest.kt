@@ -24,11 +24,13 @@ class PatternLettersTest {
     fun eachLetterIsReadInCodeAsThePhoneReadsIt() {
         val space = TABLE.codes("""\s""")
         val latin = TABLE.codes("(?i)[a-z]")
+        // Those, "ſ" as "s" and the Kelvin sign as "k". Not "ı" or "İ", which ICU folds to no "i".
+        val latinInCode = CodeRuns(PHONE_LATIN_IGNORING_CASE)
         val notALineBreak = TABLE.codes(".")
         for (code in Char.MIN_VALUE.code..Char.MAX_VALUE.code) {
             val char = code.toChar()
             assertEquals("U+%04X".format(code), space[code], isPatternSpace(char))
-            assertEquals("U+%04X".format(code), latin[code], isLatinLetterIgnoringCase(char))
+            assertEquals("U+%04X".format(code), latin[code], code in latinInCode)
             assertEquals("U+%04X".format(code), !notALineBreak[code], isLineBreak(char))
         }
         val digit = TABLE.codes("""\d""")

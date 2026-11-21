@@ -67,7 +67,6 @@
     <string name="got_it_button">Got it</string>
     <string name="chatgpt_channel">Signing in with ChatGPT</string>
     <string name="chatgpt_signing_in_notification">Signing in with ChatGPT</string>
-    <string name="next_button">Next</string>
     <string name="back_button">Back</string>
     <string name="setup_step">Step %1$d of %2$d</string>
     <string name="setup_sources_listening_note">You listen in %1$s, so its links already open there.</string>
@@ -307,7 +306,6 @@
     <string name="open_settings_button">Open settings</string>
     <string name="open_app_button">Open %1$s</string>
     <string name="floating_background">Background</string>
-    <string name="floating_text_size">Text size</string>
     <string name="floating_float">Float over other apps</string>
     <string name="floating_permission_title">Float lyrics over your apps</string>
     <string name="floating_customize">Customize</string>

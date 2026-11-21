@@ -58,12 +58,10 @@ internal fun nextReminderAt(minute: Int, now: Long, zone: ZoneId): Long {
     }
 }
 
+internal class ReminderOccurrence(val at: Long, val day: LocalDate)
+
 /** The latest chosen minute that is due, including a day whose clock skips that minute or date. */
-internal fun latestReminderAt(minute: Int, now: Long, zone: ZoneId): Long = latestReminderOccurrence(minute, now, zone).at
-
-private class ReminderOccurrence(val at: Long, val day: LocalDate)
-
-private fun latestReminderOccurrence(minute: Int, now: Long, zone: ZoneId): ReminderOccurrence {
+internal fun latestReminderOccurrence(minute: Int, now: Long, zone: ZoneId): ReminderOccurrence {
     val time = LocalTime.of(minute / 60, minute % 60)
     var date = Instant.ofEpochMilli(now).atOffset(ZoneOffset.MAX).toLocalDate()
     var latest: ReminderOccurrence? = null

@@ -8,7 +8,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONException
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.IOException
@@ -95,12 +94,8 @@ internal class SongSearcher(
 
     /** What [find] found, or nothing when the service is unreachable or sends back rubbish. */
     private suspend fun answering(find: suspend () -> List<MusicMetadata>): List<MusicMetadata> =
-        try {
+        answeredOr(emptyList()) {
             find()
-        } catch (_: IOException) {
-            emptyList()
-        } catch (_: JSONException) {
-            emptyList()
         }
 
     /** What Deezer holds for [query]; empty when it won't answer or has nothing. */
@@ -112,8 +107,7 @@ internal class SongSearcher(
         val results = fetchJson(url.toString()).optJSONArray("data") ?: return emptyList()
         // A blank word is in every name alike, so it changes no order.
         val typed = query.split(phoneRegex("\\s+")).map(SongNames::normalize)
-        return (0 until results.length()).mapNotNull { index ->
-            val song = results.optJSONObject(index) ?: return@mapNotNull null
+        return results.objects().mapNotNull { song ->
             val title = MetadataParsers.deezerTitle(song).trim()
             val artist = song.optJSONObject("artist")?.text("name").orEmpty()
             // Without both a name and an artist there's no song to look up anywhere else.
@@ -144,8 +138,7 @@ internal class SongSearcher(
             .apply { if (store.length == 2) addQueryParameter("country", store) }
             .build()
         val results = fetchJson(url.toString()).optJSONArray("results") ?: return emptyList()
-        return (0 until results.length()).mapNotNull { index ->
-            val song = results.optJSONObject(index) ?: return@mapNotNull null
+        return results.objects().mapNotNull { song ->
             val title = song.text("trackName")
             val artist = song.text("artistName")
             if (title.isEmpty() || artist.isEmpty()) return@mapNotNull null

@@ -243,12 +243,12 @@ internal object MetadataParsers {
         val state = runCatching { JSONObject(String(Base64.getDecoder().decode(encoded.trim()))) }.getOrNull() ?: return emptyMap()
         val items = state.optJSONObject("entities")?.optJSONObject("items") ?: return emptyMap()
         return items.keys().asSequence().mapNotNull { items.optJSONObject(it)?.optJSONObject("content")?.optJSONArray("items") }
-            .flatMap { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it)?.optJSONObject("itemV2")?.optJSONObject("data") } }
+            .flatMap { list -> list.objects().mapNotNull { it.optJSONObject("itemV2")?.optJSONObject("data") } }
             .mapNotNull { song ->
                 val url = spotifyTrackUrl(song.optString("uri")) ?: return@mapNotNull null
                 val sources = song.optJSONObject("albumOfTrack")?.optJSONObject("coverArt")?.optJSONArray("sources") ?: return@mapNotNull null
                 // The 300px one: sharp in a list without downloading the 640px one.
-                val cover = (0 until sources.length()).mapNotNull(sources::optJSONObject)
+                val cover = sources.objects()
                     .minByOrNull { kotlin.math.abs(it.optInt("width") - 300) }?.let { it.optString("url").ifBlank { null } }
                 cover?.let { url to it }
             }.toMap()
@@ -785,8 +785,7 @@ internal object MetadataParsers {
     }
 
     private fun spotifyEmbedTracks(list: JSONArray): List<MusicMetadata> {
-        return (0 until list.length()).mapNotNull { index ->
-            val track = list.optJSONObject(index) ?: return@mapNotNull null
+        return list.objects().mapNotNull { track ->
             MusicMetadata(
                 track.optString("title").ifBlank { return@mapNotNull null }, track.optString("subtitle"),
                 url = spotifyTrackUrl(track.optString("uri")), lengthMs = track.optLong("duration").takeIf { it > 0 }
@@ -819,8 +818,7 @@ internal object MetadataParsers {
         return MusicMetadata(title, artist, type, artwork, tracks, trackCount = count, lengthMs = lengthMs, instrumentalAlbum = instrumentalAlbum).takeIf { title.isNotBlank() }
     }
 
-    private fun deezerTracks(data: JSONArray): List<MusicMetadata> = (0 until data.length()).mapNotNull { index ->
-        val track = data.optJSONObject(index) ?: return@mapNotNull null
+    private fun deezerTracks(data: JSONArray): List<MusicMetadata> = data.objects().mapNotNull { track ->
         MusicMetadata(
             deezerTitle(track).ifBlank { return@mapNotNull null },
             track.optJSONObject("artist")?.optString("name").orEmpty(),
@@ -901,12 +899,10 @@ internal object MetadataParsers {
         val artist = album?.optJSONObject("byArtist")?.optString("name").orEmpty()
         val list = album?.optJSONObject("track")?.optJSONArray("itemListElement")
         // One return: an empty list where none are found is the same as any empty list.
-        return list?.let { songs ->
-            (0 until songs.length()).mapNotNull { index ->
-                val name = songs.optJSONObject(index)?.optJSONObject("item")?.let { it.optString("name").ifBlank { null } }
-                name?.let { MusicMetadata(it, artist) }
-            }
-        }.orEmpty()
+        return list.objects().mapNotNull { song ->
+            val name = song.optJSONObject("item")?.let { it.optString("name").ifBlank { null } }
+            name?.let { MusicMetadata(it, artist) }
+        }
     }
 
     private fun splitBy(text: String, separator: String, type: ItemType): MusicMetadata {

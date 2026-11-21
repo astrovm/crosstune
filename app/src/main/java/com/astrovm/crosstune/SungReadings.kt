@@ -68,9 +68,7 @@ internal class SungReadings(
     }
 
     private suspend fun keep(key: String, fixes: List<ReadingFix>) {
-        val cache = cache ?: return
-        cache.put(key, JSONArray(fixes.map { JSONArray().put(it.line).put(it.kanji).put(it.reading) }).toString())
-        cache.save()
+        cache?.keep(key, JSONArray(fixes.map { JSONArray().put(it.line).put(it.kanji).put(it.reading) }).toString())
     }
 
     private fun cacheKey(song: MusicMetadata, lines: List<String>, version: Int) =
