@@ -2,7 +2,40 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from measure import summarize
+from measure import adb_path, cache_dir, summarize
+
+
+class PlacesTest(unittest.TestCase):
+    def test_keeps_its_files_in_the_agent_cache_on_mr_and_in_the_home_elsewhere(self):
+        with tempfile.TemporaryDirectory() as folder:
+            mr = Path(folder) / 'agent-cache'
+            home = Path(folder) / 'home'
+            self.assertEqual(home / '.cache/agent-cache/crosstune-773', cache_dir(mr, home))
+            self.assertTrue((home / '.cache/agent-cache/crosstune-773').is_dir())
+            mr.mkdir()
+            self.assertEqual(mr / 'crosstune-773', cache_dir(mr, home))
+            self.assertTrue((mr / 'crosstune-773').is_dir())
+
+    def test_finds_adb_where_the_sdk_is_on_linux_and_on_a_mac_or_on_the_path(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder) / 'home'
+            bin_dir = Path(folder) / 'bin'
+            bin_dir.mkdir()
+            on_path = bin_dir / 'adb'
+            on_path.write_text('#!/bin/sh\n')
+            on_path.chmod(0o755)
+            self.assertEqual(on_path, adb_path({'PATH': str(bin_dir)}, home))
+            with self.assertRaisesRegex(RuntimeError, 'adb is missing'):
+                adb_path({'PATH': ''}, home)
+            for sdk in ('Library/Android/sdk', 'Android/Sdk'):
+                adb = home / sdk / 'platform-tools/adb'
+                adb.parent.mkdir(parents=True)
+                adb.write_text('')
+                self.assertEqual(adb, adb_path({'PATH': str(bin_dir)}, home))
+            configured = Path(folder) / 'sdk/platform-tools/adb'
+            configured.parent.mkdir(parents=True)
+            configured.write_text('')
+            self.assertEqual(configured, adb_path({'ANDROID_HOME': str(Path(folder) / 'sdk'), 'PATH': ''}, home))
 
 
 class SummaryTest(unittest.TestCase):

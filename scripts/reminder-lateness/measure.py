@@ -6,10 +6,36 @@ import json
 import math
 import os
 import re
+import shutil
 import statistics
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
+from pathlib import Path
 from zoneinfo import ZoneInfo
+
+
+def cache_dir(mr=Path('/mnt/data/agent-cache'), home=None):
+    """Where the recovery journal and the preference backup go: the agent cache on mr, and in the home elsewhere.
+
+    Made here, as agent-cache-clean removes it after 3 days unused and a first run elsewhere has none."""
+    root = mr if mr.is_dir() else (home or Path.home()) / '.cache/agent-cache'
+    folder = root / 'crosstune-773'
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def adb_path(environ=None, home=None):
+    """The SDK's adb: ANDROID_HOME's, then where Android Studio puts it on Linux and on a Mac, then the PATH's."""
+    environ = os.environ if environ is None else environ
+    home = home or Path.home()
+    roots = [Path(environ['ANDROID_HOME'])] if environ.get('ANDROID_HOME') else []
+    for root in roots + [home / 'Android/Sdk', home / 'Library/Android/sdk']:
+        if (root / 'platform-tools/adb').exists():
+            return root / 'platform-tools/adb'
+    found = shutil.which('adb', path=environ.get('PATH'))
+    if not found:
+        raise RuntimeError("adb is missing: install the Android SDK's platform-tools")
+    return Path(found)
 
 
 def summarize(lateness):
@@ -549,7 +575,6 @@ def main():
     import signal
     import subprocess
     import sys
-    from pathlib import Path
 
     parser = argparse.ArgumentParser(description='Measure one practice reminder on the locked Samsung.')
     parser.add_argument('--minutes', type=int, default=20, help='minimum minutes until the reminder')
@@ -577,12 +602,12 @@ def main():
 
     signal.signal(signal.SIGTERM, interrupted)
     try:
-        adb = Path.home() / 'Android/Sdk/platform-tools/adb'
+        adb = adb_path()
         listing = subprocess.run([str(adb), 'devices', '-l'], capture_output=True, text=True, check=True).stdout
         phone = Phone(adb, samsung_serial(listing))
         if media_volume(phone.shell('cmd media_session volume --stream 3 --get').decode()) != 0:
             raise RuntimeError('Media volume is not zero; refusing to start')
-        cache = Path('/mnt/data/agent-cache/crosstune-773')
+        cache = cache_dir()
         backup = cache / 'preferences-backup.xml'
         journal = cache / 'device-state.json'
         if args.recover:

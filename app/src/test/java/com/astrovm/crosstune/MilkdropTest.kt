@@ -246,6 +246,14 @@ class MilkdropTest {
         assertTrue(presets.all { "[preset00]" in milkdropPreset(assets, it) })
     }
 
+    /** README says how many visuals come with the app, which has to stay true as presets come and go. */
+    @Test
+    fun readmeCountsTheVisualsThatComeWithTheApp() {
+        val presets = milkdropPresets(ApplicationProvider.getApplicationContext<Application>().assets)
+        val readme = File("../README.md").readText()
+        assertTrue(readme, "**MilkDrop visuals.** ${presets.size} [projectM]" in readme)
+    }
+
     @Test
     fun theImagesPresetsDrawWithAreCopiedOutOnceForEachInstall() {
         val app = ApplicationProvider.getApplicationContext<Application>()
