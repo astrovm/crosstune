@@ -4372,7 +4372,8 @@ class MainActivityTest {
         // What it played before isn't the song asked.
         phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = morphe)
         composeRule.onNode(play).performClick()
-        waitForText(string(R.string.player_waiting, "YouTube Music"))
+        // Waited for by the name Play said (Issue #1123).
+        waitForText(string(R.string.player_waiting, "YT Music Morphe"))
         phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = morphe)
         composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodes(hasText("Old Song")).fetchSemanticsNodes().isEmpty())

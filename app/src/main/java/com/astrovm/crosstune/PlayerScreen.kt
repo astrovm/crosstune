@@ -139,7 +139,8 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     // A song the app went on to often comes without a cover, which is then the result's, when it's that song.
     val cover = song.artworkUrl ?: state.result?.takeIf { SongNames.same(it.title, song.title) && SongNames.sameArtist(it.artist, song.artist) }?.artworkUrl
     val following = player.following
-    val app = following?.app ?: MusicService.ofPackage(player.app)?.let { stringResource(it.labelRes) }
+    // Named as Play named it: a build patched from the service by its own name.
+    val app = following?.app ?: musicAppLabel(player.app)
     SwipedBack(onBack = actions.onClosePlayer)
     // What plays next, opened from the list it plays from up top or its button under the buttons.
     // Between one song and the next the app says nothing for a moment, so it stays as it was till it
