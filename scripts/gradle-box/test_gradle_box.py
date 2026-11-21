@@ -873,16 +873,36 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
         return self.start_script(BOX.with_name("in-box.sh"), "sh", "-c", build, "build", *args,
                                  GRADLE_BOX_CGROUP=str(self.cgroup))
 
-    def test_in_the_box_a_build_that_waited_on_memory_says_how_long(self):
+    def squeezed(self, waited_us, full):
+        """A build that waits on memory for `waited_us` microseconds, at the box's limit `full` times, and exits 4."""
+        return (f'printf "some avg10=40.00 avg60=0.00 avg300=0.00 total=%s\\n" {100_000_000 + waited_us} > "$1/memory.pressure"; '
+                f'printf "low 0\\nhigh 0\\nmax {full}\\noom 0\\noom_kill 0\\n" > "$1/memory.events"; exit 4')
+
+    def test_in_the_box_a_build_that_waited_at_the_limit_says_how_long_and_to_ask_for_more(self):
         self.box_memory(waited_s=100)
-        script = self.dir / "squeezed.py"
-        script.write_text("import sys\nfrom pathlib import Path\n"
-                          "Path(sys.argv[1], 'memory.pressure').write_text('some avg10=40.00 avg60=0.00 avg300=0.00 total=112400000\\n')\n"
-                          "Path(sys.argv[1], 'memory.events').write_text('low 0\\nhigh 0\\nmax 3021\\noom 0\\noom_kill 0\\n')\n")
-        box = self.in_box(f'{shlex.quote(sys.executable)} {shlex.quote(str(script))} "$1"; exit 4', str(self.cgroup))
+        box = self.in_box(self.squeezed(12_400_000, full=3021), str(self.cgroup))
         output, _ = box.communicate(timeout=20)
         self.assertEqual(4, box.returncode, output)
         self.assertIn("this build waited on memory for 12 s, at the box's limit 3021 times", output)
+        self.assertIn("Ask for more with GRADLE_BOX_MEMORY", output)
+
+    def test_in_the_box_a_build_that_waited_under_the_limit_points_at_the_machine(self):
+        self.box_memory(waited_s=100)
+        box = self.in_box(self.squeezed(12_400_000, full=0), str(self.cgroup))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(4, box.returncode, output)
+        self.assertIn("this build waited on memory for 12 s, under the box's limit, so the machine was short of memory", output)
+        self.assertNotIn("GRADLE_BOX_MEMORY ", output)
+
+    def test_in_the_box_a_wait_of_5_s_is_told_and_one_under_it_is_not(self):
+        for waited_us, told in ((4_900_000, False), (5_000_000, True)):
+            with self.subTest(waited_us=waited_us):
+                self.box_memory(waited_s=100)
+                box = self.in_box(self.squeezed(waited_us, full=1), str(self.cgroup))
+                output, _ = box.communicate(timeout=20)
+                self.assertEqual(4, box.returncode, output)
+                self.assertEqual(told, "waited on memory for 5 s" in output, output)
+                self.assertEqual(told, bool(output), output)
 
     def test_in_the_box_a_build_that_barely_waited_says_nothing(self):
         self.box_memory(waited_s=100)
@@ -906,12 +926,13 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
 
     def test_in_the_box_a_stop_reaches_the_build(self):
         self.box_memory(waited_s=0)
-        box = self.in_box(f'trap \'touch "{self.dir}/stopped"; exit 143\' TERM; touch "{self.dir}/started"; '
+        # The build takes a moment to stop, and stops well: its own 0, not the stop's 143.
+        box = self.in_box(f'trap \'touch "{self.dir}/stopped"; sleep 0.3; exit 0\' TERM; touch "{self.dir}/started"; '
                           'while :; do sleep 0.02; done')
         self.wait_for("started", box)
         box.terminate()
         output, _ = box.communicate(timeout=20)
-        self.assertEqual(143, box.returncode, output)
+        self.assertEqual(0, box.returncode, output)
         self.assertTrue((self.dir / "stopped").exists())
 
     def test_waits_to_start_while_the_machine_is_out_of_memory(self):
