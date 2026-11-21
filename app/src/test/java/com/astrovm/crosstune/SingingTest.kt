@@ -783,18 +783,62 @@ class SingingTest {
     }
 
     @Test
-    fun pickedUpPartwayOneWhileHeardFurtherOffThanNearLinesAreLookedAtMovesThem() {
+    fun pickedUpPartwayOneWhileHeardFurtherOffThanNearLinesAreLookedAtMovesThemThisTimeOnly() {
         // As Bizarre Love Triangle went, YouTube Music's words timed for another take: one while heard 22.8 s
-        // off, then 20.8 s, as the take's pace differs too. That far off, the lines heard are found only
-        // where by far the most words agree across the whole song, so a chorus sung elsewhere isn't.
+        // off. That far off, the lines heard are found only where by far the most words agree across the
+        // whole song, so they move at once, but for this time only: a chorus may be timed otherwise there.
         val times = listOf(2, 5, 8, 30, 33, 36)
         lyricsTimedFor(null, times)
         singing.answer = { sungAt(times, times.map { 12_000L }) }
         openLyrics()
         plays(positionMs = 3_000)
         waitUntil { singing.hears == 1 && model().uiState.lyricLines[1].timeMs == 17_000L }
-        assertTrue(model().uiState.lyricsSynced)
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertFalse(model().uiState.reportOffer)
+        // The next while hears the words as far off, where they're shown now: they're kept so, a problem found.
+        passes(40_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
+        assertEquals(times.map { it * 1_000L + 12_000L }, model().uiState.lyricLines.map { it.timeMs })
         assertTrue(prefs().contains("lyrics_sync"))
+        assertTrue(model().uiState.reportOffer)
+    }
+
+    /** Lines timed right, picked up 3 s in, the first while hearing the chorus, lines 3 to 5, 25 s before it's sung, where lines 1 and 2 are: then where it's sung. */
+    private fun chorusHeardFarFromWhereItsSung(): List<Int> {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.answer = { sungAt(times, if (whiles == 0) listOf(100_000L, 100_000L, 100_000L, -25_000L, -25_000L, -25_000L) else times.map { 0L }).also { whiles++ } }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 5_000L }
+        return times
+    }
+
+    @Test
+    fun pickedUpPartwayOneChorusHeardFarFromWhereItsSungIsntKept() {
+        // Found where by far the most words agree, but the chorus is sung again where the words time it.
+        chorusHeardFarFromWhereItsSung()
+        composeRule.waitForIdle()
+        // Moved this time only: nothing's kept, and nothing's said to be wrong with the words.
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertFalse(model().uiState.reportOffer)
+    }
+
+    @Test
+    fun pickedUpPartwayLinesMovedByOneWrongWhileGoBackByOneRightOne() {
+        val times = chorusHeardFarFromWhereItsSung()
+        // Moved back in the app a little later, the next while hears the first lines where they're timed: one while undoes it.
+        passes(5_000)
+        plays(positionMs = 3_000)
+        // Heard from just before the next line shown.
+        passes(5_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 30_000L }
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
     }
 
     @Test
@@ -814,22 +858,63 @@ class SingingTest {
         assertTrue(model().uiState.lyricsSynced)
     }
 
-    @Test
-    fun pickedUpPartwayWordsKeptFarOffMoveAgainByAWhileHeardALittleFurther() {
-        // Kept 17 s off by the first while, the next hears the words two seconds further off, as a take's
-        // pace differs: little next to how far off they are, so they move, as a second while agreeing would.
-        val times = listOf(1, 3, 5, 40, 42, 44)
-        lyricsTimedFor(null, times)
-        var whiles = 0
-        singing.answer = { sungAt(times, times.map { if (whiles == 0) 17_000L else 19_000L }).also { whiles++ } }
+    /** The words kept [offMs] later than timed, as a play before heard them, open again. */
+    private fun keptOff(offMs: Long) {
         openLyrics()
-        plays(positionMs = 3_000)
-        // Heard from just before the first line it's sung by.
-        passes(1_000)
-        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 57_000L }
-        passes(60_000)
-        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 59_000L }
-        assertTrue(model().uiState.lyricsSynced)
+        val shown = model().uiState
+        LyricsSyncStore(prefs()).save(checkNotNull(shown.lyricsFor) { "Expected lyricsFor to be non-null" }, shown.lyricLines, listOf(SyncPoint(shown.lyricLines.first().timeMs, shown.lyricLines.first().timeMs + offMs)))
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
+        openLyrics()
+        waitUntil { model().uiState.lyricsSynced }
+    }
+
+    @Test
+    fun pickedUpPartwayOneWhileHeardFarFromWordsKeptFarOffDoesntMoveThem() {
+        // Kept 40 s off, one while hears them 5.7 s further: no more than an eighth of how far off they are,
+        // but still one while alone, as the one Never Gonna Give You Up was wrongly heard by, 5.35 s off.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        keptOff(40_000)
+        val kept = prefs().getString("lyrics_sync", null)
+        singing.answer = { sungAt(times, times.map { 45_700L }) }
+        plays(positionMs = 43_000)
+        waitUntil { singing.hears >= 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L + 40_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertEquals(kept, prefs().getString("lyrics_sync", null))
+    }
+
+    @Test
+    fun pickedUpPartwayLinesPutInTimeByHandArentMovedByOneWhile() {
+        // Put 20 s later by hand, then picked up there: one while hears them 2.5 s further still.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 22_500L }) }
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(20_000) }
+        val byHand = prefs().getString("lyrics_sync", null)
+        plays(positionMs = 23_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L + 20_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertEquals(byHand, prefs().getString("lyrics_sync", null))
+    }
+
+    @Test
+    fun aVideoPickedUpPartwayPutInTimeByHandIsntMovedByOneWhile() {
+        // A video's one while far off is enough to move words found as they are, but not words put in time by hand.
+        shazamAnswers(180_000)
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 3_000L }) }
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        val byHand = prefs().getString("lyrics_sync", null)
+        plays(positionMs = 3_000, video = true)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L + 500L }, model().uiState.lyricLines.map { it.timeMs })
+        assertEquals(byHand, prefs().getString("lyrics_sync", null))
     }
 
     @Test

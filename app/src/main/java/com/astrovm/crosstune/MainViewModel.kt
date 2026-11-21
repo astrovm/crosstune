@@ -2439,8 +2439,10 @@ internal class MainViewModel(
     /** Whether no singing was heard where the words are timed, and none found yet: no line is shown sung till it is. */
     private var unheard = false
     private var heardThisTime = false
-    /** How far off the words as found a whole while heard last said they are, far enough off to say they're off themselves, with the app's clock unsure: they move once another while agrees. */
+    /** How far off the words as found a whole while heard last said they are, far enough off to say they're off themselves, with the app's clock unsure: they're kept so once another while agrees. */
     private var farOffMs: Long? = null
+    /** Whether the lines shown were moved this time by a while found further off than near lines are looked at, and nothing agreed yet. */
+    private var movedFar = false
     /** Whether the words are being lined up to the singing, through the song, with the app's clock sure; lines heard so far stay till it's done. */
     private var liningUp = false
     /** Whether the speech model, offered to be fetched by hand, was turned down; it isn't offered again till Crosstune opens again. */
@@ -3424,36 +3426,50 @@ internal class MainViewModel(
      * That's a problem found too: a song is mostly picked up playing, the words opened after it started.
      * But in a music app, one while alone can be matched to the wrong lines, as a chorus heard seconds
      * from where it's sung, or a line the speech model hears over and over: words timed for another take
-     * are off all through the song, so they move that far only once a later while, [whole] or its first
-     * seconds, is heard about as far off, or they were kept about as far off already: the further off, the
-     * more they drift, as the take's pace differs too. Till then they stay where they are, even after lines
-     * heard near. One while found further off than near lines are looked at is enough: that's found only
-     * where by far the most words heard agree, across the whole song.
+     * are off all through the song, so they're kept that far off only once a later while, [whole] or its
+     * first seconds, is heard about as far off: the further off, the more they drift, as the take's pace
+     * differs too. Till then they stay where they are, even after lines heard near. One found further off
+     * than near lines are looked at moves them this time only: that's found only where by far the most
+     * words heard agree, across the whole song, so it's likely right, but a chorus sung again may still be
+     * timed differently there. The next while heard back where they're kept puts them back.
      */
     private fun placeThisTime(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long, whole: Boolean) {
         heardThisTime = true
         val placed = SungAlignment.linesMs(sung, clock::positionAt, shown, shift).ifEmpty { mapOf(shown.indexOfFirst { it.timeMs + shift >= clock.positionAt(sung.startedAtMs) }.coerceAtLeast(0) to null) }
-        val heard = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
-        val far = abs(shift) >= WORDS_OFF_MS
-        // How far off the words as found are, by this while: the lines shown may be moved already.
-        val offMs = placed.keys.first().let { shift + shown[it].timeMs - foundLines[it].timeMs }
-        // A video's words are often seconds off, timed for the release without its intro: one while says so.
-        // So does one found further off than near lines are looked at, as only where by far the most words
-        // heard agree, across the whole song, is: a chorus sung as much elsewhere isn't. Or else an earlier
-        // while said about as far, or the words were kept that far off already.
-        val agreed = far && (appFollowing?.video == true || abs(shift) > SungAlignment.MAX_SHIFT_MS ||
-            listOfNotNull(farOffMs, (offMs - shift).takeIf { syncPoints.isNotEmpty() }).any { abs(it - offMs) < agreeingMs(offMs) })
-        if (whole) farOffMs = offMs.takeIf { far && !agreed }
-        if (far) {
-            if (!agreed) return
-            // The words kept so for the first time are a problem found, as those heard off with the clock sure are.
-            val first = syncPoints.isEmpty()
-            setSync(song, heard)
-            if (first) problemFound(SongProblem.SUNG_OFF)
-            return
+        val line = placed.keys.first()
+        // How far off the words as found are, by this while, and as they're kept: the lines shown may be moved already.
+        val offMs = shift + shown[line].timeMs - foundLines[line].timeMs
+        val keptMs = LyricsSync.adjust(foundLines, syncPoints, pace)[line].timeMs - foundLines[line].timeMs
+        val agrees = farOffMs?.let { abs(it - offMs) < agreeingMs(offMs) } == true
+        // Moved this time by a while found far off, but heard back where they're kept: that while was wrong.
+        val back = movedFar && abs(offMs - keptMs) < WORDS_OFF_MS
+        val heard = placed.entries.fold(if (back) syncPoints else shownPoints) { kept, (at, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[at].timeMs, ms ?: (shown[at].timeMs + shift))) }
+        when {
+            back -> {
+                movedFar = false
+                if (whole) farOffMs = null
+            }
+            // Near where they're shown: moved far this time already, this while says so too.
+            abs(shift) < WORDS_OFF_MS -> if (movedFar && agrees) return keepFarOff(song, heard, whole) else if (whole) farOffMs = offMs.takeIf { movedFar }
+            // A video's words are often seconds off, timed for the release without its intro: one while says so,
+            // unless they were put in time by hand, which one while alone never undoes.
+            (appFollowing?.video == true && !timedByHand) || agrees -> return keepFarOff(song, heard, whole)
+            else -> {
+                if (whole) farOffMs = offMs
+                if (abs(shift) <= SungAlignment.MAX_SHIFT_MS) return
+                movedFar = true
+            }
         }
         heardPoints = heard
         showPoints()
+    }
+
+    /** The lines [heard] far off kept so, as two whiles agree they are: the words are off, not the clock. The first time, that's a problem found, as those heard off with the clock sure are. */
+    private fun keepFarOff(song: MusicMetadata, heard: List<SyncPoint>, whole: Boolean) {
+        val first = syncPoints.isEmpty()
+        if (whole) farOffMs = null
+        setSync(song, heard)
+        if (first) problemFound(SongProblem.SUNG_OFF)
     }
 
     /**
@@ -3505,6 +3521,7 @@ internal class MainViewModel(
     private fun forgetHeard() {
         if (heardPoints.isEmpty()) return
         heardPoints = emptyList()
+        movedFar = false
         showPoints()
     }
 
@@ -4280,6 +4297,7 @@ internal class MainViewModel(
         if (timedByHand) timingAtCorrection = playedIn to currentPlayerTiming()
         // Put in time by hand or for good, what was heard this time only gives way.
         heardPoints = emptyList()
+        movedFar = false
         // Kept for the words as found, which is how they're found next time.
         syncStore.save(song, foundLines, withGuess(points), wordsPace)
         uiState = uiState.copy(lyricLines = linesFrom(points), lyricsSynced = points.isNotEmpty(), lyricsOffTake = false)
