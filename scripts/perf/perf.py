@@ -7,7 +7,7 @@
     perf.py start --runs 10 --build new=b.apk           # cold start, `am start -W`
 
 Each run prints one JSON line, and each build a summary (mean, spread) at the end. Pick the phone
-with ANDROID_SERIAL. It needs adb: ANDROID_HOME's, else ~/Android/Sdk's, else the one on the PATH.
+with ANDROID_SERIAL. It needs adb, which scripts/lib/adbtool.py finds: $ADB, the SDK's, or the one on the PATH.
 
 `jank` cold starts the app before each run, so the main screen shows only its Recent list, then
 swipes the same way each run: up the list and back down, a fling each, from the screen's own size.
