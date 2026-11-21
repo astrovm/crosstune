@@ -425,10 +425,18 @@ internal class PlayingFirst(
     override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
         val heard = played.listen()
         if (!byMicrophone || heard != Heard.Failed(AppError.MICROPHONE)) return heard
+        if (!whileAloud) return roomForPlaying(hearing.listen())
         // Through headphones or muted, the microphone hears nothing of it: no more use than none at all.
-        val room = (if (whileAloud) aloud() else hearing.listen()) ?: return heard
-        return roomForPlaying(room)
+        val on = playback.playsAloud()
+        if (on == Aloud.No || on == unheardOn) return heard
+        val room = roomForPlaying(aloud() ?: return heard)
+        // On Bluetooth that may be headphones, it goes on only while it names the song there. Not reaching Shazam tells nothing.
+        if (on is Aloud.Maybe && (room is Heard.Song || room == Heard.Nothing)) unheardOn = on.takeIf { room == Heard.Nothing }
+        return room
     }
+
+    /** The Bluetooth output on which the microphone heard nothing of what the phone played, as with headphones, till another connects. */
+    private var unheardOn: Aloud.Maybe? = null
 
     private fun roomForPlaying(room: Heard): Heard {
         // The microphone hears the room too: another song playing there isn't the one the phone plays.
@@ -440,7 +448,7 @@ internal class PlayingFirst(
     /** What the microphone hears while the phone plays out loud, or null once it doesn't, as when headphones are plugged in. */
     private suspend fun aloud(): Heard? = coroutineScope {
         val listening = async { hearing.listen() }
-        val quiet = launch { while (playback.playsAloud()) delay(ALOUD_CHECK_MS) }
+        val quiet = launch { while (playback.playsAloud() != Aloud.No) delay(ALOUD_CHECK_MS) }
         select<Heard?> { listening.onAwait { it }; quiet.onJoin { null } }.also { coroutineContext.cancelChildren() }
     }
 

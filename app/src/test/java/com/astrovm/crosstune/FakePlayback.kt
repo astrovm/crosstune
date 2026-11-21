@@ -226,7 +226,7 @@ internal class FakePlayback : PlaybackSource {
     }.distinctUntilChanged()
 
     /** Whether the phone's music plays out loud, where the microphone hears it. */
-    var aloud = true
+    var aloud: Aloud = Aloud.Yes
 
     override fun playsAloud() = aloud
 

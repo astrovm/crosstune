@@ -500,7 +500,7 @@ class MainViewModelTest {
     fun aStationWithoutPlaybackStateIsNamedByEarAndATapOpensTheSongHeard() {
         // Simple Radio says only the station's name (Issue #1000): what it plays is heard, as for any station.
         val hears = EarsOnThePhone(heardSong())
-        val playback = FakePlayback().apply { aloud = true }
+        val playback = FakePlayback().apply { aloud = Aloud.Yes }
         val model = radioModel(hears, playback, mayCapture = { true })
         playback.unnamed.value = station.copy(reportsState = false)
         model.playingBarInSight(true)
@@ -520,7 +520,7 @@ class MainViewModelTest {
     @Test
     fun aStationWithoutPlaybackStateIsListenedToOnlyInSightAndItsListenStopsWhenItGoes() {
         val hears = EarsOnThePhone(heardSong())
-        val playback = FakePlayback().apply { aloud = true }
+        val playback = FakePlayback().apply { aloud = Aloud.Yes }
         val model = radioModel(hears, playback, mayCapture = { true })
         hears.holdPlaying = CompletableDeferred()
         playback.unnamed.value = station.copy(reportsState = false)
@@ -545,7 +545,7 @@ class MainViewModelTest {
         // One that may be another song playing in the room, and one that may be over by now: never the station's
         // name as a song, which it doesn't say it plays.
         for (heard in listOf(heardSong().copy(inRoom = true), heardSong(lengthMs = null))) {
-            val playback = FakePlayback().apply { aloud = true }
+            val playback = FakePlayback().apply { aloud = Aloud.Yes }
             val model = radioModel(EarsOnThePhone(heard), playback, mayCapture = { true })
             playback.unnamed.value = station.copy(reportsState = false)
             model.playingBarInSight(true)
@@ -1043,7 +1043,7 @@ class MainViewModelTest {
     @Test
     fun withTheMicrophoneAllowedThePhonesOwnSoundIsHeardThroughHeadphonesAndOnATvSoATapOpensWhatTheBarShows() {
         for (tv in listOf(false, true)) {
-            val playback = FakePlayback().apply { aloud = tv }
+            val playback = FakePlayback().apply { aloud = if (tv) Aloud.Yes else Aloud.No }
             // A song of no known length: shown on the bar, but never opened.
             val ears = EarsOnThePhone(heardSong(lengthMs = null))
             val model = radioModel(ears, playback, phone = if (tv) Phone.TV else Phone.OTHER)
@@ -1114,7 +1114,7 @@ class MainViewModelTest {
         assertEquals(listOf(false), tv.asked)
         // Through headphones or muted, the microphone would hear nothing.
         val quiet = EarsOnThePhone(Heard.Nothing)
-        radioModel(quiet, FakePlayback().apply { aloud = false }).playingBarInSight(true)
+        radioModel(quiet, FakePlayback().apply { aloud = Aloud.No }).playingBarInSight(true)
         idle()
         assertEquals(listOf(false), quiet.asked)
     }
@@ -1143,7 +1143,7 @@ class MainViewModelTest {
         var micAllowed = false
         var shared = false
         // At volume 0, with no microphone allowed and the phone's own sound not shared, nothing's heard.
-        val playback = FakePlayback().apply { aloud = false }
+        val playback = FakePlayback().apply { aloud = Aloud.No }
         val ears = EarsOnThePhone(Heard.Failed(AppError.MICROPHONE), Heard.Nothing)
         val model = radioModel(ears, playback, mayCalibrate = { micAllowed }, mayCapture = { shared })
         model.playingBarInSight(true)
@@ -1162,15 +1162,20 @@ class MainViewModelTest {
         micAllowed = true
         pass(MainViewModel.EARS_CHECK_MS)
         assertEquals(6, ears.asked.size)
-        playback.aloud = true
+        playback.aloud = Aloud.Yes
         pass(MainViewModel.EARS_CHECK_MS)
         assertEquals(7, ears.asked.size)
         assertEquals(true, ears.asked.last())
         // Headphones plugged in: the phone's own sound alone, at once too.
-        playback.aloud = false
+        playback.aloud = Aloud.No
         pass(MainViewModel.EARS_CHECK_MS)
         assertEquals(8, ears.asked.size)
         assertEquals(false, ears.asked.last())
+        // A Bluetooth speaker, or headphones, connected: the microphone's tried, at once too.
+        playback.aloud = Aloud.Maybe(setOf(1))
+        pass(MainViewModel.EARS_CHECK_MS)
+        assertEquals(9, ears.asked.size)
+        assertEquals(true, ears.asked.last())
     }
 
     @Test
@@ -1179,7 +1184,7 @@ class MainViewModelTest {
         val ears = EarsOnThePhone(heardSong())
         radioModel(ears, playback).playingBarInSight(true)
         idle()
-        playback.aloud = false
+        playback.aloud = Aloud.No
         pass(MainViewModel.EARS_CHECK_MS * 5)
         assertEquals(1, ears.asked.size)
     }

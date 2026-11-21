@@ -881,6 +881,62 @@ class SongListenerTest {
     }
 
     @Test
+    fun onClassicBluetoothTheMicrophoneIsTriedAndGoesOnOnlyWhileItNamesTheSong() = runTest {
+        val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
+        val unshared = Heard.Failed(AppError.MICROPHONE)
+        val song = Heard.Song(MusicMetadata("Fake Song", "Fake Artist"), null, 12_000, 400_000)
+        val answers = ArrayDeque<Heard>()
+        var asked = 0
+        val ears = PlayingFirst(phone, SongHearing { asked++; answers.removeFirst() }, SongHearing { unshared })
+        suspend fun heardOn(on: Aloud, vararg room: Heard): Heard {
+            phone.aloud = on
+            answers += room
+            return ears.listenToPlaying(whileAloud = true)
+        }
+        // A speaker: the microphone names the song, and goes on, through talk between songs too.
+        val speaker = Aloud.Maybe(setOf(1))
+        assertEquals(song.copy(inRoom = true), heardOn(speaker, song))
+        assertEquals(song.copy(inRoom = true), heardOn(speaker, song))
+        // Not reaching Shazam tells nothing of where the music goes.
+        assertEquals(Heard.Failed(AppError.NETWORK), heardOn(speaker, Heard.Failed(AppError.NETWORK)))
+        assertTrue(heardOn(speaker, Heard.Unsent { song }) is Heard.Unsent)
+        assertEquals(4, asked)
+        // A car, with hands-free too, is heard in it as well.
+        val car = Aloud.Maybe(setOf(2, 3))
+        assertEquals(song.copy(inRoom = true), heardOn(car, song))
+        assertEquals(5, asked)
+        // Headphones: the microphone hears nothing of it, so on them it isn't asked again.
+        val headphones = Aloud.Maybe(setOf(4))
+        assertEquals(Heard.Nothing, heardOn(headphones, Heard.Nothing))
+        assertEquals(6, asked)
+        assertEquals(unshared, heardOn(headphones))
+        assertEquals(unshared, heardOn(headphones))
+        assertEquals(6, asked)
+        // Nor on headphones the microphone hears another song through, in the room.
+        phone.onThePhone = Heard.Song(MusicMetadata("Another Song", "Another Artist"), null)
+        val others = Aloud.Maybe(setOf(5))
+        assertEquals(Heard.Nothing, heardOn(others, song))
+        assertEquals(unshared, heardOn(others))
+        assertEquals(7, asked)
+        phone.onThePhone = null
+        // Another one connected, or the same again, is tried afresh: maybe a speaker this time.
+        assertEquals(song.copy(inRoom = true), heardOn(Aloud.Maybe(setOf(6)), song))
+        // Wired headphones are never tried; the phone's speaker always is.
+        assertEquals(unshared, heardOn(Aloud.No))
+        assertEquals(8, asked)
+        assertEquals(Heard.Nothing, heardOn(Aloud.Yes, Heard.Nothing))
+        assertEquals(Heard.Nothing, heardOn(Aloud.Yes, Heard.Nothing))
+        assertEquals(10, asked)
+        // Asked by hand, as to name a song, the microphone listens whatever the output.
+        phone.aloud = headphones
+        answers += song
+        assertEquals(song.copy(inRoom = true), ears.listenToPlaying())
+        // And the first speaker, heard before, still is.
+        assertEquals(song.copy(inRoom = true), heardOn(speaker, song))
+        assertEquals(12, asked)
+    }
+
+    @Test
     fun whileAloudTheMicrophoneStopsOnceThePhoneGoesQuietButItsOwnSoundGoesOn() = runTest {
         val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
         val unshared = Heard.Failed(AppError.MICROPHONE)
@@ -898,7 +954,7 @@ class SongListenerTest {
         val stopped = async { PlayingFirst(phone, room, SongHearing { unshared }).listenToPlaying(whileAloud = true) }
         delay(check * 5)
         assertTrue(stopped.isActive)
-        phone.aloud = false
+        phone.aloud = Aloud.No
         // On virtual time, as all of this test: a delay here passes at once.
         delay(check * 2)
         assertTrue(stopped.isCompleted)
@@ -906,10 +962,10 @@ class SongListenerTest {
         assertTrue(microphoneStopped)
         // The phone's own sound still hears it through headphones, so that listen goes on.
         val shared = CompletableDeferred<Heard>()
-        phone.aloud = true
+        phone.aloud = Aloud.Yes
         val goesOn = async { PlayingFirst(phone, room, SongHearing { shared.await() }).listenToPlaying(whileAloud = true) }
         delay(check * 5)
-        phone.aloud = false
+        phone.aloud = Aloud.No
         delay(check * 5)
         assertTrue(goesOn.isActive)
         shared.complete(song)
@@ -923,7 +979,7 @@ class SongListenerTest {
         // Heard by the microphone alone, it may be the room's: see aSongOnlyTheMicrophoneHeardWithNoSongNamedIsKeptAsHeardInTheRoom.
         assertEquals(song.copy(inRoom = true), byHand.await())
         // A song heard while the phone plays out loud is the answer.
-        phone.aloud = true
+        phone.aloud = Aloud.Yes
         assertEquals(song.copy(inRoom = true), PlayingFirst(phone, SongHearing { song }, SongHearing { unshared }).listenToPlaying(whileAloud = true))
     }
 

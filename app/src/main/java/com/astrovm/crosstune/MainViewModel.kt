@@ -288,7 +288,7 @@ internal class MainViewModel(
     private var followedUnnamed: Pair<Unnamed, Following>? = null
 
     /** What the last listen by ear could hear with, as [earsNow] has it, when it named no song; null after one that did. */
-    private var unheardWith: List<Boolean>? = null
+    private var unheardWith: Ears? = null
 
     /** Whether the last listen by ear to what an app plays now, with no song named, named none: talk, a song Shazam doesn't know, or a failure. */
     private var unheardByEar = false
@@ -1296,7 +1296,7 @@ internal class MainViewModel(
             // Listening along with the words, or hearing them sung, has the microphone and the phone's sound till it's done.
             listOfNotNull(alongJob, singingJob, voiceJob).forEach { it.join() }
             val ears = earsNow(source)
-            val byMicrophone = uiState.phone != Phone.TV && mayCalibrate() && source.playsAloud()
+            val byMicrophone = uiState.phone != Phone.TV && mayCalibrate() && source.playsAloud() != Aloud.No
             // How the app said it played as the sound to hear started, which what it says after is checked against.
             val startedWith = uiState.playingUnnamed?.following
             // Stopped for one of those, it's tried again once that's done.
@@ -1346,7 +1346,10 @@ internal class MainViewModel(
     }
 
     /** What naming by ear can hear with now: the microphone allowed, the phone's own sound shared, the phone playing aloud. */
-    private fun earsNow(source: PlaybackSource) = listOf(mayCalibrate(), mayCapture(), source.playsAloud())
+    private fun earsNow(source: PlaybackSource) = Ears(mayCalibrate(), mayCapture(), source.playsAloud())
+
+    /** What naming by ear hears with: whether the microphone's allowed, whether the phone shares its sound, and where it plays. */
+    private data class Ears(val microphone: Boolean, val shared: Boolean, val aloud: Aloud)
 
     /**
      * When the song [heard] should be over, on the [now] clock, from its length and where in it it was heard, going by
