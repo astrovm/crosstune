@@ -690,6 +690,28 @@ class TvTest {
     }
 
     @Test
+    fun onATvASheetUpOnTheScreenComeBackToGivesTheRemoteBackOncePutAway() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasContentDescription(string(R.string.tile_lyrics_label)))
+        words.requestFocus()
+        composeRule.runOnIdle { model().openFixes() }
+        val onMain = { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitUntil(5_000) { !onMain() }
+        // Songs looked up by name meanwhile: their sheet shows on the main screen come back to, and keeps the remote.
+        composeRule.runOnIdle { model().searchSongs("moon") }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { onMain() && shown(string(R.string.song_search_title)) }
+        composeRule.waitForIdle()
+        words.assertIsNotFocused()
+        // Put away, the remote goes back to what it was on there.
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { !shown(string(R.string.song_search_title)) }
+        composeRule.waitForIdle()
+        words.assertIsFocused()
+    }
+
+    @Test
     fun onATvBackFromPracticeLandsOnTheRowThatStartedIt() {
         prefs().edit().putString("saved_lines", """[{"text":"夜の空","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
         launch()
@@ -873,6 +895,32 @@ class TvTest {
         composeRule.mainClock.autoAdvance = true
         composeRule.waitForIdle()
         bar.assertIsFocused()
+    }
+
+    @Test
+    fun onATvASheetUpAsAStationsPlayerClosesGivesTheRemoteToTheBarOncePutAway() {
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
+        }
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { SongHearing { Heard.Nothing } }
+        launch()
+        composeRule.waitUntil(5_000) { shown("Blue 100.7 FM") }
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        settings().requestFocus()
+        composeRule.runOnIdle { model().peekPlayingUnnamed() }
+        composeRule.waitUntil(5_000) { openStation().isDisplayed() }
+        // Songs looked up by name close the player, and their sheet on the main screen keeps the remote.
+        composeRule.runOnIdle { model().searchSongs("moon") }
+        composeRule.waitUntil(5_000) { stationPlayerGone() && shown(string(R.string.song_search_title)) }
+        composeRule.waitForIdle()
+        settings().assertIsNotFocused()
+        // Put away, the remote goes on to the bar it was handed to.
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { !shown(string(R.string.song_search_title)) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsFocused()
     }
 
     @Test

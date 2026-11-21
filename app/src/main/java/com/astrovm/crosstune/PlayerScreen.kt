@@ -178,10 +178,10 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     // A station with no state has nothing else to press, so on a TV the remote starts on its one button, and keeps it as the station changes.
     LaunchedEffect(player.stationOnly) { if (player.stationOnly && state.phone == Phone.TV) openStation.requestFocus() }
     // Closed, the remote goes back to the station's bar, which is still there, rather than nowhere.
-    val barFocus = LocalBarFocus.current
+    val main = LocalMainFocus.current
     val handsBack by rememberUpdatedState(player.stationOnly && state.phone == Phone.TV)
-    DisposableEffect(barFocus) {
-        onDispose { if (handsBack) barFocus.handBack() }
+    DisposableEffect(main) {
+        onDispose { if (handsBack) main?.goBackTo(Screen.PLAYER) }
     }
     val fromTools = remember { FocusRequester() }
     // Which of them opened it, null till one did, so the remote is back there once it's put away,
