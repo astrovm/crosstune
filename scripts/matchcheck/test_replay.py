@@ -1,5 +1,10 @@
+import contextlib
+import hashlib
+import io
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -45,6 +50,42 @@ class RightIdsTest(unittest.TestCase):
         for channel, own in (("YOASOBI", True), ("Yoasobi - Topic", True), ("ＹＯＡＳＯＢＩ", False)):
             self.assertEqual(own, replay.own_channel(channel, ["YOASOBI"]), channel)
         self.assertTrue(replay.own_channel("Beyoncé", ["Beyonce"]))
+
+
+class PrepareTest(unittest.TestCase):
+    def test_the_answers_kept_are_named_where_in_the_folder_so_a_copy_of_it_finds_them(self):
+        with tempfile.TemporaryDirectory() as out:
+            song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon Kenshi Yonezu")
+            with open(os.path.join(out, "songs.json"), "w", encoding="utf-8") as kept:
+                json.dump([song], kept)
+            os.mkdir(os.path.join(out, "raw"))
+            songs = replay.ytm_path(out, song["query"], replay.collect.YTM_SONGS)
+            self.assertIsNone(songs)
+            for params in (replay.collect.YTM_SONGS, replay.collect.YTM_VIDEOS):
+                body = {"context": {"client": replay.collect.YTM_CLIENT}, "query": song["query"], "params": params}
+                key = hashlib.sha256((replay.collect.YTM_SEARCH + json.dumps(body, sort_keys=True)).encode()).hexdigest()[:24]
+                with open(os.path.join(out, "raw", key + ".json"), "w", encoding="utf-8") as kept:
+                    json.dump({}, kept)
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.prepare(out)
+            with open(os.path.join(out, "replay.json"), encoding="utf-8") as kept:
+                [prepared] = json.load(kept)
+            for name in ("songs", "videos"):
+                self.assertFalse(os.path.isabs(prepared[name]))
+                self.assertTrue(prepared[name].startswith("raw" + os.sep))
+                self.assertTrue(os.path.isfile(os.path.join(out, prepared[name])))
+
+    def test_answers_never_kept_are_none(self):
+        with tempfile.TemporaryDirectory() as out:
+            song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon Kenshi Yonezu")
+            with open(os.path.join(out, "songs.json"), "w", encoding="utf-8") as kept:
+                json.dump([song], kept)
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.prepare(out)
+            with open(os.path.join(out, "replay.json"), encoding="utf-8") as kept:
+                [prepared] = json.load(kept)
+            self.assertIsNone(prepared["songs"])
+            self.assertIsNone(prepared["videos"])
 
 
 if __name__ == "__main__":
