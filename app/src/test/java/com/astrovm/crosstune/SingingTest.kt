@@ -1083,6 +1083,26 @@ class SingingTest {
     }
 
     @Test
+    fun wordsPutInTimeByTheSingingArentTimedAnewByCopiesFoundWhenLookedUpAgain() {
+        var copies = false
+        remixWithCopies({ copies })
+        val times = lines.indices.map { it * 3_000L }
+        openLyrics()
+        val song = checkNotNull(model().uiState.lyricsFor) { "Expected the words' song" }
+        val found = model().uiState.lyricLines
+        // The singing put the first line a second later, which keeps a point and no hand mark.
+        LyricsSyncStore(prefs()).save(song, found, listOf(SyncPoint(0, 1_000)))
+        controller?.destroyAndSettle()
+        File(app.cacheDir, "lyrics.json").delete()
+        copies = true
+        openLyrics()
+        waitUntil { fake.requestedUrls.any { "track_name=Demo&" in it } && keptForGood() }
+        composeRule.waitForIdle()
+        // The copies are looked for, as these lines aren't timed by hand, but the shown ones keep where the singing put them.
+        assertEquals(times.map { it + 1_000 }, model().uiState.lyricLines.map { it.timeMs })
+    }
+
+    @Test
     fun wordsPutInTimeByHandWhileCopiesAreLookedForStayAsTheyAre() {
         val asked = CountDownLatch(1)
         val answer = CountDownLatch(1)
