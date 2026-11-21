@@ -14,6 +14,7 @@ keeps only that one on, plays the song a moment so the dev app follows it, pause
 put, and takes screenshots. Then it hides the visuals for one more, the words alone, which says what's
 a word pixel. The dev app's settings are put back after; the song stays a few seconds further on.
 Set ANDROID_SERIAL when more than one phone is connected.
+It needs NumPy, SciPy and Pillow.
 
 `report` gives WCAG contrast of word pixels against the ring right around them, 2 to 8 pixels out,
 piece of glyph by piece of glyph, for each kind of text: worst, 5th percentile, median, and how many

@@ -117,6 +117,14 @@ class PerfTest(unittest.TestCase):
         log = self.home_path / "asked"
         return log.read_text().splitlines() if log.exists() else []
 
+    def test_aapt2_comes_from_android_studios_sdk_when_the_named_one_has_none(self):
+        studio = self.home_path / "studio"
+        aapt2 = studio / "Android/Sdk/build-tools/36.0.0/aapt2"
+        aapt2.parent.mkdir(parents=True)
+        aapt2.touch()
+        with mock.patch.dict(os.environ, {"ANDROID_HOME": str(self.home_path / "empty"), "HOME": str(studio)}):
+            self.assertEqual(str(aapt2), perf.aapt2_path())
+
     def test_jank_reads_the_frames_since_the_reset_and_sums_up_each_build(self):
         lines = self.run_perf("jank", "--runs", "2", "--label", "main")
         run = lines[0]

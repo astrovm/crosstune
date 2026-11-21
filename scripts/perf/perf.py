@@ -48,7 +48,9 @@ USER_HZ = 100
 
 
 def aapt2_path() -> str:
-    for sdk in adbtool.sdk_places():
+    # The named SDK first, then Android Studio's: Build Tools may be only in the one Studio keeps up to date.
+    places = adbtool.sdk_places()
+    for sdk in [*places, *(place for place in adbtool.studio_places() if place not in places)]:
         tools = sorted(sdk.glob("build-tools/*/aapt2"), reverse=True)
         if tools:
             return str(tools[0])

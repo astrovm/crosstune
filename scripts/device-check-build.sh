@@ -32,8 +32,10 @@ main() {
     mkdir -p "$out"
     cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk "$out/"
     { echo "$head"; [[ $dirty == false ]] || git status --porcelain; } > "$out/head.txt"
-    # sha256sum's lines; a Mac without it has shasum, which writes the same.
-    if command -v sha256sum >/dev/null; then sha256sum "$out"/*.apk; else shasum -a 256 "$out"/*.apk; fi > "$out/sha256.txt"
+    # sha256sum's lines, with the bare names, so `sha256sum -c sha256.txt` works from inside the folder. A Mac without
+    # it has shasum, which writes the same.
+    local apks=(app-debug.apk app-debug-androidTest.apk)
+    (cd "$out" && if command -v sha256sum >/dev/null; then sha256sum "${apks[@]}"; else shasum -a 256 "${apks[@]}"; fi > sha256.txt)
     echo "Built $out/app-debug.apk and $out/app-debug-androidTest.apk from $head"
 }
 main "$@"; exit

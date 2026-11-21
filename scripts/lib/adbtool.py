@@ -18,11 +18,16 @@ from pathlib import Path
 SAMSUNG_MODEL = "SM_S908E"
 
 
+def studio_places() -> list[Path]:
+    """Where Android Studio puts the SDK, on Linux and on a Mac."""
+    return [Path.home() / "Android/Sdk", Path.home() / "Library/Android/sdk"]
+
+
 def sdk_places() -> list[Path]:
     """Where an SDK may be: $ANDROID_HOME and $ANDROID_SDK_ROOT when either is set, as that SDK is the one meant, or
-    else Android Studio's own places on Linux and on a Mac."""
+    else Android Studio's own places."""
     named = [Path(place) for place in (os.environ.get("ANDROID_HOME"), os.environ.get("ANDROID_SDK_ROOT")) if place]
-    return named or [Path.home() / "Android/Sdk", Path.home() / "Library/Android/sdk"]
+    return named or studio_places()
 
 
 def sdk() -> Path | None:

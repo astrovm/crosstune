@@ -34,7 +34,8 @@ build() { "$repo/scripts/device-check-build.sh" "$@" > "$work/out" 2>&1; }
 build PracticeClockCheck clockcheck || fail "a clean tree didn't build: $(cat "$work/out")"
 grep -qx "runner :app:assembleDebugAndroidTest -PcrosstuneTestRunner=com.astrovm.crosstune.PracticeClockCheck" "$repo/build/clockcheck/app-debug-androidTest.apk" || fail "not the runner named"
 [[ $(cat "$repo/build/clockcheck/head.txt") == "$head" ]] || fail "head.txt isn't the commit alone"
-(cd "$repo" && sha256sum --check --strict --quiet build/clockcheck/sha256.txt) || fail "sha256.txt doesn't match the APKs"
+(cd "$repo/build/clockcheck" && sha256sum --check --strict --quiet sha256.txt) || fail "sha256.txt doesn't match the APKs"
+grep -q '  app-debug.apk$' "$repo/build/clockcheck/sha256.txt" || fail "sha256.txt doesn't name the APKs bare"
 [[ $(wc -l < "$repo/build/clockcheck/sha256.txt") == 2 ]] || fail "sha256.txt isn't one line per APK"
 
 # Uncommitted changes are refused before anything is built.

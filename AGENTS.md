@@ -14,7 +14,7 @@ python3 scripts/build-site.py             # after changing site/; commit docs/ t
 python3 scripts/unittests.py              # the Python tests of every folder under scripts/, as CI runs them; name folders for fewer
 python3 scripts/emulator/emulator.py check   # the test emulators, declared in scripts/emulator/emulators.json; `create` and `start` make and run them
 python3 scripts/devicelock.py take samsung --who "task" --minutes 15   # shared lock for samsung, crosstune-phone, crosstune-tv or crosstune-android8; waits in line, writes who holds it, lets go when the time is up. `release` ends yours, `who` shows the holder and the queue
-scripts/device-check-build.sh RUNNER NAME   # the dev app and one instrumentation runner, built for a check on a phone into build/NAME/; each check's README names its runner
+scripts/device-check-build.sh [--dirty] RUNNER NAME   # the dev app and one instrumentation runner, built for a check on a phone into build/NAME/; each check's README names its runner. It refuses uncommitted changes unless --dirty
 python3 scripts/syncreplay/syncreplay.py run ID   # the lyrics timing replayed on a real recording, line by line against when it's sung; prep first, see the script
 ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S   # the same on the phone over adb, timed from the dev app's own log; screenshots time lines up to 2 s off
 python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # the replay set up as that phone check went, held to its lines

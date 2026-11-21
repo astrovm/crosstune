@@ -48,6 +48,9 @@ import tempfile
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import adbtool
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 sys.path.insert(0, str(ROOT / "scripts/regextable"))
@@ -106,10 +109,10 @@ def on_emulator(checkout, serial, count, long=None):
         regextable.adb("-s", serial, "push", str(app), DEVICE_APP)
         regextable.adb("-s", serial, "push", str(work / "dex.jar"), DEVICE_JAR)
         if long is not None:
-            subprocess.run([regextable.adbtool.path(), "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {TIMER} {long}"], check=True)
+            subprocess.run([adbtool.path(), "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {TIMER} {long}"], check=True)
             return None
         started = time.monotonic()
-        subprocess.run([regextable.adbtool.path(), "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {WRITER} {DEVICE_OUT} {count}"], check=True)
+        subprocess.run([adbtool.path(), "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {WRITER} {DEVICE_OUT} {count}"], check=True)
         print(f"{count} titles read on {serial} in {time.monotonic() - started:.0f} s")
         regextable.adb("-s", serial, "pull", DEVICE_OUT, str(work / "made.tsv.gz"))
     finally:
