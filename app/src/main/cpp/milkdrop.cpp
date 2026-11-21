@@ -63,10 +63,12 @@ JNIEXPORT void JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeDraw(JNIE
 
 // The size of the buffers drawn into [surface] from the next one on, which Android stretches to fill
 // the window. Set by the thread that draws, so a new size comes with the first frame drawn at it.
+// The format stays the one EGL set for its config: 0 would put back the window's own.
 JNIEXPORT jboolean JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeBuffers(JNIEnv* env, jclass, jobject surface, jint width, jint height) {
     ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
     if (window == nullptr) return JNI_FALSE;
-    int32_t failed = ANativeWindow_setBuffersGeometry(window, width, height, 0);
+    int32_t format = ANativeWindow_getFormat(window);
+    int32_t failed = format < 0 ? format : ANativeWindow_setBuffersGeometry(window, width, height, format);
     ANativeWindow_release(window);
     return failed == 0 ? JNI_TRUE : JNI_FALSE;
 }

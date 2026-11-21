@@ -709,6 +709,57 @@ class MilkdropTest {
     }
 
     @Test
+    fun theFramesBehindTheWordsAreSizedOnlyWhenTheirSizeChanges() {
+        val milkdrop = SizedMilkdrop(listOf(200L, 100L, 60L, 20L))
+        val (renderer, _) = sized(milkdrop)
+        renderer.created()
+        val set = mutableListOf<Pair<Int, Int>>()
+        val frames = FrameSizes(renderer) { width, height -> set.add(width to height) }
+
+        repeat(3) { assertEquals(540 to 1158, frames.next(1080, 2316)) }
+        assertEquals(listOf(540 to 1158), set)
+
+        // Turned sideways, the view's size changes while the preset's doesn't.
+        assertEquals(1158 to 540, frames.next(2316, 1080))
+        frames.next(2316, 1080)
+        assertEquals(listOf(540 to 1158, 1158 to 540), set)
+
+        // Drawn smaller, the next frame is set to it.
+        renderer.drawFor(5_600)
+        assertEquals(3, renderer.size)
+        frames.next(2316, 1080)
+        frames.next(2316, 1080)
+        assertEquals(listOf(540 to 1158, 1158 to 540, 772 to 360), set)
+    }
+
+    @Test
+    fun aSizeTheFramesBehindTheWordsFailedToTakeIsTriedAgainWithTheNextFrame() {
+        val milkdrop = SizedMilkdrop(listOf(200L, 100L, 60L, 20L))
+        val (renderer, _) = sized(milkdrop)
+        renderer.created()
+        var fails = 2
+        var tries = 0
+        val frames = FrameSizes(renderer) { _, _ -> tries++; fails-- <= 0 }
+
+        repeat(5) { frames.next(1080, 2316) }
+
+        assertEquals(3, tries)
+    }
+
+    @Test
+    fun aNewSurfaceBehindTheWordsHasItsFramesSizedAgain() {
+        val milkdrop = SizedMilkdrop(listOf(200L, 100L, 60L, 20L))
+        val (renderer, _) = sized(milkdrop)
+        renderer.created()
+        val set = mutableListOf<Pair<Int, Int>>()
+        FrameSizes(renderer) { width, height -> set.add(width to height) }.next(1080, 2316)
+
+        FrameSizes(renderer) { width, height -> set.add(width to height) }.next(1080, 2316)
+
+        assertEquals(listOf(540 to 1158, 540 to 1158), set)
+    }
+
+    @Test
     fun eachSecondItTellsHowManyFramesASecondThePhoneCouldDraw() {
         val told = mutableListOf<Int>()
         val renderer = MilkdropRenderer(
