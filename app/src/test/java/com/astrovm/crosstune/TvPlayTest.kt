@@ -308,6 +308,27 @@ class TvPlayTest {
     }
 
     @Test
+    fun onATvADialogUpOnTheScreenComeBackGivesTheRemoteBackWhereItWasOnceItsPutAway() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasClickAction())
+        words.requestFocus()
+        words.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { shown("Demo two") }
+        // The apps to open it in, asked for meanwhile: they show over the card come back to, and keep the remote.
+        composeRule.runOnIdle { model().playerOpenWith() }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown("Demo two") && shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        assertTrue(inDialog())
+        // Put away, with nothing of its own to give the remote to, it goes back to what opened the words.
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        words.assertIsFocused()
+    }
+
+    @Test
     fun onAPhoneBackFromTheWordsPutsNothingBackInFocus() {
         phone = Phone.PIXEL
         launch()

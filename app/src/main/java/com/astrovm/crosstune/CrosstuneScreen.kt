@@ -539,11 +539,16 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         focuses.turnTo(screen)
         backOf[screen] = layers.backTo
     }
-    // A dialog or sheet shown keeps the remote, as one that shows again on the screen come back to does.
-    var overlaid by remember { mutableStateOf(false) }
     var settled by remember { mutableStateOf(screen) }
-    // The screen come back to under a dialog or sheet, whose remote goes back once that's put away.
+    // The screen come back to under a dialog or sheet, which keeps the remote till it's put away. Then the remote goes
+    // back where it was on that screen, where the last one put away had no opener of its own to give it back to; and
+    // then what gives it somewhere once that's gone, like the song picker giving it to the field, has the last word.
     var waiting by remember { mutableStateOf<Screen?>(null) }
+    val overlays = rememberOverlays { own ->
+        val back = waiting
+        waiting = null
+        !own && back != null && focuses.of(back).restore()
+    }
     val remote by rememberUpdatedState(state.phone == Phone.TV)
     LaunchedEffect(moving.currentState) {
         val from = settled
@@ -551,17 +556,14 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         settled = now
         waiting = null
         if (!remote || now != backOf[from]) return@LaunchedEffect
-        // Not by whether something has it, as Android hands it to the link field once what had it is gone. A dialog
-        // or sheet keeps it till it's put away. A station's player, as it closes, makes the bar what it goes back to.
-        if (overlaid) waiting = now else focuses.of(now).restore()
+        // Not by whether something has it, as Android hands it to the link field once what had it is gone.
+        // A station's player, as it closes, makes the bar what it goes back to.
+        if (overlays.any) waiting = now else focuses.of(now).restore()
     }
-    LaunchedEffect(overlaid) {
-        if (overlaid) return@LaunchedEffect
-        waiting?.let { focuses.of(it).restore() }
-        waiting = null
-    }
+    // On the move to another screen, the one left has nothing to wait for.
+    LaunchedEffect(moving.targetState) { if (moving.targetState != waiting) waiting = null }
     CompositionLocalProvider(LocalCovers provides actions.covers, LocalMainFocus provides focuses.of(Screen.MAIN)) {
-    WithOverlays(inside = state.phone == Phone.TV, onOverlaid = { overlaid = it }) {
+    WithOverlays(inside = state.phone == Phone.TV, overlays) {
     CompositionLocalProvider(LocalLayerSwipe provides layers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
         transitionSpec = {

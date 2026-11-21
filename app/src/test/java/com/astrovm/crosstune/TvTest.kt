@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
@@ -689,8 +690,8 @@ class TvTest {
         words.assertIsFocused()
     }
 
-    @Test
-    fun onATvASheetUpOnTheScreenComeBackToGivesTheRemoteBackOncePutAway() {
+    /** Back on the main screen from the fix list with songs looked up by name meanwhile: their picker shows there, and keeps the remote. */
+    private fun backToThePicker(): SemanticsNodeInteraction {
         launch()
         composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
         val words = composeRule.onNode(hasContentDescription(string(R.string.tile_lyrics_label)))
@@ -698,17 +699,33 @@ class TvTest {
         composeRule.runOnIdle { model().openFixes() }
         val onMain = { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)).fetchSemanticsNodes().isNotEmpty() }
         composeRule.waitUntil(5_000) { !onMain() }
-        // Songs looked up by name meanwhile: their sheet shows on the main screen come back to, and keeps the remote.
         composeRule.runOnIdle { model().searchSongs("moon") }
         checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitUntil(5_000) { onMain() && shown(string(R.string.song_search_title)) }
         composeRule.waitForIdle()
         words.assertIsNotFocused()
-        // Put away, the remote goes back to what it was on there.
+        return words
+    }
+
+    @Test
+    fun onATvTheSongPickerPutAwayOnTheScreenComeBackGivesTheRemoteToTheField() {
+        val words = backToThePicker()
+        // Its own rule, the field as after a link, rather than what the remote was on before the fix list.
         checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitUntil(5_000) { !shown(string(R.string.song_search_title)) }
         composeRule.waitForIdle()
-        words.assertIsFocused()
+        field().assertIsFocused()
+        words.assertIsNotFocused()
+    }
+
+    @Test
+    fun onATvASongPickedOnTheScreenComeBackGivesTheRemoteToTheField() {
+        val words = backToThePicker()
+        composeRule.runOnIdle { model().chooseSong(MusicMetadata("Moon", "Band")) }
+        composeRule.waitUntil(5_000) { !shown(string(R.string.song_search_title)) && !model().uiState.isLoading }
+        composeRule.waitForIdle()
+        field().assertIsFocused()
+        words.assertIsNotFocused()
     }
 
     @Test
