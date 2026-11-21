@@ -2,7 +2,9 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 /**
@@ -14,3 +16,10 @@ import kotlinx.coroutines.launch
  */
 internal fun CoroutineScope.launchKept(keep: (Job) -> Unit, block: suspend CoroutineScope.() -> Unit): Job =
     launch(start = CoroutineStart.LAZY, block = block).also { keep(it); it.start() }
+
+/**
+ * [launchKept] for an answer: kept before it runs, so what's done once it's over, like dropping it from where it's kept,
+ * comes after it's kept even when it's over at once, as a lookup answered from what's kept is.
+ */
+internal fun <T> CoroutineScope.asyncKept(keep: (Deferred<T>) -> Unit, block: suspend CoroutineScope.() -> T): Deferred<T> =
+    async(start = CoroutineStart.LAZY, block = block).also { keep(it); it.start() }

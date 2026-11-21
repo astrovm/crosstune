@@ -1314,7 +1314,7 @@ internal class MainViewModel(
                     // played before it went on, it's never shown, and dropping it listens again at once, in place of this.
                     if (!showHeardByEar(heard, startedWith)) return
                     byEarLook?.cancel()
-                    byEarLook = lyricsFinder?.let { finder -> viewModelScope.launch { finder.firstLook(heard.metadata) } }
+                    lyricsFinder?.let { finder -> viewModelScope.launchKept({ byEarLook = it }) { finder.firstLook(heard.metadata) } }
                     untilOver(heard)
                 }
                 // Talk, ads or a pause: no song plays, so none is shown, and the next try waits longer each time.
@@ -2004,10 +2004,7 @@ internal class MainViewModel(
         val key = RecordingKey.of(asked)
         kept[key]?.let { return showPeek(song, it.lines, it.lyrics, it.timedByEar) }
         val finder = lyricsFinder?.takeIf { lookAhead && asked.type == ItemType.TRACK && asked.artist.isNotBlank() } ?: return
-        val look = lookingAhead[key] ?: viewModelScope.async { finder.firstLook(asked) }.also {
-            lookingAhead[key] = it
-            it.invokeOnCompletion { lookingAhead.remove(key) }
-        }
+        val look = lookingAhead[key] ?: lookUpAhead(finder, key, asked)
         viewModelScope.launchKept({ peekJob = it }) {
             (look.await().lyrics as? LyricsFinder.Lyrics.Found)?.let { showPeek(song, it.lines, it.words, byEar = false) }
         }
@@ -2481,8 +2478,15 @@ internal class MainViewModel(
         val song = uiState.result?.takeIf { it.type == ItemType.TRACK }?.let(::asPlayed) ?: return
         val key = RecordingKey.of(song)
         if (key in lookingAhead || key in kept) return
-        lookingAhead[key] = viewModelScope.async { finder.firstLook(song) }.also { it.invokeOnCompletion { lookingAhead.remove(key) } }
+        lookUpAhead(finder, key, song)
     }
+
+    /**
+     * Looks up [song]'s words, held under [key] till they're found. Held before the lookup runs: answered at once from
+     * what's kept, it'd be dropped before it was held, then held for good, and the song never looked up ahead again.
+     */
+    private fun lookUpAhead(finder: LyricsFinder, key: String, song: MusicMetadata): Deferred<LyricsFinder.FirstLook> =
+        viewModelScope.asyncKept({ look -> lookingAhead[key] = look; look.invokeOnCompletion { lookingAhead.remove(key) } }) { finder.firstLook(song) }
 
     private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false) {
         val song = asPlayed(requested)
