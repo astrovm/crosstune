@@ -858,12 +858,9 @@ class SingingTest {
         assertTrue(model().uiState.lyricsSynced)
     }
 
-    /** The words kept [offMs] later than timed, as a play before heard them, open again. */
-    private fun keptOff(offMs: Long) {
-        openLyrics()
-        val shown = model().uiState
-        LyricsSyncStore(prefs()).save(checkNotNull(shown.lyricsFor) { "Expected lyricsFor to be non-null" }, shown.lyricLines, listOf(SyncPoint(shown.lyricLines.first().timeMs, shown.lyricLines.first().timeMs + offMs)))
-        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
+    /** The words at [times] seconds kept [offMs] later than timed, as a play before heard them, then open. */
+    private fun keptOff(times: List<Int>, offMs: Long) {
+        LyricsSyncStore(prefs()).save(MusicMetadata("Demo", "Band"), lines.zip(times) { line, at -> LyricLine(at * 1_000L, line) }, listOf(SyncPoint(times.first() * 1_000L, times.first() * 1_000L + offMs)))
         openLyrics()
         waitUntil { model().uiState.lyricsSynced }
     }
@@ -874,10 +871,12 @@ class SingingTest {
         // but still one while alone, as the one Never Gonna Give You Up was wrongly heard by, 5.35 s off.
         val times = listOf(2, 5, 8, 30, 33, 36)
         lyricsTimedFor(null, times)
-        keptOff(40_000)
+        keptOff(times, 40_000)
         val kept = prefs().getString("lyrics_sync", null)
         singing.answer = { sungAt(times, times.map { 45_700L }) }
         plays(positionMs = 43_000)
+        // Heard from just before the next line shown.
+        passes(2_000)
         waitUntil { singing.hears >= 1 }
         composeRule.waitForIdle()
         assertEquals(times.map { it * 1_000L + 40_000L }, model().uiState.lyricLines.map { it.timeMs })
