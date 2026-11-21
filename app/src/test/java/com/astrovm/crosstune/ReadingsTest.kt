@@ -691,6 +691,8 @@ class ReadingsTest {
         assertEquals("minna tou", typed("みんなとぅ"))
         // A word of two kana ends on the と too.
         assertEquals("hitou ga", typed("ひとぅが"))
+        // But not the start of one alone: そと starts words the dictionary has, and isn't one of them, so とぅ is tu.
+        assertEquals("so tu nai", typed("そとぅない"))
     }
 
     @Test
