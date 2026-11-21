@@ -62,6 +62,12 @@ internal sealed interface Heard {
         val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs, speed) else null
     }
     data object Nothing : Heard
+
+    /**
+     * Nothing but zeros: a microphone muted by Android's privacy toggle or held by another app, or the phone's own sound at
+     * volume 0. Shown as [Nothing], but it tells nothing of what's playing or where.
+     */
+    data object Silent : Heard
     data class Failed(val error: AppError) : Heard
 
     /**
@@ -85,7 +91,7 @@ internal class Shazam(
         // Nothing but zeros is a muted microphone or a phone playing at volume 0. Shazam answers it with no
         // match, and it can't match anything, so it isn't sent: a busy Shazam must not make silence look
         // like Shazam being out of reach, which hands the listen over to another app.
-        if ((0 until count).none { samples[it].toInt() != 0 }) return Heard.Nothing
+        if ((0 until count).none { samples[it].toInt() != 0 }) return Heard.Silent
         val uri = withContext(computeDispatcher) { Busy.during { ShazamSignature.uri(samples, count) } }
         val heard = send(uri)
         return if (keepIfOffline && heard == Heard.Failed(AppError.NETWORK)) Heard.Unsent { send(uri) } else heard
@@ -428,15 +434,27 @@ internal class PlayingFirst(
         if (!whileAloud) return roomForPlaying(hearing.listen())
         // Through headphones or muted, the microphone hears nothing of it: no more use than none at all.
         val on = playback.playsAloud()
-        if (on == Aloud.No || on == unheardOn) return heard
+        if (on == Aloud.No || on is Aloud.Maybe && (unheard[on.output] ?: 0) >= UNHEARD_TRIES) return heard
         val room = roomForPlaying(aloud() ?: return heard)
-        // On Bluetooth that may be headphones, it goes on only while it names the song there. Not reaching Shazam tells nothing.
-        if (on is Aloud.Maybe && (room is Heard.Song || room == Heard.Nothing)) unheardOn = on.takeIf { room == Heard.Nothing }
+        // Moved to another output midway, what was heard was on both, so it tells of neither.
+        if (on is Aloud.Maybe && playback.playsAloud() == on) tally(on.output, room)
         return room
     }
 
-    /** The Bluetooth output on which the microphone heard nothing of what the phone played, as with headphones, till another connects. */
-    private var unheardOn: Aloud.Maybe? = null
+    /**
+     * On classic Bluetooth, which may be headphones, how many listens in a row the microphone named no song on each
+     * output, by its id: after [UNHEARD_TRIES], it's taken for headphones till it connects again, with a new id.
+     */
+    private val unheard = mutableMapOf<Int, Int>()
+
+    /** Counts what the microphone heard on [output]. A song starts the count over; silence, or not reaching Shazam, tells nothing. */
+    private fun tally(output: Int, room: Heard) {
+        when (room) {
+            is Heard.Song -> unheard.remove(output)
+            Heard.Nothing -> unheard[output] = (unheard[output] ?: 0) + 1
+            else -> Unit
+        }
+    }
 
     private fun roomForPlaying(room: Heard): Heard {
         // The microphone hears the room too: another song playing there isn't the one the phone plays.
@@ -454,6 +472,9 @@ internal class PlayingFirst(
 
     companion object {
         const val ALOUD_CHECK_MS = 1_000L
+
+        /** On radio a listen often falls on talk, an ad or a jingle, so a speaker is taken for headphones only after this many in a row. */
+        const val UNHEARD_TRIES = 3
     }
 }
 

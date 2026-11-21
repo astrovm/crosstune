@@ -1172,9 +1172,14 @@ class MainViewModelTest {
         assertEquals(8, ears.asked.size)
         assertEquals(false, ears.asked.last())
         // A Bluetooth speaker, or headphones, connected: the microphone's tried, at once too.
-        playback.aloud = Aloud.Maybe(setOf(1))
+        playback.aloud = Aloud.Maybe(1)
         pass(MainViewModel.EARS_CHECK_MS)
         assertEquals(9, ears.asked.size)
+        assertEquals(true, ears.asked.last())
+        // The sound moved to another one, as from earbuds to a car: at once too.
+        playback.aloud = Aloud.Maybe(2)
+        pass(MainViewModel.EARS_CHECK_MS)
+        assertEquals(10, ears.asked.size)
         assertEquals(true, ears.asked.last())
     }
 

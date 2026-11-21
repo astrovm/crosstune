@@ -234,10 +234,10 @@ internal sealed interface Aloud {
     data object No : Aloud
 
     /**
-     * On classic Bluetooth, a speaker or a car, heard, or headphones, not, which Android won't tell apart.
-     * Each connection's [outputs] are new, so one tells a speaker from the headphones connected after it.
+     * On classic Bluetooth, a speaker or a car, heard, or headphones, not, which Android won't tell apart. [output] is
+     * the id of the device that plays, new each time one connects, so it tells a speaker from the headphones after it.
      */
-    data class Maybe(val outputs: Set<Int>) : Aloud
+    data class Maybe(val output: Int) : Aloud
 }
 
 /** What's playing on the phone, as far as Android lets Crosstune see. */
@@ -865,7 +865,8 @@ internal class MediaSessionPlayback(
         return when {
             outputs.any { it.type !in ROOM_OUTPUTS && it.type !in CLASSIC_BLUETOOTH } -> Aloud.No
             bluetooth.isEmpty() -> Aloud.Yes
-            else -> Aloud.Maybe(bluetooth.map { it.id }.toSet())
+            // The phone plays music through one A2DP device at a time; a hands-free link comes and goes with calls.
+            else -> Aloud.Maybe((bluetooth.firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP } ?: bluetooth.first()).id)
         }
     }
 

@@ -1067,7 +1067,7 @@ internal class MainViewModel(
     private fun answer(heard: Heard, lyrics: Boolean, byPhone: Boolean = false, checked: CheckedPlayerSong? = null) {
         when (heard) {
             is Heard.Song -> showHeard(heard, lyrics, byPhone, checked)
-            Heard.Nothing -> showListenError(AppError.NO_MATCH)
+            Heard.Nothing, Heard.Silent -> showListenError(AppError.NO_MATCH)
             is Heard.Failed -> showListenError(heard.error)
             is Heard.Unsent -> {
                 held = heard to lyrics
@@ -1318,7 +1318,7 @@ internal class MainViewModel(
                     untilOver(heard)
                 }
                 // Talk, ads or a pause: no song plays, so none is shown, and the next try waits longer each time.
-                Heard.Nothing -> {
+                Heard.Nothing, Heard.Silent -> {
                     uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = null)) }
                     BY_EAR_RETRY_MS shl minOf(quietByEar++, QUIET_PAUSE_DOUBLINGS)
                 }
@@ -2758,7 +2758,7 @@ internal class MainViewModel(
                 }
                 // Nothing heard, the music has most likely stopped, so the words stop where they are,
                 // and the microphone rests, longer each time, until the app playing it plays again.
-                Heard.Nothing -> {
+                Heard.Nothing, Heard.Silent -> {
                     heardClock?.takeIf { it.playing }?.let { clock ->
                         heardClock = clock.copy(positionMs = clock.positionAt(now()), atMs = now(), playing = false)
                         keepInTime()

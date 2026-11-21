@@ -70,6 +70,7 @@ import org.robolectric.shadows.AudioDeviceInfoBuilder
 import org.robolectric.shadows.PlaybackInfoBuilder
 import org.robolectric.shadows.ShadowMediaSessionManager
 import org.robolectric.shadows.ShadowSettings
+import org.robolectric.util.ReflectionHelpers
 
 /** Following what a music app plays, through the media sessions Android shows Crosstune once allowed. */
 @RunWith(RobolectricTestRunner::class)
@@ -2876,15 +2877,23 @@ class PlaybackTest {
     }
 
     @Test
-    fun classicBluetoothMayBeASpeakerACarOrHeadphones() {
+    fun classicBluetoothMayBeASpeakerACarOrHeadphonesKeptApartByTheDeviceThatPlays() {
         val audio = app.getSystemService(AudioManager::class.java)
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
-        // A speaker and headphones on classic Bluetooth both show as A2DP alone; a car, or a speaker or headset
-        // with a microphone, as A2DP and hands-free. Android tells them apart only by a class it hides without a permission.
-        for (types in listOf(listOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP), listOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO))) {
-            outputs(audio, *(listOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) + types).toIntArray())
-            assertTrue("$types", playback.playsAloud() is Aloud.Maybe)
-        }
+        val speaker = device(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, 2)
+        // A speaker and headphones on classic Bluetooth both show as A2DP alone. Android tells them apart only by a class
+        // it hides without a permission, so it's the device's id, new each time one connects, that tells one from the next.
+        shadowOf(audio).setOutputDevices(listOf(speaker, device(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, 31)))
+        assertEquals(Aloud.Maybe(31), playback.playsAloud())
+        shadowOf(audio).setOutputDevices(listOf(speaker, device(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, 40)))
+        assertEquals(Aloud.Maybe(40), playback.playsAloud())
+        // A car, or a speaker or headset with a microphone, adds hands-free, which comes and goes with calls: the music's
+        // device stays the one that plays, whichever order Android lists them in.
+        shadowOf(audio).setOutputDevices(listOf(speaker, device(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, 52), device(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, 40)))
+        assertEquals(Aloud.Maybe(40), playback.playsAloud())
+        // Hands-free alone, it's that one.
+        shadowOf(audio).setOutputDevices(listOf(speaker, device(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, 52)))
+        assertEquals(Aloud.Maybe(52), playback.playsAloud())
         // A Bluetooth LE speaker or headset says which it is.
         outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BLE_SPEAKER)
         assertEquals(Aloud.Yes, playback.playsAloud())
@@ -2896,6 +2905,12 @@ class PlaybackTest {
         outputs(audio, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
         assertEquals(Aloud.No, playback.playsAloud())
+    }
+
+    /** An output of [type] with [id]: Robolectric's builder gives every one id 0, as Android gives each connection its own. */
+    private fun device(type: Int, id: Int): AudioDeviceInfo = AudioDeviceInfoBuilder.newBuilder().setType(type).build().also {
+        ReflectionHelpers.setField(ReflectionHelpers.getField<Any>(ReflectionHelpers.getField<Any>(it, "mPort"), "mHandle"), "mId", id)
+        assertEquals(id, it.id)
     }
 
     private fun outputs(audio: AudioManager, vararg types: Int) =
