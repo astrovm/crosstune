@@ -806,13 +806,13 @@ class SingingTest {
 
     /**
      * Lines sung [keptMs] after they're timed, and kept so, picked up 3 s in, the first while hearing the
-     * chorus, lines 3 to 5, 25 s before it's sung, where lines 1 and 2 are: then where it's sung.
+     * chorus, lines 3 to 5, 25 s before it's sung, where lines 1 and 2 are: then where it's sung, or [laterMs] after they're timed.
      */
-    private fun chorusHeardFarFromWhereItsSung(keptMs: Long = 0): List<Int> {
+    private fun chorusHeardFarFromWhereItsSung(keptMs: Long = 0, laterMs: Long = keptMs): List<Int> {
         val times = listOf(2, 5, 8, 30, 33, 36)
         lyricsTimedFor(null, times)
         var whiles = 0
-        singing.answer = { sungAt(times, if (whiles == 0) listOf(100_000L, 100_000L, 100_000L, keptMs - 25_000L, keptMs - 25_000L, keptMs - 25_000L) else times.map { keptMs }).also { whiles++ } }
+        singing.answer = { sungAt(times, if (whiles == 0) listOf(100_000L, 100_000L, 100_000L, keptMs - 25_000L, keptMs - 25_000L, keptMs - 25_000L) else times.map { laterMs }).also { whiles++ } }
         if (keptMs == 0L) openLyrics() else keptOff(times, keptMs)
         plays(positionMs = 3_000)
         // Kept later, the first line shown is later too, and it's heard from just before it.
@@ -844,6 +844,19 @@ class SingingTest {
         assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
         assertFalse(model().uiState.lyricsSynced)
         assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun pickedUpPartwayLinesMovedByOneWrongWhileDontGoBackByOneHeardJustFarEnoughFromWhereTheyreKept() {
+        // Heard 2 s from where the words are kept is off, as anywhere here: that while doesn't say the move was wrong.
+        chorusHeardFarFromWhereItsSung(laterMs = MainViewModel.WORDS_OFF_MS)
+        passes(5_000)
+        plays(positionMs = 3_000)
+        passes(5_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[1].timeMs == 5_000L + MainViewModel.WORDS_OFF_MS }
+        // Found far off itself, it moves the lines it heard this time only: the rest aren't put back where they're kept.
+        assertTrue(model().uiState.lyricLines[3].timeMs < 30_000L)
+        assertFalse(model().uiState.lyricsSynced)
     }
 
     @Test
