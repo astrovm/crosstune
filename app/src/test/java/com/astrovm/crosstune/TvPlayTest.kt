@@ -18,6 +18,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.hasTestTag
@@ -27,6 +28,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
@@ -115,6 +118,8 @@ class TvPlayTest {
         ShadowSettings.setCanDrawOverlays(false)
     }
 
+    private fun model() = ViewModelProvider(checkNotNull(controller).get())[MainViewModel::class.java]
+
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     private fun string(id: Int, vararg args: Any): String = app.getString(id, *args)
@@ -127,7 +132,8 @@ class TvPlayTest {
 
     private fun shown(text: String) = composeRule.onAllNodes(hasText(text) or hasContentDescription(text)).fetchSemanticsNodes().isNotEmpty()
 
-    private fun onPlayer() = shown(string(R.string.lyrics_play)) || shown(string(R.string.lyrics_pause))
+    // The now-playing bar has a pause button too, so the player is told by its cover.
+    private fun onPlayer() = composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty()
 
     private fun click(text: String) {
         // Pressed as the remote does, which reaches what's below the TV's edge too, scrolling to it.
@@ -217,6 +223,156 @@ class TvPlayTest {
     }
 
     @Test
+    fun onATvBackFromTheWordsLandsOnPauseAndFromThePlayerOnPlay() {
+        launch()
+        val floating = playCovered()
+        // The remote's, as a TV is: Robolectric starts as a touch screen, where nothing takes focus.
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        playing()
+        waitUntil { shown("Demo one") }
+        // Back from the words, the remote is on the player's main button, rather than nowhere.
+        pressBack(floating.get())
+        waitUntil { onPlayer() }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_pause)) and hasClickAction()).assertIsFocused()
+        // Back from the player, it's on the card's Play, the way the user came.
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasContentDescription(play) and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackFromTheStepsPlayShowsFirstLandsOnPlay() {
+        ShadowSettings.setCanDrawOverlays(false)
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val playOnCard = composeRule.onNode(hasContentDescription(play) and hasClickAction())
+        playOnCard.requestFocus()
+        playOnCard.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play)).fetchSemanticsNodes().isEmpty() }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitForIdle()
+        playOnCard.assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackLandsOnPlayWhenTheRemoteWasLastOnAButtonThatOpensNoScreen() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val playOnCard = composeRule.onNode(hasContentDescription(play) and hasClickAction())
+        // Past settings, then on the link field, which opens no screen: settings is no longer where it was.
+        composeRule.onNode(hasContentDescription(string(R.string.settings_button))).requestFocus()
+        composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)).requestFocus()
+        composeRule.runOnIdle { model().openFixes() }
+        waitUntil { !shown(play) }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { shown(play) }
+        composeRule.waitForIdle()
+        playOnCard.assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackLeavesTheRemoteInADialogThatShowsAgain() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val settings = composeRule.onNode(hasContentDescription(string(R.string.settings_button)))
+        settings.requestFocus()
+        settings.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { !shown(play) }
+        // Songs looked up by name while away: their sheet shows on the main screen come back to, and keeps the remote.
+        composeRule.runOnIdle { model().searchSongs("moon") }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { shown(string(R.string.song_search_title)) }
+        composeRule.waitForIdle()
+        assertTrue(inDialog())
+        settings.assertIsNotFocused()
+    }
+
+    @Test
+    fun onATvTheWordsClosedUnderTheirSheetGiveTheRemoteBackToTheButtonThatOpenedThem() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasClickAction())
+        words.requestFocus()
+        words.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { shown("Demo two") }
+        // Their sheet about the song is up as something else closes them, as a link that comes in does.
+        click(string(R.string.lyrics_about_song))
+        waitUntil { inDialog() }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { !shown("Demo two") }
+        composeRule.waitForIdle()
+        words.assertIsFocused()
+    }
+
+    @Test
+    fun onATvADialogUpOnTheScreenComeBackGivesTheRemoteBackWhereItWasOnceItsPutAway() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasClickAction())
+        words.requestFocus()
+        words.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { shown("Demo two") }
+        // The apps to open it in, asked for meanwhile: they show over the card come back to, and keep the remote.
+        composeRule.runOnIdle { model().playerOpenWith() }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown("Demo two") && shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        assertTrue(inDialog())
+        // Put away, with nothing of its own to give the remote to, it goes back to what opened the words.
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        words.assertIsFocused()
+        // Given back once, it's done: moved on, the next dialog put away doesn't take the remote back to the words.
+        val settings = composeRule.onNode(hasContentDescription(string(R.string.settings_button)))
+        settings.requestFocus()
+        composeRule.runOnIdle { model().playerOpenWith() }
+        waitUntil { shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        words.assertIsNotFocused()
+    }
+
+    @Test
+    fun onAPhoneBackFromTheWordsPutsNothingBackInFocus() {
+        phone = Phone.PIXEL
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasClickAction())
+        words.requestFocus()
+        words.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { shown("Demo two") }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown("Demo two") }
+        composeRule.waitForIdle()
+        // A phone is touched: what it was on is no place to be put back.
+        words.assertIsNotFocused()
+    }
+
+    @Test
+    fun onATvBackFromPracticeOverTheWordsLeavesTheRemoteOnThem() {
+        prefs().edit().putString("saved_lines", """[{"text":"Demo one","translation":"Demo uno","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
+        launch()
+        val floating = playCovered()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        playing()
+        waitUntil { shown("Demo two") }
+        click(string(R.string.lyrics_study))
+        click(string(R.string.practice_song))
+        waitUntil { !shown("Demo two") }
+        pressBack(floating.get())
+        waitUntil { shown("Demo two") }
+        composeRule.waitForIdle()
+        // Practice is drawn in the words' place, the same screen, so nothing closes: the words give the remote somewhere to be.
+        assertEquals(1, composeRule.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().size)
+    }
+
+    @Test
     fun chooseAppListsYouTubesTvAppOnceAsTheOnlyYouTubeThere() {
         launch()
         // YouTube's own app isn't on a TV, so YouTube there is its TV app, one row, not that and the app it stands in for.
@@ -255,6 +411,32 @@ class TvPlayTest {
         pressBack(floating.get())
         waitUntil { shadowOf(floating.get()).isStoppedBySelf }
         waitUntil { playback.nowPlayingWatchers == 0 }
+    }
+
+    @Test
+    fun onATvBackFromThePlayerTheBarOpenedLandsOnTheBar() {
+        launch()
+        val floating = playCovered()
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, app = MusicService.YOUTUBE_TV)
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        playing()
+        waitUntil { shown("Demo one") }
+        pressBack(floating.get())
+        waitUntil { onPlayer() }
+        pressBack(floating.get())
+        waitUntil { !onPlayer() && composeRule.onAllNodes(hasTestTag(NOW_PLAYING_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitForIdle()
+        // Back from the player the card's Play opened, the remote is on Play, with the bar under it.
+        composeRule.onNode(hasContentDescription(play) and hasClickAction()).assertIsFocused()
+        // Opened from the bar, back from the player it's on the bar.
+        val bar = composeRule.onNode(hasTestTag(NOW_PLAYING_TAG))
+        bar.requestFocus()
+        bar.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { onPlayer() }
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        composeRule.waitForIdle()
+        bar.assertIsFocused()
     }
 
     @Test

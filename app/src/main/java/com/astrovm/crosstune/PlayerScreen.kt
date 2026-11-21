@@ -178,10 +178,10 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     // A station with no state has nothing else to press, so on a TV the remote starts on its one button, and keeps it as the station changes.
     LaunchedEffect(player.stationOnly) { if (player.stationOnly && state.phone == Phone.TV) openStation.requestFocus() }
     // Closed, the remote goes back to the station's bar, which is still there, rather than nowhere.
-    val barFocus = LocalBarFocus.current
+    val main = LocalMainFocus.current
     val handsBack by rememberUpdatedState(player.stationOnly && state.phone == Phone.TV)
-    DisposableEffect(barFocus) {
-        onDispose { if (handsBack) barFocus.owed = true }
+    DisposableEffect(main) {
+        onDispose { if (handsBack) main?.goBackTo(Screen.PLAYER) }
     }
     val fromTools = remember { FocusRequester() }
     // Which of them opened it, null till one did, so the remote is back there once it's put away,
@@ -302,7 +302,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             }
             Spacer(Modifier.weight(1f))
             // With no line to show, the words are a button here instead.
-            if (hasWords && words.isEmpty()) IconButton(onClick = actions.onPlayerLyrics) {
+            if (hasWords && words.isEmpty()) IconButton(onClick = actions.onPlayerLyrics, modifier = Modifier.returnsFocus(Screen.LYRICS)) {
                 AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
             }
             if (!player.stationOnly) SleepButton(state.sleep, songEnds = following?.durationMs != null, actions)
@@ -537,7 +537,7 @@ private fun PlayerButtons(following: Following?, actions: ScreenActions, modifie
         IconButton(onClick = { actions.onPlayerSkip(false) }, enabled = following?.canSkipPrevious == true, modifier = Modifier.size(56.dp)) {
             AppIcon(R.drawable.ic_skip_previous, contentDescription = stringResource(R.string.lyrics_previous_song), modifier = Modifier.size(32.dp))
         }
-        FilledIconButton(onClick = actions.onPlayerPlayPause, modifier = Modifier.size(72.dp)) {
+        FilledIconButton(onClick = actions.onPlayerPlayPause, modifier = Modifier.returnsFocus().size(72.dp)) {
             AppIcon(
                 if (playing) R.drawable.ic_pause else R.drawable.ic_play,
                 contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play),
@@ -936,6 +936,7 @@ private fun LyricsPeek(lines: List<LyricLine>, byEar: Boolean, following: Follow
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
             .background(tint.copy(alpha = 0.24f))
+            .returnsFocus(Screen.LYRICS)
             .clickable(onClickLabel = name, onClick = onLyrics)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {

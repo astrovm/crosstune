@@ -50,7 +50,7 @@ class ScreenOverlaysTest {
         // The remote's, as a TV is: Robolectric starts as a touch screen, where buttons take no focus.
         val keys = LocalInputModeManager.current
         remember { keys.requestInputMode(InputMode.Keyboard) }
-        CrosstuneTheme { WithOverlays(inside) { Box { content() } } }
+        CrosstuneTheme { WithOverlays(inside, rememberOverlays { false }) { Box { content() } } }
     }
 
     @Test

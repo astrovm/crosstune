@@ -223,6 +223,7 @@ internal fun FixBar(count: Int, onClick: () -> Unit, modifier: Modifier = Modifi
                 .padding(horizontal = 12.dp, vertical = 8.dp)
                 .widthIn(max = ContentMaxWidth)
                 .fillMaxWidth()
+                .returnsFocus(Screen.FIXES)
                 .testTag(FIX_BAR_TAG)
         ) {
             Row(
@@ -310,6 +311,7 @@ private fun FixAll(state: UiState, actions: ScreenActions, left: List<Need>) {
             contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
             interactionSource = press.source,
             modifier = Modifier
+                .returnsFocus()
                 .fillMaxWidth()
                 .heightIn(min = 52.dp)
                 .then(press.modifier)
@@ -369,6 +371,7 @@ private fun FixRow(check: Check, asks: Boolean, onOpen: (Need) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .returnsFocus(check.need)
             .clickable(enabled = !done, onClickLabel = stringResource(R.string.fix_button)) { onOpen(check.need) }
             .semantics { if (done) stateDescription = doneLabel }
             .heightIn(min = 64.dp)
