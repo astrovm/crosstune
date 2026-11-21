@@ -46,51 +46,73 @@ class LyricsComingTest {
         composeRule.waitForIdle()
     }
 
-    /**
-     * How strongly the line [index] is drawn against what's behind it: its most different pixel, across
-     * the line or, as a share of where its words are drawn, from [from] to [to].
-     */
-    private fun ink(index: Int, from: Float = 0f, to: Float = 1f, image: android.graphics.Bitmap = composeRule.onRoot().captureToImage().asAndroidBitmap()): Int {
-        val node = composeRule.onAllNodesWithTag(LYRIC_LINE_TAG).fetchSemanticsNodes()[index]
-        val bounds = node.boundsInRoot
-        val rows = bounds.top.toInt() until bounds.bottom.toInt()
-        // Against what's behind it on the same row, as the ground shades from top to bottom.
-        fun difference(x: Int, y: Int) = shifts.sumOf { shift -> abs(((image.getPixel(x, y) shr shift) and 0xFF) - ((image.getPixel(0, y) shr shift) and 0xFF)) }
-        val drawn = (bounds.left.toInt() until bounds.right.toInt()).filter { x -> rows.any { y -> difference(x, y) > inked } }
-        val start = drawn.first()
-        val width = drawn.last() - start
-        return rows.maxOf { y -> ((start + width * from).toInt()..(start + width * to).toInt()).maxOf { x -> difference(x, y) } }
+    /** The screen as it's drawn now, its pixels read once, with where each line is. */
+    private inner class Frame {
+        private val image = composeRule.onRoot().captureToImage().asAndroidBitmap()
+        private val width = image.width
+        private val pixels = IntArray(width * image.height).also { image.getPixels(it, 0, width, 0, 0, width, image.height) }
+        private val lines = composeRule.onAllNodesWithTag(LYRIC_LINE_TAG).fetchSemanticsNodes().map { it.boundsInRoot }
+
+        /**
+         * How strongly the line [index] is drawn against what's behind it: its most different pixel in each of [parts]
+         * equal shares of where its words are drawn, from the first to the last.
+         */
+        fun ink(index: Int, parts: Int = 1): List<Int> {
+            val bounds = lines[index]
+            val top = bounds.top.toInt()
+            val left = bounds.left.toInt()
+            // Each column's most different pixel, against what's behind it on the same row, as the ground shades
+            // from top to bottom.
+            val columns = IntArray(bounds.right.toInt() - left)
+            for (y in top until bounds.bottom.toInt()) {
+                val ground = pixels[y * width]
+                for (x in columns.indices) columns[x] = maxOf(columns[x], difference(pixels[y * width + left + x], ground))
+            }
+            val start = columns.indexOfFirst { it > inked }
+            val span = columns.indexOfLast { it > inked } - start
+            return (0 until parts).map { part ->
+                (start + span * part / parts.toFloat()).toInt()..(start + span * (part + 1) / parts.toFloat()).toInt()
+            }.map { share -> share.maxOf { columns[it] } }
+        }
+
+        private fun difference(pixel: Int, ground: Int) = shifts.sumOf { shift -> abs(((pixel shr shift) and 0xFF) - ((ground shr shift) and 0xFF)) }
     }
+
+    /** How strongly each line is drawn now, across where its words are. */
+    private fun ink() = Frame().let { frame -> List(lines.size) { frame.ink(it).single() } }
 
     private val shifts = listOf(0, 8, 16)
 
     /** How different from what's behind it a pixel has to be to be a letter's, not the ground's shading. */
     private val inked = 60
 
-
     @Test
     fun setToTheLineComingNextIsBrighterThanTheOnesAfterItAMomentBeforeItIsSung() {
         show(4_500, aheadMs = 1_000)
-        assertTrue(ink(0) > ink(1))
-        assertTrue("${ink(1)} ${ink(2)}", ink(1) > ink(2) + 20)
+        val (first, second, third) = ink()
+        assertTrue("$first $second", first > second)
+        assertTrue("$second $third", second > third + 20)
     }
 
     @Test
     fun notSetToItIsDimLikeTheRestUntilItIsSung() {
         show(4_500, aheadMs = 0)
-        assertEquals(ink(2).toFloat(), ink(1).toFloat(), 15f)
+        val (_, second, third) = ink()
+        assertEquals(third.toFloat(), second.toFloat(), 15f)
     }
 
     @Test
     fun setToItWaitsTillTheNextLineIsNearBeforeBrightening() {
         show(3_500, aheadMs = 1_000)
-        assertEquals(ink(2).toFloat(), ink(1).toFloat(), 15f)
+        val (_, second, third) = ink()
+        assertEquals(third.toFloat(), second.toFloat(), 15f)
     }
 
     @Test
     fun setFurtherAheadItBrightensSooner() {
         show(3_500, aheadMs = 2_000)
-        assertTrue("${ink(1)} ${ink(2)}", ink(1) > ink(2) + 20)
+        val (_, second, third) = ink()
+        assertTrue("$second $third", second > third + 20)
     }
 
     /**
@@ -120,8 +142,7 @@ class LyricsComingTest {
         return (from..to step step).map { at ->
             position = at
             composeRule.waitForIdle()
-            val image = composeRule.onRoot().captureToImage().asAndroidBitmap()
-            at to watch.map { line -> (0 until 4).map { quarter -> ink(line, quarter / 4f, (quarter + 1) / 4f, image) } }
+            at to Frame().let { frame -> watch.map { line -> frame.ink(line, parts = 4) } }
         }
     }
 
@@ -132,8 +153,12 @@ class LyricsComingTest {
         LyricLine(6_600, "Home again now", listOf(TimedWord(6_900, "Home "), TimedWord(7_300, "again "), TimedWord(7_700, "now")))
     )
 
-    /** How the words of the two lines are drawn, a tenth of a second at a time, while the song plays through them. */
-    private fun played(chords: ChordsState = ChordsState()) = sampled(sungByWord, 1_000, 3_900, 8_500, 100, listOf(1, 2), chords)
+    /**
+     * How the words of the two lines are drawn, a tenth of a second at a time, while the song plays through them, from
+     * [from] to [to]: each frame takes a moment to draw, so a test draws only the ones it looks at.
+     */
+    private fun played(from: Long = 3_900, to: Long = 6_900, chords: ChordsState = ChordsState()) =
+        sampled(sungByWord, 1_000, from, to, 100, listOf(1, 2), chords)
 
     /** Every quarter of [line], by where the song is, as it's drawn. */
     private fun drawn(samples: List<Pair<Long, List<List<Int>>>>, line: Int) = samples.map { (at, inks) -> at to inks[line] }
@@ -159,13 +184,13 @@ class LyricsComingTest {
     @Test
     fun timedWordByWordOnlyTheLineSungChangesWhileItsWordsLight() {
         // The line coming next waits, rather than brightening among the words lit one by one.
-        val next = drawn(played(), 1).filter { (at, _) -> at in 5_300..6_500 }
+        val next = drawn(played(from = 5_300, to = 6_500), 1)
         next.zipWithNext().forEach { (before, after) -> assertEquals("at ${after.first}", before.second, after.second) }
     }
 
     @Test
     fun withChordsTimedWordByWordTheLineComingNextStaysDimToo() {
         val sheet = ChordSheet(listOf(SheetLine("Home again now", listOf(Chord(5, "C")))), site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/x-1")
-        assertFirstWordNotBrightBeforeItIsSung(played(ChordsState(on = true, sheet = sheet)).filter { (at, _) -> at < 7_000 }, 1, 6_900)
+        assertFirstWordNotBrightBeforeItIsSung(played(chords = ChordsState(on = true, sheet = sheet)).filter { (at, _) -> at < 7_000 }, 1, 6_900)
     }
 }
