@@ -307,7 +307,7 @@ case "${1:-}" in
   production) production "${2:?usage: play.sh production VERSION}" ;;
   listing) listing ;;
   *)
-    echo "usage: play.sh release TAG | play.sh production VERSION | play.sh listing | play.sh setup | play.sh --help" >&2
+    echo "usage: play.sh release TAG | production VERSION | listing | setup | --help" >&2
     exit 2
     ;;
 esac
