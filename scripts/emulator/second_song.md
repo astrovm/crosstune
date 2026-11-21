@@ -2,7 +2,10 @@
 
 ## Inputs and method
 
-The Samsung SM-S908E is selected by model, with its shared lock held per pair.
+The Samsung SM-S908E is selected by model. Each pair takes it through `scripts/devicelock.py`
+(or the test emulator `--serial` names, by its port), waiting in line behind other agents,
+and lets it go after. Don't hold the device yourself while it runs: its first pair would wait
+for your turn to end.
 `second_song.py` saves and restores Crosstune's preferences. It reads Android's
 activity tasks and the visible accessibility tree and takes a screenshot for each
 song. `--keep-playing` leaves the destination running between the first and second

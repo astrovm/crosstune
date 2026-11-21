@@ -3,13 +3,14 @@
 
 --serial points it at another device instead, such as the crosstune-phone emulator
 (emulator-5580). The Samsung stays the default, and is the only one picked by model.
+Each pair of songs takes the device through scripts/devicelock.py, so it waits in line
+behind other agents and lets go between pairs.
 
 Pass the device-bound CLI returned by T3 device_open as --device-cli. Evidence stays
 under build/, including screenshots, visible nodes and Android task dumps. No login
 or subscription prompts are accepted. Review the evidence before calling a row right.
 """
 import argparse
-import fcntl
 import json
 import os
 import re
@@ -17,6 +18,7 @@ import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
@@ -35,6 +37,11 @@ SEARCHES = [('Crosstune Unreleased First', 'Test Band'), ('Crosstune Unreleased 
 PACKAGES = dict(zip(SERVICES, ['com.aspiro.tidal', 'deezer.android.app', 'com.apple.android.music', 'com.amazon.mp3', 'com.qobuz.music', 'com.audiomack', 'com.spotify.music', 'com.bandcamp.android', 'com.soundcloud.android', 'com.google.android.youtube', 'com.google.android.apps.youtube.music', 'app.morphe.android.apps.youtube.music']))
 TEST_APPS = {'com.aspiro.tidal', 'deezer.android.app', 'com.apple.android.music', 'com.amazon.mp3', 'com.qobuz.music', 'com.audiomack', 'com.spotify.music', 'com.bandcamp.android', 'com.soundcloud.android', 'com.google.android.youtube', 'com.google.android.apps.youtube.music', 'app.morphe.android.apps.youtube.music'}
 LINKS = ['https://www.deezer.com/track/3135556', 'https://www.deezer.com/track/908604612']
+# The test emulators, by name, as emulator.py makes them and devicelock.py shares them.
+EMULATORS = json.loads((Path(__file__).resolve().parent / 'emulators.json').read_text())
+DEVICELOCK = Path(__file__).resolve().parents[1] / 'devicelock.py'
+# How long one pair of songs holds the device: about a minute, with room for a slow app.
+PAIR_MINUTES = 5
 DEEZER_SOURCES = ['https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT', 'https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b']
 
 
@@ -44,6 +51,27 @@ def run(command, **kwargs):
         raise RuntimeError(f'{command[0]} exited {result.returncode}: {result.stdout}{result.stderr}')
     return result.stdout
 
+
+def shared_device(serial):
+    """The name devicelock.py shares serial's device by: the Samsung with no serial, a test emulator by its port. None
+    for any other device, which no one else takes turns on."""
+    if serial is None:
+        return 'samsung'
+    return next((name for name, spec in EMULATORS.items() if serial == f"emulator-{spec['port']}"), None)
+
+
+@contextmanager
+def turn(device, who):
+    """Holds device through devicelock.py while the block runs, waiting in line behind other agents, and lets it go
+    after; it holds nothing for None. The holder lets go by itself after PAIR_MINUTES, should this stop on the way."""
+    if device is None:
+        yield
+        return
+    subprocess.run([sys.executable, str(DEVICELOCK), 'take', device, '--who', who, '--minutes', str(PAIR_MINUTES)], check=True, stdout=subprocess.DEVNULL)
+    try:
+        yield
+    finally:
+        subprocess.run([sys.executable, str(DEVICELOCK), 'release', device, '--who', who], check=True, stdout=subprocess.DEVNULL)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -131,8 +159,8 @@ def main():
         # Each launch argument is its own token, including text containing spaces.
         device('open', APP, *[token for item in extra for token in ['--launch-args', item]])
 
-    lock_path = Path('/tmp') / ('claude-' + str(os.getuid())) / ((serial if args.serial else 'samsung') + '.lock')
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    shared = shared_device(args.serial)
+    who = f'second_song.py {args.phase} {os.getpid()}'
     for target, label in SERVICES.items():
         if args.service and target != args.service:
             continue
@@ -149,8 +177,7 @@ def main():
                 if (args.output / (prefix + '-1.png')).exists():
                     continue
                 # Release between pairs, so other agents can use the shared phone.
-                with lock_path.open('w') as lock:
-                    fcntl.flock(lock, fcntl.LOCK_EX)
+                with turn(shared, who):
                     saved = adb('shell', 'run-as', APP, 'cat', 'shared_prefs/crosstune_preferences.xml')
                     quiet()
                     try:
