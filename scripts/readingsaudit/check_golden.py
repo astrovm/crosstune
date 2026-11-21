@@ -63,6 +63,10 @@ LOCK_FILES = (
 )
 
 
+# Where the app's own code is: a file added there may be a reading source main doesn't list yet.
+APP_CODE = "app/src/main/java/"
+
+
 def marks(body):
     """(whether the body says golden: none, the (word, kana) pairs it accepts, whether it says golden: lock changed,
     the digests it says golden: lines checked for, whether it says golden: new audit). Only a whole line counts."""
@@ -207,7 +211,18 @@ def readings_digest(repo, base, head):
     for commit in (base, head):
         made.append(git(repo, "ls-tree", commit, "--", *READING_SOURCES))
         made += kuromoji_lines(repo, commit)
+    # A file the range adds to the app's code may be a new reading source, named in READING_SOURCES on its branch but not
+    # here yet: it counts too, so each commit that changes it asks for the command again (Issue #1143).
+    added = added_code(repo, base, head)
+    if added:
+        made.append(git(repo, "ls-tree", head, "--", *added))
     return hashlib.sha256("\n".join(made).encode()).hexdigest()[:16]
+
+
+def added_code(repo, base, head):
+    """The files under APP_CODE that [head] has and [base] doesn't, moved and copied ones too, other than READING_SOURCES."""
+    return sorted({paths[-1] for status, paths in changes(repo, base, head)
+                   if status in "ACR" and paths[-1].startswith(APP_CODE) and paths[-1] not in READING_SOURCES})
 
 
 def golden_path(changed):
