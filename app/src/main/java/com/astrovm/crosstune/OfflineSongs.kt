@@ -6,7 +6,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
-import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -114,15 +113,9 @@ internal class OfflineSongs(
         }
     }
 
-    private fun read(): List<KeptOffline> {
-        try {
-            if (file.isFile) return JSONArray(file.readText()).let { list -> (0 until list.length()).mapNotNull { kept(list.optJSONObject(it)) } }
-        } catch (_: IOException) {
-            // Unreadable, nothing's kept.
-        } catch (_: JSONException) {
-            // Unreadable, nothing's kept.
-        }
-        return emptyList()
+    // Unreadable, nothing's kept.
+    private fun read(): List<KeptOffline> = answeredOr(emptyList()) {
+        if (file.isFile) JSONArray(file.readText()).let { list -> (0 until list.length()).mapNotNull { kept(list.optJSONObject(it)) } } else emptyList()
     }
 
     private fun json(kept: KeptOffline) = JSONObject()

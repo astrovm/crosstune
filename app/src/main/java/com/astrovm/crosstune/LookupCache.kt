@@ -10,7 +10,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
-import org.json.JSONException
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicReference
@@ -165,7 +164,8 @@ internal class LookupCache(
     }
 
     private fun read(file: File, entries: LinkedHashMap<String, Entry>) {
-        try {
+        // Unreadable, it starts over.
+        answeredOr(Unit) {
             if (!file.isFile) return
             val list = JSONArray(file.readText())
             // Saved before days were counted, each was used on one, today.
@@ -173,10 +173,6 @@ internal class LookupCache(
                 val pins = entry.optJSONArray(4)?.let { ids -> (0 until ids.length()).map(ids::optString).toSet() }.orEmpty()
                 entries[entry.optString(0)] = Entry(entry.optString(1), entry.optInt(2, 1), entry.optLong(3, today()), pins)
             }
-        } catch (_: IOException) {
-            // Unreadable, it starts over.
-        } catch (_: JSONException) {
-            // Unreadable, it starts over.
         }
     }
 

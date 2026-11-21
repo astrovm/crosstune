@@ -99,14 +99,10 @@ internal class ExactMatcher(
      * or a vlog. Null when it can't be told, e.g. offline.
      */
     suspend fun isMusicVideo(videoId: String): Boolean? = withTimeoutOrNull(TIMEOUT_MS) {
-        try {
+        answeredOr(null) {
             val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION)
             val body = JSONObject().put("context", JSONObject().put("client", client)).put("videoId", videoId)
             musicVideoTypeIn(fetchJson(YOUTUBE_MUSIC_NEXT_URL, body))?.let { it in MUSIC_VIDEO_TYPES || uploadedAsMusic(videoId) }
-        } catch (_: IOException) {
-            null
-        } catch (_: JSONException) {
-            null
         }
     }
 
@@ -170,13 +166,7 @@ internal class ExactMatcher(
     private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false, retrying: Boolean = false): Looked {
         repeat(if (retrying) 2 else 1) {
             val answer = withTimeoutOrNull(timeoutMs) {
-                try {
-                    findOn(target, metadata, loosely)
-                } catch (_: IOException) {
-                    null
-                } catch (_: JSONException) {
-                    null
-                }
+                answeredOr(null) { findOn(target, metadata, loosely) }
             }
             if (answer != null) {
                 val match = answer.url?.let(Match::Found) ?: answer.toPick?.let { picked(it) } ?: Match.Missing
@@ -360,26 +350,16 @@ internal class ExactMatcher(
 
     private suspend fun coverOf(metadata: MusicMetadata, timeoutMs: Long): String? = (remembered("cover", "", metadata) {
         withTimeoutOrNull(timeoutMs) {
-            try {
+            answeredOr(null) {
                 // A Spotify song's own cover is known by its link, with no guessing by name. When Spotify
                 // doesn't answer, e.g. it's busy with the rest of the playlist, the name still finds it.
                 val own = if (metadata.url?.startsWith(SPOTIFY_TRACK_URL) == true) {
-                    try {
-                        spotifyCover(metadata.url)
-                    } catch (_: IOException) {
-                        null
-                    } catch (_: JSONException) {
-                        null
-                    }
+                    answeredOr(null) { spotifyCover(metadata.url) }
                 } else {
                     null
                 }
                 // Apple has some Deezer doesn't, e.g. The Blue Hearts'.
                 own ?: deezerCover(metadata) ?: itunesCover(metadata)
-            } catch (_: IOException) {
-                null
-            } catch (_: JSONException) {
-                null
             }
         }?.let { Looked(Match.Found(it)) } ?: Looked(Match.Failed)
     } as? Match.Found)?.url

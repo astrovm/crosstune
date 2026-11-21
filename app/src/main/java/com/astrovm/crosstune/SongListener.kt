@@ -132,16 +132,12 @@ internal class Shazam(
     }
 
     /** Not known, e.g. offline, the song is still named, as only its words need it. */
-    private suspend fun lengthOf(id: String): Long? = try {
+    private suspend fun lengthOf(id: String): Long? = answeredOr(null) {
         val url = ITUNES_LOOKUP_URL.toHttpUrl().newBuilder().addQueryParameter("id", id).build()
         client.newCall(Request.Builder().url(url).build()).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) return@answer null
             JSONObject(response.body.stringAtMost()).optJSONArray("results")?.optJSONObject(0)?.optLong("trackTimeMillis")?.takeIf { it > 0 }
         }
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null
     }
 
     private fun body(uri: String): JSONObject {

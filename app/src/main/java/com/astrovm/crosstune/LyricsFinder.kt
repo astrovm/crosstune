@@ -774,13 +774,7 @@ internal class LyricsFinder(
     private suspend fun copiesNamed(metadata: MusicMetadata, title: String, timeoutMs: Long): List<Answer> {
         val named = metadata.copy(title = title)
         val answers = withTimeoutOrNull(timeoutMs) {
-            try {
-                answersFor(named)
-            } catch (_: IOException) {
-                null
-            } catch (_: JSONException) {
-                null
-            }
+            answeredOr(null) { answersFor(named) }
         }
         return answers.orEmpty().filter { it.isExact(named) || it.belongsTo(named) }
     }
@@ -882,13 +876,7 @@ internal class LyricsFinder(
         if (parts.size < 2 && metadata.title.trim().split(whitespace).size < 2) return null
         val asks = if (parts.size > 1) parts.drop(1).take(MAX_TITLE_PARTS).map { listOf(parts.first(), it) } else listOf(listOf(metadata.title))
         for (ask in asks) {
-            val answers = try {
-                answersFor(ask.joinToString(" "))
-            } catch (_: IOException) {
-                null
-            } catch (_: JSONException) {
-                null
-            } ?: return null
+            val answers = answeredOr(null) { answersFor(ask.joinToString(" ")) } ?: return null
             answers.firstOrNull { it.namedBy(ask) }?.let { return metadata.copy(title = it.title, artist = it.artist, url = null, recordingId = null) }
         }
         return null
@@ -941,7 +929,7 @@ internal class LyricsFinder(
      * Being many times more than anyone else's says it's theirs by itself: a famous song's covers are
      * many, but by as many singers. A name many songs share, as "Hello", has no one [FirstSinger.farAhead].
      */
-    private suspend fun firstSinger(song: String, cover: String): FirstSinger? = try {
+    private suspend fun firstSinger(song: String, cover: String): FirstSinger? = answeredOr(null) {
         val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("term", song)
             .addQueryParameter("country", "us")
@@ -953,10 +941,6 @@ internal class LyricsFinder(
         val singers = songs.groupBy { it.optString("artistName") }.entries.sortedByDescending { it.value.size }
         val next = singers.getOrNull(1)?.value?.size ?: 0
         singers.firstOrNull()?.takeIf { it.value.size >= MIN_FIRST_SINGER_SONGS }?.let { FirstSinger(it.key, it.value.first().optLong("trackId"), it.value.size >= FIRST_SINGER_LEAD * next) }
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null
     }
 
     /** Who first sang a song, and one of their recordings of it in the iTunes Store, by its [id]. */
@@ -1117,7 +1101,7 @@ internal class LyricsFinder(
         if (recording != null) recording.genre in WORDLESS_GENRES else artistGenre(metadata.artist) in WORDLESS_ARTIST_GENRES
 
     /** The genre the US iTunes Store files [artist] under: null when it has no one by that name, or won't answer, and blank when it names none. */
-    private suspend fun artistGenre(artist: String): String? = try {
+    private suspend fun artistGenre(artist: String): String? = answeredOr(null) {
         val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("term", artist)
             .addQueryParameter("country", "us")
@@ -1127,10 +1111,6 @@ internal class LyricsFinder(
         val artists = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }.orEmpty()
         // Namesakes go by the genre most of them share, as a DJ of a jazz trumpeter's name may be listed first; the first listed among equals.
         artists.filter { SongNames.sameArtist(it.optString("artistName"), artist) }.groupingBy { it.optString("primaryGenreName") }.eachCount().maxByOrNull { it.value }?.key
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null
     }
 
     /**
@@ -1178,7 +1158,7 @@ internal class LyricsFinder(
         val find = youTubeMusicSong
         if (find == null && RecordingKey.youTubeId(metadata) == null) return null
         return withTimeoutOrNull(timeoutMs) {
-            try {
+            answeredOr(null) {
                 val videoId = RecordingKey.youTubeId(metadata) ?: find?.invoke(metadata) ?: return@withTimeoutOrNull null
                 val watching = post(YOUTUBE_MUSIC_NEXT_URL, innertube(WEB_CLIENT, WEB_CLIENT_VERSION).put("videoId", videoId))
                 // A song without words has no page for them.
@@ -1187,10 +1167,6 @@ internal class LyricsFinder(
                 val words = youTubeMusicWords(JSONObject(post(YOUTUBE_MUSIC_BROWSE_URL, innertube(APP_CLIENT, APP_CLIENT_VERSION).put("browseId", page))))
                 // Timed for that very release, which, found by its name, may be another edit of the song.
                 words?.copy(lengthMs = MetadataParsers.youtubeMusicVideo(JSONObject(watching), videoId)?.lengthMs)
-            } catch (_: IOException) {
-                null
-            } catch (_: JSONException) {
-                null
             }
         }
     }
@@ -1218,14 +1194,10 @@ internal class LyricsFinder(
         repeat(TRIES) { tried ->
             if (tried > 0) delay(busyPauseMs)
             val answer = withTimeoutOrNull(timeoutMs) {
-                try {
+                answeredOr(Lyrics.Unavailable) {
                     // No list at all means it wouldn't answer, which is not a song without words.
                     val answers = answersFor(metadata) ?: return@withTimeoutOrNull Lyrics.Unavailable
                     wordsOf(answers, metadata, timeoutMs) ?: Lyrics.None
-                } catch (_: IOException) {
-                    Lyrics.Unavailable
-                } catch (_: JSONException) {
-                    Lyrics.Unavailable
                 }
             } ?: Lyrics.Unavailable
             if (answer !is Lyrics.Unavailable) return answer
@@ -1287,7 +1259,7 @@ internal class LyricsFinder(
         recordingInStore(metadata) ?: movementSpelledTheOtherWay(metadata.title)?.let { recordingInStore(metadata.copy(title = it)) }
 
     /** [inStore] asked once, under [metadata]'s title as given. */
-    private suspend fun recordingInStore(metadata: MusicMetadata): Recording? = try {
+    private suspend fun recordingInStore(metadata: MusicMetadata): Recording? = answeredOr(null) {
         val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("term", "${metadata.title} ${metadata.artist}")
             .addQueryParameter("country", "us")
@@ -1306,10 +1278,6 @@ internal class LyricsFinder(
             val names = metadata.copy(title = song.optString("trackName"), artist = song.optString("artistName"))
             Recording(song.optLong("trackId"), song.optLong("trackTimeMillis").takeIf { it > 0 }, names, song.optString("primaryGenreName")).takeIf { it.id > 0 }
         }
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null
     }
 
     /** The store's title is the one playing, also when only its movement index is written the other way. */
@@ -1382,7 +1350,7 @@ internal class LyricsFinder(
      * given: the Japanese iTunes Store names recording [id] in its own. Null when it's not there, or
      * has no other names.
      */
-    private suspend fun ownNames(metadata: MusicMetadata, id: Long): MusicMetadata? = try {
+    private suspend fun ownNames(metadata: MusicMetadata, id: Long): MusicMetadata? = answeredOr(null) {
         val lookup = ITUNES_LOOKUP_URL.toHttpUrl().newBuilder()
             .addQueryParameter("id", id.toString())
             .addQueryParameter("country", "jp")
@@ -1394,10 +1362,6 @@ internal class LyricsFinder(
                 title.isNotEmpty() && artist.isNotEmpty() && !(SongNames.same(title, metadata.title) && SongNames.same(artist, metadata.artist))
             }
         }
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null
     }
 
     /**
@@ -1406,7 +1370,7 @@ internal class LyricsFinder(
      * opens its words with are left off.
      */
     private suspend fun fromNetEase(metadata: MusicMetadata, lengthMs: Long?, timeoutMs: Long, alsoBy: String = metadata.artist): Lyrics = withTimeoutOrNull(timeoutMs) {
-        try {
+        answeredOr(Lyrics.Unavailable) {
             val search = NETEASE_SEARCH_URL.toHttpUrl().newBuilder()
                 .addQueryParameter("s", "${metadata.title} ${metadata.artist}")
                 .addQueryParameter("type", "1")
@@ -1456,10 +1420,6 @@ internal class LyricsFinder(
             // credits go on to name the players, so they're not looked at once it says so.
             if (answer?.optBoolean("pureMusic") == true || lrc.contains(NETEASE_INSTRUMENTAL)) return@withTimeoutOrNull Lyrics.Instrumental
             netEaseRead(lrc, byWord, metadata, recordingMs)
-        } catch (_: IOException) {
-            Lyrics.Unavailable
-        } catch (_: JSONException) {
-            Lyrics.Unavailable
         }
     } ?: Lyrics.Unavailable
 
@@ -1470,7 +1430,7 @@ internal class LyricsFinder(
      * the address is the search's own.
      */
     private suspend fun fromLetras(metadata: MusicMetadata, timeoutMs: Long): Lyrics = withTimeoutOrNull(timeoutMs) {
-        try {
+        answeredOr(Lyrics.Unavailable) {
             val search = LETRAS_SEARCH_URL.toHttpUrl().newBuilder()
                 .addQueryParameter("q", "${metadata.title} ${metadata.artist}")
                 .addQueryParameter("wt", "json")
@@ -1493,10 +1453,6 @@ internal class LyricsFinder(
                 ?.replace(letrasStanza, "\n\n")?.replace(letrasBreak, "\n")?.let(::withoutTags)
                 ?.let { ChordFinder.unescape(it).trim() }?.takeIf { it.isNotEmpty() }
             words?.let { Lyrics.Found(it, source = LETRAS) } ?: Lyrics.None
-        } catch (_: IOException) {
-            Lyrics.Unavailable
-        } catch (_: JSONException) {
-            Lyrics.Unavailable
         }
     } ?: Lyrics.Unavailable
 
@@ -1507,7 +1463,7 @@ internal class LyricsFinder(
      * A song it marks as instrumental has none to find.
      */
     private suspend fun fromGenius(metadata: MusicMetadata, timeoutMs: Long): Lyrics = withTimeoutOrNull(timeoutMs) {
-        try {
+        answeredOr(Lyrics.Unavailable) {
             val search = GENIUS_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("q", "${metadata.title} ${metadata.artist}").build()
             val sections = JSONObject(browserPage(search.toString())).optJSONObject("response")?.optJSONArray("sections")
                 ?: return@withTimeoutOrNull Lyrics.Unavailable
@@ -1525,10 +1481,6 @@ internal class LyricsFinder(
             if (song.optBoolean("instrumental")) return@withTimeoutOrNull Lyrics.Instrumental
             val page = GENIUS_URL.toHttpUrl().newBuilder().encodedPath(song.optString("path").ifEmpty { return@withTimeoutOrNull Lyrics.None }).build()
             geniusWords(browserPage(page.toString()), song.optString("title"))?.let { Lyrics.Found(it, source = GENIUS) } ?: Lyrics.None
-        } catch (_: IOException) {
-            Lyrics.Unavailable
-        } catch (_: JSONException) {
-            Lyrics.Unavailable
         }
     } ?: Lyrics.Unavailable
 

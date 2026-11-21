@@ -8,7 +8,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONException
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.IOException
@@ -95,12 +94,8 @@ internal class SongSearcher(
 
     /** What [find] found, or nothing when the service is unreachable or sends back rubbish. */
     private suspend fun answering(find: suspend () -> List<MusicMetadata>): List<MusicMetadata> =
-        try {
+        answeredOr(emptyList()) {
             find()
-        } catch (_: IOException) {
-            emptyList()
-        } catch (_: JSONException) {
-            emptyList()
         }
 
     /** What Deezer holds for [query]; empty when it won't answer or has nothing. */

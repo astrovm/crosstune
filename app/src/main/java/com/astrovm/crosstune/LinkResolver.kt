@@ -122,7 +122,7 @@ internal class LinkResolver(
      */
     private suspend fun withTracks(link: MusicLink, metadata: MusicMetadata, page: String): MusicMetadata {
         if (link.type != ItemType.PLAYLIST && link.type != ItemType.ALBUM) return metadata
-        val tracks = try {
+        val tracks = answeredOr(emptyList()) {
             when (link.service) {
                 MusicService.SPOTIFY -> {
                     val (response, body) = fetch("https://open.spotify.com/embed/${link.type.name.lowercase()}/${link.id}")
@@ -134,10 +134,6 @@ internal class LinkResolver(
                 MusicService.AUDIOMACK -> apis.audiomackTracks(link.type, link.id)
                 else -> return metadata
             }
-        } catch (_: IOException) {
-            emptyList()
-        } catch (_: JSONException) {
-            emptyList()
         }
         return metadata.copy(tracks = tracks, trackCount = metadata.trackCount?.takeIf { it > tracks.size })
     }
@@ -223,7 +219,7 @@ internal class LinkResolver(
         youTubeMusic(YOUTUBE_MUSIC_BROWSE_URL, "browseId", link.id)?.let { MetadataParsers.youtubeMusicPage(it, link.type) }
 
     /** What YouTube Music's [url] answers about [key] [id]; null when it doesn't. */
-    private suspend fun youTubeMusic(url: String, key: String, id: String): JSONObject? = try {
+    private suspend fun youTubeMusic(url: String, key: String, id: String): JSONObject? = answeredOr(null) {
         val body = JSONObject()
             .put("context", JSONObject().put("client", JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION).put("hl", "en")))
             .put(key, id)
@@ -232,10 +228,6 @@ internal class LinkResolver(
             if (!response.isSuccessful) return@answer null
             JSONObject(response.body.stringAtMost())
         }
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null
     }
 
     private suspend fun fetch(url: String): Pair<Response, String> {
