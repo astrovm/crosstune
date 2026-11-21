@@ -13,8 +13,9 @@ Music with the songs and videos it gave. Four ways:
 2. "alone": no ChatGPT; "asked": ChatGPT picks a right result when it's shown one, and none otherwise.
 
 A song result is right when one of its names is a name a store gives the song, by its artist. A video
-is right when it's named so, says no other version, and is the artist's or names the artist. Every
-wrong open, and every video, is listed with -v, to be checked by eye.
+is right when it's named so, says no other version, and is the artist's; or names the artist, where
+no song result and no video of the artist's is right, as someone else's lyrics video is no match where
+the song is there. Every wrong open, and every video, is listed with -v, to be checked by eye.
 
 Run LABEL on another checkout, e.g. origin/main, with the same test file and gradle-box.sh, and
 compare with --against. OUT stays out of git: it holds what the services answered.
@@ -26,6 +27,7 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import analyze
@@ -44,6 +46,35 @@ def raw_path(out, url, body):
 
 def ytm_path(out, query, params):
     return raw_path(out, collect.YTM_SEARCH, {"context": {"client": collect.YTM_CLIENT}, "query": query, "params": params})
+
+
+# What YouTube adds to an artist's own channel's name, as ExactMatcher's CHANNEL_SUFFIXES: "Band - Topic", "BandVEVO".
+CHANNEL_SUFFIXES = {"topic", "vevo", "official", "music", "tv"}
+# SongNames' leadingArticle, artistSeparator and conjunction, which split a credit into its artists.
+LEADING_ARTICLE = re.compile(r"^the\s+", re.IGNORECASE)
+CREDIT_SEPARATOR = re.compile(r"\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*", re.IGNORECASE)
+CONJUNCTION = re.compile(r"\s+(?:and|y|und|et)\s+", re.IGNORECASE)
+
+
+def normalized(text):
+    """SongNames.normalize: NFD, its marks dropped, lowercase, letters and digits only. Not analyze.normalize, whose NFKD
+    makes a fullwidth ＹＯＡＳＯＢＩ YOASOBI, where the app keeps them apart."""
+    folded = "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.category(c).startswith("M"))
+    return "".join(c for c in folded.lower() if unicodedata.category(c)[0] in "LN")
+
+
+def credited(credit):
+    """SongNames.artists: each artist in a credit, and the whole credit, without the article, normalized."""
+    names = [part for name in CREDIT_SEPARATOR.split(credit) if name.strip() for part in CONJUNCTION.split(name.strip())]
+    return {normalized(LEADING_ARTICLE.sub("", name)) for name in [*names, credit]} - {""}
+
+
+def own_channel(uploader, credits):
+    """Whether a video's channel is the artist's own, as ExactMatcher.isOwnVideo tells: the whole channel name, without its
+    article, is one of the artists in [credits], maybe with what YouTube adds to it."""
+    channel = normalized(LEADING_ARTICLE.sub("", uploader))
+    names = {name for credit in credits for name in credited(credit)}
+    return any(channel == a or (channel.startswith(a) and channel[len(a):] in CHANNEL_SUFFIXES) for a in names)
 
 
 def right_ids(song, results, videos):
@@ -68,13 +99,17 @@ def right_ids(song, results, videos):
 
     # Checked by eye, it's the song, whatever its name says: "(Directors Edit Version)" for "(Director's Edit Version)".
     ids = {r["id"] for r in results if r["id"] and (by_eye(r) or (named(r) and analyze.artists(r["details"][0]) & wanted and not says_another(r)))}
+    named_only = set()
     for v in videos:
         if not v["id"] or not named(v) or says_another(v):
             continue
-        by = analyze.artists(v["details"][0]) & wanted or any(a in analyze.normalize(v["name"]) for a in wanted)
-        if by:
+        if own_channel(v["details"][0], [song["artist"]] + [n["artist"] for n in song["native"]]):
             ids.add(v["id"])
-    return sorted(ids)
+        elif any(a in analyze.normalize(v["name"]) for a in wanted):
+            named_only.add(v["id"])
+    # A video someone else put up that only names the artist, e.g. a fan's lyrics video, is the song only where YouTube
+    # Music has nothing of the artist's own: not where it has the song itself, or the artist's video of it.
+    return sorted(ids or named_only)
 
 
 def read_json(path):

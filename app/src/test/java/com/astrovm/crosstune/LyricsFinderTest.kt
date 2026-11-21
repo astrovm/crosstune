@@ -1940,6 +1940,17 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun everyStoreThatWritesANamesScriptIsKnown() {
+        val han = setOf("JP", "TW", "HK", "CN")
+        assertEquals(
+            listOf(setOf("KR"), han + "KR", setOf("JP") + han, setOf("JP"), han, emptySet()),
+            listOf("아일릿", "사랑 愛", "夜に駆ける", "ヨアソビ", "米津玄師", "Magnetic").map(SongNames::storesWriting)
+        )
+        // A Japanese song as Korea's store writes its artist is still Japan's.
+        assertEquals(setOf("JP", "KR"), SongNames.storesWriting("終わらない歌더 블루 하츠") - (han - "JP"))
+    }
+
+    @Test
     fun netEaseHavingNoSuchSongWithLrclibDownIsntNone() {
         fake.handler = { request ->
             val url = request.url
