@@ -203,14 +203,15 @@ internal object Readings {
         val out = mutableListOf<Piece>()
         var i = 0
         var j = 0
-        while (i < drawn.size && j < pieces.size) {
+        // Both end where the text does, so they run out together.
+        while (i < drawn.size) {
             val first = j
             val a = mutableListOf(drawn[i++])
             val b = mutableListOf(pieces[j++])
             while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += drawn[i++] else b += pieces[j++]
             // One word, so a word read right before, ない in しらないぃ, isn't split for another, しらな and いい.
             val word = whole[first].takeIf { j == first + 1 && it.isKnown && it.position !in draws }
-            out += if (word != null && draws.any { it in word.position until word.position + word.surface.length }) b else a
+            out += if (word != null && word.surface.indices.any { word.position + it in draws }) b else a
         }
         return out
     }

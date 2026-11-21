@@ -656,6 +656,9 @@ class ReadingsTest {
             assertEquals(line, expected, TestUniDic.reading { words(line) })
         }
         assertEquals("pyen", Readings.of(listOf("ぴぇん"), Script.JAPANESE).single().typed)
+        // ずっとう is no one word, so ずっと keeps its reading, drawn out, with the ぅ that would make とぅ a sound full size.
+        assertEquals(listOf("ずっとぅ" to "ずっと"), words("ずっとぅ"))
+        assertEquals("zuttou", Readings.of(listOf("ずっとぅ"), Script.JAPANESE).single().typed)
     }
 
     @Test
