@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,13 +21,18 @@ import java.io.IOException
 class MatchReplayTest {
 
     private val fake = FakeSpotify()
+    private lateinit var dir: File
 
     @Test
     fun replay() {
-        val dir = System.getenv("MATCHCHECK_DIR")?.let(::File)
-        assumeTrue(dir != null && File(dir, "replay.json").isFile)
-        val out = File(requireNotNull(dir), "replay.json")
-        val songs = JSONArray(out.readText()).let { all -> (0 until all.length()).map(all::getJSONObject) }
+        val given = System.getenv("MATCHCHECK_DIR")?.let(::File)
+        assumeTrue(given != null && File(given, "replay.json").isFile)
+        dir = requireNotNull(given)
+        val songs = JSONArray(File(dir, "replay.json").readText()).let { all -> (0 until all.length()).map(all::getJSONObject) }
+        // An answer that can't be read would be taken for a lookup that failed, and every song would open nothing, the same
+        // on main and the branch, which reads as a pass.
+        val missing = songs.flatMap { song -> KINDS.mapNotNull { keptAnswer(song, it) } }.filterNot(File::isFile)
+        assertTrue("replay.json names answers that aren't there (${missing.size}), as ${missing.take(2)}: run replay.py prepare again", missing.isEmpty())
         val found = JSONObject()
         val shown = JSONObject()
         for (names in listOf(true, false)) {
@@ -78,14 +84,21 @@ class MatchReplayTest {
             url.host == "api.deezer.com" -> FakeSpotify.html(request, JSONObject().put("data", song.getJSONArray("deezer")).toString())
             url.host == "music.youtube.com" -> {
                 val videos = FakeSpotify.bodyOf(request).contains(VIDEOS)
-                val path = song.optString(if (videos) "videos" else "songs").ifEmpty { null }
-                FakeSpotify.html(request, path?.let { File(it).readText() } ?: "{}")
+                FakeSpotify.html(request, keptAnswer(song, if (videos) "videos" else "songs")?.readText() ?: "{}")
             }
             else -> throw IOException("not kept: $url")
         }
     }
 
+    /**
+     * Where YouTube Music's [kind] answer for [song] was kept, in [dir]; none when it never gave one. Older replay.json
+     * files name it from the root, as they are.
+     */
+    private fun keptAnswer(song: JSONObject, kind: String): File? =
+        song.takeUnless { it.isNull(kind) }?.getString(kind)?.let { path -> File(path).takeIf(File::isAbsolute) ?: File(dir, path) }
+
     private companion object {
+        val KINDS = listOf("songs", "videos")
         const val VIDEOS = "EgWKAQIQAWoKEAoQAxAEEAkQBQ=="
         const val WHILE_MS = 60_000L
     }

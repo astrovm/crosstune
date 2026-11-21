@@ -136,7 +136,8 @@ def prepare(out):
                    for ms in (song["editionsMs"] or [song["lengthMs"]])],
             "native": native,
             "deezer": [{"title": d.get("title"), "artist": {"name": d.get("artist")}, "duration": d.get("duration")} for d in song.get("deezer", [])],
-            "songs": songs_path, "videos": videos_path,
+            # Where in out, so a copy of the folder, as another task's or the build box's, still finds them.
+            "songs": songs_path and os.path.relpath(songs_path, out), "videos": videos_path and os.path.relpath(videos_path, out),
             "right": right_ids(song, results, videos), "names": names,
         })
     with open(os.path.join(out, "replay.json"), "w", encoding="utf-8") as kept:
