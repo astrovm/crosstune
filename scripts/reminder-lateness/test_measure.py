@@ -11,8 +11,10 @@ class PlacesTest(unittest.TestCase):
             mr = Path(folder) / 'agent-cache'
             home = Path(folder) / 'home'
             self.assertEqual(home / '.cache/agent-cache/crosstune-773', cache_dir(mr, home))
+            self.assertTrue((home / '.cache/agent-cache/crosstune-773').is_dir())
             mr.mkdir()
             self.assertEqual(mr / 'crosstune-773', cache_dir(mr, home))
+            self.assertTrue((mr / 'crosstune-773').is_dir())
 
     def test_finds_adb_where_the_sdk_is_on_linux_and_on_a_mac_or_on_the_path(self):
         with tempfile.TemporaryDirectory() as folder:

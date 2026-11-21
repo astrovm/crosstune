@@ -15,9 +15,13 @@ from zoneinfo import ZoneInfo
 
 
 def cache_dir(mr=Path('/mnt/data/agent-cache'), home=None):
-    """Where the recovery journal and the preference backup go: the agent cache on mr, and in the home elsewhere."""
+    """Where the recovery journal and the preference backup go: the agent cache on mr, and in the home elsewhere.
+
+    Made here, as agent-cache-clean removes it after 3 days unused and a first run elsewhere has none."""
     root = mr if mr.is_dir() else (home or Path.home()) / '.cache/agent-cache'
-    return root / 'crosstune-773'
+    folder = root / 'crosstune-773'
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
 
 
 def adb_path(environ=None, home=None):
