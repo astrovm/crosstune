@@ -635,7 +635,7 @@ class MainActivityTest {
     }
 
     @Test
-    @Config(sdk = [32])
+    @Config(sdk = [31])
     fun copySearchShowsToastBeforeAndroid13() {
         respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
         launch()

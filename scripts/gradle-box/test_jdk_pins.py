@@ -18,6 +18,8 @@ def box_major() -> str:
 def files() -> list[Path]:
     workflows = ROOT / ".github/workflows"
     named = [*workflows.glob("*.yml"), *workflows.glob("*.yaml"), ROOT / "CONTRIBUTING.md"]
+    # The composite actions the workflows set the JDK up with.
+    named += [*(ROOT / ".github/actions").rglob("action.yml"), *(ROOT / ".github/actions").rglob("action.yaml")]
     scripts = ROOT / "scripts"
     named += [p for p in scripts.rglob("*") if p.is_file() and (p.suffix in (".py", ".sh") or p.name.startswith("Containerfile"))]
     return sorted(set(named) - {Path(__file__).resolve()})
@@ -41,6 +43,7 @@ class JdkPinsTest(unittest.TestCase):
         major = box_major()
         found = pins()
         self.assertTrue(any(name.endswith((".yml", ".yaml")) for name, _ in found), "no setup-java step found")
+        self.assertIn((".github/actions/jdk/action.yml", major), found)
         # A pin that isn't a plain major (a matrix, a file, a full version) can't be held equal, so it fails too.
         self.assertEqual([], [(name, v) for name, v in found if v != major])
 

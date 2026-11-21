@@ -295,7 +295,9 @@ public final class Steps implements ClassFileTransformer, Runnable, Supplier<Lis
     /**
      * Fails where a constant is a method handle to a call counted where it's called: a method reference, made by the
      * JVM in a class of its own, which isn't written, would call it with nothing counted. No class in the JDK, Kotlin,
-     * the app or its libraries has one.
+     * the app or its libraries has one. A handle looked up by name, {@code Method.invoke} and
+     * {@code MethodHandles.arrayConstructor} also call it where nothing is written, so their copies don't count: no
+     * reader uses them.
      */
     private static void unreferenced(Object constant) {
         if (constant instanceof ConstantDynamic) {

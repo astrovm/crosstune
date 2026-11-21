@@ -14,6 +14,7 @@ keeps only that one on, plays the song a moment so the dev app follows it, pause
 put, and takes screenshots. Then it hides the visuals for one more, the words alone, which says what's
 a word pixel. The dev app's settings are put back after; the song stays a few seconds further on.
 Set ANDROID_SERIAL when more than one phone is connected.
+It needs NumPy, SciPy and Pillow.
 
 `report` gives WCAG contrast of word pixels against the ring right around them, 2 to 8 pixels out,
 piece of glyph by piece of glyph, for each kind of text: worst, 5th percentile, median, and how many
@@ -27,13 +28,15 @@ for lines to come at the usual brightness, per preset, brightest first.
 import argparse
 import html
 import importlib.util
-import os
 import re
 import shlex
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import adbtool
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 APP = "com.astrovm.crosstune.dev"
@@ -51,8 +54,7 @@ NOW = (0.85, 0.725, 56 / 255)
 
 
 def adb(*command, stdin=None):
-    tool = os.environ.get("ADB", str(Path.home() / "Android" / "Sdk" / "platform-tools" / "adb"))
-    return subprocess.run([tool, *command], input=stdin, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False).stdout
+    return adbtool.run(*command, input=stdin, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False).stdout
 
 
 def shell(command):

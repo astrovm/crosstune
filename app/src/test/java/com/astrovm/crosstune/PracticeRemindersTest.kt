@@ -852,7 +852,7 @@ class PracticeRemindersTest {
     }
 
     @Test
-    @Config(sdk = [32])
+    @Config(sdk = [31])
     fun androidTwelveHasNoPermissionToAskAndStillShowsIt() {
         setUpWith(line("One"))
         firesOn(3)

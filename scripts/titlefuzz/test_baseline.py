@@ -120,6 +120,7 @@ class BaselineTest(unittest.TestCase):
                      mock.patch.object(baseline.regextable, "emulator", return_value="emulator-fixture"), \
                      mock.patch.object(baseline.regextable, "SDK", sdk), \
                      mock.patch.object(baseline.regextable, "run") as command, \
+                     mock.patch.dict(baseline.os.environ, {"ADB": "adb"}), \
                      mock.patch.object(baseline.Path, "home", return_value=home), \
                      mock.patch.object(baseline.subprocess, "run", side_effect=failure) as run:
                     if failed:
