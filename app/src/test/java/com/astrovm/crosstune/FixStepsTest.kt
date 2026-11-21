@@ -242,7 +242,7 @@ class FixStepsTest {
     }
 
     @Test
-    @Config(sdk = [26, 29])
+    @Config(sdk = [28, 29])
     fun olderAndroidListsEachAppInsteadOfAnAllowNotificationAccessSwitch() {
         showSteps(Need.Follow)
         for (phone in Phone.entries.filter { it != Phone.TV }) {

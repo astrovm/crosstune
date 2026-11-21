@@ -5,7 +5,7 @@ No phone or emulator: the app's real screens are drawn by Robolectric on a clock
 one frame at a time, so every run gives the same pictures. The MilkDrop visuals behind the words
 are drawn ahead by scripts/milkdrop-render, from a made-up beat, with the same visual every time.
 
-  python3 scripts/shots/shots.py          # both themes, then copies into docs/, fastlane/ and screenshots/
+  python3 scripts/shots/shots.py          # both themes, then copies into docs/ and fastlane/
   python3 scripts/shots/shots.py ja ko    # only these languages
   python3 scripts/shots/shots.py --theme light  # only the light set
   python3 scripts/shots/shots.py --box    # Gradle in the build box, in turn with other checkouts
@@ -80,9 +80,11 @@ def publish(lang, theme):
         clip = f"{name}-{theme}"
         shutil.copy(made / f"{clip}.mp4", site / f"{clip}.mp4")
         run(["ffmpeg", "-v", "error", "-y", "-i", made / f"{clip}.png", "-q:v", "4", site / f"{clip}.jpg"])
-    locale = LANGS[lang][1]
-    store = (ROOT / "fastlane/metadata/android" / locale / "images/phoneScreenshots"
-             if theme == "dark" else ROOT / "screenshots/light" / locale)
+    # The store lists the dark shots only; the light ones are drawn as a check that the light theme still renders.
+    if theme != "dark":
+        print(f"{lang} {theme}: 2 clips", flush=True)
+        return
+    store = ROOT / "fastlane/metadata/android" / LANGS[lang][1] / "images/phoneScreenshots"
     store.mkdir(parents=True, exist_ok=True)
     for shot in shots:
         shutil.copy(shot, store / shot.name)

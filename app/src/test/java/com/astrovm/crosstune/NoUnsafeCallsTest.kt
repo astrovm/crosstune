@@ -2,19 +2,17 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.io.File
 
 /**
  * A value that may be null is handled, never asserted to be non-null: when it is null after all, the app
- * crashes instead of doing what it does without it. Read the code without comments and strings too,
- * so unresolved types cannot hide an assertion from detekt.
+ * crashes instead of doing what it does without it. The code is read as text, without comments and strings, so
+ * no type has to be resolved to find an assertion, and none can hide one.
  */
 class NoUnsafeCallsTest {
     @Test
     fun codeNeverAssertsAValueIsThere() {
-        val roots = listOf(File("src/main/java")) + File("src").listFiles().orEmpty()
-            .filter { it.isDirectory && it.name.contains("test", ignoreCase = true) }
-        val found = roots.flatMap { AppPatterns.sources(it.path) }.flatMap { file ->
+        // Every source folder: the app's, the tests' and any a build type adds.
+        val found = AppPatterns.sources("src").flatMap { file ->
             val source = file.readText()
             val code = Code(source, java = file.extension == "java").read()
             assertEquals(file.name, source.lines().size, code.lines().size)

@@ -121,6 +121,8 @@ BLOCK = 960
 ON_TIME_S = 0.5
 # The app's logcat tag for this, off unless set to DEBUG (TIMING_LOG in SungWords.kt).
 TIMING_LOG = "CrosstuneTiming"
+# What CleanFirst takes as still silence (QUIET in CleanHearing.kt), so the replay hears as the phone did.
+QUIET = 2
 DEV_APP = "com.astrovm.crosstune.dev"
 # How well a while heard may fit elsewhere, against its best fit, and still say where it is: false fits measured 0.91 to 0.95, true ones up to 0.85.
 ONE_PLACE = 0.8
@@ -458,6 +460,14 @@ def run(args):
         compare(phone_lit, shown)
 
 
+def heard_clean(log):
+    """Whether the phone heard the sound played itself (Shizuku's playback capture), from its log. Only playback
+    capture logs what it captured, but it logs its half-second check too, which hears nothing of an app that won't
+    be heard this way, like Spotify: the phone then heard through the visualizer, as `hear` makes it by default.
+    Off by [QUIET] from silence is still silence."""
+    return any(int(loudest) > QUIET for loudest in re.findall(r"captured \d+ samples, loudest (\d+)", log))
+
+
 def like_phone(args):
     """Sets the replay up as the last `phone` check of the song went, from what it kept: where the app
     picked the song up, how far its clock was behind, how long the phone took to work out each while
@@ -478,8 +488,7 @@ def like_phone(args):
     args.works = gaps
     # Where in the song each while began, as what's heard depends on it: the phone's first began 1.3 s later than the replay's.
     args.whiles = [args.start + start - int(said.group(2)) + args.behind for start, _ in whiles] if said else []
-    # Only playback capture logs what it captured; the visualizer's sound is heard as `hear` makes it by default.
-    clean = "captured " in log
+    clean = heard_clean(log)
     args.model = f"{APP_MODEL}.clean" if clean else APP_MODEL
     # The words the phone showed, not those prep was given.
     if (kept / "lyrics.json").exists():

@@ -101,7 +101,9 @@ jobs:
           python3 scripts/readingsaudit/readingsaudit.py oldkana
           # The headers the script writes are the ones its tests ask for.
           python3 -m unittest discover -s scripts/readingsaudit -p "test_*.py"
-          python3 scripts/notices.py fetch-jmdict
+          # GitHub's runners sometimes can't reach edrdg.org for hours (Issue #1160). A pull request's run then keeps the
+          # committed pages and warns; the scheduled run, which proposes the update, stays strict.
+          python3 scripts/notices.py fetch-jmdict ${{ github.event_name == 'pull_request' && '--keep-if-unreachable' || '' }}
           git diff --stat -- "$TABLES" "$NOTICE_MANIFEST"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
