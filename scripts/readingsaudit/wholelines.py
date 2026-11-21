@@ -20,7 +20,8 @@ once with main's code and once with this checkout's, and compares what main's co
 
 A change to any of them is named, and the command exits 1. With none, it prints the line the pull request's body
 needs: `golden: lines checked DIGEST`. The digest names what the readings are made of on both sides, so
-check_golden.py asks for the command again when either side changes. The line is the author's word that they ran
+check_golden.py asks for the command again when either side changes. It is the digest main's check_golden.py takes, as
+CI runs main's: a file this branch adds to the reading files counts once it is on main. The line is the author's word that they ran
 this: CI can't run it, as the lines are songs' words.
 
 So the lines it reads are the ones the golden file was made from, the golden file's header names the audit: how
@@ -295,5 +296,22 @@ def lines(folder, accepted, base="origin/main", repo=audit.ROOT, read=read_whole
     print("Put these lines in the pull request's body:")
     for word, kana in used:
         print(f"{check_golden.ACCEPT}{word} {kana}")
-    print(f"{check_golden.LINES}{check_golden.readings_digest(repo, base_commit, head)}")
+    print(f"{check_golden.LINES}{body_digest(repo, base_commit, head)}")
     return 0
+
+
+def body_digest(repo, base_commit, head):
+    """The digest CI's check takes for the body's line. CI runs [base_commit]'s check_golden.py, with its list of the
+    files readings are made of, so a pull request can't loosen the check it is held to: a reading file this branch
+    adds counts once it is on main. A base with no checker yet is checked by this one."""
+    with tempfile.TemporaryDirectory() as folder:
+        archive = subprocess.run(["git", "-C", str(repo), "archive", base_commit, "scripts/readingsaudit"], capture_output=True)
+        if archive.returncode != 0:
+            return check_golden.readings_digest(repo, base_commit, head)
+        subprocess.run(["tar", "-x", "-C", folder], input=archive.stdout, check=True)
+        scripts = Path(folder) / "scripts/readingsaudit"
+        # -E and -s, as in CI: Python finds main's golden code next to main's checker only.
+        digest = ("import sys; sys.path.insert(0, sys.argv[1]); import check_golden; "
+                  "print(check_golden.readings_digest(sys.argv[2], sys.argv[3], sys.argv[4]))")
+        return subprocess.run(["python3", "-E", "-s", "-c", digest, str(scripts), str(repo), base_commit, head],
+                              check=True, capture_output=True, text=True).stdout.strip()

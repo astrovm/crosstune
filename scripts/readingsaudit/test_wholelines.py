@@ -297,6 +297,16 @@ class Command(unittest.TestCase):
             self.assertNotIn("golden: accept", text)
             self.assertNotIn("golden: new audit", text)
 
+    def test_the_line_for_the_body_has_the_digest_mains_checker_takes(self):
+        # CI runs main's checker, and its list of reading files may lack one this branch adds.
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder)
+            git(repo, "checkout", "-q", "main")
+            write(repo, check_golden.CHECKER, "def readings_digest(repo, base, head):\n    return 'main:' + base[:7] + ':' + head\n")
+            commit(repo, "test: a checker on main")
+            base = git(repo, "rev-parse", "main")
+            self.assertEqual(f"main:{base[:7]}:pr", wholelines.body_digest(repo, base, "pr"))
+
     def test_a_change_fails_until_accepted_and_the_accept_goes_in_the_body(self):
         with tempfile.TemporaryDirectory() as folder:
             repo = self.repo(folder)
