@@ -13,7 +13,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
-import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
 import android.media.MediaMetadata
@@ -225,21 +224,6 @@ internal data class PlaybackMatch(
     val playing: Boolean = following?.clock?.playing == true, val appSessions: Int = 1
 )
 
-/** Whether the phone's music is heard in the room, where the microphone hears it too. */
-internal sealed interface Aloud {
-    /** Out loud: on its own speaker, a TV, or a Bluetooth LE speaker. */
-    data object Yes : Aloud
-
-    /** Muted, or in headphones or another output its listener alone may hear. */
-    data object No : Aloud
-
-    /**
-     * On classic Bluetooth, a speaker or a car, heard, or headphones, not, which Android won't tell apart. [output] is
-     * the id of the device that plays, new each time one connects, so it tells a speaker from the headphones after it.
-     */
-    data class Maybe(val output: Int) : Aloud
-}
-
 /** What's playing on the phone, as far as Android lets Crosstune see. */
 internal interface PlaybackSource {
     /** Whether Android lets Crosstune see what plays, which the user allows in its settings. */
@@ -363,9 +347,6 @@ internal interface PlaybackSource {
     /** [playingUnnamed], updated when apps start, pause, stop, or change what they play. */
     @MainThread
     fun unnamedUpdates(): Flow<Unnamed?>
-
-    /** Whether the phone's music plays out loud, where the microphone hears it: not muted, nor in headphones, or on Bluetooth, maybe. */
-    fun playsAloud(): Aloud
 
     /** What [app] plays, playing or paused, and where in its queue, as that changes; null while it plays nothing. */
     @MainThread
@@ -858,18 +839,6 @@ internal class MediaSessionPlayback(
 
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
 
-    override fun playsAloud(): Aloud {
-        if (audio.isStreamMute(AudioManager.STREAM_MUSIC) || audio.getStreamVolume(AudioManager.STREAM_MUSIC) == 0) return Aloud.No
-        val outputs = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        val bluetooth = outputs.filter { it.type in CLASSIC_BLUETOOTH }
-        return when {
-            outputs.any { it.type !in ROOM_OUTPUTS && it.type !in CLASSIC_BLUETOOTH } -> Aloud.No
-            bluetooth.isEmpty() -> Aloud.Yes
-            // The phone plays music through one A2DP device at a time; a hands-free link comes and goes with calls.
-            else -> Aloud.Maybe((bluetooth.firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP } ?: bluetooth.first()).id)
-        }
-    }
-
     private fun activeSessions(): List<MediaController> = sessions.getActiveSessions(listener).also { controllers ->
         covers.retainSessions(controllers.map { it.sessionToken }.toSet())
     }
@@ -1320,30 +1289,6 @@ private const val SPOTIFY_LIKED = "CHECK_FILL"
 
 /** A music app's own button to repeat, which goes round its ways as it does there, by what the app's session calls it. */
 private val REPEATS = setOf("loop_mode_action") // YouTube Music
-
-/**
- * Where the phone's music is heard in the room, or never goes: its own speaker and earpiece, a call, a TV
- * over HDMI, a car, a Bluetooth LE speaker. Any other output may be heard by its listener alone, so the
- * microphone isn't asked to hear it: headphones, a hearing aid, a USB one, a line out, a dock, or a kind a
- * later Android adds. Classic Bluetooth is [CLASSIC_BLUETOOTH]'s.
- */
-private val ROOM_OUTPUTS = buildSet {
-    addAll(
-        listOf(
-            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_TELEPHONY,
-            AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_BUS
-        )
-    )
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) addAll(listOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE, AudioDeviceInfo.TYPE_REMOTE_SUBMIX))
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) addAll(listOf(AudioDeviceInfo.TYPE_HDMI_EARC, AudioDeviceInfo.TYPE_BLE_SPEAKER))
-}
-
-/**
- * Classic Bluetooth, which carries a speaker, a car and headphones alike: Android tells them apart only by the
- * device's class, which it shows an app only once the user allows it nearby devices, and Crosstune doesn't ask
- * that. Its music is [Aloud.Maybe] heard, a hands-free one's calls with it.
- */
-private val CLASSIC_BLUETOOTH = setOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
 
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)

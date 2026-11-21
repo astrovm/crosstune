@@ -17,7 +17,6 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.AudioAttributes
 import android.media.MediaDescription
@@ -66,11 +65,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
-import org.robolectric.shadows.AudioDeviceInfoBuilder
 import org.robolectric.shadows.PlaybackInfoBuilder
 import org.robolectric.shadows.ShadowMediaSessionManager
 import org.robolectric.shadows.ShadowSettings
-import org.robolectric.util.ReflectionHelpers
 
 /** Following what a music app plays, through the media sessions Android shows Crosstune once allowed. */
 @RunWith(RobolectricTestRunner::class)
@@ -2824,118 +2821,6 @@ class PlaybackTest {
         shadowOf(sessions).addController(radio)
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2"), seen.last().sessionless())
-    }
-
-    @Test
-    fun thePhonePlaysAloudOnlyOnItsSpeakerAndNotMuted() {
-        val audio = app.getSystemService(AudioManager::class.java)
-        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
-        assertEquals(Aloud.Yes, playback.playsAloud())
-        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
-        assertEquals(Aloud.No, playback.playsAloud())
-        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
-        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
-        assertEquals(Aloud.No, playback.playsAloud())
-        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
-        // Through headphones, wired or not, the microphone hears nothing of it.
-        for (type in listOf(AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_BLE_HEADSET)) {
-            outputs(audio, type)
-            assertEquals(Aloud.No, playback.playsAloud())
-        }
-        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
-        assertEquals(Aloud.Yes, playback.playsAloud())
-    }
-
-    @Test
-    fun anyOutputThatMayBeHeardByItsListenerAloneIsNotAloud() {
-        val audio = app.getSystemService(AudioManager::class.java)
-        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
-        // What a phone always has, and a TV, a car or a speaker that fills the room.
-        val room = listOf(
-            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE,
-            AudioDeviceInfo.TYPE_TELEPHONY, AudioDeviceInfo.TYPE_REMOTE_SUBMIX
-        )
-        outputs(audio, *room.toIntArray())
-        assertEquals(Aloud.Yes, playback.playsAloud())
-        for (type in listOf(AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_HDMI_EARC, AudioDeviceInfo.TYPE_BUS, AudioDeviceInfo.TYPE_BLE_SPEAKER)) {
-            outputs(audio, *(room + type).toIntArray())
-            assertEquals("$type", Aloud.Yes, playback.playsAloud())
-        }
-        // Each of these may be in one listener's ears, and so may a kind a later Android adds.
-        val private = listOf(
-            AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_USB_HEADSET,
-            AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_ACCESSORY, AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_BROADCAST,
-            AudioDeviceInfo.TYPE_HEARING_AID, AudioDeviceInfo.TYPE_BLE_HEARING_AID, AudioDeviceInfo.TYPE_BLE_CENTRAL, AudioDeviceInfo.TYPE_BLE_CENTRAL_BROADCAST,
-            AudioDeviceInfo.TYPE_LINE_ANALOG, AudioDeviceInfo.TYPE_LINE_DIGITAL, AudioDeviceInfo.TYPE_AUX_LINE,
-            AudioDeviceInfo.TYPE_DOCK, AudioDeviceInfo.TYPE_DOCK_ANALOG, AudioDeviceInfo.TYPE_IP, AudioDeviceInfo.TYPE_FM,
-            AudioDeviceInfo.TYPE_MULTICHANNEL_GROUP, AudioDeviceInfo.TYPE_UNKNOWN, 99
-        )
-        for (type in private) {
-            outputs(audio, *(room + type).toIntArray())
-            assertEquals("$type", Aloud.No, playback.playsAloud())
-        }
-    }
-
-    @Test
-    fun classicBluetoothMayBeASpeakerACarOrHeadphonesKeptApartByTheDeviceThatPlays() {
-        val audio = app.getSystemService(AudioManager::class.java)
-        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
-        val speaker = device(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, 2)
-        // A speaker and headphones on classic Bluetooth both show as A2DP alone. Android tells them apart only by a class
-        // it hides without a permission, so it's the device's id, new each time one connects, that tells one from the next.
-        shadowOf(audio).setOutputDevices(listOf(speaker, device(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, 31)))
-        assertEquals(Aloud.Maybe(31), playback.playsAloud())
-        shadowOf(audio).setOutputDevices(listOf(speaker, device(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, 40)))
-        assertEquals(Aloud.Maybe(40), playback.playsAloud())
-        // A car, or a speaker or headset with a microphone, adds hands-free, which comes and goes with calls: the music's
-        // device stays the one that plays, whichever order Android lists them in.
-        shadowOf(audio).setOutputDevices(listOf(speaker, device(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, 52), device(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, 40)))
-        assertEquals(Aloud.Maybe(40), playback.playsAloud())
-        // Hands-free alone, it's that one.
-        shadowOf(audio).setOutputDevices(listOf(speaker, device(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, 52)))
-        assertEquals(Aloud.Maybe(52), playback.playsAloud())
-        // A Bluetooth LE speaker or headset says which it is.
-        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BLE_SPEAKER)
-        assertEquals(Aloud.Yes, playback.playsAloud())
-        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BLE_HEADSET)
-        assertEquals(Aloud.No, playback.playsAloud())
-        // Wired headphones too are in someone's ears, whatever else is connected, as is a muted phone.
-        outputs(audio, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_WIRED_HEADPHONES)
-        assertEquals(Aloud.No, playback.playsAloud())
-        outputs(audio, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
-        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
-        assertEquals(Aloud.No, playback.playsAloud())
-    }
-
-    /** An output of [type] with [id]: Robolectric's builder gives every one id 0, as Android gives each connection its own. */
-    private fun device(type: Int, id: Int): AudioDeviceInfo = AudioDeviceInfoBuilder.newBuilder().setType(type).build().also {
-        ReflectionHelpers.setField(ReflectionHelpers.getField<Any>(ReflectionHelpers.getField<Any>(it, "mPort"), "mHandle"), "mId", id)
-        assertEquals(id, it.id)
-    }
-
-    private fun outputs(audio: AudioManager, vararg types: Int) =
-        shadowOf(audio).setOutputDevices(types.map { AudioDeviceInfoBuilder.newBuilder().setType(it).build() })
-
-    @Test
-    @Config(sdk = [Build.VERSION_CODES.R])
-    fun beforeBluetoothLeHeadsetsHeadphonesStillCount() {
-        val audio = app.getSystemService(AudioManager::class.java)
-        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
-        outputs(audio, AudioDeviceInfo.TYPE_WIRED_HEADSET)
-        assertEquals(Aloud.No, playback.playsAloud())
-        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE, AudioDeviceInfo.TYPE_REMOTE_SUBMIX)
-        assertEquals(Aloud.Yes, playback.playsAloud())
-    }
-
-    @Test
-    @Config(sdk = [Build.VERSION_CODES.Q])
-    fun beforeAndroid11TheSpeakerAloneIsStillAloud() {
-        val audio = app.getSystemService(AudioManager::class.java)
-        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
-        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_TELEPHONY)
-        assertEquals(Aloud.Yes, playback.playsAloud())
-        outputs(audio, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_WIRED_HEADPHONES)
-        assertEquals(Aloud.No, playback.playsAloud())
     }
 
     @Test

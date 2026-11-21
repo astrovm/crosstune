@@ -432,10 +432,9 @@ class MainViewModelTest {
 
     private val station = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2", "https://example.com/logo.png")
 
-    /** Hears [answers] in turn, the last one from then on, and keeps whether each time it was let use the microphone, and only while the phone plays out loud. */
+    /** Hears [answers] in turn, the last one from then on, and keeps whether each time it was let use the microphone. */
     private class EarsOnThePhone(vararg val answers: Heard) : SongHearing {
         val asked = mutableListOf<Boolean>()
-        val whileAloud = mutableListOf<Boolean>()
         /** Listens with no time gone by: see [Looping]. */
         private val listensNow = Looping()
         /** How many times the microphone listened for a song nearby, rather than to what the phone plays, and what it heard. */
@@ -452,9 +451,8 @@ class MainViewModelTest {
             holdNearby?.await()
             return heardNearby
         }
-        override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
+        override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
             asked += byMicrophone
-            this.whileAloud += whileAloud
             // Listened to over and over with no time going by is a loop: it stops here, so the test fails on the count, at once.
             if (listensNow.loops()) awaitCancellation()
             try {
@@ -500,7 +498,7 @@ class MainViewModelTest {
     fun aStationWithoutPlaybackStateIsNamedByEarAndATapOpensTheSongHeard() {
         // Simple Radio says only the station's name (Issue #1000): what it plays is heard, as for any station.
         val hears = EarsOnThePhone(heardSong())
-        val playback = FakePlayback().apply { aloud = Aloud.Yes }
+        val playback = FakePlayback()
         val model = radioModel(hears, playback, mayCapture = { true })
         playback.unnamed.value = station.copy(reportsState = false)
         model.playingBarInSight(true)
@@ -520,7 +518,7 @@ class MainViewModelTest {
     @Test
     fun aStationWithoutPlaybackStateIsListenedToOnlyInSightAndItsListenStopsWhenItGoes() {
         val hears = EarsOnThePhone(heardSong())
-        val playback = FakePlayback().apply { aloud = Aloud.Yes }
+        val playback = FakePlayback()
         val model = radioModel(hears, playback, mayCapture = { true })
         hears.holdPlaying = CompletableDeferred()
         playback.unnamed.value = station.copy(reportsState = false)
@@ -545,7 +543,7 @@ class MainViewModelTest {
         // One that may be another song playing in the room, and one that may be over by now: never the station's
         // name as a song, which it doesn't say it plays.
         for (heard in listOf(heardSong().copy(inRoom = true), heardSong(lengthMs = null))) {
-            val playback = FakePlayback().apply { aloud = Aloud.Yes }
+            val playback = FakePlayback()
             val model = radioModel(EarsOnThePhone(heard), playback, mayCapture = { true })
             playback.unnamed.value = station.copy(reportsState = false)
             model.playingBarInSight(true)
@@ -1041,16 +1039,17 @@ class MainViewModelTest {
     }
 
     @Test
-    fun withTheMicrophoneAllowedThePhonesOwnSoundIsHeardThroughHeadphonesAndOnATvSoATapOpensWhatTheBarShows() {
+    fun withTheMicrophoneAllowedThePhonesOwnSoundIsHeardOnAPhoneAndOnATvSoATapOpensWhatTheBarShows() {
         for (tv in listOf(false, true)) {
-            val playback = FakePlayback().apply { aloud = if (tv) Aloud.Yes else Aloud.No }
+            val playback = FakePlayback()
             // A song of no known length: shown on the bar, but never opened.
             val ears = EarsOnThePhone(heardSong(lengthMs = null))
             val model = radioModel(ears, playback, phone = if (tv) Phone.TV else Phone.OTHER)
             model.playingBarInSight(true)
             idle()
-            // Heard through Android's own sound, as the microphone permission allows, not the microphone.
-            assertEquals("tv $tv", listOf(false), ears.asked)
+            // Heard through Android's own sound, as the microphone permission allows. The microphone is let in only where
+            // that won't share it, and never on a TV.
+            assertEquals("tv $tv", listOf(!tv), ears.asked)
             assertEquals("tv $tv", ears.answers[0], model.uiState.playingUnnamed?.heard)
             // So it can be named by ear: a tap opens the player on the station, never the station as a song.
             model.openPlayingUnnamed()
@@ -1092,13 +1091,12 @@ class MainViewModelTest {
     }
 
     @Test
-    fun theMicrophoneNamesWhatPlaysOnlyWhenAllowedAlreadyOnAPhonePlayingAloud() {
+    fun theMicrophoneNamesWhatPlaysOnlyWhenAllowedAlreadyAndNotOnATv() {
+        // Whatever the phone plays through: it can't tell a Bluetooth speaker or a car from headphones.
         val allowed = EarsOnThePhone(Heard.Nothing)
         radioModel(allowed).playingBarInSight(true)
         idle()
         assertEquals(listOf(true), allowed.asked)
-        // Headphones plugged in midway, it stops: see SongListenerTest.
-        assertEquals(listOf(true), allowed.whileAloud)
         // Never asked for: only the phone's own sound, when it shares it.
         val notAllowed = EarsOnThePhone(Heard.Failed(AppError.MICROPHONE))
         val model = radioModel(notAllowed, mayCalibrate = { false })
@@ -1112,11 +1110,6 @@ class MainViewModelTest {
         radioModel(tv, phone = Phone.TV).playingBarInSight(true)
         idle()
         assertEquals(listOf(false), tv.asked)
-        // Through headphones or muted, the microphone would hear nothing.
-        val quiet = EarsOnThePhone(Heard.Nothing)
-        radioModel(quiet, FakePlayback().apply { aloud = Aloud.No }).playingBarInSight(true)
-        idle()
-        assertEquals(listOf(false), quiet.asked)
     }
 
     @Test
@@ -1142,8 +1135,8 @@ class MainViewModelTest {
     fun aNewWayToHearListensAgainAtOnceAfterNoSongWasHeard() {
         var micAllowed = false
         var shared = false
-        // At volume 0, with no microphone allowed and the phone's own sound not shared, nothing's heard.
-        val playback = FakePlayback().apply { aloud = Aloud.No }
+        // With no microphone allowed and the phone's own sound not shared, nothing's heard.
+        val playback = FakePlayback()
         val ears = EarsOnThePhone(Heard.Failed(AppError.MICROPHONE), Heard.Nothing)
         val model = radioModel(ears, playback, mayCalibrate = { micAllowed }, mayCapture = { shared })
         model.playingBarInSight(true)
@@ -1158,38 +1151,20 @@ class MainViewModelTest {
         // The rests start over from the shortest.
         pass(MainViewModel.BY_EAR_RETRY_MS)
         assertEquals(5, ears.asked.size)
-        // The microphone's allowed, then the phone plays aloud again: each starts a listen at once.
+        // The microphone's allowed: at once too, and with it.
         micAllowed = true
         pass(MainViewModel.EARS_CHECK_MS)
         assertEquals(6, ears.asked.size)
-        playback.aloud = Aloud.Yes
-        pass(MainViewModel.EARS_CHECK_MS)
-        assertEquals(7, ears.asked.size)
-        assertEquals(true, ears.asked.last())
-        // Headphones plugged in: the phone's own sound alone, at once too.
-        playback.aloud = Aloud.No
-        pass(MainViewModel.EARS_CHECK_MS)
-        assertEquals(8, ears.asked.size)
-        assertEquals(false, ears.asked.last())
-        // A Bluetooth speaker, or headphones, connected: the microphone's tried, at once too.
-        playback.aloud = Aloud.Maybe(1)
-        pass(MainViewModel.EARS_CHECK_MS)
-        assertEquals(9, ears.asked.size)
-        assertEquals(true, ears.asked.last())
-        // The sound moved to another one, as from earbuds to a car: at once too.
-        playback.aloud = Aloud.Maybe(2)
-        pass(MainViewModel.EARS_CHECK_MS)
-        assertEquals(10, ears.asked.size)
         assertEquals(true, ears.asked.last())
     }
 
     @Test
     fun aSongHeardIsNotListenedToAgainForANewWayToHear() {
-        val playback = FakePlayback()
+        var shared = false
         val ears = EarsOnThePhone(heardSong())
-        radioModel(ears, playback).playingBarInSight(true)
+        radioModel(ears, mayCapture = { shared }).playingBarInSight(true)
         idle()
-        playback.aloud = Aloud.No
+        shared = true
         pass(MainViewModel.EARS_CHECK_MS * 5)
         assertEquals(1, ears.asked.size)
     }
@@ -1470,7 +1445,7 @@ class MainViewModelTest {
     /** Takes [takesMs] to hear [heard], timed from when it began to listen, as a recording is. */
     private class SlowEars(val takesMs: Long, val heard: Heard.Song) : SongHearing {
         override suspend fun listen(): Heard = Heard.Nothing
-        override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
+        override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
             val from = SystemClock.elapsedRealtime()
             delay(takesMs)
             return heard.copy(startedAtMs = from)
@@ -2323,7 +2298,7 @@ class MainViewModelTest {
             closedFirst = !open
             return Heard.Nothing
         }
-        override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
+        override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
             asked += byMicrophone
             open = true
             try {
@@ -2366,7 +2341,7 @@ class MainViewModelTest {
             }
         }
         override suspend fun listen() = held()
-        override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean) = held()
+        override suspend fun listenToPlaying(byMicrophone: Boolean) = held()
     }
 
     @Test

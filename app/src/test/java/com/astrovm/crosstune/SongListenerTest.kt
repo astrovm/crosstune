@@ -5,13 +5,9 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.test.core.app.ApplicationProvider
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -217,9 +213,9 @@ class SongListenerTest {
     @Test
     fun aSilentRecordingIsNoMatchWithoutAskingShazam() {
         answer("", code = 503)
-        assertEquals(Heard.Silent, heard(ShortArray(48_000)))
+        assertEquals(Heard.Nothing, heard(ShortArray(48_000)))
         // Only the part heard counts: sound further on, not yet recorded, doesn't make it a recording to send.
-        assertEquals(Heard.Silent, runBlocking { shazam.recognize(ShortArray(48_000).also { it[40_000] = 5 }, 30_000, keepIfOffline = true) })
+        assertEquals(Heard.Nothing, runBlocking { shazam.recognize(ShortArray(48_000).also { it[40_000] = 5 }, 30_000, keepIfOffline = true) })
         assertEquals(0, fake.requestedUrls.size)
         // One sample of sound is enough to ask.
         assertEquals(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE), heard(ShortArray(48_000).also { it[47_999] = 1 }))
@@ -227,11 +223,11 @@ class SongListenerTest {
     }
 
     @Test
-    fun aListenThatHearsOnlySilenceIsSilentAndAsksShazamNothing() {
+    fun aListenThatHearsOnlySilenceIsNothingAndAsksShazamNothing() {
         // The phone's own sound at volume 0, or a muted microphone, is zeros for the whole listen.
         answer("", code = 429)
         repeat(4) { microphone.playSecond(0) ; microphone.playSecond(0); microphone.playSecond(0) }
-        assertEquals(Heard.Silent, runBlocking { listener.listen() })
+        assertEquals(Heard.Nothing, runBlocking { listener.listen() })
         assertEquals(0, fake.requestedUrls.size)
         assertTrue(microphone.closed)
         // Sound that comes in after the silence is asked about, with all of it.
@@ -881,145 +877,15 @@ class SongListenerTest {
     }
 
     @Test
-    fun onClassicBluetoothTheMicrophoneIsTriedAndGoesOnTillItNamesNoSongThreeTimesInARow() = runTest {
+    fun withNoSongNamedTheMicrophoneIsAskedWhateverThePhonePlaysThrough() = runTest {
         val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
-        val unshared = Heard.Failed(AppError.MICROPHONE)
+        val unshared = SongHearing { Heard.Failed(AppError.MICROPHONE) }
         val song = Heard.Song(MusicMetadata("Fake Song", "Fake Artist"), null, 12_000, 400_000)
-        val answers = ArrayDeque<Heard>()
-        var asked = 0
-        val ears = PlayingFirst(phone, SongHearing { asked++; answers.removeFirst() }, SongHearing { unshared })
-        suspend fun heardOn(on: Aloud, vararg room: Heard): Heard {
-            phone.aloud = on
-            answers += room
-            return ears.listenToPlaying(whileAloud = true)
-        }
-        // Three, not one: on radio a single listen often falls on talk or an ad.
-        val tries = 3
-        // A speaker: the microphone names the song, and goes on.
-        val speaker = Aloud.Maybe(1)
-        assertEquals(song.copy(inRoom = true), heardOn(speaker, song))
-        // On radio a listen often falls on talk or an ad: short of three in a row, it goes on. A song starts the count over.
-        repeat(tries - 1) { assertEquals(Heard.Nothing, heardOn(speaker, Heard.Nothing)) }
-        assertEquals(song.copy(inRoom = true), heardOn(speaker, song))
-        repeat(tries - 1) { assertEquals(Heard.Nothing, heardOn(speaker, Heard.Nothing)) }
-        // Not reaching Shazam, and silence, as with the microphone blocked, tell nothing: neither counts, nor starts it over.
-        assertEquals(Heard.Failed(AppError.NETWORK), heardOn(speaker, Heard.Failed(AppError.NETWORK)))
-        assertTrue(heardOn(speaker, Heard.Unsent { song }) is Heard.Unsent)
-        assertEquals(Heard.Silent, heardOn(speaker, Heard.Silent))
-        assertEquals(2 * tries + 3, asked)
-        // The third in a row: taken for headphones, the microphone isn't asked there again.
-        assertEquals(Heard.Nothing, heardOn(speaker, Heard.Nothing))
-        assertEquals(unshared, heardOn(speaker))
-        assertEquals(2 * tries + 4, asked)
-        // A car, connected meanwhile, is another output: its microphone tries start afresh, and it's heard in it.
-        val car = Aloud.Maybe(2)
-        assertEquals(song.copy(inRoom = true), heardOn(car, song))
-        // Headphones: three listens hear nothing, and the microphone isn't asked on them again.
-        val headphones = Aloud.Maybe(3)
-        repeat(tries) { assertEquals(Heard.Nothing, heardOn(headphones, Heard.Nothing)) }
-        assertEquals(2 * tries + 5 + tries, asked)
-        assertEquals(unshared, heardOn(headphones))
-        // Each keeps its own count: back on the car, it's still heard.
-        assertEquals(song.copy(inRoom = true), heardOn(car, song))
-        // The same headphones connected again have a new id, and are tried afresh: maybe a speaker this time.
-        assertEquals(song.copy(inRoom = true), heardOn(Aloud.Maybe(4), song))
-        assertEquals(3 * tries + 7, asked)
-        // Wired headphones are never tried; the phone's speaker always is.
-        assertEquals(unshared, heardOn(Aloud.No))
-        repeat(tries + 1) { assertEquals(Heard.Nothing, heardOn(Aloud.Yes, Heard.Nothing)) }
-        assertEquals(4 * tries + 8, asked)
-        // Asked by hand, as to name a song, the microphone listens whatever the output.
-        phone.aloud = headphones
-        answers += song
-        assertEquals(song.copy(inRoom = true), ears.listenToPlaying())
-    }
-
-    @Test
-    fun aListenThatMovesToAnotherBluetoothOutputMidwayCountsForNeither() = runTest {
-        val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
-        val unshared = Heard.Failed(AppError.MICROPHONE)
-        var asked = 0
-        // Each listen starts on the earbuds and ends in the car, where the sound moved.
-        val ears = PlayingFirst(
-            phone,
-            SongHearing {
-                asked++
-                phone.aloud = Aloud.Maybe(2)
-                Heard.Nothing
-            },
-            SongHearing { unshared }
-        )
-        repeat(PlayingFirst.UNHEARD_TRIES) {
-            phone.aloud = Aloud.Maybe(1)
-            assertEquals(Heard.Nothing, ears.listenToPlaying(whileAloud = true))
-        }
-        // Neither was counted: both are still tried.
-        phone.aloud = Aloud.Maybe(1)
-        ears.listenToPlaying(whileAloud = true)
-        assertEquals(PlayingFirst.UNHEARD_TRIES + 1, asked)
-        phone.aloud = Aloud.Maybe(2)
-        ears.listenToPlaying(whileAloud = true)
-        assertEquals(PlayingFirst.UNHEARD_TRIES + 2, asked)
-    }
-
-    @Test
-    fun throughBluetoothHeadphonesASongPlayingInTheRoomIsStillTakenForTheStations() = runTest {
-        // Known gap: a station names no song, so nothing tells the room's song from the one in the headphones. It's kept as heard in
-        // the room, which a tap doesn't open, and the headphones aren't counted as heard nothing.
-        val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
-        val room = Heard.Song(MusicMetadata("Cafe Song", "Cafe Artist"), null, 12_000, 400_000)
-        var asked = 0
-        val ears = PlayingFirst(phone, SongHearing { asked++; room }, SongHearing { Heard.Failed(AppError.MICROPHONE) })
-        phone.aloud = Aloud.Maybe(1)
-        repeat(PlayingFirst.UNHEARD_TRIES + 1) { assertEquals(room.copy(inRoom = true), ears.listenToPlaying(whileAloud = true)) }
-        assertEquals(PlayingFirst.UNHEARD_TRIES + 1, asked)
-    }
-
-    @Test
-    fun whileAloudTheMicrophoneStopsOnceThePhoneGoesQuietButItsOwnSoundGoesOn() = runTest {
-        val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
-        val unshared = Heard.Failed(AppError.MICROPHONE)
-        val song = Heard.Song(MusicMetadata("Fake Song", "Fake Artist"), null, 12_000, 400_000)
-        var microphoneStopped = false
-        val room = SongHearing {
-            try {
-                awaitCancellation()
-            } finally {
-                microphoneStopped = true
-            }
-        }
-        val check = PlayingFirst.ALOUD_CHECK_MS
-        // Headphones plugged in midway: the microphone would hear nothing from then on, so it stops at the next check.
-        val stopped = async { PlayingFirst(phone, room, SongHearing { unshared }).listenToPlaying(whileAloud = true) }
-        delay(check * 5)
-        assertTrue(stopped.isActive)
-        phone.aloud = Aloud.No
-        // On virtual time, as all of this test: a delay here passes at once.
-        delay(check * 2)
-        assertTrue(stopped.isCompleted)
-        assertEquals(unshared, stopped.await())
-        assertTrue(microphoneStopped)
-        // The phone's own sound still hears it through headphones, so that listen goes on.
-        val shared = CompletableDeferred<Heard>()
-        phone.aloud = Aloud.Yes
-        val goesOn = async { PlayingFirst(phone, room, SongHearing { shared.await() }).listenToPlaying(whileAloud = true) }
-        delay(check * 5)
-        phone.aloud = Aloud.No
-        delay(check * 5)
-        assertTrue(goesOn.isActive)
-        shared.complete(song)
-        assertEquals(song, goesOn.await())
-        // Not asked to, the microphone goes on though the phone is quiet: someone may be naming a song in the room.
-        val asked = CompletableDeferred<Heard>()
-        val byHand = async { PlayingFirst(phone, SongHearing { asked.await() }, SongHearing { unshared }).listenToPlaying() }
-        delay(check * 5)
-        assertTrue(byHand.isActive)
-        asked.complete(song)
-        // Heard by the microphone alone, it may be the room's: see aSongOnlyTheMicrophoneHeardWithNoSongNamedIsKeptAsHeardInTheRoom.
-        assertEquals(song.copy(inRoom = true), byHand.await())
-        // A song heard while the phone plays out loud is the answer.
-        phone.aloud = Aloud.Yes
-        assertEquals(song.copy(inRoom = true), PlayingFirst(phone, SongHearing { song }, SongHearing { unshared }).listenToPlaying(whileAloud = true))
+        // The phone can't tell a Bluetooth speaker or a car from headphones, so where nothing else named the song, the
+        // microphone is asked. Heard by it alone, it may be the room's: see aSongOnlyTheMicrophoneHeardWithNoSongNamedIsKeptAsHeardInTheRoom.
+        assertEquals(song.copy(inRoom = true), PlayingFirst(phone, SongHearing { song }, unshared).listenToPlaying())
+        // Not asked to, as on a TV or without the microphone allowed, it isn't.
+        assertEquals(Heard.Failed(AppError.MICROPHONE), PlayingFirst(phone, SongHearing { error("not asked") }, unshared).listenToPlaying(byMicrophone = false))
     }
 
     @Test

@@ -10,17 +10,13 @@ import androidx.core.content.edit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -62,12 +58,6 @@ internal sealed interface Heard {
         val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs, speed) else null
     }
     data object Nothing : Heard
-
-    /**
-     * Nothing but zeros: a microphone muted by Android's privacy toggle or held by another app, or the phone's own sound at
-     * volume 0. Shown as [Nothing], but it tells nothing of what's playing or where.
-     */
-    data object Silent : Heard
     data class Failed(val error: AppError) : Heard
 
     /**
@@ -91,7 +81,7 @@ internal class Shazam(
         // Nothing but zeros is a muted microphone or a phone playing at volume 0. Shazam answers it with no
         // match, and it can't match anything, so it isn't sent: a busy Shazam must not make silence look
         // like Shazam being out of reach, which hands the listen over to another app.
-        if ((0 until count).none { samples[it].toInt() != 0 }) return Heard.Silent
+        if ((0 until count).none { samples[it].toInt() != 0 }) return Heard.Nothing
         val uri = withContext(computeDispatcher) { Busy.during { ShazamSignature.uri(samples, count) } }
         val heard = send(uri)
         return if (keepIfOffline && heard == Heard.Failed(AppError.NETWORK)) Heard.Unsent { send(uri) } else heard
@@ -381,9 +371,8 @@ internal fun interface SongHearing {
     /**
      * What an app on the phone plays, heard rather than as the app says, to tell how far the app is from
      * the words; by the microphone too, when the phone won't share its sound, unless not [byMicrophone].
-     * With [whileAloud], the microphone stops once the phone no longer plays out loud.
      */
-    suspend fun listenToPlaying(byMicrophone: Boolean = true, whileAloud: Boolean = false): Heard = listen()
+    suspend fun listenToPlaying(byMicrophone: Boolean = true): Heard = listen()
 }
 
 /**
@@ -424,32 +413,10 @@ internal class PlayingFirst(
         return Around(phone, if (phone == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else null)
     }
 
-    override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
+    override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
         val heard = played.listen()
         if (!byMicrophone || heard != Heard.Failed(AppError.MICROPHONE)) return heard
-        if (!whileAloud) return roomForPlaying(hearing.listen())
-        // Through headphones or muted, the microphone hears nothing of it: no more use than none at all.
-        val on = playback.playsAloud()
-        if (on == Aloud.No || on is Aloud.Maybe && (unheard[on.output] ?: 0) >= UNHEARD_TRIES) return heard
-        val room = roomForPlaying(aloud() ?: return heard)
-        // Moved to another output midway, what was heard was on both, so it tells of neither.
-        if (on is Aloud.Maybe && playback.playsAloud() == on) tally(on.output, room)
-        return room
-    }
-
-    /**
-     * On classic Bluetooth, which may be headphones, how many listens in a row the microphone named no song on each
-     * output, by its id: after [UNHEARD_TRIES], it's taken for headphones till it connects again, with a new id.
-     */
-    private val unheard = mutableMapOf<Int, Int>()
-
-    /** Counts what the microphone heard on [output]. A song starts the count over; silence, or not reaching Shazam, tells nothing. */
-    private fun tally(output: Int, room: Heard) {
-        when (room) {
-            is Heard.Song -> unheard.remove(output)
-            Heard.Nothing -> unheard[output] = (unheard[output] ?: 0) + 1
-            else -> Unit
-        }
+        return roomForPlaying(hearing.listen())
     }
 
     private fun roomForPlaying(room: Heard): Heard {
@@ -457,20 +424,6 @@ internal class PlayingFirst(
         // With no song named to tell, the one heard may be either.
         val playing = playback.songForRecognition()?.metadata ?: return (room as? Heard.Song)?.copy(inRoom = true) ?: room
         return room.takeIf { it !is Heard.Song || SongNames.names(playing.title, playing.artist, it.metadata) } ?: Heard.Nothing
-    }
-
-    /** What the microphone hears while the phone plays out loud, or null once it doesn't, as when headphones are plugged in. */
-    private suspend fun aloud(): Heard? = coroutineScope {
-        val listening = async { hearing.listen() }
-        val quiet = launch { while (playback.playsAloud() != Aloud.No) delay(ALOUD_CHECK_MS) }
-        select<Heard?> { listening.onAwait { it }; quiet.onJoin { null } }.also { coroutineContext.cancelChildren() }
-    }
-
-    companion object {
-        const val ALOUD_CHECK_MS = 1_000L
-
-        /** On radio a listen often falls on talk, an ad or a jingle, so a speaker is taken for headphones only after this many in a row. */
-        const val UNHEARD_TRIES = 3
     }
 }
 

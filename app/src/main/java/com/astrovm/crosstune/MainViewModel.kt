@@ -288,7 +288,7 @@ internal class MainViewModel(
     private var followedUnnamed: Pair<Unnamed, Following>? = null
 
     /** What the last listen by ear could hear with, as [earsNow] has it, when it named no song; null after one that did. */
-    private var unheardWith: Ears? = null
+    private var unheardWith: List<Boolean>? = null
 
     /** Whether the last listen by ear to what an app plays now, with no song named, named none: talk, a song Shazam doesn't know, or a failure. */
     private var unheardByEar = false
@@ -1067,7 +1067,7 @@ internal class MainViewModel(
     private fun answer(heard: Heard, lyrics: Boolean, byPhone: Boolean = false, checked: CheckedPlayerSong? = null) {
         when (heard) {
             is Heard.Song -> showHeard(heard, lyrics, byPhone, checked)
-            Heard.Nothing, Heard.Silent -> showListenError(AppError.NO_MATCH)
+            Heard.Nothing -> showListenError(AppError.NO_MATCH)
             is Heard.Failed -> showListenError(heard.error)
             is Heard.Unsent -> {
                 held = heard to lyrics
@@ -1285,23 +1285,23 @@ internal class MainViewModel(
 
     /**
      * Listens to what plays, again once the song heard should be over, as the next one has started by
-     * then. Shared sound first; the microphone only when it was allowed before, never on a TV, and only
-     * while the phone plays aloud, as through headphones or muted it hears nothing. Any failure is quiet:
-     * what plays stays named as the app has it.
+     * then. Shared sound first; the microphone when it was allowed before, never on a TV, through
+     * headphones too: no song named any other way, it may still hear one, from a speaker or a car the phone
+     * can't tell from headphones. Any failure is quiet: what plays stays named as the app has it.
      */
     private suspend fun nameByEar(source: PlaybackSource) {
         byEar = currentCoroutineContext()[Job]
         while (true) {
-            untilByEar(source)
+            untilByEar()
             // Listening along with the words, or hearing them sung, has the microphone and the phone's sound till it's done.
             listOfNotNull(alongJob, singingJob, voiceJob).forEach { it.join() }
-            val ears = earsNow(source)
-            val byMicrophone = uiState.phone != Phone.TV && mayCalibrate() && source.playsAloud() != Aloud.No
+            val ears = earsNow()
+            val byMicrophone = uiState.phone != Phone.TV && mayCalibrate()
             // How the app said it played as the sound to hear started, which what it says after is checked against.
             val startedWith = uiState.playingUnnamed?.following
             // Stopped for one of those, it's tried again once that's done.
             val heard = coroutineScope {
-                val listening = async { listener.listenToPlaying(byMicrophone, whileAloud = true) }
+                val listening = async { listener.listenToPlaying(byMicrophone) }
                 byEarListen = listening
                 listening.join()
                 listening.takeUnless { it.isCancelled }?.await()
@@ -1318,7 +1318,7 @@ internal class MainViewModel(
                     untilOver(heard)
                 }
                 // Talk, ads or a pause: no song plays, so none is shown, and the next try waits longer each time.
-                Heard.Nothing, Heard.Silent -> {
+                Heard.Nothing -> {
                     uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = null)) }
                     BY_EAR_RETRY_MS shl minOf(quietByEar++, QUIET_PAUSE_DOUBLINGS)
                 }
@@ -1331,25 +1331,21 @@ internal class MainViewModel(
 
     /**
      * Waits till the next listen by ear. After one that named no song, a new way to hear starts it at
-     * once, the rests from the shortest: the microphone or the phone's own sound allowed, or the phone
-     * playing aloud again, or no longer, as when headphones come or go.
+     * once, the rests from the shortest: the microphone or the phone's own sound allowed, or no longer.
      */
-    private suspend fun untilByEar(source: PlaybackSource) {
+    private suspend fun untilByEar() {
         while (now() < nextByEarAtMs) {
             val with = unheardWith ?: return delay(nextByEarAtMs - now())
             delay(minOf(EARS_CHECK_MS, nextByEarAtMs - now()))
-            if (with != earsNow(source)) {
+            if (with != earsNow()) {
                 quietByEar = 0
                 nextByEarAtMs = now()
             }
         }
     }
 
-    /** What naming by ear can hear with now: the microphone allowed, the phone's own sound shared, the phone playing aloud. */
-    private fun earsNow(source: PlaybackSource) = Ears(mayCalibrate(), mayCapture(), source.playsAloud())
-
-    /** What naming by ear hears with: whether the microphone's allowed, whether the phone shares its sound, and where it plays. */
-    private data class Ears(val microphone: Boolean, val shared: Boolean, val aloud: Aloud)
+    /** What naming by ear can hear with now: the microphone allowed, the phone's own sound shared. */
+    private fun earsNow() = listOf(mayCalibrate(), mayCapture())
 
     /**
      * When the song [heard] should be over, on the [now] clock, from its length and where in it it was heard, going by
@@ -2765,7 +2761,7 @@ internal class MainViewModel(
                 }
                 // Nothing heard, the music has most likely stopped, so the words stop where they are,
                 // and the microphone rests, longer each time, until the app playing it plays again.
-                Heard.Nothing, Heard.Silent -> {
+                Heard.Nothing -> {
                     heardClock?.takeIf { it.playing }?.let { clock ->
                         heardClock = clock.copy(positionMs = clock.positionAt(now()), atMs = now(), playing = false)
                         keepInTime()
