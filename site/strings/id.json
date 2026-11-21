@@ -66,7 +66,7 @@
   "short_h2": "Singkatnya",
   "short_items": [
     "Tanpa akun, iklan, atau analitik.",
-    "Riwayatmu tetap di ponselmu. Satu-satunya server Crosstune hanya menerima laporan masalah yang kamu kirim.",
+    "Riwayatmu tetap di ponselmu. Satu-satunya server Crosstune menerima laporan masalah yang kamu kirim, dan laporan otomatis jika kamu menyalakannya. Server ini tidak menyimpan alamat IP dan menghapus setiap laporan setelah 180 hari.",
     "Link yang kamu konversi hanya dikirim ke layanan musik yang terkait.",
     "Untuk mengenali lagu, Shazam hanya menerima sidik jari suaranya, tidak pernah rekamannya.",
     "Hapus riwayat kapan saja di aplikasi.",

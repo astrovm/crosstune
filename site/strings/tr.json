@@ -66,7 +66,7 @@
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
-    "Geçmişiniz telefonunuzda kalır. Crosstune'un tek sunucusu yalnızca bildirdiğiniz sorunları alır.",
+    "Geçmişiniz telefonunuzda kalır. Crosstune'un tek sunucusu gönderdiğiniz sorun bildirimlerini ve açarsanız otomatik olanları alır. IP adresi saklamaz ve her bildirimi 180 gün sonra siler.",
     "Dönüştürdüğünüz bağlantılar yalnızca ilgili müzik servislerine gider.",
     "Şarkı tanırken Shazam'a sesin yalnızca bir parmak izi gider, ses kaydı asla gitmez.",
     "Geçmişi istediğiniz zaman uygulamadan temizleyebilirsiniz.",

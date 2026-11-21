@@ -66,7 +66,7 @@
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
-    "Votre historique reste sur votre téléphone. Le seul serveur de Crosstune reçoit les problèmes que vous signalez.",
+    "Votre historique reste sur votre téléphone. Le seul serveur de Crosstune reçoit les signalements que vous envoyez, et les signalements automatiques si vous les activez. Il ne garde aucune adresse IP et supprime chaque signalement après 180 jours.",
     "Les liens que vous convertissez ne vont qu'aux services de musique concernés.",
     "Pour reconnaître un titre, Shazam reçoit seulement une empreinte du son, jamais l'audio.",
     "Effacez l'historique à tout moment dans l'application.",

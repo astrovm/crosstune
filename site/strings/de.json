@@ -66,7 +66,7 @@
   "short_h2": "Kurz gesagt",
   "short_items": [
     "Kein Konto, keine Werbung, keine Analysen.",
-    "Dein Verlauf bleibt auf deinem Handy. Der einzige Server von Crosstune bekommt nur die Problemmeldungen, die du schickst.",
+    "Dein Verlauf bleibt auf deinem Handy. Der einzige Server von Crosstune bekommt die Problemmeldungen, die du schickst, und automatische, wenn du sie einschaltest. Er speichert keine IP-Adresse und löscht jede Meldung nach 180 Tagen.",
     "Links, die du umwandelst, gehen nur an die beteiligten Musikdienste.",
     "Zum Erkennen eines Songs bekommt Shazam nur einen Fingerabdruck des Klangs, nie die Aufnahme.",
     "Lösche den Verlauf jederzeit in der App.",
