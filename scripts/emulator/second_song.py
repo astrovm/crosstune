@@ -14,9 +14,13 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import adbtool
 
 APP = 'com.astrovm.crosstune.dev'
 SERVICES = {
@@ -54,9 +58,12 @@ def main():
     parser.add_argument('--output', type=Path, default=Path('build/second-song'))
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    adb_cli = str(Path(os.environ.get('ANDROID_HOME', Path.home() / 'Android/Sdk')) / 'platform-tools/adb')
+    adb_cli = adbtool.path()
     devices = run(['timeout', '10', adb_cli, 'devices', '-l'])
-    wanted = args.serial or next((row.split()[0] for row in devices.splitlines() if 'SM_S908E' in row), None)
+    try:
+        wanted = args.serial or adbtool.samsung_serial(devices)
+    except ValueError:
+        wanted = None
     serial = next((row.split()[0] for row in devices.splitlines() if row.split()[0] == wanted and row.split()[1] == 'device'), None)
     if not serial:
         raise SystemExit(f'{args.serial or "Samsung"} is not attached; refusing to touch another device')

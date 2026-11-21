@@ -20,7 +20,7 @@ class OneTapSetupTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
 
     @Test
-    @Config(sdk = [26, 30])
+    @Config(sdk = [28, 30])
     fun beforeAndroid12OneTapDoesNotRunAnyPrivilegedCommands() = runBlocking {
         val shell = FakeShell()
         val setup = OneTapSetup(app, listOf(shell))
@@ -45,7 +45,7 @@ class OneTapSetupTest {
     }
 
     @Test
-    @Config(sdk = [32])
+    @Config(sdk = [31])
     fun beforeAndroid13FloatingLyricsNeedNoNotificationPermission() = runBlocking {
         val shell = FakeShell()
         assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = true, exact = false))

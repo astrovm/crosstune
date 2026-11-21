@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
+import kotlin.math.abs
 
 /** Which sound a song's heard through: the clean one music apps play, or the visuals' tap. */
 class CleanFirstTest {
@@ -81,6 +82,36 @@ class CleanFirstTest {
         val gone = Microphone { if (opens++ == 0) Sound(100).open() else null }
         CleanFirst(gone, tap).open()
         assertEquals(4, tap.opened)
+    }
+
+    /**
+     * Issue #1100: Shazam opens its hearing while the singing's is still open, so [CleanFirst] keeps nothing
+     * from one open to the next: each picks its own sound, clean or the tap, and closes all it opened. The
+     * fakes here fill every read, so this can't see Android silence a second capture: `CaptureCheck` measures
+     * that on a phone. On the Samsung (Android 16), two playback captures at once both heard TIDAL, loudest
+     * 32767 during the overlap; Spotify, which no playback capture hears even alone, both heard through the tap.
+     */
+    @Test
+    fun aHearingOpenedWhileAnotherIsOpenPicksItsOwnSoundAndClosesAllItOpened() {
+        // What each hears: the clean sound, or, with none, the visuals' tap.
+        for ((case, clean, loudest) in listOf(Triple("heard cleanly", Sound(3000), 3000), Triple("as Spotify plays", Sound(0), 100))) {
+            val tap = Sound(100)
+            val singing = checkNotNull(CleanFirst(clean, tap).open())
+            val heard = ShortArray(ShazamSignature.SAMPLE_RATE / 10)
+            singing.read(heard, 0, heard.size)
+            // Opened while the singing's recording is still open, as listening along does.
+            val shazam = checkNotNull(CleanFirst(clean, tap).open())
+            assertEquals(case, heard.size, shazam.read(heard, 0, heard.size))
+            assertEquals(case, loudest, heard.maxOf { abs(it.toInt()) })
+            // The singing hears on meanwhile.
+            heard.fill(0)
+            assertEquals(case, heard.size, singing.read(heard, 0, heard.size))
+            assertEquals(case, loudest, heard.maxOf { abs(it.toInt()) })
+            shazam.close()
+            singing.close()
+            assertEquals(case, clean.opened, clean.closed)
+            assertEquals(case, tap.opened, tap.closed)
+        }
     }
 
     @Test

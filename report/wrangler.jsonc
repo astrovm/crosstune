@@ -1,4 +1,6 @@
-// The Worker that keeps reports from the app. Deploy with `npx wrangler deploy` from this folder; the tables are in schema.sql and limits.sql.
+// The Worker that keeps reports from the app. Deploy with `npx wrangler deploy` from this folder (`cf deploy` finds no dev
+// server here and stops); the tables are in schema.sql and limits.sql. Before deploying a Worker that stores a new
+// column, run its ALTER TABLE (schema.sql) or migration (migrations/), then limits.sql again, on the live database.
 {
   "name": "crosstune-report",
   // The Crosstune account, which holds crosstune.cc: the custom domain needs it.

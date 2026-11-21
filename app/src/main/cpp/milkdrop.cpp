@@ -1,4 +1,5 @@
 // The bridge from Kotlin to projectM: each call runs on the GL thread, with its context current.
+#include <android/native_window_jni.h>
 #include <jni.h>
 #include <projectM-4/projectM.h>
 
@@ -58,6 +59,18 @@ JNIEXPORT void JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeHear(JNIE
 
 JNIEXPORT void JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeDraw(JNIEnv*, jobject, jlong instance) {
     projectm_opengl_render_frame(handle(instance));
+}
+
+// The size of the buffers drawn into [surface] from the next one on, which Android stretches to fill
+// the window. Set by the thread that draws, so a new size comes with the first frame drawn at it.
+// The format stays the one EGL set for its config: 0 would put back the window's own.
+JNIEXPORT jboolean JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeBuffers(JNIEnv* env, jclass, jobject surface, jint width, jint height) {
+    ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
+    if (window == nullptr) return JNI_FALSE;
+    int32_t format = ANativeWindow_getFormat(window);
+    int32_t failed = format < 0 ? format : ANativeWindow_setBuffersGeometry(window, width, height, format);
+    ANativeWindow_release(window);
+    return failed == 0 ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeDestroy(JNIEnv*, jobject, jlong instance) {

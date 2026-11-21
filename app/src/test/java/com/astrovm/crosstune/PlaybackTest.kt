@@ -714,7 +714,7 @@ class PlaybackTest {
     }
 
     @Test
-    @Config(sdk = [32])
+    @Config(sdk = [31])
     fun beforeAndroid13NothingIsHeldBack() {
         assertFalse(playback.restricted())
     }
@@ -1920,7 +1920,7 @@ class PlaybackTest {
 
     /** Before Android 13 a notification needs no permission, so nothing is asked. */
     @Test
-    @Config(sdk = [32])
+    @Config(sdk = [31])
     fun beforeAndroidThirteenTheWayBackIsNotAsked() {
         ShadowSettings.setCanDrawOverlays(false)
         assertFalse(app.askToReturnToCard { error("asked") })

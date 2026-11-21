@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.edit
 import android.graphics.PixelFormat
+import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
@@ -164,6 +165,15 @@ void main() { color = shadeColor; }"""
 
         /** Missing, e.g. on a phone whose processor it wasn't built for, there are just no visuals. */
         private val loaded = runCatching { System.loadLibrary("milkdrop") }.isSuccess
+
+        /**
+         * Draws into [surface] at [width] by [height] from its next frame on, stretched by Android to
+         * fill it; false when it can't. Only the thread drawing into it calls this.
+         */
+        fun buffers(surface: Surface, width: Int, height: Int) = loaded && nativeBuffers(surface, width, height)
+
+        @JvmStatic
+        private external fun nativeBuffers(surface: Surface, width: Int, height: Int): Boolean
     }
 }
 
@@ -462,13 +472,22 @@ internal class MilkdropRenderer(
     /** The sharpest size each preset was tried at and drew too slowly, not tried again till the app starts over. */
     private val tooSharp: MutableMap<String, Int> = mutableMapOf()
 ) {
-    /** The size drawn at, an index into [VISUALS_SIZES], read by the view drawn in to size its surface. */
+    /**
+     * The size drawn at, an index into [VISUALS_SIZES], read to size the frames: by [MilkdropView]
+     * for its surface, and by [FrameSizes] behind the words.
+     */
     @Volatile
     var size = fixedSize ?: START_SIZE
         private set
 
-    /** Told when [size] changes, from the GL thread, for the view to size its surface again. */
+    /**
+     * Told when [size] changes, from the GL thread, for [MilkdropView] to size its surface again.
+     * Behind the words, [FrameSizes] reads [size] before each frame instead.
+     */
     var onSize: () -> Unit = {}
+
+    /** How many pixels across and down it draws at now, in a view [width] by [height]. */
+    fun drawnSize(width: Int, height: Int) = drawn(width, size) to drawn(height, size)
 
     private var benching = bench
     private var benchFrames = 0
@@ -890,6 +909,11 @@ internal class MilkdropView(context: Context, @get:VisibleForTesting val rendere
  * Shows what [renderer] draws behind the window, the words over it, where Android puts each frame
  * on the screen by itself: the words are only drawn again when they change, not with every frame
  * of the visuals, which a TV is too slow for. Drawing stops while it's out of sight.
+ *
+ * Its surface stays the view's size. Drawn smaller, the thread drawing sets the size of the frames
+ * it draws, which Android stretches to fill it. Sized from here instead, with setFixedSize, Android
+ * scales the surface for the new size with the window's next frame, not with the first frame drawn
+ * at that size: for a frame, the last one drawn showed at the wrong scale, in a corner (Issue #1147).
  */
 internal class MilkdropBehind(context: Context, private val renderer: MilkdropRenderer) : SurfaceView(context), SurfaceHolder.Callback {
     private var thread: GlThread? = null
@@ -898,18 +922,11 @@ internal class MilkdropBehind(context: Context, private val renderer: MilkdropRe
         holder.addCallback(this)
         // Opaque, so nothing under the window, as a TV's video, shows through, even before the first frame.
         holder.setFormat(PixelFormat.RGBX_8888)
-        renderer.onSize = { post { sizeSurface(width, height) } }
     }
-
-    override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
-        super.onSizeChanged(width, height, oldWidth, oldHeight)
-        sizeSurface(width, height)
-    }
-
-    private fun sizeSurface(width: Int, height: Int) = holder.setFixedSize(drawn(width, renderer.size), drawn(height, renderer.size))
 
     override fun surfaceCreated(holder: SurfaceHolder) {
-        val drawing = GlThread(holder.surface, renderer)
+        val surface = holder.surface
+        val drawing = GlThread(surface, renderer, frames = FrameSizes(renderer) { width, height -> NativeMilkdrop.buffers(surface, width, height) })
         thread = drawing
         drawing.pause(!isShown)
         drawing.start()
@@ -949,8 +966,35 @@ private val tooSharpThisRun = ConcurrentHashMap<String, Int>()
 /** [length] in pixels drawn at [size] of [VISUALS_SIZES]. */
 internal fun drawn(length: Int, size: Int) = (length * VISUALS_SIZES[size]).roundToInt().coerceAtLeast(1)
 
-/** The thread [renderer] draws on, into [target], with an OpenGL ES 3 context of its own, then [release]s it. */
-private class GlThread(private val target: Any, private val renderer: MilkdropRenderer, private val release: () -> Unit = {}) : Thread("Milkdrop") {
+/**
+ * The size of the frames drawn into one surface, set with [set] from the thread drawing, before each
+ * frame, to what [renderer] draws at now in a view of the size given. One for each surface: a new
+ * surface starts with nothing set.
+ */
+internal class FrameSizes(private val renderer: MilkdropRenderer, private val set: (Int, Int) -> Boolean) {
+    /** The size last set, so it's only set again when it changes. */
+    private var last: Pair<Int, Int>? = null
+
+    /** The size to draw the next frame at, in a view [width] by [height], set first if it changed. */
+    fun next(width: Int, height: Int): Pair<Int, Int> {
+        val size = renderer.drawnSize(width, height)
+        // Failing, it's tried again with the next frame on purpose: the frames stay the size they were,
+        // and setting it costs next to nothing.
+        if (size != last && set(size.first, size.second)) last = size
+        return size
+    }
+}
+
+/**
+ * The thread [renderer] draws on, into [target], with an OpenGL ES 3 context of its own, then [release]s it.
+ * With [frames], it sets the size of the frames it draws itself, from the size it's given.
+ */
+private class GlThread(
+    private val target: Any,
+    private val renderer: MilkdropRenderer,
+    private val release: () -> Unit = {},
+    private val frames: FrameSizes? = null
+) : Thread("Milkdrop") {
     private val lock = ReentrantLock()
     /** Told whenever the size, a pause or finishing changes, which the thread waits on between frames. */
     private val changed = lock.newCondition()
@@ -1016,12 +1060,13 @@ private class GlThread(private val target: Any, private val renderer: MilkdropRe
                     while (!done && (paused || !sized)) changed.await()
                     if (done) null else Pair(width, height)
                 } ?: break
+                val asked = frames?.next(size.first, size.second) ?: size
                 // The surface's own size, which Android may change back behind the view's back, as when
                 // the app comes back from another one; what was asked for is only the fallback.
                 val drawn = IntArray(2)
                 val known = EGL14.eglQuerySurface(display, window, EGL14.EGL_WIDTH, drawn, 0) &&
                     EGL14.eglQuerySurface(display, window, EGL14.EGL_HEIGHT, drawn, 1) && drawn[0] > 0 && drawn[1] > 0
-                if (known) renderer.sized(drawn[0], drawn[1]) else renderer.sized(size.first, size.second)
+                if (known) renderer.sized(drawn[0], drawn[1]) else renderer.sized(asked.first, asked.second)
                 renderer.frame()
                 EGL14.eglSwapBuffers(display, window)
             }
