@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
                     LinkInterception(applicationContext),
                     artwork,
                     hearingFactory?.invoke().let { hearing ->
-                        PlayingFirst(playback, hearing ?: SongListener(microphoneFactory(), Shazam(client)), hearing ?: SongListener(CleanFirst(cleanSoundFactory(this@MainActivity), PlayedSound(soundTapFactory, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))), Shazam(client)))
+                        PlayingFirst(playback, hearing ?: SongListener(microphoneFactory(), Shazam(client)), hearing ?: SongListener(playedHearing(this@MainActivity), Shazam(client)))
                     },
                     systemDispatcher,
                     listenAlongPauseMs,
@@ -552,6 +552,13 @@ class MainActivity : ComponentActivity() {
         internal var cleanSoundFactory: (Context) -> Microphone? = ::PlaybackCapture
 
         /**
+         * How Shazam and the singing each hear what a music app plays: its own sound when it lets that be
+         * heard, else the visuals' tap. One recipe for both, and for `CaptureCheck`, which measures it on a phone.
+         */
+        internal fun playedHearing(context: Context): Microphone =
+            CleanFirst(cleanSoundFactory(context), PlayedSound(soundTapFactory, context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)))
+
+        /**
          * What hears the words sung in what the phone plays: whisper.cpp's model, fetched once on an
          * unmetered network into files kept out of backups. None on a phone with little memory, e.g. a
          * TV's 2 GB, where it would push the music app out.
@@ -561,7 +568,7 @@ class MainActivity : ComponentActivity() {
             val memory = ActivityManager.MemoryInfo().also { context.getSystemService(ActivityManager::class.java)?.getMemoryInfo(it) }
             val model = WhisperModel(client, File(context.noBackupFilesDir, "whisper"), mayFetch = { context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == false })
             SingingListener(
-                CleanFirst(cleanSoundFactory(context), PlayedSound(soundTapFactory, context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))),
+                playedHearing(context),
                 model::file,
                 NativeWhisper::open,
                 fetch = model::fetchAnyway,

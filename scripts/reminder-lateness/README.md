@@ -15,7 +15,7 @@ The script uses a fake due card. It records the alarm window and the notificatio
 
 The script temporarily changes the dev app's exact-alarm UID app-op and notification access and simulates an unplugged battery. It records and restores both the UID and package exact-alarm modes, then verifies them. It restores the original settings and preferences. It also restores forced Doze and the screen state when needed. It never changes media volume or Do Not Disturb. It refuses to run unless media volume is zero.
 
-A private recovery journal and preference backup go in `/mnt/data/agent-cache/crosstune-773/` and are deleted after successful restoration. If restoration fails, take the Samsung lock again and run:
+A private recovery journal and preference backup go in `/mnt/data/agent-cache/crosstune-773/` on mr, or `~/.cache/agent-cache/crosstune-773/` on other computers, and are deleted after successful restoration. If restoration fails, take the Samsung lock again and run:
 
 ```sh
 python3 scripts/reminder-lateness/measure.py --recover
@@ -27,5 +27,5 @@ Older journals contain only the exact-alarm package mode. Recovery restores that
 Run the fake-data tests in a container:
 
 ```sh
-podman run --rm --network none --memory 1g --memory-swap 1g -v "$PWD/scripts/reminder-lateness:/work:ro" -w /work python:3.13-slim python -B -m unittest -v test_measure
+podman run --rm --network none --memory 1g --memory-swap 1g -v "$PWD/scripts:/work:ro" -w /work/reminder-lateness python:3.13-slim python -B -m unittest -v test_measure
 ```

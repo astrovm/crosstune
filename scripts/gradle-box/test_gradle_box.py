@@ -650,8 +650,8 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
                 root = self.checkout(table)
                 here = root / "scripts" / (table + "check")
                 here.mkdir()
-                script = here / "golden.sh"
-                shutil.copy2(BOX.parent.parent / (table + "check") / "golden.sh", script)
+                script = root / "scripts" / "main-golden.sh"
+                shutil.copy2(BOX.parent.parent / "main-golden.sh", script)
                 (here / helper).touch()
                 tests = root / "app/src/test/java/com/astrovm/crosstune"
                 tests.mkdir(parents=True)
@@ -659,7 +659,7 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
                 resources = root / "app/src/test/resources"
                 resources.mkdir()
                 self.hold("first")
-                job = self.start_script(script, "fake-sha", FAKE_WRITER=str(writer), FAKE_TABLE=table)
+                job = self.start_script(script, table, "fake-sha", FAKE_WRITER=str(writer), FAKE_TABLE=table)
                 try:
                     self.wait_for("started.first")
                     script.write_text("exit 99\n" * 8_192 + script.read_text())

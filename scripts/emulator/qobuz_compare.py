@@ -16,6 +16,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import adbtool
+
 APP = "com.astrovm.crosstune.dev"
 QOBUZ = "com.qobuz.music"
 LISTENER = f"{APP}/com.astrovm.crosstune.NowPlayingListener"
@@ -130,7 +133,7 @@ def main():
     apks = {"base": a.base, "head": a.head}
 
     def adb(*c, timeout=300):
-        return subprocess.run(["adb", "-s", a.serial, *c], capture_output=True, text=True, timeout=timeout, check=False)
+        return adbtool.run(*c, serial=a.serial, capture_output=True, text=True, timeout=timeout, check=False)
 
     def shell(*c):
         return adb("shell", *c).stdout.strip()

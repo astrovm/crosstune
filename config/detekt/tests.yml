@@ -1,5 +1,0 @@
-# Tests need only the null-safety rule, not the production complexity limits.
-potential-bugs:
-  active: true
-  UnsafeCallOnNullableType:
-    active: true

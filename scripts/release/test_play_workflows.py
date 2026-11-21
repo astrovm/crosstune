@@ -42,6 +42,28 @@ class PlayWorkflowsTest(unittest.TestCase):
         self.assertIn('apksigcopier" compare', release["verify"])
         self.assertNotIn("apt-get", release["verify"])
 
+    def test_the_signed_apk_is_compared_with_a_rebuild_from_scratch_before_the_release(self):
+        release = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
+        # The rebuild waits for nothing, so its build runs while the other jobs do, and it uses no cache of theirs.
+        rebuild = release["rebuild"]
+        self.assertNotIn("needs:", rebuild)
+        self.assertIn("permissions: {}", rebuild)
+        # The shared JDK action sets setup-gradle's cache-disabled for this.
+        self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: disabled", rebuild)
+        self.assertIn("./gradlew :app:assembleRelease --no-build-cache", rebuild)
+        self.assertIn("name: rebuilt\n          path: app/build/outputs/apk/release/app-release-unsigned.apk", rebuild)
+        # The comparison takes the APK sign made and the one rebuild made, and runs none of the build's code.
+        verify = release["verify"]
+        self.assertIn("needs: [sign, rebuild]", verify)
+        self.assertIn("permissions: {}", verify)
+        self.assertNotIn("gradlew", verify)
+        self.assertNotIn("submodules", verify)
+        self.assertIn("sparse-checkout: scripts/release/apksigcopier-requirements.txt", verify)
+        self.assertIn("name: rebuilt\n          path: rebuilt", verify)
+        self.assertIn('compare "Crosstune-$TAG.apk" --unsigned rebuilt/app-release-unsigned.apk', verify)
+        # No release without the comparison.
+        self.assertIn("needs: [build, sign, verify]", release["publish"])
+
     def test_the_play_key_is_in_the_three_play_jobs_only(self):
         found = sorted((workflow, job) for workflow, job, _ in play_jobs())
         self.assertEqual(

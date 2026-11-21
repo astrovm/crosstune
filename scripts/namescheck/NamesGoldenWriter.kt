@@ -6,10 +6,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Writes what a checkout's [SongNames] makes of every [NamePairs] pair, for golden.sh to keep as what `main` did:
+ * Writes what a checkout's [SongNames] makes of every [NamePairs] pair, for scripts/main-golden.sh to keep as what `main` did:
  * which pairs it took for one song, as a session with no artist was followed, or with "<unknown>" for one, each for a song
  * by an artist and for one with none, with the artist named, and by words.
- * Not one of the app's tests: golden.sh copies it into a checkout of `main` and runs it there.
+ * Not one of the app's tests: main-golden.sh copies it into a checkout of `main` and runs it there.
  */
 @RunWith(RobolectricTestRunner::class)
 class NamesGoldenWriter {

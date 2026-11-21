@@ -105,6 +105,17 @@ class TranslationsTest {
         }
     }
 
+    /** The listing's privacy paragraph stays short: it says how long reports are kept and links the whole policy, in its language. */
+    @Test
+    fun everyStoreListingLinksThePrivacyPolicyInItsLanguage() {
+        for (folder in languages.values + "en-US") {
+            val privacy = File(store, "$folder/full_description.txt").readText().trim().substringAfterLast("<b>")
+            val site = if (folder == "en-US") "" else listOf(folder.lowercase(), folder.substringBefore('-')).first { File("../docs/$it/privacy/index.html").exists() } + "/"
+            assertTrue(privacy, privacy.endsWith("https://crosstune.cc/${site}privacy/"))
+            assertTrue(privacy, "180" in privacy)
+        }
+    }
+
     @Test
     fun languagesAreOfferedInAndroidsPerAppLanguageSetting() {
         // The locale config is generated from the res folders, so the folders and the manifest have to line up.

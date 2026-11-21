@@ -1,0 +1,44 @@
+name: Matcher cases
+
+# MatcherCasesTest's whole matrix and all its made-up searches, where CI's test job runs one in 20 of them: about
+# 600,000 searches, against what main opened. What opened is uploaded, to make main's again from (see the test).
+# CI calls it when a pull request changes the matcher, and Mutants weekly each week.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Every checkout prints Git's hint to name the initial branch. This is what it asks for. A called workflow
+# doesn't get its caller's env.
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  matcher:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/jdk
+        with:
+          gradle: read-only
+
+      - name: Matcher cases in full
+        run: ./gradlew :app:testDebugUnitTest --tests com.astrovm.crosstune.MatcherCasesTest -PmatcherFull --build-cache --configuration-cache
+
+      - name: Upload what opened
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: matcher-cases
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/matcher-*-now.tsv
+          retention-days: 14
+          if-no-files-found: warn
