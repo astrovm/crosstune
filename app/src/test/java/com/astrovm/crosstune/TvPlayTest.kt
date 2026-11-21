@@ -21,7 +21,9 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.semantics.SemanticsActions
@@ -212,6 +214,18 @@ class TvPlayTest {
         checkNotNull(controller) { "Expected controller to be non-null" }.start().resume()
         composeRule.waitForIdle()
         assertFalse(shown("Demo one"))
+    }
+
+    @Test
+    fun chooseAppListsYouTubesTvAppOnceAsTheOnlyYouTubeThere() {
+        launch()
+        // YouTube's own app isn't on a TV, so YouTube there is its TV app, one row, not that and the app it stands in for.
+        click(string(R.string.choose_app_button))
+        assertEquals(1, composeRule.onAllNodes(hasText(string(R.string.target_youtube))).fetchSemanticsNodes().size)
+        composeRule.onAllNodes(hasText(string(R.string.target_youtube)))[0].performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        // Picked, the song opens in that TV app.
+        composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.target_youtube)))
     }
 
     @Test
