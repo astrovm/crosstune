@@ -375,12 +375,21 @@ if ((${#also[@]})); then
 else
     run=(./gradlew --no-daemon "$@")
 fi
+# The box's own memory, which the machine's pressure above doesn't show, is told from inside it.
+run=(bash "$root/scripts/gradle-box/in-box.sh" "${run[@]}")
+child=
+stopped=
+trap 'stopped=1; [[ -z $child ]] || kill -TERM "$child" 2>/dev/null || true' INT TERM
 nice -n 10 podman run "${box[@]}" "$image" "${run[@]}" &
 child=$!
-trap 'kill -TERM "$child" 2>/dev/null || true' INT TERM
-status=0
-while kill -0 "$child" 2>/dev/null; do
+[[ -z $stopped ]] || kill -TERM "$child" 2>/dev/null || true
+# A stop ends the wait early, with 128 and the signal: while the build still runs, wait again for its own code.
+while :; do
+    status=0
     wait "$child" || status=$?
+    if ((status <= 128)) || ! kill -0 "$child" 2>/dev/null; then
+        break
+    fi
 done
 ((status != 0)) || keep_downloads
 lost=$((($(stalled total) - stalled_before) / 1000000))
