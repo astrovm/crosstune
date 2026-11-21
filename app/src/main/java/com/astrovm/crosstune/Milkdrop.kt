@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.edit
 import android.graphics.PixelFormat
+import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
@@ -164,6 +165,15 @@ void main() { color = shadeColor; }"""
 
         /** Missing, e.g. on a phone whose processor it wasn't built for, there are just no visuals. */
         private val loaded = runCatching { System.loadLibrary("milkdrop") }.isSuccess
+
+        /**
+         * Draws into [surface] at [width] by [height] from its next frame on, stretched by Android to
+         * fill it; false when it can't. Only the thread drawing into it calls this.
+         */
+        fun buffers(surface: Surface, width: Int, height: Int) = loaded && nativeBuffers(surface, width, height)
+
+        @JvmStatic
+        private external fun nativeBuffers(surface: Surface, width: Int, height: Int): Boolean
     }
 }
 
@@ -469,6 +479,9 @@ internal class MilkdropRenderer(
 
     /** Told when [size] changes, from the GL thread, for the view to size its surface again. */
     var onSize: () -> Unit = {}
+
+    /** How many pixels across and down it draws at now, in a view [width] by [height]. */
+    fun drawnSize(width: Int, height: Int) = drawn(width, size) to drawn(height, size)
 
     private var benching = bench
     private var benchFrames = 0
@@ -890,6 +903,11 @@ internal class MilkdropView(context: Context, @get:VisibleForTesting val rendere
  * Shows what [renderer] draws behind the window, the words over it, where Android puts each frame
  * on the screen by itself: the words are only drawn again when they change, not with every frame
  * of the visuals, which a TV is too slow for. Drawing stops while it's out of sight.
+ *
+ * Its surface stays the view's size. Drawn smaller, the thread drawing sets the size of the frames
+ * it draws, which Android stretches to fill it. Sized from here instead, with setFixedSize, Android
+ * scales the surface for the new size with the window's next frame, not with the first frame drawn
+ * at that size: for a frame, the last one drawn showed at the wrong scale, in a corner (Issue #1147).
  */
 internal class MilkdropBehind(context: Context, private val renderer: MilkdropRenderer) : SurfaceView(context), SurfaceHolder.Callback {
     private var thread: GlThread? = null
@@ -898,18 +916,11 @@ internal class MilkdropBehind(context: Context, private val renderer: MilkdropRe
         holder.addCallback(this)
         // Opaque, so nothing under the window, as a TV's video, shows through, even before the first frame.
         holder.setFormat(PixelFormat.RGBX_8888)
-        renderer.onSize = { post { sizeSurface(width, height) } }
     }
-
-    override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
-        super.onSizeChanged(width, height, oldWidth, oldHeight)
-        sizeSurface(width, height)
-    }
-
-    private fun sizeSurface(width: Int, height: Int) = holder.setFixedSize(drawn(width, renderer.size), drawn(height, renderer.size))
 
     override fun surfaceCreated(holder: SurfaceHolder) {
-        val drawing = GlThread(holder.surface, renderer)
+        val surface = holder.surface
+        val drawing = GlThread(surface, renderer, buffers = { width, height -> NativeMilkdrop.buffers(surface, width, height) })
         thread = drawing
         drawing.pause(!isShown)
         drawing.start()
@@ -949,14 +960,24 @@ private val tooSharpThisRun = ConcurrentHashMap<String, Int>()
 /** [length] in pixels drawn at [size] of [VISUALS_SIZES]. */
 internal fun drawn(length: Int, size: Int) = (length * VISUALS_SIZES[size]).roundToInt().coerceAtLeast(1)
 
-/** The thread [renderer] draws on, into [target], with an OpenGL ES 3 context of its own, then [release]s it. */
-private class GlThread(private val target: Any, private val renderer: MilkdropRenderer, private val release: () -> Unit = {}) : Thread("Milkdrop") {
+/**
+ * The thread [renderer] draws on, into [target], with an OpenGL ES 3 context of its own, then [release]s it.
+ * With [buffers], it sets the size of the frames it draws itself, as [renderer] says, from the size it's given.
+ */
+private class GlThread(
+    private val target: Any,
+    private val renderer: MilkdropRenderer,
+    private val release: () -> Unit = {},
+    private val buffers: ((Int, Int) -> Boolean)? = null
+) : Thread("Milkdrop") {
     private val lock = ReentrantLock()
     /** Told whenever the size, a pause or finishing changes, which the thread waits on between frames. */
     private val changed = lock.newCondition()
     private var width = 0
     private var height = 0
     private var sized = false
+    /** The size of the frames last set with [buffers]. */
+    private var buffered: Pair<Int, Int>? = null
     private var paused = false
     private var done = false
 
@@ -1016,12 +1037,15 @@ private class GlThread(private val target: Any, private val renderer: MilkdropRe
                     while (!done && (paused || !sized)) changed.await()
                     if (done) null else Pair(width, height)
                 } ?: break
+                val asked = buffers?.let { setBuffers ->
+                    renderer.drawnSize(size.first, size.second).also { if (it != buffered && setBuffers(it.first, it.second)) buffered = it }
+                } ?: size
                 // The surface's own size, which Android may change back behind the view's back, as when
                 // the app comes back from another one; what was asked for is only the fallback.
                 val drawn = IntArray(2)
                 val known = EGL14.eglQuerySurface(display, window, EGL14.EGL_WIDTH, drawn, 0) &&
                     EGL14.eglQuerySurface(display, window, EGL14.EGL_HEIGHT, drawn, 1) && drawn[0] > 0 && drawn[1] > 0
-                if (known) renderer.sized(drawn[0], drawn[1]) else renderer.sized(size.first, size.second)
+                if (known) renderer.sized(drawn[0], drawn[1]) else renderer.sized(asked.first, asked.second)
                 renderer.frame()
                 EGL14.eglSwapBuffers(display, window)
             }

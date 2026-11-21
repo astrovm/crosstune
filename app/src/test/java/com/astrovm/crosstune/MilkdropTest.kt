@@ -696,6 +696,19 @@ class MilkdropTest {
     }
 
     @Test
+    fun theFramesBehindTheWordsAreDrawnAtTheSizeThePresetIsDrawnAtNow() {
+        // Behind the words, the thread drawing sizes its own frames by this, so a new size comes
+        // with the first frame drawn at it, not a frame before or after (Issue #1147).
+        val milkdrop = SizedMilkdrop(listOf(200L, 100L, 60L, 20L))
+        val (renderer, _) = sized(milkdrop)
+        renderer.created()
+        assertEquals(540 to 1158, renderer.drawnSize(1080, 2316))
+        renderer.drawFor(5_600)
+        assertEquals(3, renderer.size)
+        assertEquals(360 to 772, renderer.drawnSize(1080, 2316))
+    }
+
+    @Test
     fun eachSecondItTellsHowManyFramesASecondThePhoneCouldDraw() {
         val told = mutableListOf<Int>()
         val renderer = MilkdropRenderer(
