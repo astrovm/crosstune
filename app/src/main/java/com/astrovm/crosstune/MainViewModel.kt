@@ -566,7 +566,7 @@ internal class MainViewModel(
         val account = chatGpt ?: return
         chatGptJob?.cancel()
         uiState = uiState.copy(chatGpt = uiState.chatGpt.copy(signingIn = true, problem = null))
-        chatGptJob = viewModelScope.launch {
+        viewModelScope.launchKept({ chatGptJob = it }) {
             try {
                 val result = account.signIn(open = { url -> effectChannel.send(Effect.Open(url, packageName = null, finishAfterOpen = false)) })
                 val signedIn = result == ChatGptSignInResult.SIGNED_IN
@@ -686,7 +686,7 @@ internal class MainViewModel(
     private fun loadSystemState() {
         systemJob?.cancel()
         val history = uiState.history
-        systemJob = viewModelScope.launch {
+        viewModelScope.launchKept({ systemJob = it }) {
             val (stored, state) = withContext(systemDispatcher) { historyStore.load() to interception.linkState() }
             linkState = state
             // Anything looked up or cleared meanwhile is newer than what was read.
@@ -743,7 +743,7 @@ internal class MainViewModel(
         // A link Crosstune can't open is reported as one, not looked up as a song named after it.
         if (searcher == null || words.isEmpty() || MusicLinks.looksLikeALink(words)) return rejectInput()
         cancelContentWork()
-        searchJob = viewModelScope.launch {
+        viewModelScope.launchKept({ searchJob = it }) {
             // Whatever was shown before is gone, so the songs found are what the screen is about.
             uiState = uiState.copy(
                 isSearchingSongs = true,
@@ -768,7 +768,7 @@ internal class MainViewModel(
                 songSearchQuery = words,
                 error = null
             )
-            if (!describes) return@launch
+            if (!describes) return@launchKept
             val named = try {
                 found(searcher, tutor?.songsFor(words).orEmpty())
             } finally {
@@ -809,10 +809,10 @@ internal class MainViewModel(
         val tutor = tutor ?: return
         cancelContentWork()
         uiState = uiState.copy(isLoading = true, result = null, link = null, error = null, linkText = "")
-        job = viewModelScope.launch {
+        viewModelScope.launchKept({ job = it }) {
             val songs = tutor.songsLike(song)?.let { found(searcher, it) }.orEmpty()
             uiState = uiState.copy(isLoading = false)
-            if (songs.isEmpty()) return@launch showError(AppError.NO_SONGS_LIKE)
+            if (songs.isEmpty()) return@launchKept showError(AppError.NO_SONGS_LIKE)
             showSongList(song.title, songs, like = true)
         }
     }
@@ -1036,7 +1036,7 @@ internal class MainViewModel(
         // microphone hears the room too; with no app playing, one on a speaker it's cast to, or to name a song, the
         // microphone hears what's nearby.
         val unnamed = lyrics && playback?.playsHereWithoutSong() == true
-        job = viewModelScope.launch {
+        viewModelScope.launchKept({ job = it }) {
             byEar?.cancelAndJoin()
             var checked: CheckedPlayerSong? = null
             val heard = try {
@@ -1090,7 +1090,7 @@ internal class MainViewModel(
         val (heard, lyrics) = held ?: return
         forgetHeld()
         uiState = uiState.copy(isLoading = true, error = null)
-        job = viewModelScope.launch {
+        viewModelScope.launchKept({ job = it }) {
             val named = heard.send()
             uiState = uiState.copy(isLoading = false)
             answer(named, lyrics)
@@ -1314,7 +1314,7 @@ internal class MainViewModel(
                     // played before it went on, it's never shown, and dropping it listens again at once, in place of this.
                     if (!showHeardByEar(heard, startedWith)) return
                     byEarLook?.cancel()
-                    byEarLook = lyricsFinder?.let { finder -> viewModelScope.launch { finder.firstLook(heard.metadata) } }
+                    lyricsFinder?.let { finder -> viewModelScope.launchKept({ byEarLook = it }) { finder.firstLook(heard.metadata) } }
                     untilOver(heard)
                 }
                 // Talk, ads or a pause: no song plays, so none is shown, and the next try waits longer each time.
@@ -1538,13 +1538,13 @@ internal class MainViewModel(
         // target isn't known until it's followed, so it's always looked up.
         val link = (input as? LinkInput.Link)?.link
         val saved = link?.let(::savedAs)
-        job = viewModelScope.launch {
+        viewModelScope.launchKept({ job = it }) {
             // A video from another app that isn't music, like a tutorial, opens as it would without
             // Crosstune; one copied, or that YouTube Music can't tell about, e.g. offline, is let be.
             val video = link?.takeIf { (copied || here || openWhenReady && destination == null) && it.mayNotBeMusic }
             // Looked up while asking whether it's music, so a music video costs one wait, not two.
             val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input)) }
-            if (!lookupGoesOn(video, copied, lookup, ::showLoading)) return@launch
+            if (!lookupGoesOn(video, copied, lookup, ::showLoading)) return@launchKept
             lookedUp(lookup.await(), saved, checked)
         }
     }
@@ -1646,7 +1646,7 @@ internal class MainViewModel(
         val result = uiState.result?.takeIf { it.type == ItemType.PLAYLIST } ?: return
         val missing = result.tracks.indices.filter { result.tracks[it].artworkUrl == null }.take(MAX_COVER_LOOKUPS)
         if (missing.isEmpty()) return
-        coverJob = viewModelScope.launch {
+        viewModelScope.launchKept({ coverJob = it }) {
             val tracks = result.tracks.toMutableList()
             try {
                 matcher.covers(missing.map(tracks::get)) { found, cover ->
@@ -1675,7 +1675,7 @@ internal class MainViewModel(
         if (uiState.result == null || uiState.showDestinationPicker) return
         job?.cancel()
         uiState = uiState.copy(isMatching = false)
-        job = viewModelScope.launch { prepareResult() }
+        viewModelScope.launchKept({ job = it }) { prepareResult() }
     }
 
     private suspend fun prepareResult() {
@@ -1737,11 +1737,11 @@ internal class MainViewModel(
         if (service.playsSongBySong) return playSongBySong(all, service, destination, name)
         val tracks = all.take(MAX_QUEUE)
         cancelTrackWork()
-        trackJob = viewModelScope.launch {
+        viewModelScope.launchKept({ trackJob = it }) {
             uiState = uiState.copy(queueProgress = 0 to tracks.size)
             try {
                 val queue = matcher.youtubeQueue(service, tracks) { looked -> uiState = uiState.copy(queueProgress = looked to tracks.size) }
-                if (queue == null) return@launch showError(AppError.NOT_FOUND)
+                if (queue == null) return@launchKept showError(AppError.NOT_FOUND)
                 // In Crosstune's player, as one song plays, from the list's first song found.
                 val app = destination.packageName
                 val first = queue.songs.first()
@@ -1766,7 +1766,7 @@ internal class MainViewModel(
         val app = destination.packageName ?: return
         val first = tracks.first()
         cancelTrackWork()
-        trackJob = viewModelScope.launch {
+        viewModelScope.launchKept({ trackJob = it }) {
             if (!service.playsAskedSongs) {
                 uiState = uiState.copy(isMatching = true)
                 val link = try {
@@ -1774,7 +1774,7 @@ internal class MainViewModel(
                 } finally {
                     if (isActive) uiState = uiState.copy(isMatching = false)
                 }
-                link ?: return@launch openTrack(first)
+                link ?: return@launchKept openTrack(first)
                 openPlayer(first, app, link)
                 // Before the app's opened, so what it played until then isn't taken for the list's start.
                 playQueue?.play(tracks, service, app, 1, listOf(first), name)
@@ -1782,7 +1782,7 @@ internal class MainViewModel(
                     playQueue?.stop()
                     effectChannel.send(opening(link, app, finishAfterOpen = false, song = first))
                 }
-                return@launch
+                return@launchKept
             }
             openPlayer(first, app)
             if (playback?.playSong(first, app, mustStart = true) == true) {
@@ -1803,16 +1803,16 @@ internal class MainViewModel(
     fun openTrack(track: MusicMetadata) {
         val destination = uiState.resultDestination
         cancelTrackWork()
-        trackJob = viewModelScope.launch {
+        viewModelScope.launchKept({ trackJob = it }) {
             // A song from a playlist on the same service is opened by its own link.
             track.url?.takeIf { destination.matchService != null && MusicLinks.serviceFor(it) == destination.matchService }?.let { url ->
                 effectChannel.send(opening(destination.adapt(url).forSharing(), destination.packageName, finishAfterOpen = false, song = track))
-                return@launch
+                return@launchKept
             }
             // YouTube and YouTube Music play the same videos, so one opens as itself in the other.
             track.url?.let { MusicLinks.linkFor(it) }?.youtubeVideoOn(destination.matchService)?.let { url ->
                 effectChannel.send(opening(destination.adapt(url).forSharing(), destination.packageName, finishAfterOpen = false, song = track))
-                return@launch
+                return@launchKept
             }
             val match = destination.matchService?.takeIf { uiState.exactMatch }?.let { service ->
                 uiState = uiState.copy(isMatching = true)
@@ -1827,7 +1827,7 @@ internal class MainViewModel(
             val service = destination.matchService
             // Not found there, as opposed to no answer, e.g. offline, which just searches.
             if (match == ExactMatcher.Match.Missing && service != null && canBeMissing(service, track)) {
-                return@launch openMissing(track, track.url?.let(MusicLinks::linkFor), destination, url, finishAfterOpen = false)
+                return@launchKept openMissing(track, track.url?.let(MusicLinks::linkFor), destination, url, finishAfterOpen = false)
             }
             effectChannel.send(opening(url.forSharing(), destination.packageName, finishAfterOpen = false, song = track))
         }
@@ -1844,7 +1844,7 @@ internal class MainViewModel(
             selectedDestination = destination ?: uiState.selectedDestination
         )
         job?.cancel()
-        job = viewModelScope.launch { open(chosen, finishAfterOpen, tapped = true) }
+        viewModelScope.launchKept({ job = it }) { open(chosen, finishAfterOpen, tapped = true) }
     }
 
     /**
@@ -1863,10 +1863,10 @@ internal class MainViewModel(
             return
         }
         job?.cancel()
-        job = viewModelScope.launch {
+        viewModelScope.launchKept({ job = it }) {
             uiState = uiState.copy(playingResult = true)
             try {
-                val link = prepareDestination(destination) ?: return@launch
+                val link = prepareDestination(destination) ?: return@launchKept
                 // The link only a search when it was looked up and not found.
                 val exact = uiState.destinationUrls[destination]?.exact != false
                 val source = playback
@@ -1876,7 +1876,7 @@ internal class MainViewModel(
                 val there = source?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(app, it.appPackage, interception::isInstalled) }
                 if (there != null) {
                     if (!there.clock.playing) source.playPause(song, true)
-                    return@launch
+                    return@launchKept
                 }
                 // Asked by name, other apps find it; YouTube Music only plays its own link.
                 val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link, mustStart = true) == true
@@ -1970,7 +1970,7 @@ internal class MainViewModel(
         leftJob?.cancel()
         val source = playback ?: return
         if (uiState.coveringApp) return
-        leftJob = viewModelScope.launch {
+        viewModelScope.launchKept({ leftJob = it }) {
             if (withTimeoutOrNull(START_MS) { source.follow(song).first { it != null && !it.clock.playing } } != null) source.playPause(song, true)
         }
     }
@@ -2004,11 +2004,8 @@ internal class MainViewModel(
         val key = RecordingKey.of(asked)
         kept[key]?.let { return showPeek(song, it.lines, it.lyrics, it.timedByEar) }
         val finder = lyricsFinder?.takeIf { lookAhead && asked.type == ItemType.TRACK && asked.artist.isNotBlank() } ?: return
-        val look = lookingAhead[key] ?: viewModelScope.async { finder.firstLook(asked) }.also {
-            lookingAhead[key] = it
-            it.invokeOnCompletion { lookingAhead.remove(key) }
-        }
-        peekJob = viewModelScope.launch {
+        val look = lookingAhead[key] ?: lookUpAhead(finder, key, asked)
+        viewModelScope.launchKept({ peekJob = it }) {
             (look.await().lyrics as? LyricsFinder.Lyrics.Found)?.let { showPeek(song, it.lines, it.words, byEar = false) }
         }
     }
@@ -2031,11 +2028,11 @@ internal class MainViewModel(
         val opened = uiState.player ?: return
         val source = playback?.takeIf { it.hasAccess() } ?: return
         if (opened.stationOnly) {
-            playerJob = viewModelScope.launch { followStationDisplay(source) }
+            viewModelScope.launchKept({ playerJob = it }) { followStationDisplay(source) }
             return
         }
         val song = opened.song
-        playerJob = viewModelScope.launch {
+        viewModelScope.launchKept({ playerJob = it }) {
             // What names no song is only told apart by the app that plays it.
             combine(source.follow(song, opened.askedOf, opened.session), source.nowPlayingUpdates(), source.unnamedUpdates(), ::Triple).collect { (following, playing, unnamed) ->
                 val player = uiState.player ?: return@collect
@@ -2483,8 +2480,15 @@ internal class MainViewModel(
         val song = uiState.result?.takeIf { it.type == ItemType.TRACK }?.let(::asPlayed) ?: return
         val key = RecordingKey.of(song)
         if (key in lookingAhead || key in kept) return
-        lookingAhead[key] = viewModelScope.async { finder.firstLook(song) }.also { it.invokeOnCompletion { lookingAhead.remove(key) } }
+        lookUpAhead(finder, key, song)
     }
+
+    /**
+     * Looks up [song]'s words, held under [key] till they're found. Held before the lookup runs: answered at once from
+     * what's kept, it'd be dropped before it was held, then held for good, and the song never looked up ahead again.
+     */
+    private fun lookUpAhead(finder: LyricsFinder, key: String, song: MusicMetadata): Deferred<LyricsFinder.FirstLook> =
+        viewModelScope.asyncKept({ look -> lookingAhead[key] = look; look.invokeOnCompletion { lookingAhead.remove(key) } }) { finder.firstLook(song) }
 
     private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false) {
         val song = asPlayed(requested)
@@ -2516,7 +2520,7 @@ internal class MainViewModel(
         if (showKept(song)) {
             follow(song)
         } else {
-            lyricsJob = viewModelScope.launch {
+            viewModelScope.launchKept({ lyricsJob = it }) {
                 var first: LyricsFinder.FirstLook? = null
                 // No words found, and whether it's taken for an instrumental: worked out once that shows, as it may wait on the app.
                 var noWords: Boolean? = null
@@ -2694,6 +2698,7 @@ internal class MainViewModel(
 
     private var alongJob: Job? = null
 
+
     /** Told when the app playing the song shown starts playing it, e.g. after a pause, so listening along wakes. */
     private val appPlaysAgain = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
@@ -2705,7 +2710,7 @@ internal class MainViewModel(
     fun listenAlong() {
         if (alongJob?.isActive == true) return
         uiState = uiState.copy(listeningAlong = true)
-        alongJob = listeningAlong()
+        listeningAlong()
         // Being lined up by ear, the words aren't offered to put in time by hand meanwhile.
         uiState.lyricsFor?.let { uiState = uiState.copy(lyricsOffTake = timedForAnother(it)) }
     }
@@ -2734,7 +2739,7 @@ internal class MainViewModel(
     private suspend fun hearAlong(quietly: Boolean) =
         if (lining || alongByPhone) listener.listenToPlaying(byMicrophone = !quietly) else listener.listen()
 
-    private fun listeningAlong() = viewModelScope.launch {
+    private fun listeningAlong() = viewModelScope.launchKept({ alongJob = it }) {
         byEarLetsGo()
         var quiet = 0
         var calibrationTries = 0
@@ -2742,7 +2747,7 @@ internal class MainViewModel(
             // A video's long intro isn't the song: what's heard there, before the song may have started, is no try.
             if (autoCalibrating && !songMayNotHaveStarted() && calibrationTries++ >= 5) {
                 stopListeningAlong()
-                return@launch
+                return@launchKept
             }
             // Only to learn Shazam's gap, nobody asked to listen, so never with the microphone.
             val quietly = autoCalibrating && appFollowing?.let(::learnsGap) == true
@@ -2774,7 +2779,7 @@ internal class MainViewModel(
                     if (heard.error == AppError.MICROPHONE) {
                         stopListeningAlong()
                         if (!quietly) uiState = uiState.copy(error = AppError.MICROPHONE, canRetry = false)
-                        return@launch
+                        return@launchKept
                     }
                     delay(listenAlongPauseMs * 2)
                 }
@@ -3018,7 +3023,7 @@ internal class MainViewModel(
         if (!playingLinedUp() || !mayCalibrate()) return
         // With the app's clock sure, the words are heard once for the song; unsure, once each time it's picked up.
         if (if (clockSure) (uiState.lyricsSynced && !liningUp) || timedByHand || handGap != null || sungStore.heard(song, lines) else heardThisTime) return
-        singingJob = viewModelScope.launch {
+        viewModelScope.launchKept({ singingJob = it }) {
             byEarLetsGo()
             try {
                 hearOn(hearing, song, lines)
@@ -3039,7 +3044,7 @@ internal class MainViewModel(
         val words = found?.words ?: return
         if (!mayHearUntimed()) return
         val store = heardUntimed?.let(::HeardSongs)
-        singingJob = viewModelScope.launch {
+        viewModelScope.launchKept({ singingJob = it }) {
             byEarLetsGo()
             // Shown from what was kept, what was heard before isn't loaded yet.
             if (heardStretches.isEmpty()) heardStretches = store?.load(song, words).orEmpty()
@@ -3047,7 +3052,7 @@ internal class MainViewModel(
             if (heardStretches != timedBy) timeByEar(song)
             // A few whiles in a row with nothing sung heard, it's let be till the app's clock starts or jumps.
             while (!heardEnough(song) && singingTries < SINGING_TRIES) {
-                val heard = hearStretch(hearing, song, words) ?: return@launch
+                val heard = hearStretch(hearing, song, words) ?: return@launchKept
                 heardStretches = heardStretches + heard
                 store?.save(song, words, heardStretches)
                 timeByEar(song)
@@ -3181,7 +3186,7 @@ internal class MainViewModel(
     private fun holdUntil(waiting: Unsung) {
         val deadline = waiting.heldUntilMs ?: return
         heldJob?.cancel()
-        heldJob = viewModelScope.launch {
+        viewModelScope.launchKept({ heldJob = it }) {
             delay((deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))
             unsung?.takeIf { it.held === waiting.held }?.let {
                 voiceJob?.cancel()
@@ -3227,7 +3232,7 @@ internal class MainViewModel(
             return
         }
         if (voiceJob?.isActive == true) return
-        voiceJob = viewModelScope.launch {
+        viewModelScope.launchKept({ voiceJob = it }) {
             byEarLetsGo()
             var heard = waiting
             while (heard.tries < VOICE_TRIES) {
@@ -3236,8 +3241,8 @@ internal class MainViewModel(
                 val sung = hearing.hear(null, null)
                 TimingLog.note("voice while ${heard.tries + 1}: ${if (sung == null) "nothing heard, model missing ${hearing.missesModel}, no sound ${hearing.heardNoSound}" else "sings ${sung.sings}"}")
                 // Stopped: heard again once it plays, or, for held words, shown if it isn't in time.
-                if (unsung !== heard || uiState.following?.clock?.playing != true) return@launch
-                voiceIn(hearing, sung, held = heard.held != null)?.let { return@launch heardOut(heard, it) }
+                if (unsung !== heard || uiState.following?.clock?.playing != true) return@launchKept
+                voiceIn(hearing, sung, held = heard.held != null)?.let { return@launchKept heardOut(heard, it) }
                 heard = voiceWindowFinished(heard, started)
             }
             if (waiting.tries < VOICE_TRIES) heardOut(heard, Listen.NO_VOICE)
@@ -3688,7 +3693,7 @@ internal class MainViewModel(
         placeHeard()
         uiState = uiState.copy(following = heardFollowing(song))
         val source = playback?.takeIf { it.hasAccess() } ?: return
-        followJob = viewModelScope.launch {
+        viewModelScope.launchKept({ followJob = it }) {
             source.follow(song).collect { playing ->
                 if (playing?.clock?.playing == true && appFollowing?.clock?.playing != true) appPlaysAgain.tryEmit(Unit)
                 // The app stopped it, was closed or went on to another song: the words stop where it left
@@ -3739,7 +3744,7 @@ internal class MainViewModel(
         nextJob?.cancel()
         nextJob = null
         val source = playback?.takeIf { it.hasAccess() && !nextPaused } ?: return
-        nextJob = viewModelScope.launch {
+        viewModelScope.launchKept({ nextJob = it }) {
             combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).collect { (app, playing) ->
                 if (app?.clock?.playing == true) shownPlayed = true
                 // Practice moves the music app from song to song, which the words stay out of.
@@ -4055,7 +4060,7 @@ internal class MainViewModel(
         manualReport = draft
         uiState = uiState.copy(report = ReportStatus.SENDING)
         val previous = manualReportJob
-        manualReportJob = viewModelScope.launch {
+        viewModelScope.launchKept({ manualReportJob = it }) {
             previous?.join()
             val delivery = sender.send(draft.report)
             if (manualReport === draft) uiState = uiState.copy(report = delivery.manualStatus)
@@ -4078,7 +4083,7 @@ internal class MainViewModel(
         manualReport = draft
         uiState = uiState.copy(report = ReportStatus.SENDING)
         val previous = manualReportJob
-        manualReportJob = viewModelScope.launch {
+        viewModelScope.launchKept({ manualReportJob = it }) {
             previous?.join()
             val delivery = sender.send(draft.report)
             if (manualReport === draft) uiState = uiState.copy(report = delivery.manualStatus)
@@ -4346,9 +4351,9 @@ internal class MainViewModel(
      */
     private fun writeInOwnScript(song: MusicMetadata, script: Script) {
         val lines = wordLines()
-        restoreJob = viewModelScope.launch {
-            val written = tutor?.fromRomaji(song, lines, script) ?: return@launch
-            if (uiState.lyricsFor != song || wordLines() != lines) return@launch
+        viewModelScope.launchKept({ restoreJob = it }) {
+            val written = tutor?.fromRomaji(song, lines, script) ?: return@launchKept
+            if (uiState.lyricsFor != song || wordLines() != lines) return@launchKept
             restored = written
             stopLearning()
             uiState = uiState.copy(
@@ -4700,12 +4705,12 @@ internal class MainViewModel(
         wordJob?.cancel()
         examplesJob?.cancel()
         uiState = uiState.copy(word = WordMeaning(word, looking = true), learning = uiState.learning.copy(examples = null))
-        wordJob = viewModelScope.launch {
+        viewModelScope.launchKept({ wordJob = it }) {
             val language = translateInto()
             val inLine = if (usesChatGpt() && line != null) tutor?.meaning(word.lookup, line, language) else null
             if (inLine != null) {
                 uiState = uiState.copy(word = WordMeaning(word, inLine.meaning, type = inLine.type))
-                return@launch
+                return@launchKept
             }
             val translated = translator.translate(listOf(word.lookup), language)
             // Already in the app's language, a word means what the dictionary says.
@@ -4734,7 +4739,7 @@ internal class MainViewModel(
         val line = lines.getOrNull(index) ?: return
         explanationJob?.cancel()
         setExplanation(LineExplanation(index))
-        explanationJob = viewModelScope.launch {
+        viewModelScope.launchKept({ explanationJob = it }) {
             val reply = tutor.explain(song, lines, index, translateInto()) { text ->
                 // Written as it comes, unless it's done by the time this is shown.
                 viewModelScope.launch { if (uiState.learning.explanation?.let { it.index == index && it.writing } == true) setExplanation(LineExplanation(index, text)) }
@@ -4759,7 +4764,7 @@ internal class MainViewModel(
         val explanation = learning.explanation?.takeIf { it.index == index && it.done }?.text
         questionJob?.cancel()
         setQuestions(index, before + LineQuestion(asked))
-        questionJob = viewModelScope.launch {
+        viewModelScope.launchKept({ questionJob = it }) {
             val reply = tutor.askAboutLine(song, wordLines(), index, explanation, before.map { it.question to it.answer }, asked, translateInto()) { text ->
                 viewModelScope.launch {
                     if (uiState.learning.questions.lastOrNull()?.writing == true) setQuestions(index, before + LineQuestion(asked, text))
@@ -4785,7 +4790,7 @@ internal class MainViewModel(
         if (uiState.learning.songExplanation?.let { it.done || it.writing } == true) return
         songExplanationJob?.cancel()
         setSongExplanation(LineExplanation(SONG))
-        songExplanationJob = viewModelScope.launch {
+        viewModelScope.launchKept({ songExplanationJob = it }) {
             val reply = tutor.explainSong(song, lines, translateInto()) { text ->
                 viewModelScope.launch { if (uiState.learning.songExplanation?.writing == true) setSongExplanation(LineExplanation(SONG, text)) }
             }
@@ -4799,8 +4804,8 @@ internal class MainViewModel(
     private fun findSongFacts(song: MusicMetadata) {
         val tutor = tutor ?: return
         if (uiState.learning.songFacts != null || songFactsJob?.isActive == true) return
-        songFactsJob = viewModelScope.launch {
-            val facts = tutor.songFacts(song) ?: return@launch
+        viewModelScope.launchKept({ songFactsJob = it }) {
+            val facts = tutor.songFacts(song) ?: return@launchKept
             if (uiState.lyricsFor?.let { sameSong(it, song) } == true) uiState = uiState.copy(learning = uiState.learning.copy(songFacts = facts))
         }
     }
@@ -4816,7 +4821,7 @@ internal class MainViewModel(
         val explanation = uiState.learning.songExplanation?.takeIf { it.done }?.text
         songQuestionJob?.cancel()
         setSongQuestions(before + LineQuestion(asked))
-        songQuestionJob = viewModelScope.launch {
+        viewModelScope.launchKept({ songQuestionJob = it }) {
             val reply = tutor.askAboutSong(song, wordLines(), explanation, before.map { it.question to it.answer }, asked, translateInto()) { text ->
                 viewModelScope.launch { if (uiState.learning.songQuestions.lastOrNull()?.writing == true) setSongQuestions(before + LineQuestion(asked, text)) }
             }
@@ -4837,7 +4842,7 @@ internal class MainViewModel(
         val lines = wordLines().takeIf { it.isNotEmpty() } ?: return
         if (uiState.learning.wordsToKnow?.failed == false) return
         setWordsToKnow(Asking())
-        wordsToKnowJob = viewModelScope.launch {
+        viewModelScope.launchKept({ wordsToKnowJob = it }) {
             val words = tutor.wordsToKnow(song, lines, translateInto())
             setWordsToKnow(Asking(words, failed = words == null))
         }
@@ -4864,7 +4869,7 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         if (uiState.learning.artist?.let { it.done || it.writing } == true) return
         setArtist(LineExplanation(SONG))
-        artistJob = viewModelScope.launch {
+        viewModelScope.launchKept({ artistJob = it }) {
             val reply = tutor.aboutArtist(song, translateInto()) { text ->
                 viewModelScope.launch { if (uiState.learning.artist?.writing == true) setArtist(LineExplanation(SONG, text)) }
             }
@@ -4886,7 +4891,7 @@ internal class MainViewModel(
         val line = wordLines().getOrNull(index) ?: return
         examplesJob?.cancel()
         setExamples(WordExamples(word, index))
-        examplesJob = viewModelScope.launch {
+        viewModelScope.launchKept({ examplesJob = it }) {
             val examples = tutor.examples(word.lookup, line, song, translateInto())
             setExamples(WordExamples(word, index, Asking(examples, failed = examples == null)))
         }
@@ -4935,7 +4940,7 @@ internal class MainViewModel(
         playback?.seekTo(song, inApp(start))
         movedOn(uiState.following?.appPackage)
         var sought = now()
-        repeatJob = viewModelScope.launch {
+        viewModelScope.launchKept({ repeatJob = it }) {
             while (isActive) {
                 delay(REPEAT_CHECK_MS)
                 val position = uiState.following?.clock?.positionAt(now()) ?: continue
@@ -4976,8 +4981,8 @@ internal class MainViewModel(
         if (Readings.uniDic != null || uniDicJob?.isActive == true) return
         Readings.uniDic = dictionary.tokenizer(fetch = false)
         if (Readings.uniDic != null) return
-        uniDicJob = viewModelScope.launch {
-            Readings.uniDic = dictionary.tokenizer(fetch = true) ?: return@launch
+        viewModelScope.launchKept({ uniDicJob = it }) {
+            Readings.uniDic = dictionary.tokenizer(fetch = true) ?: return@launchKept
             if (uiState.learning.script == Script.JAPANESE && uiState.learning.lines.isNotEmpty()) {
                 readingsJob?.cancel()
                 uiState = uiState.copy(learning = uiState.learning.copy(lines = emptyList()))
@@ -4998,7 +5003,7 @@ internal class MainViewModel(
         if (learning.lines.isEmpty()) readWords(lines)
         val translator = translator ?: return
         if (learning.translation && uiState.lyrics.isNotEmpty() && learning.translations.isEmpty() && !learning.translating) {
-            translationJob = viewModelScope.launch {
+            viewModelScope.launchKept({ translationJob = it }) {
                 uiState = uiState.copy(learning = uiState.learning.copy(translating = true, translationFailed = false))
                 val language = translateInto()
                 // A song in a language the user reads needs none, line by line, and nor does one already in
@@ -5006,7 +5011,7 @@ internal class MainViewModel(
                 val sung = lyricsLanguage?.of(lines)
                 if (sung != null && (sung in learning.untranslated || sung == AppLanguage.untranslatedTag(language))) {
                     uiState = uiState.copy(learning = uiState.learning.copy(translations = lines.map { null }, translating = false))
-                    return@launch
+                    return@launchKept
                 }
                 // ChatGPT, signed in, translates the song as a whole; the usual way when it can't.
                 val translated = (
@@ -5028,7 +5033,7 @@ internal class MainViewModel(
                 )
                 uiState.lyricsFor?.let(::retranslateSavedLines)
                 // The song's name too, to know what it means, the same way.
-                val song = uiState.lyricsFor ?: return@launch
+                val song = uiState.lyricsFor ?: return@launchKept
                 val title = listOf(song.title)
                 val meaning = ((if (usesChatGpt() && learning.chatGptTranslation) tutor?.translate(title, language, song) else null) ?: translator.translate(title, language))
                     ?.firstOrNull()?.takeUnless { it.equals(song.title.trim(), ignoreCase = true) }
@@ -5045,7 +5050,7 @@ internal class MainViewModel(
         val script = uiState.learning.script
         if (!uiState.learning.reads || script == null || readingsJob?.isActive == true) return
         val kept = uiState.learning.lines
-        readingsJob = viewModelScope.launch {
+        viewModelScope.launchKept({ readingsJob = it }) {
             if (script == Script.JAPANESE) readWithUniDic()
             // Japanese loads its dictionary the first time, a moment better spent away from the screen.
             val song = uiState.lyricsFor
@@ -5108,7 +5113,7 @@ internal class MainViewModel(
         val chords = uiState.chords
         val lines = wordLines()
         if (!chords.on || uiState.lyrics.isEmpty() || chords.loading || chords.tried) return
-        chordsJob = viewModelScope.launch {
+        viewModelScope.launchKept({ chordsJob = it }) {
             uiState = uiState.copy(chords = uiState.chords.copy(loading = true))
             val answer = finder.chordsOf(song, lines)
             val failure = when (answer) {
@@ -5360,15 +5365,15 @@ internal class MainViewModel(
 
     private fun openSaved(entry: HistoryEntry, finishAfterOpen: Boolean) {
         cancelContentWork()
-        job = viewModelScope.launch {
+        viewModelScope.launchKept({ job = it }) {
             val destination = destinationFor(entry)
-            val url = urlForHistory(entry, destination) ?: return@launch
+            val url = urlForHistory(entry, destination) ?: return@launchKept
             val prepared = uiState.history.firstOrNull { it.link.url == entry.link.url }?.destinationLinks?.get(destination.key)
             val service = destination.matchService
             if (prepared != null && prepared.url.forSharing() == url && !prepared.exact && prepared.matchingEnabled && service != null &&
                 canBeMissing(service, entry.metadata)
             ) {
-                return@launch openMissing(entry.metadata, entry.link, destination, url, finishAfterOpen)
+                return@launchKept openMissing(entry.metadata, entry.link, destination, url, finishAfterOpen)
             }
             effectChannel.send(opening(url, destination.packageName, finishAfterOpen, entry.metadata))
         }
@@ -5725,7 +5730,7 @@ internal class MainViewModel(
             fetchAgain = true
             return
         }
-        keepingOffline = viewModelScope.launch {
+        viewModelScope.launchKept({ keepingOffline = it }) {
             do {
                 fetchAgain = false
                 keptOfflineRounds++
