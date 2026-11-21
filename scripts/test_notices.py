@@ -21,6 +21,13 @@ notices = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(notices)
 
 
+def http_error(test, code, message=""):
+    """An HTTP error from the EDRDG site, with an empty body that's closed after the test, as a real one would be."""
+    error = urllib.error.HTTPError("https://www.edrdg.org/", code, message, {}, io.BytesIO())
+    test.addCleanup(error.close)
+    return error
+
+
 class PageTextTest(unittest.TestCase):
 
     def test_blocks_are_apart_and_links_keep_their_address(self):
@@ -229,7 +236,7 @@ class JmdictNoticesTest(unittest.TestCase):
     def test_an_unreachable_site_keeps_the_snapshot_only_when_asked(self):
         before = self.jmdict.read_bytes()
         offline = urllib.error.URLError(TimeoutError("timed out"))
-        busy = urllib.error.HTTPError("https://www.edrdg.org/", 503, "Service Unavailable", None, None)
+        busy = http_error(self, 503, "Service Unavailable")
         for error in (offline, TimeoutError("timed out"), ConnectionResetError("reset"), busy):
             with self.subTest(error=error):
                 with mock.patch.object(notices, "source_bytes", side_effect=[NEW_LICENCE, error]), \
@@ -242,7 +249,7 @@ class JmdictNoticesTest(unittest.TestCase):
                     notices.main(["notices.py", "fetch-jmdict"])
 
     def test_a_site_that_answers_wrong_still_fails_when_unreachable_is_allowed(self):
-        refused = urllib.error.HTTPError("https://www.edrdg.org/", 404, "Not Found", None, None)
+        refused = http_error(self, 404, "Not Found")
         bad_certificate = urllib.error.URLError(ssl.SSLCertVerificationError("certificate has expired"))
         for error in (refused, bad_certificate):
             with self.subTest(error=error), mock.patch.object(notices, "source_bytes", side_effect=[error]), \
@@ -252,10 +259,8 @@ class JmdictNoticesTest(unittest.TestCase):
             notices.main(["notices.py", "fetch-jmdict", "--keep-if-unreachable"])
 
     def test_the_answers_download_retries_count_as_down_and_the_rest_as_answers(self):
-        def answer(code):
-            return urllib.error.HTTPError("https://www.edrdg.org/", code, "", None, None)
         self.assertEqual([True, True, True, True, False, False, False],
-                         [notices.unreachable(answer(code)) for code in (408, 429, 500, 599, 499, 404, 403)])
+                         [notices.unreachable(http_error(self, code)) for code in (408, 429, 500, 599, 499, 404, 403)])
 
     def test_an_unknown_option_or_one_for_another_command_stops_before_fetching(self):
         for argv in (["fetch-jmdict", "--keep-if-unreachble"], ["fetch", "--keep-if-unreachable"]):
