@@ -51,6 +51,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -70,6 +71,23 @@ class PlayerScreenTest {
         assertEquals("3:07", clockText(187_000))
         assertEquals("59:59", clockText(3_599_000))
         assertEquals("1:02:07", clockText(3_727_000))
+    }
+
+    @Test
+    fun waitingForTheAppNamesItAsPlayDoesAPatchedBuildByItsOwnName() {
+        player(following = { null })
+        fun waits(app: String?) = showing { it.copy(player = it.player?.copy(app = app)) }
+        fun waitsFor(name: String) = compose.onNodeWithText(context.getString(R.string.player_waiting, name)).assertIsDisplayed()
+        waits(MusicService.YOUTUBE_MUSIC.packageName)
+        waitsFor("YouTube Music")
+        // A build patched from it, by the name Android gives it, with a word when that's the service's own (Issue #1123).
+        val morphe = "app.morphe.android.apps.youtube.music"
+        shadowOf(context.packageManager).installPackage(installedApp(morphe, "YT Music Morphe"))
+        waits(morphe)
+        waitsFor("YT Music Morphe")
+        // An app that's no service's: nothing to wait for by name.
+        waits("com.example.player")
+        none(hasText(context.getString(R.string.player_waiting, ""), substring = true))
     }
 
     @Test
