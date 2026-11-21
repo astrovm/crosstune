@@ -4039,6 +4039,30 @@ class MainViewModelTest {
         assertEquals(paused, ears.asked)
     }
 
+    @Test
+    fun theNextSongTakenOverBackInSightIsWatchedOnceAndNotOutOfSight() {
+        val playback = FakePlayback()
+        val model = lyricsModel(playback)
+        model.pauseFollowingNext()
+        idle()
+        val watchers = playback.playing.subscriptionCount.value
+        // Out of sight, the app goes on to the next song; back in sight, it takes over the words.
+        val calm = MusicMetadata("Calm", "Band")
+        playback.playing.value = null
+        playback.onThePhone = Heard.Song(calm, null, app = "com.spotify")
+        idle()
+        assertEquals(song, model.uiState.lyricsFor)
+        model.resumeFollowingNext()
+        until("the next song's words") { model.uiState.lyricsFor == calm }
+        // Out of sight again, nothing's left watching for the next one, so a third song leaves the words.
+        model.pauseFollowingNext()
+        idle()
+        assertEquals("watchers out of sight", watchers, playback.playing.subscriptionCount.value)
+        playback.onThePhone = Heard.Song(MusicMetadata("Third", "Band"), null, app = "com.spotify")
+        pass(2_000)
+        assertEquals(calm, model.uiState.lyricsFor)
+    }
+
     /** The music app at [ms] into the song now. */
     private fun appAt(playback: FakePlayback, ms: Long) {
         playback.playing.value = following().copy(clock = PlaybackClock(ms, android.os.SystemClock.elapsedRealtime()))
