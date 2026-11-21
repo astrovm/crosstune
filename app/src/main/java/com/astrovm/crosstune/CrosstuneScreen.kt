@@ -107,7 +107,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -159,22 +158,11 @@ internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
 internal const val NOW_PLAYING_TAG = "now_playing"
 
-/**
- * The bar of what's playing, for a player that closes to hand the remote back to it: [owed] till the bar has taken it.
- * It's also what the remote goes back to on [main], the screen it's on, which would otherwise put it back on what it was on there.
- */
+/** The bar of what's playing on [main], the screen it's on, for a player that closes to hand the remote back to it. */
 internal class BarFocus(private val main: ScreenFocus? = null) {
-    val requester = FocusRequester()
-    var owed by mutableStateOf(false)
-        private set
-
+    /** Back on [main], the remote goes to the bar, rather than to what it was on as the player opened. */
     fun handBack() {
-        owed = true
         main?.goBackTo(Screen.PLAYER)
-    }
-
-    fun taken() {
-        owed = false
     }
 }
 
@@ -569,7 +557,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         settled = now
         if (!remote || now != backOf[from]) return@LaunchedEffect
         // Not by whether something has it, as Android hands it to the link field once what had it is gone. A dialog
-        // or sheet keeps it. A station's player hands it to the bar, which it goes back to here too, the bar's own way.
+        // or sheet keeps it. A station's player, as it closes, makes the bar what it goes back to.
         if (!overlaid) focuses.of(now).restore()
     }
     CompositionLocalProvider(LocalCovers provides actions.covers, LocalBarFocus provides barFocus) {
@@ -937,15 +925,7 @@ private fun PlayingBar(
 ) {
     val playing = following?.clock?.playing != false
     // The buttons sit inside the bar's own tap target, where a remote's search from the bar never looks.
-    val handed = LocalBarFocus.current
-    val bar = handed.requester
-    // Once the player that covered it is gone, the remote comes back to it.
-    LaunchedEffect(handed.owed) {
-        if (!handed.owed) return@LaunchedEffect
-        withFrameNanos {}
-        runCatching { bar.requestFocus() }
-        handed.taken()
-    }
+    val bar = remember { FocusRequester() }
     val playPause = remember { FocusRequester() }
     Surface(
         onClick = onOpen,
