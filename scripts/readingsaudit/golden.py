@@ -5,6 +5,19 @@
   python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA   # and drop the lock on WORD read as KANA, on purpose
   python3 scripts/readingsaudit/readingsaudit.py hole      # how many right readings the file guards on every wider stretch of their line
 
+A row locks a reading's kana and the parts they go over, and, where the app gives them on the row's stretch, the word
+sheet's romaji, as said and as typed (Readings.words), and the parts shown once the song's words put the reading right
+(Readings.corrected). No row locks a line's romaji, the word sheet as shown (Readings.asShown) or a song's script
+(Readings.scriptOf): only `lines` (wholelines.py) checks those (Issue #959). Each row holds the shortest stretch of its
+line that reads the same alone and with more of the line around it, and CONTEXT letters on each side; `golden --width N`
+tries another number. A rule that looks further along the line, or at its length, gets past the rows, so `lines` is
+the second lock. When more than a quarter of one song's lines would be a row whole, the lines that lock the most
+readings stay whole, the others' readings are locked on the longest stretch short of the line, and the command counts
+those as not fully guarded. UNION_SHARE (`golden --union-share`) would also limit how much of a song the rows spell end
+to end; it is off, for the owner to decide, as it costs locks. `golden` prints these counts, and ReadingsGoldenTest
+fails when the file has fewer rows than its header says. What each limit catches and misses was measured on the
+reviews of PR #931, and is kept in Issue #959.
+
 This file is part of the lock: check_golden.py asks a pull request that changes it to say so in its body.
 """
 import json

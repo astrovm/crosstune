@@ -12,7 +12,7 @@
 
 Everything goes in build/songcheck/; each step goes on where it stopped. `run --gradle "sh run.sh"`
 runs Gradle some other way, like in a container; `hear` and `timing` want faster-whisper and
-anyascii, from scripts/lyrics/requirements.txt. `hear --device cuda` wants openai-whisper instead.
+anyascii, from requirements.txt next to it. `hear --device cuda` wants openai-whisper instead.
 """
 import argparse
 import difflib

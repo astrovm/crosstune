@@ -8,10 +8,8 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
 class LeadTimingTest {
     private val prefs = ApplicationProvider.getApplicationContext<Application>().getSharedPreferences("video-test", Context.MODE_PRIVATE).apply { edit().clear().commit() }
     private val song = MusicMetadata("Demo", "Band", recordingId = "app:video")

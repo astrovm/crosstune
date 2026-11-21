@@ -39,7 +39,7 @@ internal data class Scene(val sessions: List<Played>, val sounding: Boolean) {
 /**
  * Every kind of session there is, alone and two at a time, in every place, state and order, through the real
  * [MediaSessionPlayback] in Robolectric: what plays first, and what following a song finds. Plain enough to be copied
- * into a checkout of `main` to write what `main` made of each (scripts/playcheck/golden.sh).
+ * into a checkout of `main` to write what `main` made of each (scripts/main-golden.sh play).
  */
 internal object PlayScenes {
     /** A song, as a music app names it, and the same title in every other way an app may send it. */
