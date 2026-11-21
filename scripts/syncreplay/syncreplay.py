@@ -3,7 +3,7 @@
 far from where each line is really sung the app showed it.
 
   python3 scripts/syncreplay/syncreplay.py set [--cached]        # find and prep the song set
-  python3 scripts/syncreplay/syncreplay.py all                   # replays, hearing what they ask for; per-song and overall table
+  python3 scripts/syncreplay/syncreplay.py all [--from MS]       # replays, hearing what they ask for; per-song and overall table
   python3 scripts/syncreplay/syncreplay.py prep ID LYRICS.json   # once per recording: see below
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
   python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # as the last `phone` check of it went
@@ -1037,10 +1037,10 @@ def prepped():
 
 
 def run_all(args):
-    """Every prepped song replayed from the start in one go, and how its lines came out against when they're sung."""
+    """Every prepped song replayed from the start, or from --from, in one go, and how its lines came out against when they're sung."""
     songs = prepped()
     asked = own() / "replay.json"
-    asked.write_text(json.dumps({"songs": [{"song": song, "from": 0, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]}))
+    asked.write_text(json.dumps({"songs": [{"song": song, "from": args.start, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]}))
     # Their names too, one a line, as SyncReplayTest reads them before it can read JSON.
     names = own() / "replay.songs"
     wanted = asked.read_text()
@@ -1057,7 +1057,7 @@ def run_all(args):
         if args.heard:
             break
         with ThreadPoolExecutor(SONGS_HEARD_AT_ONCE) as pool:
-            if not sum(pool.map(lambda song: hear_asked(song, [f"{song}.from0.shown.json"]), songs)):
+            if not sum(pool.map(lambda song: hear_asked(song, [f"{song}.from{args.start}.shown.json"]), songs)):
                 break
     titles = {song.get("id"): song["title"] for song in json.loads((OUT / "set.json").read_text())} if (OUT / "set.json").exists() else {}
     totals = dict(lines=0, close=0, on=0, dark=0, early=0)
@@ -1065,7 +1065,7 @@ def run_all(args):
     lyric_lines = 0
     print(f"{'song':12} {'lines':>5} {'0.3 s':>6} {'0.5 s':>6} {'dark':>5} {'early':>5} {'worst':>6}  title")
     for song in songs:
-        shown = json.loads((own() / f"{song}.from0.shown.json").read_text())
+        shown = json.loads((own() / f"{song}.from{args.start}.shown.json").read_text())
         sung = sung_lines(song, shown["lines"])
         first = lit_first(shown)
         lags = [first[k] - sung[k] for k in sung if k in first]
@@ -1442,6 +1442,8 @@ def main():
     p.set_defaults(go=find_set)
     p = steps.add_parser("all")
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
+    # From the start, the app's clock is sure; later, each is picked up partway, as a song mostly is.
+    p.add_argument("--from", dest="start", type=int, default=0, help="ms into each song it's picked up")
     p.add_argument("--work", type=int, default=4500, help="ms the phone takes to work out what it heard")
     p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
     p.add_argument("--heard", default="", help="replay another set of what was heard: .thin5 reads ID.heard20.thin5.json")
