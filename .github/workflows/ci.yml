@@ -173,7 +173,7 @@ jobs:
           .github/play/play.sh setup
           bundle exec ruby .github/play/test/play_test.rb
 
-  # The panel test uses a local fixture. The tests that follow real links run by hand (see CONTRIBUTING.md).
+  # The panel test uses a local fixture. The tests that follow real links run by hand (see extension/README.md).
   extension:
     needs: changes
     if: needs.changes.outputs.extension == 'true'

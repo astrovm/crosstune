@@ -110,14 +110,8 @@ Release APKs are signed with this certificate. Its SHA-256 fingerprint is also l
 
 ## Building
 
-Clone with `git clone --recurse-submodules`, and use the Android SDK and JDK 17 or newer.
-
-```bash
-./gradlew :app:assembleDebug   # "Crosstune Dev", installs next to the released app
-./gradlew :app:ci            # the checks CI runs
-```
-
-More in [CONTRIBUTING.md](CONTRIBUTING.md).
+Crosstune builds with the Android SDK and JDK 17 or newer, from a clone with its submodules.
+The commands are in [AGENTS.md](AGENTS.md#commands), and how to build, test and release it is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Crosstune is licensed under the [GNU General Public License v3.0 only](LICENSE) (GPL-3.0-only).
 

@@ -15,10 +15,13 @@ The phone's history is the content, so compare builds on one phone.
 
 With --build, each run installs the builds in turn, keeping the app's data, so they take turns on
 a phone that warms up and cools down, rather than one build getting the cooler phone. The SDK's
-aapt2 checks a private copy of each APK before any install. Each run installs that checked copy. An APK that
+aapt2 (Android SDK Build Tools) checks a private copy of each APK before any install, and each run installs that
+checked copy, only once it is confirmed as Crosstune Dev. An APK that
 isn't debuggable is then compiled from its baseline profile, as Play has it after an install.
 A debug build runs most of its code in Android's interpreter, so measure a release-like build
-(`-PperfBuild :app:assemblePerf`) for what people's phones do.
+(`-PperfBuild :app:assemblePerf`, the minified release as "Crosstune Dev", signed with the debug key) for what
+people's phones do. Messages about the phone cooling down go to stderr. When Android gives no cold-start time, the
+command stops there, with no value made up for that run.
 """
 
 from __future__ import annotations

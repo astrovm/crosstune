@@ -9,7 +9,10 @@
 #   play.sh production VERSION The release VERSION (2.26.0) on internal testing goes on to production, with its
 #                              English release notes and the listing, in one edit, so one review takes them all.
 #                              When PLAY_TRACKS names testing tracks, it comes from the first of them instead,
-#                              with only its notes, as the listing went there. Any other version is refused.
+#                              with only its notes, as the listing went there. Any other version is refused,
+#                              and so is one older than production's, or a source release with any other
+#                              version code beside it. The checks read every track it goes to, a form factor's
+#                              production (tv:production) too, in the same Play edit that promotes it.
 #                              Before anything is sent, its tag v2.26.0 has to be on origin, no version code on
 #                              Play may lack a tag (as for a release), and the bundle Play has as that version
 #                              code has to be the one the Release workflow made: its SHA-256 is in the GitHub
