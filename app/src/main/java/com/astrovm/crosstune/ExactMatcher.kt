@@ -100,9 +100,8 @@ internal class ExactMatcher(
      */
     suspend fun isMusicVideo(videoId: String): Boolean? = withTimeoutOrNull(TIMEOUT_MS) {
         answeredOr(null) {
-            val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION)
-            val body = JSONObject().put("context", JSONObject().put("client", client)).put("videoId", videoId)
-            musicVideoTypeIn(fetchJson(YOUTUBE_MUSIC_NEXT_URL, body))?.let { it in MUSIC_VIDEO_TYPES || uploadedAsMusic(videoId) }
+            val body = YouTubeMusicApi.body(language = null).put("videoId", videoId)
+            musicVideoTypeIn(fetchJson(YouTubeMusicApi.NEXT_URL, body))?.let { it in MUSIC_VIDEO_TYPES || uploadedAsMusic(videoId) }
         }
     }
 
@@ -628,13 +627,8 @@ internal class ExactMatcher(
         }
         // Only songs can be opened in the YouTube app, and it would just be a search for the rest.
         if (!isSong && watchUrl == YOUTUBE_WATCH_URL) return Answer(null)
-        val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION)
-            .put("hl", "en")
-        val body = JSONObject()
-            .put("context", JSONObject().put("client", client))
-            .put("query", searchQuery(metadata))
-            .put("params", params)
-        val items = fetchJson(YOUTUBE_MUSIC_SEARCH_URL, body).listItems()
+        val body = YouTubeMusicApi.body().put("query", searchQuery(metadata)).put("params", params)
+        val items = fetchJson(YouTubeMusicApi.SEARCH_URL, body).listItems()
         val recording = requestedRecording(metadata.title.takeIf { isSong }.orEmpty())
         fun found(item: JSONObject, loose: Boolean): String? {
             val columns = item.optJSONArray("flexColumns")?.objects()
@@ -668,7 +662,7 @@ internal class ExactMatcher(
         // Not there by its name, it may be by another, e.g. in Japanese, or only as a video, e.g. one
         // never released, or only put up by others, as The Blue Hearts' are.
         val (videos, names) = coroutineScope {
-            val videos = async { searchVideosOnYouTubeMusic(metadata, client) }
+            val videos = async { searchVideosOnYouTubeMusic(metadata) }
             val names = async { namesOf(metadata) }
             videos.await() to names.await()
         }
@@ -922,12 +916,9 @@ internal class ExactMatcher(
      * it's the song's words, its artist's and nothing else but such tags; a remix or a live take has
      * words of its own and stays out.
      */
-    private suspend fun searchVideosOnYouTubeMusic(metadata: MusicMetadata, client: JSONObject): List<JSONObject> {
-        val body = JSONObject()
-            .put("context", JSONObject().put("client", client))
-            .put("query", searchQuery(metadata))
-            .put("params", YOUTUBE_MUSIC_VIDEOS)
-        return fetchJson(YOUTUBE_MUSIC_SEARCH_URL, body).listItems()
+    private suspend fun searchVideosOnYouTubeMusic(metadata: MusicMetadata): List<JSONObject> {
+        val body = YouTubeMusicApi.body().put("query", searchQuery(metadata)).put("params", YOUTUBE_MUSIC_VIDEOS)
+        return fetchJson(YouTubeMusicApi.SEARCH_URL, body).listItems()
     }
 
     /** A YouTube Music search result: its video, its name, its second line split up, and its length when it says. */
@@ -1357,8 +1348,6 @@ internal class ExactMatcher(
         private val qobuzAlbumRegex = phoneRegex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)${'"'}""")
 
         const val BANDCAMP_SEARCH_URL = "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
-        const val YOUTUBE_MUSIC_SEARCH_URL = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
-        const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
 
         /** Songs (ATV), official music videos (OMV) and label uploads; UGC and podcasts aren't music. */
         val MUSIC_VIDEO_TYPES = setOf("ATV", "OMV", "OFFICIAL_SOURCE_MUSIC")
@@ -1368,7 +1357,6 @@ internal class ExactMatcher(
         const val YOUTUBE_WATCH_URL = "https://www.youtube.com/watch?v="
         /** How many search results the song is picked from. */
         const val PICK_FROM = 6
-        const val YOUTUBE_MUSIC_CLIENT_VERSION = "1.20240101.01.00"
         const val YOUTUBE_PLAYER_URL = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
         const val YOUTUBE_CLIENT_VERSION = "2.20240101.00.00"
 

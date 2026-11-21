@@ -205,7 +205,7 @@ internal class LinkResolver(
 
     /** The video [id] as YouTube Music names it, or null when it can't. */
     private suspend fun youTubeMusicVideo(id: String): MusicMetadata? =
-        youTubeMusic(YOUTUBE_MUSIC_NEXT_URL, "videoId", id)?.let { MetadataParsers.youtubeMusicVideo(it, id) }
+        youTubeMusic(YouTubeMusicApi.NEXT_URL, "videoId", id)?.let { MetadataParsers.youtubeMusicVideo(it, id) }
 
     /** The SoundCloud upload at [url] as SoundCloud's own API has it, or null when it can't say. */
     private suspend fun soundCloudTrack(url: String): MusicMetadata? = try {
@@ -216,13 +216,11 @@ internal class LinkResolver(
 
     /** An album's or artist's page on YouTube Music, as its header names it, with an album's songs. */
     private suspend fun youTubeMusicPage(link: MusicLink): MusicMetadata? =
-        youTubeMusic(YOUTUBE_MUSIC_BROWSE_URL, "browseId", link.id)?.let { MetadataParsers.youtubeMusicPage(it, link.type) }
+        youTubeMusic(YouTubeMusicApi.BROWSE_URL, "browseId", link.id)?.let { MetadataParsers.youtubeMusicPage(it, link.type) }
 
     /** What YouTube Music's [url] answers about [key] [id]; null when it doesn't. */
     private suspend fun youTubeMusic(url: String, key: String, id: String): JSONObject? = answeredOr(null) {
-        val body = JSONObject()
-            .put("context", JSONObject().put("client", JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION).put("hl", "en")))
-            .put(key, id)
+        val body = YouTubeMusicApi.body().put(key, id)
         val request = Request.Builder().url(url).post(body.toString().toRequestBody("application/json".toMediaType())).build()
         client.newCall(request).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) return@answer null
@@ -257,8 +255,5 @@ internal class LinkResolver(
     }
 
     private companion object {
-        const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
-        const val YOUTUBE_MUSIC_BROWSE_URL = "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false"
-        const val YOUTUBE_MUSIC_CLIENT_VERSION = "1.20240101.01.00"
     }
 }

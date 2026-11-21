@@ -1160,19 +1160,16 @@ internal class LyricsFinder(
         return withTimeoutOrNull(timeoutMs) {
             answeredOr(null) {
                 val videoId = RecordingKey.youTubeId(metadata) ?: find?.invoke(metadata) ?: return@withTimeoutOrNull null
-                val watching = post(YOUTUBE_MUSIC_NEXT_URL, innertube(WEB_CLIENT, WEB_CLIENT_VERSION).put("videoId", videoId))
+                val watching = post(YouTubeMusicApi.NEXT_URL, YouTubeMusicApi.body().put("videoId", videoId))
                 // A song without words has no page for them.
                 val page = lyricsPage.find(watching)?.groupValues?.get(1) ?: return@withTimeoutOrNull null
                 // Only YouTube Music's app is given them timed.
-                val words = youTubeMusicWords(JSONObject(post(YOUTUBE_MUSIC_BROWSE_URL, innertube(APP_CLIENT, APP_CLIENT_VERSION).put("browseId", page))))
+                val words = youTubeMusicWords(JSONObject(post(YouTubeMusicApi.BROWSE_URL, YouTubeMusicApi.body(YouTubeMusicApi.APP_CLIENT, YouTubeMusicApi.APP_CLIENT_VERSION).put("browseId", page))))
                 // Timed for that very release, which, found by its name, may be another edit of the song.
                 words?.copy(lengthMs = MetadataParsers.youtubeMusicVideo(JSONObject(watching), videoId)?.lengthMs)
             }
         }
     }
-
-    private fun innertube(name: String, version: String) =
-        JSONObject().put("context", JSONObject().put("client", JSONObject().put("clientName", name).put("clientVersion", version).put("hl", "en")))
 
     private suspend fun post(url: String, body: JSONObject): String {
         val request = Request.Builder().url(url).post(body.toString().toRequestBody("application/json".toMediaType())).build()
@@ -1921,12 +1918,6 @@ internal class LyricsFinder(
         const val NETEASE_SEARCH_URL = "https://music.163.com/api/search/get"
         const val NETEASE_LYRIC_URL = "https://music.163.com/api/song/lyric"
         const val NETEASE_REFERER = "https://music.163.com/"
-        const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
-        const val YOUTUBE_MUSIC_BROWSE_URL = "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false"
-        const val WEB_CLIENT = "WEB_REMIX"
-        const val WEB_CLIENT_VERSION = "1.20240101.01.00"
-        const val APP_CLIENT = "ANDROID_MUSIC"
-        const val APP_CLIENT_VERSION = "7.21.50"
 
         /**
          * Bumped when words kept from before should be looked up again, the words kept as shown too: 8 for Japanese songs NetEase writes
