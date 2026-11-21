@@ -68,10 +68,12 @@ internal sealed class Destination {
 
 /**
  * Persists the default destination, per-source rules, custom destinations and the sites web
- * frontends open on. Frontend apps and patched builds are offered only while [isInstalled].
+ * frontends open on. Frontend apps and patched builds are offered only while [isInstalled], and
+ * builds Crosstune has no name for while [found] by the links they open; see [LinkState.apps].
  */
 internal class DestinationStore(
     private val preferences: SharedPreferences,
+    private val found: () -> List<String> = { emptyList() },
     private val isInstalled: (String) -> Boolean = { true }
 ) {
 
@@ -89,13 +91,18 @@ internal class DestinationStore(
     fun allDestinations(): List<Destination> = services() + frontends() + customDestinations()
 
     /**
-     * Each service, then the builds patched from it that are installed, each an app of its own. Without its
-     * own app, a service opens in such a build, so that build alone stands for it, e.g. YouTube's TV app on a
-     * TV, rather than two rows that open the same app.
+     * Each service, then the builds patched from it that are installed, each an app of its own: those Crosstune
+     * knows by name, then those [found] by the links they open. Without its own app, a service opens in such a
+     * build, so that build alone stands for it, e.g. YouTube's TV app on a TV, rather than two rows that open the
+     * same app.
      */
-    private fun services(): List<Destination.Service> = MusicService.entries.flatMap { service ->
-        val builds = service.builds.filter(isInstalled).map { Destination.Service(service, it) }
-        if (builds.isNotEmpty() && !isInstalled(service.packageName)) builds else listOf(Destination.Service(service)) + builds
+    private fun services(): List<Destination.Service> {
+        val found = found()
+        return MusicService.entries.flatMap { service ->
+            val unnamed = found.filter { it !in service.packageNames && MusicService.ofPackage(it) == service }
+            val builds = (service.builds.filter(isInstalled) + unnamed).map { Destination.Service(service, it) }
+            if (builds.isNotEmpty() && !isInstalled(service.packageName)) builds else listOf(Destination.Service(service)) + builds
+        }
     }
 
     private fun frontends(): List<Destination.Alternative> {

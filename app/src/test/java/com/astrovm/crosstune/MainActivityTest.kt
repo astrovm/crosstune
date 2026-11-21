@@ -7263,6 +7263,25 @@ class MainActivityTest {
         waitUntil(TIMEOUT_MS) { prefs().getString("default_target", null) != null }
         assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
         assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC, morphe), ViewModelProvider(activity)[MainViewModel::class.java].uiState.defaultDestination)
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
+
+        // The only one a build Crosstune has no name for, found by the links it opens: songs open in it, not in YouTube
+        // Music's own app, which isn't there.
+        freshInstall()
+        shadowOf(app.packageManager).removePackage(morphe)
+        val piko = "app.piko.android.apps.youtube.music"
+        installLinkOpener(app, piko, "YT Music Piko", "music.youtube.com")
+        val inPiko = launch()
+        waitUntil(TIMEOUT_MS) { prefs().getString("default_target", null) != null }
+        assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
+        val state = ViewModelProvider(inPiko)[MainViewModel::class.java].uiState
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC, piko), state.defaultDestination)
+        assertTrue(Destination.Service(MusicService.YOUTUBE_MUSIC, piko) in state.destinations)
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
+
+        // Saved already, nothing's picked when Crosstune opens again, and the saved choice still opens in it once found.
+        val again = launch()
+        waitUntil(TIMEOUT_MS) { ViewModelProvider(again)[MainViewModel::class.java].uiState.defaultDestination.packageName == piko }
     }
 
     @Test

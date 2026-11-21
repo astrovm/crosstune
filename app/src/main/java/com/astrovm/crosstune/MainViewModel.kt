@@ -233,7 +233,7 @@ internal class MainViewModel(
     private val kept = object : LinkedHashMap<String, KeptWords>(KEPT_SONGS, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, KeptWords>) = size > KEPT_SONGS
     }
-    private val destinationStore = DestinationStore(preferences, interception::isInstalled)
+    private val destinationStore = DestinationStore(preferences, { linkState?.apps.orEmpty() }, interception::isInstalled)
 
     init {
         migrateExistingInstall()
@@ -691,7 +691,8 @@ internal class MainViewModel(
             linkState = state
             // Anything looked up or cleared meanwhile is newer than what was read.
             val unchanged = uiState.history === history
-            uiState = uiState.withLinkState().let { if (unchanged) it.copy(history = stored) else it }
+            // The choices again too, as a build found by the links it opens is one of them.
+            uiState = uiState.withDestinations().let { if (unchanged) it.copy(history = stored) else it }
             pickTheOnlyMusicApp()
         }
     }

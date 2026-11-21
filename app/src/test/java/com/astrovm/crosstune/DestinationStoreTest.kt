@@ -57,6 +57,31 @@ class DestinationStoreTest {
     }
 
     @Test
+    fun aBuildFoundByTheLinksItOpensIsAnAppOfItsOwnAsTheBuildsWithANameAre() {
+        val piko = "app.piko.android.apps.youtube.music"
+        val pikoYouTube = "app.piko.android.youtube"
+        val morphe = "app.morphe.android.apps.youtube.music"
+        val installed = mutableSetOf(piko, pikoYouTube, morphe)
+        // Morphe's is found by its links too, and is still one row; Spotify's own app is no build.
+        val found = DestinationStore(preferences, { listOf(piko, morphe, pikoYouTube, MusicService.SPOTIFY.packageName) }) { it in installed }
+        fun rows(service: MusicService) = found.allDestinations().filterIsInstance<Destination.Service>().filter { it.service == service }
+        val inPiko = Destination.Service(MusicService.YOUTUBE_MUSIC, piko)
+        val inMorphe = Destination.Service(MusicService.YOUTUBE_MUSIC, morphe)
+        assertEquals(listOf(inMorphe, inPiko), rows(MusicService.YOUTUBE_MUSIC))
+        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE, pikoYouTube)), rows(MusicService.YOUTUBE))
+        assertEquals(listOf(Destination.Service(MusicService.SPOTIFY)), rows(MusicService.SPOTIFY))
+
+        // The only build, it stands for its service, which is what the only music app is saved as.
+        installed -= morphe
+        found.setDefault(Destination.Service(MusicService.YOUTUBE_MUSIC))
+        assertEquals(inPiko, found.defaultDestination())
+        assertEquals(piko, found.defaultDestination().packageName)
+        // With YouTube Music's own app there too, each is a row.
+        installed += MusicService.YOUTUBE_MUSIC.packageName
+        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE_MUSIC), inPiko), rows(MusicService.YOUTUBE_MUSIC))
+    }
+
+    @Test
     fun aPatchedBuildIsAnAppOfItsOwnOnlyWhileInstalledAndFallsBackToItsServiceOnceGone() {
         val morphe = "app.morphe.android.apps.youtube.music"
         val installed = mutableSetOf(morphe, "app.revanced.android.youtube")

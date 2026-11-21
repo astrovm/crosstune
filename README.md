@@ -30,7 +30,7 @@ The first app you pick on a song is where songs play from then on. Change it in 
 ## Features
 
 - **Tap and go.** A link from one service opens in another, at the exact song, album or artist when the app supports it: Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Apple Music.
-- **Choose where.** Pick your music app once, or one per service. ReVanced, RVX, Morphe and Vanced count as apps of their own. Or add any site with a search URL like `https://example.com/search?q={query}`.
+- **Choose where.** Pick your music app once, or one per service. Patched builds of YouTube and YouTube Music, as ReVanced, RVX, Morphe and others, count as apps of their own. Or add any site with a search URL like `https://example.com/search?q={query}`.
 - **Not in the app you picked?** Crosstune says so, then opens the song where it's from or searches anyway. Choose in **Settings** → **When a song isn't found**.
 - **Playlists and albums.** See their songs and open any one, or play them all, in order or shuffled, in YouTube Music, YouTube, TIDAL or Spotify. Spotify pauses between songs while the phone is locked. On a phone with no screen lock, **Wake for Spotify's next song** in **Settings** → **Advanced** keeps it going.
 - **Recent.** Search your recent songs, and swipe one away to remove it.
