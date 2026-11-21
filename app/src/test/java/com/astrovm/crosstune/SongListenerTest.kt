@@ -893,7 +893,8 @@ class SongListenerTest {
             answers += room
             return ears.listenToPlaying(whileAloud = true)
         }
-        val tries = PlayingFirst.UNHEARD_TRIES
+        // Three, not one: on radio a single listen often falls on talk or an ad.
+        val tries = 3
         // A speaker: the microphone names the song, and goes on.
         val speaker = Aloud.Maybe(1)
         assertEquals(song.copy(inRoom = true), heardOn(speaker, song))
