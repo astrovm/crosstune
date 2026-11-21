@@ -6,6 +6,7 @@ import http.client
 import importlib.util
 import io
 import socketserver
+import ssl
 import tarfile
 import tempfile
 import threading
@@ -18,6 +19,13 @@ from unittest import mock
 SPEC = importlib.util.spec_from_file_location("notices", Path(__file__).resolve().parent / "notices.py")
 notices = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(notices)
+
+
+def http_error(test, code, message=""):
+    """An HTTP error from the EDRDG site, with an empty body that's closed after the test, as a real one would be."""
+    error = urllib.error.HTTPError("https://www.edrdg.org/", code, message, {}, io.BytesIO())
+    test.addCleanup(error.close)
+    return error
 
 
 class PageTextTest(unittest.TestCase):
@@ -224,6 +232,42 @@ class JmdictNoticesTest(unittest.TestCase):
             notices.main(["notices.py", "fetch-jmdict"])
         self.assertEqual(before, self.jmdict.read_bytes())
         self.assertEqual(b"old", (self.texts / self.licence).read_bytes())
+
+    def test_an_unreachable_site_keeps_the_snapshot_only_when_asked(self):
+        before = self.jmdict.read_bytes()
+        offline = urllib.error.URLError(TimeoutError("timed out"))
+        busy = http_error(self, 503, "Service Unavailable")
+        for error in (offline, TimeoutError("timed out"), ConnectionResetError("reset"), busy):
+            with self.subTest(error=error):
+                with mock.patch.object(notices, "source_bytes", side_effect=[NEW_LICENCE, error]), \
+                        contextlib.redirect_stdout(io.StringIO()) as said:
+                    self.assertEqual(0, notices.main(["notices.py", "fetch-jmdict", "--keep-if-unreachable"]))
+                self.assertIn("::warning::", said.getvalue())
+                self.assertEqual(before, self.jmdict.read_bytes())
+                self.assertEqual(b"old", (self.texts / self.licence).read_bytes())
+                with mock.patch.object(notices, "source_bytes", side_effect=[error]), self.assertRaises(OSError):
+                    notices.main(["notices.py", "fetch-jmdict"])
+
+    def test_a_site_that_answers_wrong_still_fails_when_unreachable_is_allowed(self):
+        refused = http_error(self, 404, "Not Found")
+        bad_certificate = urllib.error.URLError(ssl.SSLCertVerificationError("certificate has expired"))
+        for error in (refused, bad_certificate):
+            with self.subTest(error=error), mock.patch.object(notices, "source_bytes", side_effect=[error]), \
+                    self.assertRaises(urllib.error.URLError):
+                notices.main(["notices.py", "fetch-jmdict", "--keep-if-unreachable"])
+        with mock.patch.object(notices, "source_bytes", side_effect=[b""]), self.assertRaisesRegex(SystemExit, "Expected EDRDG"):
+            notices.main(["notices.py", "fetch-jmdict", "--keep-if-unreachable"])
+
+    def test_the_answers_download_retries_count_as_down_and_the_rest_as_answers(self):
+        self.assertEqual([True, True, True, True, False, False, False],
+                         [notices.unreachable(http_error(self, code)) for code in (408, 429, 500, 599, 499, 404, 403)])
+
+    def test_an_unknown_option_or_one_for_another_command_stops_before_fetching(self):
+        for argv in (["fetch-jmdict", "--keep-if-unreachble"], ["fetch", "--keep-if-unreachable"]):
+            with self.subTest(argv=argv), mock.patch.object(notices, "source_bytes") as fetch, \
+                    self.assertRaisesRegex(SystemExit, "takes no"):
+                notices.main(["notices.py", *argv])
+            fetch.assert_not_called()
 
     def test_empty_or_error_responses_leave_both_texts_and_digests_intact(self):
         for responses in ((b"", NEW_DOCUMENTATION), (NEW_LICENCE, b"<html>Service unavailable</html>")):

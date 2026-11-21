@@ -73,7 +73,7 @@ set_target_properties(Renderer PROPERTIES SOURCES "${PROJECTM_RENDERER_SOURCES}"
 target_compile_options(projectM_eval PRIVATE -fno-finite-math-only)
 
 add_library(milkdrop SHARED milkdrop.cpp)
-target_link_libraries(milkdrop PRIVATE libprojectM::projectM)
+target_link_libraries(milkdrop PRIVATE libprojectM::projectM android)
 
 # whisper.cpp, to hear a song's words on the phone and line its timed words up to them. A checkout
 # without it still builds, with the words lined up as before.
