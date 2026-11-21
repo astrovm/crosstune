@@ -2351,6 +2351,27 @@ class MainActivityTest {
     }
 
     @Test
+    fun aCopiedMusicVideoShowsItsLookupUnderWay() {
+        val found = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, """{"x":{"musicVideoType":"MUSIC_VIDEO_TYPE_OMV"}}""")
+            else {
+                found.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                FakeSpotify.html(request, """{"title":"The Weeknd - Blinding Lights (Official Video)","author_name":"TheWeekndVEVO"}""")
+            }
+        }
+        val activity = launch()
+        val viewModel = ViewModelProvider(activity)[MainViewModel::class.java]
+        copied("https://www.youtube.com/watch?v=4NRXx6U8ABQ")
+        comeBack()
+        // Once YouTube Music says it's music, the link is filled in and shown being looked up, not left still.
+        waitUntil { viewModel.uiState.linkText.isNotEmpty() }
+        assertTrue(viewModel.uiState.isLoading)
+        found.countDown()
+        waitForText("Blinding Lights")
+    }
+
+    @Test
     fun aSongTypedWhileACopiedVideoIsCheckedIsntReplaced() {
         val typed = CountDownLatch(1)
         fake.handler = { request ->

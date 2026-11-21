@@ -7234,8 +7234,12 @@ class ListeningTest {
     private companion object {
         const val TIMEOUT_MS = 5_000L
 
-        /** For a dictionary that never comes to fail the test. The wait ends the moment it's here, 1 to 3 s in on a busy machine, whatever this says. */
-        const val UNIDIC_MS = 60_000L
+        /**
+         * For a dictionary that never comes to fail the test. The wait ends the moment it's here, 1 to 3 s in on a busy
+         * machine, whatever this says. It stays under the 30 s mutation testing gives a test, so a change that never sets
+         * the dictionary fails a test there instead of only running out of time.
+         */
+        const val UNIDIC_MS = 20_000L
         const val DAY_MS = 24 * 60 * 60 * 1000L
         const val NO_MATCH = """{"matches":[]}"""
         const val MATCH = """{"matches":[{"id":"1"}],"track":{"title":"Iris","subtitle":"The Goo Goo Dolls",""" +
