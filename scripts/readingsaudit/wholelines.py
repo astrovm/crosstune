@@ -305,7 +305,7 @@ def body_digest(repo, base_commit, head):
     files readings are made of, so a pull request can't loosen the check it is held to: a reading file this branch
     adds counts once it is on main. A base with no checker yet is checked by this one."""
     with tempfile.TemporaryDirectory() as folder:
-        archive = subprocess.run(["git", "-C", str(repo), "archive", base_commit, "scripts/readingsaudit"], capture_output=True)
+        archive = subprocess.run(["git", "-C", str(repo), "archive", base_commit, "scripts/readingsaudit"], capture_output=True, check=False)
         if archive.returncode != 0:
             return check_golden.readings_digest(repo, base_commit, head)
         subprocess.run(["tar", "-x", "-C", folder], input=archive.stdout, check=True)
