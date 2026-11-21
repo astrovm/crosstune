@@ -87,6 +87,8 @@ class GradleBoxTest(unittest.TestCase):
         self.meminfo = self.dir / "meminfo"
         self.meminfo.write_text("MemTotal:       67108864 kB\nMemFree:         1000000 kB\n")
         self.stall(lately=0, total_s=0)
+        self.cgroup = self.dir / "cgroup"
+        self.cgroup.mkdir()
         self.checkouts = {}
 
     def checkout(self, name):
@@ -118,6 +120,8 @@ class GradleBoxTest(unittest.TestCase):
                 "GRADLE_BOX_PRESSURE": str(self.pressure),
                 # The machine's memory, as Linux tells it, on a Mac too: 64 GiB.
                 "GRADLE_BOX_MEMINFO": str(self.meminfo),
+                # The box's own memory, in a folder the test writes, not the machine running the tests.
+                "GRADLE_BOX_CGROUP": str(self.cgroup),
                 "FAKE_DIR": str(self.dir),
                 "FAKE_RUN": run,
                 **env,
@@ -213,6 +217,8 @@ for i, arg in enumerate(command):
         with open(arg) as real, open(copy, "w") as fake:
             fake.write(real.read().replace("./gradlew", os.environ["FAKE_GRADLEW"]))
         command[i] = copy
+    elif arg == "./gradlew":
+        command[i] = os.environ["FAKE_GRADLEW"]
 sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
 """)
         gradlew = self.dir / "gradlew"
@@ -296,7 +302,8 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         self.assertIn("--memory-swap", command)
         self.assertIn(self.image(), command)
         self.assertNotIn("/usr/bin/git", command)
-        self.assertTrue(command.endswith("./gradlew --no-daemon :app:assembleDebug --stacktrace"), command)
+        self.assertTrue(command.endswith(
+            f"bash {self.checkout('a')}/scripts/gradle-box/in-box.sh ./gradlew --no-daemon :app:assembleDebug --stacktrace"), command)
         mounted = [part.split(":")[0] for part in command.split() if part.startswith("/") and ":" in part]
         self.assertNotIn(str(self.home), mounted)
         self.assertEqual([line for line in self.asked() if " build " in f" {line} "], [])
@@ -852,6 +859,60 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
         old.unlink()
         waits.communicate(timeout=20)
         self.assertTrue((self.dir / "started.waits").exists())
+
+    def box_memory(self, waited_s, full=0, killed=0):
+        """The box's cgroup as Linux tells it: how long some task in it waited on memory, and its memory events."""
+        (self.cgroup / "memory.pressure").write_text(
+            f"some avg10=0.00 avg60=0.00 avg300=0.00 total={waited_s * 1_000_000}\n"
+            f"full avg10=0.00 avg60=0.00 avg300=0.00 total={waited_s * 500_000}\n")
+        (self.cgroup / "memory.events").write_text(
+            f"low 0\nhigh 0\nmax {full}\noom {killed}\noom_kill {killed}\noom_group_kill 0\n")
+
+    def in_box(self, build, *args):
+        """in-box.sh running a build that does `build` in the shell, with the box's cgroup in the test's folder."""
+        return self.start_script(BOX.with_name("in-box.sh"), "sh", "-c", build, "build", *args,
+                                 GRADLE_BOX_CGROUP=str(self.cgroup))
+
+    def test_in_the_box_a_build_that_waited_on_memory_says_how_long(self):
+        self.box_memory(waited_s=100)
+        script = self.dir / "squeezed.py"
+        script.write_text("import sys\nfrom pathlib import Path\n"
+                          "Path(sys.argv[1], 'memory.pressure').write_text('some avg10=40.00 avg60=0.00 avg300=0.00 total=112400000\\n')\n"
+                          "Path(sys.argv[1], 'memory.events').write_text('low 0\\nhigh 0\\nmax 3021\\noom 0\\noom_kill 0\\n')\n")
+        box = self.in_box(f'{shlex.quote(sys.executable)} {shlex.quote(str(script))} "$1"; exit 4', str(self.cgroup))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(4, box.returncode, output)
+        self.assertIn("this build waited on memory for 12 s, at the box's limit 3021 times", output)
+
+    def test_in_the_box_a_build_that_barely_waited_says_nothing(self):
+        self.box_memory(waited_s=100)
+        box = self.in_box("echo built")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(0, box.returncode, output)
+        self.assertEqual("built\n", output)
+
+    def test_in_the_box_processes_killed_for_memory_are_told(self):
+        self.box_memory(waited_s=0, full=40, killed=1)
+        box = self.in_box("exit 137")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(137, box.returncode, output)
+        self.assertIn("the box ran out of memory and 1 processes in it were killed", output)
+
+    def test_in_the_box_without_its_cgroup_the_build_runs_as_ever(self):
+        box = self.in_box("echo built; exit 3")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(3, box.returncode, output)
+        self.assertEqual("built\n", output)
+
+    def test_in_the_box_a_stop_reaches_the_build(self):
+        self.box_memory(waited_s=0)
+        box = self.in_box(f'trap \'touch "{self.dir}/stopped"; exit 143\' TERM; touch "{self.dir}/started"; '
+                          'while :; do sleep 0.02; done')
+        self.wait_for("started", box)
+        box.terminate()
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(143, box.returncode, output)
+        self.assertTrue((self.dir / "stopped").exists())
 
     def test_waits_to_start_while_the_machine_is_out_of_memory(self):
         self.stall(lately=40, total_s=0)

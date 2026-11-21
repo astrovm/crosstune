@@ -375,6 +375,8 @@ if ((${#also[@]})); then
 else
     run=(./gradlew --no-daemon "$@")
 fi
+# The box's own memory, which the machine's pressure above doesn't show, is told from inside it.
+run=(bash "$root/scripts/gradle-box/in-box.sh" "${run[@]}")
 nice -n 10 podman run "${box[@]}" "$image" "${run[@]}" &
 child=$!
 trap 'kill -TERM "$child" 2>/dev/null || true' INT TERM
