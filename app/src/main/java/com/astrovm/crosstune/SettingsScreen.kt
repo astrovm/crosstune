@@ -84,6 +84,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.NonSkippableComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -1447,6 +1448,8 @@ private fun PickedMark(picked: Boolean) {
  * A setting picked from a short list, with the one picked shown beside its name as [shown]. [mark], when there's
  * one, draws a choice's icon before its name: in the list, and beside the setting for the one picked.
  */
+// Each caller makes its list of choices anew, so Compose would never find this row's inputs the same and skip it.
+@NonSkippableComposable
 @Composable
 private fun <T> ChoiceRow(
     label: String,

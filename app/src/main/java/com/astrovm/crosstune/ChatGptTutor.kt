@@ -182,7 +182,7 @@ internal class ChatGptTutor(
                 asked.toString(),
                 effort = "low"
             )
-            (reply.array() ?: return null).toString()
+            reply.array()?.toString()
         } ?: return null
         return Readings.corrected(read, readingFixes(fixes))
     }
