@@ -251,6 +251,12 @@ class JmdictNoticesTest(unittest.TestCase):
         with mock.patch.object(notices, "source_bytes", side_effect=[b""]), self.assertRaisesRegex(SystemExit, "Expected EDRDG"):
             notices.main(["notices.py", "fetch-jmdict", "--keep-if-unreachable"])
 
+    def test_the_answers_download_retries_count_as_down_and_the_rest_as_answers(self):
+        def answer(code):
+            return urllib.error.HTTPError("https://www.edrdg.org/", code, "", None, None)
+        self.assertEqual([True, True, True, True, False, False, False],
+                         [notices.unreachable(answer(code)) for code in (408, 429, 500, 599, 499, 404, 403)])
+
     def test_an_unknown_option_or_one_for_another_command_stops_before_fetching(self):
         for argv in (["fetch-jmdict", "--keep-if-unreachble"], ["fetch", "--keep-if-unreachable"]):
             with self.subTest(argv=argv), mock.patch.object(notices, "source_bytes") as fetch, \
