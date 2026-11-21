@@ -641,7 +641,8 @@ class HeardWhenAskedTest(unittest.TestCase):
 
     def test_silence_is_what_the_app_takes_as_silence(self):
         source = (r.ROOT / 'app/src/main/java/com/astrovm/crosstune/CleanHearing.kt').read_text()
-        self.assertEqual([str(r.QUIET)], re.findall(r'const val QUIET = (\d+)', source))
+        self.assertEqual([str(r.QUIET)], re.findall(r'const val QUIET = (\d+)', source),
+                         'QUIET moved or changed in CleanHearing.kt; keep syncreplay.QUIET in step')
 
     def test_a_second_play_asks_too(self):
         with patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score', return_value=None), \

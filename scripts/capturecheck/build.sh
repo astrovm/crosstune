@@ -11,8 +11,10 @@ main() {
     [[ $(git rev-parse HEAD) == "$head" ]] || { echo "HEAD moved during the build" >&2; return 1; }
     mkdir -p build/capturecheck
     cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk build/capturecheck/
-    # A build with changes not yet committed says so beside the commit.
+    # Unlike clockcheck, which gates a release candidate, this is a debugging probe: it's often built with a fix
+    # still uncommitted, so a dirty tree is allowed and listed beside the commit instead of refused.
     { echo "$head"; git status --porcelain; } > build/capturecheck/head.txt
+    sha256sum build/capturecheck/*.apk > build/capturecheck/sha256.txt
     echo "Install both from build/capturecheck/ with the SDK adb, then run the am instrument line in CaptureCheck.kt."
 }
 main "$@"; exit

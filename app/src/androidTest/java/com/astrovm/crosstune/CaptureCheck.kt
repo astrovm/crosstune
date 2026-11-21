@@ -47,7 +47,7 @@ class CaptureCheck : Instrumentation() {
                 putString("during", during.getOrThrow())
                 putString("after", after)
             })
-        } catch (error: Exception) {
+        } catch (error: Throwable) {
             finish(1, Bundle().apply { putString("error", error.toString()) })
         }
     }
