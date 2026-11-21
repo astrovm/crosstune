@@ -1125,6 +1125,37 @@ class ExactMatcherTest {
         assertEquals("https://music.youtube.com/watch?v=piano000000", find("Fan • 1.4K views • 3:59", known))
     }
 
+    // As Apple names Lemon (Music Box), track 1501298975 in MatcherRealAnswersTest's Lemon: every store in Latin letters but
+    // Japan's, and YouTube Music only as Japan's does. With Japan's lookup failing, a fan's video is all there is to open. It
+    // isn't kept, as Japan's name finds the song: asked again once Japan answers, the song opens.
+    @Test
+    fun whatsFoundWhileAStoreThatNamesTheSongFailedIsntKept() {
+        val song = MusicMetadata("Lemon (Music Box)", "Orgel Sound J-Pop", lengthMs = 223_760)
+        val latin = appleSong("Lemon (Music Box)", "Orgel Sound J-Pop", 223_760, id = 1501298975)
+        val japanese = appleSong("Lemon ~ドラマ「アンナチュラル」主題歌~ (オルゴール)", "オルゴールサウンド J-POP", 223_760, id = 1501298975)
+        val elsewhere = listOf("JP", "KR", "TW", "HK", "CN").associateWith { if (it == "JP") japanese else latin }
+        val songs = listOf(youTubeMusicRow("Lemon ~ドラマ「アンナチュラル」主題歌~ (オルゴール)", "オルゴールサウンド J-POP • オルゴール作品集 米津玄師 • 3:44", videoId = "musicbox000"))
+        val videos = listOf(youTubeMusicRow("Orgel Sound J-Pop - Lemon (Music Box)", "Fan • 1K views • 3:44", videoId = "fan00000000"))
+        val file = kotlin.io.path.createTempDirectory("lookups").toFile().resolve("lookups.json")
+        var clock = 0L
+        val matcher = ExactMatcher(
+            fake.client(), "US", Dispatchers.Unconfined, LookupCache(file, Dispatchers.Unconfined), missingForMs = 60 * 60_000L, now = { clock }
+        )
+        namesAndTabs(songs = songs, videos = videos, apple = mapOf("US" to latin), elsewhere = elsewhere, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        // Asked again at once, as a card does, it's held, and nothing's asked.
+        fake.requestedUrls.clear()
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(emptyList<String>(), fake.requestedUrls)
+        namesAndTabs(songs = songs, videos = videos, apple = mapOf("US" to latin), elsewhere = elsewhere)
+        clock += ExactMatcher.UNSURE_FOR_MS
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=musicbox000"), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        // That one's kept.
+        clock += ExactMatcher.UNSURE_FOR_MS
+        namesAndTabs(songs = songs, videos = videos, apple = mapOf("US" to latin), elsewhere = elsewhere, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=musicbox000"), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
     @Test
     fun aSongOnlyPutUpByOthersIsFoundAsTheUploadThatPlaysIt() {
         val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS")

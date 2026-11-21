@@ -87,8 +87,8 @@ internal class ExactMatcher(
     /** When each thing looked for and not found was, by its [cacheKey]. */
     private val missing = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
-    /** When each thing looked for was missed while a store that could have proved it failed to answer, by its [cacheKey]. */
-    private val unsure = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    /** When each thing was looked for while a store that could have named it failed, and what that came to, by its [cacheKey]. */
+    private val unsure = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Match>>()
 
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
@@ -151,11 +151,14 @@ internal class ExactMatcher(
      * A search's answer: what it found, or else, on YouTube, the songs and videos it turned up for
      * ChatGPT to pick from, given its own while, as it takes a few seconds.
      */
-    private class Answer(val url: String?, val toPick: ToPick? = null, val final: Boolean = true)
+    private class Answer(val url: String?, val toPick: ToPick? = null, val final: Boolean = true, val lasting: Boolean = true)
 
     private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthsMs: List<Long>)
 
-    /** What [lookUp] came to, and whether it's no answer because a store that could have proved the song failed: [unsure]. */
+    /**
+     * What [lookUp] came to, and whether it's only for now, as a store that could have named the song failed: [unsure].
+     * Then a miss is no answer, and what's found or missed is held a while, not kept.
+     */
     private class Looked(val match: Match, val unsure: Boolean = false)
 
     /**
@@ -177,7 +180,7 @@ internal class ExactMatcher(
             }
             if (answer != null) {
                 val match = answer.url?.let(Match::Found) ?: answer.toPick?.let { picked(it) } ?: Match.Missing
-                return if (match == Match.Missing && !answer.final) Looked(Match.Failed, unsure = true) else Looked(match)
+                return if (match == Match.Missing && !answer.final) Looked(Match.Failed, unsure = true) else Looked(match, unsure = !answer.lasting)
             }
         }
         return Looked(Match.Failed)
@@ -214,22 +217,25 @@ internal class ExactMatcher(
 
     /**
      * What was found for [metadata] before, or [lookUp]'s answer, which is kept when it found
-     * something; when it found nothing, that's kept for [missingForMs]. One that's no answer as a store
-     * that could have proved it failed is kept as no answer for a while, at most as long, so asking
-     * again at once, as a card does, doesn't ask every service again for the store that's down.
+     * something; when it found nothing, that's kept for [missingForMs]. One reached while a store that
+     * could have named the song failed is held for a while, at most as long, and then asked again: what
+     * it found may be a fan's video where that store's name finds the song. Held, asking again at once,
+     * as a card does, doesn't ask every service again for the store that's down.
      */
     private suspend fun remembered(kind: String, target: String, metadata: MusicMetadata, lookUp: suspend () -> Looked): Match {
         val key = cacheKey(kind, target, metadata)
         cache?.get(key)?.let { return Match.Found(it) }
         missing[key]?.takeIf { now() - it < missingForMs }?.let { return Match.Missing }
-        unsure[key]?.takeIf { now() - it < minOf(missingForMs, UNSURE_FOR_MS) }?.let { return Match.Failed }
+        unsure[key]?.takeIf { now() - it.first < minOf(missingForMs, UNSURE_FOR_MS) }?.let { return it.second }
         val looked = lookUp()
-        when (val match = looked.match) {
-            is Match.Found -> cache?.put(key, match.url)
-            Match.Missing -> if (missingForMs > 0) missing[key] = now()
-            Match.Failed -> if (looked.unsure) unsure[key] = now()
+        val match = looked.match
+        when {
+            looked.unsure -> unsure[key] = now() to match
+            match is Match.Found -> cache?.put(key, match.url)
+            // Noted even where misses aren't kept, with missingForMs 0: it's then never read. The app always keeps them a while.
+            match == Match.Missing -> missing[key] = now()
         }
-        return looked.match
+        return match
     }
 
     /**
@@ -695,14 +701,14 @@ internal class ExactMatcher(
         val song = named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedEdition) ?: it }
             ?: videoNamesSong(metadata, abroad, videos.map(::row), names)
             ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
-        song?.let { return Answer(watchUrl + it.id) }
+        song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         // Someone else's video, e.g. a fan's lyrics video, only where every store answered: one that failed may have named the
         // artist's own row, as only the US store names 米津玄師 Kenshi Yonezu.
         videos.map(::row).firstOrNull {
             isTheSongsVideo(it, names) && (names.complete || isOwnVideo(it, names)) && keepsRequestedRecording(recording, it, video = true)
-        }?.let { return Answer(watchUrl + it.id) }
+        }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
-        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), final = names.complete)
+        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), final = names.complete, lasting = names.everyStore)
     }
 
     /** Keep a recording note separate when an unbracketed guest credit runs up to it. */
@@ -978,7 +984,12 @@ internal class ExactMatcher(
          * No store that could prove a row failed to answer: when one did, a name or a length that would have proved
          * the artist's own row may be missing. See [namesOf].
          */
-        val complete: Boolean
+        val complete: Boolean,
+        /**
+         * Every store that could name the song answered. When one didn't, what its name finds may be missing, even where
+         * the names are [complete]: Japan's alone may name Lemon (Music Box) as YouTube Music has it. See [remembered].
+         */
+        val everyStore: Boolean
     ) {
         /** Apple, or Deezer, knows recordings of the song that differ in length: a live take may be one. */
         val severalRecordings = lengthsMs.any { one -> lengthsMs.any { other -> one - other > SAME_SONG_LENGTH_MS } }
@@ -1036,7 +1047,7 @@ internal class ExactMatcher(
             liveAlbum(collection) || Takes.saysAnotherTake(collection) != null
         }
         val complete = !(found == null && searching.failed) && unanswered.none { it == "US" || it in homes } && !asked.failed
-        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum, complete)
+        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum, complete, complete && unanswered.isEmpty())
     }
 
     /**

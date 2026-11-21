@@ -27,6 +27,7 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import analyze
@@ -55,16 +56,23 @@ CREDIT_SEPARATOR = re.compile(r"\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturi
 CONJUNCTION = re.compile(r"\s+(?:and|y|und|et)\s+", re.IGNORECASE)
 
 
+def normalized(text):
+    """SongNames.normalize: NFD, its marks dropped, lowercase, letters and digits only. Not analyze.normalize, whose NFKD
+    makes a fullwidth ＹＯＡＳＯＢＩ YOASOBI, where the app keeps them apart."""
+    folded = "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.category(c).startswith("M"))
+    return "".join(c for c in folded.lower() if unicodedata.category(c)[0] in "LN")
+
+
 def credited(credit):
     """SongNames.artists: each artist in a credit, and the whole credit, without the article, normalized."""
     names = [part for name in CREDIT_SEPARATOR.split(credit) if name.strip() for part in CONJUNCTION.split(name.strip())]
-    return {analyze.normalize(LEADING_ARTICLE.sub("", name)) for name in [*names, credit]} - {""}
+    return {normalized(LEADING_ARTICLE.sub("", name)) for name in [*names, credit]} - {""}
 
 
 def own_channel(uploader, credits):
     """Whether a video's channel is the artist's own, as ExactMatcher.isOwnVideo tells: the whole channel name, without its
     article, is one of the artists in [credits], maybe with what YouTube adds to it."""
-    channel = analyze.normalize(LEADING_ARTICLE.sub("", uploader))
+    channel = normalized(LEADING_ARTICLE.sub("", uploader))
     names = {name for credit in credits for name in credited(credit)}
     return any(channel == a or (channel.startswith(a) and channel[len(a):] in CHANNEL_SUFFIXES) for a in names)
 

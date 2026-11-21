@@ -40,6 +40,12 @@ class RightIdsTest(unittest.TestCase):
         for channel, own in (("Band A & Band B", True), ("Band B - Topic", True), ("Band A & Someone", False), ("Someone x Band A", False)):
             self.assertEqual(own, replay.own_channel(channel, ["Band A & Band B"]), channel)
 
+    def test_a_channel_is_named_as_the_app_normalizes_names(self):
+        # SongNames.normalize drops accents but keeps fullwidth letters apart, as NFD does.
+        for channel, own in (("YOASOBI", True), ("Yoasobi - Topic", True), ("ＹＯＡＳＯＢＩ", False)):
+            self.assertEqual(own, replay.own_channel(channel, ["YOASOBI"]), channel)
+        self.assertTrue(replay.own_channel("Beyoncé", ["Beyonce"]))
+
 
 if __name__ == "__main__":
     unittest.main()
