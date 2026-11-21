@@ -915,6 +915,13 @@ class ExactMatcherTest {
         }
         assertEquals("https://music.youtube.com/watch?v=stay0000000", finds("4:18"))
         assertNull(finds("4:19"))
+        // Its length known nowhere, Deezer's 0 for a song it hasn't timed isn't one, so it's found at any length.
+        namesAndTabs(
+            songs = listOf(youTubeMusicRow("真夜中のドア", "松原みき • Pocket Park • 4:19", videoId = "stay0000000")),
+            apple = mapOf("AR" to appleSong("Stay With Me", "Miki Matsubara", 0)), elsewhere = mapOf("JP" to appleSong("真夜中のドア", "松原みき", 0)),
+            deezer = """[{"title":"Stay With Me","artist":{"name":"Miki Matsubara"},"duration":0}]"""
+        )
+        assertEquals("https://music.youtube.com/watch?v=stay0000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
     }
 
     @Test
@@ -1646,6 +1653,9 @@ class ExactMatcherTest {
         val romaji = MusicMetadata("ガラスのPALM TREE", "Band")
         assertEquals("https://music.youtube.com/watch?v=other000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(romaji)) {} }?.url)
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, romaji) })
+        // The same on YouTube, which opens the song YouTube Music's search finds.
+        assertEquals("https://www.youtube.com/watch?v=other000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE, listOf(romaji)) {} }?.url)
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE, romaji) })
     }
 
     @Test
