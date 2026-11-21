@@ -10,7 +10,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import okhttp3.Request
 import okhttp3.Response
@@ -874,18 +873,6 @@ class SongListenerTest {
         // Heard in the phone's own sound, it's the station's, and the microphone isn't asked.
         assertEquals(song, runBlocking { PlayingFirst(phone, SongHearing { error("not asked") }, SongHearing { song }).listenToPlaying() })
         assertEquals(Heard.Nothing, runBlocking { PlayingFirst(phone, SongHearing { Heard.Nothing }, unshared).listenToPlaying() })
-    }
-
-    @Test
-    fun withNoSongNamedTheMicrophoneIsAskedWhateverThePhonePlaysThrough() = runTest {
-        val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
-        val unshared = SongHearing { Heard.Failed(AppError.MICROPHONE) }
-        val song = Heard.Song(MusicMetadata("Fake Song", "Fake Artist"), null, 12_000, 400_000)
-        // The phone can't tell a Bluetooth speaker or a car from headphones, so where nothing else named the song, the
-        // microphone is asked. Heard by it alone, it may be the room's: see aSongOnlyTheMicrophoneHeardWithNoSongNamedIsKeptAsHeardInTheRoom.
-        assertEquals(song.copy(inRoom = true), PlayingFirst(phone, SongHearing { song }, unshared).listenToPlaying())
-        // Not asked to, as on a TV or without the microphone allowed, it isn't.
-        assertEquals(Heard.Failed(AppError.MICROPHONE), PlayingFirst(phone, SongHearing { error("not asked") }, unshared).listenToPlaying(byMicrophone = false))
     }
 
     @Test

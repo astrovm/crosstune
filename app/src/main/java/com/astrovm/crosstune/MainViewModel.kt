@@ -1285,9 +1285,9 @@ internal class MainViewModel(
 
     /**
      * Listens to what plays, again once the song heard should be over, as the next one has started by
-     * then. Shared sound first; the microphone when it was allowed before, never on a TV, through
-     * headphones too: no song named any other way, it may still hear one, from a speaker or a car the phone
-     * can't tell from headphones. Any failure is quiet: what plays stays named as the app has it.
+     * then. Shared sound first; then the microphone, if it was allowed before and this isn't a TV, whatever
+     * the phone plays through, as it can't tell a speaker or a car from headphones. Any failure is quiet:
+     * what plays stays named as the app has it.
      */
     private suspend fun nameByEar(source: PlaybackSource) {
         byEar = currentCoroutineContext()[Job]
