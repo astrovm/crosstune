@@ -61,8 +61,8 @@ class SingingTest {
     /** Put back after, so other tests hear as the app does. */
     private val realSinging = MainActivity.singingFactory
 
-    /** Six lines, three seconds apart, each sung [SHIFT_MS] later than they're timed. */
-    private val lines = listOf("Sing to me tonight", "Under the yellow moon", "Every river finds the sea", "Hold the morning light", "Dancing on the water", "Never let it go")
+    /** Six lines, three seconds apart, each sung [SHIFT_MS] later than they're timed; a test may give more. */
+    private var lines = listOf("Sing to me tonight", "Under the yellow moon", "Every river finds the sea", "Hold the morning light", "Dancing on the water", "Never let it go")
 
     /** When the music app's clock started, which is when the singing was heard from too, and where in the song. */
     private var startedAt = 0L
@@ -804,15 +804,20 @@ class SingingTest {
         assertTrue(model().uiState.reportOffer)
     }
 
-    /** Lines timed right, picked up 3 s in, the first while hearing the chorus, lines 3 to 5, 25 s before it's sung, where lines 1 and 2 are: then where it's sung. */
-    private fun chorusHeardFarFromWhereItsSung(): List<Int> {
+    /**
+     * Lines sung [keptMs] after they're timed, and kept so, picked up 3 s in, the first while hearing the
+     * chorus, lines 3 to 5, 25 s before it's sung, where lines 1 and 2 are: then where it's sung.
+     */
+    private fun chorusHeardFarFromWhereItsSung(keptMs: Long = 0): List<Int> {
         val times = listOf(2, 5, 8, 30, 33, 36)
         lyricsTimedFor(null, times)
         var whiles = 0
-        singing.answer = { sungAt(times, if (whiles == 0) listOf(100_000L, 100_000L, 100_000L, -25_000L, -25_000L, -25_000L) else times.map { 0L }).also { whiles++ } }
-        openLyrics()
+        singing.answer = { sungAt(times, if (whiles == 0) listOf(100_000L, 100_000L, 100_000L, keptMs - 25_000L, keptMs - 25_000L, keptMs - 25_000L) else times.map { keptMs }).also { whiles++ } }
+        if (keptMs == 0L) openLyrics() else keptOff(times, keptMs)
         plays(positionMs = 3_000)
-        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 5_000L }
+        // Kept later, the first line shown is later too, and it's heard from just before it.
+        if (keptMs > 0) passes(2_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 5_000L + keptMs }
         return times
     }
 
@@ -839,6 +844,72 @@ class SingingTest {
         assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
         assertFalse(model().uiState.lyricsSynced)
         assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun pickedUpPartwayLinesKeptOffMovedByOneWrongWhileGoBackToWhereTheyreKept() {
+        val times = chorusHeardFarFromWhereItsSung(keptMs = 3_000)
+        // Moved back in the app, the next while hears the first lines where they're kept, 3 s after they're timed.
+        passes(5_000)
+        plays(positionMs = 3_000)
+        passes(5_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 33_000L }
+        assertEquals(times.map { it * 1_000L + 3_000L }, model().uiState.lyricLines.map { it.timeMs })
+    }
+
+    @Test
+    fun pickedUpPartwayOneWhileHeardJustAsFarOffAsNearLinesAreLookedAtLeavesThem() {
+        // Heard ten seconds off, it's found near where they're timed, where words can match by chance too: one while doesn't move them.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { SungAlignment.MAX_SHIFT_MS }) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+    }
+
+    @Test
+    fun pickedUpPartwayTwoWhilesHeardFarOffASecondApartDontAgreeThatNear() {
+        // Eight seconds off, words drift no more than a second through the song, and these two are a second apart.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.answer = { sungAt(times, times.map { if (whiles == 0) 9_000L else 8_000L }).also { whiles++ } }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 }
+        passes(30_000)
+        waitUntil { singing.hears == 2 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertFalse(model().uiState.lyricsSynced)
+    }
+
+    @Test
+    fun pickedUpPartwayAWhilesFirstSecondsDontAgreeWithTheRestOfItButTheNextWhileDoes() {
+        // Moved 12 s by one while found far off, then heard 1.9 s further still, lines close enough
+        // together for its first seconds to tell where they are before the rest of it is in.
+        lines = lines + listOf("Bright stars above us", "Carry me home again", "Whisper softly forever")
+        val times = listOf(2, 5, 8, 30, 32, 34, 60, 62, 64)
+        lyricsTimedFor(null, times)
+        val offMs = { if (singing.hears == 1) 12_000L else 13_900L }
+        singing.answer = { sungAt(times, times.map { offMs() }) }
+        singing.early = { if (singing.hears == 1) null else sungAt(times, times.map { offMs() }, SingingListener.FIRST_SECONDS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[1].timeMs == 17_000L }
+        passes(40_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 43_900L }
+        composeRule.waitForIdle()
+        // Those first seconds are the same while as the rest of it, so they don't agree with it.
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+        // The next while hears them as far off: two whiles agree, and they're kept so.
+        passes(33_000)
+        waitUntil { singing.hears == 3 && model().uiState.lyricsSynced }
+        assertEquals(times.mapIndexed { line, at -> at * 1_000L + if (line < 3) 12_000L else 13_900L }, model().uiState.lyricLines.map { it.timeMs })
     }
 
     @Test
