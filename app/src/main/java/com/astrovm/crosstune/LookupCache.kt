@@ -10,7 +10,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
-import org.json.JSONException
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicReference
@@ -87,6 +86,15 @@ internal class LookupCache(
             }
         }
     }
+
+    /** [put], then [save] at once: for an answer that took asking for. */
+    suspend fun keep(key: String, value: String) {
+        put(key, value)
+        save()
+    }
+
+    /** What's kept for [key], or else what [ask] answers, kept when it says anything; null when it says nothing. */
+    suspend inline fun getOrAsk(key: String, ask: () -> String?): String? = get(key) ?: ask()?.also { if (it.isNotEmpty()) keep(key, it) }
 
     /** Discard a checked answer if another lookup has not replaced it. */
     suspend fun discard(key: String, value: String) = loaded().let { entries ->
@@ -165,18 +173,15 @@ internal class LookupCache(
     }
 
     private fun read(file: File, entries: LinkedHashMap<String, Entry>) {
-        try {
+        // Unreadable, it starts over.
+        answeredOr(Unit) {
             if (!file.isFile) return
             val list = JSONArray(file.readText())
             // Saved before days were counted, each was used on one, today.
             (0 until list.length()).mapNotNull(list::optJSONArray).forEach { entry ->
-                val pins = entry.optJSONArray(4)?.let { ids -> (0 until ids.length()).map(ids::optString).toSet() }.orEmpty()
+                val pins = entry.optJSONArray(4).strings().toSet()
                 entries[entry.optString(0)] = Entry(entry.optString(1), entry.optInt(2, 1), entry.optLong(3, today()), pins)
             }
-        } catch (_: IOException) {
-            // Unreadable, it starts over.
-        } catch (_: JSONException) {
-            // Unreadable, it starts over.
         }
     }
 

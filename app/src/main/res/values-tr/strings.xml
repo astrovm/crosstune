@@ -53,7 +53,6 @@
     <string name="got_it_button">Anladım</string>
     <string name="chatgpt_channel">ChatGPT ile giriş</string>
     <string name="chatgpt_signing_in_notification">ChatGPT ile giriş yapılıyor</string>
-    <string name="next_button">İleri</string>
     <string name="back_button">Geri</string>
     <string name="setup_step">Adım %1$d / %2$d</string>
     <string name="setup_sources_listening_note">%1$s uygulamasında dinliyorsun, bu yüzden bağlantıları zaten orada açılıyor.</string>
@@ -284,7 +283,6 @@
     <string name="song_search_title">Şarkılar</string>
     <string name="song_search_none">“%1$s” için şarkı bulunamadı.</string>
     <string name="floating_background">Arka plan</string>
-    <string name="floating_text_size">Yazı boyutu</string>
     <string name="floating_float">Diğer uygulamaların üzerinde göster</string>
     <string name="floating_permission_title">Sözler uygulamalarının üzerinde</string>
     <string name="floating_customize">Özelleştir</string>

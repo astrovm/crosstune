@@ -188,4 +188,26 @@ class LookupCacheTest {
         unwritable.save()
         assertEquals("found", unwritable.get("song"))
     }
+
+    @Test
+    fun anAnswerAskedForIsKeptOnDiskAtOnceAndNotAskedAgain() = runBlocking {
+        val cache = cache()
+        var asked = 0
+        assertEquals("found", cache.getOrAsk("song") { asked++; "found" })
+        assertEquals("found", cache.getOrAsk("song") { asked++; "other" })
+        assertEquals(1, asked)
+        // Written already, with no save of its own.
+        assertEquals("found", cache().get("song"))
+    }
+
+    @Test
+    fun anAnswerOfNothingIsAskedAgain() = runBlocking {
+        val cache = cache()
+        assertNull(cache.getOrAsk("song") { null })
+        assertEquals("", cache.getOrAsk("song") { "" })
+        assertNull(cache.peek("song"))
+        cache.keep("song", "")
+        // Kept on purpose, nothing to say is kept too.
+        assertEquals("", cache().get("song"))
+    }
 }

@@ -48,8 +48,7 @@ internal val DEFAULT_CARD_TYPES = listOf(READ_IT, HEAR_IT, TRANSLATE_IT)
 internal fun loadCardTypes(preferences: SharedPreferences): List<CardType> {
     val array = preferences.getString(CARD_TYPES_KEY, null)?.let { runCatching { JSONArray(it) }.getOrNull() }
         ?: return listOf(READ_IT.copy(options = CardOptions.load(preferences))) + DEFAULT_CARD_TYPES.drop(1)
-    val kept = (0 until array.length()).mapNotNull { index ->
-        val json = array.optJSONObject(index) ?: return@mapNotNull null
+    val kept = array.objects().mapNotNull { json ->
         val id = json.optString("id").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
         val preset = (DEFAULT_CARD_TYPES.firstOrNull { it.id == id } ?: READ_IT).options
         CardType(

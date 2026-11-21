@@ -2617,10 +2617,7 @@ internal class MainViewModel(
         )
         kept[key] = words
         keptOnDisk?.let { disk ->
-            viewModelScope.launch {
-                disk.put(key, words.json())
-                disk.save()
-            }
+            viewModelScope.launch { disk.keep(key, words.json()) }
         }
     }
 
