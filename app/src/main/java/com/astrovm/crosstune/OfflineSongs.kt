@@ -62,11 +62,6 @@ internal class OfflineSongs(
         save(loaded().map { if (it.id == id) it.copy(saved = it.saved + key, unread = if (unread) it.unread + key else it.unread - key) else it })
     }
 
-    /** The songs kept that are still to be liked in the app that plays them, each once. */
-    suspend fun toLike(): List<MusicMetadata> = lock.withLock {
-        loaded().flatMap { kept -> kept.songs.filter { keyOf(it) !in kept.liked } }.distinctBy(::keyOf)
-    }
-
     /**
      * Takes the first song still to be liked that [matches], and remembers it as liked, so it's liked
      * once, even when its app says it plays twice before the like lands, and never again once unliked

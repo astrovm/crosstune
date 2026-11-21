@@ -200,8 +200,8 @@ class CrosstuneWidgetTest {
 
     @Test
     fun theOneTapWidgetsDrawForTheLauncherAndAllRedraw() = runBlocking {
-        assertNotNull(RecognizeWidgetReceiver().glanceAppWidget.compose(app, size = ActionWidget.SMALL))
-        assertNotNull(LyricsWidgetReceiver().glanceAppWidget.compose(app, size = ActionWidget.SMALL))
+        assertNotNull(RecognizeWidgetReceiver().glanceAppWidget.compose(app, size = DpSize(40.dp, 40.dp)))
+        assertNotNull(LyricsWidgetReceiver().glanceAppWidget.compose(app, size = DpSize(40.dp, 40.dp)))
         // With none placed, there's nothing to redraw, and nothing goes wrong.
         CrosstuneWidget.updateAllWidgets(app)
     }

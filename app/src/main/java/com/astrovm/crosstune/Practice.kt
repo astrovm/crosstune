@@ -51,9 +51,6 @@ internal fun missedAgain(queue: List<SavedLine>): List<SavedLine> {
     return sameSong + missed + rest.drop(sameSong.size)
 }
 
-/** Whether [one] and [other] are lines of the same song. */
-internal fun sameSongOf(one: SavedLine, other: SavedLine?) = other != null && one.title == other.title && one.artist == other.artist
-
 /**
  * Whether [text] is no more than sounds, e.g. "la la la", "Oh, oh" or "ラララ", which aren't worth
  * learning: nothing but letters that sing a sound, or no letters at all.

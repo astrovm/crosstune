@@ -183,13 +183,6 @@ internal fun bracketTags(text: String, opens: String, closes: String): List<IntR
     return tags
 }
 
-/**
- * Whether a pattern that ignores case reads [char] as one of a to z on a phone, by [PHONE_LATIN_IGNORING_CASE]: those,
- * "ſ" as "s" and the Kelvin sign as "k". Not "ı" or "İ", which ICU folds to no "i".
- */
-internal fun isLatinLetterIgnoringCase(char: Char) = char.code in LATIN_IGNORING_CASE
-private val LATIN_IGNORING_CASE = CodeRuns(PHONE_LATIN_IGNORING_CASE)
-
 /** Whether each bracket in [text] closes, in order, with the bracket of its own kind: [closes] pairs with [opens]. */
 internal fun bracketsInOrder(text: String, opens: String, closes: String): Boolean {
     val open = StringBuilder()
