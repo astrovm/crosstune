@@ -2677,10 +2677,13 @@ internal class MainViewModel(
         // Words held while a voice is listened for aren't shown yet: they're timed once they are.
         if (found !is LyricsFinder.Lyrics.Found || (found.markedInstrumental && found !== this.found)) return
         val finder = lyricsFinder ?: return
+        // Put in time by hand, they stay as they are, next time too: that timing is kept for these lines (Issue #1164).
+        // No copy is looked for then, and they're kept for good, so none is next time either.
+        if (byHand(song)) return finder.keep(song, found)
         val better = finder.retimed(song, found) as? LyricsFinder.Lyrics.Found ?: return
         if (better.lines == found.lines) return
-        // Put in time by hand, before or meanwhile, they stay as they are, next time too: that timing is kept for these lines (Issue #1164).
-        if (shown(song) && keptByHand) return finder.keep(song, found)
+        // Or put in time by hand while the copies were looked for, which kept the better times meanwhile.
+        if (byHand(song)) return finder.keep(song, found)
         if (!mayRetime(song)) return
         foundLines = better.lines
         this.found = better
@@ -2690,6 +2693,9 @@ internal class MainViewModel(
 
     /** Whether [song]'s words may still be timed anew: they're still shown, and no one has put them in time, by hand or by the singing. */
     private fun mayRetime(song: MusicMetadata) = shown(song) && syncPoints.isEmpty() && handGap == null
+
+    /** Whether [song]'s words are the ones shown, and put in time by hand. */
+    private fun byHand(song: MusicMetadata) = shown(song) && keptByHand
 
     /** Whether [song]'s words are the ones shown. */
     private fun shown(song: MusicMetadata) = uiState.lyricsFor?.let { sameSong(it, song) } == true

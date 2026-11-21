@@ -43,6 +43,8 @@ import org.robolectric.annotation.Config
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** The timed words lined up to the singing heard in what the phone plays. */
 @RunWith(RobolectricTestRunner::class)
@@ -1022,10 +1024,11 @@ class SingingTest {
         assertEquals(byHand, prefs().getString("lyrics_sync", null))
     }
 
-    @Test
-    fun wordsPutInTimeByHandArentTimedAnewByCopiesFoundWhenLookedUpAgain() {
-        // The remix's own words, three seconds apart; under the song's bare name, two copies that agree with each other, ten seconds later.
-        var copies = false
+    /**
+     * The remix's own words, three seconds apart; under the song's bare name, two copies that agree with each other, ten
+     * seconds later, once [copies] says they answer, each answered once [held] lets it.
+     */
+    private fun remixWithCopies(copies: () -> Boolean, held: () -> Unit = {}) {
         fun answer(title: String, shiftMs: Int, seconds: Int?): String {
             val synced = lines.mapIndexed { index, line -> "[00:%05.2f] %s".format(Locale.ROOT, (index * 3_000 + shiftMs) / 1000.0, line) }.joinToString("\\n")
             return """{"trackName":"$title","artistName":"Band",${seconds?.let { "\"duration\":$it," }.orEmpty()}"syncedLyrics":"$synced"}"""
@@ -1036,13 +1039,24 @@ class SingingTest {
                 request,
                 when {
                     url.host == "lrclib.net" && url.queryParameter("track_name") == "Demo (2018 Remix)" -> "[${answer("Demo (2018 Remix)", 0, null)}]"
-                    url.host == "lrclib.net" -> if (copies) "[${answer("Demo", 10_000, 200)},${answer("Demo", 10_600, 201)}]" else "[]"
+                    url.host == "lrclib.net" && url.queryParameter("track_name") == "Demo" && copies() ->
+                        held().let { "[${answer("Demo", 10_000, 200)},${answer("Demo", 10_600, 201)}]" }
+                    url.host == "lrclib.net" -> "[]"
                     url.host == "music.163.com" -> """{"result":{"songs":[]}}"""
                     url.host.endsWith("youtube.com") -> """{"title":"Demo (2018 Remix)","author_name":"Band"}"""
                     else -> """{"results":[]}"""
                 }
             )
         }
+    }
+
+    /** The words kept by the lookups for good, as they are once they're timed anew or kept as they were. */
+    private fun keptForGood() = File(app.cacheDir, "lyrics.json").let { it.isFile && "Sing to me tonight" in it.readText() && "provisional" !in it.readText() }
+
+    @Test
+    fun wordsPutInTimeByHandArentTimedAnewByCopiesFoundWhenLookedUpAgain() {
+        var copies = false
+        remixWithCopies({ copies })
         val times = lines.indices.map { it * 3_000L }
         openLyrics()
         val song = checkNotNull(model().uiState.lyricsFor) { "Expected the words' song" }
@@ -1051,14 +1065,14 @@ class SingingTest {
         // Put in time by hand with Shazam's gap alone, which saves no points, only that they were (Issue #1164).
         LyricsSyncStore(prefs()).save(song, found, emptyList(), byHand = true)
         controller?.destroyAndSettle()
-        // Looked up again, as after the lookups change, and now the copies answer.
+        // Looked up again, as after the lookups change, and now the copies answer; they're not even asked.
         File(app.cacheDir, "lyrics.json").delete()
         copies = true
         val asked = fake.requestedUrls.size
         openLyrics()
-        waitUntil { fake.requestedUrls.drop(asked).any { it.contains("track_name=Demo&") || it.endsWith("track_name=Demo") } }
-        composeRule.waitForIdle()
+        waitUntil(::keptForGood)
         assertEquals(times, model().uiState.lyricLines.map { it.timeMs })
+        assertTrue(fake.requestedUrls.drop(asked).none { "track_name=Demo&" in it })
         // And kept so: opened again once the words as shown aren't kept any more, as after the readings change, they're the
         // same lines, so the mark that they were timed by hand still holds.
         controller?.destroyAndSettle()
@@ -1066,6 +1080,30 @@ class SingingTest {
         openLyrics()
         assertEquals(times, model().uiState.lyricLines.map { it.timeMs })
         assertTrue(LyricsSyncStore(prefs()).byHand(song, model().uiState.lyricLines))
+    }
+
+    @Test
+    fun wordsPutInTimeByHandWhileCopiesAreLookedForStayAsTheyAre() {
+        val asked = CountDownLatch(1)
+        val answer = CountDownLatch(1)
+        remixWithCopies({ true }) {
+            asked.countDown()
+            answer.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        }
+        val times = lines.indices.map { it * 3_000L }
+        openLyrics()
+        // The copies are asked for once the words show; they're put in time by hand before they answer.
+        waitUntil { asked.count == 0L }
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        answer.countDown()
+        waitUntil(::keptForGood)
+        composeRule.waitForIdle()
+        assertEquals(times.map { it + 500 }, model().uiState.lyricLines.map { it.timeMs })
+        // Kept so, with the lines that timing is kept for.
+        controller?.destroyAndSettle()
+        File(app.cacheDir, "kept_words.json").delete()
+        openLyrics()
+        assertEquals(times.map { it + 500 }, model().uiState.lyricLines.map { it.timeMs })
     }
 
     @Test
