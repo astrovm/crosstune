@@ -122,7 +122,9 @@ class PerfTest(unittest.TestCase):
         aapt2 = studio / "Android/Sdk/build-tools/36.0.0/aapt2"
         aapt2.parent.mkdir(parents=True)
         aapt2.touch()
-        with mock.patch.dict(os.environ, {"ANDROID_HOME": str(self.home_path / "empty"), "HOME": str(studio)}):
+        # Both names an SDK can go by, as CI's runner sets ANDROID_SDK_ROOT to an SDK that has its own aapt2.
+        named = {"ANDROID_HOME": str(self.home_path / "empty"), "ANDROID_SDK_ROOT": str(self.home_path / "empty")}
+        with mock.patch.dict(os.environ, {**named, "HOME": str(studio)}):
             self.assertEqual(str(aapt2), perf.aapt2_path())
 
     def test_jank_reads_the_frames_since_the_reset_and_sums_up_each_build(self):
