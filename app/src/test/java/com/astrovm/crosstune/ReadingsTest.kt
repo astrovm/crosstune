@@ -558,7 +558,7 @@ class ReadingsTest {
             "まってよぉぉ" to listOf("まって" to "まつ", "よぉぉ" to "よい"),
             "ズットォ" to listOf("ズットォ" to "ズットォ"),
             // A small vowel that spells a long vowel draws it out too: ありがとぅ is ありがとう, not ありが and とぅ.
-            "ありがとぅ" to listOf("ありがとぅ" to "ありがと"),
+            "ありがとぅ" to listOf("ありがとぅ" to "ありがとう"),
         )
         for ((line, expected) in lines) assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
         for (line in lines.keys + listOf("やだぁ", "すきすきすきぃ", "あいたいよぉ")) {
@@ -590,6 +590,72 @@ class ReadingsTest {
         fun typed(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().typed
         assertEquals("isshun no yume", typed("いっしゅんのゆめ"))
         assertEquals("zukkyun", typed("ずっきゅん"))
+    }
+
+    @Test
+    fun aSmallTsuDoublesOnlyAConsonantRightAfterIt() {
+        // Not across the line's own space, nor before a vowel: there it only cuts the word short. ッ as っ.
+        val lines = mapOf(
+            "あっ あっ" to "a a", "あっあっ" to "a a", "きゃっ きゃっ" to "kya kya", "きゃっきゃっ" to "kyakkya",
+            "がっ ちゃ" to "ga cha", "ヤッ た" to "ya ta", "ヤッた" to "yatta",
+        )
+        for ((line, typed) in lines) {
+            assertEquals(line, typed, Readings.of(listOf(line), Script.JAPANESE).single().typed)
+            assertEquals(line, typed, TestUniDic.reading { Readings.of(listOf(line), Script.JAPANESE).single().typed })
+        }
+        assertTrue(Readings.of(listOf("やっ ほー"), Script.JAPANESE).single().typed.startsWith("ya ho"))
+    }
+
+    @Test
+    fun hiraganaToAndDoWithASmallUAreASoundBeforeMoreKanaAndDrawOutAtTheEnd() {
+        // (said, typed): とぅ is tu before more kana, as トゥ is, and draws と out at the end of a word, ありがとう.
+        val lines = mapOf(
+            "とぅないと" to ("tu naito" to "tu naito"),
+            "どぅびどぅば" to ("du biduba" to "du biduba"),
+            "うとぅ" to ("utoo" to "utou"),
+            "ありがとぅ" to ("arigatoo" to "arigatou"),
+            "ありがとぅ！" to ("arigatoo！" to "arigatou！"),
+        )
+        fun read(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().let { it.romanized to it.typed }
+        for ((line, romaji) in lines) {
+            assertEquals(line, romaji, read(line))
+            assertEquals(line, romaji, TestUniDic.reading { read(line) })
+        }
+        for (line in listOf("とぅもろー", "とぅるるる")) {
+            assertEquals(line, "tu", read(line).second.take(2))
+            assertEquals(line, "tu", TestUniDic.reading { read(line).second.take(2) })
+        }
+    }
+
+    @Test
+    fun katakanaToAndDoWithASmallUAreSoundsWhereverTheyAre() {
+        for (words in listOf(Readings.words("アリガトゥ", Script.JAPANESE), TestUniDic.reading { Readings.words("アリガトゥ", Script.JAPANESE) })) {
+            assertEquals(listOf("アリガトゥ" to "アリガトゥ"), words.map { it.text to it.lookup })
+        }
+        assertEquals("arigatu", Readings.of(listOf("アリガトゥ"), Script.JAPANESE).single().typed)
+        assertEquals("ari ga tu", Readings.of(listOf("ありがトゥ"), Script.JAPANESE).single().typed)
+    }
+
+    @Test
+    fun aWordSmallVowelsDrawOutIsTheWordTheySpellFullSize() {
+        val lines = mapOf(
+            "せんせぃ" to listOf("せんせぃ" to "せんせい"),
+            "くださぃ" to listOf("くださぃ" to "くださる"),
+            "おはよぅ" to listOf("おはよぅ" to "おはよう"),
+            "だよぅ" to listOf("だ" to "だ", "よぅ" to "よう"),
+            "かわぃぃ" to listOf("かわぃぃ" to "かわいい"),
+            // Not a word read right before, ない, split for another: しらな and いい.
+            "しらないぃ" to listOf("しらないぃ" to "しる"),
+            // A small ぇ after the い row is a sound: ひぇー is a cry, not ひる.
+            "ひぇー" to listOf("ひぇ" to "ひぇ"),
+            "きぇー" to listOf("きぇ" to "きぇ"),
+        )
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }.filter { it.first != "ー" }
+        for ((line, expected) in lines) {
+            assertEquals(line, expected, words(line))
+            assertEquals(line, expected, TestUniDic.reading { words(line) })
+        }
+        assertEquals("pyen", Readings.of(listOf("ぴぇん"), Script.JAPANESE).single().typed)
     }
 
     @Test

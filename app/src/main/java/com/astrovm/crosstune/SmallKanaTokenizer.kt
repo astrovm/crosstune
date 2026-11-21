@@ -180,22 +180,33 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
 
         /**
          * A kana and a small vowel that make a sound of their own, as in words from other languages: ファ, ウィ, ティ,
-         * ディ. トゥ and ドゥ only in katakana: in hiragana, ありがとぅ, a small ぅ after と or ど draws it out.
+         * ディ, トゥ; and a kana of the い row with a small ぇ, as in ぴぇん and ひぇー. Hiragana とぅ and どぅ only
+         * before more kana, とぅないと: at the end of a word, ありがとぅ, the ぅ draws out the と, as hiragana lyrics
+         * spell a long vowel.
          */
         private val SOUNDS = (
             "ふぁふぃふぇふぉゔぁゔぃゔぇゔぉうぃうぇうぉつぁつぃつぇつぉくぁくぃくぇくぉぐぁすぃずぃてぃでぃしぇじぇちぇいぇ" +
-                "ファフィフェフォヴァヴィヴェヴォウィウェウォツァツィツェツォクァクィクェクォグァスィズィティディシェジェチェイェトゥドゥ"
+                "きぇぎぇにぇひぇびぇぴぇみぇりぇ" +
+                "ファフィフェフォヴァヴィヴェヴォウィウェウォツァツィツェツォクァクィクェクォグァスィズィティディシェジェチェイェトゥドゥ" +
+                "キェギェニェヒェビェピェミェリェ"
             ).chunked(2).toSet()
+        private val SOUNDS_BEFORE_KANA = setOf("とぅ", "どぅ")
 
         private fun smallAfterKana(text: String, at: Int) = at in 1 until text.length && text[at] in SMALL_KANA && Readings.isKana(text[at - 1])
 
         /**
-         * Whether [small] after [before] draws out the sound before it, as ぉ in ありがとぉ, ぅ in ありがとぅ, ぃ in
-         * せんせぃ and くださぃ, and ぇ in ねーぇ, rather than make a sound with it, as ぃ does in でぃ and ぇ in ふぇ.
+         * Whether the small kana at [at] in [text] draws out the sound before it, as ぉ in ありがとぉ, ぅ in ありがとぅ,
+         * ぃ in せんせぃ and くださぃ, and ぇ in ねーぇ, rather than make a sound with it, as ぃ does in でぃ, ぇ in ふぇ
+         * and ぅ in とぅないと.
          */
-        fun drawsOut(before: Char, small: Char) = small in SMALL_VOWELS && Readings.isKana(before) && "$before$small" !in SOUNDS
+        fun drawsOut(text: String, at: Int): Boolean {
+            if (!smallAfterKana(text, at) || text[at] !in SMALL_VOWELS) return false
+            val pair = text.substring(at - 1, at + 1)
+            return pair !in SOUNDS && (pair !in SOUNDS_BEFORE_KANA || !beforeKana(text, at + 1))
+        }
 
-        private fun drawsOut(text: String, at: Int) = smallAfterKana(text, at) && drawsOut(text[at - 1], text[at])
+        /** Whether a kana that is said, not a small vowel or ー that draws out what comes before, is at [at]. */
+        private fun beforeKana(text: String, at: Int) = text.getOrNull(at)?.let { Readings.isKana(it) && it !in SMALL_VOWELS && it != 'ー' } == true
 
         /** A small kana at [at] said with the kana before it, as ゃ in しゃ and ぃ in でぃ. */
         private fun saidWith(text: String, at: Int) = smallAfterKana(text, at) && !drawsOut(text, at)

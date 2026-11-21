@@ -302,10 +302,24 @@ class Command(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             repo = self.repo(folder)
             git(repo, "checkout", "-q", "main")
-            write(repo, check_golden.CHECKER, "def readings_digest(repo, base, head):\n    return 'main:' + base[:7] + ':' + head\n")
+            write(repo, check_golden.CHECKER, "def readings_digest(repo, base, head):\n    return 'main:' + base[:7] + ':' + head[:7]\n")
             commit(repo, "test: a checker on main")
-            base = git(repo, "rev-parse", "main")
-            self.assertEqual(f"main:{base[:7]}:pr", wholelines.body_digest(repo, base, "pr"))
+            git(repo, "checkout", "-q", "pr")
+            git(repo, "merge", "-q", "main")
+            self.record(repo)
+            code, text = self.run_lines(repo)
+            self.assertEqual(0, code, text)
+            main, head = git(repo, "rev-parse", "main"), git(repo, "rev-parse", "HEAD")
+            self.assertTrue(text.endswith(f"\ngolden: lines checked main:{main[:7]}:{head[:7]}\n"), text)
+
+    def test_a_base_with_scripts_but_no_checker_is_checked_by_this_one(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder)
+            git(repo, "checkout", "-q", "main")
+            write(repo, f"{check_golden.SCRIPTS}/golden.py", "")
+            commit(repo, "test: golden code on main, no checker")
+            main = git(repo, "rev-parse", "main")
+            self.assertEqual(check_golden.readings_digest(repo, main, "pr"), wholelines.body_digest(repo, main, "pr"))
 
     def test_a_change_fails_until_accepted_and_the_accept_goes_in_the_body(self):
         with tempfile.TemporaryDirectory() as folder:

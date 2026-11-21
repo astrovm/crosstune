@@ -304,10 +304,11 @@ def body_digest(repo, base_commit, head):
     """The digest CI's check takes for the body's line. CI runs [base_commit]'s check_golden.py, with its list of the
     files readings are made of, so a pull request can't loosen the check it is held to: a reading file this branch
     adds counts once it is on main. A base with no checker yet is checked by this one."""
+    # As CI asks: ls-tree prints nothing when the base has no checker, though it may have other scripts there.
+    if not git(repo, "ls-tree", "--name-only", base_commit, "--", check_golden.CHECKER):
+        return check_golden.readings_digest(repo, base_commit, head)
     with tempfile.TemporaryDirectory() as folder:
-        archive = subprocess.run(["git", "-C", str(repo), "archive", base_commit, "scripts/readingsaudit"], capture_output=True, check=False)
-        if archive.returncode != 0:
-            return check_golden.readings_digest(repo, base_commit, head)
+        archive = subprocess.run(["git", "-C", str(repo), "archive", base_commit, check_golden.SCRIPTS], capture_output=True, check=True)
         subprocess.run(["tar", "-x", "-C", folder], input=archive.stdout, check=True)
         scripts = Path(folder) / "scripts/readingsaudit"
         # -E and -s, as in CI: Python finds main's golden code next to main's checker only.
