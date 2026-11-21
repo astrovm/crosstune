@@ -326,6 +326,16 @@ class TvPlayTest {
         waitUntil { !shown(string(R.string.picker_title)) }
         composeRule.waitForIdle()
         words.assertIsFocused()
+        // Given back once, it's done: moved on, the next dialog put away doesn't take the remote back to the words.
+        val settings = composeRule.onNode(hasContentDescription(string(R.string.settings_button)))
+        settings.requestFocus()
+        composeRule.runOnIdle { model().playerOpenWith() }
+        waitUntil { shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        words.assertIsNotFocused()
     }
 
     @Test

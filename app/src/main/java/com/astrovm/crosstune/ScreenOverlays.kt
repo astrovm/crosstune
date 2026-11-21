@@ -85,7 +85,7 @@ internal class Overlays(private val putAway: (own: Boolean) -> Boolean) {
 
 /** Room for dialogs and sheets over a screen, kept where [putAway] can say where the remote goes as the last goes. */
 @Composable
-internal fun rememberOverlays(putAway: (own: Boolean) -> Boolean = { false }) = remember { Overlays(putAway) }
+internal fun rememberOverlays(putAway: (own: Boolean) -> Boolean) = remember { Overlays(putAway) }
 
 /** One dialog or sheet shown, and what to give the remote back to when it's put away. */
 internal class Overlay(val content: State<@Composable () -> Unit>, val opener: FocusRequester) {
@@ -94,7 +94,7 @@ internal class Overlay(val content: State<@Composable () -> Unit>, val opener: F
 
 /** Draws [content], the screen, with room over it in [overlays] for [ScreenAlert]s and [ScreenSheet]s, where [inside]. */
 @Composable
-internal fun WithOverlays(inside: Boolean, overlays: Overlays = rememberOverlays(), content: @Composable () -> Unit) {
+internal fun WithOverlays(inside: Boolean, overlays: Overlays, content: @Composable () -> Unit) {
     if (!inside) return content()
     CompositionLocalProvider(LocalOverlays provides overlays) {
         Box {

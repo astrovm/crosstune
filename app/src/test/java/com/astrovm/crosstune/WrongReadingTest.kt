@@ -67,7 +67,7 @@ class WrongReadingTest {
         state = first
         compose.setContent {
             inputModes = LocalInputModeManager.current
-            CrosstuneTheme { WithOverlays(inside = tv) { LyricsScreen(state, actions) } }
+            CrosstuneTheme { WithOverlays(inside = tv, rememberOverlays { false }) { LyricsScreen(state, actions) } }
         }
         compose.waitForIdle()
         // Held, as a line followed in time is, which a tap moves the music to.
