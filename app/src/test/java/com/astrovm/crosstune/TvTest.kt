@@ -915,7 +915,7 @@ class TvTest {
     }
 
     @Test
-    fun onATvASheetUpAsAStationsPlayerClosesGivesTheRemoteToTheBarOncePutAway() {
+    fun onATvTheSongPickerUpAsAStationsPlayerClosesGivesTheRemoteToTheFieldOncePutAway() {
         val radio = FakePlayback().apply {
             access = true
             unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
@@ -933,11 +933,12 @@ class TvTest {
         composeRule.waitUntil(5_000) { stationPlayerGone() && shown(string(R.string.song_search_title)) }
         composeRule.waitForIdle()
         settings().assertIsNotFocused()
-        // Put away, the remote goes on to the bar it was handed to.
+        // Put away, the picker's own rule has the last word over the bar the remote was handed to: the field, as after a link.
         checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitUntil(5_000) { !shown(string(R.string.song_search_title)) }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsFocused()
+        field().assertIsFocused()
+        settings().assertIsNotFocused()
     }
 
     @Test
