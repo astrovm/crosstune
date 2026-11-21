@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import shutil
 import statistics
@@ -36,31 +35,17 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import adbtool
+
 PACKAGE = "com.astrovm.crosstune.dev"
 ACTIVITY = f"{PACKAGE}/com.astrovm.crosstune.MainActivity"
 PROFILE_RECEIVER = f"{PACKAGE}/androidx.profileinstaller.ProfileInstallReceiver"
 USER_HZ = 100
 
 
-def sdk_roots() -> list[Path]:
-    configured = os.environ.get("ANDROID_HOME")
-    roots = [Path.home() / "Android/Sdk", Path.home() / "Library/Android/sdk"]
-    return [Path(configured), *roots] if configured else roots
-
-
-def adb_path() -> str:
-    for base in sdk_roots():
-        adb = base / "platform-tools/adb"
-        if adb.exists():
-            return str(adb)
-    found = shutil.which("adb")
-    if not found:
-        sys.exit("adb is missing: install the Android SDK's platform-tools")
-    return found
-
-
 def aapt2_path() -> str:
-    for sdk in sdk_roots():
+    for sdk in adbtool.sdk_places():
         tools = sorted(sdk.glob("build-tools/*/aapt2"), reverse=True)
         if tools:
             return str(tools[0])
@@ -97,7 +82,7 @@ def staged_builds(arguments: list[str], folder: Path) -> list[tuple[str, str]]:
 
 
 def adb(*args: str) -> str:
-    return subprocess.run([adb_path(), *args], check=True, capture_output=True, text=True).stdout
+    return adbtool.run(*args, check=True, capture_output=True, text=True).stdout
 
 
 def shell(*args: str) -> str:

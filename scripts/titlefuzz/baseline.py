@@ -102,17 +102,17 @@ def on_emulator(checkout, serial, count, long=None):
     regextable.run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "dex.jar"), "--classpath", str(work / "app-classes.zip"), "--classpath", str(ids), "--classpath", str(stdlib), str(work / "classes.zip"))
     app = checkout / "app/build/outputs/apk/debug/app-debug.apk"
     try:
-        regextable.run("adb", "-s", serial, "push", str(app), DEVICE_APP)
-        regextable.run("adb", "-s", serial, "push", str(work / "dex.jar"), DEVICE_JAR)
+        regextable.adb("-s", serial, "push", str(app), DEVICE_APP)
+        regextable.adb("-s", serial, "push", str(work / "dex.jar"), DEVICE_JAR)
         if long is not None:
-            subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {TIMER} {long}"], check=True)
+            subprocess.run([regextable.adbtool.path(), "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {TIMER} {long}"], check=True)
             return None
         started = time.monotonic()
-        subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {WRITER} {DEVICE_OUT} {count}"], check=True)
+        subprocess.run([regextable.adbtool.path(), "-s", serial, "shell", f"app_process -cp {DEVICE_APP}:{DEVICE_JAR} /system/bin {WRITER} {DEVICE_OUT} {count}"], check=True)
         print(f"{count} titles read on {serial} in {time.monotonic() - started:.0f} s")
-        regextable.run("adb", "-s", serial, "pull", DEVICE_OUT, str(work / "made.tsv.gz"))
+        regextable.adb("-s", serial, "pull", DEVICE_OUT, str(work / "made.tsv.gz"))
     finally:
-        regextable.run("adb", "-s", serial, "shell", f"rm -f {DEVICE_APP} {DEVICE_JAR} {DEVICE_OUT}")
+        regextable.adb("-s", serial, "shell", f"rm -f {DEVICE_APP} {DEVICE_JAR} {DEVICE_OUT}")
     return work / "made.tsv.gz"
 
 

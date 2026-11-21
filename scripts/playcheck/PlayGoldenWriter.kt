@@ -8,9 +8,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Writes what a checkout's [MediaSessionPlayback] makes of every [PlayScenes] scene, for golden.sh to keep as what `main`
+ * Writes what a checkout's [MediaSessionPlayback] makes of every [PlayScenes] scene, for scripts/main-golden.sh to keep as what `main`
  * did: what it offers as playing, and what each follow finds.
- * Not one of the app's tests: golden.sh copies it into a checkout of `main` and runs it there.
+ * Not one of the app's tests: main-golden.sh copies it into a checkout of `main` and runs it there.
  */
 @RunWith(RobolectricTestRunner::class)
 class PlayGoldenWriter {

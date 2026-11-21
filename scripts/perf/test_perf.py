@@ -88,7 +88,7 @@ class PerfTest(unittest.TestCase):
         (home / "unknown.apk").touch()
         self.home_path = home
         self.env = mock.patch.dict(os.environ, {
-            "ANDROID_HOME": str(home), "FAKE": str(home),
+            "ANDROID_HOME": str(home), "ADB": "", "FAKE": str(home),
             "STAT_APP_0": STAT.format(u=100, s=50), "STAT_MAIN_0": STAT.format(u=10, s=5),
             "STAT_APP_1": STAT.format(u=500, s=250), "STAT_MAIN_1": STAT.format(u=60, s=15),
         })
@@ -264,13 +264,6 @@ class PerfTest(unittest.TestCase):
             self.run_perf("start", "--runs", "1", "--settle", "1")
         self.assertEqual([10, 1], self.slept)
         self.assertIn("no battery temperature", log.getvalue())
-
-    def test_adb_comes_from_the_path_without_an_sdk(self):
-        with mock.patch.dict(os.environ, {"ANDROID_HOME": ""}), mock.patch.object(perf.Path, "home", return_value=Path("/nowhere")):
-            with mock.patch.object(perf.shutil, "which", return_value="/usr/bin/adb"):
-                self.assertEqual("/usr/bin/adb", perf.adb_path())
-            with mock.patch.object(perf.shutil, "which", return_value=None), self.assertRaises(SystemExit):
-                perf.adb_path()
 
 
 if __name__ == "__main__":

@@ -11,6 +11,10 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import adbtool
 
 p = argparse.ArgumentParser()
 p.add_argument("serial")
@@ -27,7 +31,8 @@ p.add_argument("--then-after", type=float, default=3)
 a = p.parse_args()
 if not a.serial.strip():
     sys.exit("no serial: refusing to run adb without an explicit device")
-_seen = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=20, check=False).stdout
+ADB = adbtool.path()
+_seen = subprocess.run([ADB, "devices"], capture_output=True, text=True, timeout=20, check=False).stdout
 if not re.search(r"^" + re.escape(a.serial) + r"\s+device\b", _seen, re.MULTILINE):
     sys.exit(f"{a.serial} isn't attached: refusing to run")
 APP = "com.astrovm.crosstune.dev"
@@ -46,7 +51,7 @@ PREFS = """<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
 
 
 def adb(*c, timeout=20):
-    return subprocess.run(["adb", "-s", a.serial, *c], capture_output=True, text=True, timeout=timeout, check=False).stdout
+    return subprocess.run([ADB, "-s", a.serial, *c], capture_output=True, text=True, timeout=timeout, check=False).stdout
 
 
 def session():
@@ -76,7 +81,7 @@ def playing_wait(want=None, secs=25):
 # Quiet, and nothing in front.
 prefs = PREFS.format(right_away="true" if a.path == "straight" else "false", in_crosstune="false" if a.path == "straight" else "true")
 adb("shell", "am", "force-stop", APP)
-subprocess.run(["adb", "-s", a.serial, "shell", "run-as", APP, "sh", "-c", "'mkdir -p shared_prefs; cat > shared_prefs/crosstune_preferences.xml'"], input=prefs, text=True, capture_output=True, timeout=20, check=True)
+subprocess.run([ADB, "-s", a.serial, "shell", "run-as", APP, "sh", "-c", "'mkdir -p shared_prefs; cat > shared_prefs/crosstune_preferences.xml'"], input=prefs, text=True, capture_output=True, timeout=20, check=True)
 adb("shell", "cmd", "audio", "set-volume", "3", "0")
 adb("shell", "am", "force-stop", APP)
 if a.pre == "other":
@@ -100,7 +105,7 @@ if a.path != "straight":
     adb("shell", "am", "start", "-a", "android.intent.action.SEND", "-t", "text/plain", "--es", "android.intent.extra.TEXT", a.link, "-n", f"{APP}/com.astrovm.crosstune.MainActivity")
     time.sleep(12)
 adb("logcat", "-c")
-log = subprocess.Popen(["adb", "-s", a.serial, "logcat", "-v", "epoch", "ActivityTaskManager:I", "LoadTask:E", "*:S"], stdout=subprocess.PIPE, text=True)
+log = subprocess.Popen([ADB, "-s", a.serial, "logcat", "-v", "epoch", "ActivityTaskManager:I", "LoadTask:E", "*:S"], stdout=subprocess.PIPE, text=True)
 lines = []
 threading.Thread(target=lambda: [lines.append(row.rstrip()) for row in log.stdout], daemon=True).start()
 t0 = float(adb("shell", "date", "+%s.%N").strip())

@@ -90,3 +90,7 @@ python3 scripts/emulator/qobuz_compare.py SERIAL main.apk fix.apk 'https://www.d
 ```
 
 `--then LINK --then-want TITLE` asks for a newer song 3 seconds in, and a try counts only if the newer song plays and the older one doesn't come back.
+
+## Opening a second song
+
+`second_song.py` opens two songs one after the other in each installed music app on the Samsung, from a card search and from a shared music link, and keeps what each app's task and screen showed. [`second_song.md`](second_song.md) has the songs, the measurements from Issue #678 and the command.

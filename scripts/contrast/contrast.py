@@ -27,13 +27,15 @@ for lines to come at the usual brightness, per preset, brightest first.
 import argparse
 import html
 import importlib.util
-import os
 import re
 import shlex
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import adbtool
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 APP = "com.astrovm.crosstune.dev"
@@ -51,8 +53,7 @@ NOW = (0.85, 0.725, 56 / 255)
 
 
 def adb(*command, stdin=None):
-    tool = os.environ.get("ADB", str(Path.home() / "Android" / "Sdk" / "platform-tools" / "adb"))
-    return subprocess.run([tool, *command], input=stdin, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False).stdout
+    return adbtool.run(*command, input=stdin, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False).stdout
 
 
 def shell(command):

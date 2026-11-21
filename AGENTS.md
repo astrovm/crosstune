@@ -20,8 +20,8 @@ python3 scripts/syncreplay/syncreplay.py untimed [--again MS] -v   # words with 
                                                                 # and against untimed-main.json: lines main had right, wrong or dark now
 python3 scripts/syncreplay/syncreplay.py synthetic   # made-up lines heard a word at a time, each writing at each pace; SyntheticSingingTest holds them to a floor
 python3 scripts/matchcheck/replay.py run OUT LABEL   # the YouTube Music matcher replayed on real songs collect.py kept, without the network; `prepare` first, `table OUT LABEL --against main` compares
-scripts/namescheck/golden.sh [SHA]          # what main's SongNames took for each pair NamePairs.kt makes, for NamesGoldenTest; run again after changing NamePairs.kt
-scripts/playcheck/golden.sh [SHA]           # what main's MediaSessionPlayback played first and followed in each scene PlayScenes.kt makes, for PlayGoldenTest; run again after changing PlayScenes.kt
+scripts/main-golden.sh names [SHA]          # what main's SongNames took for each pair NamePairs.kt makes, for NamesGoldenTest; run again after changing NamePairs.kt
+scripts/main-golden.sh play [SHA]           # what main's MediaSessionPlayback played first and followed in each scene PlayScenes.kt makes, for PlayGoldenTest; run again after changing PlayScenes.kt
 python3 scripts/notices.py check          # each licence text in Settings → About → Licenses against its source, fetched again
 python3 scripts/kotlinc/kotlinc.py fetch   # the Kotlin compiler's jars, for the readings guard and syncreplay, each checked against kotlinc.lock; `lock` after a Kotlin bump
 node --test report/*.test.mjs             # the report Worker's tests

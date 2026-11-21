@@ -2,7 +2,7 @@
 
 This project test runner supplies fake responses for one invented song, Paper Lantern Sky by The Fixture Owls. Ultimate Guitar fails until recovery. The other chord sites answer with no sheets. The main activity uses only intercepted OkHttp requests. Disconnect Wi-Fi and mobile data before the run. The runner rejects an active device network, so independent widget clients cannot reach external servers. The runner does not launch an activity or drive the UI.
 
-Run `scripts/chordcheck/build.sh` to build the dev APK and test APK separately. It records their hashes and commit in `build/chordcheck/`.
+Commit the candidate, then run `scripts/device-check-build.sh OfflineChordCheck chordcheck` to build the dev APK and test APK separately. It records their hashes and commit in `build/chordcheck/`.
 
 Lock the test device first. Back up the dev app's complete private data and device settings. Keep the backup private and out of git. Redact tokens and token hashes from manifests and output. The runner replaces the dev app's preferences, Recent, caches and pinned offline data with an isolated fixture. It refuses to run against the production app. Normal app use also changes caches and offline data. Restore all app data after the test.
 

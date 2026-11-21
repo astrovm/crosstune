@@ -2,7 +2,7 @@
 
 This API 31+ test uses a real Android media session with invented metadata. It creates no audio and makes no network request. It tests the dev app only. It does not prove that TIDAL, Spotify or YouTube Music played a line.
 
-1. Commit the candidate, then run `scripts/clockcheck/build.sh`. The script builds the app and runner in separate container jobs. It freezes both APKs, their source commit and hashes in `build/clockcheck/`.
+1. Commit the candidate, then run `scripts/device-check-build.sh PracticeClockCheck clockcheck`. The script builds the app and runner in separate container jobs. It freezes both APKs, their source commit and hashes in `build/clockcheck/`.
 2. Take the project's emulator lock. Back up its stopped AVD before booting it. Start it with the project emulator script, then open it in the Device panel.
 3. Install both frozen APKs with the SDK adb. Pull each installed `base.apk` and compare its hash with `sha256.txt`.
 4. Run the project runner with the SDK adb:
