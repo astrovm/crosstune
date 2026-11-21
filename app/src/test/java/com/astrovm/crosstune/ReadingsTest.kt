@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import com.atilika.kuromoji.ipadic.Tokenizer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -525,21 +526,270 @@ class ReadingsTest {
     }
 
     @Test
-    fun smallKanaRecoveryNeedsBothNounsAndTheirReadings() {
-        val text = "かいしゃのけいひ"
+    fun noWordOfALineInKanaStartsOnASmallKana() {
+        // IPADIC alone splits each of these before a small kana: じ and ゅぎょう, し and ゅくだい, に and っ and き.
+        val lines = mapOf(
+            "あのじゅぎょう" to listOf("あの" to "あの", "じゅぎょう" to "授業"),
+            "しゅくだいをともだち" to listOf("しゅくだい" to "宿題", "を" to "を", "ともだち" to "ともだち"),
+            "きょうしつのせんせい" to listOf("きょうしつ" to "教室", "の" to "の", "せんせい" to "せんせい"),
+            "いしゃのけいひ" to listOf("いしゃ" to "いしゃ", "の" to "の", "けいひ" to "経費"),
+            "にっきをかく" to listOf("にっき" to "にっき", "を" to "を", "かく" to "かく"),
+        )
+        for ((line, expected) in lines) assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
+        // A word JMdict has in kanji is read so, as IPADIC reads the kanji.
+        assertEquals(listOf(Reader.JMDICT), Readings.words("あのじゅぎょう", Script.JAPANESE).last().by)
+        for (line in lines.keys + listOf("これじゃひとりぼっち", "うっせぇうっせぇうっせぇわ", "クソだりぃな", "きょねんのゆめ", "まばたきみたいないっしゅん")) {
+            for (words in listOf(Readings.words(line, Script.JAPANESE), TestUniDic.reading { Readings.words(line, Script.JAPANESE) })) {
+                assertTrue("$line: $words", words.none { it.text.first() in "ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ" })
+            }
+        }
+    }
+
+    @Test
+    fun aSmallVowelDrawsOutTheWordBeforeIt() {
+        // Each word as IPADIC splits it, with the small vowels after it that draw it out: looked up as it is.
+        val lines = mapOf(
+            "ありがとぉ" to listOf("ありがとぉ" to "ありがと"),
+            "おねがいぃ" to listOf("おねがいぃ" to "おねがい"),
+            "だめぇ" to listOf("だめぇ" to "だめ"),
+            "ほんとぉ" to listOf("ほんとぉ" to "ほんと"),
+            "しらないぃ" to listOf("しらないぃ" to "しる"),
+            "きみがすきぃ" to listOf("きみ" to "きみ", "が" to "が", "すきぃ" to "すく"),
+            "まってよぉぉ" to listOf("まって" to "まつ", "よぉぉ" to "よい"),
+            "ズットォ" to listOf("ズットォ" to "ズットォ"),
+            // A small vowel that spells a long vowel draws it out too: ありがとぅ is ありがとう, not ありが and とぅ.
+            "ありがとぅ" to listOf("ありがとぅ" to "ありがとう"),
+        )
+        for ((line, expected) in lines) assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
+        for (line in lines.keys + listOf("やだぁ", "すきすきすきぃ", "あいたいよぉ")) {
+            for (words in listOf(Readings.words(line, Script.JAPANESE), TestUniDic.reading { Readings.words(line, Script.JAPANESE) })) {
+                assertTrue("$line: $words", words.none { it.text.first() in "ぁぃぅぇぉァィゥェォ" })
+                assertTrue("$line: $words", words.none { it.by == listOf(Reader.JMDICT) })
+            }
+        }
+        assertEquals("arigatoo", Readings.of(listOf("ありがとぉ"), Script.JAPANESE).single().typed)
+        assertEquals("arigatou", Readings.of(listOf("ありがとぅ"), Script.JAPANESE).single().typed)
+        // No word JMdict has in kanji is offered before a small vowel it may go on in: ちょうだぃ is no 長打.
+        assertTrue(Readings.words("ちょうだぃ", Script.JAPANESE).none { it.lookup == "長打" })
+        // おう and えい spelled small, and a vowel after ー, which draws out the kana before it too, stay with their word.
+        val longVowels = mapOf("せんせぃ" to listOf("せんせぃ"), "くださぃ" to listOf("くださぃ"), "ねーぇ" to listOf("ねーぇ"), "すごーぃ" to listOf("すごーぃ"))
+        for ((line, expected) in longVowels) {
+            assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text })
+            assertEquals(line, expected, TestUniDic.reading { Readings.words(line, Script.JAPANESE).map { it.text } })
+        }
+        // A small vowel that makes a sound with the kana before, ぃ in でぃ and ぇ in ふぇ, is said with it, not drawn out.
+        for (line in listOf("めでぃあ", "かふぇてらす")) {
+            val words = Readings.words(line, Script.JAPANESE).map { it.text }
+            assertTrue("$line: $words", words.any { "でぃ" in it || "ふぇ" in it })
+        }
+        assertEquals("（risei adiosu）", Readings.of(listOf("（理性アディオス）"), Script.JAPANESE).single().typed)
+    }
+
+    @Test
+    fun aWordThatEndsOnASmallTsuRunsIntoTheNextInRomaji() {
+        fun typed(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().typed
+        assertEquals("isshun no yume", typed("いっしゅんのゆめ"))
+        assertEquals("zukkyun", typed("ずっきゅん"))
+    }
+
+    @Test
+    fun aSmallTsuDoublesOnlyAConsonantRightAfterIt() {
+        // Not across the line's own space, nor before a vowel: there it only cuts the word short. ッ as っ.
+        val lines = mapOf(
+            "あっ あっ" to "a a", "あっあっ" to "a a", "きゃっ きゃっ" to "kya kya", "きゃっきゃっ" to "kyakkya",
+            "がっ ちゃ" to "ga cha", "ヤッ た" to "ya ta", "ヤッた" to "yatta",
+        )
+        for ((line, typed) in lines) {
+            assertEquals(line, typed, Readings.of(listOf(line), Script.JAPANESE).single().typed)
+            assertEquals(line, typed, TestUniDic.reading { Readings.of(listOf(line), Script.JAPANESE).single().typed })
+        }
+        assertTrue(Readings.of(listOf("やっ ほー"), Script.JAPANESE).single().typed.startsWith("ya ho"))
+    }
+
+    @Test
+    fun hiraganaToAndDoWithASmallUAreASoundBeforeMoreKanaAndDrawOutAtTheEnd() {
+        // (said, typed): とぅ is tu before more kana, as トゥ is, and draws と out at the end of a word, ありがとう.
+        val lines = mapOf(
+            "とぅないと" to ("tu naito" to "tu naito"),
+            "どぅびどぅば" to ("du biduba" to "du biduba"),
+            "うとぅ" to ("utoo" to "utou"),
+            "ありがとぅ" to ("arigatoo" to "arigatou"),
+            "ありがとぅ！" to ("arigatoo！" to "arigatou！"),
+        )
+        fun read(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().let { it.romanized to it.typed }
+        for ((line, romaji) in lines) {
+            assertEquals(line, romaji, read(line))
+            assertEquals(line, romaji, TestUniDic.reading { read(line) })
+        }
+        for (line in listOf("とぅもろー", "とぅるるる")) {
+            assertEquals(line, "tu", read(line).second.take(2))
+            assertEquals(line, "tu", TestUniDic.reading { read(line).second.take(2) })
+        }
+    }
+
+    @Test
+    fun katakanaToAndDoWithASmallUAreSoundsWhereverTheyAre() {
+        for (words in listOf(Readings.words("アリガトゥ", Script.JAPANESE), TestUniDic.reading { Readings.words("アリガトゥ", Script.JAPANESE) })) {
+            assertEquals(listOf("アリガトゥ" to "アリガトゥ"), words.map { it.text to it.lookup })
+        }
+        assertEquals("arigatu", Readings.of(listOf("アリガトゥ"), Script.JAPANESE).single().typed)
+        assertEquals("ari ga tu", Readings.of(listOf("ありがトゥ"), Script.JAPANESE).single().typed)
+    }
+
+    @Test
+    fun aWordSmallVowelsDrawOutIsTheWordTheySpellFullSize() {
+        val lines = mapOf(
+            "せんせぃ" to listOf("せんせぃ" to "せんせい"),
+            "くださぃ" to listOf("くださぃ" to "くださる"),
+            "おはよぅ" to listOf("おはよぅ" to "おはよう"),
+            "だよぅ" to listOf("だ" to "だ", "よぅ" to "よう"),
+            "かわぃぃ" to listOf("かわぃぃ" to "かわいい"),
+            // Not a word read right before, ない, split for another: しらな and いい.
+            "しらないぃ" to listOf("しらないぃ" to "しる"),
+            // A small ぇ after the い row is a sound: ひぇー is a cry, not ひる.
+            "ひぇー" to listOf("ひぇ" to "ひぇ"),
+            "きぇー" to listOf("きぇ" to "きぇ"),
+        )
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }.filter { it.first != "ー" }
+        for ((line, expected) in lines) {
+            assertEquals(line, expected, words(line))
+            assertEquals(line, expected, TestUniDic.reading { words(line) })
+        }
+        assertEquals("pyen", Readings.of(listOf("ぴぇん"), Script.JAPANESE).single().typed)
+        // ずっとう is no one word, so ずっと keeps its reading, drawn out, with the ぅ that would make とぅ a sound full size.
+        assertEquals(listOf("ずっとぅ" to "ずっと"), words("ずっとぅ"))
+        assertEquals("zuttou", Readings.of(listOf("ずっとぅ"), Script.JAPANESE).single().typed)
+    }
+
+    @Test
+    fun aWordDrawnOutStaysOneBeforeMoreKanaAndAParticleDrawnOutIsNoCall() {
+        val lines = mapOf(
+            // A word the dictionary has ends on the と, so the ぅ draws it out, more kana after it or not.
+            "ありがとぅね" to listOf("ありがとぅ" to "ありがとう", "ね" to "ね"),
+            "ありがとぅございます" to listOf("ありがとぅ" to "ありがとう", "ございます" to "ござる"),
+            "ずっとぅいっしょ" to listOf("ずっとぅ" to "ずっと", "いっしょ" to "いっしょ"),
+            // A particle drawn out is still one, not よお the call; ねえ is a particle too.
+            "そうだよぉ" to listOf("そうだ" to "そう", "よぉ" to "よ"),
+            "そうだねぇ" to listOf("そうだ" to "そう", "ねぇ" to "ねえ"),
+            "かわぃぃよぉ" to listOf("かわぃぃ" to "かわいい", "よぉ" to "よ"),
+            // No particle starts a line: there it's the call.
+            "よぉ、元気？" to listOf("よぉ" to "よお", "元気" to "元気"),
+            // IPADIC takes the も for a particle, but drawn out it's もう.
+            "もぅいいよ" to listOf("もぅ" to "もう", "いい" to "いい", "よ" to "よ"),
+        )
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        for ((line, expected) in lines) {
+            assertEquals(line, expected, words(line))
+            assertEquals(line, expected, TestUniDic.reading { words(line) })
+        }
+        fun typed(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().typed
+        assertEquals("arigatou ne", typed("ありがとぅね"))
+        assertEquals("zuttou issho", typed("ずっとぅいっしょ"))
+        // No word ends on a と that starts the line, so there it's a sound.
+        assertEquals("tu naito", typed("とぅないと"))
+        // Ending the line, no kana is said after it: drawn out, a word the dictionary has before it or not.
+        assertEquals("minna tou", typed("みんなとぅ"))
+        // A word of two kana ends on the と too.
+        assertEquals("hitou ga", typed("ひとぅが"))
+        // But not the start of one alone: そと starts words the dictionary has, and isn't one of them, so とぅ is tu.
+        assertEquals("so tu nai", typed("そとぅない"))
+    }
+
+    @Test
+    fun aSmallKanaBeforeASmallVowelStillStartsNoWord() {
+        val words = Readings.words("でしょぅ", Script.JAPANESE).map { it.text }
+        assertTrue("$words", words.none { it.first() in "ぁぃぅぇぉっゃゅょゎ" })
+    }
+
+    @Test
+    fun aStraySmallKanaGoesWithTheKanaBeforeIt() {
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        assertEquals(listOf("ちいさ", "なゃ"), words("ちいさなゃ"))
+    }
+
+    @Test
+    fun aSmallTsuGoesWithTheKanaItDoublesAndTheSmallKanaSaidWithThat() {
+        val lines = mapOf(
+            "ちゅっちゅ" to "chutchu", "きゃっきゃっ" to "kyakkya", "しゃっしゃっ" to "shassha", "にっきにっき" to "nikki nikki",
+            // With no kana after it to double, っ cuts the word before short, and goes with it.
+            "きゃっ" to "kya", "かいしゃっ" to "kaisha", "ちょっ！" to "cho！", "すごーっ" to "sugoo",
+        )
+        for ((line, typed) in lines) {
+            val words = Readings.words(line, Script.JAPANESE).map { it.text }
+            assertTrue("$line: $words", words.none { it.first() in "ぁぃぅぇぉっゃゅょゎ" })
+            assertEquals(line, typed, Readings.of(listOf(line), Script.JAPANESE).single().typed)
+        }
+        assertEquals(listOf("かいしゃっ"), Readings.words("かいしゃっ！", Script.JAPANESE).map { it.text })
+        // Before a word that starts wrong, a word IPADIC starts on っ is searched again with the word before it, so the
+        // search knows what kana that っ follows; but never with a word already searched again, にっき in にっきっしょゃ.
+        for (line in listOf("まってっゃ", "きみってゃん", "にっきっしょゃ")) {
+            val words = Readings.words(line, Script.JAPANESE).map { it.text }
+            assertTrue("$line: $words", words.none { it.first() in "ぁぃぅぇぉっゃゅょゎ" })
+        }
+    }
+
+    @Test
+    fun aLineWithNoWayToSayItsSmallKanaStaysAsKuromojiSplitIt() {
+        // りゅう leaves っ after it, which no word may start on, and no word the search knows holds both: Issue #1139.
+        assertEquals(listOf("り", "ゅうっなも"), Readings.words("りゅうっなも", Script.JAPANESE).map { it.text })
+    }
+
+    @Test
+    fun theSearchFindsWhatKuromojiDoesWhereNoWordStartsOnASmallKana() {
+        val kuromoji = Tokenizer()
+        val tokenizer = SmallKanaTokenizer { Readings.OldKana(emptyMap(), setOf("あ")) }
+        val lines = listOf(
+            "ジョンスミスさんは2024年にＸＹＺ社へ行った", "彁という字はない", "彁彁彁あ", "ABCアイウエオ123", "東京特許許可局で",
+            "ヴォルデモートとハリー・ポッター", "αβγとабв", "今日は　いい天気", "ｶﾀｶﾅとカタカナ", "!!??…♪", "ノートパソコンを買う",
+        )
+        for (line in lines) {
+            val searched = tokenizer.searched(line, 0)?.map { it.surface to it.allFeatures }
+            assertEquals(line, kuromoji.tokenize(line).map { it.surface to it.allFeatures }, searched)
+        }
+    }
+
+    @Test
+    fun aDrawnOutWordIsSaidAsTheDictionarySaysIt() {
+        // せんせい is said せんせー: drawn out, せんせーぃ.
+        val reading = Readings.of(listOf("せんせいぃ"), Script.JAPANESE).single()
+        assertEquals("senseei", reading.romanized)
+        assertEquals("senseii", reading.typed)
+    }
+
+    @Test
+    fun aWordIsSearchedAgainOnlyBesideTheSmallKanaItStartedOn() {
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        // IPADIC has いじ and ょう: only those two are searched again, so これ and もう stay as they were.
+        assertEquals(listOf("きっと", "もう", "これ", "い", "じょう"), words("きっともうこれいじょう"))
+    }
+
+    @Test
+    fun wordsThatStartWithASmallTsuStay() {
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        assertEquals(listOf("きみ", "って", "こどもっぽい"), words("きみってこどもっぽい"))
+        // っ alone after て is ていく said short: 消えてった is 消えていった, and った its いった.
+        assertEquals(listOf("消えて", "った"), words("消えてった"))
+    }
+
+    @Test
+    fun onlyThePartOfALineSplitBeforeASmallKanaIsSearchedAgain() {
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        assertEquals(listOf("きょう", "は", "かいしゃ", "の", "けいひ"), words("きょうは、かいしゃのけいひ"))
+    }
+
+    @Test
+    fun aWordInKanaIsOfferedOnlyWhereIpadicReadsItsKanjiSo() {
         val cached = Readings.oldKanaRead
         val vocabulary = Readings.oldKana
-        val unsure = listOf("かいし", "ゃのけいひ")
-        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text }
+        fun words() = Readings.words("かいしゃのけいひ", Script.JAPANESE).map { it.text to it.lookup }
         try {
-            for (today in listOf(vocabulary.today - "かいしゃ", vocabulary.today - "けいひ", vocabulary.today + ("けいひ" to "携帯"))) {
-                Readings.oldKanaRead = Readings.OldKana(today, vocabulary.modern)
-                assertEquals(unsure, words(text))
-            }
+            // 携帯 is no けいひ, so the line is left with the words IPADIC knows in kana.
+            Readings.oldKanaRead = Readings.OldKana(vocabulary.today + ("けいひ" to "携帯"), vocabulary.modern)
+            assertTrue(words().none { it.second == "携帯" })
+            assertEquals("かいしゃ" to "会社", words().first())
         } finally {
             Readings.oldKanaRead = cached
         }
-        assertEquals(listOf("ちいさな", "ゃ"), words("ちいさなゃ"))
     }
 
     @Test

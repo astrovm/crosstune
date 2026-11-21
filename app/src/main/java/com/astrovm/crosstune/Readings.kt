@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.icu.text.Transliterator
 import android.os.Build
 import androidx.annotation.RequiresApi
-import com.atilika.kuromoji.ipadic.Tokenizer
 import kotlin.math.abs
 
 /**
@@ -106,8 +105,9 @@ internal object Readings {
      * 10 for an old ほ said お in kana alone.
      * 11 for standalone old kana read with the built-in dictionary.
      * 12 for a suffix that follows a word it can't join, 等 after a verb, 桜 after a counter, and 千夜.
+     * 13 for any word in kana IPADIC starts on a small kana, じゅぎょう and いっしょ, and the small vowels that draw a word out, ありがとぉ.
      */
-    const val VERSION = 12
+    const val VERSION = 13
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -156,7 +156,7 @@ internal object Readings {
 
     private fun letters(text: String) = text.filter(Char::isLetterOrDigit).lowercase()
 
-    private val tokenizer by lazy { Tokenizer() }
+    private val tokenizer by lazy { SmallKanaTokenizer { oldKana } }
 
     private fun japanese(line: String): LineReading {
         val given = givenReadings(line)
@@ -182,55 +182,50 @@ internal object Readings {
     // counting something, as 2 in 2人, as its kanji, 二人 ふたり, not a number on its own: they stay as written.
     private fun pieces(line: String): List<Piece> {
         val text = line.mapIndexed { at, c -> NEW_FORMS[c] ?: KANJI_DIGITS[c]?.takeIf { counts(line, at) } ?: c }.joinToString("")
-        val known = withSmallKana(okurigana(line, text, ipadicPieces(line, text)))
+        val known = okurigana(line, text, ipadicPieces(line, text))
         val other = uniDic
         val read = saidAsWritten(modernPieces(other?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known))
         return if (other == null) wholeOldKanaWord(line, read) ?: read else read
     }
 
-    /** Keep the small kana with its noun where the dictionaries can read both nouns around の. */
-    private fun withSmallKana(pieces: List<Piece>): List<Piece> {
-        if (pieces.none(Piece::startsWithUnreadSmallKana)) return pieces
-        val words = mutableListOf<Piece>()
-        for (piece in pieces) {
-            val pair = words.lastOrNull()?.let { before -> nounsWithSmallKana(before, piece) }
-            if (pair == null) {
-                words += piece
-            } else {
-                words.removeAt(words.lastIndex)
-                words += pair
-            }
+    /**
+     * [line] as IPADIC splits [text], the line with its kanji made the dictionary's. Where small vowels draw out a
+     * word, せんせぃ or かわぃぃ, it's first read with them full size, せんせい and かわいい: where the dictionary knows
+     * that for one word, it's that word, as written. Elsewhere, ありがとぉ, the small vowels go with the word before,
+     * which keeps its reading.
+     */
+    private fun ipadicPieces(line: String, text: String): List<Piece> {
+        val drawn = drawnOut(text, ipadicPieces(line, tokenizer.tokenize(text)))
+        val draws = text.indices.filter { tokenizer.drawsOut(text, it) }.toSet()
+        if (draws.isEmpty()) return drawn
+        val whole = tokenizer.tokenize(text.mapIndexed { at, c -> if (at in draws) c + 1 else c }.joinToString(""))
+        val pieces = ipadicPieces(line, whole)
+        val out = mutableListOf<Piece>()
+        var i = 0
+        var j = 0
+        // Both end where the text does, so they run out together.
+        while (i < drawn.size) {
+            val first = j
+            val a = mutableListOf(drawn[i++])
+            val b = mutableListOf(pieces[j++])
+            while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += drawn[i++] else b += pieces[j++]
+            // One word, so a word read right before, ない in しらないぃ, isn't split for another, しらな and いい. And a
+            // particle drawn out, よぉ in そうだよぉ, isn't the call よお: still a particle, ねえ in そうだねぇ, or another
+            // word, もう in もぅいいよ, where IPADIC took も for one, it is. Only a particle alone: IPADIC takes か and わ
+            // in かわぃぃ for particles, where かわいい is the word. And never first: no particle starts a line, so よぉ in
+            // よぉ、元気？ is the call.
+            val particle = i > 1 && drawnOutParticle(a, draws)
+            val word = whole[first].takeIf { j == first + 1 && it.isKnown && it.position !in draws && !(particle && it.partOfSpeechLevel1 == "感動詞") }
+            out += if (word != null && word.surface.indices.any { word.position + it in draws }) b else a
         }
-        return words
+        return out
     }
 
-    /** Kana alone can look like a verb and an unknown word, as かいし and ゃのけいひ. */
-    private fun nounsWithSmallKana(before: Piece, after: Piece): List<Piece>? {
-        if (!after.startsWithUnreadSmallKana || before.surface.any { it !in 'ぁ'..'ゖ' }) return null
-        val small = after.surface.takeWhile { it in SMALL_HIRAGANA }
-        val rest = after.surface.drop(small.length)
-        if (!rest.startsWith('の')) return null
-        val first = before.surface + small
-        val last = rest.drop(1)
-        val head = oldKana.today[first] ?: return null
-        val tail = oldKana.today[last] ?: return null
-        val tokens = tokenizer.tokenize("${head}の$tail")
-        val written = listOf(first, "の", last)
-        if (tokens.map { it.surface } != listOf(head, "の", tail) ||
-            tokens.map { it.partOfSpeechLevel1 } != listOf("名詞", "助詞", "名詞") ||
-            tokens.map { hiragana(it.reading.orEmpty()) } != written) return null
-        var end = before.end - before.surface.length
-        return tokens.zip(written) { token, kana ->
-            end += kana.length
-            Piece(kana, kana, token.partOfSpeechLevel1, token.partOfSpeechLevel2, token.baseForm,
-                drawnOutE(hiragana(token.pronunciation)), end, reader = Reader.JMDICT)
-        }
-    }
+    /** [a] is one particle, and a small vowel draws it out. */
+    private fun drawnOutParticle(a: List<Piece>, draws: Set<Int>) =
+        a.singleOrNull()?.let { piece -> piece.kind == "助詞" && piece.surface.indices.any { piece.end - piece.surface.length + it in draws } } == true
 
-    private const val SMALL_HIRAGANA = "ぁぃぅぇぉっゃゅょゎ"
-
-    /** [line] as IPADIC splits [text], the line with its kanji made the dictionary's. */
-    private fun ipadicPieces(line: String, text: String) = tokenizer.tokenize(text).map { token ->
+    private fun ipadicPieces(line: String, tokens: List<com.atilika.kuromoji.ipadic.Token>) = tokens.map { token ->
             // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
             val reading = token.reading?.takeIf { it != "*" }
             Piece(
@@ -241,9 +236,33 @@ internal object Readings {
                 token.baseForm?.takeIf { it != "*" } ?: token.surface,
                 token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) },
                 token.position + token.surface.length,
-                unread = reading == null
+                unread = reading == null,
+                reader = if (token is SmallKanaTokenizer.JmdictToken) Reader.JMDICT else Reader.IPADIC
             )
         }
+
+    /**
+     * Small vowels that draw out the word in kana before them, ありがと and ぉ, go with it, as one word read as that one, and so does
+     * a small っ alone that cuts it short, かいしゃ and っ at the end of [text].
+     */
+    private fun drawnOut(text: String, pieces: List<Piece>) = pieces.fold(ArrayList<Piece>()) { out, piece ->
+        val before = out.lastOrNull()
+        val drawing = before != null && (
+            (piece.end - piece.surface.length until piece.end).all { tokenizer.drawsOut(text, it) } ||
+                SmallKanaTokenizer.cutsShort(text, piece.end - 1, piece.surface)
+            )
+        // IPADIC can make ー a word of its own, すご and ー and ぃ: the ー draws out the word before as the vowel does.
+        val word = out.getOrNull(out.lastIndex - 1)?.takeIf { isKana(it.surface.last()) && before?.surface?.all { c -> c == 'ー' } == true }
+        when {
+            before == null || !drawing -> out += piece
+            word != null -> {
+                out.removeAt(out.lastIndex)
+                out[out.lastIndex] = word.drawnOutBy(before).drawnOutBy(piece)
+            }
+            else -> out[out.lastIndex] = before.drawnOutBy(piece)
+        }
+        out
+    }
 
     /**
      * [pieces] of the line, where it writes the kana after a kanji in katakana, 夜ニ紛レ or 届カナイ,
@@ -758,8 +777,6 @@ internal object Readings {
         /** How it is spelled today, when it is in old kana and [Furigana.byRule] says it. */
         val today: String? = null
     ) {
-        val startsWithUnreadSmallKana get() = unread && surface.firstOrNull()?.let { it in SMALL_HIRAGANA } == true
-
         /** Kanji the dictionary can't read. */
         val unknown get() = unread && surface.any(::isHan)
 
@@ -777,6 +794,15 @@ internal object Readings {
 
         /** It read [kana] by Crosstune's own rules, as a word of [kind] and [subkind] when that changes too. */
         fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) = Piece(surface, kana, kind, subkind, base, null, end, reader = Reader.RULES, today = today)
+
+        /**
+         * It, drawn out by the small vowels of [small], said as long as they make it. Where its last kana and a small
+         * vowel would read as a sound of their own, とぅ as tu, the vowel is read full size: ありがとぅ is arigatou.
+         */
+        fun drawnOutBy(small: Piece): Piece {
+            val drawn = if ("${kana.last()}${small.kana.first()}" in YOUON) small.kana.map { it + 1 }.joinToString("") else small.kana
+            return Piece(surface + small.surface, kana + drawn, kind, subkind, base, spoken?.plus(drawn), small.end, unread, reader, today)
+        }
 
         /** It read [kana], and said [said]. */
         fun reading(kana: String, said: String) = Piece(surface, kana, kind, subkind, base, said, end, reader = reader, today = today)
@@ -1364,7 +1390,27 @@ internal object Readings {
      * 分かった is wakatta rather than waka ta, while particles stand alone. Brackets and marks sit
      * against what they're beside.
      */
-    private fun romajiWords(pieces: List<Piece>, kana: (Piece) -> String): List<String> = grouped(pieces).map { word -> word.joinToString("", transform = kana) }
+    private fun romajiWords(pieces: List<Piece>, kana: (Piece) -> String): List<String> {
+        val index = pieces.withIndex().associate { (at, piece) -> piece to at }
+        val words = ArrayList<String>()
+        var before: Piece? = null
+        for (word in grouped(pieces)) {
+            val text = word.joinToString("", transform = kana)
+            // A word that ends on っ doubles the consonant that starts the next, so they're one: いっ and しゅん are isshun.
+            // Not across a space the line has, あっ あっ, nor before a vowel, あっあっ: there it only cuts the word short.
+            val touching = before != null && index[before] == index[word.first()]?.minus(1)
+            if (touching && words.last().lastOrNull()?.let { it in "っッ" } == true && text.firstOrNull()?.let(::isConsonant) == true) {
+                words[words.lastIndex] += text
+            } else {
+                words += text
+            }
+            before = word.last()
+        }
+        return words
+    }
+
+    /** Kana that start with a consonant, which a small っ before them doubles: not a vowel, ん, ー, a mark that repeats a kana, or a small kana. */
+    private fun isConsonant(kana: Char) = isKana(kana) && kana !in "あいうえおアイウエオんンー・ゝゞヽヾぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ"
 
     /** The line [pieces] make in romaji, as it's said or [typed], with a space at most between words. */
     private fun romanizedLine(pieces: List<Piece>, typed: Boolean) =
@@ -1793,6 +1839,9 @@ internal object Readings {
         val small = listOf('ゃ' to "a", 'ゅ' to "u", 'ょ' to "o")
         listOf("き" to "ky", "ぎ" to "gy", "し" to "sh", "じ" to "j", "ち" to "ch", "ぢ" to "j", "に" to "ny", "ひ" to "hy", "び" to "by", "ぴ" to "py", "み" to "my", "り" to "ry")
             .forEach { (kana, start) -> small.forEach { (s, vowel) -> put(kana + s, start + vowel) } }
+        // A small ぇ after the い row in cries and slang: ひぇー hyee, ぴぇん pyen.
+        listOf("き" to "ky", "ぎ" to "gy", "に" to "ny", "ひ" to "hy", "び" to "by", "ぴ" to "py", "み" to "my", "り" to "ry")
+            .forEach { (kana, start) -> put(kana + "ぇ", start + "e") }
         put("ふぁ", "fa"); put("ふぃ", "fi"); put("ふぇ", "fe"); put("ふぉ", "fo")
         put("てぃ", "ti"); put("でぃ", "di"); put("うぃ", "wi"); put("うぇ", "we"); put("ゔぁ", "va")
         // The rest katakana writes words from other languages with: イェーガー, シェル, ジェット, チェック, ウォーク, ヴィーナス.
