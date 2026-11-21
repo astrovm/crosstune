@@ -672,6 +672,8 @@ class ReadingsTest {
             "そうだよぉ" to listOf("そうだ" to "そう", "よぉ" to "よ"),
             "そうだねぇ" to listOf("そうだ" to "そう", "ねぇ" to "ねえ"),
             "かわぃぃよぉ" to listOf("かわぃぃ" to "かわいい", "よぉ" to "よ"),
+            // No particle starts a line: there it's the call.
+            "よぉ、元気？" to listOf("よぉ" to "よお", "元気" to "元気"),
             // IPADIC takes the も for a particle, but drawn out it's もう.
             "もぅいいよ" to listOf("もぅ" to "もう", "いい" to "いい", "よ" to "よ"),
         )
@@ -685,6 +687,10 @@ class ReadingsTest {
         assertEquals("zuttou issho", typed("ずっとぅいっしょ"))
         // No word ends on a と that starts the line, so there it's a sound.
         assertEquals("tu naito", typed("とぅないと"))
+        // Ending the line, no kana is said after it: drawn out, a word the dictionary has before it or not.
+        assertEquals("minna tou", typed("みんなとぅ"))
+        // A word of two kana ends on the と too.
+        assertEquals("hitou ga", typed("ひとぅが"))
     }
 
     @Test

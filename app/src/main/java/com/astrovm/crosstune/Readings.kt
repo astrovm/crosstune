@@ -212,8 +212,9 @@ internal object Readings {
             // One word, so a word read right before, ない in しらないぃ, isn't split for another, しらな and いい. And a
             // particle drawn out, よぉ in そうだよぉ, isn't the call よお: still a particle, ねえ in そうだねぇ, or another
             // word, もう in もぅいいよ, where IPADIC took も for one, it is. Only a particle alone: IPADIC takes か and わ
-            // in かわぃぃ for particles, where かわいい is the word.
-            val particle = a.singleOrNull()?.let { piece -> piece.kind == "助詞" && piece.surface.indices.any { piece.end - piece.surface.length + it in draws } } == true
+            // in かわぃぃ for particles, where かわいい is the word. And never first: no particle starts a line, so よぉ in
+            // よぉ、元気？ is the call.
+            val particle = i > 1 && a.singleOrNull()?.let { piece -> piece.kind == "助詞" && piece.surface.indices.any { piece.end - piece.surface.length + it in draws } } == true
             val word = whole[first].takeIf { j == first + 1 && it.isKnown && it.position !in draws && !(particle && it.partOfSpeechLevel1 == "感動詞") }
             out += if (word != null && word.surface.indices.any { word.position + it in draws }) b else a
         }
