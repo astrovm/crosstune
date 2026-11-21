@@ -1,7 +1,5 @@
 package com.astrovm.crosstune
 
-import java.text.Normalizer
-import java.util.Locale
 
 /**
  * The take of a song a name says it is: live, karaoke, a TV size. YouTube Music lists these beside the studio song, in any
@@ -52,15 +50,10 @@ internal object Takes {
         val cuts = (1 until name.lastIndex).filter { name[it] in TitleDelimiters.DASHES && name[it - 1].isWhitespace() && name[it + 1].isWhitespace() }
         return cuts.zip(cuts.drop(1) + name.length) { from, to -> name.substring(from, to) }
     }
-    private val marks = phoneRegex("""\p{M}+""")
-    private val wordSplit = phoneRegex("""[^a-z0-9]+""")
-
-    private fun wordList(text: String): List<String> =
-        Normalizer.normalize(text, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT).split(wordSplit).filter { it.isNotEmpty() }
 
     private fun takeOfTag(tag: String): Take? {
         val letters = SongNames.normalize(tag).trimStart { it.isDigit() }
-        val words = wordList(tag).dropWhile { it.all(Char::isDigit) }
+        val words = SongNames.wordList(tag).dropWhile { it.all(Char::isDigit) }
         val first = words.firstOrNull()
         val spoken = words.take(2).joinToString("")
         return when {
