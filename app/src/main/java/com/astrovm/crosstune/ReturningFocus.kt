@@ -42,6 +42,11 @@ internal class ScreenFocus {
         last = here.entries.firstOrNull { it.value.focused }?.key
     }
 
+    /** Back on the screen, the remote goes to [key], whatever it was on as the screen was left. */
+    fun goBackTo(key: Any) {
+        last = key
+    }
+
     /** [node] now under [key] rather than [old], and still what the remote was on, if it was. */
     fun rekey(old: Any, key: Any, node: ReturnsFocusNode) {
         remove(old, node)

@@ -8,6 +8,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
@@ -27,6 +28,7 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -837,6 +839,40 @@ class TvTest {
         composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(NOW_PLAYING_TAG).fetchSemanticsNodes().isNotEmpty() }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsNotFocused()
+    }
+
+    @Test
+    fun onATvBackFromAStationsPlayerGoesStraightToTheBarNotByWhatMainWasLeftOn() {
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
+        }
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { SongHearing { Heard.Nothing } }
+        launch()
+        composeRule.waitUntil(5_000) { shown("Blue 100.7 FM") }
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        // Main is left with the remote on the gear, which Back would go back to, were the bar not owed it.
+        settings().requestFocus()
+        composeRule.runOnIdle { model().peekPlayingUnnamed() }
+        composeRule.waitUntil(5_000) { openStation().isDisplayed() }
+        openStation().assertIsFocused()
+        // A frame at a time, as the gear lit up for one before the bar took the remote.
+        composeRule.mainClock.autoAdvance = false
+        composeRule.runOnUiThread {
+            checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+            Snapshot.sendApplyNotifications()
+        }
+        val bar = composeRule.onNodeWithTag(NOW_PLAYING_TAG)
+        var frames = 0
+        while (!(stationPlayerGone() && composeRule.onAllNodes(hasTestTag(NOW_PLAYING_TAG) and isFocused()).fetchSemanticsNodes().isNotEmpty())) {
+            assertTrue("Back took longer than ${frames} frames", frames++ < 200)
+            composeRule.mainClock.advanceTimeByFrame()
+            settings().assertIsNotFocused()
+        }
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
+        bar.assertIsFocused()
     }
 
     @Test

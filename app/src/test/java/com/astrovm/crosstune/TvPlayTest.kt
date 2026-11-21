@@ -291,6 +291,39 @@ class TvPlayTest {
     }
 
     @Test
+    fun onATvTheWordsClosedUnderTheirSheetGiveTheRemoteBackToTheButtonThatOpenedThem() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasClickAction())
+        words.requestFocus()
+        words.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { shown("Demo two") }
+        // Their sheet about the song is up as something else closes them, as a link that comes in does.
+        click(string(R.string.lyrics_about_song))
+        waitUntil { inDialog() }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { !shown("Demo two") }
+        composeRule.waitForIdle()
+        words.assertIsFocused()
+    }
+
+    @Test
+    fun onAPhoneBackFromTheWordsPutsNothingBackInFocus() {
+        phone = Phone.PIXEL
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasClickAction())
+        words.requestFocus()
+        words.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { shown("Demo two") }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown("Demo two") }
+        composeRule.waitForIdle()
+        // A phone is touched: what it was on is no place to be put back.
+        words.assertIsNotFocused()
+    }
+
+    @Test
     fun onATvBackFromPracticeOverTheWordsLeavesTheRemoteOnThem() {
         prefs().edit().putString("saved_lines", """[{"text":"Demo one","translation":"Demo uno","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
         launch()

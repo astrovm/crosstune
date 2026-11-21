@@ -159,10 +159,23 @@ internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
 internal const val NOW_PLAYING_TAG = "now_playing"
 
-/** The bar of what's playing, for a player that closes to hand the remote back to it: [owed] till the bar has taken it. */
-internal class BarFocus {
+/**
+ * The bar of what's playing, for a player that closes to hand the remote back to it: [owed] till the bar has taken it.
+ * It's also what the remote goes back to on [main], the screen it's on, which would otherwise put it back on what it was on there.
+ */
+internal class BarFocus(private val main: ScreenFocus? = null) {
     val requester = FocusRequester()
     var owed by mutableStateOf(false)
+        private set
+
+    fun handBack() {
+        owed = true
+        main?.goBackTo(Screen.PLAYER)
+    }
+
+    fun taken() {
+        owed = false
+    }
 }
 
 internal val LocalBarFocus = staticCompositionLocalOf { BarFocus() }
@@ -536,9 +549,9 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     // way back, a screen starts afresh, as it always has.
     val kept = rememberSaveableStateHolder()
     LaunchedEffect(screen) { if (screen != Screen.FIX_STEP) Screen.entries.filter { it != screen }.forEach { kept.removeState(it.name) } }
-    val barFocus = remember { BarFocus() }
     // Back on a screen, with a remote, it goes back to what it was on there, once the screen left is gone.
     val focuses = remember { ScreenFocuses(screen) }
+    val barFocus = remember { BarFocus(focuses.of(Screen.MAIN)) }
     // Noted as the app turns to another screen, while the remote is still on what it was on, with
     // where each screen goes back to, as one at the same depth, like settings under the fix list, can be.
     val backOf = remember { mutableMapOf<Screen, Screen?>() }
@@ -555,10 +568,9 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         val now = moving.currentState
         settled = now
         if (!remote || now != backOf[from]) return@LaunchedEffect
-        withFrameNanos {}
         // Not by whether something has it, as Android hands it to the link field once what had it is gone. A dialog
-        // or sheet keeps it, and the bar takes it for itself from a station's player.
-        if (!overlaid && !barFocus.owed) focuses.of(now).restore()
+        // or sheet keeps it. A station's player hands it to the bar, which it goes back to here too, the bar's own way.
+        if (!overlaid) focuses.of(now).restore()
     }
     CompositionLocalProvider(LocalCovers provides actions.covers, LocalBarFocus provides barFocus) {
     WithOverlays(inside = state.phone == Phone.TV, onOverlaid = { overlaid = it }) {
@@ -932,7 +944,7 @@ private fun PlayingBar(
         if (!handed.owed) return@LaunchedEffect
         withFrameNanos {}
         runCatching { bar.requestFocus() }
-        handed.owed = false
+        handed.taken()
     }
     val playPause = remember { FocusRequester() }
     Surface(

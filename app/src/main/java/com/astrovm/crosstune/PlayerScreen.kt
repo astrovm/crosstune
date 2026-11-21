@@ -181,7 +181,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     val barFocus = LocalBarFocus.current
     val handsBack by rememberUpdatedState(player.stationOnly && state.phone == Phone.TV)
     DisposableEffect(barFocus) {
-        onDispose { if (handsBack) barFocus.owed = true }
+        onDispose { if (handsBack) barFocus.handBack() }
     }
     val fromTools = remember { FocusRequester() }
     // Which of them opened it, null till one did, so the remote is back there once it's put away,
