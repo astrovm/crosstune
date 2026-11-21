@@ -21,6 +21,16 @@ class DestinationStoreTest {
     private val deezer = Destination.Service(MusicService.DEEZER)
 
     @Test
+    fun aBuildIsToldFromItsServicesAppByAWordOfItsOwn() {
+        assertEquals("TV", MusicService.buildName(MusicService.YOUTUBE_TV))
+        assertEquals("ReVanced", MusicService.buildName("app.revanced.android.youtube"))
+        assertEquals("RVX", MusicService.buildName("app.rvx.android.apps.youtube.music"))
+        assertEquals("Morphe", MusicService.buildName("app.morphe.android.youtube"))
+        // One no list knows goes by its patcher's part of the package.
+        assertEquals("Piko", MusicService.buildName("app.piko.android.youtube"))
+    }
+
+    @Test
     fun frontendAppsAreOfferedOnlyWhenInstalledAndWebFrontendsOnTheirSite() {
         val onlyNewPipe = DestinationStore(preferences) { it == "org.schabi.newpipe" }
         val alternatives = onlyNewPipe.allDestinations().filterIsInstance<Destination.Alternative>()
@@ -54,21 +64,46 @@ class DestinationStoreTest {
         val music = Destination.Service(MusicService.YOUTUBE_MUSIC)
         val inMorphe = Destination.Service(MusicService.YOUTUBE_MUSIC, morphe)
 
-        // Each build comes right after its service, and plain services keep their own key and app.
+        // Without the service's own app, which would open the build anyway, the build alone stands for it.
         val services = patched.allDestinations().filterIsInstance<Destination.Service>()
-        assertEquals(listOf(music, inMorphe), services.filter { it.service == MusicService.YOUTUBE_MUSIC })
-        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE), Destination.Service(MusicService.YOUTUBE, "app.revanced.android.youtube")), services.filter { it.service == MusicService.YOUTUBE })
+        assertEquals(listOf(inMorphe), services.filter { it.service == MusicService.YOUTUBE_MUSIC })
+        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE, "app.revanced.android.youtube")), services.filter { it.service == MusicService.YOUTUBE })
+        // The service chosen before, or as the first default, is that build now.
+        assertEquals(inMorphe, patched.defaultDestination())
+        preferences.edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        assertEquals(inMorphe, patched.defaultDestination())
+        // Chosen again as it stands, it keeps the service's key, as saving the default again in settings does.
+        patched.setDefault(inMorphe)
+        assertEquals("YOUTUBE_MUSIC", preferences.getString("default_target", null))
+        // With the own app there too, each build comes right after its service, and plain services keep their own key and app.
+        installed += MusicService.YOUTUBE_MUSIC.packageName
+        assertEquals(listOf(music, inMorphe), patched.allDestinations().filterIsInstance<Destination.Service>().filter { it.service == MusicService.YOUTUBE_MUSIC })
+        // So the service chosen before is its own app now, and the build is a choice of its own.
+        assertEquals(music, patched.defaultDestination())
+        patched.setDefault(inMorphe)
+        assertEquals(inMorphe.key, preferences.getString("default_target", null))
+        installed -= MusicService.YOUTUBE_MUSIC.packageName
         assertEquals(morphe, inMorphe.packageName)
         assertEquals(MusicService.YOUTUBE_MUSIC.packageName, music.packageName)
         assertEquals("YOUTUBE_MUSIC@$morphe", inMorphe.key)
         assertEquals("YOUTUBE_MUSIC", music.key)
 
-        // Chosen as the default and as a rule, it comes back as itself.
+        // Chosen as the default over another app, and as a rule, it comes back as itself.
+        patched.setDefault(deezer)
         patched.setDefault(inMorphe)
+        assertEquals(inMorphe.key, preferences.getString("default_target", null))
         patched.setRule(MusicService.SPOTIFY, inMorphe)
         assertEquals(inMorphe, patched.defaultDestination())
         assertEquals(inMorphe, patched.rule(MusicService.SPOTIFY))
         assertTrue(patched.hasDefault())
+        // A rule chosen again as it stands keeps the service's key the same way, for a service's links and a frontend's.
+        patched.setRule(MusicService.DEEZER, music)
+        patched.setRule(MusicService.DEEZER, inMorphe)
+        assertEquals("YOUTUBE_MUSIC", preferences.getString("rule_DEEZER", null))
+        patched.setRule(Frontend.entries.first(), music)
+        patched.setRule(Frontend.entries.first(), inMorphe)
+        assertEquals("YOUTUBE_MUSIC", preferences.getString("rule_frontend_${Frontend.entries.first().name}", null))
+        assertEquals(inMorphe, patched.rule(Frontend.entries.first()))
 
         // Uninstalled, the choice is its service again, not nothing.
         installed.clear()
