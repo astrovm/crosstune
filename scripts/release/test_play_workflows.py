@@ -48,7 +48,8 @@ class PlayWorkflowsTest(unittest.TestCase):
         rebuild = release["rebuild"]
         self.assertNotIn("needs:", rebuild)
         self.assertIn("permissions: {}", rebuild)
-        self.assertIn("cache-disabled: true", rebuild)
+        # The shared JDK action sets setup-gradle's cache-disabled for this.
+        self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: disabled", rebuild)
         self.assertIn("./gradlew :app:assembleRelease --no-build-cache", rebuild)
         self.assertIn("name: rebuilt\n          path: app/build/outputs/apk/release/app-release-unsigned.apk", rebuild)
         # The comparison takes the APK sign made and the one rebuild made, and runs none of the build's code.

@@ -37,9 +37,17 @@
 # GiB, slows a build down once it holds that much, as the kernel takes pages back. Both show how a test
 # does on a busy machine, without making the machine busy. Neither changes the slots.
 #
-# On a Mac the box runs in podman's machine, so the memory and the CPUs it can have are that machine's,
-# not the Mac's. A box asking for more than is there gets what is there, and is told. Nothing here needs
-# GNU's tools or a newer bash than the Mac's own: locks are taken through python3, which is needed anyway.
+# On a Mac the box runs in podman's machine, which has to be on (`podman machine start`), so the memory
+# and the CPUs it can have are that machine's, not the Mac's (`podman machine set --memory` gives it more).
+# A box asking for more than is there gets what is there, and is told. Nothing here needs GNU's tools or a
+# newer bash than the Mac's own: locks are taken through python3, which is needed anyway.
+#
+# On Apple Silicon the box builds and runs a Linux amd64 image, for Robolectric. Point GRADLE_BOX_ANDROID_HOME
+# at an Android SDK of its own with Linux tools: fill it with sdkmanager and REPO_OS_OVERRIDE=linux. With it
+# empty, the box reads ANDROID_HOME. On a Mac, or with GRADLE_BOX_ANDROID_HOME set, the container uses that
+# SDK and its default NDK and CMake paths; Android Studio still reads the checkout's own local.properties.
+# Emulated, the box runs several times slower, a full :app:ci for hours, so the growth tests (Growth.kt)
+# measure how much slower the JVM runs and give the threads beside a reading that much more processor time.
 #
 # Idle slot homes are evicted oldest first above 40 GiB (GRADLE_BOX_CACHE_BYTES overrides it): a home
 # is about 6, and a build in a new one starts cold.

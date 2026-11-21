@@ -88,6 +88,10 @@ jobs:
           "$RUNNER_TEMP/ruff/bin/pip" install --disable-pip-version-check --quiet -r scripts/ruff-requirements.txt
           "$RUNNER_TEMP/ruff/bin/ruff" check --output-format github
 
+      # Every tracked shell script. A finding is fixed, never silenced, as with ruff.
+      - name: Lint the shell scripts
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck
+
   site:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -98,7 +102,6 @@ jobs:
 
       - name: Check Play Store changelog and texts
         run: |
-          python3 -m unittest discover -s scripts/release -p "test_*.py"
           python3 scripts/release/check_changelog.py
           python3 scripts/release/check_store_text.py
 
@@ -125,50 +128,23 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
 
       # The readings guard parses Kotlin and Java with the Kotlin compiler, and syncreplay's tests ask it what to compile.
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+      - uses: ./.github/actions/jdk
         with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: build/kotlinc
-          key: kotlinc-${{ hashFiles('scripts/kotlinc/kotlinc.lock') }}
-
-      - name: Fetch the locked Kotlin compiler
-        run: python3 scripts/kotlinc/kotlinc.py fetch
+          gradle: none
+          kotlinc: true
 
       - name: Read the pinned Whisper headers for the JNI test
         run: git submodule update --init --depth 1 -- third_party/whisper.cpp
 
-      # The committed site has to be what build-site.py makes, new pages included.
-      - name: Test site and media scripts
+      # The committed site has to be what build-site.py makes, new pages included. Then each folder's tests under
+      # scripts/, the release, readings and mutants scripts' too, which other workflows also run before they use them.
+      - name: Test the site and the scripts
         run: |
           python3 scripts/build-site.py
           git add --intent-to-add docs/
           git diff --exit-code -- docs/
-          python3 -m unittest discover -s scripts/milkdrop-render -p "test_*.py"
-          python3 -m unittest discover -s scripts/shots -p "test_*.py"
-          python3 -m unittest discover -s scripts/songcheck -p "test_*.py"
-          python3 -m unittest discover -s scripts/kotlinc -p "test_*.py"
-          python3 -m unittest discover -s scripts/readingsaudit -p "test_*.py"
-          python3 -m unittest discover -s scripts/syncreplay -p "test_*.py"
-          python3 -m unittest discover -s scripts/matchcheck -p "test_*.py"
-          python3 -m unittest discover -s scripts/contrast -p "test_*.py"
-          python3 -m unittest discover -s scripts/gradle-box -p "test_*.py"
-          python3 -m unittest discover -s scripts/emulator -p "test_*.py"
-          python3 -m unittest scripts/test_devicelock.py
-          python3 -m unittest scripts/test_notices.py
-          python3 -m unittest scripts/test_workflows.py
-          python3 -m unittest discover -s scripts/record -p "test_*.py"
-          python3 -m unittest discover -s scripts/reports -p "test_*.py"
-          python3 -m unittest discover -s scripts/jtotal-widths -p "test_*.py"
-          python3 -m unittest discover -s scripts/lyrics -p "test_*.py"
-          python3 -m unittest discover -s scripts/ci-warnings -p "test_*.py"
-          python3 -m unittest discover -s scripts/reminder-lateness -p "test_*.py"
-          python3 -m unittest discover -s scripts/perf -p "test_*.py"
-          python3 -m unittest discover -s scripts/regextable -p "test_*.py"
-          python3 -m unittest discover -s scripts/titlefuzz -p "test_*.py"
+          python3 scripts/unittests.py
+          bash scripts/device-check-build.test.sh
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
           node --test "report/*.test.mjs"
@@ -193,12 +169,11 @@ jobs:
 
       - name: Test the Google Play steps
         run: |
-          shellcheck .github/play/play.sh
           ruby --version
           .github/play/play.sh setup
           bundle exec ruby .github/play/test/play_test.rb
 
-  # The panel test uses a local fixture. The tests that follow real links run by hand (see CONTRIBUTING.md).
+  # The panel test uses a local fixture. The tests that follow real links run by hand (see extension/README.md).
   extension:
     needs: changes
     if: needs.changes.outputs.extension == 'true'
@@ -240,12 +215,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: ./.github/actions/jdk
 
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
@@ -278,12 +248,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: ./.github/actions/jdk
 
       - name: Count growth
         run: ./gradlew :app:growthTests --build-cache --configuration-cache
@@ -311,12 +276,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: ./.github/actions/jdk
 
       - name: Every case of each fuzz
         run: >-
@@ -336,41 +296,11 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-  # MatcherCasesTest's whole matrix and all its made-up searches, where the test job runs one in 20 of them: about
-  # 600,000 searches, against what main opened. What opened is uploaded, to make main's again from (see the test).
+  # MatcherCasesTest's whole matrix and all its made-up searches, where the test job runs one in 20 of them.
   matcher:
     needs: changes
     if: needs.changes.outputs.matcher == 'true'
-    runs-on: ubuntu-26.04
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        with:
-          # Main's runs of CI save the caches; this one only reads them.
-          cache-read-only: true
-
-      - name: Matcher cases in full
-        run: ./gradlew :app:testDebugUnitTest --tests com.astrovm.crosstune.MatcherCasesTest -PmatcherFull --build-cache --configuration-cache
-
-      - name: Upload what opened
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: matcher-cases
-          path: |
-            app/build/test-results/testDebugUnitTest/
-            app/build/matcher-*-now.tsv
-          retention-days: 14
-          if-no-files-found: warn
+    uses: ./.github/workflows/matcher.yml
 
   lint:
     needs: changes
@@ -467,12 +397,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint"
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: ./.github/actions/jdk
 
       - name: Lint
         run: ./gradlew :app:lintDebug :app:detekt --build-cache --configuration-cache
@@ -501,12 +426,7 @@ jobs:
           # projectM, which draws the MilkDrop visuals, is built from source.
           submodules: recursive
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: ./.github/actions/jdk
 
       # projectM is compiled six times, debug and release for three ABIs, and Gradle can't cache native
       # builds. ccache gives back the same objects for the same source, compiler and flags, so only

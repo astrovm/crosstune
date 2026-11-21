@@ -11,9 +11,11 @@ git submodule update --init --recursive   # projectM is built from source for th
 scripts/gradle-box/gradle-box.sh TASK...   # Gradle in a container, in turn with other checkouts; how agents and test runs build
 GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh :app:testDebugUnitTest --tests '*NameTest*'   # a few test classes ask for 7 GiB, not a full build's 16, so more of them run side by side
 python3 scripts/build-site.py             # after changing site/; commit docs/ too
+python3 scripts/unittests.py              # the Python tests of every folder under scripts/, as CI runs them; name folders for fewer
 python3 scripts/emulator/emulator.py check   # the test emulators, declared in scripts/emulator/emulators.json; `create` and `start` make and run them
 python3 scripts/devicelock.py take samsung --who "task" --minutes 15   # shared lock for samsung, crosstune-phone, crosstune-tv or crosstune-android8; waits in line, writes who holds it, lets go when the time is up. `release` ends yours, `who` shows the holder and the queue
-adb shell am instrument -w -e microphone heard com.astrovm.crosstune.dev.test/com.astrovm.crosstune.CaptureCheck   # what two hearings at once hear of what a music app plays, each second's loudest; scripts/capturecheck/build.sh builds it
+scripts/device-check-build.sh [--dirty] RUNNER NAME   # the dev app and one instrumentation runner, built for a check on a phone into build/NAME/; each check's README names its runner. It refuses uncommitted changes unless --dirty
+adb shell am instrument -w -e microphone heard com.astrovm.crosstune.dev.test/com.astrovm.crosstune.CaptureCheck   # what two hearings at once hear of what a music app plays, each second's loudest; `scripts/device-check-build.sh --dirty CaptureCheck capturecheck` builds it
 python3 scripts/syncreplay/syncreplay.py run ID   # the lyrics timing replayed on a real recording, line by line against when it's sung; prep first, see the script
 ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S   # the same on the phone over adb, timed from the dev app's own log; screenshots time lines up to 2 s off
 python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # the replay set up as that phone check went, held to its lines
@@ -21,8 +23,8 @@ python3 scripts/syncreplay/syncreplay.py untimed [--again MS] -v   # words with 
                                                                 # and against untimed-main.json: lines main had right, wrong or dark now
 python3 scripts/syncreplay/syncreplay.py synthetic   # made-up lines heard a word at a time, each writing at each pace; SyntheticSingingTest holds them to a floor
 python3 scripts/matchcheck/replay.py run OUT LABEL   # the YouTube Music matcher replayed on real songs collect.py kept, without the network; `prepare` first, `table OUT LABEL --against main` compares
-scripts/namescheck/golden.sh [SHA]          # what main's SongNames took for each pair NamePairs.kt makes, for NamesGoldenTest; run again after changing NamePairs.kt
-scripts/playcheck/golden.sh [SHA]           # what main's MediaSessionPlayback played first and followed in each scene PlayScenes.kt makes, for PlayGoldenTest; run again after changing PlayScenes.kt
+scripts/main-golden.sh names [SHA]          # what main's SongNames took for each pair NamePairs.kt makes, for NamesGoldenTest; run again after changing NamePairs.kt
+scripts/main-golden.sh play [SHA]           # what main's MediaSessionPlayback played first and followed in each scene PlayScenes.kt makes, for PlayGoldenTest; run again after changing PlayScenes.kt
 python3 scripts/notices.py check          # each licence text in Settings → About → Licenses against its source, fetched again
 python3 scripts/kotlinc/kotlinc.py fetch   # the Kotlin compiler's jars, for the readings guard and syncreplay, each checked against kotlinc.lock; `lock` after a Kotlin bump
 node --test report/*.test.mjs             # the report Worker's tests

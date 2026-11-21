@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from measure import adb_path, cache_dir, summarize
+from measure import cache_dir, summarize
 
 
 class PlacesTest(unittest.TestCase):
@@ -15,27 +15,6 @@ class PlacesTest(unittest.TestCase):
             mr.mkdir()
             self.assertEqual(mr / 'crosstune-773', cache_dir(mr, home))
             self.assertTrue((mr / 'crosstune-773').is_dir())
-
-    def test_finds_adb_where_the_sdk_is_on_linux_and_on_a_mac_or_on_the_path(self):
-        with tempfile.TemporaryDirectory() as folder:
-            home = Path(folder) / 'home'
-            bin_dir = Path(folder) / 'bin'
-            bin_dir.mkdir()
-            on_path = bin_dir / 'adb'
-            on_path.write_text('#!/bin/sh\n')
-            on_path.chmod(0o755)
-            self.assertEqual(on_path, adb_path({'PATH': str(bin_dir)}, home))
-            with self.assertRaisesRegex(RuntimeError, 'adb is missing'):
-                adb_path({'PATH': ''}, home)
-            for sdk in ('Library/Android/sdk', 'Android/Sdk'):
-                adb = home / sdk / 'platform-tools/adb'
-                adb.parent.mkdir(parents=True)
-                adb.write_text('')
-                self.assertEqual(adb, adb_path({'PATH': str(bin_dir)}, home))
-            configured = Path(folder) / 'sdk/platform-tools/adb'
-            configured.parent.mkdir(parents=True)
-            configured.write_text('')
-            self.assertEqual(configured, adb_path({'ANDROID_HOME': str(Path(folder) / 'sdk'), 'PATH': ''}, home))
 
 
 class SummaryTest(unittest.TestCase):
@@ -96,33 +75,6 @@ class TargetTest(unittest.TestCase):
         for lead in (0, -1):
             with self.subTest(lead=lead), self.assertRaises(ValueError):
                 target_time(1_700_000_000_000, lead, 'UTC')
-
-
-class DeviceTest(unittest.TestCase):
-    def test_selects_only_the_online_samsung(self):
-        from measure import samsung_serial
-
-        listing = (
-            'List of devices attached\n'
-            'fake-poco device product:x model:2510EPC8BG device:x transport_id:1\n'
-            'fake-samsung device product:b0qxxx model:SM_S908E device:b0q transport_id:2\n'
-            'fake-offline offline model:SM_S908E transport_id:3\n'
-        )
-        self.assertEqual(samsung_serial(listing), 'fake-samsung')
-
-    def test_accepts_a_serial_with_spaces_from_mdns(self):
-        from measure import samsung_serial
-
-        listing = 'fake-device (2)._adb-tls._tcp device product:x model:SM_S908E device:x transport_id:1\n'
-        self.assertEqual(samsung_serial(listing), 'fake-device (2)._adb-tls._tcp')
-
-    def test_rejects_absent_or_ambiguous_samsung(self):
-        from measure import samsung_serial
-
-        for listing in ('List of devices attached\n',
-                        'a device model:SM_S908E\nb device model:SM_S908E\n'):
-            with self.subTest(listing=listing), self.assertRaises(ValueError):
-                samsung_serial(listing)
 
 
 class NotificationTest(unittest.TestCase):

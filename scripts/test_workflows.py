@@ -3,14 +3,19 @@
 Each checkout leaves the job's token out of .git/config, so the code and pages a job runs or opens can't
 read it there. Only a job that pushes with git keeps it, and it's named below with what it pushes.
 
-Each script's tests run in a workflow, so a script that makes what the app's tests read is held to its own.
+Each script's tests run in a workflow, so a script that makes what the app's tests read is held to its own. CI runs
+every folder's with scripts/unittests.py.
 
 CI / Required waits on every other job in ci.yml, so a job added there can't fail and still let a pull request merge.
 """
 
 import re
+import sys
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import unittests
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -63,11 +68,13 @@ def checkouts_with_token(text):
     return found
 
 
-def unrun(tests, workflows):
+def unrun(tests, workflows, every=()):
     """Each of [tests], paths from the repo's root, that no `unittest` line in [workflows]' text runs, alone or by
-    `discover -s` of its folder."""
+    `discover -s` of its folder, and that isn't in one of the folders [every] when a line runs unittests.py alone."""
     run = set(re.findall(r"python3 -m unittest (\S+\.py)", workflows))
     folders = set(re.findall(r"python3 -m unittest discover -s (\S+) -p \"test_\*\.py\"", workflows))
+    if re.search(r"^\s*python3 scripts/unittests\.py\s*$", workflows, re.MULTILINE):
+        folders |= set(every)
     return [test for test in tests if test not in run and test.rsplit("/", 1)[0] not in folders]
 
 
@@ -100,12 +107,22 @@ def unrequired(text, required="required-ci"):
 class WorkflowsTest(unittest.TestCase):
     def test_each_scripts_tests_run_in_a_workflow(self):
         tests = sorted(str(path.relative_to(ROOT)) for path in (ROOT / "scripts").rglob("test_*.py"))
-        self.assertEqual([], unrun(tests, "\n".join(path.read_text(encoding="utf-8") for path in WORKFLOWS.glob("*.yml"))))
+        every = [str(folder) for folder in unittests.folders()]
+        self.assertEqual([], unrun(tests, "\n".join(path.read_text(encoding="utf-8") for path in WORKFLOWS.glob("*.yml")), every))
+
+    def test_ci_runs_every_folders_tests(self):
+        self.assertRegex((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"), r"(?m)^ +python3 scripts/unittests\.py$")
 
     def test_a_test_runs_alone_or_with_its_folder(self):
         text = 'python3 -m unittest discover -s scripts/a -p "test_*.py"\npython3 -m unittest scripts/test_b.py\n'
         tests = ["scripts/a/test_x.py", "scripts/test_b.py", "scripts/c/test_y.py", "scripts/a/d/test_z.py"]
         self.assertEqual(["scripts/c/test_y.py", "scripts/a/d/test_z.py"], unrun(tests, text))
+
+    def test_the_runner_alone_runs_the_folders_it_finds(self):
+        tests = ["scripts/a/test_x.py", "scripts/c/test_y.py"]
+        self.assertEqual([], unrun(tests, "          python3 scripts/unittests.py\n", ["scripts/a", "scripts/c"]))
+        # Named folders aren't read for what they run, so they count for none.
+        self.assertEqual(tests, unrun(tests, "python3 scripts/unittests.py scripts/a\n", ["scripts/a", "scripts/c"]))
 
     def test_ci_required_waits_on_every_job(self):
         self.assertEqual([], unrequired((WORKFLOWS / "ci.yml").read_text(encoding="utf-8")))

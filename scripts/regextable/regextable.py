@@ -38,6 +38,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import adbtool
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 TABLES = ROOT / "app/src/test/regextable"
 KOTLIN = ROOT / "app/src/main/java/com/astrovm/crosstune/PhoneRegexTable.kt"
@@ -82,6 +85,10 @@ SETS = {
 
 def run(*args, **kwargs):
     return subprocess.run(args, check=True, capture_output=True, text=True, **kwargs).stdout
+
+
+def adb(*args):
+    return run(adbtool.path(), *args)
 
 
 def load(path):
@@ -191,9 +198,9 @@ def emulator(serial):
         if not serial.startswith("emulator-"):
             sys.exit(f"{serial} isn't an emulator: the table is made on one, never on a phone")
         return serial
-    for line in run("adb", "devices").splitlines()[1:]:
+    for line in adb("devices").splitlines()[1:]:
         found = line.split("\t")[0]
-        if found.startswith("emulator-") and AVD in run("adb", "-s", found, "emu", "avd", "name"):
+        if found.startswith("emulator-") and AVD in adb("-s", found, "emu", "avd", "name"):
             return found
     sys.exit(f"No {AVD} emulator is running: start it with scripts/emulator/emulator.py start {AVD}")
 
@@ -209,10 +216,10 @@ def probe(serial):
     work = Path(tempfile.mkdtemp(prefix="regextable-", dir=os.environ.get("REGEXTABLE_TMP")))
     try:
         run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "probe.jar"), *probe_classes, str(stdlib))
-        run("adb", "-s", serial, "push", str(work / "probe.jar"), DEVICE_JAR)
-        run("adb", "-s", serial, "shell", f"app_process -cp {DEVICE_JAR} /system/bin {MAIN_CLASS} {DEVICE_TABLE}")
-        run("adb", "-s", serial, "pull", DEVICE_TABLE, str(work / "android.tsv"))
-        run("adb", "-s", serial, "shell", f"rm -f {DEVICE_JAR} {DEVICE_TABLE}")
+        adb("-s", serial, "push", str(work / "probe.jar"), DEVICE_JAR)
+        adb("-s", serial, "shell", f"app_process -cp {DEVICE_JAR} /system/bin {MAIN_CLASS} {DEVICE_TABLE}")
+        adb("-s", serial, "pull", DEVICE_TABLE, str(work / "android.tsv"))
+        adb("-s", serial, "shell", f"rm -f {DEVICE_JAR} {DEVICE_TABLE}")
         engine = load(work / "android.tsv")[1]
         table = TABLES / f"android-{api(engine)}.tsv"
         TABLES.mkdir(parents=True, exist_ok=True)
@@ -289,13 +296,13 @@ def patterns(serial, base):
         ids = next(ROOT.glob("app/build/intermediates/*r_class_jar/debug/*/R.jar"))
         run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "dex.jar"), str(work / "classes.zip"), str(ids), str(stdlib))
         device = "/data/local/tmp/patterns-"
-        run("adb", "-s", serial, "push", str(work / "dex.jar"), device + "probe.jar")
-        run("adb", "-s", serial, "push", str(work / "head.tsv"), device + "list.tsv")
+        adb("-s", serial, "push", str(work / "dex.jar"), device + "probe.jar")
+        adb("-s", serial, "push", str(work / "head.tsv"), device + "list.tsv")
         try:
-            run("adb", "-s", serial, "shell", f"app_process -cp {device}probe.jar /system/bin {PATTERNS_CLASS} digest {device}list.tsv {device}out.tsv")
-            run("adb", "-s", serial, "pull", device + "out.tsv", str(work / "android.tsv"))
+            adb("-s", serial, "shell", f"app_process -cp {device}probe.jar /system/bin {PATTERNS_CLASS} digest {device}list.tsv {device}out.tsv")
+            adb("-s", serial, "pull", device + "out.tsv", str(work / "android.tsv"))
         finally:
-            run("adb", "-s", serial, "shell", f"rm -f {device}probe.jar {device}list.tsv {device}out.tsv")
+            adb("-s", serial, "shell", f"rm -f {device}probe.jar {device}list.tsv {device}out.tsv")
         run(*jvm, "digest", str(work / "head.tsv"), str(work / "jvm.tsv"))
         engine, phone = digests(work / "android.tsv")
         kept = TABLES / f"patterns-android-{api(engine)}.tsv"

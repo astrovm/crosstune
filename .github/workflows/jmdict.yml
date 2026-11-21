@@ -6,6 +6,13 @@ name: JMdict
 # It opens one pull request for the changes, or brings the open one up to date. The release fails when a file's JMdict
 # is older than readingsaudit.py's MAX_AGE_DAYS.
 #
+# fetch takes jmdict-eng by its release's tag, and keeps it only if it has the size and SHA-256 the release gives. A tag
+# whose JMdict is older than the committed files' stops table and oldkana with that reason: the licence asks for the
+# newest version, so a remake never goes back. propose.sh pushes jmdict/remake, always made again from the newest main,
+# and pushes it again when main has moved or the lists have changed since. It stops when a person has pushed to that
+# branch. When the repository doesn't let Actions create pull requests, the run pushes the branch and fails, and the
+# next run opens the pull request. propose.test.sh tries propose.sh on a local repository with a fake gh.
+#
 # A pull request that changes this workflow or the scripts it runs remakes the files the same way,
 # and shows what changed, but opens nothing.
 on:
@@ -60,18 +67,10 @@ jobs:
         run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Gradle builds with this JDK, and the readings guard's tests parse with the Kotlin compiler on it.
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+      - uses: ./.github/actions/jdk
         with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: build/kotlinc
-          key: kotlinc-${{ hashFiles('scripts/kotlinc/kotlinc.lock') }}
-
-      - name: Fetch the locked Kotlin compiler
-        run: python3 scripts/kotlinc/kotlinc.py fetch
+          gradle: read-only
+          kotlinc: true
 
       - name: Test the scripts
         run: |
@@ -92,11 +91,6 @@ jobs:
           if [ -n "$TAG" ]; then args+=(--tag "$TAG"); fi
           # It writes tag= to GITHUB_OUTPUT, once the tag has the form of jmdict-simplified's.
           python3 scripts/readingsaudit/readingsaudit.py fetch "${args[@]}"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        with:
-          # Main's runs of CI save the caches; this one only reads them.
-          cache-read-only: true
 
       # The same commands as by hand, with Gradle run plainly, as CI runs it, instead of in the build box.
       - name: Refresh the word lists and notices

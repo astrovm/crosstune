@@ -11,7 +11,7 @@ import kotlin.math.abs
  * It plays nothing and sends nothing: start a song in a music app first, and Shizuku or root must have
  * allowed the dev app's playback capture. The loudest sample of each second of each comes back.
  *
- * `scripts/capturecheck/build.sh` builds it, then
+ * `scripts/device-check-build.sh --dirty CaptureCheck capturecheck` builds it, then
  * `adb shell am instrument -w -e microphone playback com.astrovm.crosstune.dev.test/com.astrovm.crosstune.CaptureCheck`
  * hears through [PlaybackCapture] alone; `-e microphone heard` through [MainActivity.playedHearing],
  * the way the singing and Shazam each hear. That way, as in the app, the visuals' tap may note in the

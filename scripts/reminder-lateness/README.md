@@ -27,5 +27,5 @@ Older journals contain only the exact-alarm package mode. Recovery restores that
 Run the fake-data tests in a container:
 
 ```sh
-podman run --rm --network none --memory 1g --memory-swap 1g -v "$PWD/scripts/reminder-lateness:/work:ro" -w /work python:3.13-slim python -B -m unittest -v test_measure
+podman run --rm --network none --memory 1g --memory-swap 1g -v "$PWD/scripts:/work:ro" -w /work/reminder-lateness python:3.13-slim python -B -m unittest -v test_measure
 ```

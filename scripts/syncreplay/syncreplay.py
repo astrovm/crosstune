@@ -97,6 +97,9 @@ OUT = Path(os.environ.get("SYNCREPLAY_DIR") or ROOT / "build" / "syncreplay")
 sys.path.insert(0, str(ROOT / "scripts" / "kotlinc"))
 import kotlinc  # noqa: E402  the compiler jars the readings guard parses with too
 
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+import adbtool  # noqa: E402  adb, found the same way in every script
+
 HEARD = OUT / "heard"
 HEARD_BUILT = threading.Lock()
 # The app's speech model; others can be tried with `hear --model` and `run --model`.
@@ -607,8 +610,7 @@ def adb(*command):
     serial = os.environ.get("ANDROID_SERIAL")
     if not serial:
         sys.exit("Say which phone in ANDROID_SERIAL")
-    tool = os.environ.get("ADB", str(Path.home() / "Android" / "Sdk" / "platform-tools" / "adb"))
-    return subprocess.run([tool, "-s", serial, *command], capture_output=True, check=True).stdout
+    return subprocess.run([adbtool.path(), "-s", serial, *command], capture_output=True, check=True).stdout
 
 
 def shell(*command):

@@ -19,7 +19,8 @@ export function senderKey(address) {
  * address by its /48, the most a provider gives one home or office, so a sender can't count as many by moving
  * within what it was given. A mobile carrier gives each phone a /64, but many phones can share one /48: they share
  * its day too (Issue #958). A 6to4 address (2002::/16) carries an IPv4 address, and counts by that one's /24. What
- * isn't an address is its own network.
+ * isn't an address is its own network. Nothing counts a wider block or a carrier: a limit low enough to cost a flood
+ * something there would turn away the honest phones of one carrier as use grows.
  */
 export function networkOf(address) {
   const read = addressOf(address);
