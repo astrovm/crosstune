@@ -3440,36 +3440,49 @@ internal class MainViewModel(
         // How far off the words as found are, by this while, and as they're kept: the lines shown may be moved already.
         val offMs = shift + shown[line].timeMs - foundLines[line].timeMs
         val keptMs = LyricsSync.adjust(foundLines, syncPoints, pace)[line].timeMs - foundLines[line].timeMs
-        val agrees = farOffMs?.let { abs(it - offMs) < agreeingMs(offMs) } == true
         // Moved this time by a while found far off, but heard back where they're kept: that while was wrong.
         val back = movedFar && abs(offMs - keptMs) < WORDS_OFF_MS
         val heard = placed.entries.fold(if (back) syncPoints else shownPoints) { kept, (at, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[at].timeMs, ms ?: (shown[at].timeMs + shift))) }
-        when {
-            back -> {
-                movedFar = false
-                if (whole) farOffMs = null
-            }
-            // Near where they're shown: moved far this time already, this while says so too.
-            abs(shift) < WORDS_OFF_MS -> if (movedFar && agrees) return keepFarOff(song, heard, whole) else if (whole) farOffMs = offMs.takeIf { movedFar }
-            // A video's words are often seconds off, timed for the release without its intro: one while says so,
-            // unless they were put in time by hand, which one while alone never undoes.
-            (appFollowing?.video == true && !timedByHand) || agrees -> return keepFarOff(song, heard, whole)
-            else -> {
-                if (whole) farOffMs = offMs
-                if (abs(shift) <= SungAlignment.MAX_SHIFT_MS) return
-                movedFar = true
-            }
+        if (back) {
+            movedFar = false
+            if (whole) farOffMs = null
+        } else if (!showsThisTime(song, heard, shift, offMs, whole)) {
+            return
         }
         heardPoints = heard
         showPoints()
     }
 
-    /** The lines [heard] far off kept so, as two whiles agree they are: the words are off, not the clock. The first time, that's a problem found, as those heard off with the clock sure are. */
-    private fun keepFarOff(song: MusicMetadata, heard: List<SyncPoint>, whole: Boolean) {
+    /**
+     * Whether the lines [heard] [shift] from those shown, the words as found [offMs] off, are shown there this
+     * time only. If not, they're kept there for good, as this while agrees with the last heard far off, or
+     * stay where they are till one does.
+     */
+    private fun showsThisTime(song: MusicMetadata, heard: List<SyncPoint>, shift: Long, offMs: Long, whole: Boolean): Boolean {
+        val agrees = farOffMs?.let { abs(it - offMs) < agreeingMs(offMs) } == true
+        // Near where they're shown: moved far this time already, this while says so too.
+        if (abs(shift) < WORDS_OFF_MS) {
+            if (movedFar && agrees) return keepFarOff(song, heard, whole)
+            if (whole) farOffMs = offMs.takeIf { movedFar }
+            return true
+        }
+        // A video's words are often seconds off, timed for the release without its intro: one while says so,
+        // unless they were put in time by hand, which one while alone never undoes.
+        if ((appFollowing?.video == true && !timedByHand) || agrees) return keepFarOff(song, heard, whole)
+        if (whole) farOffMs = offMs
+        // Found by the far matcher alone: where by far the most words heard agree, so shown there this time.
+        val farOnly = abs(shift) > SungAlignment.MAX_SHIFT_MS
+        if (farOnly) movedFar = true
+        return farOnly
+    }
+
+    /** The lines [heard] far off kept so, as two whiles agree they are: the words are off, not the clock. The first time, that's a problem found, as those heard off with the clock sure are. Never shown this time only, so false. */
+    private fun keepFarOff(song: MusicMetadata, heard: List<SyncPoint>, whole: Boolean): Boolean {
         val first = syncPoints.isEmpty()
         if (whole) farOffMs = null
         setSync(song, heard)
         if (first) problemFound(SongProblem.SUNG_OFF)
+        return false
     }
 
     /**
