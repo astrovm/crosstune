@@ -2970,6 +2970,8 @@ class ListeningTest {
         assertTrue(checkNotNull(LeadStore(prefs()).load(song)) { "Expected LeadStore(prefs()).load(song) to be non-null" } in 9_400..10_600)
         assertTrue(SavedLinesStore(prefs()).load().single().leadMs in 9_400..10_600)
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
+        // Still, they were put in time by hand, kept so past leaving them, so one while heard off doesn't move them.
+        assertTrue(LyricsSyncStore(prefs()).byHand(song, lines))
         assertFalse(controllerModel().uiState.lyricsOffTake)
         // Another line tapped after stretches the words from the one that moved them, for this release.
         composeRule.runOnIdle { phone.playing.value = checkNotNull(phone.playing.value) { "Expected phone.playing.value to be non-null" }.copy(clock = PlaybackClock(55_000, SystemClock.elapsedRealtime())) }
@@ -7234,8 +7236,12 @@ class ListeningTest {
     private companion object {
         const val TIMEOUT_MS = 5_000L
 
-        /** For a dictionary that never comes to fail the test. The wait ends the moment it's here, 1 to 3 s in on a busy machine, whatever this says. */
-        const val UNIDIC_MS = 60_000L
+        /**
+         * For a dictionary that never comes to fail the test. The wait ends the moment it's here, 1 to 3 s in on a busy
+         * machine, whatever this says. It stays under the 30 s mutation testing gives a test, so a change that never sets
+         * the dictionary fails a test there instead of only running out of time.
+         */
+        const val UNIDIC_MS = 20_000L
         const val DAY_MS = 24 * 60 * 60 * 1000L
         const val NO_MATCH = """{"matches":[]}"""
         const val MATCH = """{"matches":[{"id":"1"}],"track":{"title":"Iris","subtitle":"The Goo Goo Dolls",""" +

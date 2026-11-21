@@ -88,7 +88,7 @@ internal class AutoReports(
     }
 
     private fun sent(): List<String> =
-        preferences.getString(KEY_SENT, null)?.let { runCatching { JSONArray(it) }.getOrNull() }?.let { list -> (0 until list.length()).map(list::getString) }.orEmpty()
+        preferences.getString(KEY_SENT, null)?.let { runCatching { JSONArray(it) }.getOrNull() }.strings()
 
     /** Whether [song]'s [problem] was reported already. */
     fun reported(song: MusicMetadata, problem: SongProblem): Boolean = keyOf(song, problem) in sent()

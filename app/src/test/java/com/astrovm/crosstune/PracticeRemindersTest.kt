@@ -118,7 +118,7 @@ class PracticeRemindersTest {
             for (instant in instants) {
                 val now = java.time.Instant.parse(instant).toEpochMilli()
                 for (minute in listOf(0, 150, 1410)) {
-                    val due = latestReminderAt(minute, now, local)
+                    val due = latestReminderOccurrence(minute, now, local).at
                     val context = "$name $instant $minute"
                     assertTrue(context, due <= now)
                     assertTrue(context, nextReminderAt(minute, due, local) > now)
@@ -852,7 +852,7 @@ class PracticeRemindersTest {
     }
 
     @Test
-    @Config(sdk = [32])
+    @Config(sdk = [31])
     fun androidTwelveHasNoPermissionToAskAndStillShowsIt() {
         setUpWith(line("One"))
         firesOn(3)

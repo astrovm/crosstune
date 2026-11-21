@@ -635,7 +635,7 @@ class MainActivityTest {
     }
 
     @Test
-    @Config(sdk = [32])
+    @Config(sdk = [31])
     fun copySearchShowsToastBeforeAndroid13() {
         respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
         launch()
@@ -997,6 +997,9 @@ class MainActivityTest {
                     "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"First Song"}]}}},
                     {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
                     "playlistItemData":{"videoId":"first000000"}}}]}""")
+                // Apple and Deezer don't have the second song, and say so, as an answer that can't be read is no answer at all.
+                request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                request.url.host == "api.deezer.com" -> FakeSpotify.html(request, """{"data":[]}""")
                 else -> FakeSpotify.html(request, FakeSpotify.trackPage("$title | Spotify", type))
             }
         }
@@ -2345,6 +2348,27 @@ class MainActivityTest {
         waitForText("Blinding Lights")
         assertEquals("https://www.youtube.com/watch?v=4NRXx6U8ABQ", viewModel.uiState.linkText)
         assertNull(nextStartedActivity())
+    }
+
+    @Test
+    fun aCopiedMusicVideoShowsItsLookupUnderWay() {
+        val found = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, """{"x":{"musicVideoType":"MUSIC_VIDEO_TYPE_OMV"}}""")
+            else {
+                found.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                FakeSpotify.html(request, """{"title":"The Weeknd - Blinding Lights (Official Video)","author_name":"TheWeekndVEVO"}""")
+            }
+        }
+        val activity = launch()
+        val viewModel = ViewModelProvider(activity)[MainViewModel::class.java]
+        copied("https://www.youtube.com/watch?v=4NRXx6U8ABQ")
+        comeBack()
+        // Once YouTube Music says it's music, the link is filled in and shown being looked up, not left still.
+        waitUntil { viewModel.uiState.linkText.isNotEmpty() }
+        assertTrue(viewModel.uiState.isLoading)
+        found.countDown()
+        waitForText("Blinding Lights")
     }
 
     @Test

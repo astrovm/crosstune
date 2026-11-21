@@ -51,9 +51,6 @@ internal fun missedAgain(queue: List<SavedLine>): List<SavedLine> {
     return sameSong + missed + rest.drop(sameSong.size)
 }
 
-/** Whether [one] and [other] are lines of the same song. */
-internal fun sameSongOf(one: SavedLine, other: SavedLine?) = other != null && one.title == other.title && one.artist == other.artist
-
 /**
  * Whether [text] is no more than sounds, e.g. "la la la", "Oh, oh" or "ラララ", which aren't worth
  * learning: nothing but letters that sing a sound, or no letters at all.
@@ -222,7 +219,7 @@ internal class PracticeCards(
      * The music app that already has its song open plays it, else the small YouTube player.
      */
     private fun sound(line: SavedLine, explicit: Boolean = false) {
-        soundJob = scope.launch {
+        scope.launchKept({ soundJob = it }) {
             if (!inOpenApp(line, explicit)) inYouTube(line, explicit)
         }
     }
@@ -698,7 +695,7 @@ internal class PracticeCards(
         stopAudio()
         if (!playing) {
             if (practice.video == null) sound(line, explicit = true)
-            else soundJob = scope.launch { inYouTube(line, explicit = true) }
+            else scope.launchKept({ soundJob = it }) { inYouTube(line, explicit = true) }
             return
         }
         setSound(line, LineSound.PLAYED)
@@ -785,7 +782,7 @@ internal class PracticeCards(
         val source = playback ?: return
         stop()
         if (before.songless) return source.playPause(before.song, true, before.app)
-        soundJob = scope.launch {
+        scope.launchKept({ soundJob = it }) {
             // A card may have stopped it a moment ago: it's let play.
             letGo(before.app)
             inApp(source, before.song, before.app, orOpen = true) {

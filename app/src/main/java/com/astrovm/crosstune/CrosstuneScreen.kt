@@ -98,14 +98,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.NonRestartableComposable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -157,13 +158,11 @@ internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
 internal const val NOW_PLAYING_TAG = "now_playing"
 
-/** The bar of what's playing, for a player that closes to hand the remote back to it: [owed] till the bar has taken it. */
-internal class BarFocus {
-    val requester = FocusRequester()
-    var owed by mutableStateOf(false)
-}
+/** What the main screen keeps of where the remote goes back to there, for a player that closes to hand it to the bar. */
+internal val LocalMainFocus = staticCompositionLocalOf<ScreenFocus?> { null }
 
-internal val LocalBarFocus = staticCompositionLocalOf { BarFocus() }
+/** Where the remote comes back to the card's Open, when Play is its main button. */
+private const val OPEN_FOCUS = "open"
 
 /** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
 internal const val CARD_TOOLS_TAG = "card_tools"
@@ -531,9 +530,39 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     // way back, a screen starts afresh, as it always has.
     val kept = rememberSaveableStateHolder()
     LaunchedEffect(screen) { if (screen != Screen.FIX_STEP) Screen.entries.filter { it != screen }.forEach { kept.removeState(it.name) } }
-    val barFocus = remember { BarFocus() }
-    CompositionLocalProvider(LocalCovers provides actions.covers, LocalBarFocus provides barFocus) {
-    WithOverlays(inside = state.phone == Phone.TV) {
+    // Back on a screen, with a remote, it goes back to what it was on there, once the screen left is gone.
+    val focuses = remember { ScreenFocuses(screen) }
+    // Noted as the app turns to another screen, while the remote is still on what it was on, with
+    // where each screen goes back to, as one at the same depth, like settings under the fix list, can be.
+    val backOf = remember { mutableMapOf<Screen, Screen?>() }
+    SideEffect {
+        focuses.turnTo(screen)
+        backOf[screen] = layers.backTo
+    }
+    var settled by remember { mutableStateOf(screen) }
+    // The screen come back to under a dialog or sheet, which keeps the remote till it's put away. Then the remote goes
+    // back where it was on that screen, where the last one put away had no opener of its own to give it back to; and
+    // then what gives it somewhere once that's gone, like the song picker giving it to the field, has the last word.
+    var waiting by remember { mutableStateOf<Screen?>(null) }
+    val overlays = rememberOverlays { own ->
+        val back = waiting
+        waiting = null
+        !own && back != null && focuses.of(back).restore()
+    }
+    val remote by rememberUpdatedState(state.phone == Phone.TV)
+    LaunchedEffect(moving.currentState) {
+        val from = settled
+        val now = moving.currentState
+        settled = now
+        if (!remote || now != backOf[from]) return@LaunchedEffect
+        // Not by whether something has it, as Android hands it to the link field once what had it is gone.
+        // A station's player, as it closes, makes the bar what it goes back to.
+        if (overlays.any) waiting = now else focuses.of(now).restore()
+    }
+    // On the move to another screen, the one left has nothing to wait for.
+    LaunchedEffect(moving.targetState) { if (moving.targetState != waiting) waiting = null }
+    CompositionLocalProvider(LocalCovers provides actions.covers, LocalMainFocus provides focuses.of(Screen.MAIN)) {
+    WithOverlays(inside = state.phone == Phone.TV, overlays) {
     CompositionLocalProvider(LocalLayerSwipe provides layers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
         transitionSpec = {
@@ -546,6 +575,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             else slideAlong(forward = targetState.depth > initialState.depth)
         }
     ) { shown ->
+        CompositionLocalProvider(LocalScreenFocus provides focuses.of(shown)) {
         kept.SaveableStateProvider(shown.name) {
             // if/else rather than an exhaustive when, which compiles an unreachable branch into composables.
             if (shown == Screen.FIX_STEP) {
@@ -572,6 +602,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             } else {
                 MainScreen(state, actions, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true })
             }
+        }
         }
     }
     }
@@ -763,14 +794,14 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         titleLeading = { AppLogo() },
         actions = {
             // The words of what's playing, which open over everything rather than look a link up, so they're not in the field.
-            IconButton(onClick = actions.onLyricsNow, enabled = !state.isLoading && !state.isMatching) {
+            IconButton(onClick = actions.onLyricsNow, enabled = !state.isLoading && !state.isMatching, modifier = Modifier.returnsFocus(Screen.LYRICS)) {
                 AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.tile_lyrics_label))
             }
             // Saved lines, a tap from what there is to practise, with how many are due.
             if (state.savedLines.any { it.practisable }) {
                 PracticeButton(state.savedLines.cardsDueCount(System.currentTimeMillis(), state.cardTypes), onOpenPractice)
             }
-            IconButton(onClick = onOpenSettings) {
+            IconButton(onClick = onOpenSettings, modifier = Modifier.returnsFocus(Screen.SETTINGS)) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))
             }
         },
@@ -895,21 +926,13 @@ private fun PlayingBar(
 ) {
     val playing = following?.clock?.playing != false
     // The buttons sit inside the bar's own tap target, where a remote's search from the bar never looks.
-    val handed = LocalBarFocus.current
-    val bar = handed.requester
-    // Once the player that covered it is gone, the remote comes back to it.
-    LaunchedEffect(handed.owed) {
-        if (!handed.owed) return@LaunchedEffect
-        withFrameNanos {}
-        runCatching { bar.requestFocus() }
-        handed.owed = false
-    }
+    val bar = remember { FocusRequester() }
     val playPause = remember { FocusRequester() }
     Surface(
         onClick = onOpen,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG).swipeLayers()
-            .focusRequester(bar).then(if (transport) Modifier.focusProperties { right = playPause } else Modifier)
+            .focusRequester(bar).returnsFocus(Screen.PLAYER).then(if (transport) Modifier.focusProperties { right = playPause } else Modifier)
     ) {
         Column(modifier = Modifier.navigationBarsPadding()) {
             Row(
@@ -1587,7 +1610,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 onClick = actions.onPlayResult,
                 enabled = !state.playingResult && !state.isMatching,
                 interactionSource = press.source,
-                modifier = modifier.heightIn(min = 56.dp).then(press.modifier)
+                modifier = modifier.returnsFocus().heightIn(min = 56.dp).then(press.modifier)
             ) {
                 AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.size(ButtonDefaults.IconSpacing))
@@ -1600,9 +1623,9 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
         }
         val openButton = @Composable { modifier: Modifier ->
             if (canPlay) {
-                FilledTonalButton(onClick = main.onClick, enabled = main.enabled, interactionSource = press.source, modifier = modifier.then(mainModifier)) { label() }
+                FilledTonalButton(onClick = main.onClick, enabled = main.enabled, interactionSource = press.source, modifier = modifier.returnsFocus(OPEN_FOCUS).then(mainModifier)) { label() }
             } else {
-                Button(onClick = main.onClick, enabled = main.enabled, interactionSource = press.source, modifier = modifier.then(mainModifier)) { label() }
+                Button(onClick = main.onClick, enabled = main.enabled, interactionSource = press.source, modifier = modifier.returnsFocus().then(mainModifier)) { label() }
             }
         }
         if (stacked) {
@@ -1826,7 +1849,8 @@ private fun ToolAction(
         enabled = enabled,
         shape = MaterialTheme.shapes.medium,
         color = Color.Transparent,
-        contentColor = content
+        contentColor = content,
+        modifier = Modifier.returnsFocus(label)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -2262,6 +2286,6 @@ private fun PracticeButton(due: Int, onClick: () -> Unit) {
             if (due > 0) Badge(Modifier.offset(x = (-6).dp, y = 8.dp).testTag(PRACTICE_BADGE_TAG)) { Text(due.toString(), modifier = Modifier.clearAndSetSemantics { }) }
         }
     ) {
-        IconButton(onClick = onClick) { AppIcon(R.drawable.ic_school, contentDescription = description) }
+        IconButton(onClick = onClick, modifier = Modifier.returnsFocus(Screen.PRACTICE_LIST)) { AppIcon(R.drawable.ic_school, contentDescription = description) }
     }
 }

@@ -14,6 +14,9 @@ app/src/main/resources/com/astrovm/crosstune/notices/, its SHA-256 and its sourc
   python3 scripts/notices.py check          fetch every source again and compare it to the bundled bytes
   python3 scripts/notices.py fetch [FILE]   write the bundled texts from their sources, and their SHA-256
   python3 scripts/notices.py fetch-jmdict   refresh both EDRDG pages with the JMdict data
+      --keep-if-unreachable                 when edrdg.org can't be reached, keep the snapshot and warn: a pull
+                                            request's run, as GitHub's runners sometimes can't reach it for hours
+                                            (Issue #1160); the scheduled run stays strict
   python3 scripts/notices.py check-release  check the versioned sources and the bundled JMdict snapshot
 
 TextsTest (in :app:notices) checks the bundled bytes against the SHA-256 and the files in this
@@ -28,6 +31,7 @@ import io
 import os
 import pathlib
 import re
+import ssl
 import sys
 import tarfile
 import time
@@ -229,7 +233,17 @@ def licence_sections(data):
             for index, match in enumerate(headings)}
 
 
-def fetch_texts(manifest, selected):
+def unreachable(error):
+    """Whether the source is down, as opposed to answering with something wrong: no connection at all, or the answers
+    download() retries (a busy or failing server). A bad certificate or any other HTTP error is an answer, and fails."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in (408, 429) or error.code >= 500
+    if isinstance(error, urllib.error.URLError):
+        return not isinstance(error.reason, ssl.SSLError)
+    return isinstance(error, (TimeoutError, ConnectionError))
+
+
+def fetch_texts(manifest, selected, keep_if_unreachable=False):
     # Download all selected texts first, so a failed download cannot change half the snapshot.
     texts = {}
     for name, _, source in selected:
@@ -254,6 +268,11 @@ def fetch_texts(manifest, selected):
                 validate(data)
             except InvalidPage as error:
                 sys.exit(str(error))
+            except OSError as error:
+                if not (keep_if_unreachable and unreachable(error)):
+                    raise
+                print(f"::warning::{source} can't be reached ({error}); the JMdict notices stay as committed.", flush=True)
+                return
         else:
             data = source_bytes(source)
         texts[name] = data
@@ -280,7 +299,11 @@ def check_texts(selected, snapshot):
 
 def main(argv):
     command = argv[1] if len(argv) > 1 else "check"
-    only = set(argv[2:])
+    options = {arg for arg in argv[2:] if arg.startswith("--")}
+    if options - {"--keep-if-unreachable"} or (options and command != "fetch-jmdict"):
+        sys.exit(f"{command} takes no {' '.join(sorted(options))}")
+    keep_if_unreachable = bool(options)
+    only = set(argv[2:]) - options
     manifests = [JMDICT_MANIFEST] if command == "fetch-jmdict" else [MANIFEST, JMDICT_MANIFEST]
     passed = True
     for manifest in manifests:
@@ -289,7 +312,7 @@ def main(argv):
             continue
         try:
             if command in ("fetch", "fetch-jmdict"):
-                fetch_texts(manifest, selected)
+                fetch_texts(manifest, selected, keep_if_unreachable)
             else:
                 passed &= check_texts(selected, snapshot=command == "check-release" and manifest == JMDICT_MANIFEST)
         except FileNotFoundError as missing:

@@ -13,7 +13,7 @@ import org.robolectric.shadows.ShadowMediaSessionManager
 
 /**
  * What plays first, and what a follow finds, in every [PlayScenes] scene, against what `main` did (play-golden.tsv.gz,
- * written by scripts/playcheck/golden.sh from 2c24d2d4). Each answer must be `main`'s, but where a rule below says it
+ * written by scripts/main-golden.sh play from 2c24d2d4). Each answer must be `main`'s, but where a rule below says it
  * changes, and then as it says.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -30,7 +30,7 @@ class PlayGoldenTest {
     /** `main`'s answers, by what was asked: "plays" and the scene, or "follow", the scene, the song and the app. */
     private val main: Map<String, String> by lazy {
         val lines = checkNotNull(javaClass.classLoader?.getResourceAsStream("play-golden.tsv.gz")).use { GZIPInputStream(it).bufferedReader().readLines() }
-        assertEquals("play-golden.tsv.gz is of other scenes: run scripts/playcheck/golden.sh", "scenes\t${PlayScenes.fingerprint(scenes)}", lines.first())
+        assertEquals("play-golden.tsv.gz is of other scenes: run scripts/main-golden.sh play", "scenes\t${PlayScenes.fingerprint(scenes)}", lines.first())
         lines.drop(1).filter { it.isNotBlank() }.associate { it.substringBeforeLast("\t") to it.substringAfterLast("\t") }
     }
 

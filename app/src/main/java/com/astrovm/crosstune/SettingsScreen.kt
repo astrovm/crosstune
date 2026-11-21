@@ -84,6 +84,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.NonSkippableComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -484,7 +485,9 @@ private fun TranslationSourceRow(chatGpt: Boolean, onSelect: (Boolean) -> Unit) 
     choices = listOf(true to CHATGPT, false to GOOGLE_TRANSLATE),
     selected = chatGpt,
     onSelect = onSelect,
-    icon = { if (it) R.drawable.ic_translator_chatgpt else R.drawable.ic_translator_google }
+    mark = { chatGpt, inList ->
+        AppIcon(if (chatGpt) R.drawable.ic_translator_chatgpt else R.drawable.ic_translator_google, contentDescription = null, modifier = Modifier.size(if (inList) 20.dp else 18.dp))
+    }
 )
 
 /** A language's flag, or a globe for the app's or the phone's own. */
@@ -1441,9 +1444,21 @@ private fun PickedMark(picked: Boolean) {
     if (picked) AppIcon(R.drawable.ic_check, contentDescription = null, modifier = Modifier.size(20.dp))
 }
 
-/** A setting picked from a short list, with the one picked shown beside its name. */
+/**
+ * A setting picked from a short list, with the one picked shown beside its name as [shown]. [mark], when there's
+ * one, draws a choice's icon before its name: in the list, and beside the setting for the one picked.
+ */
+// Each caller makes its list of choices anew, so Compose would never find this row's inputs the same and skip it.
+@NonSkippableComposable
 @Composable
-private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, icon: ((T) -> Int)? = null) {
+private fun <T> ChoiceRow(
+    label: String,
+    choices: List<Pair<T, String>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    shown: String = choices.first { it.first == selected }.second,
+    mark: (@Composable (choice: T, inList: Boolean) -> Unit)? = null
+) {
     var expanded by remember { mutableStateOf(false) }
     LabelAndValue(
         label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) },
@@ -1454,9 +1469,9 @@ private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selecte
     ) {
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                icon?.let { AppIcon(it(selected), contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp)) }
+                mark?.let { Box(Modifier.padding(end = 6.dp)) { it(selected, false) } }
                 Text(
-                    text = choices.first { it.first == selected }.second,
+                    text = shown,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -1466,7 +1481,7 @@ private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selecte
                 choices.forEach { (choice, name) ->
                     DropdownMenuItem(
                         text = { Text(name) },
-                        leadingIcon = icon?.let { { AppIcon(it(choice), contentDescription = null, modifier = Modifier.size(20.dp)) } },
+                        leadingIcon = mark?.let { { it(choice, true) } },
                         trailingIcon = { PickedMark(choice == selected) },
                         modifier = Modifier.semantics { this.selected = choice == selected },
                         onClick = {
@@ -1554,40 +1569,14 @@ private val Palette.labelRes: Int
 @Composable
 private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
     val appLanguage = stringResource(R.string.translate_into_app_language)
-    var expanded by remember { mutableStateOf(false) }
-    LabelAndValue(
-        label = { LabelText(stringResource(R.string.setting_translate_into), style = MaterialTheme.typography.bodyLarge) },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp)
-    ) {
-        Box {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LanguageMark(into, modifier = Modifier.padding(end = 6.dp))
-                Text(
-                    text = into?.let(AppLanguage::displayName) ?: appLanguage,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                (listOf(null) + AppLanguage.translationTags).forEach { tag ->
-                    DropdownMenuItem(
-                        text = { Text(tag?.let(AppLanguage::displayName) ?: appLanguage) },
-                        leadingIcon = { LanguageMark(tag) },
-                        trailingIcon = { PickedMark(tag == into) },
-                        modifier = Modifier.semantics { selected = tag == into },
-                        onClick = {
-                            expanded = false
-                            onSelect(tag)
-                        }
-                    )
-                }
-            }
-        }
-    }
+    ChoiceRow(
+        label = stringResource(R.string.setting_translate_into),
+        choices = (listOf(null) + AppLanguage.translationTags).map { it to (it?.let(AppLanguage::displayName) ?: appLanguage) },
+        selected = into,
+        onSelect = onSelect,
+        shown = into?.let(AppLanguage::displayName) ?: appLanguage,
+        mark = { tag, _ -> LanguageMark(tag) }
+    )
 }
 
 /** Picks the languages the user reads, whose songs aren't translated: as many as they like, so the list stays open. */
@@ -1637,40 +1626,14 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
     val context = LocalContext.current
     val current = remember { AppLanguage.current(context) }
     val systemDefault = stringResource(R.string.language_system_default)
-    var expanded by remember { mutableStateOf(false) }
-    LabelAndValue(
-        label = { LabelText(stringResource(R.string.setting_language), style = MaterialTheme.typography.bodyLarge) },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp)
-    ) {
-        Box {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LanguageMark(current, modifier = Modifier.padding(end = 6.dp))
-                Text(
-                    text = current?.let(AppLanguage::displayName) ?: systemDefault,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                (listOf(null) + AppLanguage.tags).forEach { tag ->
-                    DropdownMenuItem(
-                        text = { Text(tag?.let(AppLanguage::displayName) ?: systemDefault) },
-                        leadingIcon = { LanguageMark(tag) },
-                        trailingIcon = { PickedMark(tag == current) },
-                        modifier = Modifier.semantics { selected = tag == current },
-                        onClick = {
-                            expanded = false
-                            onSelect(tag)
-                        }
-                    )
-                }
-            }
-        }
-    }
+    ChoiceRow(
+        label = stringResource(R.string.setting_language),
+        choices = (listOf(null) + AppLanguage.tags).map { it to (it?.let(AppLanguage::displayName) ?: systemDefault) },
+        selected = current,
+        onSelect = onSelect,
+        shown = current?.let(AppLanguage::displayName) ?: systemDefault,
+        mark = { tag, _ -> LanguageMark(tag) }
+    )
 }
 
 /** The installed version, e.g. "1.2.1", or "1.2.1-dev.5" for a build made after a release. */

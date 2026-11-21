@@ -97,8 +97,8 @@ internal object LyricsSync {
 
 /**
  * The lines put in time by hand, per song, on the phone only, and the pace the words go on at past
- * them. They hold for the words they were set on: other words for the song, e.g. from another place,
- * are timed their own way, so they start over.
+ * them, and whether a person put them in time. They hold for the words they were set on: other words
+ * for the song, e.g. from another place, are timed their own way, so they start over.
  */
 internal class LyricsSyncStore(private val preferences: SharedPreferences) {
 
@@ -112,13 +112,16 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
     /** How much of [song] plays per ms of its [lines], as learnt: the same unless it's sped up or slowed. */
     fun pace(song: MusicMetadata, lines: List<LyricLine>): Double = saved(song, lines)?.optDouble("pace", 1.0) ?: 1.0
 
-    fun save(song: MusicMetadata, lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0) {
+    /** Whether [song]'s [lines] were put in time by hand, the points or Shazam's gap for them; kept from before this was, they weren't. */
+    fun byHand(song: MusicMetadata, lines: List<LyricLine>): Boolean = saved(song, lines)?.optBoolean("hand") == true
+
+    fun save(song: MusicMetadata, lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0, byHand: Boolean = false) {
         val all = all() ?: JSONObject()
         val key = keyOf(song)
         all.remove(key)
-        if (points.isNotEmpty() || pace != 1.0) {
+        if (points.isNotEmpty() || pace != 1.0 || byHand) {
             val array = JSONArray().apply { points.forEach { put(JSONArray().put(it.lineMs).put(it.songMs)) } }
-            all.put(key, JSONObject().put("words", fingerprint(lines)).put("points", array).apply { if (pace != 1.0) put("pace", pace) })
+            all.put(key, JSONObject().put("words", fingerprint(lines)).put("points", array).apply { if (pace != 1.0) put("pace", pace) }.apply { if (byHand) put("hand", true) })
         }
         // The oldest go first once there are many; JSONObject keeps the order they were put in.
         while (all.length() > MAX_SONGS) all.remove(all.keys().next())

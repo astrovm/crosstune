@@ -219,6 +219,7 @@ internal fun SettingSwitch(
         },
         modifier = modifier
             .fillMaxWidth()
+            .returnsFocus(label)
             .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
             .padding(horizontal = 20.dp, vertical = 16.dp),
         gap = 16.dp

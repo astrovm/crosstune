@@ -27,6 +27,9 @@ The truth is UtaTen's ruby, the kana it writes over each kanji as it's sung, on 
 itself finds; a song UtaTen doesn't have has none, and isn't counted. `compare` wants `jmdict.json`
 in the folder (jmdict-eng from github.com/scriptin/jmdict-simplified) to tell a word read another
 way the dictionary knows from one sung as another word; without it, those two causes are one.
+Four songs in old kana are read from their UtaTen pages, which keep the original spelling, and the
+word sheet for おもひで is locked in the golden file as おもいで, with its romaji and empty ruby fields: the ruby over
+the kanji around it lets `lines` check the romaji of its whole line.
 Lines with no ruby are checked against Sudachi with its full dictionary instead, as weaker evidence,
 when the folder has a venv with it: uv venv venv && VIRTUAL_ENV=venv uv pip install sudachipy sudachidict_full
 """

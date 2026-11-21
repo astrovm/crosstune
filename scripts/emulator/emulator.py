@@ -19,6 +19,9 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import adbtool
+
 DECLARED = json.loads(Path(__file__).with_name("emulators.json").read_text())
 QUIET_SINK = "crosstune_quiet"
 BOOT_SECONDS = 300
@@ -31,13 +34,7 @@ def die(message):
 
 
 def sdk():
-    places = [os.environ.get("ANDROID_HOME"), os.environ.get("ANDROID_SDK_ROOT")]
-    if not any(places):
-        places = [Path.home() / "Android/Sdk", Path.home() / "Library/Android/sdk"]
-    for place in filter(None, places):
-        if (Path(place) / "platform-tools/adb").exists():
-            return Path(place)
-    die(f"No Android SDK here (looked in {', '.join(str(p) for p in places if p)}). Install it, or set ANDROID_HOME.")
+    return adbtool.sdk() or die(f"No Android SDK here (looked in {', '.join(map(str, adbtool.sdk_places()))}). Install it, or set ANDROID_HOME.")
 
 
 def tool(path):

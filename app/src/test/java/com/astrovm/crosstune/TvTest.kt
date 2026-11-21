@@ -8,12 +8,15 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
@@ -26,6 +29,7 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -635,6 +639,130 @@ class TvTest {
         visuals.assertIsFocused()
     }
 
+    /** The rows of things to fix, each opening its steps; their click is labelled Fix. */
+    private fun fixRows() = composeRule.onAllNodes(SemanticsMatcher("opens its steps") { it.config.getOrElseNullable(SemanticsActions.OnClick) { null }?.label == string(R.string.fix_button) })
+
+    @Test
+    fun onATvBackFromAFixStepLandsOnTheRowThatOpenedIt() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        composeRule.runOnIdle { model().openFixes() }
+        composeRule.waitUntil(5_000) { shown(string(R.string.fix_title)) && fixRows().fetchSemanticsNodes().isNotEmpty() }
+        val row = fixRows()[0]
+        val title = row.fetchSemanticsNode().config[SemanticsProperties.Text].first().text
+        row.requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { fixRows().fetchSemanticsNodes().isEmpty() }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { fixRows().fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasText(title, substring = true) and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackFromTheFixListToSettingsLandsOnTheSettingTheRemoteWasOn() {
+        settingsByRemote()
+        val follow = composeRule.onNode(hasText(string(R.string.setting_lyrics_follow)))
+        follow.performScrollTo().requestFocus()
+        // The fix list is as deep as settings, and goes back to it when opened over it.
+        composeRule.runOnIdle { model().openFixes() }
+        composeRule.waitUntil(5_000) { shown(string(R.string.fix_title)) && !shown(string(R.string.setting_lyrics_follow)) }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { shown(string(R.string.setting_lyrics_follow)) }
+        composeRule.waitForIdle()
+        follow.assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackLandsOnTheWordsButtonThatOpenedAScreenNotOnSettingsPassedBefore() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasContentDescription(string(R.string.tile_lyrics_label)))
+        settings().requestFocus()
+        words.requestFocus()
+        // As the words of what's playing open a screen, by way of listening or the microphone's steps.
+        composeRule.runOnIdle { model().openFixes() }
+        val onMain = { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitUntil(5_000) { !onMain() }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { onMain() }
+        composeRule.waitForIdle()
+        words.assertIsFocused()
+    }
+
+    /** Back on the main screen from the fix list with songs looked up by name meanwhile: their picker shows there, and keeps the remote. */
+    private fun backToThePicker(): SemanticsNodeInteraction {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasContentDescription(string(R.string.tile_lyrics_label)))
+        words.requestFocus()
+        composeRule.runOnIdle { model().openFixes() }
+        val onMain = { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitUntil(5_000) { !onMain() }
+        composeRule.runOnIdle { model().searchSongs("moon") }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { onMain() && shown(string(R.string.song_search_title)) }
+        composeRule.waitForIdle()
+        words.assertIsNotFocused()
+        return words
+    }
+
+    @Test
+    fun onATvTheSongPickerPutAwayOnTheScreenComeBackGivesTheRemoteToTheField() {
+        val words = backToThePicker()
+        // Its own rule, the field as after a link, rather than what the remote was on before the fix list.
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { !shown(string(R.string.song_search_title)) }
+        composeRule.waitForIdle()
+        field().assertIsFocused()
+        words.assertIsNotFocused()
+    }
+
+    @Test
+    fun onATvASongPickedOnTheScreenComeBackGivesTheRemoteToTheField() {
+        val words = backToThePicker()
+        composeRule.runOnIdle { model().chooseSong(MusicMetadata("Moon", "Band")) }
+        composeRule.waitUntil(5_000) { !shown(string(R.string.song_search_title)) && !model().uiState.isLoading }
+        composeRule.waitForIdle()
+        field().assertIsFocused()
+        words.assertIsNotFocused()
+    }
+
+    @Test
+    fun onATvBackFromPracticeLandsOnTheRowThatStartedIt() {
+        prefs().edit().putString("saved_lines", """[{"text":"夜の空","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val practice = composeRule.onNode(hasContentDescription(string(R.string.saved_practice), substring = true) and hasClickAction())
+        practice.requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        val all = hasText(string(R.string.practice_all_songs)) and hasClickAction()
+        val song = hasText("Demo") and hasClickAction()
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(all).fetchSemanticsNodes().isNotEmpty() }
+        for (row in listOf(song, all)) {
+            composeRule.onNode(row).requestFocus()
+            pressOnFocused(Key.DirectionCenter)
+            composeRule.waitUntil(5_000) { model().uiState.practice != null && composeRule.onAllNodes(all).fetchSemanticsNodes().isEmpty() }
+            checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+            composeRule.waitUntil(5_000) { composeRule.onAllNodes(all).fetchSemanticsNodes().isNotEmpty() }
+            composeRule.waitForIdle()
+            composeRule.onNode(row).assertIsFocused()
+        }
+    }
+
+    @Test
+    fun onATvBackFromTheStepsASettingOpensLandsOnThatSetting() {
+        settingsByRemote()
+        val follow = composeRule.onNode(hasText(string(R.string.setting_lyrics_follow)))
+        follow.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { shown(string(R.string.fix_step_turn_on, string(R.string.app_name))) }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { !shown(string(R.string.fix_step_turn_on, string(R.string.app_name))) }
+        composeRule.waitForIdle()
+        follow.assertIsFocused()
+    }
+
     private fun button(id: Int) = composeRule.onNode(hasContentDescription(string(id)) and hasClickAction())
 
     @Test
@@ -750,6 +878,67 @@ class TvTest {
         composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(NOW_PLAYING_TAG).fetchSemanticsNodes().isNotEmpty() }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsNotFocused()
+    }
+
+    @Test
+    fun onATvBackFromAStationsPlayerGoesStraightToTheBarNotByWhatMainWasLeftOn() {
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
+        }
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { SongHearing { Heard.Nothing } }
+        launch()
+        composeRule.waitUntil(5_000) { shown("Blue 100.7 FM") }
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        // Main is left with the remote on the gear, which Back would go back to, were the bar not owed it.
+        settings().requestFocus()
+        composeRule.runOnIdle { model().peekPlayingUnnamed() }
+        composeRule.waitUntil(5_000) { openStation().isDisplayed() }
+        openStation().assertIsFocused()
+        // A frame at a time, as the gear lit up for one before the bar took the remote.
+        composeRule.mainClock.autoAdvance = false
+        composeRule.runOnUiThread {
+            checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+            Snapshot.sendApplyNotifications()
+        }
+        val bar = composeRule.onNodeWithTag(NOW_PLAYING_TAG)
+        var frames = 0
+        while (!(stationPlayerGone() && composeRule.onAllNodes(hasTestTag(NOW_PLAYING_TAG) and isFocused()).fetchSemanticsNodes().isNotEmpty())) {
+            assertTrue("Back took longer than ${frames} frames", frames++ < 200)
+            composeRule.mainClock.advanceTimeByFrame()
+            settings().assertIsNotFocused()
+        }
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
+        bar.assertIsFocused()
+    }
+
+    @Test
+    fun onATvTheSongPickerUpAsAStationsPlayerClosesGivesTheRemoteToTheFieldOncePutAway() {
+        val radio = FakePlayback().apply {
+            access = true
+            unnamed.value = Unnamed("com.streema.simpleradio", "Simple Radio", "Blue 100.7 FM", reportsState = false)
+        }
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { SongHearing { Heard.Nothing } }
+        launch()
+        composeRule.waitUntil(5_000) { shown("Blue 100.7 FM") }
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        settings().requestFocus()
+        composeRule.runOnIdle { model().peekPlayingUnnamed() }
+        composeRule.waitUntil(5_000) { openStation().isDisplayed() }
+        // Songs looked up by name close the player, and their sheet on the main screen keeps the remote.
+        composeRule.runOnIdle { model().searchSongs("moon") }
+        composeRule.waitUntil(5_000) { stationPlayerGone() && shown(string(R.string.song_search_title)) }
+        composeRule.waitForIdle()
+        settings().assertIsNotFocused()
+        // Put away, the picker's own rule has the last word over the bar the remote was handed to: the field, as after a link.
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { !shown(string(R.string.song_search_title)) }
+        composeRule.waitForIdle()
+        field().assertIsFocused()
+        settings().assertIsNotFocused()
     }
 
     @Test

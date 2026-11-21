@@ -8,9 +8,7 @@ import androidx.core.content.edit
 import kotlinx.coroutines.Dispatchers
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONException
 import org.json.JSONObject
-import java.io.IOException
 
 /** A newer Crosstune on GitHub: its [version], and its APK's [apkUrl]. */
 internal data class Update(val version: String, val apkUrl: String)
@@ -31,7 +29,7 @@ internal class UpdateChecker(
     }
 
     /** The latest release, with its APK; null offline, or with none. */
-    private suspend fun latest(): Update? = try {
+    private suspend fun latest(): Update? = answeredOr(null) {
         val request = Request.Builder().url(LATEST_URL).header("Accept", "application/vnd.github+json").build()
         client.newCall(request).answer(Dispatchers.IO) { response ->
             if (!response.isSuccessful) return@answer null
@@ -40,10 +38,6 @@ internal class UpdateChecker(
             val apk = release.optJSONArray("assets").objects().firstOrNull { it.optString("name").endsWith(".apk") } ?: return@answer null
             Update(version, apk.optString("browser_download_url").ifEmpty { return@answer null })
         }
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null
     }
 
     private fun saved(): Update? {

@@ -92,13 +92,9 @@ internal class ChatGpt(
     suspend fun models(): List<ChatGptModel>? {
         offered?.let { return it }
         val token = accessToken() ?: return null
-        return try {
+        return answeredOr(null) {
             // None listed is kept no more than an error is: it's asked again next time.
             fetchModels(token)?.also { if (it.isNotEmpty()) offered = it }
-        } catch (_: IOException) {
-            null
-        } catch (_: JSONException) {
-            null
         }
     }
 
@@ -295,7 +291,7 @@ internal class ChatGpt(
             .add("refresh_token", account.getString(REFRESH_TOKEN))
             .add("resource", RESOURCE)
             .build()
-        try {
+        answeredOr(null) {
             val request = Request.Builder().url(TOKEN_URL).post(form).build()
             val (renewed, body) = client.newCall(request).answer(ioDispatcher) { response -> response.isSuccessful to response.body.stringAtMost() }
             if (renewed) {
@@ -309,10 +305,6 @@ internal class ChatGpt(
                 forget(account)
                 write(account)
             }
-            null
-        } catch (_: IOException) {
-            null
-        } catch (_: JSONException) {
             null
         }
     }

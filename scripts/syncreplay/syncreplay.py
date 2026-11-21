@@ -3,7 +3,7 @@
 far from where each line is really sung the app showed it.
 
   python3 scripts/syncreplay/syncreplay.py set [--cached]        # find and prep the song set
-  python3 scripts/syncreplay/syncreplay.py all                   # replays, hearing what they ask for; per-song and overall table
+  python3 scripts/syncreplay/syncreplay.py all [--from MS]       # replays, hearing what they ask for; per-song and overall table
   python3 scripts/syncreplay/syncreplay.py prep ID LYRICS.json   # once per recording: see below
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
   python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # as the last `phone` check of it went
@@ -97,6 +97,9 @@ OUT = Path(os.environ.get("SYNCREPLAY_DIR") or ROOT / "build" / "syncreplay")
 sys.path.insert(0, str(ROOT / "scripts" / "kotlinc"))
 import kotlinc  # noqa: E402  the compiler jars the readings guard parses with too
 
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+import adbtool  # noqa: E402  adb, found the same way in every script
+
 HEARD = OUT / "heard"
 HEARD_BUILT = threading.Lock()
 # The app's speech model; others can be tried with `hear --model` and `run --model`.
@@ -118,6 +121,8 @@ BLOCK = 960
 ON_TIME_S = 0.5
 # The app's logcat tag for this, off unless set to DEBUG (TIMING_LOG in SungWords.kt).
 TIMING_LOG = "CrosstuneTiming"
+# What CleanFirst takes as still silence (QUIET in CleanHearing.kt), so the replay hears as the phone did.
+QUIET = 2
 DEV_APP = "com.astrovm.crosstune.dev"
 # How well a while heard may fit elsewhere, against its best fit, and still say where it is: false fits measured 0.91 to 0.95, true ones up to 0.85.
 ONE_PLACE = 0.8
@@ -455,6 +460,14 @@ def run(args):
         compare(phone_lit, shown)
 
 
+def heard_clean(log):
+    """Whether the phone heard the sound played itself (Shizuku's playback capture), from its log. Only playback
+    capture logs what it captured, but it logs its half-second check too, which hears nothing of an app that won't
+    be heard this way, like Spotify: the phone then heard through the visualizer, as `hear` makes it by default.
+    Off by [QUIET] from silence is still silence."""
+    return any(int(loudest) > QUIET for loudest in re.findall(r"captured \d+ samples, loudest (\d+)", log))
+
+
 def like_phone(args):
     """Sets the replay up as the last `phone` check of the song went, from what it kept: where the app
     picked the song up, how far its clock was behind, how long the phone took to work out each while
@@ -475,8 +488,7 @@ def like_phone(args):
     args.works = gaps
     # Where in the song each while began, as what's heard depends on it: the phone's first began 1.3 s later than the replay's.
     args.whiles = [args.start + start - int(said.group(2)) + args.behind for start, _ in whiles] if said else []
-    # Only playback capture logs what it captured; the visualizer's sound is heard as `hear` makes it by default.
-    clean = "captured " in log
+    clean = heard_clean(log)
     args.model = f"{APP_MODEL}.clean" if clean else APP_MODEL
     # The words the phone showed, not those prep was given.
     if (kept / "lyrics.json").exists():
@@ -598,8 +610,7 @@ def adb(*command):
     serial = os.environ.get("ANDROID_SERIAL")
     if not serial:
         sys.exit("Say which phone in ANDROID_SERIAL")
-    tool = os.environ.get("ADB", str(Path.home() / "Android" / "Sdk" / "platform-tools" / "adb"))
-    return subprocess.run([tool, "-s", serial, *command], capture_output=True, check=True).stdout
+    return subprocess.run([adbtool.path(), "-s", serial, *command], capture_output=True, check=True).stdout
 
 
 def shell(*command):
@@ -1026,10 +1037,10 @@ def prepped():
 
 
 def run_all(args):
-    """Every prepped song replayed from the start in one go, and how its lines came out against when they're sung."""
+    """Every prepped song replayed from the start, or from --from, in one go, and how its lines came out against when they're sung."""
     songs = prepped()
     asked = own() / "replay.json"
-    asked.write_text(json.dumps({"songs": [{"song": song, "from": 0, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]}))
+    asked.write_text(json.dumps({"songs": [{"song": song, "from": args.start, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]}))
     # Their names too, one a line, as SyncReplayTest reads them before it can read JSON.
     names = own() / "replay.songs"
     wanted = asked.read_text()
@@ -1046,7 +1057,7 @@ def run_all(args):
         if args.heard:
             break
         with ThreadPoolExecutor(SONGS_HEARD_AT_ONCE) as pool:
-            if not sum(pool.map(lambda song: hear_asked(song, [f"{song}.from0.shown.json"]), songs)):
+            if not sum(pool.map(lambda song: hear_asked(song, [f"{song}.from{args.start}.shown.json"]), songs)):
                 break
     titles = {song.get("id"): song["title"] for song in json.loads((OUT / "set.json").read_text())} if (OUT / "set.json").exists() else {}
     totals = dict(lines=0, close=0, on=0, dark=0, early=0)
@@ -1054,7 +1065,7 @@ def run_all(args):
     lyric_lines = 0
     print(f"{'song':12} {'lines':>5} {'0.3 s':>6} {'0.5 s':>6} {'dark':>5} {'early':>5} {'worst':>6}  title")
     for song in songs:
-        shown = json.loads((own() / f"{song}.from0.shown.json").read_text())
+        shown = json.loads((own() / f"{song}.from{args.start}.shown.json").read_text())
         sung = sung_lines(song, shown["lines"])
         first = lit_first(shown)
         lags = [first[k] - sung[k] for k in sung if k in first]
@@ -1431,6 +1442,8 @@ def main():
     p.set_defaults(go=find_set)
     p = steps.add_parser("all")
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
+    # From the start, the app's clock is sure; later, each is picked up partway, as a song mostly is.
+    p.add_argument("--from", dest="start", type=int, default=0, help="ms into each song it's picked up")
     p.add_argument("--work", type=int, default=4500, help="ms the phone takes to work out what it heard")
     p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
     p.add_argument("--heard", default="", help="replay another set of what was heard: .thin5 reads ID.heard20.thin5.json")

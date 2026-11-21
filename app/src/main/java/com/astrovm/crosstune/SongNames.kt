@@ -198,9 +198,11 @@ internal object SongNames {
     private val EAST_ASIAN = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL)
 
     /** Letters and digits only, no marks and no case: "Édition" and "Edition" are one word. */
-    fun normalize(text: String): String =
+    fun normalize(text: String): String = unaccented(text).replace(lettersAndDigits, "")
+
+    /** [text] with no case and without the [marks] its letters take apart into: "Édition" as "edition". */
+    fun unaccented(text: String, marks: Regex = this.marks): String =
         Normalizer.normalize(text, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
-            .replace(lettersAndDigits, "")
 
     /** "The" only counts as an article when it is a word of its own, so not in "Thelonious". */
     fun withoutArticle(name: String): String = name.replace(leadingArticle, "")
@@ -208,9 +210,8 @@ internal object SongNames {
     /** The words written in letters and digits: another script's are what the other title spells out. */
     fun words(title: String): Set<String> = wordList(title).toSet()
 
-    private fun wordList(title: String): List<String> =
-        Normalizer.normalize(title, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
-            .split(wordSplit).filter { it.isNotEmpty() }
+    /** The words written in letters and digits, in order, as [words] reads them. */
+    fun wordList(title: String): List<String> = unaccented(title).split(wordSplit).filter { it.isNotEmpty() }
 
     /**
      * "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself; "Song
@@ -1153,6 +1154,21 @@ internal object SongNames {
         val scripts = names.map { Character.UnicodeScript.of(it.code) }.toSet()
         return homeStores.entries.firstOrNull { it.key in scripts }?.value
     }
+
+    /**
+     * Every store that writes [names] in its own script: Japan's for kana, Korea's for Hangul, and Japan's, Taiwan's, Hong
+     * Kong's and China's for Chinese characters, as 米津玄師 and 鄧紫棋 are both written only in them. Unlike [homeStore], a
+     * Japanese song's name in Hangul, as Korea's store writes Japanese artists, doesn't make Korea's the only one.
+     */
+    fun storesWriting(names: String): Set<String> {
+        val scripts = names.map { Character.UnicodeScript.of(it.code) }.toSet()
+        return scriptStores.filterKeys { it in scripts }.values.flatten().toSet()
+    }
+
+    private val scriptStores = mapOf(
+        Character.UnicodeScript.HANGUL to listOf("KR"), Character.UnicodeScript.HIRAGANA to listOf("JP"),
+        Character.UnicodeScript.KATAKANA to listOf("JP"), Character.UnicodeScript.HAN to listOf("JP", "TW", "HK", "CN")
+    )
 
     private val homeStores = linkedMapOf(
         Character.UnicodeScript.HANGUL to "KR", Character.UnicodeScript.HIRAGANA to "JP", Character.UnicodeScript.KATAKANA to "JP", Character.UnicodeScript.HAN to "TW"

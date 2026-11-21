@@ -43,7 +43,7 @@ The first app you pick on a song is where songs play from then on. Change it in 
 - **Timing that fits the recording.** Lyrics listen briefly to line up with a live take, a video or another release. On phones with 3 GB of memory or more, they hear the singing and move each line to where it's sung, and time lyrics that came with no timing. This runs on your phone with [whisper.cpp](https://github.com/ggml-org/whisper.cpp), whose 32 MB model downloads once, on Wi-Fi.
 - **Report a problem.** Wrong words or timing? One tap in the lyrics sends it to the developer. Say yes once, and Crosstune reports songs with missing lyrics, timing or chords by itself. It listens for singing first, so an instrumental isn't reported, and lyrics found for what looks like an instrumental show once someone sings. Turn it off in **Settings**.
 - **Floating lyrics.** Float them over any app.
-- **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Pick which show in **Settings** → **Visuals**.
+- **MilkDrop visuals.** 150 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Pick which show in **Settings** → **Visuals**.
 - **Learn the words.** Kana, pinyin, romaji and any other script in Latin letters under each line, translations, and the meaning of any word. A reading looks wrong? Flag it on the word.
 - **Practice with the music.** Save lines and they come back as cards: rate each **Again**, **Hard**, **Good** or **Easy**. A card plays its line in the music app that has the song open, or in a small YouTube player, and you stay in Crosstune. Tap the bell for a daily reminder of the cards due.
 - **ChatGPT, if you have it.** Sign in to translate whole songs, explain a line or a song, find the words worth learning, and find songs by describing them.
@@ -110,14 +110,8 @@ Release APKs are signed with this certificate. Its SHA-256 fingerprint is also l
 
 ## Building
 
-Clone with `git clone --recurse-submodules`, and use the Android SDK and JDK 17 or newer.
-
-```bash
-./gradlew :app:assembleDebug   # "Crosstune Dev", installs next to the released app
-./gradlew :app:ci            # the checks CI runs
-```
-
-More in [CONTRIBUTING.md](CONTRIBUTING.md).
+Crosstune builds with the Android SDK and JDK 17 or newer, from a clone with its submodules.
+The commands are in [AGENTS.md](AGENTS.md#commands), and how to build, test and release it is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Crosstune is licensed under the [GNU General Public License v3.0 only](LICENSE) (GPL-3.0-only).
 

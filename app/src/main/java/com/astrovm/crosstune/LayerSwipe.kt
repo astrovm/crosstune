@@ -35,7 +35,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -112,13 +111,6 @@ internal class LayerSwipe {
         if (carry) started.settled?.invoke()
         if (!carry) started.back?.invoke()
         carryOn = carry
-    }
-
-    /** A fling lifts the finger too: how much of it a swipe under way takes, all of it, or none. */
-    fun flung(velocity: Float): Float {
-        if (!swiping) return 0f
-        release(velocity)
-        return velocity
     }
 
     /**

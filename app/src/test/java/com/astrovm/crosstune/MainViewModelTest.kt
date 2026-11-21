@@ -4021,6 +4021,58 @@ class MainViewModelTest {
         assertFalse(model.uiState.listeningAlong)
     }
 
+    @Test
+    fun theNextSongHeardFirstBackInSightIsListenedAlongToOnceAndStopsWhenOutOfSightAgain() {
+        val next = MusicMetadata("Moon", "Luna")
+        val ears = ScriptedEars(heardNow())
+        val playback = FakePlayback()
+        val model = lyricsModel(playback, app = null, listener = ears)
+        playback.onThePhone = null
+        model.listenAlong()
+        idle()
+        assertEquals(1, ears.asked)
+        // Out of sight, the song changes; back in sight, the first thing heard is the next song, which takes over the words.
+        model.pauseListeningAlong()
+        ears.queue.add(heardNow(of = next, at = 1_000, match = "m2"))
+        model.resumeListeningAlong()
+        repeat(6) { if (model.uiState.lyricsFor != next) pass(2_000) }
+        assertEquals(next, model.uiState.lyricsFor)
+        // One hearing a round, from one listen along.
+        val asked = ears.asked
+        repeat(3) { ears.queue.add(heardNow(of = next, at = 20_000L + it * 8_000, match = "m2")) }
+        pass(3 * 8_000L + 500)
+        assertEquals(asked + 3, ears.asked)
+        // Out of sight again, nothing more is heard.
+        model.pauseListeningAlong()
+        val paused = ears.asked
+        pass(30_000)
+        assertEquals(paused, ears.asked)
+    }
+
+    @Test
+    fun theNextSongTakenOverBackInSightIsWatchedOnceAndNotOutOfSight() {
+        val playback = FakePlayback()
+        val model = lyricsModel(playback)
+        model.pauseFollowingNext()
+        idle()
+        val watchers = playback.playing.subscriptionCount.value
+        // Out of sight, the app goes on to the next song; back in sight, it takes over the words.
+        val calm = MusicMetadata("Calm", "Band")
+        playback.playing.value = null
+        playback.onThePhone = Heard.Song(calm, null, app = "com.spotify")
+        idle()
+        assertEquals(song, model.uiState.lyricsFor)
+        model.resumeFollowingNext()
+        until("the next song's words") { model.uiState.lyricsFor == calm }
+        // Out of sight again, nothing's left watching for the next one, so a third song leaves the words.
+        model.pauseFollowingNext()
+        idle()
+        assertEquals("watchers out of sight", watchers, playback.playing.subscriptionCount.value)
+        playback.onThePhone = Heard.Song(MusicMetadata("Third", "Band"), null, app = "com.spotify")
+        pass(2_000)
+        assertEquals(calm, model.uiState.lyricsFor)
+    }
+
     /** The music app at [ms] into the song now. */
     private fun appAt(playback: FakePlayback, ms: Long) {
         playback.playing.value = following().copy(clock = PlaybackClock(ms, android.os.SystemClock.elapsedRealtime()))

@@ -76,7 +76,7 @@ internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> 
         actions = { ReminderBell(state, actions) }
     ) {
         // All of them practises what's due; with none, it says so, and the kinds of card can still be set there.
-        PracticeRow(stringResource(R.string.practice_all_songs), songs.sumOf { it.due }, onClick = actions.onStartPractice) {
+        PracticeRow(stringResource(R.string.practice_all_songs), songs.sumOf { it.due }, onClick = actions.onStartPractice, modifier = Modifier.returnsFocus()) {
             AppIcon(R.drawable.ic_school, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(24.dp))
         }
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -98,7 +98,7 @@ internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> 
                     PracticeRow(
                         song.song.title, song.due, below = song.song.artist, onClick = { actions.onPractiseSongOf(song.song) }, edit = { editing = listOf(song.song.title, song.song.artist) },
                         // Swiping isn't something TalkBack can do, so removing is an action of its own there.
-                        modifier = Modifier.background(MaterialTheme.colorScheme.surface).semantics { customActions = listOf(CustomAccessibilityAction(label) { remove(); true }) }
+                        modifier = Modifier.returnsFocus(song.song.title to song.song.artist).background(MaterialTheme.colorScheme.surface).semantics { customActions = listOf(CustomAccessibilityAction(label) { remove(); true }) }
                     ) {
                         CoverArt(song.song.artworkUrl, actions.loadArtwork, size = 40.dp)
                     }
@@ -123,9 +123,9 @@ private fun PracticeRow(
     title: String,
     due: Int,
     onClick: () -> Unit,
+    modifier: Modifier,
     below: String? = null,
     edit: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
     leading: @Composable () -> Unit
 ) {
     Row(

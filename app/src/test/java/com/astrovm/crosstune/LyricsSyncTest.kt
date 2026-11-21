@@ -3,6 +3,8 @@ package com.astrovm.crosstune
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Before
@@ -179,6 +181,26 @@ class LyricsSyncTest {
         store.save(song, lines, points)
         assertEquals(1.0, store.pace(song, lines), 0.0)
         assertEquals(points, store.load(song, lines))
+    }
+
+    @Test
+    fun whetherTheLinesWerePutInTimeByHandIsKeptWithThem() {
+        val points = listOf(SyncPoint(10_000, 12_000))
+        // Kept as an older Crosstune kept them, with nothing said of hands: not by hand.
+        LyricsSyncStore(prefs).save(song, lines, points)
+        assertFalse(checkNotNull(prefs.getString("lyrics_sync", null)).contains("hand"))
+        assertFalse(LyricsSyncStore(prefs).byHand(song, lines))
+        // By hand, read back on the next play, for these words only.
+        LyricsSyncStore(prefs).save(song, lines, points, byHand = true)
+        assertTrue(LyricsSyncStore(prefs).byHand(song, lines))
+        assertFalse(LyricsSyncStore(prefs).byHand(song, lines.dropLast(1)))
+        // Shazam's gap moved by hand leaves no point to keep, but that it was by hand is kept on its own.
+        LyricsSyncStore(prefs).save(song, lines, emptyList(), byHand = true)
+        assertTrue(LyricsSyncStore(prefs).byHand(song, lines))
+        assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs).load(song, lines))
+        // Put back as found, it's gone.
+        LyricsSyncStore(prefs).save(song, lines, emptyList())
+        assertFalse(LyricsSyncStore(prefs).byHand(song, lines))
     }
 
     @Test

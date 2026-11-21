@@ -1,5 +1,6 @@
 """Benchmark setup must succeed before a playback request can start."""
 
+import os
 import runpy
 import subprocess
 import sys
@@ -28,7 +29,8 @@ class QobuzSetupTest(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, "", "")
 
         args = ["qobuz_try.py", "fixture-device", "https://example.invalid/fixture", "Fixture Song"]
-        with mock.patch.object(sys, "argv", args), mock.patch.object(subprocess, "run", side_effect=run):
+        with mock.patch.object(sys, "argv", args), mock.patch.object(subprocess, "run", side_effect=run), \
+                mock.patch.dict(os.environ, {"ADB": "adb"}):
             with self.assertRaises(subprocess.CalledProcessError):
                 runpy.run_path(str(Path(__file__).with_name("qobuz_try.py")), run_name="__main__")
         self.assertIn("run-as", calls[-1])

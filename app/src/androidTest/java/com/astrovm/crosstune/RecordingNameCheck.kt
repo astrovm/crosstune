@@ -12,7 +12,10 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
-/** Observe the app's real follower while VLC plays one invented local fixture. It sends no controls or network requests. */
+/**
+ * Observe the app's real follower while VLC plays one invented local fixture. It sends no controls or network requests.
+ * scripts/namescheck/README.md says how to build and run it.
+ */
 class RecordingNameCheck : Instrumentation() {
     private var asked = ""
     private var playing = ""

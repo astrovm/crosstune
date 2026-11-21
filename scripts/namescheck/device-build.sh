@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build an immutable app and the real-session probe, like golden.sh's temporary baseline checkout.
+# Build an immutable app and the real-session probe, like main-golden.sh's temporary baseline checkout.
 # Usage: device-build.sh COMMIT LABEL
 main() {
     set -euo pipefail

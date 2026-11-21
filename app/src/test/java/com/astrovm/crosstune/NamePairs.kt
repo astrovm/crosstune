@@ -3,7 +3,7 @@ package com.astrovm.crosstune
 /**
  * A title an app sends, against the title of the song asked for: each a base name with a [tag][titleTag] after it, or
  * [before] it, the app's maybe with a track number and an extension, as a file is named. Plain Kotlin, as it's copied
- * into a checkout of `main` to write what `main` made of each (scripts/namescheck/golden.sh).
+ * into a checkout of `main` to write what `main` made of each (scripts/main-golden.sh names).
  */
 internal data class NamePair(
     val titleBase: String, val titleTag: String, val numbered: Boolean, val songBase: String, val songTag: String, val before: Boolean = false
