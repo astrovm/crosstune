@@ -76,6 +76,14 @@ class PublishingTest(unittest.TestCase):
                 self.assertFalse((shots.ROOT / 'screenshots').exists())
                 self.assertEqual(len(list(dark.parent.iterdir())), 1)
 
+    def test_the_light_set_alone_lists_nothing_in_the_store(self):
+        # Published first or last, a light run must not touch the store's dark set.
+        self.fixture('light')
+        shots.publish('zh-tw', 'light')
+        self.assertTrue((shots.ROOT / 'docs/img/zh-tw/home-light.mp4').exists())
+        self.assertFalse((shots.ROOT / 'fastlane').exists())
+        self.assertFalse((shots.ROOT / 'screenshots').exists())
+
     def test_incomplete_set_does_not_replace_store_listing(self):
         self.fixture('light', count=7)
         listing = shots.ROOT / 'fastlane/metadata/android/zh-TW/images/phoneScreenshots'
