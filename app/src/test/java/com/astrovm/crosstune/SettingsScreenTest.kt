@@ -12,6 +12,12 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -99,6 +105,20 @@ class SettingsScreenTest {
         show(UiState())
         // One button, so a screen reader says both, as the other rows do.
         composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.settings_default_label))).assert(hasText(string(R.string.target_youtube_music)))
+    }
+
+    @Test
+    fun theMusicAppsMenuTicksTheAppItIsSetToAsTheOtherSettingsDo() {
+        val spotify = Destination.Service(MusicService.SPOTIFY)
+        val deezer = Destination.Service(MusicService.DEEZER)
+        show(UiState(destinations = listOf(spotify, deezer), defaultDestination = deezer))
+        composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
+        composeRule.waitForIdle()
+        // One tick, by the app it's set to, not its color alone, which says nothing to someone who can't tell it apart.
+        composeRule.onAllNodes(hasTestTag(PICKED_TAG), useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText(string(R.string.service_spotify))), useUnmergedTree = true).assertIsNotSelected()
+        composeRule.onNode(isSelected() and hasAnyDescendant(hasText(string(R.string.target_deezer))) and hasAnyDescendant(hasTestTag(PICKED_TAG)), useUnmergedTree = true)
+            .assertExists()
     }
 
     @Test
