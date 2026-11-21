@@ -118,6 +118,8 @@ BLOCK = 960
 ON_TIME_S = 0.5
 # The app's logcat tag for this, off unless set to DEBUG (TIMING_LOG in SungWords.kt).
 TIMING_LOG = "CrosstuneTiming"
+# What CleanFirst takes as still silence (QUIET in CleanHearing.kt), so the replay hears as the phone did.
+QUIET = 2
 DEV_APP = "com.astrovm.crosstune.dev"
 # How well a while heard may fit elsewhere, against its best fit, and still say where it is: false fits measured 0.91 to 0.95, true ones up to 0.85.
 ONE_PLACE = 0.8
@@ -459,8 +461,8 @@ def heard_clean(log):
     """Whether the phone heard the sound played itself (Shizuku's playback capture), from its log. Only playback
     capture logs what it captured, but it logs its half-second check too, which hears nothing of an app that won't
     be heard this way, like Spotify: the phone then heard through the visualizer, as `hear` makes it by default.
-    Off by 2 from silence is still silence, as `CleanFirst` takes it."""
-    return any(int(loudest) > 2 for loudest in re.findall(r"captured \d+ samples, loudest (\d+)", log))
+    Off by [QUIET] from silence is still silence."""
+    return any(int(loudest) > QUIET for loudest in re.findall(r"captured \d+ samples, loudest (\d+)", log))
 
 
 def like_phone(args):

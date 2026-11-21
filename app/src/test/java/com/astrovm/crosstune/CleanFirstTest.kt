@@ -85,12 +85,14 @@ class CleanFirstTest {
     }
 
     /**
-     * Issue #1100: Shazam listens while the singing still records, each through a recording of its own. On the
-     * Samsung (Android 16), two playback captures at once both heard TIDAL, loudest 32767 during the overlap;
-     * Spotify, which no playback capture hears even alone, was heard by both through the visuals' tap.
+     * Issue #1100: Shazam opens its hearing while the singing's is still open, so [CleanFirst] keeps nothing
+     * from one open to the next: each picks its own sound, clean or the tap, and closes all it opened. The
+     * fakes here fill every read, so this can't see Android silence a second capture: `CaptureCheck` measures
+     * that on a phone. On the Samsung (Android 16), two playback captures at once both heard TIDAL, loudest
+     * 32767 during the overlap; Spotify, which no playback capture hears even alone, both heard through the tap.
      */
     @Test
-    fun shazamHearsWhatPlaysWhileTheSingingStillRecordsIt() {
+    fun aHearingOpenedWhileAnotherIsOpenPicksItsOwnSoundAndClosesAllItOpened() {
         // What each hears: the clean sound, or, with none, the visuals' tap.
         for ((case, clean, loudest) in listOf(Triple("heard cleanly", Sound(3000), 3000), Triple("as Spotify plays", Sound(0), 100))) {
             val tap = Sound(100)

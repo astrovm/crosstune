@@ -13,7 +13,7 @@ GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh :app:testDebugUnitTest --te
 python3 scripts/build-site.py             # after changing site/; commit docs/ too
 python3 scripts/emulator/emulator.py check   # the test emulators, declared in scripts/emulator/emulators.json; `create` and `start` make and run them
 python3 scripts/devicelock.py take samsung --who "task" --minutes 15   # shared lock for samsung, crosstune-phone, crosstune-tv or crosstune-android8; waits in line, writes who holds it, lets go when the time is up. `release` ends yours, `who` shows the holder and the queue
-adb shell am instrument -w -e microphone heard com.astrovm.crosstune.dev.test/com.astrovm.crosstune.CaptureCheck   # what two hearings at once hear of what a music app plays, each second's loudest; build it as CaptureCheck.kt says
+adb shell am instrument -w -e microphone heard com.astrovm.crosstune.dev.test/com.astrovm.crosstune.CaptureCheck   # what two hearings at once hear of what a music app plays, each second's loudest; scripts/capturecheck/build.sh builds it
 python3 scripts/syncreplay/syncreplay.py run ID   # the lyrics timing replayed on a real recording, line by line against when it's sung; prep first, see the script
 ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S   # the same on the phone over adb, timed from the dev app's own log; screenshots time lines up to 2 s off
 python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # the replay set up as that phone check went, held to its lines

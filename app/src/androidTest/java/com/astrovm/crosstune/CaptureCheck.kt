@@ -1,9 +1,7 @@
 package com.astrovm.crosstune
 
 import android.app.Instrumentation
-import android.content.Context
 import android.os.Bundle
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
@@ -13,11 +11,12 @@ import kotlin.math.abs
  * It plays nothing and sends nothing: start a song in a music app first, and Shizuku or root must have
  * allowed the dev app's playback capture. The loudest sample of each second of each comes back.
  *
- * Build it with `scripts/gradle-box/gradle-box.sh :app:assembleDebugAndroidTest -PcrosstuneTestRunner=com.astrovm.crosstune.CaptureCheck`,
- * next to `:app:assembleDebug`, then
+ * `scripts/capturecheck/build.sh` builds it, then
  * `adb shell am instrument -w -e microphone playback com.astrovm.crosstune.dev.test/com.astrovm.crosstune.CaptureCheck`
- * hears through [PlaybackCapture] alone; `-e microphone heard` through [CleanFirst], with the visuals'
- * tap behind it, the way the singing and Shazam each hear.
+ * hears through [PlaybackCapture] alone; `-e microphone heard` through [MainActivity.playedHearing],
+ * the way the singing and Shazam each hear. That way, as in the app, the visuals' tap may note in the
+ * dev app's preferences that the phone shares its sound ([PlayedSound.KEY_SHARES]). `am instrument`
+ * restarts the dev app's process, so an open Crosstune Dev starts over.
  */
 class CaptureCheck : Instrumentation() {
     private var through = "playback"
@@ -32,18 +31,20 @@ class CaptureCheck : Instrumentation() {
         try {
             val microphone = when (through) {
                 "playback" -> PlaybackCapture(targetContext)
-                "heard" -> CleanFirst(MainActivity.cleanSoundFactory(targetContext), PlayedSound(MainActivity.soundTapFactory, targetContext.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)))
+                "heard" -> MainActivity.playedHearing(targetContext)
                 else -> error("Unknown microphone $through")
             }
-            val long = AtomicReference<String>()
-            val first = thread { long.set(hear(microphone, FIRST_MS)) }
+            // The long hearing's own thread hands back what it heard, or what went wrong, so either is reported.
+            var long: Result<String>? = null
+            val first = thread { long = runCatching { hear(microphone, FIRST_MS) } }
             Thread.sleep(SECOND_AT_MS)
-            val during = hear(microphone, SECOND_MS)
+            val during = runCatching { hear(microphone, SECOND_MS) }
             first.join()
             val after = hear(microphone, SECOND_MS)
+            val heardFirst = checkNotNull(long).getOrThrow()
             finish(0, Bundle().apply {
-                putString("first", long.get())
-                putString("during", during)
+                putString("first", heardFirst)
+                putString("during", during.getOrThrow())
                 putString("after", after)
             })
         } catch (error: Exception) {
