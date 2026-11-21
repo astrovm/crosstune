@@ -152,9 +152,12 @@ class LinkInterceptionTest {
 
     @Test
     fun installedAppsAreDetected() {
+        assertTrue(interception.linkState().serviceApps.isEmpty())
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.aspiro.tidal" })
+        assertEquals(setOf(MusicService.TIDAL), interception.linkState().serviceApps.keys)
         // A build patched from an app, under a name of its own, is that app.
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "app.revanced.android.apps.youtube.music" })
+        assertEquals(setOf(MusicService.TIDAL, MusicService.YOUTUBE_MUSIC), interception.linkState().serviceApps.keys)
         assertEquals("app.revanced.android.apps.youtube.music", interception.linkState().serviceApps[MusicService.YOUTUBE_MUSIC]?.packageName)
     }
 
@@ -181,6 +184,7 @@ class LinkInterceptionTest {
         // An app of some other service that opens no such link is not mistaken for one.
         shadowOf(app.packageManager).installPackage(installedApp("org.example.player", "Player"))
         val state = interception.linkState()
+        assertEquals(setOf(MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE), state.serviceApps.keys)
         assertEquals(fork, state.serviceApps[MusicService.YOUTUBE_MUSIC]?.packageName)
         assertEquals(plainYouTube, state.serviceApps[MusicService.YOUTUBE]?.packageName)
         assertEquals(listOf(fork, plainYouTube), state.apps)
