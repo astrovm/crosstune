@@ -1285,23 +1285,23 @@ internal class MainViewModel(
 
     /**
      * Listens to what plays, again once the song heard should be over, as the next one has started by
-     * then. Shared sound first; the microphone only when it was allowed before, never on a TV, and only
-     * while the phone plays aloud, as through headphones or muted it hears nothing. Any failure is quiet:
+     * then. Shared sound first; then the microphone, if it was allowed before and this isn't a TV, whatever
+     * the phone plays through, as it can't tell a speaker or a car from headphones. Any failure is quiet:
      * what plays stays named as the app has it.
      */
     private suspend fun nameByEar(source: PlaybackSource) {
         byEar = currentCoroutineContext()[Job]
         while (true) {
-            untilByEar(source)
+            untilByEar()
             // Listening along with the words, or hearing them sung, has the microphone and the phone's sound till it's done.
             listOfNotNull(alongJob, singingJob, voiceJob).forEach { it.join() }
-            val ears = earsNow(source)
-            val byMicrophone = uiState.phone != Phone.TV && mayCalibrate() && source.playsAloud()
+            val ears = earsNow()
+            val byMicrophone = uiState.phone != Phone.TV && mayCalibrate()
             // How the app said it played as the sound to hear started, which what it says after is checked against.
             val startedWith = uiState.playingUnnamed?.following
             // Stopped for one of those, it's tried again once that's done.
             val heard = coroutineScope {
-                val listening = async { listener.listenToPlaying(byMicrophone, whileAloud = true) }
+                val listening = async { listener.listenToPlaying(byMicrophone) }
                 byEarListen = listening
                 listening.join()
                 listening.takeUnless { it.isCancelled }?.await()
@@ -1331,22 +1331,21 @@ internal class MainViewModel(
 
     /**
      * Waits till the next listen by ear. After one that named no song, a new way to hear starts it at
-     * once, the rests from the shortest: the microphone or the phone's own sound allowed, or the phone
-     * playing aloud again, or no longer, as when headphones come or go.
+     * once, the rests from the shortest: the microphone or the phone's own sound allowed, or no longer.
      */
-    private suspend fun untilByEar(source: PlaybackSource) {
+    private suspend fun untilByEar() {
         while (now() < nextByEarAtMs) {
             val with = unheardWith ?: return delay(nextByEarAtMs - now())
             delay(minOf(EARS_CHECK_MS, nextByEarAtMs - now()))
-            if (with != earsNow(source)) {
+            if (with != earsNow()) {
                 quietByEar = 0
                 nextByEarAtMs = now()
             }
         }
     }
 
-    /** What naming by ear can hear with now: the microphone allowed, the phone's own sound shared, the phone playing aloud. */
-    private fun earsNow(source: PlaybackSource) = listOf(mayCalibrate(), mayCapture(), source.playsAloud())
+    /** What naming by ear can hear with now: the microphone allowed, the phone's own sound shared. */
+    private fun earsNow() = listOf(mayCalibrate(), mayCapture())
 
     /**
      * When the song [heard] should be over, on the [now] clock, from its length and where in it it was heard, going by

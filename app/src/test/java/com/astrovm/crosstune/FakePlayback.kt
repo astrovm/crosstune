@@ -225,11 +225,6 @@ internal class FakePlayback : PlaybackSource {
         combine(songs, unnamed) { _, now -> now }.collectLatest { now -> if (now == null) send(read()) else flowOf(now.app).collect { send(read()) } }
     }.distinctUntilChanged()
 
-    /** Whether the phone's music plays out loud, where the microphone hears it. */
-    var aloud = true
-
-    override fun playsAloud() = aloud
-
     /** The app each seek was sent to, null for any. */
     val seekedApps: MutableList<String?> = CopyOnWriteArrayList()
 

@@ -13,7 +13,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
-import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
 import android.media.MediaMetadata
@@ -348,9 +347,6 @@ internal interface PlaybackSource {
     /** [playingUnnamed], updated when apps start, pause, stop, or change what they play. */
     @MainThread
     fun unnamedUpdates(): Flow<Unnamed?>
-
-    /** Whether the phone's music plays out loud, where the microphone hears it: not muted, nor in headphones. */
-    fun playsAloud(): Boolean
 
     /** What [app] plays, playing or paused, and where in its queue, as that changes; null while it plays nothing. */
     @MainThread
@@ -843,10 +839,6 @@ internal class MediaSessionPlayback(
 
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
 
-    override fun playsAloud(): Boolean =
-        !audio.isStreamMute(AudioManager.STREAM_MUSIC) && audio.getStreamVolume(AudioManager.STREAM_MUSIC) > 0 &&
-            audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).all { it.type in ROOM_OUTPUTS }
-
     private fun activeSessions(): List<MediaController> = sessions.getActiveSessions(listener).also { controllers ->
         covers.retainSessions(controllers.map { it.sessionToken }.toSet())
     }
@@ -1297,23 +1289,6 @@ private const val SPOTIFY_LIKED = "CHECK_FILL"
 
 /** A music app's own button to repeat, which goes round its ways as it does there, by what the app's session calls it. */
 private val REPEATS = setOf("loop_mode_action") // YouTube Music
-
-/**
- * Where the phone's music is heard in the room, or never goes: its own speaker and earpiece, a call, a TV
- * over HDMI, a car, a Bluetooth LE speaker. Any other output may be heard by its listener alone, so the
- * microphone isn't asked to hear it: headphones, a hearing aid, a USB or classic Bluetooth one, which can't
- * be told from headphones, a line out, a dock, or a kind a later Android adds.
- */
-private val ROOM_OUTPUTS = buildSet {
-    addAll(
-        listOf(
-            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_TELEPHONY,
-            AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_BUS
-        )
-    )
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) addAll(listOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE, AudioDeviceInfo.TYPE_REMOTE_SUBMIX))
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) addAll(listOf(AudioDeviceInfo.TYPE_HDMI_EARC, AudioDeviceInfo.TYPE_BLE_SPEAKER))
-}
 
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)

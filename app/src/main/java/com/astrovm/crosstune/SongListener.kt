@@ -10,17 +10,13 @@ import androidx.core.content.edit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -375,9 +371,8 @@ internal fun interface SongHearing {
     /**
      * What an app on the phone plays, heard rather than as the app says, to tell how far the app is from
      * the words; by the microphone too, when the phone won't share its sound, unless not [byMicrophone].
-     * With [whileAloud], the microphone stops once the phone no longer plays out loud.
      */
-    suspend fun listenToPlaying(byMicrophone: Boolean = true, whileAloud: Boolean = false): Heard = listen()
+    suspend fun listenToPlaying(byMicrophone: Boolean = true): Heard = listen()
 }
 
 /**
@@ -418,12 +413,10 @@ internal class PlayingFirst(
         return Around(phone, if (phone == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else null)
     }
 
-    override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
+    override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
         val heard = played.listen()
         if (!byMicrophone || heard != Heard.Failed(AppError.MICROPHONE)) return heard
-        // Through headphones or muted, the microphone hears nothing of it: no more use than none at all.
-        val room = (if (whileAloud) aloud() else hearing.listen()) ?: return heard
-        return roomForPlaying(room)
+        return roomForPlaying(hearing.listen())
     }
 
     private fun roomForPlaying(room: Heard): Heard {
@@ -431,17 +424,6 @@ internal class PlayingFirst(
         // With no song named to tell, the one heard may be either.
         val playing = playback.songForRecognition()?.metadata ?: return (room as? Heard.Song)?.copy(inRoom = true) ?: room
         return room.takeIf { it !is Heard.Song || SongNames.names(playing.title, playing.artist, it.metadata) } ?: Heard.Nothing
-    }
-
-    /** What the microphone hears while the phone plays out loud, or null once it doesn't, as when headphones are plugged in. */
-    private suspend fun aloud(): Heard? = coroutineScope {
-        val listening = async { hearing.listen() }
-        val quiet = launch { while (playback.playsAloud()) delay(ALOUD_CHECK_MS) }
-        select<Heard?> { listening.onAwait { it }; quiet.onJoin { null } }.also { coroutineContext.cancelChildren() }
-    }
-
-    companion object {
-        const val ALOUD_CHECK_MS = 1_000L
     }
 }
 
