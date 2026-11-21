@@ -214,7 +214,7 @@ internal class ChatGptTutor(
     private fun readingKey(song: MusicMetadata, lines: List<String>) = "${song.title}|${song.artist}|${lines.hashCode()}"
 
     private fun readingFixes(json: String): List<ReadingFix> = JSONArray(json).let { list ->
-        (0 until list.length()).mapNotNull { list.optJSONObject(it) }.map { ReadingFix(it.optInt("line") - 1, it.optString("kanji"), it.optString("reading"), Reader.CHATGPT) }
+        list.objects().map { ReadingFix(it.optInt("line") - 1, it.optString("kanji"), it.optString("reading"), Reader.CHATGPT) }
     }
 
     /** Songs that match [description], what someone remembers about them, most likely first, as title to artist. */
@@ -237,7 +237,7 @@ internal class ChatGptTutor(
             cache.save()
             array.toString()
         }
-        return objects(kept).mapNotNull(::named)
+        return JSONArray(kept).objects().mapNotNull(::named)
     }
 
     /**
@@ -298,7 +298,7 @@ internal class ChatGptTutor(
             )
             (reply.array() ?: return null).toString()
         }
-        val japanese = JSONArray(kept).let { list -> (0 until list.length()).map { list.optString(it) } }
+        val japanese = JSONArray(kept).strings()
         if (japanese.size != lines.size) return null
         cache.put(key, kept)
         cache.save()
@@ -326,7 +326,7 @@ internal class ChatGptTutor(
             )
             (reply.array() ?: return null).toString()
         }
-        val words = objects(kept).mapNotNull { json ->
+        val words = JSONArray(kept).objects().mapNotNull { json ->
             val word = json.optString("word").trim()
             val meaning = json.optString("meaning").trim()
             if (word.isEmpty() || meaning.isEmpty()) null else KeyWord(word, json.optString("reading").trim().takeIf { it.isNotEmpty() && it != word }, meaning)
@@ -357,7 +357,7 @@ internal class ChatGptTutor(
         }
         val json = JSONObject(kept)
         val original = json.optJSONObject("original")?.let(::named)
-        val samples = json.optJSONArray("samples")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it)?.let(::named) } }.orEmpty()
+        val samples = json.optJSONArray("samples").objects().mapNotNull(::named)
         // Nothing to say is kept too, so the web isn't searched again each time.
         cache.put(key, kept)
         cache.save()
@@ -413,7 +413,7 @@ internal class ChatGptTutor(
             )
             (reply.array() ?: return null).toString()
         }
-        val examples = objects(kept).mapNotNull { json ->
+        val examples = JSONArray(kept).objects().mapNotNull { json ->
             val sentence = json.optString("sentence").trim()
             val meaning = json.optString("meaning").trim()
             if (sentence.isEmpty() || meaning.isEmpty()) null else Example(sentence, meaning)
@@ -445,7 +445,7 @@ internal class ChatGptTutor(
             cache.save()
             array.toString()
         }
-        return objects(kept).mapNotNull(::named)
+        return JSONArray(kept).objects().mapNotNull(::named)
     }
 
     /**
@@ -474,9 +474,6 @@ internal class ChatGptTutor(
         effort = "low",
         onText = onText
     )
-
-    /** The objects in the JSON array [text]. */
-    private fun objects(text: String): List<JSONObject> = JSONArray(text).let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }
 
     /** A song named in [json] by its title and artist, or null when either is missing. */
     private fun named(json: JSONObject): Pair<String, String>? {

@@ -936,7 +936,7 @@ internal class LyricsFinder(
             .addQueryParameter("entity", "song")
             .addQueryParameter("limit", "$SONGS_OF_A_NAME")
             .build()
-        val songs = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }.orEmpty()
+        val songs = (parse(search.toString()) as? JSONObject)?.optJSONArray("results").objects()
             .filter { SongNames.same(SongNames.bareTitle(it.optString("trackName")), song) && it.optString("artistName").let { artist -> artist.isNotBlank() && !SongNames.sameArtist(artist, cover) } }
         val singers = songs.groupBy { it.optString("artistName") }.entries.sortedByDescending { it.value.size }
         val next = singers.getOrNull(1)?.value?.size ?: 0
@@ -1108,7 +1108,7 @@ internal class LyricsFinder(
             .addQueryParameter("entity", "musicArtist")
             .addQueryParameter("limit", "10")
             .build()
-        val artists = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }.orEmpty()
+        val artists = (parse(search.toString()) as? JSONObject)?.optJSONArray("results").objects()
         // Namesakes go by the genre most of them share, as a DJ of a jazz trumpeter's name may be listed first; the first listed among equals.
         artists.filter { SongNames.sameArtist(it.optString("artistName"), artist) }.groupingBy { it.optString("primaryGenreName") }.eachCount().maxByOrNull { it.value }?.key
     }
@@ -1266,7 +1266,7 @@ internal class LyricsFinder(
             .addQueryParameter("entity", "song")
             .addQueryParameter("limit", "10")
             .build()
-        val songs = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }.orEmpty()
+        val songs = (parse(search.toString()) as? JSONObject)?.optJSONArray("results").objects()
         // Null when the song's length isn't known.
         fun asLong(song: JSONObject) = metadata.lengthMs?.let { abs(song.optLong("trackTimeMillis") - it) <= SAME_RECORDING_LENGTH_MS }
         val named = songs.firstOrNull { song ->
@@ -1380,7 +1380,7 @@ internal class LyricsFinder(
                 ?: return@withTimeoutOrNull Lyrics.Unavailable
             val songs = result.optJSONArray("songs") ?: return@withTimeoutOrNull Lyrics.None
             val credits = listOf(SongNames.withGuests(metadata.artist, metadata.title), alsoBy).distinct()
-            val matching = (0 until songs.length()).mapNotNull { songs.optJSONObject(it) }.filter { song ->
+            val matching = songs.objects().filter { song ->
                 val artists = song.optJSONArray("artists")?.let { list -> (0 until list.length()).map { list.optJSONObject(it)?.optString("name").orEmpty() } }.orEmpty()
                 val length = lengthMs ?: metadata.lengthMs
                 val sameLength = length != null && abs(song.optLong("duration") - length) <= SAME_RECORDING_LENGTH_MS
@@ -1439,7 +1439,7 @@ internal class LyricsFinder(
                 .build()
             val docs = JSONObject(browserPage(search.toString()).substringAfter('(').substringBeforeLast(')')).optJSONObject("response")?.optJSONArray("docs")
                 ?: return@withTimeoutOrNull Lyrics.Unavailable
-            val song = (0 until docs.length()).mapNotNull { docs.optJSONObject(it) }.firstOrNull { doc ->
+            val song = docs.objects().firstOrNull { doc ->
                 doc.optString("t") == LETRAS_SONG && SongNames.sameVersion(metadata.title, doc.optString("txt")) &&
                     doc.optString("art").let { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, SongNames.withGuests(metadata.artist, metadata.title)) }
             } ?: return@withTimeoutOrNull Lyrics.None
@@ -1532,7 +1532,7 @@ internal class LyricsFinder(
         val data = page.optJSONObject("contents")?.optJSONObject("elementRenderer")?.optJSONObject("newElement")?.optJSONObject("type")
             ?.optJSONObject("componentType")?.optJSONObject("model")?.optJSONObject("timedLyricsModel")?.optJSONObject("lyricsData")
             ?.optJSONArray("timedLyricsData") ?: return null
-        val all = (0 until data.length()).mapNotNull { data.optJSONObject(it) }
+        val all = data.objects()
         val texts = all.map { line -> line.optString("lyricLine").trim().takeUnless { it == "♪" }.orEmpty() }
         val words = texts.filter { it.isNotEmpty() }.joinToString("\n").ifEmpty { return null }
         val starts = all.mapNotNull { it.optJSONObject("cueRange")?.optString("startTimeMilliseconds").orEmpty().toLongOrNull() }
@@ -1589,14 +1589,14 @@ internal class LyricsFinder(
         // naming itself, which is no list of answers, so the difference between "none" and
         // "wouldn't answer" rests on it.
         val list = parse(url.toString()) as? JSONArray ?: return null
-        return (0 until list.length()).mapNotNull { index -> Answer.of(list.optJSONObject(index)) }
+        return list.objects().mapNotNull(Answer::of)
     }
 
     /** What LRCLIB found for the words [said], wherever in a song's names they are; null as [answersFor]. */
     private suspend fun answersFor(said: String): List<Answer>? {
         val url = SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("q", said).build()
         val list = parse(url.toString()) as? JSONArray ?: return null
-        return (0 until list.length()).mapNotNull { index -> Answer.of(list.optJSONObject(index)) }
+        return list.objects().mapNotNull(Answer::of)
     }
 
     /**

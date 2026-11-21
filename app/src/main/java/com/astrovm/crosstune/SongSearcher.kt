@@ -107,8 +107,7 @@ internal class SongSearcher(
         val results = fetchJson(url.toString()).optJSONArray("data") ?: return emptyList()
         // A blank word is in every name alike, so it changes no order.
         val typed = query.split(phoneRegex("\\s+")).map(SongNames::normalize)
-        return (0 until results.length()).mapNotNull { index ->
-            val song = results.optJSONObject(index) ?: return@mapNotNull null
+        return results.objects().mapNotNull { song ->
             val title = MetadataParsers.deezerTitle(song).trim()
             val artist = song.optJSONObject("artist")?.text("name").orEmpty()
             // Without both a name and an artist there's no song to look up anywhere else.
@@ -139,8 +138,7 @@ internal class SongSearcher(
             .apply { if (store.length == 2) addQueryParameter("country", store) }
             .build()
         val results = fetchJson(url.toString()).optJSONArray("results") ?: return emptyList()
-        return (0 until results.length()).mapNotNull { index ->
-            val song = results.optJSONObject(index) ?: return@mapNotNull null
+        return results.objects().mapNotNull { song ->
             val title = song.text("trackName")
             val artist = song.text("artistName")
             if (title.isEmpty() || artist.isEmpty()) return@mapNotNull null

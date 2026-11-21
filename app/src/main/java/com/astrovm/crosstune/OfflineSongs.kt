@@ -115,7 +115,7 @@ internal class OfflineSongs(
 
     // Unreadable, nothing's kept.
     private fun read(): List<KeptOffline> = answeredOr(emptyList()) {
-        if (file.isFile) JSONArray(file.readText()).let { list -> (0 until list.length()).mapNotNull { kept(list.optJSONObject(it)) } } else emptyList()
+        if (file.isFile) JSONArray(file.readText()).objects().mapNotNull(::kept) else emptyList()
     }
 
     private fun json(kept: KeptOffline) = JSONObject()
@@ -128,12 +128,10 @@ internal class OfflineSongs(
 
     private fun kept(json: JSONObject?): KeptOffline? {
         val item = json?.optJSONObject("item")?.let(::song) ?: return null
-        val songs = json.optJSONArray("songs")?.let { list -> (0 until list.length()).mapNotNull { song(list.optJSONObject(it)) } }.orEmpty()
-        val saved = strings(json.optJSONArray("saved"))
-        return KeptOffline(json.optString("id").ifEmpty { idOf(item) }, item, songs, saved, strings(json.optJSONArray("liked")), strings(json.optJSONArray("unread")))
+        val songs = json.optJSONArray("songs").objects().mapNotNull { song(it) }
+        val saved = json.optJSONArray("saved").strings().toSet()
+        return KeptOffline(json.optString("id").ifEmpty { idOf(item) }, item, songs, saved, json.optJSONArray("liked").strings().toSet(), json.optJSONArray("unread").strings().toSet())
     }
-
-    private fun strings(list: JSONArray?): Set<String> = list?.let { (0 until it.length()).map(it::optString).toSet() }.orEmpty()
 
     private fun song(song: MusicMetadata) = JSONObject()
         .put("title", song.title)

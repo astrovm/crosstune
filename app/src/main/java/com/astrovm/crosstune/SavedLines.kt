@@ -309,8 +309,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     /** The lines [kept] says, as kept. */
     private fun load(kept: String?): List<SavedLine> {
         val array = kept?.let { runCatching { JSONArray(it) }.getOrNull() } ?: return emptyList()
-        return asJapanWrites((0 until array.length()).mapNotNull { index ->
-            val json = array.optJSONObject(index) ?: return@mapNotNull null
+        return asJapanWrites(array.objects().mapNotNull { json ->
             val text = json.optString("text").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             SavedLine(
                 text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"),

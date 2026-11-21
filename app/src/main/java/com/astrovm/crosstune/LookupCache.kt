@@ -170,7 +170,7 @@ internal class LookupCache(
             val list = JSONArray(file.readText())
             // Saved before days were counted, each was used on one, today.
             (0 until list.length()).mapNotNull(list::optJSONArray).forEach { entry ->
-                val pins = entry.optJSONArray(4)?.let { ids -> (0 until ids.length()).map(ids::optString).toSet() }.orEmpty()
+                val pins = entry.optJSONArray(4).strings().toSet()
                 entries[entry.optString(0)] = Entry(entry.optString(1), entry.optInt(2, 1), entry.optLong(3, today()), pins)
             }
         }

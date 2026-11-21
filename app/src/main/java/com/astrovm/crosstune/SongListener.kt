@@ -160,7 +160,7 @@ internal class Shazam(
         val track = JSONObject(body).optJSONObject("track") ?: return Heard.Nothing
         val title = track.optString("title").takeIf { it.isNotBlank() } ?: return Heard.Nothing
         val actions = track.optJSONObject("hub")?.optJSONArray("actions") ?: JSONArray()
-        val appleMusicId = (0 until actions.length()).mapNotNull(actions::optJSONObject)
+        val appleMusicId = actions.objects()
             .firstOrNull { it.optString("type") == "applemusicplay" }.text("id")
         val metadata = MusicMetadata(
             title = title,
