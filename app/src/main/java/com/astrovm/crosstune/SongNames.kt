@@ -1154,6 +1154,21 @@ internal object SongNames {
         return homeStores.entries.firstOrNull { it.key in scripts }?.value
     }
 
+    /**
+     * Every store that writes [names] in its own script: Japan's for kana, Korea's for Hangul, and Japan's, Taiwan's, Hong
+     * Kong's and China's for Chinese characters, as 米津玄師 and 鄧紫棋 are both written only in them. Unlike [homeStore], a
+     * Japanese song's name in Hangul, as Korea's store writes Japanese artists, doesn't make Korea's the only one.
+     */
+    fun storesWriting(names: String): Set<String> {
+        val scripts = names.map { Character.UnicodeScript.of(it.code) }.toSet()
+        return scriptStores.filterKeys { it in scripts }.values.flatten().toSet()
+    }
+
+    private val scriptStores = mapOf(
+        Character.UnicodeScript.HANGUL to listOf("KR"), Character.UnicodeScript.HIRAGANA to listOf("JP"),
+        Character.UnicodeScript.KATAKANA to listOf("JP"), Character.UnicodeScript.HAN to listOf("JP", "TW", "HK", "CN")
+    )
+
     private val homeStores = linkedMapOf(
         Character.UnicodeScript.HANGUL to "KR", Character.UnicodeScript.HIRAGANA to "JP", Character.UnicodeScript.KATAKANA to "JP", Character.UnicodeScript.HAN to "TW"
     )
