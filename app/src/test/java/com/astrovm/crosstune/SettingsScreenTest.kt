@@ -177,6 +177,16 @@ class SettingsScreenTest {
         for (flag in flags) assertTrue(flag, composeRule.onAllNodesWithText(flag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
     }
 
+    @Test
+    fun theLanguagesLeftUntranslatedAreMarkedWithTheirFlagsToo() {
+        show(UiState())
+        composeRule.onNodeWithText(string(R.string.setting_untranslated)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        val flags = AppLanguage.untranslatedTags.mapNotNull(AppLanguage::flag)
+        assertTrue(flags.isNotEmpty())
+        for (flag in flags) assertTrue(flag, composeRule.onAllNodesWithText(flag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+    }
+
     /** Every setting with what it's set to beside it: its name a line a word at most, never broken inside one. */
     private fun namesWholeAtTheLargestFont() {
         // At the font the test is set to, grown as Android grows it.

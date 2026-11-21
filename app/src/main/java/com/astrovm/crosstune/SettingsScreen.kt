@@ -1596,7 +1596,7 @@ private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -
         label = { LabelText(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = true }
+            .clickable(role = Role.Button) { expanded = true }
             .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
         val none = stringResource(R.string.untranslated_none)
