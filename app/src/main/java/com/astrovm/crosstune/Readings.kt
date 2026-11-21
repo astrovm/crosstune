@@ -214,12 +214,16 @@ internal object Readings {
             // word, もう in もぅいいよ, where IPADIC took も for one, it is. Only a particle alone: IPADIC takes か and わ
             // in かわぃぃ for particles, where かわいい is the word. And never first: no particle starts a line, so よぉ in
             // よぉ、元気？ is the call.
-            val particle = i > 1 && a.singleOrNull()?.let { piece -> piece.kind == "助詞" && piece.surface.indices.any { piece.end - piece.surface.length + it in draws } } == true
+            val particle = i > 1 && drawnOutParticle(a, draws)
             val word = whole[first].takeIf { j == first + 1 && it.isKnown && it.position !in draws && !(particle && it.partOfSpeechLevel1 == "感動詞") }
             out += if (word != null && word.surface.indices.any { word.position + it in draws }) b else a
         }
         return out
     }
+
+    /** [a] is one particle, and a small vowel draws it out. */
+    private fun drawnOutParticle(a: List<Piece>, draws: Set<Int>) =
+        a.singleOrNull()?.let { piece -> piece.kind == "助詞" && piece.surface.indices.any { piece.end - piece.surface.length + it in draws } } == true
 
     private fun ipadicPieces(line: String, tokens: List<com.atilika.kuromoji.ipadic.Token>) = tokens.map { token ->
             // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
