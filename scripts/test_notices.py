@@ -6,6 +6,7 @@ import http.client
 import importlib.util
 import io
 import socketserver
+import ssl
 import tarfile
 import tempfile
 import threading
@@ -228,7 +229,8 @@ class JmdictNoticesTest(unittest.TestCase):
     def test_an_unreachable_site_keeps_the_snapshot_only_when_asked(self):
         before = self.jmdict.read_bytes()
         offline = urllib.error.URLError(TimeoutError("timed out"))
-        for error in (offline, TimeoutError("timed out"), ConnectionResetError("reset")):
+        busy = urllib.error.HTTPError("https://www.edrdg.org/", 503, "Service Unavailable", None, None)
+        for error in (offline, TimeoutError("timed out"), ConnectionResetError("reset"), busy):
             with self.subTest(error=error):
                 with mock.patch.object(notices, "source_bytes", side_effect=[NEW_LICENCE, error]), \
                         contextlib.redirect_stdout(io.StringIO()) as said:
@@ -241,10 +243,20 @@ class JmdictNoticesTest(unittest.TestCase):
 
     def test_a_site_that_answers_wrong_still_fails_when_unreachable_is_allowed(self):
         refused = urllib.error.HTTPError("https://www.edrdg.org/", 404, "Not Found", None, None)
-        with mock.patch.object(notices, "source_bytes", side_effect=[refused]), self.assertRaises(urllib.error.HTTPError):
-            notices.main(["notices.py", "fetch-jmdict", "--keep-if-unreachable"])
+        bad_certificate = urllib.error.URLError(ssl.SSLCertVerificationError("certificate has expired"))
+        for error in (refused, bad_certificate):
+            with self.subTest(error=error), mock.patch.object(notices, "source_bytes", side_effect=[error]), \
+                    self.assertRaises(urllib.error.URLError):
+                notices.main(["notices.py", "fetch-jmdict", "--keep-if-unreachable"])
         with mock.patch.object(notices, "source_bytes", side_effect=[b""]), self.assertRaisesRegex(SystemExit, "Expected EDRDG"):
             notices.main(["notices.py", "fetch-jmdict", "--keep-if-unreachable"])
+
+    def test_an_unknown_option_or_one_for_another_command_stops_before_fetching(self):
+        for argv in (["fetch-jmdict", "--keep-if-unreachble"], ["fetch", "--keep-if-unreachable"]):
+            with self.subTest(argv=argv), mock.patch.object(notices, "source_bytes") as fetch, \
+                    self.assertRaisesRegex(SystemExit, "takes no"):
+                notices.main(["notices.py", *argv])
+            fetch.assert_not_called()
 
     def test_empty_or_error_responses_leave_both_texts_and_digests_intact(self):
         for responses in ((b"", NEW_DOCUMENTATION), (NEW_LICENCE, b"<html>Service unavailable</html>")):

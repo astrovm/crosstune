@@ -31,6 +31,7 @@ import io
 import os
 import pathlib
 import re
+import ssl
 import sys
 import tarfile
 import time
@@ -233,9 +234,13 @@ def licence_sections(data):
 
 
 def unreachable(error):
-    """Whether the source couldn't be reached at all, as opposed to answering with something wrong."""
-    return isinstance(error, (TimeoutError, ConnectionError)) or (
-        isinstance(error, urllib.error.URLError) and not isinstance(error, urllib.error.HTTPError))
+    """Whether the source is down, as opposed to answering with something wrong: no connection at all, or the answers
+    download() retries (a busy or failing server). A bad certificate or any other HTTP error is an answer, and fails."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in (408, 429) or error.code >= 500
+    if isinstance(error, urllib.error.URLError):
+        return not isinstance(error.reason, ssl.SSLError)
+    return isinstance(error, (TimeoutError, ConnectionError))
 
 
 def fetch_texts(manifest, selected, keep_if_unreachable=False):
@@ -294,8 +299,11 @@ def check_texts(selected, snapshot):
 
 def main(argv):
     command = argv[1] if len(argv) > 1 else "check"
-    keep_if_unreachable = "--keep-if-unreachable" in argv[2:]
-    only = set(argv[2:]) - {"--keep-if-unreachable"}
+    options = {arg for arg in argv[2:] if arg.startswith("--")}
+    if options - {"--keep-if-unreachable"} or (options and command != "fetch-jmdict"):
+        sys.exit(f"{command} takes no {' '.join(sorted(options))}")
+    keep_if_unreachable = bool(options)
+    only = set(argv[2:]) - options
     manifests = [JMDICT_MANIFEST] if command == "fetch-jmdict" else [MANIFEST, JMDICT_MANIFEST]
     passed = True
     for manifest in manifests:
