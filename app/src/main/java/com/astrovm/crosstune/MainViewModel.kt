@@ -2676,16 +2676,29 @@ internal class MainViewModel(
     private suspend fun retime(song: MusicMetadata, found: LyricsFinder.Lyrics) {
         // Words held while a voice is listened for aren't shown yet: they're timed once they are.
         if (found !is LyricsFinder.Lyrics.Found || (found.markedInstrumental && found !== this.found)) return
-        val better = lyricsFinder?.retimed(song, found) as? LyricsFinder.Lyrics.Found ?: return
-        if (better.lines == found.lines || !mayRetime(song)) return
+        val finder = lyricsFinder ?: return
+        // Put in time by hand, they stay as they are, next time too: that timing is kept for these lines (Issue #1164).
+        // No copy is looked for then, and they're kept for good, so none is next time either.
+        if (byHand(song)) return finder.keep(song, found)
+        val better = finder.retimed(song, found) as? LyricsFinder.Lyrics.Found ?: return
+        if (better.lines == found.lines) return
+        // Or put in time by hand while the copies were looked for, which kept the better times meanwhile.
+        if (byHand(song)) return finder.keep(song, found)
+        if (!mayRetime(song)) return
         foundLines = better.lines
         this.found = better
         uiState = uiState.copy(lyricLines = better.lines, lyricsTimedByEar = false, lyricsOffTake = timedForAnother(song))
         followSavedLines(song)
     }
 
-    /** Whether [song]'s words may still be timed anew: they're still shown, and no one has put them in time by hand. */
-    private fun mayRetime(song: MusicMetadata) = uiState.lyricsFor?.let { sameSong(it, song) } == true && syncPoints.isEmpty() && handGap == null
+    /** Whether [song]'s words may still be timed anew: they're still shown, and no one has put them in time, by hand or by the singing. */
+    private fun mayRetime(song: MusicMetadata) = shown(song) && syncPoints.isEmpty() && handGap == null
+
+    /** Whether [song]'s words are the ones shown, and put in time by hand. */
+    private fun byHand(song: MusicMetadata) = shown(song) && keptByHand
+
+    /** Whether [song]'s words are the ones shown. */
+    private fun shown(song: MusicMetadata) = uiState.lyricsFor?.let { sameSong(it, song) } == true
 
     private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
         SongNames.titleNames(one.title).any { title -> SongNames.titleNames(other.title).any { SongNames.same(title, it) } } && SongNames.sameArtist(one.artist, other.artist) &&

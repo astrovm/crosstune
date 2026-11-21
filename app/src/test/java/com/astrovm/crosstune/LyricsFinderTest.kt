@@ -2902,6 +2902,11 @@ class LyricsFinderTest {
         assertEquals("lrclib, timed by lrclib", better.source)
         val again = runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).firstLook(remix) }
         assertEquals(LyricsFinder.FirstLook(better, final = true), again)
+        // Put in time by hand as first found, they're kept so for good instead, with no more lookups (Issue #1164).
+        runBlocking { finder.keep(remix, first.lyrics) }
+        val askedThen = fake.requestedUrls.size
+        assertEquals(LyricsFinder.FirstLook(first.lyrics, final = true), runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).firstLook(remix) })
+        assertEquals(askedThen, fake.requestedUrls.size)
         file.delete()
     }
 
