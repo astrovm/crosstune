@@ -554,7 +554,6 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         val from = settled
         val now = moving.currentState
         settled = now
-        waiting = null
         if (!remote || now != backOf[from]) return@LaunchedEffect
         // Not by whether something has it, as Android hands it to the link field once what had it is gone.
         // A station's player, as it closes, makes the bar what it goes back to.
