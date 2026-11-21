@@ -12,6 +12,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.astrovm.crosstune.ui.theme.Palette
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -2692,6 +2694,15 @@ internal class MainViewModel(
 
     private var alongJob: Job? = null
 
+    /**
+     * Launches [block] with its job handed to [keep] before it runs. On the main thread it runs at once, up to
+     * where it first waits, and may ask for itself again meanwhile, as listening along does when the first song
+     * it hears takes over the words: kept only after, that ask finds none running and starts a second one,
+     * which nothing stops (Issue #1145).
+     */
+    private fun launchKept(keep: (Job) -> Unit, block: suspend CoroutineScope.() -> Unit): Job =
+        viewModelScope.launch(start = CoroutineStart.LAZY, block = block).also { keep(it); it.start() }
+
     /** Told when the app playing the song shown starts playing it, e.g. after a pause, so listening along wakes. */
     private val appPlaysAgain = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
@@ -2703,7 +2714,7 @@ internal class MainViewModel(
     fun listenAlong() {
         if (alongJob?.isActive == true) return
         uiState = uiState.copy(listeningAlong = true)
-        alongJob = listeningAlong()
+        listeningAlong()
         // Being lined up by ear, the words aren't offered to put in time by hand meanwhile.
         uiState.lyricsFor?.let { uiState = uiState.copy(lyricsOffTake = timedForAnother(it)) }
     }
@@ -2732,7 +2743,7 @@ internal class MainViewModel(
     private suspend fun hearAlong(quietly: Boolean) =
         if (lining || alongByPhone) listener.listenToPlaying(byMicrophone = !quietly) else listener.listen()
 
-    private fun listeningAlong() = viewModelScope.launch {
+    private fun listeningAlong() = launchKept({ alongJob = it }) {
         byEarLetsGo()
         var quiet = 0
         var calibrationTries = 0
@@ -2740,7 +2751,7 @@ internal class MainViewModel(
             // A video's long intro isn't the song: what's heard there, before the song may have started, is no try.
             if (autoCalibrating && !songMayNotHaveStarted() && calibrationTries++ >= 5) {
                 stopListeningAlong()
-                return@launch
+                return@launchKept
             }
             // Only to learn Shazam's gap, nobody asked to listen, so never with the microphone.
             val quietly = autoCalibrating && appFollowing?.let(::learnsGap) == true
@@ -2772,7 +2783,7 @@ internal class MainViewModel(
                     if (heard.error == AppError.MICROPHONE) {
                         stopListeningAlong()
                         if (!quietly) uiState = uiState.copy(error = AppError.MICROPHONE, canRetry = false)
-                        return@launch
+                        return@launchKept
                     }
                     delay(listenAlongPauseMs * 2)
                 }
@@ -3016,7 +3027,7 @@ internal class MainViewModel(
         if (!playingLinedUp() || !mayCalibrate()) return
         // With the app's clock sure, the words are heard once for the song; unsure, once each time it's picked up.
         if (if (clockSure) (uiState.lyricsSynced && !liningUp) || timedByHand || handGap != null || sungStore.heard(song, lines) else heardThisTime) return
-        singingJob = viewModelScope.launch {
+        launchKept({ singingJob = it }) {
             byEarLetsGo()
             try {
                 hearOn(hearing, song, lines)
@@ -3037,7 +3048,7 @@ internal class MainViewModel(
         val words = found?.words ?: return
         if (!mayHearUntimed()) return
         val store = heardUntimed?.let(::HeardSongs)
-        singingJob = viewModelScope.launch {
+        launchKept({ singingJob = it }) {
             byEarLetsGo()
             // Shown from what was kept, what was heard before isn't loaded yet.
             if (heardStretches.isEmpty()) heardStretches = store?.load(song, words).orEmpty()
@@ -3045,7 +3056,7 @@ internal class MainViewModel(
             if (heardStretches != timedBy) timeByEar(song)
             // A few whiles in a row with nothing sung heard, it's let be till the app's clock starts or jumps.
             while (!heardEnough(song) && singingTries < SINGING_TRIES) {
-                val heard = hearStretch(hearing, song, words) ?: return@launch
+                val heard = hearStretch(hearing, song, words) ?: return@launchKept
                 heardStretches = heardStretches + heard
                 store?.save(song, words, heardStretches)
                 timeByEar(song)
@@ -3225,7 +3236,7 @@ internal class MainViewModel(
             return
         }
         if (voiceJob?.isActive == true) return
-        voiceJob = viewModelScope.launch {
+        launchKept({ voiceJob = it }) {
             byEarLetsGo()
             var heard = waiting
             while (heard.tries < VOICE_TRIES) {
@@ -3234,8 +3245,8 @@ internal class MainViewModel(
                 val sung = hearing.hear(null, null)
                 TimingLog.note("voice while ${heard.tries + 1}: ${if (sung == null) "nothing heard, model missing ${hearing.missesModel}, no sound ${hearing.heardNoSound}" else "sings ${sung.sings}"}")
                 // Stopped: heard again once it plays, or, for held words, shown if it isn't in time.
-                if (unsung !== heard || uiState.following?.clock?.playing != true) return@launch
-                voiceIn(hearing, sung, held = heard.held != null)?.let { return@launch heardOut(heard, it) }
+                if (unsung !== heard || uiState.following?.clock?.playing != true) return@launchKept
+                voiceIn(hearing, sung, held = heard.held != null)?.let { return@launchKept heardOut(heard, it) }
                 heard = voiceWindowFinished(heard, started)
             }
             if (waiting.tries < VOICE_TRIES) heardOut(heard, Listen.NO_VOICE)
@@ -4741,8 +4752,8 @@ internal class MainViewModel(
     private fun findSongFacts(song: MusicMetadata) {
         val tutor = tutor ?: return
         if (uiState.learning.songFacts != null || songFactsJob?.isActive == true) return
-        songFactsJob = viewModelScope.launch {
-            val facts = tutor.songFacts(song) ?: return@launch
+        launchKept({ songFactsJob = it }) {
+            val facts = tutor.songFacts(song) ?: return@launchKept
             if (uiState.lyricsFor?.let { sameSong(it, song) } == true) uiState = uiState.copy(learning = uiState.learning.copy(songFacts = facts))
         }
     }
@@ -4918,8 +4929,8 @@ internal class MainViewModel(
         if (Readings.uniDic != null || uniDicJob?.isActive == true) return
         Readings.uniDic = dictionary.tokenizer(fetch = false)
         if (Readings.uniDic != null) return
-        uniDicJob = viewModelScope.launch {
-            Readings.uniDic = dictionary.tokenizer(fetch = true) ?: return@launch
+        launchKept({ uniDicJob = it }) {
+            Readings.uniDic = dictionary.tokenizer(fetch = true) ?: return@launchKept
             if (uiState.learning.script == Script.JAPANESE && uiState.learning.lines.isNotEmpty()) {
                 readingsJob?.cancel()
                 uiState = uiState.copy(learning = uiState.learning.copy(lines = emptyList()))
@@ -4987,7 +4998,7 @@ internal class MainViewModel(
         val script = uiState.learning.script
         if (!uiState.learning.reads || script == null || readingsJob?.isActive == true) return
         val kept = uiState.learning.lines
-        readingsJob = viewModelScope.launch {
+        launchKept({ readingsJob = it }) {
             if (script == Script.JAPANESE) readWithUniDic()
             // Japanese loads its dictionary the first time, a moment better spent away from the screen.
             val song = uiState.lyricsFor
