@@ -170,6 +170,40 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         rows[i] = (if (sizes[i] < row.size) row else row.copyOf(sizes[i] * 2 + 2)).also { it[sizes[i]++] = node }
     }
 
+    /**
+     * Whether the small kana at [at] in [text] draws out the sound before it, as ぉ in ありがとぉ, ぅ in ありがとぅ,
+     * ぃ in せんせぃ and くださぃ, and ぇ in ねーぇ, rather than make a sound with it, as ぃ does in でぃ, ぇ in ふぇ
+     * and ぅ in とぅないと.
+     */
+    fun drawsOut(text: String, at: Int): Boolean {
+        if (!smallAfterKana(text, at) || text[at] !in SMALL_VOWELS) return false
+        val pair = text.substring(at - 1, at + 1)
+        return pair !in SOUNDS && (pair !in SOUNDS_BEFORE_KANA || !saidAfter(text, at + 1) || endsWord(text, at))
+    }
+
+    /** Whether a kana that is said, not a small vowel or ー that draws out what comes before, is at [at]. */
+    private fun saidAfter(text: String, at: Int) = text.getOrNull(at)?.let { Readings.isKana(it) && it !in SMALL_VOWELS && it != 'ー' } == true
+
+    /** Whether a word the dictionary has, longer than the kana right before [at], ends there: ありがと in ありがとぅね. */
+    private fun endsWord(text: String, at: Int) = (0..at - 2).any { start -> doubleArrayTrie.lookup(text.substring(start, at), 0, 0) > 0 }
+
+    /** A small kana at [at] said with the kana before it, as ゃ in しゃ and ぃ in でぃ. */
+    private fun saidWith(text: String, at: Int) = smallAfterKana(text, at) && !drawsOut(text, at)
+
+    private fun wrongStart(text: String, token: Token) = wrongStart(text, token.position, token.isKnown, token.surface)
+
+    /**
+     * A word at [at] that starts on a small kana after another kana. Not small vowels alone that draw out the word
+     * before, as they go with it, nor a word IPADIC has that starts there, as only its words that start with っ do:
+     * って, っぽい and っす. っ alone, which IPADIC has too, only after て or で, as ていく said short in 消えてった,
+     * or where no kana follows for it to double: then it cuts the word before short, as in きゃっ, and goes with it.
+     */
+    private fun wrongStart(text: String, at: Int, known: Boolean, surface: String) = when {
+        !smallAfterKana(text, at) -> false
+        drawsOut(text, at) -> surface.indices.any { !drawsOut(text, at + it) }
+        cutsShort(text, at, surface) -> false
+        else -> !(known && (surface.length > 1 || text[at - 1] in "てで"))
+    }
     /** A word IPADIC has from its own dictionary, read for what JMdict writes it as, though the line has it in kana. */
     internal class JmdictToken(wordId: Int, surface: String, position: Int, dictionary: TokenInfoDictionary) :
         Token(wordId, surface, ViterbiNode.Type.KNOWN, position, dictionary)
@@ -181,8 +215,8 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         /**
          * A kana and a small vowel that make a sound of their own, as in words from other languages: ファ, ウィ, ティ,
          * ディ, トゥ; and a kana of the い row with a small ぇ, as in ぴぇん and ひぇー. Hiragana とぅ and どぅ only
-         * before more kana, とぅないと: at the end of a word, ありがとぅ, the ぅ draws out the と, as hiragana lyrics
-         * spell a long vowel.
+         * before more kana and after no word that ends on the と, とぅないと: after a word, ありがとぅね, and at the end
+         * of one, ありがとぅ, the ぅ draws out the と, as hiragana lyrics spell a long vowel.
          */
         private val SOUNDS = (
             "ふぁふぃふぇふぉゔぁゔぃゔぇゔぉうぃうぇうぉつぁつぃつぇつぉくぁくぃくぇくぉぐぁすぃずぃてぃでぃしぇじぇちぇいぇ" +
@@ -194,39 +228,8 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
 
         private fun smallAfterKana(text: String, at: Int) = at in 1 until text.length && text[at] in SMALL_KANA && Readings.isKana(text[at - 1])
 
-        /**
-         * Whether the small kana at [at] in [text] draws out the sound before it, as ぉ in ありがとぉ, ぅ in ありがとぅ,
-         * ぃ in せんせぃ and くださぃ, and ぇ in ねーぇ, rather than make a sound with it, as ぃ does in でぃ, ぇ in ふぇ
-         * and ぅ in とぅないと.
-         */
-        fun drawsOut(text: String, at: Int): Boolean {
-            if (!smallAfterKana(text, at) || text[at] !in SMALL_VOWELS) return false
-            val pair = text.substring(at - 1, at + 1)
-            return pair !in SOUNDS && (pair !in SOUNDS_BEFORE_KANA || !beforeKana(text, at + 1))
-        }
-
-        /** Whether a kana that is said, not a small vowel or ー that draws out what comes before, is at [at]. */
-        private fun beforeKana(text: String, at: Int) = text.getOrNull(at)?.let { Readings.isKana(it) && it !in SMALL_VOWELS && it != 'ー' } == true
-
-        /** A small kana at [at] said with the kana before it, as ゃ in しゃ and ぃ in でぃ. */
-        private fun saidWith(text: String, at: Int) = smallAfterKana(text, at) && !drawsOut(text, at)
-
         /** Whether [surface] at [at] is a small っ alone with no kana after it to double, as in きゃっ or かいしゃっ！. */
         fun cutsShort(text: String, at: Int, surface: String) = surface.length == 1 && surface[0] in "っッ" && text.getOrNull(at + 1)?.let(Readings::isKana) != true
 
-        private fun wrongStart(text: String, token: Token) = wrongStart(text, token.position, token.isKnown, token.surface)
-
-        /**
-         * A word at [at] that starts on a small kana after another kana. Not small vowels alone that draw out the word
-         * before, as they go with it, nor a word IPADIC has that starts there, as only its words that start with っ do:
-         * って, っぽい and っす. っ alone, which IPADIC has too, only after て or で, as ていく said short in 消えてった,
-         * or where no kana follows for it to double: then it cuts the word before short, as in きゃっ, and goes with it.
-         */
-        private fun wrongStart(text: String, at: Int, known: Boolean, surface: String) = when {
-            !smallAfterKana(text, at) -> false
-            drawsOut(text, at) -> surface.indices.any { !drawsOut(text, at + it) }
-            cutsShort(text, at, surface) -> false
-            else -> !(known && (surface.length > 1 || text[at - 1] in "てで"))
-        }
     }
 }

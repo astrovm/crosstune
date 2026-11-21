@@ -662,6 +662,32 @@ class ReadingsTest {
     }
 
     @Test
+    fun aWordDrawnOutStaysOneBeforeMoreKanaAndAParticleDrawnOutIsNoCall() {
+        val lines = mapOf(
+            // A word the dictionary has ends on the と, so the ぅ draws it out, more kana after it or not.
+            "ありがとぅね" to listOf("ありがとぅ" to "ありがとう", "ね" to "ね"),
+            "ありがとぅございます" to listOf("ありがとぅ" to "ありがとう", "ございます" to "ござる"),
+            "ずっとぅいっしょ" to listOf("ずっとぅ" to "ずっと", "いっしょ" to "いっしょ"),
+            // A particle drawn out is still one, not よお the call; ねえ is a particle too.
+            "そうだよぉ" to listOf("そうだ" to "そう", "よぉ" to "よ"),
+            "そうだねぇ" to listOf("そうだ" to "そう", "ねぇ" to "ねえ"),
+            "かわぃぃよぉ" to listOf("かわぃぃ" to "かわいい", "よぉ" to "よ"),
+            // IPADIC takes the も for a particle, but drawn out it's もう.
+            "もぅいいよ" to listOf("もぅ" to "もう", "いい" to "いい", "よ" to "よ"),
+        )
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        for ((line, expected) in lines) {
+            assertEquals(line, expected, words(line))
+            assertEquals(line, expected, TestUniDic.reading { words(line) })
+        }
+        fun typed(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().typed
+        assertEquals("arigatou ne", typed("ありがとぅね"))
+        assertEquals("zuttou issho", typed("ずっとぅいっしょ"))
+        // No word ends on a と that starts the line, so there it's a sound.
+        assertEquals("tu naito", typed("とぅないと"))
+    }
+
+    @Test
     fun aSmallKanaBeforeASmallVowelStillStartsNoWord() {
         val words = Readings.words("でしょぅ", Script.JAPANESE).map { it.text }
         assertTrue("$words", words.none { it.first() in "ぁぃぅぇぉっゃゅょゎ" })

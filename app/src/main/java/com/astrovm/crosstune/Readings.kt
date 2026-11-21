@@ -196,7 +196,7 @@ internal object Readings {
      */
     private fun ipadicPieces(line: String, text: String): List<Piece> {
         val drawn = drawnOut(text, ipadicPieces(line, tokenizer.tokenize(text)))
-        val draws = text.indices.filter { SmallKanaTokenizer.drawsOut(text, it) }.toSet()
+        val draws = text.indices.filter { tokenizer.drawsOut(text, it) }.toSet()
         if (draws.isEmpty()) return drawn
         val whole = tokenizer.tokenize(text.mapIndexed { at, c -> if (at in draws) c + 1 else c }.joinToString(""))
         val pieces = ipadicPieces(line, whole)
@@ -209,8 +209,12 @@ internal object Readings {
             val a = mutableListOf(drawn[i++])
             val b = mutableListOf(pieces[j++])
             while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += drawn[i++] else b += pieces[j++]
-            // One word, so a word read right before, ない in しらないぃ, isn't split for another, しらな and いい.
-            val word = whole[first].takeIf { j == first + 1 && it.isKnown && it.position !in draws }
+            // One word, so a word read right before, ない in しらないぃ, isn't split for another, しらな and いい. And a
+            // particle drawn out, よぉ in そうだよぉ, isn't the call よお: still a particle, ねえ in そうだねぇ, or another
+            // word, もう in もぅいいよ, where IPADIC took も for one, it is. Only a particle alone: IPADIC takes か and わ
+            // in かわぃぃ for particles, where かわいい is the word.
+            val particle = a.singleOrNull()?.let { piece -> piece.kind == "助詞" && piece.surface.indices.any { piece.end - piece.surface.length + it in draws } } == true
+            val word = whole[first].takeIf { j == first + 1 && it.isKnown && it.position !in draws && !(particle && it.partOfSpeechLevel1 == "感動詞") }
             out += if (word != null && word.surface.indices.any { word.position + it in draws }) b else a
         }
         return out
@@ -239,7 +243,7 @@ internal object Readings {
     private fun drawnOut(text: String, pieces: List<Piece>) = pieces.fold(ArrayList<Piece>()) { out, piece ->
         val before = out.lastOrNull()
         val drawing = before != null && (
-            (piece.end - piece.surface.length until piece.end).all { SmallKanaTokenizer.drawsOut(text, it) } ||
+            (piece.end - piece.surface.length until piece.end).all { tokenizer.drawsOut(text, it) } ||
                 SmallKanaTokenizer.cutsShort(text, piece.end - 1, piece.surface)
             )
         // IPADIC can make ー a word of its own, すご and ー and ぃ: the ー draws out the word before as the vowel does.
