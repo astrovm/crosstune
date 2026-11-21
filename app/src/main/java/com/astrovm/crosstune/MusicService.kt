@@ -181,6 +181,16 @@ internal enum class MusicService(
             return Intent(Intent.ACTION_SEARCH).setClassName(app, BANDCAMP_SEARCH_ACTIVITY).putExtra(SearchManager.QUERY, query)
         }
 
+        /**
+         * A word telling the build [packageName] from its service's own app when both go by one name:
+         * "TV" for YouTube's TV app, or the patcher's name, e.g. "ReVanced" for app.revanced.android.youtube.
+         */
+        fun buildName(packageName: String): String =
+            if (packageName == YOUTUBE_TV) "TV"
+            else packageName.substringBefore(".android").substringAfterLast('.').let { BUILD_NAMES[it] ?: (it.take(1).uppercase() + it.drop(1)) }
+
+        private val BUILD_NAMES = mapOf("revanced" to "ReVanced", "rvx" to "RVX")
+
         /** The service whose own app, not a build patched from it, has [packageName]. */
         fun ofOwnApp(packageName: String?): MusicService? = entries.firstOrNull { it.packageName == packageName }
 

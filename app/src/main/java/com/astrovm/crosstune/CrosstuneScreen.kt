@@ -592,8 +592,7 @@ private val RISING = setOf(Screen.LYRICS, Screen.PLAYER)
 @Composable
 internal fun Destination.label(): String =
     if (this is Destination.Service) {
-        // A patched build is named as Android shows it, e.g. "YT Music Morphe", as it has no name of ours.
-        build?.let { appLabel(it) } ?: stringResource(service.labelRes)
+        build?.let { buildLabel(service, it) } ?: stringResource(service.labelRes)
     } else if (this is Destination.Alternative) {
         frontend.label
     } else {
@@ -603,6 +602,16 @@ internal fun Destination.label(): String =
 @Composable
 internal fun Destination.openLabel(): String =
     if (this is Destination.Service && build == null) stringResource(service.openLabelRes) else stringResource(R.string.open_in_custom, label())
+
+/**
+ * A patched [build] of [service] named as Android shows it, e.g. "YT Music Morphe", as it has no name of ours, or null if
+ * it's not installed. One left with its service's app's own name, beside that app, gets a word to tell the two apart.
+ */
+@Composable
+private fun buildLabel(service: MusicService, build: String): String? {
+    val label = appLabel(build) ?: return null
+    return if (label == appLabel(service.packageName)) "$label ${MusicService.buildName(build)}" else label
+}
 
 /** The name Android gives the app [packageName], or null if it's not installed. */
 @Composable

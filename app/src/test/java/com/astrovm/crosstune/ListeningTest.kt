@@ -4925,14 +4925,24 @@ class ListeningTest {
         alone.command(FloatingLyricsService.ACTION_UNLOCK)
 
         // Taken back in Android's settings since Crosstune was left.
+        val hearing = FakeHearing()
         ShadowSettings.setCanDrawOverlays(true)
         shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
-        demoWords(FakeHearing())
+        demoWords(hearing)
         click(string(R.string.floating_float))
+        val started = shadowOf(app).nextStartedService
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
         ShadowSettings.setCanDrawOverlays(false)
-        val service = Robolectric.buildService(FloatingLyricsService::class.java, shadowOf(app).nextStartedService).create().startCommand(0, 1).get()
+        val service = Robolectric.buildService(FloatingLyricsService::class.java, started).create().startCommand(0, 1).get()
         assertTrue(shadowOf(service).isStoppedBySelf)
         assertTrue(windowViews(service).none { (it.layoutParams as WindowManager.LayoutParams).type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY })
+        // Crosstune is told, so it doesn't listen along for words that aren't there.
+        composeRule.settle(controller?.get())
+        val listens = hearing.listens
+        hearing.song("Demo", 4.0)
+        Thread.sleep(200)
+        composeRule.settle(controller?.get())
+        assertEquals(listens, hearing.listens)
     }
 
     @Test
