@@ -56,8 +56,8 @@ class PublishingTest(unittest.TestCase):
         for number in range(1, count + 1):
             (made / 'store' / f'{number}.png').write_bytes(self.images[theme].read_bytes())
 
-    def test_both_themes_keep_separate_media_and_listing_sets(self):
-        # Either publishing order must preserve the same two complete sets.
+    def test_both_themes_keep_separate_media_and_only_dark_is_listed(self):
+        # Either publishing order must keep both themes' clips, and the store's dark set alone.
         for order in [('dark', 'light'), ('light', 'dark')]:
             with self.subTest(order=order):
                 for theme in order:
@@ -70,12 +70,10 @@ class PublishingTest(unittest.TestCase):
                     self.assertEqual(clip.read_bytes(), f'{theme} home'.encode())
                     self.assertTrue(clip.with_suffix('.jpg').exists())
                 dark = shots.ROOT / 'fastlane/metadata/android/zh-TW/images/phoneScreenshots'
-                light = shots.ROOT / 'screenshots/light/zh-TW'
                 self.assertEqual(len(list(dark.glob('*.png'))), 8)
-                self.assertEqual(len(list(light.glob('*.png'))), 8)
-                for folder, theme in [(dark, 'dark'), (light, 'light')]:
-                    for shot in folder.glob('*.png'):
-                        self.assertEqual(shot.read_bytes(), self.images[theme].read_bytes())
+                for shot in dark.glob('*.png'):
+                    self.assertEqual(shot.read_bytes(), self.images['dark'].read_bytes())
+                self.assertFalse((shots.ROOT / 'screenshots').exists())
                 self.assertEqual(len(list(dark.parent.iterdir())), 1)
 
     def test_incomplete_set_does_not_replace_store_listing(self):
@@ -86,7 +84,6 @@ class PublishingTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Expected 8 light screenshots'):
             shots.publish('zh-tw', 'light')
         self.assertEqual((listing / '1.png').read_bytes(), b'existing dark screenshot')
-        self.assertFalse((shots.ROOT / 'screenshots/light/zh-TW').exists())
         self.assertFalse((shots.ROOT / 'docs/img/zh-tw').exists())
 
 
