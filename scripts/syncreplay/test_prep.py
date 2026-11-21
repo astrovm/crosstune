@@ -631,6 +631,13 @@ class HeardWhenAskedTest(unittest.TestCase):
         self.assertEqual(asked[0]['work'], 3800)
         self.assertEqual(asked[0]['whiles'], [10500, 34300, 81400, 112700])
 
+    def test_only_sound_captured_says_the_phone_heard_it_clean(self):
+        # Issue #1100: with Spotify, each hearing's half-second check captured silence, and the visualizer heard instead.
+        spotify = "D CrosstuneTiming: captured 8000 samples, loudest 0\nD CrosstuneTiming: captured 8000 samples, loudest 2\n"
+        self.assertFalse(r.heard_clean(spotify))
+        self.assertFalse(r.heard_clean("D CrosstuneTiming: lit 1 at 2 pos 3"))
+        self.assertTrue(r.heard_clean(spotify + "D CrosstuneTiming: captured 320000 samples, loudest 30071"))
+
     def test_a_second_play_asks_too(self):
         with patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score', return_value=None), \
                 tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
