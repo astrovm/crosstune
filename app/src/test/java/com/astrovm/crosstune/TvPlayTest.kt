@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.AppOpsManager
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -627,6 +628,28 @@ class TvPlayTest {
         // player's own follow of the song it opened, three watchers.
         assertTrue(watchersBehindTheCover > 3)
         waitUntil { playback.nowPlayingWatchers == 3 }
+    }
+
+    @Test
+    fun withShowingOverOtherAppsTakenBackUnderTheCoverTheCoverCloses() {
+        launch()
+        val floating = playCovered()
+        assertEquals(1, overlays(floating.get()).size)
+        val appOps = shadowOf(app.getSystemService(AppOpsManager::class.java))
+        val uid = app.applicationInfo.uid
+        // Another app's permission changing, or Crosstune's staying allowed, leaves the cover as it is.
+        appOps.setMode(AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW, uid, app.packageName, AppOpsManager.MODE_ALLOWED)
+        composeRule.waitForIdle()
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
+        // Taken back with ADB while the cover shows: Settings can't, as it takes the cover's place first.
+        ShadowSettings.setCanDrawOverlays(false)
+        appOps.setMode(AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW, uid, app.packageName, AppOpsManager.MODE_ERRORED)
+        composeRule.waitForIdle()
+        assertTrue(shadowOf(floating.get()).isStoppedBySelf)
+        // Crosstune is told, so it stops watching what plays for a cover that isn't there.
+        waitUntil { playback.nowPlayingWatchers == 3 }
+        floating.destroy()
+        assertTrue(overlays(floating.get()).isEmpty())
     }
 
     @Test

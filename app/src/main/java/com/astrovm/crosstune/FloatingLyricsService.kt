@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.AppOpsManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -146,11 +147,21 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     /** Whether the words' buttons are out, from a tap on them, until another, or one anywhere else. */
     private val controls = mutableStateOf(false)
 
+    /**
+     * Showing over other apps taken back while the words or the cover show, with ADB or another app's shell: Android
+     * takes the window away without telling the service, so it closes here and Crosstune is told. Android calls it on
+     * its own thread.
+     */
+    private val overlayAllowed = AppOpsManager.OnOpChangedListener { _, _ ->
+        lifecycleScope.launch { if (!Settings.canDrawOverlays(this@FloatingLyricsService)) close() }
+    }
+
     override fun onCreate() {
         super.onCreate()
         savedState.performAttach()
         savedState.performRestore(null)
         registry.currentState = Lifecycle.State.CREATED
+        getSystemService(AppOpsManager::class.java).startWatchingMode(AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW, packageName, overlayAllowed)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -507,6 +518,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     }
 
     override fun onDestroy() {
+        getSystemService(AppOpsManager::class.java).stopWatchingMode(overlayAllowed)
         hideUnlock()
         hideCloseTarget()
         view?.let(windows::removeView)
