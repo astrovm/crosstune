@@ -53,7 +53,6 @@
     <string name="got_it_button">J\'ai compris</string>
     <string name="chatgpt_channel">Connexion avec ChatGPT</string>
     <string name="chatgpt_signing_in_notification">Connexion avec ChatGPT en cours</string>
-    <string name="next_button">Suivant</string>
     <string name="back_button">Retour</string>
     <string name="setup_step">Étape %1$d sur %2$d</string>
     <string name="setup_sources_listening_note">Vous écoutez sur %1$s, donc ses liens s’y ouvrent déjà.</string>
@@ -284,7 +283,6 @@
     <string name="song_search_title">Titres</string>
     <string name="song_search_none">Aucun titre trouvé pour « %1$s ».</string>
     <string name="floating_background">Arrière-plan</string>
-    <string name="floating_text_size">Taille du texte</string>
     <string name="floating_float">Faire flotter par-dessus les autres applis</string>
     <string name="floating_permission_title">Paroles flottantes sur tes applis</string>
     <string name="floating_customize">Personnaliser</string>

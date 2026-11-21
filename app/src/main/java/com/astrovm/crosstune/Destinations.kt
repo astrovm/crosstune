@@ -78,8 +78,7 @@ internal class DestinationStore(
     fun customDestinations(): List<Destination.Custom> {
         val stored = preferences.getString(KEY_CUSTOM, null) ?: return emptyList()
         val array = runCatching { JSONArray(stored) }.getOrNull() ?: return emptyList()
-        return (0 until array.length()).mapNotNull { index ->
-            val item = array.optJSONObject(index) ?: return@mapNotNull null
+        return array.objects().mapNotNull { item ->
             val id = item.optString("id").ifEmpty { return@mapNotNull null }
             val name = item.optString("name").ifEmpty { return@mapNotNull null }
             val template = item.optString("template").takeIf(Destination::isValidTemplate) ?: return@mapNotNull null

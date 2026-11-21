@@ -352,7 +352,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             TranslationStatus(state.learning, state.offline, actions)
             ChordsStatus(state.chords, state.offline, actions)
             CapoStatus(state.chords)
-            MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
+            // The microphone turned down, e.g. to listen along, said here where it was asked for, with a way to allow it.
+            ProblemRow(state.error == AppError.MICROPHONE, AppError.MICROPHONE.messageRes, R.string.open_settings_button to actions.onOpenMicrophoneSettings)
             // Timed words with no music app to say where the song is: on top, how they can follow one. Even
             // while they follow it by ear, as the microphone hears the room too, which may play another song.
             var followOffered by rememberSaveable { mutableStateOf(true) }
@@ -1314,19 +1315,28 @@ private fun ChordsStatus(chords: ChordsState, offline: Boolean, actions: ScreenA
         ChordFailure.WIKI_CHECK -> R.string.lyrics_chords_wiki_check
         null -> R.string.lyrics_chords_failed
     }
-    AnimatedVisibility(visible = chords.on && chords.failed, enter = Motion.appear, exit = Motion.disappear) {
+    ProblemRow(chords.on && chords.failed, said, (R.string.retry_button to actions.onRetryChords).takeIf { !offline })
+}
+
+/**
+ * A problem, in words, where it happened, as it comes and goes; [action], a button's words and what it
+ * does, puts it right when there's one.
+ */
+@Composable
+private fun ProblemRow(visible: Boolean, @StringRes message: Int, action: Pair<Int, () -> Unit>?) {
+    AnimatedVisibility(visible = visible, enter = Motion.appear, exit = Motion.disappear) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).semantics { liveRegion = LiveRegionMode.Polite }
         ) {
             Icon(painterResource(R.drawable.ic_error), contentDescription = null, tint = MaterialTheme.colorScheme.error)
             Text(
-                stringResource(said),
+                stringResource(message),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f).padding(start = 12.dp).padding(vertical = 12.dp)
             )
-            if (!offline) TextButton(onClick = actions.onRetryChords) { Text(stringResource(R.string.retry_button)) }
+            action?.let { (label, onClick) -> TextButton(onClick = onClick) { Text(stringResource(label)) } }
         }
     }
 }
@@ -1345,26 +1355,6 @@ private fun CapoStatus(chords: ChordsState) {
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
         )
-    }
-}
-
-/** The microphone turned down, e.g. to listen along, said here where it was asked for, with a way to allow it. */
-@Composable
-private fun MicrophoneStatus(denied: Boolean, actions: ScreenActions) {
-    AnimatedVisibility(visible = denied, enter = Motion.appear, exit = Motion.disappear) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).semantics { liveRegion = LiveRegionMode.Polite }
-        ) {
-            Icon(painterResource(R.drawable.ic_error), contentDescription = null, tint = MaterialTheme.colorScheme.error)
-            Text(
-                stringResource(AppError.MICROPHONE.messageRes),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f).padding(start = 12.dp).padding(vertical = 12.dp)
-            )
-            TextButton(onClick = actions.onOpenMicrophoneSettings) { Text(stringResource(R.string.open_settings_button)) }
-        }
     }
 }
 
