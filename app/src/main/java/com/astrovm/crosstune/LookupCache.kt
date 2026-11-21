@@ -87,6 +87,15 @@ internal class LookupCache(
         }
     }
 
+    /** [put], then [save] at once: for an answer that took asking for. */
+    suspend fun keep(key: String, value: String) {
+        put(key, value)
+        save()
+    }
+
+    /** What's kept for [key], or else what [ask] answers, kept when it says anything; null when it says nothing. */
+    suspend inline fun getOrAsk(key: String, ask: () -> String?): String? = get(key) ?: ask()?.also { if (it.isNotEmpty()) keep(key, it) }
+
     /** Discard a checked answer if another lookup has not replaced it. */
     suspend fun discard(key: String, value: String) = loaded().let { entries ->
         synchronized(entries) {

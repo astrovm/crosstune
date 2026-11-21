@@ -48,8 +48,7 @@ internal class MusicBrainz(
             return null
         }
         // An answer of none is kept too, so the song gets the same facts, or none, every time.
-        cache.put(key, facts?.let { JSONObject().put("year", it.year).put("album", it.album).toString() }.orEmpty())
-        cache.save()
+        cache.keep(key, facts?.let { JSONObject().put("year", it.year).put("album", it.album).toString() }.orEmpty())
         return facts
     }
 
@@ -67,8 +66,7 @@ internal class MusicBrainz(
         } catch (_: JSONException) {
             return null
         }
-        cache.put(key, id.orEmpty())
-        cache.save()
+        cache.keep(key, id.orEmpty())
         return id
     }
 

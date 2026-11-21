@@ -169,7 +169,7 @@ internal class ChatGptTutor(
         val model = chatGpt.model() ?: return null
         // Kept for these words: another copy of the song may have other lines.
         val key = "readings|$model|${readingKey(song, lines)}"
-        val fixes = cache.get(key) ?: run {
+        val fixes = cache.getOrAsk(key) {
             val asked = JSONArray()
             lines.forEachIndexed { index, line ->
                 val readings = JSONArray(read.getOrNull(index)?.parts.orEmpty().filter { it.reading != null }.map { "${it.text}=${it.reading}" })
@@ -182,11 +182,8 @@ internal class ChatGptTutor(
                 asked.toString(),
                 effort = "low"
             )
-            val array = (reply.array() ?: return null).toString()
-            cache.put(key, array)
-            cache.save()
-            array
-        }
+            (reply.array() ?: return null).toString()
+        } ?: return null
         return Readings.corrected(read, readingFixes(fixes))
     }
 
@@ -221,7 +218,7 @@ internal class ChatGptTutor(
     suspend fun songsFor(description: String): List<Pair<String, String>>? {
         val model = chatGpt.model() ?: return null
         val key = "describe|$model|${description.trim().lowercase()}"
-        val kept = cache.get(key) ?: run {
+        val kept = cache.getOrAsk(key) {
             // Tried on real descriptions with GPT-6-Luna: "plastic algo" found Plastic Love and "una
             // ciudad de la furia" Soda Stereo's, in about 3 s; searching the web found no more. A mood,
             // "rainy sunday city pop", gave 15 for a playlist, in about 12 s, still one for "plastic algo".
@@ -232,11 +229,9 @@ internal class ChatGptTutor(
                     "Reply with only a JSON array of objects with \"title\" and \"artist\", as the songs are named on music services.",
                 description.trim()
             )
-            val array = reply.array() ?: return null
-            if (array.length() > 0) cache.put(key, array.toString())
-            cache.save()
-            array.toString()
-        }
+            // None found isn't kept, so it's asked again another time.
+            (reply.array() ?: return null).takeIf { it.length() > 0 }?.toString()
+        } ?: return emptyList()
         return JSONArray(kept).objects().mapNotNull(::named)
     }
 
@@ -300,8 +295,7 @@ internal class ChatGptTutor(
         }
         val japanese = JSONArray(kept).strings()
         if (japanese.size != lines.size) return null
-        cache.put(key, kept)
-        cache.save()
+        cache.keep(key, kept)
         // A line with no words, like a gap, stays one.
         return japanese.mapIndexed { index, line -> if (lines[index].isBlank()) lines[index] else line.trim() }
     }
@@ -332,8 +326,7 @@ internal class ChatGptTutor(
             if (word.isEmpty() || meaning.isEmpty()) null else KeyWord(word, json.optString("reading").trim().takeIf { it.isNotEmpty() && it != word }, meaning)
         }.distinctBy { it.word }
         if (words.isEmpty()) return null
-        cache.put(key, kept)
-        cache.save()
+        cache.keep(key, kept)
         return words
     }
 
@@ -359,8 +352,7 @@ internal class ChatGptTutor(
         val original = json.optJSONObject("original")?.let(::named)
         val samples = json.optJSONArray("samples").objects().mapNotNull(::named)
         // Nothing to say is kept too, so the web isn't searched again each time.
-        cache.put(key, kept)
-        cache.save()
+        cache.keep(key, kept)
         if (original == null && samples.isEmpty()) return null
         return SongFacts(original, samples)
     }
@@ -419,8 +411,7 @@ internal class ChatGptTutor(
             if (sentence.isEmpty() || meaning.isEmpty()) null else Example(sentence, meaning)
         }
         if (examples.isEmpty()) return null
-        cache.put(key, kept)
-        cache.save()
+        cache.keep(key, kept)
         return examples
     }
 
@@ -428,7 +419,7 @@ internal class ChatGptTutor(
     suspend fun songsLike(song: MusicMetadata): List<Pair<String, String>>? {
         val model = chatGpt.model() ?: return null
         val key = "like|$model|${song.title}|${song.artist}"
-        val kept = cache.get(key) ?: run {
+        val kept = cache.getOrAsk(key) {
             // Tried on real songs with GPT-6-Luna: Plastic Love gave twelve city pop songs, Miki
             // Matsubara's Stay With Me, Anri's Remember Summer Days, Junko Ohashi's Telephone Number,
             // in about 8 s; one named twice in two ways, so no song is asked for twice.
@@ -440,11 +431,8 @@ internal class ChatGptTutor(
                 effort = "low"
             )
             // None found isn't kept, so it's asked again another time.
-            val array = reply.array() ?: return null
-            if (array.length() > 0) cache.put(key, array.toString())
-            cache.save()
-            array.toString()
-        }
+            (reply.array() ?: return null).takeIf { it.length() > 0 }?.toString()
+        } ?: return emptyList()
         return JSONArray(kept).objects().mapNotNull(::named)
     }
 
@@ -498,8 +486,7 @@ internal class ChatGptTutor(
     /** An answer kept, so it's not asked again; what couldn't be answered is. */
     private suspend fun keep(key: String, reply: ChatGptReply) {
         if (reply !is ChatGptReply.Answer) return
-        cache.put(key, reply.text.trim())
-        cache.save()
+        cache.keep(key, reply.text.trim())
     }
 
     /** What [word] means as used in [line], in [language], and what kind of word it is there; null when it couldn't be found. */
@@ -518,8 +505,7 @@ internal class ChatGptTutor(
         }
         val json = jsonObject(answer) ?: return null
         val meaning = json.optString("meaning").trim().ifEmpty { return null }
-        cache.put(key, answer)
-        cache.save()
+        cache.keep(key, answer)
         return Definition(json.optString("type").trim().ifEmpty { null }, meaning)
     }
 
