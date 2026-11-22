@@ -239,9 +239,10 @@ class HistoryStoreTest {
 
     @Test
     fun keepsAPlaylistsSongs() {
+        val song = MusicMetadata("One", "Band", instrumentalAlbum = "An Album (Instrumentals)")
         val playlist = HistoryEntry(
             MusicLink(MusicService.DEEZER, ItemType.PLAYLIST, "1", "https://www.deezer.com/playlist/1"),
-            MusicMetadata("Top", "", ItemType.PLAYLIST, tracks = listOf(MusicMetadata("One", "Band"), MusicMetadata("Two", "")))
+            MusicMetadata("Top", "", ItemType.PLAYLIST, tracks = listOf(song, MusicMetadata("Two", "")))
         )
         store.add(playlist)
         assertEquals(playlist, HistoryStore(preferences).load().single())

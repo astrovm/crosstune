@@ -80,9 +80,14 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                     .put("title", entry.metadata.title)
                     .put("artist", entry.metadata.artist)
                     .putOpt("artwork", entry.metadata.artworkUrl)
-                    // A playlist's songs as [title, artist, cover, link] lists, kept short.
+                    .putOpt("instrumentalAlbum", entry.metadata.instrumentalAlbum)
+                    // A playlist's songs as [title, artist, cover, link, instrumental album] lists, kept short.
                     .put("tracks", JSONArray().apply {
-                        entry.metadata.tracks.forEach { put(JSONArray().put(it.title).put(it.artist).put(it.artworkUrl.orEmpty()).put(it.url.orEmpty())) }
+                        entry.metadata.tracks.forEach { track ->
+                            val row = JSONArray().put(track.title).put(track.artist).put(track.artworkUrl.orEmpty()).put(track.url.orEmpty())
+                            track.instrumentalAlbum?.let(row::put)
+                            put(row)
+                        }
                     })
                     .putOpt("trackCount", entry.metadata.trackCount)
                     .putOpt("length", entry.metadata.lengthMs)
@@ -121,13 +126,18 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                 val song = list.optJSONArray(index) ?: return@mapNotNull null
                 MusicMetadata(
                     song.optString(0).ifEmpty { return@mapNotNull null }, song.optString(1),
-                    artworkUrl = song.optString(2).ifEmpty { null }, url = song.optString(3).ifEmpty { null }
+                    artworkUrl = song.optString(2).ifEmpty { null }, url = song.optString(3).ifEmpty { null },
+                    instrumentalAlbum = song.optString(4).ifEmpty { null }
                 )
             }
         }.orEmpty()
         val count = optInt("trackCount").takeIf { it > 0 }
         val length = optLong("length").takeIf { it > 0 }
-        return HistoryEntry(link, MusicMetadata(title, optString("artist"), type, optString("artwork").ifEmpty { null }, tracks, trackCount = count, lengthMs = length), prepared)
+        val metadata = MusicMetadata(
+            title, optString("artist"), type, optString("artwork").ifEmpty { null }, tracks, trackCount = count, lengthMs = length,
+            instrumentalAlbum = optString("instrumentalAlbum").ifEmpty { null }
+        )
+        return HistoryEntry(link, metadata, prepared)
     }
 
     companion object {

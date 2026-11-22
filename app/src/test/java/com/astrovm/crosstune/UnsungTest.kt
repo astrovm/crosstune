@@ -394,6 +394,7 @@ class UnsungTest {
         openLyrics(::showsWords)
         checkNotNull(controller).destroyAndSettle()
         controller = null
+        assertEquals("Madvillainy Instrumentals", HistoryStore(prefs()).load().single().metadata.instrumentalAlbum)
 
         // The last app saved what it showed with the lyrics cache version before the title check.
         val disk = LookupCache(File(app.cacheDir, "kept_words.json"), Dispatchers.Unconfined)
