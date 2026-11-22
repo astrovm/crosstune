@@ -116,7 +116,7 @@
     ],
     [
       "p",
-      "Dengan akses notifikasi, Crosstune melihat lagu apa yang diputar aplikasi musikmu dan sampai mana, jadi lirik mengikuti dan pemutarnya bisa menjeda, melewati, atau menyukai lagu di aplikasimu. Untuk Simple Radio, Crosstune juga memeriksa apakah notifikasi media radio itu tampil, tanpa membaca teksnya. Ini tetap di ponselmu. Kartu latihan memutar barisnya di aplikasi yang sudah membuka lagu itu, atau di pemutar YouTube kecil di kartu, yang mencari video lagu seperti yang dilakukan sebuah link. Kamu tidak masuk ke YouTube di sana. Untuk Radio Garden, Crosstune mengirim judul dan nama artis dari siaran stasiun ke Apple Music untuk memeriksa lagunya."
+      "Dengan akses notifikasi, Crosstune melihat lagu apa yang diputar aplikasi musikmu dan sampai mana, jadi lirik mengikuti dan pemutarnya bisa menjeda, melewati, atau menyukai lagu di aplikasimu. Untuk Simple Radio, Crosstune juga memeriksa apakah notifikasi media radio itu tampil, tanpa membaca teksnya. Ini tetap di ponselmu. Kartu latihan memutar barisnya di aplikasi yang sudah membuka lagu itu, atau di pemutar YouTube kecil di kartu, yang mencari video lagu seperti yang dilakukan sebuah link. Kamu tidak masuk ke YouTube di sana. Untuk Radio Garden, Crosstune mengirim bagian teks tentang lagu yang sedang diputar stasiun yang tampak seperti judul dan nama artis ke Apple Music. Tujuannya untuk memeriksa apakah teks itu menyebut sebuah lagu."
     ],
     [
       "h2",

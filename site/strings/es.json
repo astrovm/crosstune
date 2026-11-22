@@ -116,7 +116,7 @@
     ],
     [
       "p",
-      "Con acceso a notificaciones, Crosstune ve qué canción reproducen tus apps de música y en qué parte van, así la letra la sigue y su reproductor puede pausar, saltar o darle me gusta a la canción en tu app. Con Simple Radio, también revisa que se esté mostrando la notificación multimedia de la radio, sin leer su texto. Esto se queda en tu teléfono. Una tarjeta de práctica reproduce su línea en una app que ya tiene la canción abierta, o en un pequeño reproductor de YouTube en la tarjeta, que busca el video de la canción como lo hace un link. Ahí no tenés la sesión iniciada en YouTube. Para Radio Garden, Crosstune le envía a Apple Music el título y el artista que transmite la emisora para verificar la canción."
+      "Con acceso a notificaciones, Crosstune ve qué canción reproducen tus apps de música y en qué parte van, así la letra la sigue y su reproductor puede pausar, saltar o darle me gusta a la canción en tu app. Con Simple Radio, también revisa que se esté mostrando la notificación multimedia de la radio, sin leer su texto. Esto se queda en tu teléfono. Una tarjeta de práctica reproduce su línea en una app que ya tiene la canción abierta, o en un pequeño reproductor de YouTube en la tarjeta, que busca el video de la canción como lo hace un link. Ahí no tenés la sesión iniciada en YouTube. Para Radio Garden, Crosstune le envía a Apple Music las partes del texto sobre lo que está sonando que parecen ser el título y el artista. Así verifica si corresponden a una canción."
     ],
     [
       "h2",

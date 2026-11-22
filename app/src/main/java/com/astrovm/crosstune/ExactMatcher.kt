@@ -267,7 +267,11 @@ internal class ExactMatcher(
         }
     }
 
-    private suspend fun findOnAppleMusic(metadata: MusicMetadata): String? {
+    /** Radio queue text needs its own title check, without using a cached general match. */
+    suspend fun confirmsRadioSong(metadata: MusicMetadata): Boolean =
+        withTimeoutOrNull(timeoutMs) { answeredOr(null) { findOnAppleMusic(metadata, radio = true) } } != null
+
+    private suspend fun findOnAppleMusic(metadata: MusicMetadata, radio: Boolean = false): String? {
         val (entity, nameKey, urlKey) = when (metadata.type) {
             ItemType.TRACK -> Triple("song", "trackName", "trackViewUrl")
             ItemType.ALBUM -> Triple("album", "collectionName", "collectionViewUrl")
@@ -283,7 +287,7 @@ internal class ExactMatcher(
         val named = results.objects().filter { result ->
             // Apple marks some albums in their name, e.g. "Name - Single", which the source doesn't.
             val name = result.optString(nameKey).removeSuffix(" - Single").removeSuffix(" - EP")
-            matches(metadata, name, result.optString("artistName"))
+            matches(metadata, name, result.optString("artistName"), radio = radio)
         }
         return asLongAs(metadata, named) { it.optLong("trackTimeMillis") }?.let { it.optString(urlKey).linkTo(MusicService.APPLE_MUSIC) }
     }
@@ -1322,8 +1326,9 @@ internal class ExactMatcher(
      * Requires the same name and at least one artist in common, so remixes, covers and deluxe
      * editions don't win by rank. Whole names are compared: "Sia" must not match "Asia".
      */
-    private fun matches(metadata: MusicMetadata, name: String, artist: String, album: String = ""): Boolean {
-        if (!SongNames.sameVersion(metadata.title, name, album)) return false
+    private fun matches(metadata: MusicMetadata, name: String, artist: String, album: String = "", radio: Boolean = false): Boolean {
+        val titleMatches = if (radio) RadioGarden.sameTitle(metadata.title, name) else SongNames.sameVersion(metadata.title, name, album)
+        if (!titleMatches) return false
         if (metadata.type == ItemType.ARTIST) return true
         // With no artist to check, e.g. a Google link that only names the song, any song of that name
         // would do, so none is taken for it: it's searched for instead.

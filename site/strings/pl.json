@@ -116,7 +116,7 @@
     ],
     [
       "p",
-      "Z dostępem do powiadomień Crosstune widzi, jaki utwór grają Twoje aplikacje muzyczne i w którym miejscu, więc tekst podąża za nim, a odtwarzacz Crosstune może wstrzymać, pominąć lub polubić utwór w Twojej aplikacji. Dla Simple Radio sprawdza też, czy widać multimedialne powiadomienie radia, bez czytania jego tekstu. To zostaje na Twoim telefonie. Fiszka odtwarza swój wiersz w aplikacji, która ma już otwarty ten utwór, albo w małym odtwarzaczu YouTube na fiszce, który znajduje film utworu tak jak link. Nie jesteś tam zalogowany w YouTube. W przypadku Radio Garden Crosstune wysyła do Apple Music tytuł i wykonawcę podane w strumieniu stacji, aby sprawdzić utwór."
+      "Z dostępem do powiadomień Crosstune widzi, jaki utwór grają Twoje aplikacje muzyczne i w którym miejscu, więc tekst podąża za nim, a odtwarzacz Crosstune może wstrzymać, pominąć lub polubić utwór w Twojej aplikacji. Dla Simple Radio sprawdza też, czy widać multimedialne powiadomienie radia, bez czytania jego tekstu. To zostaje na Twoim telefonie. Fiszka odtwarza swój wiersz w aplikacji, która ma już otwarty ten utwór, albo w małym odtwarzaczu YouTube na fiszce, który znajduje film utworu tak jak link. Nie jesteś tam zalogowany w YouTube. W przypadku Radio Garden Crosstune wysyła do Apple Music te części tekstu stacji o tym, co właśnie gra, które wyglądają jak tytuł i nazwa wykonawcy. W ten sposób sprawdza, czy wskazują utwór."
     ],
     [
       "h2",

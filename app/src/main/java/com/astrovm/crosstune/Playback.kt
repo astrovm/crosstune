@@ -593,9 +593,11 @@ internal class MediaSessionPlayback(
         val (title, artist) = calls()
         val named = said(this)
         val garden = packageName == RadioGarden.PACKAGE
+        val state = playbackState
+        val queueSong = if (garden) RadioGarden.queueSong(title, queueOf(this), state?.activeQueueItemId) else null
         return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let { coverOf(it, sessionToken) }, artist,
-            where = place(), said = named != null, caption = garden || named?.unnamed == true, reportsState = playbackState != null,
-            session = sessionNumbers.of(sessionToken), queueSong = if (garden) RadioGarden.queueSong(title, queueOf(this)) else null)
+            where = place(), said = named != null, caption = garden || named?.unnamed == true, reportsState = state != null,
+            session = sessionNumbers.of(sessionToken), queueSong = queueSong)
     }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?, session: Int?) = seekIn(song, positionMs, app, null, session)

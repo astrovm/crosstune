@@ -116,7 +116,7 @@
     ],
     [
       "p",
-      "With notification access, Crosstune sees which song your music apps play and how far in, so the lyrics follow along and its player can pause, skip or like the song in your app. For Simple Radio, it also checks that the radio's media notification is showing, without reading its text. This stays on your phone. A practice card plays its line in an app that already has the song open, or in a small YouTube player on the card, which finds the song's video as a link does. You aren't signed in to YouTube there. For Radio Garden, Crosstune sends the title and artist from the station's stream to Apple Music to check the song."
+      "With notification access, Crosstune sees which song your music apps play and how far in, so the lyrics follow along and its player can pause, skip or like the song in your app. For Simple Radio, it also checks that the radio's media notification is showing, without reading its text. This stays on your phone. A practice card plays its line in an app that already has the song open, or in a small YouTube player on the card, which finds the song's video as a link does. You aren't signed in to YouTube there. For Radio Garden, Crosstune sends Apple Music the parts of the station's current-song text that look like a title and artist, to check if they name a song."
     ],
     [
       "h2",

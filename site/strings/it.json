@@ -116,7 +116,7 @@
     ],
     [
       "p",
-      "Con l'accesso alle notifiche, Crosstune vede quale brano riproducono le tue app di musica e a che punto sono, così il testo segue e il suo player può mettere in pausa, saltare o mettere mi piace al brano nella tua app. Per Simple Radio, controlla anche che la notifica multimediale della radio sia visibile, senza leggerne il testo. Questo resta sul tuo telefono. Una scheda di esercizio riproduce la sua riga in un'app che ha già il brano aperto, o in un piccolo player YouTube sulla scheda, che trova il video del brano come fa un link. Lì non hai effettuato l'accesso a YouTube. Per Radio Garden, Crosstune invia ad Apple Music il titolo e l’artista indicati nello stream della stazione per verificare il brano."
+      "Con l'accesso alle notifiche, Crosstune vede quale brano riproducono le tue app di musica e a che punto sono, così il testo segue e il suo player può mettere in pausa, saltare o mettere mi piace al brano nella tua app. Per Simple Radio, controlla anche che la notifica multimediale della radio sia visibile, senza leggerne il testo. Questo resta sul tuo telefono. Una scheda di esercizio riproduce la sua riga in un'app che ha già il brano aperto, o in un piccolo player YouTube sulla scheda, che trova il video del brano come fa un link. Lì non hai effettuato l'accesso a YouTube. Per Radio Garden, Crosstune invia ad Apple Music le parti del testo della stazione sul brano in riproduzione che sembrano un titolo e un nome d’artista. Così verifica se indicano un brano."
     ],
     [
       "h2",

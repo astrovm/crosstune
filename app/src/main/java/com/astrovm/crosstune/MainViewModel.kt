@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.merge
@@ -1022,8 +1023,7 @@ internal class MainViewModel(
         if (lyrics) {
             uiState.playingUnnamed?.confirmedQueueSong?.let { song ->
                 showSong(song)
-                alongByPhone = true
-                return showLyricsFor(song, playing = true)
+                return showQueueLyrics(song)
             }
             // Shown as any song is, which stops whatever else was under way, and keeps the player on this song under its words.
             // Only when a tap would open it too; else it's listened to again.
@@ -1234,7 +1234,8 @@ internal class MainViewModel(
         val shown = liveUnnamed ?: followedUnnamed?.first?.takeIf { heardNow == null }
         val following = followedUnnamed?.takeIf { (followed) -> shown?.reportsState == true && followed.app == shown.app && followed.played == shown.played }?.second
         val was = uiState.playingUnnamed?.takeIf { it.playing == shown && liveUnnamed != null }
-        uiState = uiState.copy(playingUnnamed = shown?.let { PlayingUnnamed(it, was?.heard, following, was?.confirmedQueueSong) })
+        val song = liveUnnamed?.let { live -> queueCheck?.takeIf { it.isFor(live) && it.confirmed && now() < it.until }?.song }
+        uiState = uiState.copy(playingUnnamed = shown?.let { PlayingUnnamed(it, was?.heard, following, song) })
         showPlayingNow()
     }
 
@@ -1272,36 +1273,44 @@ internal class MainViewModel(
      * first, then listens by ear. A change in the station or its queue starts over.
      */
     private suspend fun nameUnnamed(source: PlaybackSource) {
-        source.unnamedUpdates().distinctUntilChanged()
-            .onEach { unnamed ->
-                // Started, paused or played again, it's listened to at once once it plays.
-                nextByEarAtMs = 0L
-                quietByEar = 0
-                unheardByEar = false
-                liveUnnamed = unnamed
-                showUnnamed()
+        source.unnamedUpdates().distinctUntilChanged().collectLatest { unnamed ->
+            // Started, paused or played again, it's listened to at once once it plays.
+            nextByEarAtMs = 0L
+            quietByEar = 0
+            unheardByEar = false
+            liveUnnamed = unnamed
+            if (unnamed != null && queueCheck?.isFor(unnamed) != true) {
+                queueCheck = unnamed.queueSong?.let { QueueCheck(unnamed.session, unnamed.name, it, now() + QUEUE_SONG_MAX_MS) }
             }
-            // Paused, nothing plays to hear; nor on a speaker it's cast to, which the phone doesn't play.
-            // A station that says nothing of its state shows only while the phone plays sound and no other app's
-            // session can be playing it, so that sound is taken for the station's, and it's heard too.
-            // Moved on, as by a skip, it's listened to again at once, the listen under way stopped.
-            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight } }
-            .combine(byEarAgain) { unnamed, again -> unnamed?.let { it to again } }
-            .distinctUntilChanged()
-            .collectLatest { listened ->
-                val unnamed = listened?.first ?: return@collectLatest
-                if (!confirmQueueSong(unnamed) && !unnamed.away) nameByEar(source)
+            showUnnamed()
+            if (unnamed == null) return@collectLatest
+            queueCheck?.let { confirmQueueSong(it) }
+            // The phone has nothing to hear when the station plays away. A skip restarts the listen.
+            if (!unnamed.away) {
+                combine(barInSight, byEarAgain) { inSight, again -> again.takeIf { inSight } }
+                    .distinctUntilChanged().collectLatest { if (it != null) nameByEar(source) }
             }
+        }
     }
 
-    /** A station can put a show or slogan in its queue. Only show songs Apple Music finds by title and artist. */
-    private suspend fun confirmQueueSong(unnamed: Unnamed): Boolean {
-        val song = unnamed.queueSong ?: return false
-        if (matcher.find(MusicService.APPLE_MUSIC, song) == null) return false
-        uiState.playingUnnamed?.takeIf { it.playing == unnamed }?.let {
-            uiState = uiState.copy(playingUnnamed = it.copy(confirmedQueueSong = song))
-        }
-        return true
+    private class QueueCheck(val session: Int?, val station: String?, val song: MusicMetadata, val until: Long) {
+        var confirmed = false
+
+        fun isFor(unnamed: Unnamed): Boolean =
+            session == unnamed.session && station == unnamed.name && song == unnamed.queueSong
+    }
+
+    private var queueCheck: QueueCheck? = null
+
+    /** The catalog checks the name. The station must give fresh text to keep naming songs this way. */
+    private suspend fun confirmQueueSong(check: QueueCheck) {
+        combine(barInSight, snapshotFlow { followingRadioLyrics }) { bar, lyrics -> bar || lyrics }.first { it }
+        if (now() >= check.until) return
+        if (!check.confirmed) check.confirmed = matcher.confirmsRadioSong(check.song)
+        if (!check.confirmed) return
+        showUnnamed()
+        delay(check.until - now())
+        showUnnamed()
     }
 
     /**
@@ -2483,7 +2492,7 @@ internal class MainViewModel(
      */
     fun showLyrics() {
         // Retry asks again for the words shown, which after listening along may be another song than the result's.
-        showLyricsFor(uiState.lyricsFor ?: uiState.result ?: return)
+        showLyricsFor(uiState.lyricsFor ?: uiState.result ?: return, playing = followingRadioLyrics)
     }
 
     /** [requested] as its words are looked up: as the app playing it has it, when one does. */
@@ -2514,6 +2523,19 @@ internal class MainViewModel(
      */
     private fun lookUpAhead(finder: LyricsFinder, key: String, song: MusicMetadata): Deferred<LyricsFinder.FirstLook> =
         viewModelScope.asyncKept({ look -> lookingAhead[key] = look; look.invokeOnCompletion { lookingAhead.remove(key) } }) { finder.firstLook(song) }
+
+    /** Whether the open lyrics follow the songs Radio Garden puts in its queue. */
+    var followingRadioLyrics by mutableStateOf(false)
+        private set
+
+    /** A radio queue has a song name but no song clock. Listen to the phone to find the position. */
+    private fun showQueueLyrics(song: MusicMetadata) {
+        val firstSong = !followingRadioLyrics
+        followingRadioLyrics = true
+        alongByPhone = true
+        showLyricsFor(song, playing = true)
+        if (firstSong) listenAlong()
+    }
 
     private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false) {
         val song = asPlayed(requested)
@@ -2849,6 +2871,7 @@ internal class MainViewModel(
     /** Another name can take over only after this song was heard and its app no longer says it plays. */
     private fun hearingFits(song: MusicMetadata, shown: MusicMetadata): Boolean {
         if (sameSong(song, shown)) return true
+        if (followingRadioLyrics && uiState.playingUnnamed?.confirmedQueueSong != null) return false
         return heardSong?.let { sameSong(it, shown) } == true && appFollowing?.clock?.playing != true
     }
 
@@ -3796,18 +3819,32 @@ internal class MainViewModel(
         nextJob?.cancel()
         nextJob = null
         val source = playback?.takeIf { it.hasAccess() && !nextPaused } ?: return
+        val queue = if (followingRadioLyrics) snapshotFlow { uiState.playingUnnamed?.confirmedQueueSong } else flowOf(null)
         viewModelScope.launchKept({ nextJob = it }) {
-            combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).collect { (app, playing) ->
+            combine(source.follow(song), source.nowPlayingUpdates(), queue, ::Triple).collect { (app, playing, queued) ->
                 if (app?.clock?.playing == true) shownPlayed = true
                 // Practice moves the music app from song to song, which the words stay out of.
                 if (uiState.practice != null) return@collect
                 val skips = (app?.canSkipNext == true) to (app?.canSkipPrevious == true)
                 if (skips != (uiState.canSkipNext to uiState.canSkipPrevious)) uiState = uiState.copy(canSkipNext = skips.first, canSkipPrevious = skips.second)
                 // An app still on the song shown, by another name, e.g. "Song - Remastered", or paused there, plays no other.
-                val next = playing?.takeIf { shownPlayed && app == null && !sameSong(it.metadata, song) } ?: return@collect
-                remember(next)
-                showLyricsFor(next.metadata, playing = true)
+                if (!shownPlayed || app != null) return@collect
+                showNextLyrics(song, playing, queued)
             }
+        }
+    }
+
+    private fun showNextLyrics(song: MusicMetadata, playing: Heard.Song?, queued: MusicMetadata?) {
+        if (playing != null) {
+            if (sameSong(playing.metadata, song)) return
+            remember(playing)
+            showLyricsFor(playing.metadata, playing = true)
+        } else if (queued != null) {
+            if (RadioGarden.sameTitle(queued.title, song.title) && SongNames.sameArtist(queued.artist, song.artist)) return
+            heardSong = null
+            hear(null)
+            remember(Heard.Song(queued, appleMusicId = null))
+            showQueueLyrics(queued)
         }
     }
 
@@ -4458,6 +4495,7 @@ internal class MainViewModel(
     }
 
     fun dismissLyrics() {
+        followingRadioLyrics = false
         heardSong = null
         // Words held for a listen are closed with the rest: nothing shows them, or looks them up, once they're gone.
         heldJob?.cancel()
@@ -6074,6 +6112,7 @@ internal class MainViewModel(
 
         /** How long naming by ear waits after a song whose length isn't known: about half a song. */
         const val BY_EAR_UNKNOWN_MS = 90_000L
+        private const val QUEUE_SONG_MAX_MS = 90_000L
 
         /** The soonest and the latest naming by ear listens again after a song: the end of a song may be misheard, and a long one may be skipped. */
         const val BY_EAR_SOONEST_MS = 20_000L

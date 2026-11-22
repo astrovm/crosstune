@@ -116,7 +116,7 @@
     ],
     [
       "p",
-      "Met toegang tot meldingen ziet Crosstune welk nummer je muziekapps afspelen en hoe ver ze zijn, zodat de tekst meeloopt en de speler het nummer in je app kan pauzeren, overslaan of liken. Voor Simple Radio controleert het ook of de mediamelding van de radio zichtbaar is, zonder de tekst ervan te lezen. Dit blijft op je telefoon. Een oefenkaart speelt zijn regel af in een app waar het nummer al open is, of in een kleine YouTube-speler op de kaart, die de video van het nummer vindt zoals een link dat doet. Je bent daar niet ingelogd bij YouTube. Voor Radio Garden stuurt Crosstune de titel en artiest uit de stream van het station naar Apple Music om het nummer te controleren."
+      "Met toegang tot meldingen ziet Crosstune welk nummer je muziekapps afspelen en hoe ver ze zijn, zodat de tekst meeloopt en de speler het nummer in je app kan pauzeren, overslaan of liken. Voor Simple Radio controleert het ook of de mediamelding van de radio zichtbaar is, zonder de tekst ervan te lezen. Dit blijft op je telefoon. Een oefenkaart speelt zijn regel af in een app waar het nummer al open is, of in een kleine YouTube-speler op de kaart, die de video van het nummer vindt zoals een link dat doet. Je bent daar niet ingelogd bij YouTube. Voor Radio Garden stuurt Crosstune de delen van de tekst over het huidige nummer van het station die op een titel en artiest lijken naar Apple Music. Zo controleert het of ze een nummer aanduiden."
     ],
     [
       "h2",

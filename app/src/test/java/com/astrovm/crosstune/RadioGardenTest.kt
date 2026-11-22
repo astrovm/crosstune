@@ -4,6 +4,8 @@ import android.media.MediaDescription
 import android.media.session.MediaSession
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -40,12 +42,34 @@ class RadioGardenTest {
             "Stolen Moments with John Bailey",
             "Artist- Song",
             "Artist -Song",
+            "WDR Aktuell - Die Nachrichten",
+            """text="Spot Block - End" amgTrackId="9876543" length="00:00:00" """,
+            """Artist - text="Spot Block - End" song_spot="M" """,
+            """artist="Band" - title="Song" """,
+            """Artist - Song program_id=123""",
+            "<artist>Band</artist> - Song",
+            """Artist - text="<song>Title</song>" song_spot="M" """,
+            """Artist - text="Song" extra broadcast words""",
+            """Artist - text="" song_spot="M" """,
             """text="Spot Block End" amgTrackId="9876543" length="00:00:00" """,
             """Artist - text="Spot Block End" amgTrackId="9876543" """,
             """Artist - text="Song" song_spot="A" """,
             """Artist - text=" """
         )
-        subtitles.forEach { text -> assertNull(text, RadioGarden.queueSong(station, listOf(item(station, text)))) }
+        assertEquals(emptyList<String?>(), subtitles.filter { text ->
+            RadioGarden.queueSong(station, listOf(item(station, text))) != null
+        })
+    }
+
+    @Test
+    fun comparesKanaWithoutLosingMarksOrCollapsingSmallKana() {
+        assertTrue(RadioGarden.sameTitle("ガラス", "ｶﾞﾗｽ"))
+        assertTrue(RadioGarden.sameTitle("パーティー", "ハ\u309aーティー"))
+        assertTrue(RadioGarden.sameTitle("Étoile", "Etoile"))
+        assertFalse(RadioGarden.sameTitle("ガラス", "カラス"))
+        assertFalse(RadioGarden.sameTitle("パーティー", "バーティー"))
+        assertFalse(RadioGarden.sameTitle("きゃく", "きやく"))
+        assertFalse(RadioGarden.sameTitle("スキー", "スキ"))
     }
 
     @Test
