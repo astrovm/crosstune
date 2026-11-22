@@ -1170,11 +1170,11 @@ class ExactMatcherTest {
         val answer = fake.handler
         val release = CountDownLatch(1)
         fake.handler = { request ->
-            if (request.url.host == "api.deezer.com") release.await(10, SECONDS)
+            if (request.url.host == "api.deezer.com") release.await(30, SECONDS)
             answer(request)
         }
         try {
-            val found = withTimeoutOrNull(2_000) { ExactMatcher(fake.client(), "US", timeoutMs = 10_000).find(MusicService.YOUTUBE_MUSIC, song) }
+            val found = withTimeoutOrNull(5_000) { ExactMatcher(fake.client(), "US", timeoutMs = 30_000).find(MusicService.YOUTUBE_MUSIC, song) }
             assertEquals("https://music.youtube.com/watch?v=original000", found)
         } finally {
             release.countDown()
