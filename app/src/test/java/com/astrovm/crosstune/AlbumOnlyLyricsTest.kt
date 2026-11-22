@@ -47,8 +47,11 @@ class AlbumOnlyLyricsTest {
         }
         for ((field, other) in listOf(
             "trackName" to "Accordian Extended",
+            "trackName" to "Accordian (Live)",
             "trackName" to "Accordian (Remix) (Instrumental)",
             "trackName" to "Accordian (Instrumental Remix)",
+            "trackName" to "Accordian (Instrumental 混音)",
+            "trackName" to "Accordian (Instrumental) Encore",
             "trackName" to "Accordian (Vocal Mix)",
             "albumName" to "",
             "albumName" to "Other Album (Instrumentals)",

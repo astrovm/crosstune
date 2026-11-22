@@ -1755,7 +1755,8 @@ internal class LyricsFinder(
             if (!SongNames.same(prefix, played)) return false
             val tag = name.substring(start + 1, bracket?.last ?: name.length).trim()
             // The tag may name the version as instrumental. A tag like "Instrumental Remix" also names a different mix.
-            val words = SongNames.wordList(tag).filterNot { it in INSTRUMENTAL_VERSION_WORDS }
+            val words = instrumentalTagWord.matchesIn(SongNames.unaccented(tag)).map(MatchResult::value)
+                .filterNot { it in INSTRUMENTAL_VERSION_WORDS }.toList()
             return (words.size == 1 || words == listOf("off", "vocal")) && SongNames.saysInstrumental("$prefix ($tag)", artist)
         }
 
@@ -2031,6 +2032,7 @@ internal class LyricsFinder(
         /** How far apart two copies of the same take of a song may be in length. */
         const val SAME_LENGTH_MS = 3_000L
 
+        private val instrumentalTagWord = phoneRegex("""[\p{L}\p{N}]+""")
         private val INSTRUMENTAL_VERSION_WORDS = setOf("ver", "version", "versao")
 
         /** Fewer LRCLIB copies marked instrumental than this may be a copy someone sent with no words. */
