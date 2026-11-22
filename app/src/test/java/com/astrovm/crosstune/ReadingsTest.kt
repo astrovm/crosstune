@@ -753,9 +753,18 @@ class ReadingsTest {
     }
 
     @Test
-    fun aLineWithNoWayToSayItsSmallKanaStaysAsKuromojiSplitIt() {
-        // りゅう leaves っ after it, which no word may start on, and no word the search knows holds both: Issue #1139.
-        assertEquals(listOf("り", "ゅうっなも"), Readings.words("りゅうっなも", Script.JAPANESE).map { it.text })
+    fun aWordBeforeSmallTsuLeavesAWayThrough() = checkWordBeforeSmallTsu()
+
+    @Test
+    fun aWordBeforeSmallTsuLeavesAWayThroughWithUniDic() = TestUniDic.reading { checkWordBeforeSmallTsu() }
+
+    private fun checkWordBeforeSmallTsu() {
+        val actual = Readings.words("りゅうっなも", Script.JAPANESE).map { it.text to it.lookup }
+        assertEquals(listOf("りゅうっな" to "りゅう", "も" to "も"), actual)
+        val line = Readings.of(listOf("りゅうっなも"), Script.JAPANESE).single()
+        assertEquals("ryuunna mo", line.romanized)
+        assertEquals("ryuunna mo", line.typed)
+        assertEquals(listOf("ちいさ", "なゃ"), Readings.words("ちいさなゃ", Script.JAPANESE).map { it.text })
     }
 
     @Test
