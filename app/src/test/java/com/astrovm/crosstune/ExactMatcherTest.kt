@@ -1276,10 +1276,10 @@ class ExactMatcherTest {
         assertNull(find(track(artist = "")))
         assertNull(find(track(), wanted = song.copy(artist = "")))
         assertNull(find(track(title = ""), rows = listOf(youTubeMusicRow("", "Artist • Album • 4:00", videoId = "original000")), wanted = song.copy(title = "")))
-        assertNull(find(track(), wanted = song.copy(lengthMs = null)))
-        assertNull(find(track(duration = 2), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 0:02", videoId = "original000")), wanted = song.copy(lengthMs = 0)))
+        assertEquals(found, find(track(), wanted = song.copy(lengthMs = null)))
+        assertEquals(found, find(track(duration = 2), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 0:02", videoId = "original000")), wanted = song.copy(lengthMs = 0)))
         assertNull(find(track(duration = 0), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 0:00", videoId = "original000")), wanted = song.copy(lengthMs = 1_000)))
-        assertNull(find(track(duration = 2), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 0:02", videoId = "original000")), wanted = song.copy(lengthMs = null), apple = mapOf("US" to appleSong("Song", "アーティスト", 0))))
+        assertEquals(found, find(track(duration = 2), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 0:02", videoId = "original000")), wanted = song.copy(lengthMs = null), apple = mapOf("US" to appleSong("Song", "アーティスト", 0))))
         assertEquals(found, find(track(), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 4:03", videoId = "original000"))))
         assertNull(find(track(), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 4:04", videoId = "original000"))))
         assertNull(find(track(), rows = listOf(youTubeMusicRow("Song", "Artist • Album", videoId = "original000"))))
@@ -1288,12 +1288,12 @@ class ExactMatcherTest {
         assertNull(find(track(), rows = listOf(youTubeMusicRow("Other", "Artist • Album • 4:00", videoId = "original000"))))
         assertEquals(found, find(track(), wanted = song.copy(lengthMs = null), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000))))
 
-        // A failed Deezer search must not make Apple's already-known length incomplete.
+        // Apple's length cannot prove the artist's name while Deezer is unavailable.
         val video = youTubeMusicRow("Song - アーティスト", "Fan • 1M views • 4:00", videoId = "fan00000000")
         namesAndTabs(videos = listOf(video), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
         val answer = fake.handler
         fake.handler = { request -> if (request.url.host == "api.deezer.com") throw IOException("offline") else answer(request) }
-        assertEquals("https://music.youtube.com/watch?v=fan00000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
     }
 
     @Test

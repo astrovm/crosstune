@@ -100,7 +100,7 @@
     ],
     [
       "p",
-      "Bir bağlantının şarkısını tanımak için Crosstune, bağlantının geldiği servisin herkese açık sayfasını veya API'sini okur: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam veya Google; ve kapağını yükler. Onu başka bir uygulamada açmak için başlık ve sanatçı o uygulamanın aramasına gider. Bu arama emin olamazsa Apple'ın ve Deezer'ın aramalarına da gider. Spotify için ListenBrainz'e gider, sanatçının adı MusicBrainz'e gider ve Spotify'ın herkese açık sayfaları okunur. Tümünü çal ve Karıştır bunu her şarkı için yapar; YouTube ise bulunan videolardan çalma listesini oluşturur. Yazdığınız şarkı adı Deezer ve Apple aramalarına gider. Özel bir hedef, arama kelimelerini sizin belirlediğiniz adreste alır."
+      "Bir bağlantının şarkısını tanımak için Crosstune, bağlantının geldiği servisin herkese açık sayfasını veya API'sini okur: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam veya Google; ve kapağını yükler. Onu başka bir uygulamada açmak için başlık ve sanatçı o uygulamanın aramasına gider. Bu arama emin olamazsa Apple'ın ve Deezer'ın aramalarına da gider. Deezer, sanatçıyı belirlemek için yalnızca sanatçının adını da alabilir. Spotify için ListenBrainz'e gider, sanatçının adı MusicBrainz'e gider ve Spotify'ın herkese açık sayfaları okunur. Tümünü çal ve Karıştır bunu her şarkı için yapar; YouTube ise bulunan videolardan çalma listesini oluşturur. Yazdığınız şarkı adı Deezer ve Apple aramalarına gider. Özel bir hedef, arama kelimelerini sizin belirlediğiniz adreste alır."
     ],
     [
       "h2",

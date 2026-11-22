@@ -678,7 +678,8 @@ internal class ExactMatcher(
             songRow(metadata, rows, videoRows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
             videoRows.firstOrNull {
                 isTheSongsVideo(it, names) && (names.complete || isOwnVideo(it, names)) && keepsRequestedRecording(recording, it, video = true)
-            }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+            }?.takeIf { isOwnVideo(it, names) || appleNamedArtist(metadata, names) }
+                ?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         }
         addDeezerNames(metadata, names)
         val song = songRow(metadata, rows, videoRows, names, recording)
@@ -1080,12 +1081,15 @@ internal class ExactMatcher(
         if (lengths.isEmpty()) deezerLength(metadata, results)?.let(lengths::add)
     }
 
+    private fun appleNamedArtist(metadata: MusicMetadata, names: Names): Boolean {
+        val wanted = SongNames.artists(metadata.artist)
+        return names.artists.any { artist -> SongNames.artists(artist).none(wanted::contains) }
+    }
+
     /** Ask Deezer only after the names already known can't prove a row or the artist's own video. */
     private suspend fun addDeezerNames(metadata: MusicMetadata, names: Names) {
         val lengths = listOfNotNull(metadata.lengthMs?.takeIf { it > 0 }) + names.lengthsMs
-        val wanted = SongNames.artists(metadata.artist)
-        val appleNamedArtist = names.artists.any { artist -> SongNames.artists(artist).none(wanted::contains) }
-        val needArtist = (!appleNamedArtist || !names.complete) && metadata.artist.isNotBlank() && lengths.isNotEmpty()
+        val needArtist = (!appleNamedArtist(metadata, names) || !names.complete) && metadata.artist.isNotBlank()
         val needsLength = names.lengthsMs.isEmpty()
         if (!needArtist && !needsLength) return
         val asked = Asked()
@@ -1096,9 +1100,13 @@ internal class ExactMatcher(
         }
         val foundLengths = names.lengthsMs.toMutableList()
         addDeezerLength(metadata, tracks, foundLengths)
+        val knownLengths = (lengths + foundLengths).ifEmpty {
+            tracks.mapNotNull { it.optLong("duration").takeIf { seconds -> seconds > 0 }?.times(1000) }
+        }
+        names.deezerNames = deezerNames(metadata, tracks, knownLengths, artists.firstOrNull())
+        if (foundLengths.isEmpty()) foundLengths.addAll(names.deezerNames.map { it.lengthMs })
         names.lengthsMs = foundLengths
-        names.deezerNames = deezerNames(metadata, tracks, lengths, artists.firstOrNull())
-        if (needsLength && asked.failed) {
+        if ((needArtist || needsLength) && asked.failed) {
             names.complete = false
             names.everyStore = false
         }
