@@ -348,6 +348,57 @@ class ReadingsTest {
     }
 
     @Test
+    fun longMarkKeepsTheNextWordSeparate() = assertDrawnReading(
+        "食べるー好きだよ", "taberuu sukida yo",
+        Triple("食べるー", "taberuu", "食べる"), Triple("好きだ", "sukida", "好き"), Triple("よ", "yo", "よ")
+    )
+
+    @Test
+    fun onlyTheLeadingLongMarksOfATokenAttach() {
+        assertDrawnReading(
+            "食べるーーコーヒー", "taberuuu koohii",
+            Triple("食べるーー", "taberuuu", "食べる"), Triple("コーヒー", "koohii", "コーヒー")
+        )
+        assertDrawnReading(
+            "おぉーーコーヒー飲む", "oooo koohii nomu",
+            Triple("おぉーー", "oooo", "おお"), Triple("コーヒー", "koohii", "コーヒー"), Triple("飲む", "nomu", "飲む")
+        )
+        assertDrawnReading(
+            "食べるーコーヒーぃ", "taberuu koohiii",
+            Triple("食べるー", "taberuu", "食べる"), Triple("コーヒーぃ", "koohiii", "コーヒー")
+        )
+    }
+
+    @Test
+    fun smallTsuBeforeALongMarkDoesNotDoubleTheNextWord() {
+        assertDrawnReading("あっーた", "a ta", Triple("あっー", "a", "あっ"), Triple("た", "ta", "た"))
+        assertEquals("ata", Readings.romaji("あっーーた"))
+    }
+
+    @Test
+    fun drawnOutInterjectionKeepsItsParticleSeparate() = assertDrawnReading(
+        "おぉと叫ぶ", "oo to sakebu",
+        Triple("おぉ", "oo", "おお"), Triple("と", "to", "と"), Triple("叫ぶ", "sakebu", "叫ぶ")
+    )
+
+    @Test
+    fun drawnOutAdverbKeepsItsDictionaryForm() {
+        assertDrawnReading(
+            "そーだと思う", "sooda to omou",
+            Triple("そーだ", "sooda", "そう"), Triple("と", "to", "と"), Triple("思う", "omou", "思う")
+        )
+        assertDrawnReading("そーす", "soosu", Triple("そーす", "soosu", "ソース"))
+        assertDrawnReading("ソーダ", "sooda", Triple("ソーダ", "sooda", "ソーダ"))
+    }
+
+    private fun assertDrawnReading(line: String, romaji: String, vararg words: Triple<String, String, String>) {
+        fun reading() = Readings.of(listOf(line), Script.JAPANESE).single().let { it.romanized to it.typed }
+        fun groups() = Readings.words(line, Script.JAPANESE).map { Triple(it.text, it.romanized, it.lookup) }
+        val expected = (romaji to romaji) to words.toList()
+        assertEquals(listOf(expected, expected), listOf(reading() to groups(), TestUniDic.reading { reading() to groups() }))
+    }
+
+    @Test
     fun romajiCanBeSpelledAsAKeyboardTypesIt() {
         fun read(line: String) = Readings.of(listOf(line), Script.JAPANESE).single()
         // Long vowels as the kana write them, and を as wo; the particles は and へ still wa and e.

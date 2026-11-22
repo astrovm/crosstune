@@ -186,7 +186,8 @@ internal object Readings {
         val text = line.mapIndexed { at, c -> NEW_FORMS[c] ?: KANJI_DIGITS[c]?.takeIf { counts(line, at) } ?: c }.joinToString("")
         val known = okurigana(line, text, ipadicPieces(line, text))
         val other = uniDic
-        val read = saidAsWritten(modernPieces(other?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known))
+        val mixed = other?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known
+        val read = saidAsWritten(modernPieces(splitLeadingLongMarks(line, text, mixed)))
         return if (other == null) wholeOldKanaWord(line, read) ?: read else read
     }
 
@@ -242,17 +243,27 @@ internal object Readings {
     private fun drawnWord(text: String, pieces: List<Piece>, first: Int, draws: Set<Int>): Piece? {
         val head = pieces[first]
         val start = head.end - head.surface.length
+        // In そーだ, IPADIC finds the copula だ. Keep it with the adverb そう, even though ソーダ is a noun.
+        val mark = pieces.getOrNull(first + 1)
+        if (head.surface == "そ" && mark?.surface == "ー" && pieces.getOrNull(first + 2)?.kind == "助動詞") {
+            return Piece("そー", "そー", "副詞", "助詞類接続", "そう", end = mark.end, reader = Reader.RULES)
+        }
+        // Keep the particle that follows a cry, as in おぉと叫ぶ, where おと would name a sound.
+        val cryWithParticle = head.kind == "感動詞" && pieces.getOrNull(first + 1)?.kind == "助詞"
         val candidates = (first..pieces.lastIndex).asSequence().map(pieces::get)
             .takeWhile { it.end - start <= MAX_DRAWN_WORD && it.surface.all(::isSaid) }.drop(1)
         return candidates.mapNotNull { last ->
             val kana = text.substring(start, last.end)
-            val lookup = drawnLookup(kana, start, last, draws) ?: return@mapNotNull null
+            val lookup = when {
+                'ー' in kana -> longMarkLookup(kana)
+                cryWithParticle -> null
+                else -> smallVowelLookup(kana, start, last, draws)
+            } ?: return@mapNotNull null
             Piece(kana, kana, "名詞", "一般", lookup, end = last.end, reader = Reader.RULES)
         }.lastOrNull()
     }
 
-    private fun drawnLookup(kana: String, start: Int, last: Piece, draws: Set<Int>): String? {
-        if ('ー' in kana) return longMarkLookup(kana)
+    private fun smallVowelLookup(kana: String, start: Int, last: Piece, draws: Set<Int>): String? {
         // If the last piece is only a small vowel, the normal draw-out rule already keeps the word before it.
         val plain = kana.filterIndexed { i, c ->
             i == 0 || start + i !in draws || KANA[kana[i - 1]]?.lastOrNull() != KANA[c]?.lastOrNull()
@@ -276,21 +287,50 @@ internal object Readings {
     private fun drawnOutParticle(a: List<Piece>, draws: Set<Int>) =
         a.singleOrNull()?.let { piece -> piece.kind == "助詞" && piece.surface.indices.any { piece.end - piece.surface.length + it in draws } } == true
 
-    private fun ipadicPieces(line: String, tokens: List<com.atilika.kuromoji.ipadic.Token>) = tokens.map { token ->
-            // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
-            val reading = token.reading?.takeIf { it != "*" }
-            Piece(
-                line.substring(token.position, token.position + token.surface.length),
-                reading?.let(::hiragana) ?: token.surface,
-                token.partOfSpeechLevel1,
-                token.partOfSpeechLevel2,
-                token.baseForm?.takeIf { it != "*" } ?: token.surface,
-                token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) },
-                token.position + token.surface.length,
-                unread = reading == null,
-                reader = if (token is SmallKanaTokenizer.JmdictToken) Reader.JMDICT else Reader.IPADIC
-            )
+    /** IPADIC can give a leading long mark to the next word, ーコーヒー, which needs its own lookup. */
+    private fun splitLeadingLongMarks(line: String, text: String, pieces: List<Piece>): List<Piece> {
+        if ('ー' !in text) return pieces
+        return buildList {
+            for (piece in pieces) {
+                val marks = afterLongMarks(piece.surface, 0)
+                if (marks in 1 until piece.surface.length) {
+                    val surface = piece.surface.take(marks)
+                    val end = piece.end - piece.surface.length + marks
+                    add(Piece(surface, surface, "名詞", "一般", end = end))
+                    val words = tokenizer.tokenize(text.substring(end, piece.end)).map { ipadicPiece(line, it, end) }
+                    addAll(drawnOut(text, words))
+                } else {
+                    add(piece)
+                }
+            }
         }
+    }
+
+    private fun afterLongMarks(text: String, start: Int): Int {
+        var end = start
+        while (text.getOrNull(end) == 'ー') end++
+        return end
+    }
+
+    private fun ipadicPieces(line: String, tokens: List<com.atilika.kuromoji.ipadic.Token>) = tokens.map { ipadicPiece(line, it, 0) }
+
+    private fun ipadicPiece(line: String, token: com.atilika.kuromoji.ipadic.Token, offset: Int): Piece {
+        // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
+        val reading = token.reading?.takeIf { it != "*" }
+        val start = offset + token.position
+        val end = start + token.surface.length
+        return Piece(
+            line.substring(start, end),
+            reading?.let(::hiragana) ?: token.surface,
+            token.partOfSpeechLevel1,
+            token.partOfSpeechLevel2,
+            token.baseForm?.takeIf { it != "*" } ?: token.surface,
+            token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) },
+            end,
+            unread = reading == null,
+            reader = if (token is SmallKanaTokenizer.JmdictToken) Reader.JMDICT else Reader.IPADIC
+        )
+    }
 
     /**
      * Small vowels that draw out the word in kana before them, ありがと and ぉ, go with it, as one word read as that one, and so does
@@ -1489,11 +1529,12 @@ internal object Readings {
             // the dictionary splits, "Don't" into Don, ' and t, stays as written. A mark goes with the word
             // before it, also one the dictionary takes for a word, as "!" in "Shock!".
             val english = previous != null && isEnglish(previous.surface) && isEnglish(piece.surface)
-            val longMark = piece.surface.startsWith('ー') && previous?.surface?.last()?.let { isKana(it) && it.isLetter() } == true
+            val longMark = piece.surface.all { it == 'ー' } && previous?.surface?.last()?.let { isKana(it) && it.isLetter() } == true
             val mark = (piece.kind == "記号" || piece.surface.none(Char::isLetterOrDigit)) && !opening
             val withPrevious = opened || english || longMark || mark
-            val attaches = previous != null && (withPrevious || (ending && previous.kind != "助詞"))
-            if (attaches) words.last() += piece else words += mutableListOf(piece)
+            // A split long mark ends the word it draws out. 好き after 食べるー is a new word.
+            val continuesWord = ending && previous?.kind != "助詞" && previous?.surface?.any { it != 'ー' } == true
+            if (previous != null && (withPrevious || continuesWord)) words.last() += piece else words += mutableListOf(piece)
             opened = opening
             previous = piece
         }
@@ -1850,7 +1891,12 @@ internal object Readings {
             val syllable = two?.let(YOUON::get)?.also { i += 2 } ?: (if (typed && hira[i] == 'を') "wo" else KANA[hira[i]])?.also { i++ }
             if (syllable == null) {
                 when (val c = hira[i]) {
-                    'っ' -> double = true
+                    'っ' -> {
+                        // A small っ cuts the sound off before these marks and has no consonant to double.
+                        val end = afterLongMarks(hira, i + 1)
+                        double = end == i + 1
+                        i = end - 1
+                    }
                     'ー' -> out.lastOrNull { it in "aeiou" }?.let(out::append)
                     else -> out.append(LATIN_MARKS[c] ?: c)
                 }
