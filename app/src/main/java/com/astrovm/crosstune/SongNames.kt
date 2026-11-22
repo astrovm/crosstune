@@ -425,6 +425,8 @@ internal object SongNames {
     fun saysInstrumental(title: String, artist: String): Boolean {
         // Written in full-width or half-width letters, "（Ｉｎｓｔ）" or "ｵﾌﾎﾞｰｶﾙ", it says the same.
         val name = Normalizer.normalize(title, Normalizer.Form.NFKC)
+            // Here the hyphen joins the words of the tag rather than starting a new one.
+            .replace("off-vocal", "off vocal", ignoreCase = true)
         if (sungAlong(name, artist) || coverOf(name) != null || voiceIn.containsMatchIn(name)) return false
         // A guest named before the tag is the song's, "Song (feat. Guest) [Instrumental]"; after it, they sing in this mix.
         val lastSinger = singerAfter.matchesIn(name).lastOrNull()?.range?.first ?: -1

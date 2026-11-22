@@ -33,9 +33,11 @@ internal data class MusicMetadata(
      * called there, never as a song by its name, whatever it's called. Never kept or sent anywhere.
      */
     val unnamed: Boolean = false,
-    /** The recording's album name when it explicitly says the tracks are instrumental. */
-    val instrumentalAlbum: String? = null
-)
+    /** The recording's album name, when the service or playing app gives one. */
+    val album: String? = null
+) {
+    val instrumentalAlbum: String? = album?.takeIf(SongNames::albumOfInstrumentals)
+}
 
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */
 internal object MetadataParsers {
@@ -725,7 +727,7 @@ internal object MetadataParsers {
             ItemType.TRACK -> MusicMetadata(
                 result.optString("trackName"), artist, type, artwork,
                 lengthMs = result.optLong("trackTimeMillis").takeIf { it > 0 },
-                instrumentalAlbum = result.optString("collectionName").takeIf(SongNames::albumOfInstrumentals)
+                album = result.albumName("collectionName")
             )
             // Albums are looked up with their songs, which follow the album in the results.
             ItemType.ALBUM -> MusicMetadata(
@@ -740,7 +742,7 @@ internal object MetadataParsers {
         val song = results.optJSONObject(index)?.takeIf { it.optString("wrapperType") == "track" } ?: return@mapNotNull null
         MusicMetadata(
             song.optString("trackName").ifBlank { return@mapNotNull null }, song.optString("artistName"),
-            instrumentalAlbum = song.optString("collectionName").takeIf(SongNames::albumOfInstrumentals)
+            album = song.albumName("collectionName")
         )
     }
 
@@ -814,8 +816,8 @@ internal object MetadataParsers {
         val tracks = json.optJSONObject("tracks")?.optJSONArray("data")?.let(::deezerTracks).orEmpty()
         val count = json.optInt("nb_tracks").takeIf { it > tracks.size }
         val lengthMs = json.optLong("duration").takeIf { type == ItemType.TRACK && it > 0 }?.times(1000)
-        val instrumentalAlbum = album?.optString("title")?.takeIf { type == ItemType.TRACK && SongNames.albumOfInstrumentals(it) }
-        return MusicMetadata(title, artist, type, artwork, tracks, trackCount = count, lengthMs = lengthMs, instrumentalAlbum = instrumentalAlbum).takeIf { title.isNotBlank() }
+        val albumName = album?.takeIf { type == ItemType.TRACK }?.albumName("title")
+        return MusicMetadata(title, artist, type, artwork, tracks, trackCount = count, lengthMs = lengthMs, album = albumName).takeIf { title.isNotBlank() }
     }
 
     private fun deezerTracks(data: JSONArray): List<MusicMetadata> = data.objects().mapNotNull { track ->
@@ -824,9 +826,11 @@ internal object MetadataParsers {
             track.optJSONObject("artist")?.optString("name").orEmpty(),
             // The 250px size: sharp in a list.
             artworkUrl = track.optJSONObject("album")?.let { it.optString("cover_medium").ifBlank { null } },
-            instrumentalAlbum = track.optJSONObject("album")?.optString("title")?.takeIf(SongNames::albumOfInstrumentals)
+            album = track.optJSONObject("album")?.albumName("title")
         )
     }
+
+    private fun JSONObject.albumName(key: String) = (opt(key) as? String)?.takeIf(String::isNotBlank)
 
     /** Audiomack oEmbed: the song, album or playlist's name, its artist and its cover. */
     fun audiomack(json: JSONObject, type: ItemType): MusicMetadata? {

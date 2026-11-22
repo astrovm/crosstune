@@ -12,7 +12,9 @@ internal data class PreparedLink(val url: String, val exact: Boolean, val matchi
 internal data class HistoryEntry(
     val link: MusicLink,
     val metadata: MusicMetadata,
-    val destinationLinks: Map<String, PreparedLink> = emptyMap()
+    val destinationLinks: Map<String, PreparedLink> = emptyMap(),
+    /** Older entries from album-aware services only kept instrumental albums, or no album at all. */
+    val albumChecked: Boolean = true
 )
 
 /** Keeps the most recent resolved items, newest first, in SharedPreferences. */
@@ -46,8 +48,10 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
     }
 
     /** Updates what's known about an item, e.g. covers found for its songs, without changing recency. */
-    fun update(sourceUrl: String, metadata: MusicMetadata): List<HistoryEntry> {
-        val updated = load().map { entry -> if (entry.link.url == sourceUrl) entry.copy(metadata = metadata) else entry }
+    fun update(sourceUrl: String, metadata: MusicMetadata, albumChecked: Boolean = false): List<HistoryEntry> {
+        val updated = load().map { entry ->
+            if (entry.link.url == sourceUrl) entry.copy(metadata = metadata, albumChecked = entry.albumChecked || albumChecked) else entry
+        }
         save(updated)
         return updated
     }
@@ -80,12 +84,13 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                     .put("title", entry.metadata.title)
                     .put("artist", entry.metadata.artist)
                     .putOpt("artwork", entry.metadata.artworkUrl)
-                    .putOpt("instrumentalAlbum", entry.metadata.instrumentalAlbum)
-                    // A playlist's songs as [title, artist, cover, link, instrumental album] lists, kept short.
+                    // An explicit null means the catalogue was checked and gave no album.
+                    .putOpt("album", entry.metadata.album ?: JSONObject.NULL.takeIf { entry.albumChecked && entry.link.hasCatalogAlbum })
+                    // A playlist's songs as [title, artist, cover, link, album] lists, kept short.
                     .put("tracks", JSONArray().apply {
                         entry.metadata.tracks.forEach { track ->
                             val row = JSONArray().put(track.title).put(track.artist).put(track.artworkUrl.orEmpty()).put(track.url.orEmpty())
-                            track.instrumentalAlbum?.let(row::put)
+                            track.album?.let(row::put)
                             put(row)
                         }
                     })
@@ -127,17 +132,18 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                 MusicMetadata(
                     song.optString(0).ifEmpty { return@mapNotNull null }, song.optString(1),
                     artworkUrl = song.optString(2).ifEmpty { null }, url = song.optString(3).ifEmpty { null },
-                    instrumentalAlbum = song.optString(4).ifEmpty { null }
+                    album = song.optString(4).ifEmpty { null }
                 )
             }
         }.orEmpty()
         val count = optInt("trackCount").takeIf { it > 0 }
         val length = optLong("length").takeIf { it > 0 }
+        val album = (if (isNull("album")) optString("instrumentalAlbum") else optString("album")).ifBlank { null }
         val metadata = MusicMetadata(
             title, optString("artist"), type, optString("artwork").ifEmpty { null }, tracks, trackCount = count, lengthMs = length,
-            instrumentalAlbum = optString("instrumentalAlbum").ifEmpty { null }
+            album = album
         )
-        return HistoryEntry(link, metadata, prepared)
+        return HistoryEntry(link, metadata, prepared, albumChecked = !link.hasCatalogAlbum || has("album") || album != null)
     }
 
     companion object {
@@ -156,7 +162,15 @@ private fun HistoryEntry.isSameAs(other: HistoryEntry): Boolean =
     link.url == other.link.url ||
         (link.service != null && link.service == other.link.service && link.type == other.link.type && link.id == other.link.id) ||
         (link.type == ItemType.TRACK && other.link.type == ItemType.TRACK && (link.service == null || link.service != other.link.service) &&
-            metadata.isNamedAs(other.metadata) && mayBeAsLongAs(other))
+            metadata.isNamedAs(other.metadata) && metadata.mayBeOnSameAlbum(other.metadata) && mayBeAsLongAs(other))
+
+private val MusicLink.hasCatalogAlbum: Boolean
+    get() = type == ItemType.TRACK && (service == MusicService.APPLE_MUSIC || service == MusicService.DEEZER)
+
+private fun MusicMetadata.mayBeOnSameAlbum(other: MusicMetadata): Boolean {
+    if ((instrumentalAlbum == null) != (other.instrumentalAlbum == null)) return false
+    return album == null || other.album == null || RecordingKey.sameAlbum(album, other.album)
+}
 
 /** The same name, by the same artist, as Recent tells a song's versions apart by. */
 internal fun MusicMetadata.isNamedAs(other: MusicMetadata) =

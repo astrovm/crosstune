@@ -49,19 +49,19 @@ internal object RecordingKey {
      * [song] as the app [playing] it has it: its recording and its length, and its link, or the one it
      * was opened by when the app gives none, as YouTube Music doesn't.
      */
-    fun asPlayed(song: MusicMetadata, playing: MusicMetadata): MusicMetadata =
+    fun asPlayed(song: MusicMetadata, playing: MusicMetadata, sourceUrl: String? = song.url): MusicMetadata =
         song.copy(
             recordingId = playing.recordingId, lengthMs = playing.lengthMs, heardLengthMs = song.heardLengthMs ?: song.lengthMs,
             url = playing.url ?: song.url,
-            instrumentalAlbum = playing.instrumentalAlbum ?: song.instrumentalAlbum?.takeIf { sameRecording(song, playing) }
+            album = playing.album ?: song.album?.takeIf { sameRecording(song, playing, sourceUrl) }
         )
 
     private fun track(url: String?): MusicLink? =
         (url?.let(MusicLinks::parse) as? LinkInput.Link)?.link?.takeIf { it.type == ItemType.TRACK }
 
     /** A player can omit the album. Keep the link's evidence only for an identified recording. */
-    private fun sameRecording(song: MusicMetadata, playing: MusicMetadata): Boolean {
-        val asked = track(song.url)
+    private fun sameRecording(song: MusicMetadata, playing: MusicMetadata, sourceUrl: String?): Boolean {
+        val asked = track(sourceUrl)
         val played = track(playing.url)
         if (asked != null && played != null) return asked.service != null && asked.service == played.service && asked.id == played.id
         val id = playing.recordingId ?: return false

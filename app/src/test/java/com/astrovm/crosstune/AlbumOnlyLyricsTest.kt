@@ -35,7 +35,7 @@ class AlbumOnlyLyricsTest {
             return checkNotNull(answer as? LyricsFinder.Lyrics.Found) { answer.toString() }
         }
 
-        val unmarked = lookup(playing.copy(instrumentalAlbum = null, lengthMs = 117_000))
+        val unmarked = lookup(playing.copy(album = null, lengthMs = 117_000))
         assertEquals("Hold the light\nOut in the rain", unmarked.words)
         assertEquals(false, unmarked.markedInstrumental)
         assertEquals(unmarked.copy(markedInstrumental = true), lookup(playing))
@@ -43,7 +43,7 @@ class AlbumOnlyLyricsTest {
         val tagged = JSONArray(rows).getJSONObject(1)
         val taggedTitles = listOf(
             "Accordian(Instrumental)", "Accordian - Inst.", "Accordian （伴奏版）",
-            "Accordian (Instrumental Version)", "Accordian - Off-Vocal"
+            "Accordian (Instrumental Version)", "Accordian - Off-Vocal", "Accordian (feat. Guest) (Instrumental)"
         )
         for (title in taggedTitles) {
             val response = JSONArray(rows).put(1, JSONObject(tagged.toString()).put("trackName", title))
@@ -55,6 +55,7 @@ class AlbumOnlyLyricsTest {
             "trackName" to "Accordian (Remix) (Instrumental)",
             "trackName" to "Accordian (Instrumental Remix)",
             "trackName" to "Accordian (Instrumental 混音)",
+            "trackName" to "Accordian (Instrumental) (feat. Guest)",
             "trackName" to "Accordian (Instrumental) Encore",
             "trackName" to "Accordian (Vocal Mix)",
             "albumName" to "",

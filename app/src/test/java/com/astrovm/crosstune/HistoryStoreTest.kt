@@ -112,6 +112,39 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun similarLengthsDoNotMergeDifferentAlbumReleases() {
+        val apple = entry(1, service = MusicService.APPLE_MUSIC).copy(metadata = MusicMetadata("Song", "Band", lengthMs = 114_000))
+        val deezer = entry(2).copy(metadata = MusicMetadata("Song", "Band", lengthMs = 116_000))
+        for ((a, b) in listOf(
+            "Album (Instrumentals)" to null,
+            "Album (Instrumentals)" to "Album",
+            "Album (Instrumentals)" to "Other Album (Instrumentals)",
+            "Album" to "Other Album"
+        )) {
+            store.clear()
+            val first = apple.copy(metadata = apple.metadata.copy(album = a))
+            val second = deezer.copy(metadata = deezer.metadata.copy(album = b))
+            store.add(first)
+            assertEquals(listOf(second, first), store.add(second))
+            assertEquals(listOf(second, first), HistoryStore(preferences).load())
+        }
+        store.clear()
+        store.add(apple.copy(metadata = apple.metadata.copy(album = "Album (Instrumentals)")))
+        val same = deezer.copy(metadata = deezer.metadata.copy(album = "Album (Instrumental)"))
+        assertEquals(listOf(same), store.add(same))
+    }
+
+    @Test
+    fun readsInstrumentalAlbumNamesKeptByAnOlderApp() {
+        preferences.edit {
+            putString(HistoryStore.KEY_HISTORY, """[{"service":"APPLE_MUSIC","type":"TRACK","id":"1","title":"Song","instrumentalAlbum":"Album (Instrumentals)"}]""")
+        }
+        val old = store.load().single()
+        assertEquals("Album (Instrumentals)", old.metadata.instrumentalAlbum)
+        assertTrue(old.albumChecked)
+    }
+
+    @Test
     fun twoVersionsOfASongKnownByNameAreTwoEntries() {
         // A 2:54 single and a 4:22 album take of one name, each heard as an app played it.
         fun named(lengthMs: Long?) = MusicMetadata("Plastic Love", "Mariya Takeuchi", lengthMs = lengthMs).let { song ->
@@ -239,7 +272,7 @@ class HistoryStoreTest {
 
     @Test
     fun keepsAPlaylistsSongs() {
-        val song = MusicMetadata("One", "Band", instrumentalAlbum = "An Album (Instrumentals)")
+        val song = MusicMetadata("One", "Band", album = "An Album (Instrumentals)")
         val playlist = HistoryEntry(
             MusicLink(MusicService.DEEZER, ItemType.PLAYLIST, "1", "https://www.deezer.com/playlist/1"),
             MusicMetadata("Top", "", ItemType.PLAYLIST, tracks = listOf(song, MusicMetadata("Two", "")))

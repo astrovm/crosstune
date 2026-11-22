@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
@@ -34,6 +36,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -413,6 +416,116 @@ class UnsungTest {
     }
 
     @Test
+    fun closingAnOfflineFallbackStillLetsTheNextOpenRefreshTheSheet() {
+        useAccordian()
+        plays()
+        openCard()
+        val song = checkNotNull(model().uiState.result)
+        val cache = LookupCache(File(app.cacheDir, "lyrics.json"), Dispatchers.Unconfined)
+        runBlocking { cache.keep("18\u0000${RecordingKey.of(song)}", """{"words":"Older sheet","lines":[]}""") }
+        controller?.destroyAndSettle()
+        controller = null
+
+        val answer = fake.handler
+        fake.handler = { request -> throw IOException("Offline: ${request.url.host}") }
+        tapLyrics()
+        waitUntil { model().uiState.lyrics == "Older sheet" && !model().findingWords }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        fake.handler = answer
+        val before = fake.requestedUrls.count { "lrclib.net" in it }
+        tapLyricsButton()
+        waitUntil { model().uiState.lyricsInstrumental || model().uiState.lyrics.isNotBlank() }
+        assertTrue(model().uiState.lyricsInstrumental)
+        assertTrue(fake.requestedUrls.count { "lrclib.net" in it } > before)
+    }
+
+    @Test
+    fun aRecentRowFromBeforeAlbumMetadataRecoversTheAlbum() {
+        reopenOldAccordian { composeRule.onNode(hasText("Accordian") and hasClickAction() and !hasTestTag(NOW_PLAYING_TAG)).performClick() }
+    }
+
+    @Test
+    fun pastingALinkKeptBeforeAlbumMetadataRecoversTheAlbum() {
+        reopenOldAccordian { composeRule.runOnIdle { model().pasteLink(link) } }
+    }
+
+    private fun saveOldAccordian() {
+        prefs().edit().putString(
+            HistoryStore.KEY_HISTORY,
+            """[{"service":"APPLE_MUSIC","type":"TRACK","id":"41655288","url":"$link","region":"us",
+                "title":"Accordian","artist":"Madlib & Madvillain","length":113867,"tracks":[],"destinations":{}}]"""
+        ).commit()
+    }
+
+    @Test
+    fun aRecentTrackRetriesTheAlbumAfterFailureThenKeepsAnAnswerWithNoAlbum() {
+        useAccordian()
+        saveOldAccordian()
+        var lookups = 0
+        val otherAnswer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.encodedPath == "/lookup") {
+                lookups++
+                if (lookups < 3) throw IOException("Lookup unavailable")
+                FakeSpotify.html(request, """{"results":[{"trackName":"Accordian","artistName":"Madlib & Madvillain"}]}""")
+            } else {
+                otherAnswer(request)
+            }
+        }
+        controller = Robolectric.buildActivity(MainActivity::class.java, Intent(app, MainActivity::class.java)).setup()
+        waitUntil { model().uiState.history.isNotEmpty() }
+        fun recent() {
+            composeRule.runOnIdle { model().showHistoryEntry(model().uiState.history.single()) }
+            waitUntil { model().uiState.result?.title == "Accordian" && !model().lookingUp }
+        }
+        fun paste() {
+            composeRule.runOnIdle { model().pasteLink(link) }
+            waitUntil { model().uiState.result?.title == "Accordian" && !model().lookingUp }
+        }
+
+        composeRule.runOnIdle { model().connectionChanged(online = false) }
+        recent()
+        paste()
+        assertEquals(0, lookups)
+        assertFalse(HistoryStore(prefs()).load().single().albumChecked)
+        composeRule.runOnIdle { model().connectionChanged(online = true) }
+        recent()
+        paste()
+        assertEquals(2, lookups)
+        assertFalse(HistoryStore(prefs()).load().single().albumChecked)
+        recent()
+        assertEquals(3, lookups)
+        val checked = HistoryStore(prefs()).load().single()
+        assertTrue(checked.albumChecked)
+        assertEquals(null, checked.metadata.album)
+        paste()
+        assertEquals(3, lookups)
+    }
+
+    private fun reopenOldAccordian(select: () -> Unit) {
+        useAccordian()
+        saveOldAccordian()
+        playback.onThePhone = Heard.Song(
+            MusicMetadata("Accordian", "Madlib & Madvillain", url = link, lengthMs = 113_867, recordingId = "player:41655288"),
+            appleMusicId = null
+        )
+        plays()
+        controller = Robolectric.buildActivity(MainActivity::class.java, Intent(app, MainActivity::class.java)).setup()
+        waitUntil { model().uiState.history.isNotEmpty() }
+        select()
+        waitUntil { model().uiState.result?.title == "Accordian" && !model().lookingUp }
+        assertEquals("Madvillainy Instrumentals", HistoryStore(prefs()).load().single().metadata.instrumentalAlbum)
+        tapLyricsButton()
+        waitUntil { model().uiState.lyricsInstrumental || model().uiState.lyrics.isNotBlank() }
+        assertTrue(model().uiState.lyricsInstrumental)
+        composeRule.runOnIdle { model().dismissLyrics() }
+        val asked = fake.requestedUrls.count { "itunes.apple.com/lookup" in it }
+        composeRule.runOnIdle { model().pasteLink(link) }
+        waitUntil { !model().lookingUp }
+        assertEquals(asked, fake.requestedUrls.count { "itunes.apple.com/lookup" in it })
+    }
+
+    @Test
     fun wordsFoundForASongLrclibMarksInstrumentalShowOnceSomeoneIsHeardSingingIt() {
         // Marks can be wrong, and a sung song mustn't lose its words over them.
         markedOnLrclibWithWords()
@@ -736,17 +849,61 @@ class UnsungTest {
     }
 
     @Test
-    fun thePlayersLineShowsWordsAMarkHolds() {
-        // Review of PR #919: the player opened on a song LRCLIB marks, with words found, has its line under it, as on main.
+    fun aPhonePlayerWaitsForSingingBeforeItPreviewsMarkedWords() = playerPreviewWaitsForSinging()
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-land")
+    fun aTvPlayerWaitsForSingingBeforeItPreviewsMarkedWords() {
+        phone = Phone.TV
+        playerPreviewWaitsForSinging()
+    }
+
+    private fun playerPreviewWaitsForSinging() {
         MainActivity.lookAheadLyrics = true
-        markedOnLrclibWithWords()
+        useAccordian()
+        singing.answers = listOf(music, voice)
         plays()
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
-        controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
-        waitUntil { model().uiState.result?.title == title }
-        composeRule.runOnIdle { model().playResult() }
-        waitUntil { model().uiState.player?.lines?.isNotEmpty() == true }
-        assertEquals("Hold the light", model().uiState.player?.lines?.first()?.text)
+        playback.onThePhone = Heard.Song(
+            checkNotNull(MetadataParsers.appleMusic(JSONObject(ACCORDIAN_INSTRUMENTAL_LOOKUP), ItemType.TRACK)),
+            null, app = MusicService.YOUTUBE_MUSIC.packageName
+        )
+        openCard()
+        waitUntil { model().uiState.playingNow != null }
+        composeRule.runOnIdle { model().openPlayingNow() }
+        waitUntil { model().uiState.player != null && File(app.cacheDir, "lyrics.json").isFile }
+        composeRule.waitForIdle()
+
+        // The clock advances during the voice check, so the preview may show either line.
+        val preview = hasText("Hold the light") or hasText("Out in the rain")
+        fun previewsWords() = composeRule.onAllNodes(preview).fetchSemanticsNodes().isNotEmpty()
+        fun openWords() = composeRule.onNode(hasContentDescription(app.getString(R.string.lyrics_button)) and hasClickAction()).performClick()
+        fun backToPlayer() = composeRule.runOnIdle { model().dismissLyrics() }
+        fun reopenPlayer() = composeRule.runOnIdle {
+            model().closePlayer()
+            model().openPlayingNow()
+        }
+
+        assertFalse(previewsWords())
+
+        singing.missing = true
+        openWords()
+        waitUntil { showsWords() && !model().findingWords }
+        backToPlayer()
+        assertFalse(previewsWords())
+        reopenPlayer()
+        assertFalse(previewsWords())
+
+        singing.reset()
+        singing.answers = listOf(music, voice)
+        openWords()
+        waitUntil { shows(R.string.lyrics_instrumental) && singing.hears == 1 }
+        assertFalse(showsWords())
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        waitUntil(::showsWords)
+        backToPlayer()
+        waitUntil { model().uiState.lyricsFor == null && previewsWords() }
+        reopenPlayer()
+        waitUntil(::previewsWords)
     }
 
     /** How a listen for a voice ends, set up on the fake before the words open. */
@@ -834,9 +991,18 @@ class UnsungTest {
 
     /** The song's card opened from its link, and its words asked for. */
     private fun tapLyrics() {
+        openCard()
+        tapLyricsButton()
+    }
+
+    private fun openCard() {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
         controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
         composeRule.waitForIdle()
+        waitUntil { model().uiState.result != null }
+    }
+
+    private fun tapLyricsButton() {
         val lyrics = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
         waitUntil { composeRule.onAllNodes(lyrics).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onAllNodes(lyrics)[0].performScrollTo().performClick()

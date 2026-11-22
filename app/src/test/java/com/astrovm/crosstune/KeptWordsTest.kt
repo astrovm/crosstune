@@ -37,7 +37,10 @@ class KeptWordsTest {
 
     @Test
     fun wordsKeptOnDiskReadBackAsTheyWereLeft() {
-        assertEquals(all, KeptWords.from(all.json()))
+        for (canPreview in listOf(null, false, true)) {
+            val words = all.copy(canPreview = canPreview)
+            assertEquals(words, KeptWords.from(words.json()))
+        }
     }
 
     @Test

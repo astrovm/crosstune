@@ -12,13 +12,18 @@ import org.robolectric.RobolectricTestRunner
 class MetadataParsersTest {
 
     @Test
-    fun trackLinksRetainTheInstrumentalAlbumWhenItsNameSaysSo() {
-        val album = "Fixture Album (Instrumentals)"
-        val apple = json("""{"results":[{"trackName":"Song","artistName":"Artist","collectionName":"$album"}]}""")
-        val deezer = json("""{"title":"Song","artist":{"name":"Artist"},"album":{"title":"$album"}}""")
-        assertEquals(album, MetadataParsers.appleMusic(apple, ItemType.TRACK)?.instrumentalAlbum)
-        assertEquals(album, MetadataParsers.deezer(deezer, ItemType.TRACK)?.instrumentalAlbum)
-        assertNull(MetadataParsers.deezer(deezer, ItemType.ALBUM)?.instrumentalAlbum)
+    fun trackLinksKeepAlbumNamesAndDistinguishInstrumentalAlbums() {
+        for ((album, instrumental) in listOf("Fixture Album" to null, "Fixture Album (Instrumentals)" to "Fixture Album (Instrumentals)")) {
+            val apple = json("""{"results":[{"trackName":"Song","artistName":"Artist","collectionName":"$album"}]}""")
+            val deezer = json("""{"title":"Song","artist":{"name":"Artist"},"album":{"title":"$album"}}""")
+            for (song in listOf(MetadataParsers.appleMusic(apple, ItemType.TRACK), MetadataParsers.deezer(deezer, ItemType.TRACK))) {
+                assertEquals(album, song?.album)
+                assertEquals(instrumental, song?.instrumentalAlbum)
+            }
+            assertNull(MetadataParsers.deezer(deezer, ItemType.ALBUM)?.album)
+        }
+        val missing = json("""{"title":"Song","album":{"title":null}}""")
+        assertNull(MetadataParsers.deezer(missing, ItemType.TRACK)?.album)
     }
 
     @Test
@@ -396,7 +401,7 @@ class MetadataParsersTest {
         val lookup = json(
             """{"results":[{"trackName":"Cut To The Feeling","collectionName":"Cut To The Feeling - Single","artistName":"Carly Rae Jepsen"}]}"""
         )
-        assertEquals(MusicMetadata("Cut To The Feeling", "Carly Rae Jepsen"), MetadataParsers.appleMusic(lookup, ItemType.TRACK))
+        assertEquals(MusicMetadata("Cut To The Feeling", "Carly Rae Jepsen", album = "Cut To The Feeling - Single"), MetadataParsers.appleMusic(lookup, ItemType.TRACK))
         val timed = json("""{"results":[{"trackName":"Cut To The Feeling","artistName":"Carly Rae Jepsen","trackTimeMillis":207959}]}""")
         assertEquals(207_959L, MetadataParsers.appleMusic(timed, ItemType.TRACK)?.lengthMs)
         assertEquals(

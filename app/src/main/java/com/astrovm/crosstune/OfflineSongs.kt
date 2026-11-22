@@ -136,7 +136,7 @@ internal class OfflineSongs(
         .putOpt("url", song.url)
         .putOpt("length", song.lengthMs)
         .putOpt("recording", song.recordingId)
-        .putOpt("instrumentalAlbum", song.instrumentalAlbum)
+        .putOpt("album", song.album)
 
     private fun song(json: JSONObject?): MusicMetadata? {
         val title = json?.optString("title")?.ifEmpty { null } ?: return null
@@ -148,7 +148,7 @@ internal class OfflineSongs(
             url = json.optString("url").ifEmpty { null },
             lengthMs = json.optLong("length").takeIf { it > 0 },
             recordingId = json.optString("recording").ifEmpty { null },
-            instrumentalAlbum = json.optString("instrumentalAlbum").takeIf(SongNames::albumOfInstrumentals)
+            album = json.optString("album", json.optString("instrumentalAlbum")).ifBlank { null }
         )
     }
 

@@ -575,8 +575,8 @@ internal class LyricsFinder(
     suspend fun lyricsOf(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): Lyrics =
         firstLook(metadata, timeoutMs).let { first -> if (first.final) first.lyrics else retimed(metadata, first.lyrics, timeoutMs) }
 
-    /** What [firstLook] found: words kept from before, which are [final], or else ones still to be [retimed]. */
-    data class FirstLook(val lyrics: Lyrics, val final: Boolean)
+    /** What [firstLook] found, whether it still needs timing, and whether it came from the offline fallback. */
+    data class FirstLook(val lyrics: Lyrics, val final: Boolean, val fallback: Boolean = false)
 
     /**
      * [lyricsOf] in two steps, so the words can show as soon as they're found: first what's kept, or
@@ -595,7 +595,7 @@ internal class LyricsFinder(
         val lookup = Answers()
         val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { withContext(lookup + matching) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs).orNamedInTitle(metadata, timeoutMs) } } ?: Best(Lyrics.Unavailable)
         val found = (best as? Lyrics.Found)?.let { cleaned(it, metadata, lookup.copies.toList()) } ?: best
-        if (found == Lyrics.Unavailable) keptUnderName(metadata)?.let { return FirstLook(asKept(it, metadata), final = true) }
+        if (found == Lyrics.Unavailable) keptUnderName(metadata)?.let { return FirstLook(asKept(it, metadata), final = true, fallback = true) }
         // Once this recording is confirmed instrumental, its old lyrics must not return offline.
         if (checkCredit && found == Lyrics.Instrumental) cache.discard(previousKey, previousText)
         return settled(metadata, found, own, lookup)
@@ -1757,7 +1757,8 @@ internal class LyricsFinder(
             // The tag may name the version as instrumental. A tag like "Instrumental Remix" also names a different mix.
             val words = instrumentalTagWord.matchesIn(SongNames.unaccented(tag)).map(MatchResult::value)
                 .filterNot { it in INSTRUMENTAL_VERSION_WORDS }.toList()
-            return (words.size == 1 || words == listOf("off", "vocal")) && SongNames.saysInstrumental("$prefix ($tag)", artist)
+            // Check the original title: stripping edition tags can remove a singer credited after this tag.
+            return (words.size == 1 || words == listOf("off", "vocal")) && SongNames.saysInstrumental(title, artist)
         }
 
         /**
