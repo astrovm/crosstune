@@ -163,6 +163,9 @@ internal class PracticeCards(
      */
     private val stoppedAt = mutableMapOf<Pair<String, MusicMetadata>, Long>()
 
+    /** An interior pause is only evidence of an end when a later, independently sought play stops at exactly that place too. */
+    private val pausedAt = mutableMapOf<Pair<String, MusicMetadata>, Long>()
+
     /** Apps a card stopped, kept paused a moment, see [keepStopped], by package. */
     private data class KeptPause(val app: String, val job: Job)
     private val keptStopped = ConcurrentHashMap<Pair<String?, Int>, KeptPause>()
@@ -300,10 +303,21 @@ internal class PracticeCards(
 
     /**
      * Notes that [app] stopped short at [positionMs] in [song]. It's only sent to lines that end by where it stopped before, see
-     * [reaches], and it stops short of a line's start, so a new place is always the earlier one.
+     * [reaches]. A stop before a line or repeated inside it can establish that end.
      */
     private fun stoppedShort(app: String?, song: MusicMetadata, positionMs: Long) {
         app?.let { stoppedAt[it to song] = positionMs }
+    }
+
+    /** Background pauses near a seek, or at different places, do not establish how much of a song the app plays. */
+    private fun pausedInside(target: NativeTarget, song: MusicMetadata, window: LineWindow, clock: PlaybackClock?) {
+        val app = target.app ?: return
+        val key = app to song
+        if (clock == null || clock.positionMs <= window.start + LineWindow.SEEK_SLACK_MS) {
+            pausedAt.remove(key)
+            return
+        }
+        if (pausedAt.put(key, clock.positionMs) == clock.positionMs) stoppedShort(app, song, clock.positionMs)
     }
 
     private fun fits(state: Following?, line: SavedLine): Boolean =
@@ -382,12 +396,14 @@ internal class PracticeCards(
         return false
     }
 
-    /** Lets [target] play [window] out, then pauses it. Remembers a successful play. */
+    /** Lets [target] play [window] out, then pauses it. Remembers successful plays and repeated stops. */
     private suspend fun playedOut(target: NativeTarget, song: MusicMetadata, line: SavedLine, window: LineWindow, following: () -> Following?): Boolean {
         val source = target.source
         val app = target.app
         setSound(line, LineSound.PLAYING)
-        val kept = playsThrough(target, window, following)
+        val (kept, paused) = playsThrough(target, window, following)
+        if (kept) app?.let { pausedAt.remove(it to song) }
+        else pausedInside(target, song, window, paused)
         if (kept) source.playPause(song, false, app) else stopIn(target, song)
         nativeSound = null
         if (kept) rememberControl(target, playing = true, works = true)
@@ -455,10 +471,12 @@ internal class PracticeCards(
     /**
      * Watches the app play [window] out: true once it's at the line's end; false when it stops playing the line on the way
      * for a moment, as YouTube Music without Premium pauses itself behind Crosstune, or errs; at once when it goes on to
-     * another song or plays somewhere else in it; or when the line hasn't ended in its time.
+     * another song or plays somewhere else in it; or when the line hasn't ended in its time. Keeps an observed pause when
+     * the app goes on to another song before the pause's grace ends; playing inside the line again disproves that pause.
      */
-    private suspend fun playsThrough(target: NativeTarget, window: LineWindow, following: () -> Following?): Boolean = target.clockPhase("play_result") {
+    private suspend fun playsThrough(target: NativeTarget, window: LineWindow, following: () -> Following?): Pair<Boolean, PlaybackClock?> = target.clockPhase("play_result") {
         var over = false
+        var paused: PlaybackClock? = null
         var reason = "timeout"
         withTimeoutOrNull(window.patience) {
             var offSince: Long? = null
@@ -473,13 +491,14 @@ internal class PracticeCards(
                 if (over) { reason = "line_end"; break }
                 // Playing somewhere else, as TIDAL's next song once its 30 s preview ends under a song it says is whole, is heard: stopped now, without a pause's grace.
                 if (clock.playing && !window.holds(at)) { reason = "outside_line"; break }
+                paused = clock.takeUnless { it.playing }
                 offSince = if (clock.playing && window.holds(at)) null else offSince ?: now()
                 delay(SOUND_CHECK_MS)
             }
             if (reason == "timeout") reason = "paused"
         }
         target.clockVerdict("play_result", if (over) "played" else "not_played", reason)
-        over
+        over to paused
     }
 
     /** Stops [app] once a line asked of it didn't play: the song, or one it went on into; the app playing the song when it didn't say which it is. */

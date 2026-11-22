@@ -1999,6 +1999,146 @@ class PracticeCardsTest {
         assertEquals(listOf(10_000L), playback.seeks.toList())
     }
 
+    /** Independent plays of one saved line distinguish a fixed end from a background pause at different places. */
+    private fun midLineStops(app: String, vararg stops: Long?, losesAfterPause: Boolean = false, resumesBeforeLoss: Boolean = false, nextSongStillNamed: Boolean = false): List<Long> {
+        if (losesAfterPause) ShadowLog.setLoggable("CrosstuneClock", Log.DEBUG)
+        youTubeHasTheSong()
+        keep(line(start = 27_000).copy(endMs = 33_000), types = hearIt)
+        appPlays(app, speed = 1f, positionMs = 27_000)
+        val flow = playback.appPlaying.getValue(app)
+        val song = checkNotNull(flow.value)
+        val cards = cards()
+        val seeks = mutableListOf<Long>()
+        stops.forEach { stop ->
+            flow.value = song.copy(clock = PlaybackClock(27_000, System.currentTimeMillis(), 1f))
+            val shown = player.shown.size
+            val observed = ShadowLog.getLogsForTag("CrosstuneClock").size
+            cards.start(null, before = null)
+            waitFor("the app starts or the player takes over") { practice?.sound == LineSound.PLAYING || player.shown.size > shown }
+            if (player.shown.size == shown) {
+                flow.value = stop?.let { song.copy(clock = PlaybackClock(it, System.currentTimeMillis(), 1f, playing = false)) }
+                if (losesAfterPause && stop != null) {
+                    fun saw(position: Long, playing: Boolean) = ShadowLog.getLogsForTag("CrosstuneClock").drop(observed).any {
+                        val record = JSONObject(it.msg)
+                        record.optString("phase") == "play" && record.optLong("position_ms") == position && record.optBoolean("playing") == playing
+                    }
+                    waitFor("the pause is observed before the session changes") { saw(stop, false) }
+                    if (resumesBeforeLoss) {
+                        flow.value = song.copy(clock = PlaybackClock(stop + 100, System.currentTimeMillis(), 1f))
+                        waitFor("the line is heard playing again") { saw(stop + 100, true) }
+                    }
+                    flow.value = if (nextSongStillNamed) song.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 1f)) else null
+                }
+            }
+            waitFor("this attempt falls back") { player.shown.size > shown }
+            cards.stop()
+            seeks += playback.seeks.size.toLong()
+        }
+        assertNoAppBroughtUp()
+        assertEquals(AppTraits(seeks = true), freshTraits().of(app))
+        return seeks
+    }
+
+    @Test
+    fun aFixedMidLineStopIsConfirmedByIndependentPlaysEvenWithOnlyOneSavedLine() {
+        // TIDAL reports 200 s, but repeatedly stops at precisely 29952 ms in the only saved line.
+        assertEquals(listOf(1L, 2L, 2L), midLineStops(MusicService.TIDAL.packageName, 29_952, 29_952, 29_952))
+    }
+
+    @Test
+    fun backgroundPausesAtDifferentPlacesDoNotEstablishAPreviewsEnd() {
+        // The reported length is just as long as TIDAL's. The place it stops, rather than that length, differs.
+        assertEquals(listOf(1L, 2L, 3L), midLineStops(ytMusic, 29_952, 30_000, 29_952))
+    }
+
+    @Test
+    fun repeatedBackgroundPausesAtTheLineStartDoNotEstablishAPreviewsEnd() {
+        assertEquals(listOf(1L, 2L, 3L), midLineStops(ytMusic, 27_000, 27_000, 27_000))
+    }
+
+    @Test
+    fun repeatedBackgroundPausesWithinTheSeekSlackDoNotEstablishAPreviewsEnd() {
+        assertEquals(listOf(1L, 2L, 3L), midLineStops(ytMusic, 28_500, 28_500, 28_500))
+    }
+
+    @Test
+    fun losingTheSessionCannotTellAPreviewEndingFromAnAppError() {
+        assertEquals(listOf(1L, 2L, 3L), midLineStops(MusicService.TIDAL.packageName, null, null, null))
+    }
+
+    @Test
+    fun aPauseNearTheSeekClearsEarlierEvidenceOfAnInteriorStop() {
+        assertEquals(listOf(1L, 2L, 3L, 4L), midLineStops(ytMusic, 29_952, 27_000, 29_952, 31_000))
+    }
+
+    @Test
+    fun playingALineOutClearsEarlierEvidenceOfAnInteriorStop() {
+        youTubeHasTheSong()
+        keep(line(start = 27_000).copy(endMs = 33_000), types = hearIt)
+        appPlays(ytMusic, speed = 1f, positionMs = 27_000)
+        val flow = playback.appPlaying.getValue(ytMusic)
+        val song = checkNotNull(flow.value)
+        val cards = cards()
+        repeat(5) { attempt ->
+            flow.value = song.copy(clock = PlaybackClock(27_000, System.currentTimeMillis(), 1f))
+            val shown = player.shown.size
+            cards.start(null, before = null)
+            waitFor("this attempt starts") { practice?.sound == LineSound.PLAYING || player.shown.size > shown }
+            if (attempt == 1) {
+                flow.value = song.copy(clock = PlaybackClock(27_000, System.currentTimeMillis(), 100f))
+                waitFor("the app plays the whole line") { practice?.sound == LineSound.PLAYED }
+                assertEquals(shown, player.shown.size)
+            } else {
+                if (player.shown.size == shown) flow.value = song.copy(clock = PlaybackClock(29_952, System.currentTimeMillis(), 1f, playing = false))
+                waitFor("the incomplete play falls back") { player.shown.size > shown }
+            }
+            cards.stop()
+        }
+        assertEquals(listOf(27_000L, 27_000L, 27_000L, 27_000L), playback.seeks.toList())
+    }
+
+    @Test
+    fun interiorStopEvidenceBelongsToItsAppAndSong() {
+        youTubeHasTheSong()
+        keep(line(start = 27_000).copy(endMs = 33_000), types = hearIt)
+        val tidal = MusicService.TIDAL.packageName
+        val cases = listOf(ytMusic to "Demo", ytMusic to "Other song", tidal to "Demo", ytMusic to "Other song", tidal to "Demo", ytMusic to "Demo")
+        val cards = cards()
+        val seeks = mutableListOf<Int>()
+        for ((app, title) in cases + cases.take(3)) {
+            playback.appPlaying.clear()
+            appPlays(app, speed = 1f, positionMs = 27_000)
+            playback.sessionSongs[0] = MusicMetadata(title, "Band")
+            shows { it.copy(savedLines = listOf(line(start = 27_000).copy(title = title, endMs = 33_000))) }
+            val shown = player.shown.size
+            cards.start(null, before = null)
+            waitFor("this song starts") { practice?.sound == LineSound.PLAYING || practice?.sound == LineSound.NONE || player.shown.size > shown }
+            if (player.shown.size == shown) {
+                playback.playing.value = checkNotNull(playback.playing.value).copy(clock = PlaybackClock(29_952, System.currentTimeMillis(), 1f, playing = false))
+            }
+            waitFor("this song falls back") { player.shown.size > shown || practice?.sound == LineSound.NONE }
+            // The other song has no video in the matcher, but still has to finish its native attempt.
+            cards.stop()
+            seeks += playback.seeks.size
+        }
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 6, 6, 6), seeks)
+    }
+
+    @Test
+    fun aRepeatedMidLineStopIsRememberedWhenThePreviewGoesOnToItsNextSong() {
+        assertEquals(listOf(1L, 2L, 2L), midLineStops(MusicService.TIDAL.packageName, 29_952, 29_952, 29_952, losesAfterPause = true))
+    }
+
+    @Test
+    fun aRepeatedMidLineStopIsRememberedWhenTheAppNamesTheOldSongWhilePlayingTheNext() {
+        assertEquals(listOf(1L, 2L, 2L), midLineStops(MusicService.TIDAL.packageName, 29_952, 29_952, 29_952, losesAfterPause = true, nextSongStillNamed = true))
+    }
+
+    @Test
+    fun resumingInsideTheLineDisprovesItsEarlierPauseAsAnEnd() {
+        assertEquals(listOf(1L, 2L, 3L), midLineStops(ytMusic, 29_952, 29_952, 29_952, losesAfterPause = true, resumesBeforeLoss = true))
+    }
+
     @Test
     fun anAppThatNeverGetsToTheLineIsNotReadyAndThePlayerIs() {
         youTubeHasTheSong()
