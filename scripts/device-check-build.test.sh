@@ -101,15 +101,18 @@ if FAKE_FAIL=1 build --at "$head" RecordingNameCheck namescheck-main; then fail 
 # A cache path with a $ or a quote in it is removed as it is, built or not.
 odd="$work/odd \$name \"q"
 for fails in "" 1; do
-    if ! CROSSTUNE_AGENT_CACHE=$odd FAKE_FAIL=$fails build --at "$head" RecordingNameCheck namescheck-main && [[ -z $fails ]]; then
-        fail "--at with an odd cache path didn't build: $(cat "$work/out")"
-    fi
+    want=yes
+    [[ -z $fails ]] || want=no
+    if CROSSTUNE_AGENT_CACHE=$odd FAKE_FAIL=$fails build --at "$head" RecordingNameCheck namescheck-main; then built=yes; else built=no; fi
+    [[ $built == "$want" ]] || fail "--at with an odd cache path built: $built, not $want (fails=$fails): $(cat "$work/out")"
     [[ $(git -C "$repo" worktree list | wc -l) == 1 && -z $(ls -A "$odd") ]] || fail "--at left its checkout in an odd cache path (fails=$fails): $(ls -A "$odd")"
 done
 
-# An unknown commit, or a runner this checkout hasn't, builds nothing.
+# An unknown commit, or a runner this checkout hasn't, builds nothing, and leaves nothing an earlier build made either.
+build --at "$head" RecordingNameCheck namescheck-main || fail "--at didn't build again: $(cat "$work/out")"
 if build --at nowhere RecordingNameCheck namescheck-main; then fail "an unknown commit built"; fi
 grep -q "No commit nowhere" "$work/out" || fail "the unknown commit isn't named"
+[[ -z $(ls -A "$repo/build/namescheck-main") ]] || fail "an unknown commit left an earlier build's files: $(ls "$repo/build/namescheck-main")"
 if build --at "$head" OfflineChordCheck chordcheck-main; then fail "a runner that isn't here built"; fi
 grep -q "No app/src/androidTest/java/com/astrovm/crosstune/OfflineChordCheck.kt" "$work/out" || fail "the missing runner isn't named"
 
