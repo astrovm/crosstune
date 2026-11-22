@@ -115,7 +115,7 @@ internal object RadioGarden {
         for ((index, char) in text.withIndex()) {
             when {
                 char.isDigit() -> if (leadingPlus || ++digits >= PHONE_DIGITS) return true
-                char.isWhitespace() || char == '.' || Character.getType(char) == Character.DASH_PUNCTUATION.toInt() -> Unit
+                char.isWhitespace() || char in ".()" || Character.getType(char) == Character.DASH_PUNCTUATION.toInt() -> Unit
                 else -> {
                     digits = 0
                     leadingPlus = char == '+' && text.getOrNull(index - 1)?.isLetterOrDigit() != true

@@ -810,10 +810,10 @@ class ListeningTest {
         assertTrue(shown("A PLACE TO GO"))
         main.idleFor(java.time.Duration.ofSeconds(6))
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        assertTrue(shown("A PLACE TO GO"))
-        hearing.next.trySend(Heard.Nothing)
         waitForText("1LIVE")
         assertFalse(shown("A PLACE TO GO"))
+        hearing.song("Next song", 8.0)
+        waitForText("Next song")
     }
 
     @Test
