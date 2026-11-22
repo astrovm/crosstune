@@ -284,7 +284,16 @@ internal class ExactMatcher(
         kind: String, target: String, metadata: MusicMetadata, previous: SavedAnswer? = null, lookUp: suspend () -> Looked
     ): Lookup {
         val key = cacheKey(kind, target, metadata)
-        val (outage, hold, earlier) = updateAnswers {
+        val changes = CacheChanges()
+        try {
+            return changes.findAnswer(key, previous, lookUp).also(changes::keepRetry)
+        } finally {
+            changes.flush()
+        }
+    }
+
+    private suspend fun CacheChanges.findAnswer(key: String, previous: SavedAnswer?, lookUp: suspend () -> Looked): Lookup {
+        val (outage, hold, earlier) = savingAnswers.withLock {
             val saved = savedAnswer(key)
             // Recent can still have an upload after another open found the artist's video.
             saved?.confirmedUrl?.let { return Lookup(Match.Found(it)) }
@@ -309,17 +318,17 @@ internal class ExactMatcher(
         return SavedAnswer(saved?.provisionalUrl ?: previous?.provisionalUrl, retry)
     }
 
-    private suspend fun answerLookup(
+    private suspend fun CacheChanges.answerLookup(
         key: String, outage: SavedAnswer?, hold: NameHold?, earlier: Lookup?, looked: Looked
-    ): Lookup = updateAnswers {
+    ): Lookup = savingAnswers.withLock {
         val saved = savedAnswer(key)
         // Another lookup may have saved the artist's video while this one was waiting for the store.
-        saved?.confirmedUrl?.let { return@updateAnswers Lookup(Match.Found(it)) }
+        saved?.confirmedUrl?.let { return@withLock Lookup(Match.Found(it)) }
         val retry = saved?.retry ?: hold?.let { Retry(it.wallTime) } ?: outage?.retry
         val earlierUrl = (earlier?.match as? Match.Found)?.url
         val provisional = saved?.provisionalUrl ?: outage?.url ?: earlierUrl.takeIf { looked.waitForNames }
-        if (looked.waitForNames && provisional == null) {
-            waitingAnswer(key, saved, retry)?.let { return@updateAnswers it }
+        if (provisional == null && (looked.waitForNames || looked.match == Match.Failed)) {
+            waitingAnswer(key, saved, retry, canStart = looked.waitForNames)?.let { return@withLock it }
         }
         val match = if (looked.unsure && provisional != null) Match.Found(provisional, lasting = false)
         else looked.matchAfterOutage(retry != null || earlier != null)
@@ -340,10 +349,10 @@ internal class ExactMatcher(
         return hold
     }
 
-    private suspend fun CacheChanges.waitingAnswer(key: String, saved: SavedAnswer?, retry: Retry?): Lookup? {
+    private suspend fun CacheChanges.waitingAnswer(key: String, saved: SavedAnswer?, retry: Retry?, canStart: Boolean): Lookup? {
         val existing = waitingForNames[key]
         if (existing != null) return existing.takeIf { it.waiting(now()) }?.pending()
-        if (retry?.heldAtMs != null) return null
+        if (!canStart || retry?.heldAtMs != null) return null
         val hold = NameHold(now(), wallNow())
         waitingForNames[key] = hold
         val pending = hold.pending()
@@ -374,16 +383,6 @@ internal class ExactMatcher(
         return Lookup(match)
     }
 
-    private suspend inline fun <T> updateAnswers(update: CacheChanges.() -> T): T {
-        val changes = CacheChanges()
-        try {
-            return savingAnswers.withLock { changes.update() }
-        } finally {
-            // Finish writing retry data before opening another app. Other lookups can keep going meanwhile.
-            changes.flush()
-        }
-    }
-
     private inner class CacheChanges {
         private var needsFlush = false
 
@@ -396,6 +395,11 @@ internal class ExactMatcher(
         suspend fun discardAnswer(key: String, saved: SavedAnswer) {
             cache?.discard(key, saved.forCache())
             needsFlush = true
+        }
+
+        fun keepRetry(answer: Lookup) {
+            // Another lookup may have saved this retry and still be writing it to disk.
+            if (answer.retry != null) needsFlush = true
         }
 
         suspend fun flush() {
