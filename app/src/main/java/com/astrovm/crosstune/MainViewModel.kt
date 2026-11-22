@@ -2567,7 +2567,7 @@ internal class MainViewModel(
         wordsPace = syncStore.pace(song, answer.lines)
         keptByHand = syncStore.byHand(song, answer.lines)
         uiState = uiState.copy(
-            lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints, pace), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
+            lyrics = answer.words, lyricLines = adjustedLines(syncPoints), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
             lyricsInstrumental = false, lyricsOffTake = timedForAnother(song)
         )
         uiState = uiState.copy(learning = uiState.learning.fresh(Readings.displayScriptOf(wordLines())))
@@ -3550,7 +3550,11 @@ internal class MainViewModel(
      * timing have no lines found: those shown were timed by ear, by the clock of what plays at the speed
      * it plays, so no point or pace moves them, and they stay as they are.
      */
-    private fun linesFrom(points: List<SyncPoint>) = if (foundLines.isEmpty()) uiState.lyricLines else shown(LyricsSync.adjust(foundLines, points, pace))
+    private fun linesFrom(points: List<SyncPoint>) = if (foundLines.isEmpty()) uiState.lyricLines else shown(adjustedLines(points))
+
+    /** Only lines heard, or put in time by hand, can bring a longer take's ending into this recording. */
+    private fun adjustedLines(points: List<SyncPoint>) =
+        LyricsSync.adjust(foundLines, points, pace, if (keptByHand) null else appFollowing?.durationMs ?: uiState.lyricsFor?.lengthMs)
 
     /** Forgets where lines were heard this time, as the app's clock is sure now, or it stopped. */
     private fun forgetHeard() {
@@ -3740,7 +3744,7 @@ internal class MainViewModel(
                     listenAlong()
                 }
                 // What the app plays tells whether the words are timed for it.
-                uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song) ?: left?.let { Following(it, app = null, canSeek = false) }, lyricsOffTake = timedForAnother(song))
+                uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song) ?: left?.let { Following(it, app = null, canSeek = false) }, lyricsOffTake = timedForAnother(song), lyricLines = if (shownPoints.isEmpty()) uiState.lyricLines else linesFrom(shownPoints))
                 hearSinging()
             }
         }

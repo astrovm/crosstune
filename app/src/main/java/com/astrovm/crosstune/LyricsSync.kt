@@ -20,10 +20,15 @@ internal object LyricsSync {
      * [lines] where the user says they are, by [points]. Past the first or last of them, they go on at
      * [pace]: how much of the song plays per ms of the words, when the recording is known to play faster
      * or slower than the one they're timed for, unless the points themselves tell how fast.
+     * With [durationMs] known, an automatic correction cannot bring unheard lines timed past the
+     * recording's end into it: another take may have an extra stretch before them. Points can still
+     * place them directly, or between lines heard either side. A correction by hand has no such limit.
      */
-    fun adjust(lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0): List<LyricLine> =
+    fun adjust(lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0, durationMs: Long? = null): List<LyricLine> =
         if (points.isEmpty()) lines else lines.map { line ->
-            line.copy(timeMs = timeOf(line.timeMs, points, pace), words = line.words.map { it.copy(timeMs = timeOf(it.timeMs, points, pace)) }, endMs = line.endMs?.let { timeOf(it, points, pace) })
+            val moved = line.copy(timeMs = timeOf(line.timeMs, points, pace), words = line.words.map { it.copy(timeMs = timeOf(it.timeMs, points, pace)) }, endMs = line.endMs?.let { timeOf(it, points, pace) })
+            val outside = durationMs != null && line.timeMs * pace >= durationMs && line.timeMs > points.last().lineMs
+            if (outside && moved.timeMs < line.timeMs) line else moved
         }
 
     /** Where in the song [lineMs] of the words is, by [points] in order, going on at [pace] past them. */
