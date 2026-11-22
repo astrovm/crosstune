@@ -675,7 +675,7 @@ internal class ExactMatcher(
         val rows = items.map(::row)
         val videoRows = videos.map(::row)
         if (names.appleFound) {
-            appleSongRow(rows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+            songRow(metadata, rows, videoRows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
             videoRows.firstOrNull {
                 isTheSongsVideo(it, names) && isOwnVideo(it, names) && keepsRequestedRecording(recording, it, video = true)
             }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
@@ -1085,7 +1085,7 @@ internal class ExactMatcher(
         val lengths = listOfNotNull(metadata.lengthMs?.takeIf { it > 0 }) + names.lengthsMs
         val wanted = SongNames.artists(metadata.artist)
         val appleNamedArtist = names.artists.any { artist -> SongNames.artists(artist).none(wanted::contains) }
-        val needArtist = !appleNamedArtist && metadata.artist.isNotBlank() && lengths.isNotEmpty()
+        val needArtist = (!appleNamedArtist || !names.complete) && metadata.artist.isNotBlank() && lengths.isNotEmpty()
         val needsLength = names.lengthsMs.isEmpty()
         if (!needArtist && !needsLength) return
         val asked = Asked()
@@ -1104,7 +1104,8 @@ internal class ExactMatcher(
         }
     }
 
-    private val deezerCollaboration = phoneRegex("""[,+&]|\bfeat(?:uring)?\.?""", RegexOption.IGNORE_CASE)
+    private fun deezerCollaboration(name: String): Boolean =
+        name.any { it in ",+&" } || SongNames.artistNames(name).let { it.size != 1 || it.first() != name.trim() }
 
     private fun variousArtists(name: String) = "variousartists" in SongNames.artists(name)
 
@@ -1119,7 +1120,7 @@ internal class ExactMatcher(
         val name = first?.optString("name").orEmpty()
         val artistId = first?.optLong("id") ?: 0
         if (artistId <= 0 || name.isBlank()) return null
-        if (variousArtists(name) || deezerCollaboration.containsMatchIn(name)) return null
+        if (variousArtists(name) || deezerCollaboration(name)) return null
         return artistId
     }
 

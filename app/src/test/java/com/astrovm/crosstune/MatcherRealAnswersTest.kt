@@ -72,15 +72,14 @@ class MatcherRealAnswersTest {
         assertEquals(mapOf("itunes.apple.com/search" to 6, "itunes.apple.com/lookup" to 2), apple())
     }
 
-    // Issue #1102: with Apple down, nothing says Kenshi Yonezu is 米津玄師, which is no answer, not an answer of "none". So it
-    // isn't remembered as missing, and it's asked again, when Apple answers. Not at once, as a practice card asks again
-    // straight away: then nothing's asked, as Apple is likely still down.
+    // Issue #1102: with Apple down, Deezer links Kenshi Yonezu to 米津玄師 when the known length fits.
     @Test
     fun lemonOpensWhenAppleIsDownAndDeezerNamesTheSameRecording() {
         appleDown = { true }
         assertEquals(LEMON_SONG, find(LEMON, 256_000L))
     }
 
+    // Without a fitting length, the unanswered search is retried when Apple is available again.
     @Test
     fun lemonIsAskedAgainWhenAppleWasDown() {
         val matcher = matcher()
