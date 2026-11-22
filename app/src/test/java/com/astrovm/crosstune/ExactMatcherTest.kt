@@ -1244,6 +1244,19 @@ class ExactMatcherTest {
         assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
     }
 
+    @Test
+    fun anUnconfirmedLatinTitleWaitsForTheUsLookup() {
+        val song = MusicMetadata("終わらない歌", "ザ・ブルーハーツ")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fan = youTubeMusicRow(
+            "ザ・ブルーハーツ - 終わらない歌 (Owaranai Uta)", "Fan • 1K views • 3:04", videoId = "fan00000000"
+        )
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("US"))
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+        assertEquals("https://music.youtube.com/watch?v=fan00000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
     // As Apple names Lemon (Music Box), track 1501298975 in MatcherRealAnswersTest's Lemon: every store in Latin letters but
     // Japan's, and YouTube Music only as Japan's does. With Japan's lookup failing, a fan's video is all there is to open. It
     // isn't kept, as Japan's name finds the song: asked again once Japan answers, the song opens.

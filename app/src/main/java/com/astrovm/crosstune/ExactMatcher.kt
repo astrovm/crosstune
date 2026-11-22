@@ -689,10 +689,11 @@ internal class ExactMatcher(
         fun found(row: Row) = Answer(watchUrl + row.id, lasting = names.everyStore)
         if (names.everyStore) return matching.firstOrNull()?.let(::found)
         matching.firstOrNull { isOwnVideo(it, names) }?.let { return found(it) }
+        // A failed search may have lost a length, even if there is no song row.
+        if (names.searchFailed) return null
         // A failed lookup can only add names. If a playable song is close enough in length, one of those names
         // could prove it, as the US store names 米津玄師 Kenshi Yonezu. A row with no length could still be the song.
-        // A failed search may also have lost a length, so wait for it even if there is no song row.
-        if (!names.complete && (names.searchFailed || songs.any { it.id != null && sameLength(it, names) })) return null
+        if (!names.complete && songs.any { it.id != null && sameLength(it, names) }) return null
         val fan = matching.firstOrNull() ?: return null
         // A fan's title may leave a name in brackets unconfirmed, as on a piano upload. An artist's
         // own video may also be named by the missing store, and it can run longer than the song.
