@@ -28,13 +28,13 @@ main() {
     [[ $runner =~ ^[A-Za-z0-9_]+$ ]] || { echo "RUNNER is a class name, such as OfflineChordCheck" >&2; return 2; }
     [[ $name =~ ^[a-z0-9-]+$ ]] || { echo "NAME is a plain folder name, such as chordcheck" >&2; return 2; }
     cd "$(dirname "$0")/.."
+    # What an earlier build left goes first, so a build that fails or is refused, even by git, leaves no APKs of another
+    # commit to be taken for it.
+    local out=build/$name apks=(app-debug.apk app-debug-androidTest.apk)
+    rm -f "${apks[@]/#/$out/}" "$out/head.txt" "$out/sha256.txt"
     local here=$PWD head status sha tree source=app/src/androidTest/java/com/astrovm/crosstune/$runner.kt
     head=$(git rev-parse HEAD)
     status=$(git status --porcelain)
-    # What an earlier build left goes first, so a build that fails or is refused leaves no APKs of another commit to
-    # be taken for it.
-    local out=build/$name apks=(app-debug.apk app-debug-androidTest.apk)
-    rm -f "${apks[@]/#/$out/}" "$out/head.txt" "$out/sha256.txt"
     [[ $dirty == true || -z $status ]] || { echo "Commit the candidate before building it" >&2; return 1; }
     sha=$head tree=$here
     if [[ -n $at ]]; then

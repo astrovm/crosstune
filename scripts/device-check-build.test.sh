@@ -43,6 +43,11 @@ grep -qx "runner :app:assembleDebugAndroidTest -PcrosstuneTestRunner=com.astrovm
 grep -q '  app-debug.apk$' "$repo/build/clockcheck/sha256.txt" || fail "sha256.txt doesn't name the APKs bare"
 [[ $(wc -l < "$repo/build/clockcheck/sha256.txt") == 2 ]] || fail "sha256.txt isn't one line per APK"
 
+# Git that can't answer fails it, leaving nothing an earlier build of that folder made.
+if GIT_DIR=$work/no-git build PracticeClockCheck clockcheck; then fail "a build without git passed"; fi
+[[ -z $(ls -A "$repo/build/clockcheck") ]] || fail "a build git failed left an earlier build's files: $(ls "$repo/build/clockcheck")"
+build PracticeClockCheck clockcheck || fail "a clean tree didn't build again: $(cat "$work/out")"
+
 # Uncommitted changes are refused before anything is built.
 echo change > "$repo/notes.txt"
 if build OfflineChordCheck chordcheck; then fail "a dirty tree built"; fi
