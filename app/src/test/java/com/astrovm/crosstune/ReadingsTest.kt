@@ -814,6 +814,28 @@ class ReadingsTest {
     }
 
     @Test
+    fun smallTsuRunBeforePunctuationKeepsItsWord() {
+        fun check() {
+            val line = "りゅうっっ！"
+            assertEquals(listOf("りゅうっっ" to "りゅう"), Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
+            assertEquals(line, Readings.of(listOf(line), Script.JAPANESE).single().reading)
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun smallTsuRunBeforeSpaceKeepsItsWord() {
+        fun check() {
+            val line = "りゅうっっ 桜"
+            assertEquals(listOf("りゅうっっ" to "りゅう", "桜" to "桜"), Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
+            assertEquals("りゅうっっ さくら", Readings.of(listOf(line), Script.JAPANESE).single().reading)
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
     fun katakanaSmallTsuKeepsItsWord() {
         fun check() {
             val line = "きゅうッりい"
