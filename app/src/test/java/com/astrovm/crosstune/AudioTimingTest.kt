@@ -28,6 +28,25 @@ class AudioTimingTest {
         assertEquals(listOf(falling.first(), falling.last()), AudioTiming.confirmed(falling))
     }
 
+    @Test fun aDriftCanBeConfirmedAtThirtySeconds() {
+        val first = SyncPoint(10_000, 15_000)
+        val middle = SyncPoint(16_000, 20_875)
+        val last = SyncPoint(40_000, 46_875)
+        assertEquals(listOf(first, last), AudioTiming.confirmed(listOf(first, middle, last)))
+        val short = last.copy(lineMs = 39_999, songMs = 46_874)
+        assertTrue(AudioTiming.confirmed(listOf(first, middle, short)).isEmpty())
+    }
+
+    @Test fun aDriftMayMissAHearingByAtMostOneSecond() {
+        val first = SyncPoint(10_000, 15_000)
+        val last = SyncPoint(50_000, 57_500)
+        // At the measured speed, the hearing at 26 seconds belongs at 32 seconds in the video.
+        val middle = SyncPoint(26_000, 31_000)
+        assertEquals(listOf(first, last), AudioTiming.confirmed(listOf(first, middle, last)))
+        val tooFar = middle.copy(songMs = 30_999)
+        assertTrue(AudioTiming.confirmed(listOf(first, tooFar, last)).isEmpty())
+    }
+
     @Test fun generatedNoisyOffsetsStayNearTheActualShift() {
         val random = Random(847)
         repeat(300) {
