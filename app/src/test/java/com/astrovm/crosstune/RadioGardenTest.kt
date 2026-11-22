@@ -109,6 +109,8 @@ class RadioGardenTest {
             MusicMetadata("Live Forever", "Live"),
             MusicMetadata("Live", "Band"),
             MusicMetadata("867-5309/Jenny", "Tommy Tutone"),
+            MusicMetadata("867-5309 (1981)", "Tommy Tutone"),
+            MusicMetadata("Song (2023 Remaster)", "Band"),
             MusicMetadata("1999", "Prince"),
             MusicMetadata("7 rings", "Ariana Grande"),
             MusicMetadata("99 Luftballons", "Nena"),

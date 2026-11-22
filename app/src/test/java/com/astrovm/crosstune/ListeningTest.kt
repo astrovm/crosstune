@@ -756,6 +756,26 @@ class ListeningTest {
     }
 
     @Test
+    fun radioGardenExpiresTheTitleOnReturnFromDeepSleep() {
+        startRadioGardenWithKnownLength(byMicrophone = false)
+        val activity = requireNotNull(controller)
+        val model = controllerModel()
+        activity.pause().stop()
+        shadowOf(Looper.getMainLooper()).idle()
+        val uptime = SystemClock.uptimeMillis()
+        org.robolectric.shadows.ShadowSystemClock.simulateDeepSleep(java.time.Duration.ofSeconds(361))
+        assertEquals(uptime, SystemClock.uptimeMillis())
+        assertEquals("A PLACE TO GO", model.uiState.playingUnnamed?.confirmedQueueSong?.title)
+
+        // onResume refreshes the model before the playback watcher can supply fresh station text.
+        model.refreshSystemState()
+        assertNull(model.uiState.playingUnnamed?.confirmedQueueSong)
+        activity.restart().resume()
+        waitForText("1LIVE")
+        assertFalse(shown("A PLACE TO GO"))
+    }
+
+    @Test
     fun radioGardenChecksAtTheTrackDeadlineIfMicrophoneAccessIsGrantedWhileWaiting() {
         val hearing = startRadioGardenWithKnownLength(byMicrophone = false)
         val main = shadowOf(Looper.getMainLooper())
@@ -796,7 +816,7 @@ class ListeningTest {
     }
 
     @Test
-    fun radioGardenUsesTheShortDeadlineWhenAppleMusicGivesNoLength() {
+    fun radioGardenRenewsTheTitleByEarWhenAppleMusicGivesNoLength() {
         radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
         radioGardenCatalog()
         val hearing = FakeHearing()
@@ -810,10 +830,15 @@ class ListeningTest {
         assertTrue(shown("A PLACE TO GO"))
         main.idleFor(java.time.Duration.ofSeconds(6))
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        waitForText("1LIVE")
-        assertFalse(shown("A PLACE TO GO"))
-        hearing.song("Next song", 8.0)
-        waitForText("Next song")
+        hearing.song("A PLACE TO GO", 91.0, artist = "The Kid LAROI")
+        composeRule.waitForIdle()
+        assertEquals("A PLACE TO GO", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+        main.idleFor(java.time.Duration.ofSeconds(89))
+        assertEquals(1, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(2))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        assertEquals("A PLACE TO GO", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
     }
 
     @Test
