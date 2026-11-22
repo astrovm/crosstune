@@ -16,5 +16,32 @@
       "matchHost": "repo1.maven.org",
       "concurrentRequestLimit": 1
     }
+  ],
+  "customManagers": [
+    {
+      "description": "The JDK's other pins, so a JDK update moves them with the box's Containerfile in the same PR; crosstune's test_jdk_pins.py holds them equal.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/actions/jdk/action\\.yml$/",
+        "/^scripts/syncreplay/syncreplay\\.py$/",
+        "/^CONTRIBUTING\\.md$/"
+      ],
+      "matchStrings": [
+        "java-version: \"(?<currentValue>\\d+)\"",
+        "docker\\.io/library/eclipse-temurin:(?<currentValue>[^\"\\s]+)",
+        "CI uses JDK (?<currentValue>\\d+)"
+      ],
+      "depNameTemplate": "docker.io/library/eclipse-temurin",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Only a long-term support JDK (25, 29, 33, ... every two years): the ones between lose updates in six months.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["docker.io/library/eclipse-temurin", "eclipse-temurin"],
+      "allowedVersions": "/^(25|29|33|37|41|45|49)(-jdk)?$/"
+    }
   ]
 }

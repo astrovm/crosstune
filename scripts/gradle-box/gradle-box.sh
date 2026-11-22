@@ -8,7 +8,7 @@
 # one, in the same box and slot: it waits in line once. The box sees DIR as well. The exit code is the first that failed.
 #
 # The container sees this checkout, the Android SDK read-only and the debug key, and not the rest
-# of $HOME. Git comes from the image (eclipse-temurin:25-jdk plus Git), so whisper.cpp can read its
+# of $HOME. Git comes from the image (the JDK's image plus Git), so whisper.cpp can read its
 # commit on Linux and on a Mac. Builds wait in line for memory, first come first served, and say how many
 # are ahead: waiting is normal, not a hang. Builds that share a checkout, including --also, wait for each other.
 # Distinct checkouts can run together. Each build takes a slot, which keeps its Gradle home, so a
