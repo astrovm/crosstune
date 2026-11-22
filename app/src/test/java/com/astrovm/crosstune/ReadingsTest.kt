@@ -790,9 +790,28 @@ class ReadingsTest {
     @Test fun smallTsuRunAtStartReading() = assertSmallTsuReading("っっさくら", "っっさくら")
     @Test fun smallTsuRunAtStartWords() = assertSmallTsuWords("っっさくら", listOf("っっさ", "くら"))
     @Test fun smallTsuRunAtEndReading() = assertSmallTsuReading("りゅうっっ", "りゅうっっ")
-    @Test fun smallTsuRunAtEndWords() = assertSmallTsuWords("りゅうっっ", listOf("り", "ゅうっっ"))
+    @Test fun smallTsuRunAtEndWords() = assertSmallTsuWords("りゅうっっ", listOf("りゅうっっ"))
     @Test fun smallTsuRunBeforeKanjiReading() = assertSmallTsuReading("りゅうっっ桜", "りゅうっっさくら")
-    @Test fun smallTsuRunBeforeKanjiWords() = assertSmallTsuWords("りゅうっっ桜", listOf("り", "ゅうっっ", "桜"))
+    @Test fun smallTsuRunBeforeKanjiWords() = assertSmallTsuWords("りゅうっっ桜", listOf("りゅうっっ", "桜"))
+
+    @Test
+    fun terminalSmallTsuKeepsTheKnownWord() = checkTerminalSmallTsu()
+
+    @Test
+    fun terminalSmallTsuKeepsTheKnownWordWithUniDic() = TestUniDic.reading { checkTerminalSmallTsu() }
+
+    private fun checkTerminalSmallTsu() {
+        for ((line, expected) in mapOf(
+            "りゅうっっ" to listOf("りゅうっっ" to "りゅう"),
+            "りゅうっっ桜" to listOf("りゅうっっ" to "りゅう", "桜" to "桜"),
+            "りゅうっ桜" to listOf("りゅうっ" to "りゅう", "桜" to "桜"),
+        )) {
+            val words = Readings.words(line, Script.JAPANESE)
+            assertEquals(line, expected, words.map { it.text to it.lookup })
+            assertTrue(line, words.none { it.text.first() in "ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ" })
+            assertEquals(line, line.replace("桜", "さくら"), Readings.of(listOf(line), Script.JAPANESE).single().reading)
+        }
+    }
 
     @Test
     fun katakanaSmallTsuKeepsItsWord() {
