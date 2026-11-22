@@ -1229,11 +1229,17 @@ class ExactMatcherTest {
     @Test
     fun anArtistPrefixDoesNotHideTheSameVideo() = runBlocking {
         val song = MusicMetadata("Song", "Artist", lengthMs = 240_000)
-        val fan = youTubeMusicRow("Artist - Song", "Fan • 1M views • 4:00", videoId = "fan00000000")
         val own = youTubeMusicRow("Song", "Artist • 1M views • 4:00", videoId = "original000")
-        namesAndTabs(videos = listOf(fan, own), apple = mapOf("US" to appleSong("Song", "Artist", 240_000)))
-        assertEquals("https://music.youtube.com/watch?v=original000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
-        assertTrue(fake.requestedUrls.none { it.toHttpUrl().host == "api.deezer.com" })
+        for (title in listOf("Artist - Song", "Artist – Song", "Artist「Song」MV", "Artist MV Song")) {
+            val fan = youTubeMusicRow(title, "Fan • 1M views • 4:00", videoId = "fan00000000")
+            namesAndTabs(videos = listOf(fan, own), apple = mapOf("US" to appleSong("Song", "Artist", 240_000)))
+            assertEquals(title, "https://music.youtube.com/watch?v=original000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+            assertTrue(title, fake.requestedUrls.none { it.toHttpUrl().host == "api.deezer.com" })
+        }
+        val fan = youTubeMusicRow("Artist - Song", "Fan • 1M views • 4:00", videoId = "fan00000000")
+        val clip = youTubeMusicRow("Song", "Artist • 1M views • 0:30", videoId = "clip0000000")
+        namesAndTabs(videos = listOf(fan, clip), apple = mapOf("US" to appleSong("Song", "Artist", 240_000)))
+        assertEquals("https://music.youtube.com/watch?v=fan00000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
     }
 
     @Test
