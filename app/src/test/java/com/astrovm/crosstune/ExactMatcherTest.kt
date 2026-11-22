@@ -1140,6 +1140,7 @@ class ExactMatcherTest {
         assertNull(find(track(artist = "")))
         assertNull(find(track(), wanted = song.copy(artist = "")))
         assertNull(find(track(), wanted = song.copy(lengthMs = null)))
+        assertNull(find(track(duration = 2), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 0:02", videoId = "original000")), wanted = song.copy(lengthMs = 0)))
         assertEquals(found, find(track(), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 4:03", videoId = "original000"))))
         assertNull(find(track(), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 4:04", videoId = "original000"))))
         assertNull(find(track(), rows = listOf(youTubeMusicRow("Song", "Artist • Album", videoId = "original000"))))

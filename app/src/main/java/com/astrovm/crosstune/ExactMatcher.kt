@@ -1024,11 +1024,8 @@ internal class ExactMatcher(
         val asked = Asked()
         val needsLength = lengthsMs.isEmpty()
         val deezer = asked.answer { searchDeezer(metadata) }.orEmpty()
-        if (needsLength) deezerLength(metadata, deezer)?.let(lengthsMs::add)
-        val knownLengths = listOfNotNull(metadata.lengthMs) + found?.editions.orEmpty().mapNotNull {
-            it.optLong("trackTimeMillis").takeIf { length -> length > 0 }
-        }
-        val deezerNames = deezerNames(metadata, deezer, knownLengths)
+        addDeezerLength(metadata, deezer, lengthsMs)
+        val deezerNames = deezerNames(metadata, deezer, knownLengths(metadata, found?.editions.orEmpty()))
         val album = found?.editions?.singleOrNull()?.takeIf {
             matches(metadata, it.optString("trackName"), it.optString("artistName")) &&
                 metadata.lengthMs?.let { length -> sameRecordingLength(it.optLong("trackTimeMillis"), length) } != false
@@ -1059,6 +1056,15 @@ internal class ExactMatcher(
     private fun deezerLength(metadata: MusicMetadata, results: List<JSONObject>): Long? =
         results.firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
             ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
+
+    private fun addDeezerLength(metadata: MusicMetadata, results: List<JSONObject>, lengths: MutableList<Long>) {
+        if (lengths.isEmpty()) deezerLength(metadata, results)?.let(lengths::add)
+    }
+
+    private fun knownLengths(metadata: MusicMetadata, editions: List<JSONObject>): List<Long> =
+        listOfNotNull(metadata.lengthMs?.takeIf { it > 0 }) + editions.mapNotNull {
+            it.optLong("trackTimeMillis").takeIf { length -> length > 0 }
+        }
 
     /** Only the asked title and artist were searched, so an empty name cannot identify an alternate artist. */
     private fun deezerNames(metadata: MusicMetadata, results: List<JSONObject>, lengths: List<Long>): List<DeezerName> {
