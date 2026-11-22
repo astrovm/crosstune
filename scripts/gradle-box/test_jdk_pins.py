@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 IMAGE = re.compile(r"eclipse-temurin:(\d+)[^\s\"'`]*")
 SETUP = re.compile(r"java-version:\s*[\"']?([^\s\"'#]+)")
-DOCS = re.compile(r"CI builds with JDK (\d+)")
+DOCS = re.compile(r"CI uses JDK (\d+)")
 
 
 def box_major() -> str:
@@ -48,18 +48,30 @@ class JdkPinsTest(unittest.TestCase):
         # A pin that isn't a plain major (a matrix, a file, a full version) can't be held equal, so it fails too.
         self.assertEqual([], [(name, v) for name, v in found if v != major])
 
-    def test_renovate_leaves_the_jdk_major_to_a_hand_bump(self):
-        # Renovate moves only the box, so its major update alone fails the test above. The rule lives in
-        # astrovm/repo-settings (config/renovate/astrovm/crosstune.json), which writes this file: a sync without it fails here.
-        rules = json.loads((ROOT / ".github/renovate.json").read_text()).get("packageRules", [])
-        self.assertTrue(any(
-            rule.get("enabled") is False
-            and "docker" in rule.get("matchDatasources", [])
-            and "docker.io/library/eclipse-temurin" in rule.get("matchPackageNames", [])
-            and rule.get("matchUpdateTypes") == ["major"]
-            for rule in rules
-        ), "no Renovate rule turns off eclipse-temurin's major update")
-
+    def test_renovate_moves_every_pin_to_the_next_long_term_jdk_together(self):
+        # The rules live in astrovm/repo-settings (config/renovate/astrovm/crosstune.json), which writes this file:
+        # a sync without them fails here.
+        config = json.loads((ROOT / ".github/renovate.json").read_text())
+        allowed = [
+            re.compile(rule["allowedVersions"].strip("/"))
+            for rule in config.get("packageRules", [])
+            if "docker.io/library/eclipse-temurin" in rule.get("matchPackageNames", []) and "allowedVersions" in rule
+        ]
+        self.assertEqual(1, len(allowed), "no Renovate rule holds eclipse-temurin to long-term JDKs")
+        # A long-term JDK every two years from 25; the ones between lose their updates in six months.
+        for major in range(25, 50):
+            for tag in (str(major), f"{major}-jdk"):
+                self.assertEqual((major - 25) % 4 == 0, bool(allowed[0].fullmatch(tag)), tag)
+        # Renovate reads the box's Containerfile itself; every other pin needs a custom manager, or an update moves
+        # the box alone and the test above fails.
+        covered = [
+            re.compile(pattern.strip("/"))
+            for manager in config.get("customManagers", [])
+            if manager.get("depNameTemplate") == "docker.io/library/eclipse-temurin"
+            for pattern in manager.get("managerFilePatterns", [])
+        ]
+        left = {name for name, _ in pins()} - {"scripts/gradle-box/Containerfile"}
+        self.assertEqual(set(), {name for name in left if not any(p.search(name) for p in covered)})
 
 if __name__ == "__main__":
     unittest.main()
