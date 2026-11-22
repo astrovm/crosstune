@@ -695,24 +695,25 @@ class ListeningTest {
         fake.handler = { request ->
             val body = when (request.url.queryParameter("term")) {
                 "First Song Band" -> {
-                    first.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    first.await(30, TimeUnit.SECONDS)
                     answering.countDown()
                     gardenTrack("First Song", "Band")
                 }
                 "Second Song Band" -> {
                     second.countDown()
-                    releaseSecond.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    releaseSecond.await(30, TimeUnit.SECONDS)
                     gardenTrack("Second Song", "Band")
                 }
                 else -> "{}"
             }
             FakeSpotify.html(request, body)
         }
-        launch()
         try {
+            launch()
             waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "First%20Song" in it } }
             composeRule.runOnIdle { queueSubtitle("Band - Second Song") }
             waitUntil(TIMEOUT_MS) { second.count == 0L }
+            assertEquals("The old response is still held", 1L, answering.count)
             first.countDown()
             waitUntil(TIMEOUT_MS) { answering.count == 0L }
             assertTrue(shown("1LIVE"))
