@@ -272,7 +272,7 @@ internal class ExactMatcher(
      * it found may be a fan's video where that store's name finds the song. Held, asking again at once,
      * as a card does, doesn't ask every service again for the store that's down.
      * Give the store one 30-second hold if it could name a competing result and there is no provisional URL.
-     * After that, open the saved provisional URL if the store still fails. Each open asks again after the
+     * After that, open the saved provisional URL if the next lookup still fails. Each open asks again after the
      * short in-memory pause, so the artist's video can replace the upload once the store answers.
      */
     private suspend fun remembered(
@@ -280,13 +280,14 @@ internal class ExactMatcher(
     ): Lookup {
         val key = cacheKey(kind, target, metadata)
         val saved = savedAnswer(key)
+        // Recent can still have an upload after another open found the artist's video.
+        saved?.confirmedUrl?.let { return Lookup(Match.Found(it)) }
         val outage = previousOutage(saved, previous)
         if (outage == null) {
-            saved?.confirmedUrl?.let { return Lookup(Match.Found(it)) }
             missing[key]?.takeIf { now() - it < missingForMs }?.let { return Lookup(Match.Missing) }
         }
 
-        val hold = nameHold(key, outage)
+        val hold = nameHold(key, saved, outage)
         hold?.takeIf { it.waiting(now()) }?.let { return it.pending() }
         val earlier = unsure[key]
         earlier?.takeIf { now() - it.first < minOf(missingForMs, UNSURE_FOR_MS) }?.let { return it.second }
@@ -294,7 +295,8 @@ internal class ExactMatcher(
     }
 
     private fun previousOutage(saved: SavedAnswer?, previous: SavedAnswer?): SavedAnswer? {
-        val retry = listOfNotNull(saved?.retry, previous?.retry).maxByOrNull { it.heldAtMs ?: Long.MIN_VALUE } ?: return null
+        // The cache can have corrected a hold timestamp that Recent still has from before a clock change.
+        val retry = saved?.retry?.takeIf { it.heldAtMs != null } ?: previous?.retry ?: saved?.retry ?: return null
         return SavedAnswer(saved?.provisionalUrl ?: previous?.provisionalUrl, retry)
     }
 
@@ -307,18 +309,21 @@ internal class ExactMatcher(
         if (looked.waitForNames && retry?.heldAtMs == null && provisional == null) return startWaiting(key, saved)
         val match = if (looked.unsure && provisional != null) Match.Found(provisional, lasting = false)
         else looked.matchAfterOutage(retry != null || earlier != null)
-        return rememberAnswer(key, saved, looked, match, retry)
+        return rememberAnswer(key, saved, looked, match, retry, provisional)
     }
 
-    private fun nameHold(key: String, outage: SavedAnswer?): NameHold? {
+    private suspend fun nameHold(key: String, saved: SavedAnswer?, outage: SavedAnswer?): NameHold? {
         if (outage?.url != null) return null
-        val heldAt = outage?.retry?.heldAtMs
+        val heldAt = outage?.retry?.heldAtMs ?: return waitingForNames[key]
         val at = now()
-        return waitingForNames.compute(key) { _, live ->
-            if (heldAt == null || (live != null && heldAt <= live.wallTime)) return@compute live
-            val age = (wallNow() - heldAt).coerceAtLeast(0L)
-            NameHold(at - age, heldAt)
+        val wall = wallNow()
+        val start = minOf(heldAt, wall)
+        val hold = waitingForNames.computeIfAbsent(key) { NameHold(at - (wall - start), start) }
+        if (hold.wallTime < heldAt) {
+            // Keep the corrected start so the next restart counts time spent waiting here.
+            saveAnswer(key, saved, SavedAnswer(null, Retry(hold.wallTime)))
         }
+        return hold
     }
 
     private suspend fun startWaiting(key: String, saved: SavedAnswer?): Lookup {
@@ -330,7 +335,7 @@ internal class ExactMatcher(
     }
 
     private suspend fun rememberAnswer(
-        key: String, saved: SavedAnswer?, looked: Looked, match: Match, previous: Retry?
+        key: String, saved: SavedAnswer?, looked: Looked, match: Match, previous: Retry?, provisional: String?
     ): Lookup {
         if (looked.unsure) {
             val retry = if (match is Match.Found) {
@@ -340,7 +345,7 @@ internal class ExactMatcher(
             }
             return Lookup(match, retry).also { unsure[key] = now() to it }
         }
-        if (match == Match.Failed) return Lookup(match, previous)
+        if (match == Match.Failed) return Lookup(provisional?.let { Match.Found(it, lasting = false) } ?: match, previous)
 
         waitingForNames.remove(key)
         unsure.remove(key)
