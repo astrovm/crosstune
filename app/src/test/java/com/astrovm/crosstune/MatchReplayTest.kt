@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,22 +21,31 @@ import java.io.IOException
 class MatchReplayTest {
 
     private val fake = FakeSpotify()
+    private lateinit var dir: File
 
     @Test
     fun replay() {
-        val dir = System.getenv("MATCHCHECK_DIR")?.let(::File)
-        assumeTrue(dir != null && File(dir, "replay.json").isFile)
-        val out = File(requireNotNull(dir), "replay.json")
-        val songs = JSONArray(out.readText()).let { all -> (0 until all.length()).map(all::getJSONObject) }
+        val given = System.getenv("MATCHCHECK_DIR")?.let(::File)
+        assumeTrue(given != null && File(given, "replay.json").isFile)
+        dir = requireNotNull(given)
+        val songs = JSONArray(File(dir, "replay.json").readText()).let { all -> (0 until all.length()).map(all::getJSONObject) }
+        // Every answer is read now, once, and served from here: one that can't be read, missing or not allowed, would be
+        // taken for a lookup that failed, and every song would open nothing, the same on main and the branch, which reads
+        // as a pass. Read again later, one that went away meanwhile would do the same.
+        val unread = mutableListOf<File>()
+        val kept = songs.map { song ->
+            KINDS.associateWith { kind -> keptAnswer(song, kind)?.let { file -> runCatching { file.readText() }.getOrElse { unread += file; null } } }
+        }
+        assertTrue("replay.json names answers that can't be read (${unread.size}), as ${unread.take(2)}: run replay.py prepare again", unread.isEmpty())
         val found = JSONObject()
         val shown = JSONObject()
         for (names in listOf(true, false)) {
             for (asked in listOf(false, true)) {
                 val urls = JSONArray()
                 val asks = JSONArray()
-                songs.forEach { song ->
+                songs.zip(kept).forEach { (song, answers) ->
                     val seen = JSONArray()
-                    urls.put(find(song, names, asked, seen) ?: JSONObject.NULL)
+                    urls.put(find(song, answers, names, asked, seen) ?: JSONObject.NULL)
                     asks.put(seen)
                 }
                 val mode = "${if (names) "names" else "latin"}, ${if (asked) "asked" else "alone"}"
@@ -47,12 +57,15 @@ class MatchReplayTest {
         File(dir, "replay-${System.getenv("MATCHCHECK_LABEL") ?: "head"}.json").writeText(found.toString())
     }
 
-    /** What [song] opens, with what ChatGPT was shown put in [seen], each time: the rows, then what it picked. */
-    private fun find(song: JSONObject, names: Boolean, asked: Boolean, seen: JSONArray): String? {
+    /**
+     * What [song] opens, with YouTube Music's kept [answers] served, and what ChatGPT was shown put in [seen], each time:
+     * the rows, then what it picked.
+     */
+    private fun find(song: JSONObject, answers: Map<String, String?>, names: Boolean, asked: Boolean, seen: JSONArray): String? {
         val right = song.getJSONArray("right").let { ids -> (0 until ids.length()).map(ids::getString).toSet() }
         val shownNames = song.getJSONObject("names")
         val rightShown = right.mapNotNull { shownNames.optString(it).ifEmpty { null } }.toSet()
-        fake.handler = { request -> answer(request, song, names) }
+        fake.handler = { request -> answer(request, song, answers, names) }
         // ChatGPT, when asked, picks the first right result it's shown, and none, -1, when it's shown none.
         val pick: suspend (MusicMetadata, List<String>, Boolean) -> Int? = { _, rows, _ ->
             rows.indexOfFirst { it in rightShown }.also { seen.put(JSONArray().put(JSONArray(rows)).put(it)) }
@@ -62,7 +75,7 @@ class MatchReplayTest {
         return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata(song.getString("title"), song.getString("artist"))) }
     }
 
-    private fun answer(request: Request, song: JSONObject, names: Boolean): okhttp3.Response {
+    private fun answer(request: Request, song: JSONObject, answers: Map<String, String?>, names: Boolean): okhttp3.Response {
         val url = request.url
         return when {
             url.host == "itunes.apple.com" && url.encodedPath == "/search" ->
@@ -78,14 +91,21 @@ class MatchReplayTest {
             url.host == "api.deezer.com" -> FakeSpotify.html(request, JSONObject().put("data", song.getJSONArray("deezer")).toString())
             url.host == "music.youtube.com" -> {
                 val videos = FakeSpotify.bodyOf(request).contains(VIDEOS)
-                val path = song.optString(if (videos) "videos" else "songs").ifEmpty { null }
-                FakeSpotify.html(request, path?.let { File(it).readText() } ?: "{}")
+                FakeSpotify.html(request, answers[if (videos) "videos" else "songs"] ?: "{}")
             }
             else -> throw IOException("not kept: $url")
         }
     }
 
+    /**
+     * Where YouTube Music's [kind] answer for [song] was kept, in [dir]; none when it never gave one. Older replay.json
+     * files name it from the root, as they are.
+     */
+    private fun keptAnswer(song: JSONObject, kind: String): File? =
+        song.takeUnless { it.isNull(kind) }?.getString(kind)?.let { path -> File(path).takeIf(File::isAbsolute) ?: File(dir, path) }
+
     private companion object {
+        val KINDS = listOf("songs", "videos")
         const val VIDEOS = "EgWKAQIQAWoKEAoQAxAEEAkQBQ=="
         const val WHILE_MS = 60_000L
     }
