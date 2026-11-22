@@ -1398,25 +1398,30 @@ internal class MainViewModel(
             } ?: continue
             if (check?.confirmed == true && checkQueueHearing(check, heard)) continue
             unheardByEar = heard !is Heard.Song
-            val wait = when (heard) {
-                is Heard.Song -> {
-                    quietByEar = 0
-                    // Shown till it should be over, which may be well before the next listen. Heard in what the app
-                    // played before it went on, it's never shown, and dropping it listens again at once, in place of this.
-                    if (!showHeardByEar(heard, startedWith)) return
-                    byEarLook?.cancel()
-                    lyricsFinder?.let { finder -> viewModelScope.launchKept({ byEarLook = it }) { finder.firstLook(heard.metadata) } }
-                    untilOver(heard)
-                }
-                // Talk, ads or a pause: no song plays, so none is shown, and the next try waits longer each time.
-                Heard.Nothing -> {
-                    uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = null)) }
-                    BY_EAR_RETRY_MS shl minOf(quietByEar++, QUIET_PAUSE_DOUBLINGS)
-                }
-                else -> BY_EAR_RETRY_MS
-            }
+            val wait = showByEarResult(heard, startedWith) ?: return
             nextByEarAtMs = now() + wait
             unheardWith = ears.takeUnless { heard is Heard.Song }
+        }
+    }
+
+    /** Shows the result and gives the wait before listening again. Null when playback moved while listening. */
+    private fun showByEarResult(heard: Heard, startedWith: Following?): Long? {
+        return when (heard) {
+            is Heard.Song -> {
+                quietByEar = 0
+                // Shown till it should be over, which may be well before the next listen. Heard in what the app
+                // played before it went on, it's never shown, and dropping it listens again at once, in place of this.
+                if (!showHeardByEar(heard, startedWith)) return null
+                byEarLook?.cancel()
+                lyricsFinder?.let { finder -> viewModelScope.launchKept({ byEarLook = it }) { finder.firstLook(heard.metadata) } }
+                untilOver(heard)
+            }
+            // Talk, ads or a pause: no song plays, so none is shown, and the next try waits longer each time.
+            Heard.Nothing -> {
+                uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = null)) }
+                BY_EAR_RETRY_MS shl minOf(quietByEar++, QUIET_PAUSE_DOUBLINGS)
+            }
+            else -> BY_EAR_RETRY_MS
         }
     }
 
