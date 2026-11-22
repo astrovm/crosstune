@@ -81,17 +81,18 @@ class JdkPinsTest(unittest.TestCase):
             for path in files():
                 name = str(path.relative_to(ROOT))
                 if any(covers(pattern, name) for pattern in manager.get("managerFilePatterns", [])):
-                    # By where each pin's version starts, so a file with two pins needs both read.
+                    # By where each pin's version starts, so a file with two pins needs both read, and by its major,
+                    # so a pattern that reads part of it fails.
                     text = path.read_text()
-                    read |= {(name, m.start("currentValue")) for s in strings for m in s.finditer(text)}
-        left = {(name, at) for name, at in spots() if name != "scripts/gradle-box/Containerfile"}
+                    read |= {(name, m.start("currentValue"), m.group("currentValue").split("-")[0]) for s in strings for m in s.finditer(text)}
+        left = {spot for spot in spots() if spot[0] != "scripts/gradle-box/Containerfile"}
         self.assertEqual(set(), left - read, "JDK pins no Renovate manager reads")
 
 
-def spots() -> set[tuple[str, int]]:
-    """Where each pin's version starts, by file."""
+def spots() -> set[tuple[str, int, str]]:
+    """Where each pin's version starts, by file, and its major."""
     return {
-        (str(path.relative_to(ROOT)), m.start(1))
+        (str(path.relative_to(ROOT)), m.start(1), m.group(1))
         for path in files()
         for pattern in (IMAGE, SETUP, DOCS)
         for m in pattern.finditer(path.read_text())
