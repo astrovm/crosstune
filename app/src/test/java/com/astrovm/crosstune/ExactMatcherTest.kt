@@ -934,17 +934,17 @@ class ExactMatcherTest {
 
     @Test
     fun aSongNotFoundStaysNotFoundForAWhileButNoAnswerIsAskedAgain() {
-        var clock = 0L
+        var clock = 4_000L
         var asked = 0
         val matcher = ExactMatcher(fake.client(), "AR", missingForMs = 1_000, now = { clock })
         val song = MusicMetadata("Song", "Band")
         fake.handler = { request -> asked++; FakeSpotify.html(request, """{"data":[]}""") }
         assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher.lookFor(MusicService.DEEZER, song) })
-        clock = 999
+        clock += 999
         assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher.lookFor(MusicService.DEEZER, song) })
         assertEquals(1, asked)
         // A while later, it's looked for again, and found.
-        clock = 1_000
+        clock++
         respond("""{"data":[{"title":"Song","link":"https://www.deezer.com/track/1","artist":{"name":"Band"}}]}""")
         assertEquals(ExactMatcher.Match.Found("https://www.deezer.com/track/1"), runBlocking { matcher.lookFor(MusicService.DEEZER, song) })
         // No answer isn't kept: the next time asks again.
@@ -1253,6 +1253,8 @@ class ExactMatcherTest {
         assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         clock += ExactMatcher.UNSURE_FOR_MS
         assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        val withPicker = ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> error("The unconfirmed upload should not reach the picker") })
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { withPicker.lookFor(MusicService.YOUTUBE_MUSIC, song) })
     }
 
     @Test
@@ -1513,6 +1515,12 @@ class ExactMatcherTest {
         val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
         namesAndTabs(videos = listOf(fan, own), apple = apple, failing = setOf("JP"))
         assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+
+        val unrelated = youTubeMusicRow("別のうた", "ザ・ブルーハーツ • 1M views • 4:30", videoId = "other000000")
+        namesAndTabs(videos = listOf(fan, unrelated), apple = apple, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), runBlocking {
+            matcher().lookFor(MusicService.YOUTUBE_MUSIC, song)
+        })
     }
 
     @Test
@@ -1543,7 +1551,7 @@ class ExactMatcherTest {
         val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
         val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
         val file = kotlin.io.path.createTempDirectory("restart-hold").toFile().resolve("lookups.json")
-        var clock = 4_000L
+        var clock = 0L
         fun restart() = ExactMatcher(
             fake.client(), "AR", Dispatchers.Unconfined, LookupCache(file, Dispatchers.Unconfined),
             now = { clock }, wallNow = { clock }
@@ -1560,7 +1568,7 @@ class ExactMatcherTest {
         assertEquals(upload, runBlocking { restart().lookFor(MusicService.YOUTUBE_MUSIC, song) })
         val otherFan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Another Fan • 1K views • 3:04", videoId = "other000000")
         namesAndTabs(videos = listOf(otherFan, own), apple = apple, failing = setOf("JP"))
-        clock = 4_000L + 60 * 60_000L + 1
+        clock = 60 * 60_000L + 1
         fake.requestedUrls.clear()
         assertEquals(upload, runBlocking { restart().lookFor(MusicService.YOUTUBE_MUSIC, song) })
         assertTrue(fake.requestedUrls.any { "country=JP" in it })
@@ -1573,7 +1581,7 @@ class ExactMatcherTest {
         val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
         val file = kotlin.io.path.createTempDirectory("failed-provisional").toFile().resolve("lookups.json")
         fun cache() = LookupCache(file, Dispatchers.Unconfined)
-        fun restart() = ExactMatcher(fake.client(), "AR", Dispatchers.Unconfined, cache())
+        fun restart() = ExactMatcher(fake.client(), "AR", Dispatchers.Unconfined, cache(), now = { 4_000 }, wallNow = { 4_000 })
         val video = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
         val provisional = ExactMatcher.Lookup(video, ExactMatcher.Retry())
         namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
@@ -1581,8 +1589,24 @@ class ExactMatcherTest {
         val saved = runBlocking { cache().entries() }
 
         fake.handler = { request -> FakeSpotify.html(request, "{}", code = 503) }
-        assertEquals(provisional, runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song) })
+        // Recent still has a hold. The cache has the upload, so there is no wait.
+        val retried = runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song, ExactMatcher.Retry(4_000)) }
+        assertEquals(provisional, retried)
+        assertEquals(false, (retried.match as ExactMatcher.Match.Found).lasting)
         assertEquals(saved, runBlocking { cache().entries() })
+    }
+
+    @Test
+    fun aHoldFromRecentDoesNotNeedADiskWriteWhenItsClockIsRight() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val file = kotlin.io.path.createTempDirectory("recent-hold").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, now = { 5_000 }, wallNow = { 105_000 })
+        val retry = ExactMatcher.Retry(100_000)
+
+        assertEquals(ExactMatcher.Lookup(ExactMatcher.Match.WaitingForNames, retry), finder.lookup(MusicService.YOUTUBE_MUSIC, song, retry))
+        assertTrue(fake.requestedUrls.isEmpty())
+        assertTrue(cache.entries().isEmpty())
     }
 
     @Test
@@ -1697,6 +1721,7 @@ class ExactMatcherTest {
         val result = late.await()
         assertEquals(ownUrl, cache.entries().single().second)
         assertEquals(confirmed, result)
+        assertEquals(true, (result.match as ExactMatcher.Match.Found).lasting)
     }
 
     @Test
@@ -1852,6 +1877,38 @@ class ExactMatcherTest {
         assertEquals(expected, second.await())
         assertEquals(expected, first.await())
         assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anUpgradeWritesOverTheProvisionalAnswerBeforeReturning() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val japan = mapOf("JP" to appleSong(song.title, "ザ・ブルーハーツ", 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("upgrade-flush").toFile().resolve("lookups.json")
+        val disk = PausedCacheDisk()
+        val finder = ExactMatcher(fake.client(), "AR", cache = LookupCache(file, disk))
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), finder.lookFor(MusicService.YOUTUBE_MUSIC, song))
+        val provisional = LookupCache(file, Dispatchers.Unconfined).entries()
+
+        namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = japan)
+        val ownUrl = "https://music.youtube.com/watch?v=own00000000"
+        disk.pause()
+        val confirmed = async {
+            finder.lookFor(MusicService.YOUTUBE_MUSIC, song).also {
+                assertEquals(ownUrl, LookupCache(file, Dispatchers.Unconfined).entries().single().second)
+            }
+        }
+        try {
+            withTimeout(10_000) { disk.writing.await() }
+            assertTrue("The upgrade waits for the confirmed link to be written", !confirmed.isCompleted)
+            assertEquals(provisional, LookupCache(file, Dispatchers.Unconfined).entries())
+        } finally {
+            disk.resume()
+        }
+        assertEquals(ExactMatcher.Match.Found(ownUrl), confirmed.await())
     }
 
     @Test

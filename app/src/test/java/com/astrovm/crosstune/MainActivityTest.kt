@@ -1911,12 +1911,44 @@ class MainActivityTest {
             }
         }
 
-        launch(trackLink())
-        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val preferences = prefs()
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == HistoryStore.KEY_HISTORY && HistoryStore(preferences).load().firstOrNull()
+                    ?.destinationLinks?.get("YOUTUBE_MUSIC")?.retry != null
+            ) {
+                // Let the retry pause expire as soon as the prepared link is saved, before the handoff.
+                org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(ExactMatcher.UNSURE_FOR_MS))
+            }
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        try {
+            launch(trackLink())
+            waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        } finally {
+            preferences.unregisterOnSharedPreferenceChangeListener(listener)
+        }
         assertEquals("https://music.youtube.com/watch?v=fan00000000", nextStartedActivity()?.dataString)
-        assertTrue(fake.requestedUrls.any { "itunes.apple.com/lookup?id=7&country=JP" in it })
+        assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/lookup?id=7&country=JP" in it })
         val saved = HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"]
         assertEquals(ExactMatcher.Retry(), saved?.retry)
+    }
+
+    @Test
+    fun aRecentCardLooksForAnExactLinkWhenItOnlySavedASearch() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).commit()
+        val link = checkNotNull(MusicLinks.linkFor("https://open.spotify.com/track/$TRACK_ID"))
+        val entry = HistoryEntry(
+            link, MusicMetadata("Remember", "Artist"),
+            mapOf("DEEZER" to PreparedLink("https://www.deezer.com/search/Remember%20Artist", exact = false, matchingEnabled = false))
+        )
+        HistoryStore(prefs()).add(entry)
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"data":[{"title":"Remember","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/123"}]}""")
+        }
+        val model = ViewModelProvider(launch())[MainViewModel::class.java]
+        composeRule.runOnIdle { model.showHistoryEntry(entry) }
+        waitForDestinationReady()
+        assertEquals("https://www.deezer.com/track/123", model.destinationUrl())
     }
 
     @Test
