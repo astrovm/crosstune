@@ -1349,12 +1349,14 @@ class ExactMatcherTest {
         assertNull(find(track(), rows = listOf(youTubeMusicRow("Other", "Artist • Album • 4:00", videoId = "original000"))))
         assertEquals(found, find(track(), wanted = song.copy(lengthMs = null), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000))))
 
-        // Apple's length cannot prove the artist's name while Deezer is unavailable.
+        // With no song rows and Apple's length known, no Deezer search can add a song row.
         val video = youTubeMusicRow("Song - アーティスト", "Fan • 1M views • 4:00", videoId = "fan00000000")
         namesAndTabs(videos = listOf(video), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
         val answer = fake.handler
         fake.handler = { request -> if (request.url.host == "api.deezer.com") throw IOException("offline") else answer(request) }
-        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        fake.requestedUrls.clear()
+        assertEquals("https://music.youtube.com/watch?v=fan00000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().host == "api.deezer.com" })
     }
 
     @Test
