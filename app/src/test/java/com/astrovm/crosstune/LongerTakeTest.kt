@@ -50,6 +50,8 @@ class LongerTakeTest {
         LyricLine(322_620, "Cold as the ice")
     )
     private val points = listOf(SyncPoint(122_780, 95_380), SyncPoint(131_730, 104_330))
+    /** How long the take the words are timed for is: 477 s, with a stretch this 309 s recording doesn't have. */
+    private var takeSeconds = 477
     private val prefs get() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     @Before
@@ -68,8 +70,8 @@ class LongerTakeTest {
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "lookups.json").delete()
         val synced = lines.joinToString("\n") { "[%02d:%02d.%02d] %s".format(it.timeMs / 60_000, it.timeMs / 1000 % 60, it.timeMs % 1000 / 10, it.text) }
-        val words = JSONArray().put(JSONObject().put("trackName", "Demo").put("artistName", "Band").put("duration", 477).put("syncedLyrics", synced)).toString()
-        fake.handler = { FakeSpotify.html(it, if (it.url.host == "lrclib.net") words else "{}") }
+        fun words(seconds: Int) = JSONArray().put(JSONObject().put("trackName", "Demo").put("artistName", "Band").put("duration", seconds).put("syncedLyrics", synced)).toString()
+        fake.handler = { FakeSpotify.html(it, if (it.url.host == "lrclib.net") words(takeSeconds) else "{}") }
     }
 
     @After
@@ -109,6 +111,16 @@ class LongerTakeTest {
         assertEquals(lines.map { it.text }, shown.map { it.text })
         assertFalse(SyncedLyrics.indexAt(shown, 285_270, false) == 3)
         assertFalse(SyncedLyrics.indexAt(shown, 295_220, false) == 4)
+    }
+
+    @Test
+    fun aTakeLongerOnlyByItsIntroBringsItsEndingIn() {
+        // 27.4 s earlier, a 336 s take ends where this 309 s recording does, so nothing is missing before the last lines.
+        takeSeconds = 336
+        playback.access = false
+        val shown = open().uiState.lyricLines
+        assertEquals(listOf(285_270L, 295_220L), shown.drop(3).map { it.timeMs })
+        assertEquals(3, SyncedLyrics.indexAt(shown, 285_270, false))
     }
 
     private fun recordingLengthArrives(metadata: MusicMetadata, byHand: Boolean = false): List<LyricLine> {

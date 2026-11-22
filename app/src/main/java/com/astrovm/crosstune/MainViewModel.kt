@@ -3554,7 +3554,7 @@ internal class MainViewModel(
 
     /** Only lines heard, or put in time by hand, can bring a longer take's ending into this recording. */
     private fun adjustedLines(points: List<SyncPoint>) =
-        LyricsSync.adjust(foundLines, points, pace, if (keptByHand) null else appFollowing?.durationMs ?: uiState.lyricsFor?.lengthMs)
+        LyricsSync.adjust(foundLines, points, pace, if (keptByHand) null else appFollowing?.durationMs ?: uiState.lyricsFor?.lengthMs, found?.lengthMs)
 
     /** Forgets where lines were heard this time, as the app's clock is sure now, or it stopped. */
     private fun forgetHeard() {
