@@ -284,7 +284,7 @@ internal class ExactMatcher(
         kind: String, target: String, metadata: MusicMetadata, previous: SavedAnswer? = null, lookUp: suspend () -> Looked
     ): Lookup {
         val key = cacheKey(kind, target, metadata)
-        val (outage, hold, earlier) = savingAnswers.withLock {
+        val (outage, hold, earlier) = updateAnswers {
             val saved = savedAnswer(key)
             // Recent can still have an upload after another open found the artist's video.
             saved?.confirmedUrl?.let { return Lookup(Match.Found(it)) }
@@ -311,20 +311,20 @@ internal class ExactMatcher(
 
     private suspend fun answerLookup(
         key: String, outage: SavedAnswer?, hold: NameHold?, earlier: Lookup?, looked: Looked
-    ): Lookup = savingAnswers.withLock {
+    ): Lookup = updateAnswers {
         val saved = savedAnswer(key)
         // Another lookup may have saved the artist's video while this one was waiting for the store.
-        saved?.confirmedUrl?.let { return@withLock Lookup(Match.Found(it)) }
-        val retry = hold?.let { Retry(it.wallTime) } ?: outage?.retry
+        saved?.confirmedUrl?.let { return@updateAnswers Lookup(Match.Found(it)) }
+        val retry = saved?.retry ?: hold?.let { Retry(it.wallTime) } ?: outage?.retry
         val earlierUrl = (earlier?.match as? Match.Found)?.url
-        val provisional = outage?.url ?: earlierUrl.takeIf { looked.waitForNames }
-        if (looked.waitForNames && retry?.heldAtMs == null && provisional == null) return@withLock startWaiting(key, saved)
+        val provisional = saved?.provisionalUrl ?: outage?.url ?: earlierUrl.takeIf { looked.waitForNames }
+        if (looked.waitForNames && retry?.heldAtMs == null && provisional == null) return@updateAnswers startWaiting(key, saved)
         val match = if (looked.unsure && provisional != null) Match.Found(provisional, lasting = false)
         else looked.matchAfterOutage(retry != null || earlier != null)
         rememberAnswer(key, saved, looked, match, retry, provisional)
     }
 
-    private suspend fun nameHold(key: String, saved: SavedAnswer?, outage: SavedAnswer?): NameHold? {
+    private suspend fun CacheChanges.nameHold(key: String, saved: SavedAnswer?, outage: SavedAnswer?): NameHold? {
         if (outage?.url != null) return null
         val heldAt = outage?.retry?.heldAtMs ?: return waitingForNames[key]
         val at = now()
@@ -338,7 +338,7 @@ internal class ExactMatcher(
         return hold
     }
 
-    private suspend fun startWaiting(key: String, saved: SavedAnswer?): Lookup {
+    private suspend fun CacheChanges.startWaiting(key: String, saved: SavedAnswer?): Lookup {
         val hold = NameHold(now(), wallNow())
         val first = waitingForNames.putIfAbsent(key, hold) ?: hold
         val pending = first.pending()
@@ -346,7 +346,7 @@ internal class ExactMatcher(
         return pending
     }
 
-    private suspend fun rememberAnswer(
+    private suspend fun CacheChanges.rememberAnswer(
         key: String, saved: SavedAnswer?, looked: Looked, match: Match, previous: Retry?, provisional: String?
     ): Lookup {
         if (looked.unsure) {
@@ -363,20 +363,39 @@ internal class ExactMatcher(
         unsure.remove(key)
         if (match is Match.Found) saveAnswer(key, saved, SavedAnswer(match.url))
         if (match == Match.Missing) {
-            saved?.let {
-                cache?.discard(key, it.forCache())
-                cache?.flush()
-            }
+            saved?.let { discardAnswer(key, it) }
             missing[key] = now()
         }
         return Lookup(match)
     }
 
-    private suspend fun saveAnswer(key: String, saved: SavedAnswer?, answer: SavedAnswer) {
-        if (cache == null || saved == answer) return
-        cache.put(key, answer.forCache())
-        // Keep the retry before opening another app, which may send this process away.
-        if (answer.retry != null || saved?.retry != null) cache.flush()
+    private suspend inline fun <T> updateAnswers(update: CacheChanges.() -> T): T {
+        val changes = CacheChanges()
+        try {
+            return savingAnswers.withLock { changes.update() }
+        } finally {
+            // Finish writing retry data before opening another app. Other lookups can keep going meanwhile.
+            changes.flush()
+        }
+    }
+
+    private inner class CacheChanges {
+        private var needsFlush = false
+
+        suspend fun saveAnswer(key: String, saved: SavedAnswer?, answer: SavedAnswer) {
+            if (cache == null || saved == answer) return
+            cache.put(key, answer.forCache())
+            if (answer.retry != null || saved?.retry != null) needsFlush = true
+        }
+
+        suspend fun discardAnswer(key: String, saved: SavedAnswer) {
+            cache?.discard(key, saved.forCache())
+            needsFlush = true
+        }
+
+        suspend fun flush() {
+            if (needsFlush) cache?.flush()
+        }
     }
 
     /**
