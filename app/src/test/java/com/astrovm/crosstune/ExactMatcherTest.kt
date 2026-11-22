@@ -1487,6 +1487,9 @@ class ExactMatcherTest {
         namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = us, failing = setOf("US"))
         assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = us)
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), runBlocking {
+            matcher().lookFor(MusicService.YOUTUBE_MUSIC, song)
+        })
         clock += ExactMatcher.UNSURE_FOR_MS
         assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=own00000000"), runBlocking {
             finder.lookFor(MusicService.YOUTUBE_MUSIC, song)
