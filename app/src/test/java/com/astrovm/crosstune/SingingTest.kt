@@ -76,6 +76,7 @@ class SingingTest {
         MainActivity.httpClientFactory = { fake.client() }
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
+        MainActivity.lyricsMatchingDispatcher = Dispatchers.Unconfined
         MainActivity.shellFactory = { emptyList() }
         MainActivity.checksForUpdates = { false }
         MainActivity.playbackFactory = { playback }
@@ -100,6 +101,7 @@ class SingingTest {
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
+        MainActivity.lyricsMatchingDispatcher = null
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.checksForUpdates = ::looksForUpdates
         MainActivity.playbackFactory = ::MediaSessionPlayback
@@ -1059,6 +1061,7 @@ class SingingTest {
         remixWithCopies({ copies })
         val times = lines.indices.map { it * 3_000L }
         openLyrics()
+        waitUntil { !model().findingWords }
         val song = checkNotNull(model().uiState.lyricsFor) { "Expected the words' song" }
         val found = model().uiState.lyricLines
         assertEquals(times, found.map { it.timeMs })
@@ -1066,6 +1069,9 @@ class SingingTest {
         LyricsSyncStore(prefs()).save(song, found, emptyList(), byHand = true)
         controller?.destroyAndSettle()
         // Looked up again, as after the lookups change, and now the copies answer; they're not even asked.
+        // Once the first lookup finishes, closing the screen keeps its words too. Clear both to force another lookup.
+        assertTrue(File(app.cacheDir, "kept_words.json").isFile)
+        File(app.cacheDir, "kept_words.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         copies = true
         val asked = fake.requestedUrls.size
@@ -1088,11 +1094,15 @@ class SingingTest {
         remixWithCopies({ copies })
         val times = lines.indices.map { it * 3_000L }
         openLyrics()
+        waitUntil { !model().findingWords }
         val song = checkNotNull(model().uiState.lyricsFor) { "Expected the words' song" }
         val found = model().uiState.lyricLines
         // The singing put the first line a second later, which keeps a point and no hand mark.
         LyricsSyncStore(prefs()).save(song, found, listOf(SyncPoint(0, 1_000)))
         controller?.destroyAndSettle()
+        // Once the first lookup finishes, closing the screen keeps its words too. Clear both to force another lookup.
+        assertTrue(File(app.cacheDir, "kept_words.json").isFile)
+        File(app.cacheDir, "kept_words.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         copies = true
         openLyrics()
