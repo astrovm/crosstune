@@ -20,6 +20,7 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import gradlebox
 from gradlebox import gradle_caches
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,10 +34,7 @@ RUN_SCOPES = ("compile", "runtime", None)
 
 def kotlin_version(root=ROOT):
     """The Kotlin the app builds with, from its build file."""
-    found = re.search(r'kotlin\.plugin\.compose"\) version "([^"]+)"', (root / "build.gradle.kts").read_text(encoding="utf-8"))
-    if not found:
-        sys.exit(f"{root / 'build.gradle.kts'} names no Kotlin version on its compose plugin line")
-    return found.group(1)
+    return gradlebox.kotlin_version(root)
 
 
 def read_lock(text):
