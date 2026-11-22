@@ -771,6 +771,29 @@ class ReadingsTest {
         }
     }
 
+    private fun assertSmallTsuReading(line: String, expected: String) {
+        fun check() = assertEquals(line, expected, Readings.of(listOf(line), Script.JAPANESE).single().reading)
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    private fun assertSmallTsuWords(line: String, expected: List<String>) {
+        fun check() = assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text })
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test fun smallTsuRunReading() = assertSmallTsuReading("りゅうっっさくら", "りゅうっっさくら")
+    @Test fun smallTsuRunWords() = assertSmallTsuWords("りゅうっっさくら", listOf("りゅうっっ", "さくら"))
+    @Test fun mixedSmallTsuRunReading() = assertSmallTsuReading("りゅうっッさくら", "りゅうっっさくら")
+    @Test fun mixedSmallTsuRunWords() = assertSmallTsuWords("りゅうっッさくら", listOf("りゅうっッ", "さくら"))
+    @Test fun smallTsuRunAtStartReading() = assertSmallTsuReading("っっさくら", "っっさくら")
+    @Test fun smallTsuRunAtStartWords() = assertSmallTsuWords("っっさくら", listOf("っっ", "さくら"))
+    @Test fun smallTsuRunAtEndReading() = assertSmallTsuReading("りゅうっっ", "りゅうっっ")
+    @Test fun smallTsuRunAtEndWords() = assertSmallTsuWords("りゅうっっ", listOf("りゅうっっ"))
+    @Test fun smallTsuRunBeforeKanjiReading() = assertSmallTsuReading("りゅうっっ桜", "りゅうっっさくら")
+    @Test fun smallTsuRunBeforeKanjiWords() = assertSmallTsuWords("りゅうっっ桜", listOf("りゅうっっ", "桜"))
+
     @Test
     fun katakanaSmallTsuKeepsItsWord() {
         fun check() {
