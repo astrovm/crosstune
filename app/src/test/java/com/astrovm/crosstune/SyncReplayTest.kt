@@ -15,6 +15,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -58,7 +59,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
 
     @Before
     fun setUp() {
-        MainActivity.httpClientFactory = { fake.client() }
+        MainActivity.httpClientFactory = { fake.inlineClient() }
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
         MainActivity.shellFactory = { emptyList() }
@@ -66,6 +67,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         MainActivity.playbackFactory = { playback }
         MainActivity.milkdropFactory = { NoMilkdrop }
         MainActivity.soundTapFactory = { null }
+        // Fingerprints come only from replay inputs. The JVM has no microphone.
+        MainActivity.hearingFactory = { SongHearing { Heard.Failed(AppError.MICROPHONE) } }
         MainActivity.lyricsBusyPauseMs = 0
         MainActivity.lookAheadLyrics = false
         MainActivity.listenAlongPauseMs = 0
@@ -165,7 +168,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             composeRule.onAllNodes(button)[0].performScrollTo().performClick()
         }
         // The lookup over, not lines found: words without timing have none, and words timed past the recording's end aren't taken.
-        composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } }
+        composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } && lyricsLookupFinished() }
         behind.forEachIndexed { time, behindMs ->
             val played = play(fromMs, lengthMs, behindMs)
             File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())
@@ -222,8 +225,11 @@ class SyncReplayTest(private val name: String, private val index: Int) {
     private fun play(fromMs: Long, lengthMs: Long, behindMs: Long): JSONObject {
         this.behindMs = behindMs
         heardLog = JSONArray()
-        val startedAt = fingerprintStartedAt ?: SystemClock.elapsedRealtime()
-        if (fingerprintStartedAt == null) playback.playing.value = Following(PlaybackClock(fromMs, startedAt, speed = playerSpeed), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
+        val startedAt = fingerprintStartedAt ?: composeRule.runOnIdle {
+            val at = SystemClock.elapsedRealtime()
+            playback.playing.value = Following(PlaybackClock(fromMs, at, speed = playerSpeed), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
+            at
+        }
         composeRule.waitForIdle()
         // Each line, by its text and the time it's shown first after the one before, where the song is then.
         val shown = JSONArray()
@@ -264,10 +270,18 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             last = index
         }
         val lines = JSONArray(model().uiState.lyricLines.map { it.text })
+        val saved = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).getString("lyrics_sync", null)
         return JSONObject().put("lines", lines).put("shown", shown).put("placed", placed).put("known", known).put("heard", heardLog).put("notes", notes).put("lyricsSpeed", model().uiState.following?.clock?.speed)
+            .put("savedSync", saved).put("problems", JSONArray(model().uiState.reportOfferFor.map { it.name }))
     }
 
     private fun model() = ViewModelProvider(checkNotNull(controller) { "Expected controller to be non-null" }.get())[MainViewModel::class.java]
+
+    /** The loading flag clears before copies have finished being checked for better times. */
+    private fun lyricsLookupFinished(): Boolean {
+        val lookup = model().javaClass.getDeclaredField("lyricsJob").apply { isAccessible = true }.get(model()) as? Job
+        return lookup?.isActive != true
+    }
 
     /** How long the phone takes to work out the words in what it heard, after hearing it. */
     private var workMs = WORK_MS

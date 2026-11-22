@@ -3448,7 +3448,8 @@ internal class MainViewModel(
      * differs too. Till then they stay where they are, even after lines heard near. One found further off
      * than near lines are looked at moves them this time only: that's found only where by far the most
      * words heard agree, across the whole song, so it's likely right, but a chorus sung again may still be
-     * timed differently there. Till another while agrees, each is heard where they're kept first: heard
+     * timed differently there. A whole while found that far off is still a problem to report, even alone,
+     * without keeping its correction. Till another agrees, each is heard where they're kept first: heard
      * there, it puts them back, even if it fits where they're shown now too, as the next chorus may.
      */
     private fun placeThisTime(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long, whole: Boolean) {
@@ -3476,6 +3477,7 @@ internal class MainViewModel(
                 if (whole) farOffMs = offMs
                 if (abs(shift) <= SungAlignment.MAX_SHIFT_MS) return
                 movedFar = true
+                if (whole && syncPoints.isEmpty()) problemFound(SongProblem.SUNG_OFF)
             }
             // Near where they're shown, moved there this time by a while found far off: this one says so too.
             whole -> farOffMs = offMs.takeIf { movedFar }

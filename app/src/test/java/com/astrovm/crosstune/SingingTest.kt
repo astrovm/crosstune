@@ -798,7 +798,7 @@ class SingingTest {
         waitUntil { singing.hears == 1 && model().uiState.lyricLines[1].timeMs == 17_000L }
         assertFalse(model().uiState.lyricsSynced)
         assertFalse(prefs().contains("lyrics_sync"))
-        assertFalse(model().uiState.reportOffer)
+        assertEquals(setOf(SongProblem.SUNG_OFF), model().uiState.reportOfferFor)
         // The next while hears the words as far off, where they're shown now: they're kept so, a problem found.
         passes(40_000)
         waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
@@ -829,10 +829,48 @@ class SingingTest {
         // Found where by far the most words agree, but the chorus is sung again where the words time it.
         chorusHeardFarFromWhereItsSung()
         composeRule.waitForIdle()
-        // Moved this time only: nothing's kept, and nothing's said to be wrong with the words.
+        // A lone far match can be the wrong chorus: report the doubt without keeping its correction.
         assertFalse(model().uiState.lyricsSynced)
         assertFalse(prefs().contains("lyrics_sync"))
-        assertFalse(model().uiState.reportOffer)
+        assertEquals(setOf(SongProblem.SUNG_OFF), model().uiState.reportOfferFor)
+    }
+
+    @Test
+    fun pickedUpLateOneWhileHeardFarEarlierIsReportedWithoutKeepingIt() {
+        val times = listOf(60, 63, 66, 90, 93, 96)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        openLyrics()
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        assertEquals(setOf(SongProblem.SUNG_OFF), model().uiState.reportOfferFor)
+        assertTrue(offerShown())
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+    }
+
+    @Test
+    fun aLoneFarWhileIsReportedOnlyOnceItsWholeAnswerIsIn() {
+        val times = listOf(2, 4, 6, 30, 32, 34)
+        lyricsTimedFor(null, times)
+        val whole = CompletableDeferred<Sung?>()
+        singing.early = { sungAt(times, times.map { -25_000L }, SingingListener.FIRST_SECONDS) }
+        singing.answer = { whole.await() }
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        openLyrics()
+        plays(positionMs = 4_000)
+        passes(500)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 5_000L }
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        whole.complete(sungAt(times, times.map { -25_000L }))
+        waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
+        val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
+        assertEquals("sung_off", sent.getString("problem"))
+        assertTrue(sent.getJSONObject("song").getString("log").contains("sung -25000 off, clock sure false"))
+        assertFalse(prefs().contains("lyrics_sync"))
+        passes(40_000)
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
     }
 
     @Test
@@ -865,6 +903,7 @@ class SingingTest {
     @Test
     fun pickedUpPartwayLinesKeptOffMovedByOneWrongWhileGoBackToWhereTheyreKept() {
         val times = chorusHeardFarFromWhereItsSung(keptMs = 3_000)
+        assertFalse(model().uiState.reportOffer)
         // Moved back in the app, the next while hears the first lines where they're kept, 3 s after they're timed.
         passes(5_000)
         plays(positionMs = 3_000)
@@ -1153,7 +1192,7 @@ class SingingTest {
         assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
         assertFalse(model().uiState.lyricsSynced)
         assertFalse(prefs().contains("lyrics_sync"))
-        assertFalse(model().uiState.reportOffer)
+        assertEquals(setOf(SongProblem.SUNG_OFF), model().uiState.reportOfferFor)
     }
 
     @Test
