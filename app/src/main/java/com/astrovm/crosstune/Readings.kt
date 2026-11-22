@@ -107,9 +107,9 @@ internal object Readings {
      * 12 for a suffix that follows a word it can't join, 等 after a verb, 桜 after a counter, and 千夜.
      * 13 for any word in kana IPADIC starts on a small kana, じゅぎょう and いっしょ, and the small vowels that draw a word out, ありがとぉ.
      * 14 for a drawn-out よ after a connective, まってよぉ, looked up as the ending particle.
-     * 15 for a word before a small っ that left the tokenizer with no way through.
+     * 16 for a word before small っ that left the tokenizer with no way through.
      */
-    const val VERSION = 15
+    const val VERSION = 16
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -231,7 +231,7 @@ internal object Readings {
             // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
             val reading = token.reading?.takeIf { it != "*" }
             val bridge = token as? SmallKanaTokenizer.BridgedToken
-            val ending = if (bridge == null) "" else hiragana(token.surface.takeLast(1))
+            val ending = bridge?.ending?.let(::hiragana).orEmpty()
             Piece(
                 line.substring(token.position, token.position + token.surface.length),
                 reading?.let { hiragana(it) + ending } ?: token.surface,

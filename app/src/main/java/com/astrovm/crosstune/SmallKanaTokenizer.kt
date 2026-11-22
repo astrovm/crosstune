@@ -75,7 +75,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         val lattice = ViterbiLattice(text.length + 2).apply { addBos() }
         val reached = BooleanArray(text.length + 1).also { it[0] = true }
         val offered = HashSet<ViterbiNode>()
-        val bridged = HashMap<ViterbiNode, Boolean>()
+        val bridged = HashMap<ViterbiNode, Pair<Boolean, String>>()
         var unknownEnd = -1
         for (at in text.indices) {
             if (!reached[at]) continue
@@ -92,21 +92,26 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         lattice.addEos()
         return searcher.search(lattice).filterNot { it.type == ViterbiNode.Type.KNOWN && it.wordId == -1 }.map { node ->
             val dictionary = if (node.type == ViterbiNode.Type.UNKNOWN) unknownDictionary else tokenInfoDictionary
-            if (node in bridged) BridgedToken(node.wordId, node.surface, offset + node.startIndex, tokenInfoDictionary, bridged.getValue(node))
+            if (node in bridged) {
+                val (jmdict, ending) = bridged.getValue(node)
+                BridgedToken(node.wordId, node.surface, offset + node.startIndex, tokenInfoDictionary, jmdict, ending)
+            }
             else if (node in offered) JmdictToken(node.wordId, node.surface, offset + node.startIndex, tokenInfoDictionary)
             else Token(node.wordId, node.surface, node.type, offset + node.startIndex, dictionary)
         }
     }
 
-    /** Carry a stranded small っ on the known word before it, without taking the following word's lookup. */
+    /** Carry stranded small っ on the known word before them, without taking the following word's lookup. */
     private fun bridge(
-        text: String, at: Int, nodes: List<ViterbiNode>, offered: Set<ViterbiNode>, bridged: MutableMap<ViterbiNode, Boolean>
+        text: String, at: Int, nodes: List<ViterbiNode>, offered: Set<ViterbiNode>, bridged: MutableMap<ViterbiNode, Pair<Boolean, String>>
     ): List<ViterbiNode> = nodes.mapNotNull { node ->
         val end = at + node.surface.length
         if (node.type != ViterbiNode.Type.KNOWN || !Readings.isKana(node.surface.last())) return@mapNotNull null
-        if (text.getOrNull(end) !in listOf('っ', 'ッ') || text.getOrNull(end + 1)?.let(Readings::isKana) != true) return@mapNotNull null
-        ViterbiNode(node.wordId, node.surface + text[end], tokenInfoDictionary, at, ViterbiNode.Type.KNOWN)
-            .also { bridged[it] = node in offered }
+        if (text.getOrNull(end) !in listOf('っ', 'ッ')) return@mapNotNull null
+        val ending = text.substring(end).takeWhile { it in "っッ" }
+        if (text.getOrNull(end + ending.length)?.let(Readings::isKana) != true) return@mapNotNull null
+        ViterbiNode(node.wordId, node.surface + ending, tokenInfoDictionary, at, ViterbiNode.Type.KNOWN)
+            .also { bridged[it] = (node in offered) to ending }
     }
 
     /**
@@ -225,7 +230,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         Token(wordId, surface, ViterbiNode.Type.KNOWN, position, dictionary)
 
     /** A known word followed by a small っ that otherwise leaves the search with no way through. */
-    internal class BridgedToken(wordId: Int, surface: String, position: Int, dictionary: TokenInfoDictionary, val jmdict: Boolean) :
+    internal class BridgedToken(wordId: Int, surface: String, position: Int, dictionary: TokenInfoDictionary, val jmdict: Boolean, val ending: String) :
         Token(wordId, surface, ViterbiNode.Type.KNOWN, position, dictionary)
 
     internal companion object {
