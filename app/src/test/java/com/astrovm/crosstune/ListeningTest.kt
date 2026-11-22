@@ -770,6 +770,20 @@ class ListeningTest {
         assertTrue(shown("A PLACE TO GO"))
     }
 
+    @Test
+    fun radioGardenChecksSoonAfterMicrophoneAccessIsGrantedPastTheTrackDeadline() {
+        val hearing = startRadioGardenWithKnownLength(byMicrophone = false)
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(200))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+
+        allowMicrophone()
+        main.idleFor(java.time.Duration.ofSeconds(2))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(shown("A PLACE TO GO"))
+    }
+
     private fun startRadioGardenWithKnownLength(byMicrophone: Boolean = true): FakeHearing {
         radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
         radioGardenCatalog(lengthMs = 180_000L)
