@@ -79,6 +79,9 @@ class DestinationStoreTest {
         // With YouTube Music's own app there too, each is a row.
         installed += MusicService.YOUTUBE_MUSIC.packageName
         assertEquals(listOf(Destination.Service(MusicService.YOUTUBE_MUSIC), inPiko), rows(MusicService.YOUTUBE_MUSIC))
+        // Uninstalled since it was found, it's gone at once, before Android is asked about links again.
+        installed -= piko
+        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE_MUSIC)), rows(MusicService.YOUTUBE_MUSIC))
     }
 
     @Test

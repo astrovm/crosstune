@@ -691,8 +691,11 @@ internal class MainViewModel(
             linkState = state
             // Anything looked up or cleared meanwhile is newer than what was read.
             val unchanged = uiState.history === history
-            // The choices again too, as a build found by the links it opens is one of them.
+            val previousDestination = uiState.resultDestination
+            // The choices again too, as a build found by the links it opens is one of them: the song on screen, found
+            // for the app it would have opened in before, is found again for that build.
             uiState = uiState.withDestinations().let { if (unchanged) it.copy(history = stored) else it }
+            if (previousDestination != uiState.resultDestination) prepareResultDestination()
             pickTheOnlyMusicApp()
         }
     }
@@ -1679,6 +1682,8 @@ internal class MainViewModel(
     }
 
     private suspend fun prepareResult() {
+        // Where a link goes on its own may be a build only found by the links it opens, which Android says once asked.
+        if (pendingOpen) snapshotFlow { uiState.systemStateKnown }.first { it }
         // A link shared from the app the user listens in would only open back in that app, so ask
         // where else it should go instead.
         // A frontend's link, e.g. Invidious's, is worth opening in the service's own app.

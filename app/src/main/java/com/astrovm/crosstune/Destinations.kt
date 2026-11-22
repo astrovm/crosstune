@@ -99,7 +99,8 @@ internal class DestinationStore(
     private fun services(): List<Destination.Service> {
         val found = found()
         return MusicService.entries.flatMap { service ->
-            val unnamed = found.filter { it !in service.packageNames && MusicService.ofPackage(it) == service }
+            // Asked again here, as what was found may be from before it was uninstalled.
+            val unnamed = found.filter { it !in service.packageNames && MusicService.ofPackage(it) == service && isInstalled(it) }
             val builds = (service.builds.filter(isInstalled) + unnamed).map { Destination.Service(service, it) }
             if (builds.isNotEmpty() && !isInstalled(service.packageName)) builds else listOf(Destination.Service(service)) + builds
         }

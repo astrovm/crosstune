@@ -669,6 +669,48 @@ class MainActivityTest {
     }
 
     @Test
+    fun aLinkSetToOpenInABuildFoundByItsLinksWaitsForAndroidToSayItsThere() {
+        val piko = "app.piko.android.apps.youtube.music"
+        val inPiko = Destination.Service(MusicService.YOUTUBE_MUSIC, piko)
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.YOUTUBE_MUSIC.packageName })
+        installLinkOpener(app, piko, "YT Music Piko", "music.youtube.com")
+        DestinationStore(prefs(), { listOf(piko) }).setDefault(inPiko)
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        // Android's answer about apps and links is held, so the song is found before Piko is.
+        val gate = Gate().apply { held = true }
+        MainActivity.systemDispatcher = gate
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))
+        waitUntil { ViewModelProvider(activity)[MainViewModel::class.java].uiState.result != null }
+        // Not in YouTube Music's own app meanwhile, nor asked where.
+        assertNull(shadowOf(app).peekNextStartedActivity())
+        assertFalse(ViewModelProvider(activity)[MainViewModel::class.java].uiState.showDestinationPicker)
+        gate.letGo()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(piko, checkNotNull(nextStartedActivity()) { "Expected a started activity" }.`package`)
+    }
+
+    @Test
+    fun theSongOnScreenIsFoundAgainForABuildFoundByItsLinksOnceAndroidSaysItsThere() {
+        val piko = "app.piko.android.apps.youtube.music"
+        val inPiko = Destination.Service(MusicService.YOUTUBE_MUSIC, piko)
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.YOUTUBE_MUSIC.packageName })
+        installLinkOpener(app, piko, "YT Music Piko", "music.youtube.com")
+        DestinationStore(prefs(), { listOf(piko) }).setDefault(inPiko)
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        val gate = Gate().apply { held = true }
+        MainActivity.systemDispatcher = gate
+        val activity = launch()
+        resolveTyped()
+        fun state() = ViewModelProvider(activity)[MainViewModel::class.java].uiState
+        // Found for YouTube Music's own app, the only one known yet.
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC), state().resultDestination)
+        assertTrue(Destination.Service(MusicService.YOUTUBE_MUSIC) in state().destinationUrls)
+        gate.letGo()
+        waitUntil { inPiko in state().destinationUrls }
+        assertEquals(inPiko, state().resultDestination)
+    }
+
+    @Test
     fun viewIntentWithoutDataShowsInvalidUrlError() {
         launch(Intent(Intent.ACTION_VIEW))
         assertTextShown(string(R.string.error_invalid_url))
