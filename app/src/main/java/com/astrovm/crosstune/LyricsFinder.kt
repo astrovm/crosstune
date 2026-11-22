@@ -1747,14 +1747,16 @@ internal class LyricsFinder(
         /** LRCLIB may add its instrumental tag after the title the album uses. */
         private fun addsInstrumentalTagTo(played: String): Boolean {
             val name = Normalizer.normalize(SongNames.withoutEditionTag(title), Normalizer.Form.NFKC).trim()
-            val bracket = bracketTags(name, TitleDelimiters.normalizedOpens, TitleDelimiters.normalizedCloses).lastOrNull()
-            val start = bracket?.takeIf { it.last == name.lastIndex }?.first
+            val bracket = bracketTags(name, TitleDelimiters.normalizedOpens, TitleDelimiters.normalizedCloses).lastOrNull()?.takeIf { it.last == name.lastIndex }
+            val start = bracket?.first
                 ?: name.indices.lastOrNull { name[it] in TitleDelimiters.tagDashes && isBetweenSpaces(name, it) }
                 ?: return false
-            if (!SongNames.same(name.substring(0, start), played)) return false
+            val prefix = name.substring(0, start)
+            if (!SongNames.same(prefix, played)) return false
+            val tag = name.substring(start + 1, bracket?.last ?: name.length).trim()
             // The tag may name the version as instrumental. A tag like "Instrumental Remix" also names a different mix.
-            val words = SongNames.wordList(name.substring(start)).filterNot { it in INSTRUMENTAL_VERSION_WORDS }
-            return (words.size == 1 || words == listOf("off", "vocal")) && SongNames.saysInstrumental(name, artist)
+            val words = SongNames.wordList(tag).filterNot { it in INSTRUMENTAL_VERSION_WORDS }
+            return (words.size == 1 || words == listOf("off", "vocal")) && SongNames.saysInstrumental("$prefix ($tag)", artist)
         }
 
         /**
