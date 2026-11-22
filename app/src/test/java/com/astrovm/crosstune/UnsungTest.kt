@@ -869,23 +869,26 @@ class UnsungTest {
 
         // The old display cache did not say whether a sheet was safe to preview.
         val disk = LookupCache(File(app.cacheDir, "kept_words.json"), Dispatchers.Unconfined)
-        runBlocking {
+        val keptKey = runBlocking {
             val (key, json) = disk.entries().single()
             disk.keep(key, JSONObject(json).apply { remove("canPreview") }.toString())
+            key
         }
         val lookupCache = File(app.cacheDir, "lyrics.json")
         assertTrue(lookupCache.delete())
-        lrclib = accordianLyrics()
+        val newFirst = "The newer line"
+        val newSecond = "Another newer line"
+        lrclib = lrclib.replace("Hold the light", newFirst).replace("Out in the rain", newSecond)
         MainActivity.lookAheadLyrics = true
-        val asked = fake.requestedUrls.size
 
-        openCard()
+        controller = Robolectric.buildActivity(MainActivity::class.java, Intent(app, MainActivity::class.java)).setup()
         waitUntil { model().uiState.playingNow != null }
-        assertFalse(fake.requestedUrls.drop(asked).any { "lrclib.net" in it })
-        composeRule.runOnIdle { model().openPlayingNow() }
-        waitUntil { model().uiState.player != null && lookupCache.isFile }
-        composeRule.waitForIdle()
-        assertTrue(fake.requestedUrls.drop(asked).any { "lrclib.net" in it })
+        assertEquals(keptKey, RecordingKey.of(checkNotNull(model().uiState.playingNow).song))
+        composeRule.runOnIdle { model().peekPlayingNow() }
+        val updatedPreview = hasText(newFirst) or hasText(newSecond)
+        fun previewsNewWords() = composeRule.onAllNodes(updatedPreview).fetchSemanticsNodes().isNotEmpty()
+        waitUntil { previewsNewWords() || previewsAccordian() }
+        assertTrue(previewsNewWords())
         assertFalse(previewsAccordian())
     }
 
