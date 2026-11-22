@@ -25,6 +25,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -509,12 +510,18 @@ class UnsungTest {
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         val opened = shadowOf(app).nextStartedActivity.dataString
 
-        playback.onThePhone = Heard.Song(
-            MusicMetadata("Accordian", "Madlib & Madvillain", url = track, lengthMs = 114_000, recordingId = "${deezer.packageName}:456"),
-            null, app = deezer.packageName
-        )
+        val played = MusicMetadata("Accordian", "Madlib & Madvillain", url = track, lengthMs = 114_000, recordingId = "${deezer.packageName}:456")
+        val otherTrack = played.copy(url = "https://www.deezer.com/track/789", recordingId = "${deezer.packageName}:789")
+        playback.onThePhone = Heard.Song(otherTrack, null, app = deezer.packageName)
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "Deezer", canSeek = true, appPackage = deezer.packageName)
-        waitUntil { model().uiState.playingNow != null }
+        waitUntil { model().uiState.playingNow?.song?.url == otherTrack.url }
+        composeRule.runOnIdle { model().peekPlayingNow() }
+        waitUntil { model().uiState.player?.song?.url == otherTrack.url }
+        assertNull(model().uiState.player?.song?.album)
+        composeRule.runOnIdle { model().closePlayer() }
+
+        playback.onThePhone = Heard.Song(played, null, app = deezer.packageName)
+        waitUntil { model().uiState.playingNow?.song?.url == track }
         composeRule.runOnIdle { model().openPlayingNow() }
         val words = hasContentDescription(app.getString(R.string.lyrics_button)) and hasClickAction()
         waitUntil { model().uiState.player != null && composeRule.onAllNodes(words).fetchSemanticsNodes().size == 1 }
