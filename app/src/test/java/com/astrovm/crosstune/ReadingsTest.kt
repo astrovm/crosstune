@@ -307,6 +307,47 @@ class ReadingsTest {
     }
 
     @Test
+    fun longMarksDrawOutKanaAcrossDictionarySplits() {
+        val lines = mapOf(
+            "ぱーてぃー" to "paatii",
+            "めんそーれ" to "mensoore",
+            "やっ ほー" to "ya hoo",
+            "とぅもろー" to "tumoroo",
+            "ひぇー" to "hyee"
+        )
+        fun readings() = Readings.of(lines.keys.toList(), Script.JAPANESE).map { it.romanized to it.typed }
+        val expected = lines.values.map { it to it }
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+    }
+
+    @Test
+    fun longMarksStayWithTheVowelWithoutTakingTheNextWord() {
+        val lines = mapOf("ほーー" to "hooo", "うれしーよ" to "ureshii yo", "ねーきみは" to "nee kimi wa", "ぎたーを" to "gitaa o", "ほ ー" to "ho")
+        fun readings() = Readings.of(lines.keys.toList(), Script.JAPANESE).map { it.romanized }
+        val expected = lines.values.toList()
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+    }
+
+    @Test
+    fun wordsWithLongMarksStayWholeOnTheWordSheet() {
+        val lines = mapOf("ぱーてぃー" to "paatii", "めんそーれ" to "mensoore", "とぅもろー" to "tumoroo", "ひぇー" to "hyee")
+        fun readings() = lines.keys.map { line ->
+            Readings.words(line, Script.JAPANESE).map { Triple(it.text, it.romanized, it.typed) }
+        }
+        val expected = lines.map { (line, romaji) -> listOf(Triple(line, romaji, romaji)) }
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+    }
+
+    @Test
+    fun smallVowelsKeepTheDictionaryWordTheyDrawOut() {
+        fun readings() = listOf("だぁいすき", "ばかぁ").map { line ->
+            Readings.words(line, Script.JAPANESE).map { Triple(it.text, it.romanized, it.lookup) }
+        }
+        val expected = listOf(listOf(Triple("だぁいすき", "daaisuki", "大好き")), listOf(Triple("ばかぁ", "bakaa", "ばか")))
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+    }
+
+    @Test
     fun romajiCanBeSpelledAsAKeyboardTypesIt() {
         fun read(line: String) = Readings.of(listOf(line), Script.JAPANESE).single()
         // Long vowels as the kana write them, and を as wo; the particles は and へ still wa and e.
@@ -603,7 +644,6 @@ class ReadingsTest {
             assertEquals(line, typed, Readings.of(listOf(line), Script.JAPANESE).single().typed)
             assertEquals(line, typed, TestUniDic.reading { Readings.of(listOf(line), Script.JAPANESE).single().typed })
         }
-        assertTrue(Readings.of(listOf("やっ ほー"), Script.JAPANESE).single().typed.startsWith("ya ho"))
     }
 
     @Test
@@ -621,10 +661,9 @@ class ReadingsTest {
             assertEquals(line, romaji, read(line))
             assertEquals(line, romaji, TestUniDic.reading { read(line) })
         }
-        for (line in listOf("とぅもろー", "とぅるるる")) {
-            assertEquals(line, "tu", read(line).second.take(2))
-            assertEquals(line, "tu", TestUniDic.reading { read(line).second.take(2) })
-        }
+        val sound = "とぅるるる"
+        assertEquals(sound, "tu", read(sound).second.take(2))
+        assertEquals(sound, "tu", TestUniDic.reading { read(sound).second.take(2) })
     }
 
     @Test
@@ -647,10 +686,10 @@ class ReadingsTest {
             // Not a word read right before, ない, split for another: しらな and いい.
             "しらないぃ" to listOf("しらないぃ" to "しる"),
             // A small ぇ after the い row is a sound: ひぇー is a cry, not ひる.
-            "ひぇー" to listOf("ひぇ" to "ひぇ"),
-            "きぇー" to listOf("きぇ" to "きぇ"),
+            "ひぇー" to listOf("ひぇー" to "ひぇ"),
+            "きぇー" to listOf("きぇー" to "きぇ"),
         )
-        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }.filter { it.first != "ー" }
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
         for ((line, expected) in lines) {
             assertEquals(line, expected, words(line))
             assertEquals(line, expected, TestUniDic.reading { words(line) })

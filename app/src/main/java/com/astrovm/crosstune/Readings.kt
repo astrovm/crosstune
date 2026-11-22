@@ -107,8 +107,9 @@ internal object Readings {
      * 12 for a suffix that follows a word it can't join, 等 after a verb, 桜 after a counter, and 千夜.
      * 13 for any word in kana IPADIC starts on a small kana, じゅぎょう and いっしょ, and the small vowels that draw a word out, ありがとぉ.
      * 14 for a drawn-out よ after a connective, まってよぉ, looked up as the ending particle.
+     * 15 for a long mark or a small vowel that draws out a word IPADIC split.
      */
-    const val VERSION = 14
+    const val VERSION = 15
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -196,8 +197,9 @@ internal object Readings {
      * which keeps its reading.
      */
     private fun ipadicPieces(line: String, text: String): List<Piece> {
-        val drawn = drawnOut(text, ipadicPieces(line, tokenizer.tokenize(text)))
         val draws = text.indices.filter { tokenizer.drawsOut(text, it) }.toSet()
+        val split = ipadicPieces(line, tokenizer.tokenize(text))
+        val drawn = drawnOut(text, rejoinDrawnWords(text, split, draws))
         if (draws.isEmpty()) return drawn
         val whole = tokenizer.tokenize(text.mapIndexed { at, c -> if (at in draws) c + 1 else c }.joinToString(""))
         val pieces = ipadicPieces(line, whole)
@@ -221,6 +223,52 @@ internal object Readings {
         }
         return out
     }
+
+    /** Recognize a word IPADIC split at a long mark or at a small vowel that repeats a sound, as in だぁいすき. */
+    private fun rejoinDrawnWords(text: String, pieces: List<Piece>, draws: Set<Int>): List<Piece> {
+        if ('ー' !in text && draws.isEmpty()) return pieces
+        val out = ArrayList<Piece>(pieces.size)
+        var first = 0
+        while (first < pieces.size) {
+            val replacement = drawnWord(text, pieces, first, draws)
+            out += replacement ?: pieces[first]
+            val end = out.last().end
+            do { first++ } while (pieces[first - 1].end < end)
+        }
+        return out
+    }
+
+    /** The longest known kana word at this split, with the lyric's own vowels kept for romaji. */
+    private fun drawnWord(text: String, pieces: List<Piece>, first: Int, draws: Set<Int>): Piece? {
+        val head = pieces[first]
+        val start = head.end - head.surface.length
+        val candidates = (first..pieces.lastIndex).asSequence().map(pieces::get)
+            .takeWhile { it.end - start <= MAX_DRAWN_WORD && it.surface.all(::isSaid) }.drop(1)
+        return candidates.mapNotNull { last ->
+            val kana = text.substring(start, last.end)
+            val lookup = drawnLookup(kana, start, last, draws) ?: return@mapNotNull null
+            Piece(kana, kana, "名詞", "一般", lookup, end = last.end, reader = Reader.RULES)
+        }.lastOrNull()
+    }
+
+    private fun drawnLookup(kana: String, start: Int, last: Piece, draws: Set<Int>): String? {
+        if ('ー' in kana) return longMarkLookup(kana)
+        // If the last piece is only a small vowel, the normal draw-out rule already keeps the word before it.
+        val plain = kana.filterIndexed { i, c -> i == 0 || start + i !in draws || KANA[kana[i - 1]]?.lastOrNull() != KANA[c]?.lastOrNull() }
+        if (plain == kana || last.surface.all { it in "ぁぃぅぇぉ" }) return null
+        return oldKana.today[plain] ?: plain.takeIf(tokenizer::isNoun)
+    }
+
+    private fun longMarkLookup(kana: String): String? {
+        if (kana.count { it != 'ー' } < 2 || kana.startsWith('ー')) return null
+        if (kana in DRAWN_WORDS) return kana
+        val katakana = kana.map { if (it in 'ぁ'..'ゖ') it + KATAKANA_TO_HIRAGANA else it }.joinToString("")
+        return katakana.takeIf(tokenizer::isNoun)
+    }
+
+    // The dictionaries can split these even when they're written in katakana.
+    private val DRAWN_WORDS = setOf("めんそーれ", "とぅもろー")
+    private const val MAX_DRAWN_WORD = 12
 
     /** [a] is one particle, and a small vowel draws it out. */
     private fun drawnOutParticle(a: List<Piece>, draws: Set<Int>) =
@@ -1439,7 +1487,10 @@ internal object Readings {
             // the dictionary splits, "Don't" into Don, ' and t, stays as written. A mark goes with the word
             // before it, also one the dictionary takes for a word, as "!" in "Shock!".
             val english = previous != null && isEnglish(previous.surface) && isEnglish(piece.surface)
-            val attaches = previous != null && (opened || english || ((piece.kind == "記号" || piece.surface.none(Char::isLetterOrDigit)) && !opening) || (ending && previous.kind != "助詞"))
+            val longMark = piece.surface.startsWith('ー') && previous?.surface?.last()?.let { isKana(it) && it.isLetter() } == true
+            val mark = (piece.kind == "記号" || piece.surface.none(Char::isLetterOrDigit)) && !opening
+            val withPrevious = opened || english || longMark || mark
+            val attaches = previous != null && (withPrevious || (ending && previous.kind != "助詞"))
             if (attaches) words.last() += piece else words += mutableListOf(piece)
             opened = opening
             previous = piece
