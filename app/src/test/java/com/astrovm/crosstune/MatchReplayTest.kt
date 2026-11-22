@@ -29,10 +29,10 @@ class MatchReplayTest {
         assumeTrue(given != null && File(given, "replay.json").isFile)
         dir = requireNotNull(given)
         val songs = JSONArray(File(dir, "replay.json").readText()).let { all -> (0 until all.length()).map(all::getJSONObject) }
-        // An answer that can't be read would be taken for a lookup that failed, and every song would open nothing, the same
-        // on main and the branch, which reads as a pass.
-        val missing = songs.flatMap { song -> KINDS.mapNotNull { keptAnswer(song, it) } }.filterNot(File::isFile)
-        assertTrue("replay.json names answers that aren't there (${missing.size}), as ${missing.take(2)}: run replay.py prepare again", missing.isEmpty())
+        // An answer that can't be read, missing or not allowed, would be taken for a lookup that failed, and every song
+        // would open nothing, the same on main and the branch, which reads as a pass.
+        val missing = songs.flatMap { song -> KINDS.mapNotNull { keptAnswer(song, it) } }.filterNot { it.isFile && it.canRead() }
+        assertTrue("replay.json names answers that can't be read (${missing.size}), as ${missing.take(2)}: run replay.py prepare again", missing.isEmpty())
         val found = JSONObject()
         val shown = JSONObject()
         for (names in listOf(true, false)) {
