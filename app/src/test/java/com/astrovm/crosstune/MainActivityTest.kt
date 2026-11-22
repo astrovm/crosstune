@@ -1933,6 +1933,7 @@ class MainActivityTest {
         fun videos() = """{"contents":[${row("THE BLUE HEARTS - 終わらない歌", "Fan", fanId)},
             ${row("終わらない歌", "ザ・ブルーハーツ - Topic", "own00000000")}]}"""
         var japanUp = false
+        var youtubeUp = true
         fake.handler = { request ->
             val url = request.url
             when {
@@ -1943,6 +1944,7 @@ class MainActivityTest {
                     FakeSpotify.html(request, """{"results":[{"trackId":7,"trackName":"終わらない歌","artistName":"ザ・ブルーハーツ","trackTimeMillis":184000}]}""")
                 } else FakeSpotify.html(request, "{}", code = 503)
                 url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                url.host == "music.youtube.com" && !youtubeUp -> FakeSpotify.html(request, "{}", code = 503)
                 url.host == "music.youtube.com" -> FakeSpotify.html(
                     request, if (FakeSpotify.bodyOf(request).contains("EgWKAQIQAWoKEAoQAxAEEAkQBQ==")) videos() else "{}"
                 )
@@ -1973,6 +1975,12 @@ class MainActivityTest {
         fanId = "new00000000"
         assertEquals(fan, restartAndOpenRecent())
 
+        val provisional = HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"]
+        youtubeUp = false
+        assertEquals(fan, restartAndOpenRecent())
+        assertEquals(provisional, HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"])
+
+        youtubeUp = true
         fanId = "fan00000000"
         japanUp = true
         assertEquals(own, restartAndOpenRecent())

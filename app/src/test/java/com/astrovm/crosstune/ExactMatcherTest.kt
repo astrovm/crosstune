@@ -1560,6 +1560,25 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aFailedYouTubeLookupKeepsTheSavedProvisionalAnswer() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("failed-provisional").toFile().resolve("lookups.json")
+        fun cache() = LookupCache(file, Dispatchers.Unconfined)
+        fun restart() = ExactMatcher(fake.client(), "AR", Dispatchers.Unconfined, cache())
+        val video = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
+        val provisional = ExactMatcher.Lookup(video, ExactMatcher.Retry())
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+        assertEquals(provisional, runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song) })
+        val saved = runBlocking { cache().entries() }
+
+        fake.handler = { request -> FakeSpotify.html(request, "{}", code = 503) }
+        assertEquals(provisional, runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(saved, runBlocking { cache().entries() })
+    }
+
+    @Test
     fun restartingAfterTheClockMovesBackKeepsTheSavedHold() {
         val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
         val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
@@ -1578,17 +1597,22 @@ class ExactMatcherTest {
 
         elapsed += 10_000
         wall -= 60_000
-        val finder = restart()
         fake.requestedUrls.clear()
-        assertEquals(pending, runBlocking { finder.lookup(MusicService.YOUTUBE_MUSIC, song) })
-        elapsed += ExactMatcher.UNSURE_FOR_MS - 1
-        assertEquals(pending, runBlocking { finder.lookup(MusicService.YOUTUBE_MUSIC, song) })
+        val corrected = pending.copy(retry = ExactMatcher.Retry(wall))
+        assertEquals(corrected, runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song, pending.retry) })
+        repeat(2) {
+            elapsed += 10_000
+            wall += 10_000
+            assertEquals(corrected, runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song, pending.retry) })
+        }
         assertTrue(fake.requestedUrls.isEmpty())
 
-        elapsed++
+        elapsed += 10_000
+        wall += 10_000
         val upload = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
-        assertEquals(ExactMatcher.Lookup(upload, pending.retry), runBlocking { finder.lookup(MusicService.YOUTUBE_MUSIC, song) })
-        assertEquals(ExactMatcher.Lookup(upload, pending.retry), runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Lookup(upload, corrected.retry), runBlocking {
+            restart().lookup(MusicService.YOUTUBE_MUSIC, song, pending.retry)
+        })
     }
 
     @Test
@@ -1608,15 +1632,20 @@ class ExactMatcherTest {
         namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = japan, failing = setOf("JP"))
         assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { first.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         clock += ExactMatcher.UNSURE_FOR_MS
-        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), runBlocking {
-            first.lookFor(MusicService.YOUTUBE_MUSIC, song)
-        })
+        val fanUrl = "https://music.youtube.com/watch?v=fan00000000"
+        val stale = runBlocking { first.lookup(MusicService.YOUTUBE_MUSIC, song) }
+        assertEquals(ExactMatcher.Match.Found(fanUrl, lasting = false), stale.match)
         namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = japan)
         assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=own00000000"), runBlocking {
             restart().lookFor(MusicService.YOUTUBE_MUSIC, song)
         })
+        namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = japan, failing = setOf("JP"))
         fake.requestedUrls.clear()
-        assertEquals("https://music.youtube.com/watch?v=own00000000", runBlocking { restart().find(MusicService.YOUTUBE_MUSIC, song) })
+        val ownUrl = "https://music.youtube.com/watch?v=own00000000"
+        assertEquals(ExactMatcher.Lookup(ExactMatcher.Match.Found(ownUrl)), runBlocking {
+            restart().lookup(MusicService.YOUTUBE_MUSIC, song, stale.retry, fanUrl)
+        })
+        assertEquals(ownUrl, runBlocking { restart().find(MusicService.YOUTUBE_MUSIC, song) })
         assertTrue(fake.requestedUrls.isEmpty())
     }
 
