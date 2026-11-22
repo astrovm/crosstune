@@ -3480,10 +3480,14 @@ internal class MainViewModel(
                 if (whole) farOffMs = offMs
                 if (abs(shift) <= SungAlignment.MAX_SHIFT_MS) return
                 movedFar = true
-                if (whole && syncPoints.isEmpty()) farReportPending = true
+                if (whole) reportFarIfLeftMoved()
             }
-            // Near where they're shown, moved there this time by a while found far off: this one says so too.
-            whole -> farOffMs = offMs.takeIf { movedFar }
+            // Near where they're shown, moved there this time by a while found far off: this one says so too,
+            // even after its first seconds put them back for now, so the problem waits to be found again.
+            whole -> {
+                farOffMs = offMs.takeIf { movedFar }
+                if (movedFar) reportFarIfLeftMoved()
+            }
         }
         heardPoints = heard
         showPoints()
@@ -3588,6 +3592,8 @@ internal class MainViewModel(
                 singingTries = 0
             }
             clockSure = true
+            // The play that ended may have left the words moved far by a while alone.
+            reportFarIfStillMoved()
             forgetHeard()
         } else if (last == null || abs(clock.positionAt(at) - last.positionAt(at)) > SAME_CLOCK_MS) {
             clockSure = false
@@ -4198,6 +4204,11 @@ internal class MainViewModel(
         }
         timedByHand = false
         uiState = uiState.copy(reportOfferFor = emptySet())
+    }
+
+    /** A whole while found the words far off: with no correction saved, it's a problem if they're left moved. */
+    private fun reportFarIfLeftMoved() {
+        if (syncPoints.isEmpty()) farReportPending = true
     }
 
     /** No more of this play will be heard: a lone far match is reported only if nothing put the words back. */
