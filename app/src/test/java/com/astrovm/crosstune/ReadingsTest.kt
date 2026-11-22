@@ -768,6 +768,10 @@ class ReadingsTest {
         val after = Readings.words("りゅうっさくら", Script.JAPANESE)
         assertEquals("さくら", after.last().text)
         assertEquals("さくら", after.last().lookup)
+        val travel = Readings.words("りょこうっなも", Script.JAPANESE).first()
+        assertEquals("りょこうっな", travel.text)
+        assertEquals("旅行", travel.lookup)
+        assertTrue("$travel", Reader.JMDICT in travel.by)
     }
 
     @Test
