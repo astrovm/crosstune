@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -8,6 +9,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -1647,6 +1649,49 @@ class ExactMatcherTest {
         })
         assertEquals(ownUrl, runBlocking { restart().find(MusicService.YOUTUBE_MUSIC, song) })
         assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun aLateOutageAnswerKeepsTheConfirmedVideo() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val japan = mapOf("JP" to appleSong(song.title, "ザ・ブルーハーツ", 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("late-outage").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, timeoutMs = 30_000)
+        val fanUrl = "https://music.youtube.com/watch?v=fan00000000"
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+        val provisional = ExactMatcher.Lookup(ExactMatcher.Match.Found(fanUrl, lasting = false), ExactMatcher.Retry())
+        assertEquals(provisional, finder.lookup(MusicService.YOUTUBE_MUSIC, song))
+
+        val started = CompletableDeferred<Unit>()
+        val mayAnswer = CountDownLatch(1)
+        val outage = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.queryParameter("country") == "JP") {
+                started.complete(Unit)
+                check(mayAnswer.await(30, SECONDS)) { "The late lookup never got its answer" }
+            }
+            outage(request)
+        }
+        // Recent still has an earlier hold, so saving the late answer would change the provisional entry.
+        val late = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song, ExactMatcher.Retry(4_000), fanUrl) }
+        val ownUrl = "https://music.youtube.com/watch?v=own00000000"
+        val confirmed = ExactMatcher.Lookup(ExactMatcher.Match.Found(ownUrl))
+        try {
+            withTimeout(10_000) { started.await() }
+            namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = japan)
+            assertEquals(confirmed, finder.lookup(MusicService.YOUTUBE_MUSIC, song))
+            assertEquals(ownUrl, cache.entries().single().second)
+        } finally {
+            mayAnswer.countDown()
+        }
+
+        val result = late.await()
+        assertEquals(ownUrl, cache.entries().single().second)
+        assertEquals(confirmed, result)
     }
 
     @Test
