@@ -119,32 +119,34 @@ class TurnTest(unittest.TestCase):
         self.assertIsNone(second_song.deadline)
         self.assertEqual(second_song.RESTORE_SECONDS, putting_back - working)
         lease = second_song.PAIR_MINUTES * 60
-        self.assertLess(putting_back, took + lease)
-        self.assertGreater(putting_back, time.monotonic() + lease - 30)
+        # The holder's own end: its turn started after take was called, and before it returned.
+        self.assertLessEqual(took + lease, putting_back)
+        self.assertLessEqual(putting_back, time.monotonic() + lease)
         self.assertEqual("samsung: free", self.lock("who", "samsung").strip())
 
     def test_the_turn_ends_when_the_holders_note_says_not_when_take_returns(self):
         # On a busy machine take can return a while after the holder's clock started: the note's end is the one kept.
         took = time.monotonic()
-        self.lock("take", "samsung", "--who", "late turn", "--minutes", "1")
-        holder = self.lock("who", "samsung")
-        self.assertIn("held by late turn", holder)
-        pid = holder.split("pid ")[1].split()[0]
-        self.assertLess(second_song.lease_end(pid), took + 60)
-        self.assertGreater(second_song.lease_end(pid), time.monotonic() + 55)
+        pid = self.lock("take", "samsung", "--who", "late turn", "--minutes", "1").strip()
+        self.assertLessEqual(took + 60, second_song.lease_end(pid))
+        self.assertLessEqual(second_song.lease_end(pid), time.monotonic() + 60)
         with self.assertRaises(RuntimeError):
             second_song.lease_end("999999999")
 
     def test_a_turn_already_over_leaves_the_next_agents_turn_alone(self):
-        pair = second_song.turn("samsung", "second song test")
-        pair.__enter__()
-        # The holder let go at the end of its minutes, and another agent in the same session took the device after.
-        self.lock("release", "samsung", "--who", "second song test")
-        self.lock("take", "samsung", "--who", "another agent", "--minutes", "1")
-        with mock.patch.object(second_song.time, "monotonic", return_value=time.monotonic() + 3600):
-            pair.__exit__(None, None, None)
+        with second_song.turn("samsung", "second song test"):
+            # The holder let go at the end of its minutes, and another agent in this same session took the device after.
+            self.lock("release", "samsung", "--who", "second song test")
+            self.lock("take", "samsung", "--who", "another agent", "--minutes", "1")
         self.assertIsNone(second_song.deadline)
         self.assertIn("held by another agent", self.lock("who", "samsung"))
+
+    def test_a_turn_whose_end_cant_be_read_lets_the_device_go(self):
+        with mock.patch.object(second_song, "lease_end", side_effect=RuntimeError("no end")):
+            with self.assertRaises(RuntimeError), second_song.turn("samsung", "second song test"):
+                self.fail("the pair ran without knowing when its turn ends")
+        self.assertIsNone(second_song.deadline)
+        self.assertEqual("samsung: free", self.lock("who", "samsung").strip())
 
 
 if __name__ == "__main__":

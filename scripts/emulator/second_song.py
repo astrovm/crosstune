@@ -19,7 +19,6 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
@@ -84,32 +83,31 @@ def turn(device, who):
     if device is None:
         yield lambda: None
         return
-    holder = subprocess.run([sys.executable, str(DEVICELOCK), 'take', device, '--who', who, '--minutes', str(PAIR_MINUTES)], check=True, capture_output=True, text=True).stdout
-    end = lease_end(holder)
-    deadline = end - RESTORE_SECONDS
+    holder = subprocess.run([sys.executable, str(DEVICELOCK), 'take', device, '--who', who, '--minutes', str(PAIR_MINUTES)], check=True, capture_output=True, text=True).stdout.split()[-1]
+    end = None
 
     def restoring():
         global deadline
         deadline = end
 
     try:
+        end = lease_end(holder)
+        deadline = end - RESTORE_SECONDS
         yield restoring
     finally:
         deadline = None
-        # Once the turn is over the holder has let go by itself, and the device may be another agent's turn now:
-        # releasing it by name or by session could end theirs.
-        if time.monotonic() < end:
-            subprocess.run([sys.executable, str(DEVICELOCK), 'release', device, '--who', who], check=True, stdout=subprocess.DEVNULL)
+        # This holder only: once its turn is over, the device may be another agent's turn, even from this session.
+        subprocess.run([sys.executable, str(DEVICELOCK), 'release', device, '--holder', holder], check=True, stdout=subprocess.DEVNULL)
 
 
 def lease_end(holder):
-    """When, by time.monotonic(), the turn devicelock.py's holder (its pid, what take prints) keeps ends: from the
-    holder's own note, as it can start a while before take returns, on a busy machine. The note's times are cut to
-    the second, so this is a moment early at most."""
-    note = devicelock.read_note(devicelock.holder_path(int(holder.split()[-1])))
-    if not note or not note.get('until'):
-        raise RuntimeError(f'devicelock.py took the device but left no note for holder {holder.strip()}')
-    return time.monotonic() + (datetime.fromisoformat(note['until']) - datetime.now().astimezone()).total_seconds()
+    """When, by time.monotonic(), the turn devicelock.py's holder (the pid take printed) keeps ends: the "ends" it
+    writes in its note, by the same clock it lets go by. take can return a while after the holder's turn started."""
+    note = devicelock.read_note(devicelock.holder_path(int(holder)))
+    if not note or not isinstance(note.get('ends'), (int, float)):
+        raise RuntimeError(f'devicelock.py took the device but left no end for holder {holder}')
+    return note['ends']
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
