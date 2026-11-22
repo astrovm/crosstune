@@ -679,20 +679,43 @@ internal class ExactMatcher(
             ?: videoNamesSong(metadata, abroad, videoRows, names)
             ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
         song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
-        matchingVideo(rows, videoRows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+        matchingVideo(rows, videoRows, names, recording, watchUrl)?.let { return it }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), final = names.complete, lasting = names.everyStore)
     }
 
-    private fun matchingVideo(songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording): Row? {
+    private fun matchingVideo(songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String): Answer? {
         val matching = videos.asSequence().filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
-        if (names.complete) return matching.firstOrNull()
-        matching.firstOrNull { isOwnVideo(it, names) }?.let { return it }
+        fun found(row: Row) = Answer(watchUrl + row.id, lasting = names.everyStore)
+        if (names.everyStore) return matching.firstOrNull()?.let(::found)
+        matching.firstOrNull { isOwnVideo(it, names) }?.let { return found(it) }
         // A failed lookup can only add names. If a playable song is close enough in length, one of those names
         // could prove it, as the US store names 米津玄師 Kenshi Yonezu. A row with no length could still be the song.
         // A failed search may also have lost a length, so wait for it even if there is no song row.
-        if (names.searchFailed || songs.any { it.id != null && sameLength(it, names) }) return null
-        return matching.firstOrNull()
+        if (!names.complete && (names.searchFailed || songs.any { it.id != null && sameLength(it, names) })) return null
+        val fan = matching.firstOrNull() ?: return null
+        // A fan's title may leave a name in brackets unconfirmed, as on a piano upload. An artist's
+        // own video may also be named by the missing store, and it can run longer than the song.
+        val unresolved = names.lookupCouldName(unconfirmedVideoText(fan.name, names)) ||
+            videos.any { other -> other.id != fan.id && couldBeOwnVideo(other, names, recording) }
+        if (unresolved) return Answer(null, final = false, lasting = false)
+        return found(fan)
+    }
+
+    private fun couldBeOwnVideo(row: Row, names: Names, recording: RequestedRecording): Boolean {
+        if (row.id == null || !keepsRequestedRecording(recording, row, video = true)) return false
+        val channel = row.details.first().removeSuffix(" - Topic")
+        if (!isOwnVideo(row, names) && !names.lookupCouldName(channel)) return false
+        return videoTitleMatches(row.name, names) ||
+            (!isAnotherVideoVersion(row.name, names) && names.lookupCouldName(unconfirmedVideoText(row.name, names)))
+    }
+
+    /** What remains of the video's title, including brackets, after removing known names and tags. */
+    private fun unconfirmedVideoText(title: String, names: Names): String {
+        val known = names.titles.map(SongNames::withoutEditionTag) + names.artists.flatMap(SongNames::artistNames)
+        val words = SongNames.words(title) - known.flatMap(SongNames::words).toSet() - VIDEO_TAGS
+        val withoutNames = removeVideoNames(title, known.map(SongNames::normalize) + VIDEO_TAG_MARKS)
+        return withoutNames.filter { it.code > 0x7f } + words.joinToString(" ")
     }
 
     /** Keep a recording note separate when an unbracketed guest credit runs up to it. */
@@ -978,12 +1001,15 @@ internal class ExactMatcher(
          * the artist's own row may be missing. See [namesOf].
          */
         val complete: Boolean,
-        /**
-         * Every store that could name the song answered. When one didn't, what its name finds may be missing, even where
-         * the names are [complete]: Japan's alone may name Lemon (Music Box) as YouTube Music has it. See [remembered].
-         */
-        val everyStore: Boolean
+        val failedLookups: Set<String>
     ) {
+        // A failed lookup can leave a name missing even where the names are complete, as for Lemon (Music Box).
+        val everyStore = complete && failedLookups.isEmpty()
+
+        fun lookupCouldName(text: String): Boolean =
+            SongNames.storesWriting(text).any(failedLookups::contains) ||
+                ("US" in failedLookups && SongNames.words(text).any { word -> word.any(Char::isLetter) })
+
         /** Apple, or Deezer, knows recordings of the song that differ in length: a live take may be one. */
         val severalRecordings = lengthsMs.any { one -> lengthsMs.any { other -> one - other > SAME_SONG_LENGTH_MS } }
 
@@ -1011,7 +1037,7 @@ internal class ExactMatcher(
         // Every edition it has, as the album's take of a song is often a minute longer than the single's, and a
         // music app may have only the single's.
         val lengthsMs = found?.editions.orEmpty().mapNotNull { it.optLong("trackTimeMillis").takeIf { length -> length > 0 } }.toMutableList()
-        var unanswered = emptyList<String>()
+        var unanswered = emptySet<String>()
         song?.optLong("trackId")?.takeIf { it > 0 }?.let { id ->
             // And by the US store's name, in Latin letters as YouTube Music writes it, when another store found it under a
             // name in another script: Japan's finds Lemon by 米津玄師, which only the US store names Kenshi Yonezu, as YouTube
@@ -1026,7 +1052,7 @@ internal class ExactMatcher(
                 titles += it.optString("trackName").ifBlank { null } ?: return@forEach
                 artists += it.optString("artistName").ifBlank { null } ?: return@forEach
             }
-            unanswered = stores.zip(elsewhere).filter { it.second.second }.map { it.first }
+            unanswered = stores.zip(elsewhere).filter { it.second.second }.map { it.first }.toSet()
         }
         val homes = SongNames.storesWriting((titles + artists).joinToString(""))
         val asked = Asked()
@@ -1043,7 +1069,7 @@ internal class ExactMatcher(
         val complete = !searchFailed && unanswered.none { it == "US" || it in homes }
         return Names(
             titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum,
-            searchFailed, complete, complete && unanswered.isEmpty()
+            searchFailed, complete, unanswered
         )
     }
 
@@ -1266,11 +1292,17 @@ internal class ExactMatcher(
      * what's in them, "(終わらない歌 An Endless Song)", is what it's called elsewhere or said of it.
      */
     private fun isTheSongsVideo(row: Row, names: Names): Boolean {
-        if (row.id == null) return false
-        if (names.titles.none { titleIn(it, row.name) }) return false
-        if (names.titles.all { title -> SongNames.saysAnotherVersion(row.name, title, names.artists.joinToString(" ")) }) return false
+        if (row.id == null || !videoTitleMatches(row.name, names)) return false
+        // A channel is the artist's own by its whole name, maybe with what YouTube adds to one:
+        // "Band - Topic", "BandVEVO".
+        return isOwnVideo(row, names) || names.artists.any { artistIn(it, row.name) } && row.lengthMs != null && names.lengthsMs.isNotEmpty() && sameLength(row, names)
+    }
+
+    private fun videoTitleMatches(title: String, names: Names): Boolean {
+        if (names.titles.none { titleIn(it, title) }) return false
+        if (isAnotherVideoVersion(title, names)) return false
         val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
-        val outside = outsideBrackets(row.name)
+        val outside = outsideBrackets(title)
         val rest = SongNames.words(outside) - said.toSet() - VIDEO_TAGS
         if (rest.any { !YEAR.matches(it) }) return false
         // Nor anything in another script, which has no words to tell apart: "桜の雨" isn't "桜". Named
@@ -1279,12 +1311,15 @@ internal class ExactMatcher(
         val bothWays = SongNames.titleNames(outside.trim()).drop(1).takeIf { halves -> halves.any { SongNames.normalize(it) in known } }.orEmpty()
         val written = (known + bothWays.map(SongNames::normalize) +
             names.artists.flatMap(SongNames::artistNames).map { SongNames.normalize(SongNames.withoutArticle(it)) } + VIDEO_TAG_MARKS)
-            .filter { it.isNotEmpty() }.sortedByDescending { it.length }
-        if (written.fold(SongNames.normalize(outside)) { left, name -> left.replace(name, "") }.any { it.code > 0x7f }) return false
-        // A channel is the artist's own by its whole name, maybe with what YouTube adds to one:
-        // "Band - Topic", "BandVEVO".
-        return isOwnVideo(row, names) || names.artists.any { artistIn(it, row.name) } && row.lengthMs != null && names.lengthsMs.isNotEmpty() && sameLength(row, names)
+        return removeVideoNames(outside, written).none { it.code > 0x7f }
     }
+
+    private fun isAnotherVideoVersion(name: String, names: Names): Boolean =
+        names.titles.all { title -> SongNames.saysAnotherVersion(name, title, names.artists.joinToString(" ")) }
+
+    private fun removeVideoNames(title: String, names: List<String>): String =
+        names.filter(String::isNotEmpty).sortedByDescending(String::length)
+            .fold(SongNames.normalize(title)) { left, name -> left.replace(name, "") }
 
     private fun isOwnVideo(row: Row, names: Names): Boolean {
         val uploader = SongNames.normalize(SongNames.withoutArticle(row.details.first()))
