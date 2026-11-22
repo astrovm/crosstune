@@ -1444,14 +1444,25 @@ internal class MainViewModel(
      */
     fun openPlayingNow() {
         val now = uiState.playingNow ?: return
-        if (uiState.result?.let { sameSong(it, now.song) } != true) showSong(now.song)
-        if (uiState.player?.song != now.song) openPlayer(now.song, now.following?.appPackage, played = true)
+        val song = withCollectionTrackAlbum(now.song)
+        if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
+        if (uiState.player?.song != song) openPlayer(song, now.following?.appPackage, played = true)
     }
 
     /** The player on the song playing now, alone, as a swipe up from the bar opens it before it's let go. */
     fun peekPlayingNow() {
         val now = uiState.playingNow ?: return
-        openPlayer(now.song, now.following?.appPackage, played = true)
+        openPlayer(withCollectionTrackAlbum(now.song), now.following?.appPackage, played = true)
+    }
+
+    /** A player may name the track opened from its collection and leave the album out. */
+    private fun withCollectionTrackAlbum(song: MusicMetadata): MusicMetadata {
+        if (song.album != null) return song
+        val id = RecordingKey.trackIdentity(song.url) ?: return song
+        val album = uiState.result?.tracks?.firstNotNullOfOrNull { track ->
+            track.album?.takeIf { RecordingKey.trackIdentity(track.url) == id }
+        } ?: return song
+        return song.copy(album = album)
     }
 
     /** Pauses the song playing now, or plays it again: as its button shows, playing when its app doesn't say where it is. */
@@ -1587,7 +1598,7 @@ internal class MainViewModel(
     private suspend fun refreshSavedAlbum(entry: HistoryEntry): HistoryEntry {
         if (entry.albumChecked || uiState.offline) return entry
         val refreshed = resolver.resolve(LinkInput.Link(entry.link)) as? Resolution.Resolved ?: return entry
-        return entry.copy(metadata = refreshed.metadata, albumChecked = true)
+        return entry.afterAlbumLookup(refreshed.metadata)
     }
 
     /** What a link's lookup found, or why it failed; [saved] is how Recent had it. */

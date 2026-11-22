@@ -13,9 +13,12 @@ internal data class HistoryEntry(
     val link: MusicLink,
     val metadata: MusicMetadata,
     val destinationLinks: Map<String, PreparedLink> = emptyMap(),
-    /** Older entries from album-aware services only kept instrumental albums, or no album at all. */
+    /** Whether the catalogue has already been asked for this item's or its tracks' albums. */
     val albumChecked: Boolean = true
-)
+) {
+    fun afterAlbumLookup(latest: MusicMetadata) =
+        copy(metadata = metadata.withMissingCatalogueDetails(latest), albumChecked = true)
+}
 
 /** Keeps the most recent resolved items, newest first, in SharedPreferences. */
 internal class HistoryStore(private val preferences: SharedPreferences) {
@@ -50,7 +53,12 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
     /** Updates what's known about an item, e.g. covers found for its songs, without changing recency. */
     fun update(sourceUrl: String, metadata: MusicMetadata, albumChecked: Boolean = false): List<HistoryEntry> {
         val updated = load().map { entry ->
-            if (entry.link.url == sourceUrl) entry.copy(metadata = metadata, albumChecked = entry.albumChecked || albumChecked) else entry
+            if (entry.link.url == sourceUrl) {
+                // A cover lookup may finish with a snapshot taken before the album lookup.
+                entry.copy(metadata = metadata.withMissingCatalogueDetails(entry.metadata), albumChecked = entry.albumChecked || albumChecked)
+            } else {
+                entry
+            }
         }
         save(updated)
         return updated
@@ -86,11 +94,12 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                     .putOpt("artwork", entry.metadata.artworkUrl)
                     // An explicit null means the catalogue was checked and gave no album.
                     .putOpt("album", entry.metadata.album ?: JSONObject.NULL.takeIf { entry.albumChecked && entry.link.hasCatalogAlbum })
-                    // A playlist's songs as [title, artist, cover, link, album] lists, kept short.
+                    // A collection's songs as [title, artist, cover, link, album, length] lists, kept short.
                     .put("tracks", JSONArray().apply {
                         entry.metadata.tracks.forEach { track ->
                             val row = JSONArray().put(track.title).put(track.artist).put(track.artworkUrl.orEmpty()).put(track.url.orEmpty())
-                            track.album?.let(row::put)
+                            if (track.album != null || track.lengthMs != null) row.put(track.album ?: JSONObject.NULL)
+                            track.lengthMs?.let(row::put)
                             put(row)
                         }
                     })
@@ -132,7 +141,8 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                 MusicMetadata(
                     song.optString(0).ifEmpty { return@mapNotNull null }, song.optString(1),
                     artworkUrl = song.optString(2).ifEmpty { null }, url = song.optString(3).ifEmpty { null },
-                    album = song.optString(4).ifEmpty { null }
+                    album = (song.opt(4) as? String)?.takeIf(String::isNotBlank),
+                    lengthMs = song.optLong(5).takeIf { it > 0 }
                 )
             }
         }.orEmpty()
@@ -143,7 +153,8 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
             title, optString("artist"), type, optString("artwork").ifEmpty { null }, tracks, trackCount = count, lengthMs = length,
             album = album
         )
-        return HistoryEntry(link, metadata, prepared, albumChecked = !link.hasCatalogAlbum || has("album") || album != null)
+        val missingAlbum = if (type == ItemType.TRACK) album == null else tracks.any { it.album == null }
+        return HistoryEntry(link, metadata, prepared, albumChecked = !link.hasCatalogAlbum || has("album") || !missingAlbum)
     }
 
     companion object {
@@ -165,7 +176,38 @@ private fun HistoryEntry.isSameAs(other: HistoryEntry): Boolean =
             metadata.isNamedAs(other.metadata) && metadata.mayBeOnSameAlbum(other.metadata) && mayBeAsLongAs(other))
 
 private val MusicLink.hasCatalogAlbum: Boolean
-    get() = type == ItemType.TRACK && (service == MusicService.APPLE_MUSIC || service == MusicService.DEEZER)
+    get() = type != ItemType.ARTIST && (service == MusicService.APPLE_MUSIC || service == MusicService.DEEZER)
+
+/** Fill missing catalogue details while keeping the saved tracks in order. */
+private fun MusicMetadata.withMissingCatalogueDetails(latest: MusicMetadata): MusicMetadata =
+    copy(
+        artist = artist.ifBlank { latest.artist },
+        artworkUrl = artworkUrl ?: latest.artworkUrl,
+        tracks = tracks.withMissingTrackDetails(latest.tracks),
+        url = url ?: latest.url,
+        trackCount = trackCount ?: latest.trackCount,
+        lengthMs = lengthMs ?: latest.lengthMs,
+        album = album ?: latest.album
+    )
+
+/** Retain the saved items in order. Match by track ID or by a name unique in both lists. */
+private fun List<MusicMetadata>.withMissingTrackDetails(latest: List<MusicMetadata>): List<MusicMetadata> {
+    if (isEmpty()) return latest
+    if (latest.isEmpty()) return this
+    val ids = latest.mapNotNull { track -> RecordingKey.trackIdentity(track.url)?.let { it to track } }.toMap()
+    val names = latest.groupBy { it.catalogueName }
+    val savedNames = groupingBy { it.catalogueName }.eachCount()
+    return map { saved ->
+        val id = RecordingKey.trackIdentity(saved.url)
+        val match = id?.let(ids::get) ?: names[saved.catalogueName]?.singleOrNull()?.takeIf {
+            savedNames[saved.catalogueName] == 1 && (id == null || RecordingKey.trackIdentity(it.url) == null)
+        }
+        match?.let(saved::withMissingCatalogueDetails) ?: saved
+    }
+}
+
+private val MusicMetadata.catalogueName: Pair<String, String>
+    get() = SongNames.normalize(title) to SongNames.normalize(artist)
 
 private fun MusicMetadata.mayBeOnSameAlbum(other: MusicMetadata): Boolean {
     if ((instrumentalAlbum == null) != (other.instrumentalAlbum == null)) return false

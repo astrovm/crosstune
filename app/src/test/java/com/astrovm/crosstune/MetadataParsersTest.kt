@@ -471,6 +471,7 @@ class MetadataParsersTest {
             ItemType.ALBUM
         )
         assertEquals(listOf("Matador (Remasterizado 2008)"), album?.tracks?.map { it.title })
+        assertEquals("Vasos Vacíos", album?.tracks?.single()?.album)
     }
 
     @Test
@@ -915,8 +916,10 @@ class MetadataParsersTest {
         assertNull(MetadataParsers.appleMusic(json("{}"), ItemType.TRACK))
         assertNull(MetadataParsers.appleMusic(json("""{"results":[]}"""), ItemType.TRACK))
         // An album's songs are the track results after it; anything else there is left out.
-        val album = json("""{"results":[{"collectionName":"Album - EP","artistName":"Band"},5,{"wrapperType":"collection"},{"wrapperType":"track","trackName":""},{"wrapperType":"track","trackName":"One","artistName":"Band"}]}""")
-        assertEquals(listOf(MusicMetadata("One", "Band")), checkNotNull(MetadataParsers.appleMusic(album, ItemType.ALBUM)) { "Expected MetadataParsers.appleMusic(album, ItemType.ALBUM) to be non-null" }.tracks)
+        val track = "https://music.apple.com/us/song/456"
+        val album = json("""{"results":[{"collectionName":"Album - EP","artistName":"Band"},5,{"wrapperType":"collection"},{"wrapperType":"track","trackName":""},
+            {"wrapperType":"track","trackName":"One","artistName":"Band","trackViewUrl":"$track","trackTimeMillis":71461}]}""")
+        assertEquals(listOf(MusicMetadata("One", "Band", url = track, lengthMs = 71_461, album = "Album - EP")), checkNotNull(MetadataParsers.appleMusic(album, ItemType.ALBUM)).tracks)
         // A playlist is named by its page.
         fun playlist(data: String?, title: String? = "Mix on Apple Music") =
             og(title) + (data?.let { """<script type="application/json" id="serialized-server-data">$it</script>""" } ?: "")
@@ -966,10 +969,23 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun applePlaylistsKeepTrackLinksAndTheLinkedAlbum() {
+        val track = "https://music.apple.com/us/album/instrumentals/123?i=456"
+        val data = """{"title":"One","artistName":"Band","duration":71461,"contentDescriptor":{"kind":"song","url":"$track"},
+            "tertiaryLinks":[{"title":"Unrelated Link"},{"title":"Album (Instrumentals)","segue":{"destination":{"contentDescriptor":{"kind":"album"}}}}]}"""
+        val page = og("Mix on Apple Music") + """<script type="application/json" id="serialized-server-data">$data</script>"""
+        assertEquals(
+            MusicMetadata("One", "Band", url = track, lengthMs = 71_461, album = "Album (Instrumentals)"),
+            MetadataParsers.applePlaylist(page)?.tracks?.single()
+        )
+    }
+
+    @Test
     fun deezerPlaylistRowsKeepAnInstrumentalAlbumOnlyWhenItsNameSaysSo() {
-        val tracks = """[{"title":"A","album":{"title":"Album (Instrumentals)"}},{"title":"B","album":{"title":"Album"}},{"title":"C"}]"""
+        val tracks = """[{"title":"A","link":"https://www.deezer.com/track/456","album":{"title":"Album (Instrumentals)"}},{"title":"B","album":{"title":"Album"}},{"title":"C"}]"""
         val listed = checkNotNull(MetadataParsers.deezer(json("""{"title":"Mix","tracks":{"data":$tracks}}"""), ItemType.PLAYLIST)).tracks
         assertEquals(listOf("Album (Instrumentals)", null, null), listed.map { it.instrumentalAlbum })
+        assertEquals("https://www.deezer.com/track/456", listed.first().url)
     }
 
     @Test

@@ -449,6 +449,100 @@ class UnsungTest {
         reopenOldAccordian { composeRule.runOnIdle { model().pasteLink(link) } }
     }
 
+    @Test
+    fun aSparseAlbumLookupKeepsTheSavedTrackDetails() {
+        useAccordian()
+        val cover = "https://example.com/accordian.jpg"
+        prefs().edit().putString(
+            HistoryStore.KEY_HISTORY,
+            """[{"service":"APPLE_MUSIC","type":"TRACK","id":"41655288","url":"$link","region":"us",
+              "title":"Accordian","artist":"Madlib & Madvillain","artwork":"$cover","length":113867}]"""
+        ).commit()
+        val ordinaryAnswer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.encodedPath == "/lookup") {
+                FakeSpotify.html(request, """{"results":[{"trackName":"Accordian (store title)","collectionName":"Madvillainy Instrumentals"}]}""")
+            } else {
+                ordinaryAnswer(request)
+            }
+        }
+        plays()
+        openCard()
+        waitUntil { !model().lookingUp }
+        val expected = MusicMetadata("Accordian", "Madlib & Madvillain", artworkUrl = cover, lengthMs = 113_867, album = "Madvillainy Instrumentals")
+        assertEquals(expected, model().uiState.result)
+        assertEquals(expected, HistoryStore(prefs()).load().single().metadata)
+        openCachedAccordianLyrics()
+        assertTrue(model().uiState.lyricsInstrumental)
+    }
+
+    @Test
+    fun anOldDeezerPlaylistFindsItsTracksAlbumsBeforeTheyPlay() {
+        val playlist = "https://www.deezer.com/playlist/123"
+        val track = "https://www.deezer.com/track/456"
+        val deezer = MusicService.DEEZER
+        shadowOf(app.packageManager).installPackage(installedApp(deezer.packageName, "Deezer"))
+        val cover = "https://example.com/old-cover.jpg"
+        lrclib = accordianLyrics()
+        singing.answers = listOf(music)
+        prefs().edit().putString("default_target", deezer.name).putString(
+            HistoryStore.KEY_HISTORY,
+            """[{"service":"DEEZER","type":"PLAYLIST","id":"123","url":"$playlist","title":"Old Mix",
+              "tracks":[["Accordian","Madlib & Madvillain","$cover",""],["An older track","Band","$cover",""]]}]"""
+        ).commit()
+        val ordinaryAnswer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/playlist/123") {
+                FakeSpotify.html(request, """{"title":"Old Mix","tracks":{"data":[
+                  {"id":456,"title":"Accordian","duration":114,"artist":{"name":"Madlib & Madvillain"},"album":{"title":"Madvillainy Instrumentals"}},
+                  {"id":789,"title":"Accordian","artist":{"name":"Another Artist"},"album":{"title":"Other Album"}}
+                ]}}""")
+            } else {
+                ordinaryAnswer(request)
+            }
+        }
+        controller = Robolectric.buildActivity(MainActivity::class.java, Intent(app, MainActivity::class.java)).setup()
+        waitUntil { model().uiState.history.isNotEmpty() }
+        composeRule.onNode(hasText("Old Mix") and hasClickAction()).performClick()
+        waitUntil { model().uiState.result != null && !model().lookingUp }
+        composeRule.onNode(hasText("Accordian") and hasClickAction()).performScrollTo().performClick()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = shadowOf(app).nextStartedActivity.dataString
+
+        playback.onThePhone = Heard.Song(
+            MusicMetadata("Accordian", "Madlib & Madvillain", url = track, lengthMs = 114_000, recordingId = "${deezer.packageName}:456"),
+            null, app = deezer.packageName
+        )
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "Deezer", canSeek = true, appPackage = deezer.packageName)
+        waitUntil { model().uiState.playingNow != null }
+        composeRule.runOnIdle { model().openPlayingNow() }
+        val words = hasContentDescription(app.getString(R.string.lyrics_button)) and hasClickAction()
+        waitUntil { model().uiState.player != null && composeRule.onAllNodes(words).fetchSemanticsNodes().size == 1 }
+        composeRule.onNode(words).performClick()
+        waitUntil { model().uiState.lyricsInstrumental || model().uiState.lyrics.isNotBlank() }
+        assertTrue("Expected the instrumental to hold the sung sheet. ${model().uiState.lyricsFor}", model().uiState.lyricsInstrumental)
+        assertFalse(showsWords())
+        assertEquals(track, opened)
+
+        val saved = HistoryStore(prefs()).load().first { it.link.url == playlist }
+        assertEquals(listOf("Accordian", "An older track"), saved.metadata.tracks.map { it.title })
+        assertEquals(cover, saved.metadata.tracks.first().artworkUrl)
+        assertEquals(track, saved.metadata.tracks.first().url)
+        assertEquals(114_000L, saved.metadata.tracks.first().lengthMs)
+        assertEquals("Madvillainy Instrumentals", saved.metadata.tracks.first().album)
+        assertTrue(saved.albumChecked)
+        composeRule.runOnIdle { model().showHistoryEntry(saved) }
+        waitUntil { !model().lookingUp }
+        composeRule.runOnIdle { model().pasteLink(playlist) }
+        waitUntil { !model().lookingUp }
+        assertEquals(1, fake.requestedUrls.count { "api.deezer.com/playlist/123" in it })
+    }
+
+    private fun openCachedAccordianLyrics() {
+        tapLyricsButton()
+        waitUntil { model().uiState.lyricsInstrumental || model().uiState.lyrics.isNotBlank() }
+    }
+
     private fun saveOldAccordian() {
         prefs().edit().putString(
             HistoryStore.KEY_HISTORY,

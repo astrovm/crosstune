@@ -59,11 +59,17 @@ internal object RecordingKey {
     private fun track(url: String?): MusicLink? =
         (url?.let(MusicLinks::parse) as? LinkInput.Link)?.link?.takeIf { it.type == ItemType.TRACK }
 
+    /** A track on its own service, whether it was linked from an album or on its own. */
+    fun trackIdentity(url: String?): Pair<MusicService, String>? {
+        val track = track(url) ?: return null
+        return (track.service ?: return null) to track.id
+    }
+
     /** A player can omit the album. Keep the link's evidence only for an identified recording. */
     private fun sameRecording(song: MusicMetadata, playing: MusicMetadata, sourceUrl: String?): Boolean {
-        val asked = track(sourceUrl)
-        val played = track(playing.url)
-        if (asked != null && played != null) return asked.service != null && asked.service == played.service && asked.id == played.id
+        val asked = trackIdentity(sourceUrl)
+        val played = trackIdentity(playing.url)
+        if (asked != null && played != null) return asked == played
         val id = playing.recordingId ?: return false
         return id == song.recordingId && !id.substringAfter(':').startsWith("duration:")
     }

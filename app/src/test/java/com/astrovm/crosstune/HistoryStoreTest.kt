@@ -289,6 +289,47 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun oldCollectionsAreCheckedOnceWhenAnyTrackLacksAnAlbum() {
+        for ((service, type) in listOf("DEEZER" to "PLAYLIST", "DEEZER" to "ALBUM", "APPLE_MUSIC" to "ALBUM", "APPLE_MUSIC" to "PLAYLIST")) {
+            preferences.edit {
+                putString(HistoryStore.KEY_HISTORY, """[{"service":"$service","type":"$type","id":"1","title":"List","tracks":[["One","Band"],["Two","Band","","","Album"]]}]""")
+            }
+            val old = store.load().single()
+            assertEquals(false, old.albumChecked)
+            val refreshed = old.afterAlbumLookup(old.metadata.copy(tracks = listOf(MusicMetadata("One", "Band", lengthMs = 100_000))))
+            store.add(refreshed)
+            assertEquals(refreshed, HistoryStore(preferences).load().single())
+        }
+    }
+
+    @Test
+    fun aCatalogueRefreshMatchesIdsAndSkipsAmbiguousOrDifferentTracks() {
+        val link = checkNotNull(MusicLinks.linkFor("https://www.deezer.com/playlist/123"))
+        val track = MusicMetadata("Saved title", "Band", url = "https://www.deezer.com/track/1")
+        val differentTrack = MusicMetadata("Same name", "Band", url = "https://www.deezer.com/track/2")
+        val unnamedRelease = MusicMetadata("Duplicate", "Band")
+        val saved = MusicMetadata("List", "", ItemType.PLAYLIST, tracks = listOf(track, differentTrack, unnamedRelease, unnamedRelease))
+        val fresh = saved.copy(tracks = listOf(
+            track.copy(title = "Catalogue title", lengthMs = 114_000, album = "Album (Instrumentals)"),
+            differentTrack.copy(url = "https://www.deezer.com/track/3", album = "Unrelated Album"),
+            unnamedRelease.copy(album = "Another Album")
+        ))
+        val entry = HistoryEntry(link, saved, albumChecked = false)
+        val checked = entry.afterAlbumLookup(fresh)
+        val recovered = track.copy(lengthMs = 114_000, album = "Album (Instrumentals)")
+        assertEquals(listOf(recovered, differentTrack, unnamedRelease, unnamedRelease), checked.metadata.tracks)
+        assertEquals(saved.tracks, entry.afterAlbumLookup(fresh.copy(tracks = emptyList())).metadata.tracks)
+
+        // A cover fetch started before the catalogue answered must keep the recovered details.
+        store.add(checked)
+        val cover = "https://example.com/track.jpg"
+        store.update(link.url, saved.copy(tracks = listOf(track.copy(artworkUrl = cover), differentTrack, unnamedRelease, unnamedRelease)))
+        val reopened = HistoryStore(preferences).load().single()
+        assertTrue(reopened.albumChecked)
+        assertEquals(recovered.copy(artworkUrl = cover), reopened.metadata.tracks.first())
+    }
+
+    @Test
     fun aPlaylistKeepsItsSongsCoversAndLinksAndCanBeUpdatedInPlace() {
         val store = HistoryStore(preferences)
         val link = MusicLink(MusicService.SPOTIFY, ItemType.PLAYLIST, "1", "https://open.spotify.com/playlist/1")
