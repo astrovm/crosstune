@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.performSemanticsAction
 
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.core.app.NotificationManagerCompat
 
 import androidx.lifecycle.ViewModelProvider
 
@@ -52,6 +53,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.Manifest
 import org.robolectric.shadows.ShadowLog
+import org.robolectric.shadows.ShadowMediaSessionManager
 import org.robolectric.shadows.ShadowSettings
 import org.robolectric.shadows.ShadowWindowManagerImpl
 import org.robolectric.shadow.api.Shadow
@@ -242,6 +244,7 @@ class ListeningTest {
     private val fake = FakeSpotify()
     private var microphone = FakeMicrophone()
     private var controller: ActivityController<MainActivity>? = null
+    private var releaseRadioGarden: (() -> Unit)? = null
 
     /** Put back after, so other tests still tell the phone as the app does. */
     private val realPhone = MainActivity.phoneFactory
@@ -273,7 +276,11 @@ class ListeningTest {
 
     @After
     fun tearDown() {
-        controller?.destroyAndSettle()
+        try {
+            controller?.destroyAndSettle()
+        } finally {
+            releaseRadioGarden?.invoke()
+        }
         // Anything still listening hears the end.
         microphone.end()
         MainActivity.httpClientFactory = ::httpClient
@@ -613,14 +620,26 @@ class ListeningTest {
     /** Radio Garden's Android session announces a station and puts the stream text in a single queue item. */
     private fun radioGarden(station: String, subtitle: String): (String) -> Unit {
         val garden = RadioGarden.PACKAGE
+        val listenerSetting = "enabled_notification_listeners"
+        val previous = Settings.Secure.getString(app.contentResolver, listenerSetting)
+        val audio = app.getSystemService(AudioManager::class.java)
+        val sounding = audio.isMusicActive
+        val session = MediaSession(app, "KotlinAudioPlayer")
+        releaseRadioGarden = {
+            session.release()
+            ShadowMediaSessionManager.reset()
+            shadowOf(audio).setIsMusicActive(sounding)
+            // AndroidX keeps the old packages when the setting is null, even after Robolectric resets it.
+            Settings.Secure.putString(app.contentResolver, listenerSetting, previous.orEmpty())
+            NotificationManagerCompat.getEnabledListenerPackages(app)
+        }
         shadowOf(app.packageManager).installPackage(PackageInfo().apply {
             packageName = garden
             applicationInfo = ApplicationInfo().apply { packageName = garden; nonLocalizedLabel = "Radio Garden" }
         })
-        Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners",
+        Settings.Secure.putString(app.contentResolver, listenerSetting,
             ComponentName(app, NowPlayingListener::class.java).flattenToString())
-        shadowOf(app.getSystemService(AudioManager::class.java)).setIsMusicActive(true)
-        val session = MediaSession(app, "KotlinAudioPlayer")
+        shadowOf(audio).setIsMusicActive(true)
         val controller = MediaController(app, session.sessionToken)
         shadowOf(controller).setPackageName(garden)
         shadowOf(controller).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, station).build())
