@@ -254,7 +254,9 @@ internal object Readings {
     private fun drawnLookup(kana: String, start: Int, last: Piece, draws: Set<Int>): String? {
         if ('ー' in kana) return longMarkLookup(kana)
         // If the last piece is only a small vowel, the normal draw-out rule already keeps the word before it.
-        val plain = kana.filterIndexed { i, c -> i == 0 || start + i !in draws || KANA[kana[i - 1]]?.lastOrNull() != KANA[c]?.lastOrNull() }
+        val plain = kana.filterIndexed { i, c ->
+            i == 0 || start + i !in draws || KANA[kana[i - 1]]?.lastOrNull() != KANA[c]?.lastOrNull()
+        }
         if (plain == kana || last.surface.all { it in "ぁぃぅぇぉ" }) return null
         return oldKana.today[plain] ?: plain.takeIf(tokenizer::isNoun)
     }
@@ -266,7 +268,7 @@ internal object Readings {
         return katakana.takeIf(tokenizer::isNoun)
     }
 
-    // The dictionaries can split these even when they're written in katakana.
+    // IPADIC has no entry for these words, even in katakana.
     private val DRAWN_WORDS = setOf("めんそーれ", "とぅもろー")
     private const val MAX_DRAWN_WORD = 12
 
