@@ -1297,7 +1297,7 @@ internal class MainViewModel(
         }
     }
 
-    private class QueueCheck(
+    internal class QueueCheck(
         val station: String?,
         val song: MusicMetadata,
         private val firstSeen: Long
@@ -1312,6 +1312,18 @@ internal class MainViewModel(
         val expiresAt get() = lastEvidence + lengthMs * 2
 
         fun isConfirmedAt(at: Long) = confirmed && at < expiresAt
+
+        fun isDueAt(at: Long) = at >= until
+
+        fun waitForListen(at: Long, microphone: Boolean): Long {
+            if (!isConfirmedAt(at)) return 0L
+            val pause = when {
+                !isDueAt(at) -> until - at
+                microphone -> return 0L
+                else -> EARS_CHECK_MS
+            }
+            return minOf(pause, expiresAt - at)
+        }
 
         fun confirm(durationMs: Long?) {
             confirmed = true
@@ -1410,12 +1422,9 @@ internal class MainViewModel(
     /** Once the listen is due, check for newly granted access while the title is still valid. */
     private suspend fun waitForQueueCheck(check: QueueCheck) {
         while (true) {
-            val at = now()
-            if (!check.isConfirmedAt(at)) return
-            val untilListen = check.until - at
-            if (untilListen <= 0 && mayUseMicrophone()) return
-            val pause = if (untilListen > 0) untilListen else EARS_CHECK_MS
-            delay(minOf(pause, check.expiresAt - at))
+            val pause = check.waitForListen(now(), mayUseMicrophone())
+            if (pause == 0L) return
+            delay(pause)
         }
     }
 
@@ -1454,7 +1463,7 @@ internal class MainViewModel(
             val ears = earsNow()
             val byMicrophone = mayUseMicrophone()
             val check = confirmedRadioQueue()
-            if (check != null && (!byMicrophone || now() < check.until)) continue
+            if (check != null && (!byMicrophone || !check.isDueAt(now()))) continue
             // How the app said it played as the sound to hear started, which what it says after is checked against.
             val startedWith = uiState.playingUnnamed?.following
             // Stopped for one of those, it's tried again once that's done.
@@ -2986,7 +2995,7 @@ internal class MainViewModel(
     }
 
     private fun checkRadioQueueFromLyrics(radio: QueueCheck?, heard: Heard) {
-        if (radio != null && now() >= radio.until) checkQueueHearing(radio, heard)
+        if (radio?.isDueAt(now()) == true) checkQueueHearing(radio, heard)
     }
 
     /**

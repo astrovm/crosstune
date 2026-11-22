@@ -42,6 +42,19 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun radioCatalogReportsOnlyPositiveLengthsWithinIntRange() = runBlocking {
+        val track = MusicMetadata("Radio Song", "Band")
+        val matcher = matcher()
+        val longest = Int.MAX_VALUE.toLong()
+        for ((length, expected) in listOf(0L to null, 1L to 1L, longest to longest, (longest + 1) to null)) {
+            respond("""{"results":[{"trackName":"Radio Song","artistName":"Band",
+                "trackViewUrl":"https://music.apple.com/us/album/fixture/123?i=456","trackTimeMillis":$length}]}""")
+            assertEquals("Catalog length $length", ExactMatcher.AppleMusicMatch("https://music.apple.com/us/album/fixture/123?i=456", expected),
+                matcher.findRadioSong(track))
+        }
+    }
+
+    @Test
     fun youTubeMusicTellsSongsAndMusicVideosFromOtherVideos() {
         fun type(type: String) = """{"contents":{"x":{"watchEndpointMusicConfig":{"musicVideoType":"MUSIC_VIDEO_TYPE_$type"}}}}"""
         respond(type("OMV"))

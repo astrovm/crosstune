@@ -71,34 +71,27 @@ internal object RadioGarden {
         text[it] in TitleDelimiters.DASHES && text[it - 1].isWhitespace() && text[it + 1].isWhitespace()
     }
 
-    private fun hasAdMarker(text: String): Boolean {
+    private fun hasAdMarker(text: String): Boolean = text.indices.any { at ->
         val spot = "spot"
+        if (!text.startsWith(spot, at, ignoreCase = true) || text.getOrNull(at - 1)?.isLetterOrDigit() == true) return@any false
+        val afterSpot = at + spot.length
+        if (text.getOrNull(afterSpot)?.isWhitespace() != true) return@any false
+        val blockStart = text.afterSpaces(afterSpot) ?: return@any false
         val block = "block"
-        var at = text.indexOf(spot, ignoreCase = true)
-        while (at >= 0) {
-            val afterSpot = at + spot.length
-            val blockStart = text.afterSpaces(afterSpot)
-            val blockEnd = blockStart + block.length
-            val startsWord = text.getOrNull(at - 1)?.isLetterOrDigit() != true
-            val endsWord = text.getOrNull(blockEnd)?.isLetterOrDigit() != true
-            val separated = startsWord && blockStart > afterSpot && endsWord
-            if (separated && text.startsWith(block, blockStart, ignoreCase = true)) return true
-            at = text.indexOf(spot, afterSpot, ignoreCase = true)
-        }
-        return false
+        text.startsWith(block, blockStart, ignoreCase = true) && text.getOrNull(blockStart + block.length)?.isLetterOrDigit() != true
     }
 
     private fun hasKeyValue(text: String): Boolean = text.indices.any { at ->
         if (text[at] != '=') return@any false
         var before = at - 1
-        while (before >= 0 && text[before].isWhitespace()) before--
+        while (text.getOrNull(before)?.isWhitespace() == true) before--
         val last = text.getOrNull(before) ?: return@any false
         last in "_.:-" || Character.isLetterOrDigit(text.codePointBefore(before + 1))
     }
 
     private fun readTitle(streamTitle: String, station: String): String? =
-        (if (streamTitle.startsWith("text=")) iheartTitle(streamTitle) else streamTitle)
-            ?.takeUnless { it.equals(station, ignoreCase = true) || invalidField(it, title = true) }
+        (if (streamTitle.startsWith(IHEART_TITLE)) iheartTitle(streamTitle) else streamTitle)
+            .takeUnless { it.equals(station, ignoreCase = true) || invalidField(it, title = true) }
 
     private fun invalidField(text: String, title: Boolean = false): Boolean {
         if (text.isBlank() || hasKeyValue(text)) return true
@@ -135,10 +128,9 @@ internal object RadioGarden {
         return false
     }
 
-    private fun iheartTitle(text: String): String? {
-        if (!text.startsWith(IHEART_TITLE)) return null
+    private fun iheartTitle(text: String): String {
         val end = text.indexOf('"', IHEART_TITLE.length)
-        if (end < 0 || !iheartMusicFields(text, end + 1)) return null
+        if (end == -1 || !iheartMusicFields(text, end + 1)) return ""
         return text.substring(IHEART_TITLE.length, end).trim()
     }
 
@@ -147,25 +139,21 @@ internal object RadioGarden {
         var at = start
         while (at < text.length) {
             if (!text[at].isWhitespace()) return false
-            val keyStart = text.afterSpaces(at)
+            val keyStart = text.afterSpaces(at) ?: return false
             val equals = text.indexOf('=', keyStart)
             if (equals <= keyStart || text.getOrNull(equals + 1) != '"') return false
             val key = text.substring(keyStart, equals)
             if (!key.all { it.isLetterOrDigit() || it in "_-" }) return false
             val valueStart = equals + 2
             val end = text.indexOf('"', valueStart)
-            if (end < 0) return false
+            if (end == -1) return false
             if (key.equals("song_spot", ignoreCase = true) && text.substring(valueStart, end) != "M") return false
             at = end + 1
         }
         return true
     }
 
-    private fun String.afterSpaces(from: Int): Int {
-        var at = from
-        while (at < length && this[at].isWhitespace()) at++
-        return at
-    }
+    private fun String.afterSpaces(from: Int): Int? = (from until length).firstOrNull { !this[it].isWhitespace() }
 
     /** Accent-insensitive for Latin names, but a voiced kana and its unvoiced form spell different words. */
     fun sameTitle(one: String, another: String): Boolean = titleKey(one) == titleKey(another)

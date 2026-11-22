@@ -514,6 +514,23 @@ class MainViewModelTest {
     }
 
     @Test
+    fun radioGardenQueueUsesTheExactListenAndExpiryBoundaries() {
+        val check = MainViewModel.QueueCheck("1LIVE", MusicMetadata("Song", "Band"), firstSeen = 10_000L)
+        check.confirm(180_000L)
+        val due = 200_000L
+        val expiry = 370_000L
+        assertFalse(check.isDueAt(due - 1))
+        assertTrue(check.isDueAt(due))
+        assertEquals(1L, check.waitForListen(due - 1, microphone = true))
+        assertEquals(0L, check.waitForListen(due, microphone = true))
+        assertEquals(1_000L, check.waitForListen(due, microphone = false))
+        assertEquals(1L, check.waitForListen(expiry - 1, microphone = false))
+        assertTrue(check.isConfirmedAt(expiry - 1))
+        assertFalse(check.isConfirmedAt(expiry))
+        assertEquals(0L, check.waitForListen(expiry, microphone = false))
+    }
+
+    @Test
     fun aStationWithoutPlaybackStateIsNamedByEarAndATapOpensTheSongHeard() {
         // Simple Radio says only the station's name (Issue #1000): what it plays is heard, as for any station.
         val hears = EarsOnThePhone(heardSong())

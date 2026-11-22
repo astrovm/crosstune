@@ -646,6 +646,8 @@ class ListeningTest {
         waitForText("A PLACE TO GO")
         assertEquals(1 to 1, listens to stopped)
         composeRule.runOnIdle { queueSubtitle("Cologne, Germany") }
+        assertTrue(shown("A PLACE TO GO"))
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(181))
         waitUntil(TIMEOUT_MS) { listens == 2 && shown("1LIVE") }
         assertFalse(shown("A PLACE TO GO"))
         composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
@@ -782,14 +784,18 @@ class ListeningTest {
 
     @Test
     fun radioGardenClearsTheConfirmedSongWhenARecheckHearsADifferentSong() {
+        ShadowLog.setLoggable(TIMING_LOG, android.util.Log.DEBUG)
         val hearing = startRadioGardenWithKnownLength()
-        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(191))
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(191))
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         assertTrue(shown("A PLACE TO GO"))
         hearing.song("Next song", 8.0)
         waitForText("Next song")
         assertFalse(shown("A PLACE TO GO"))
         assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        main.idleFor(java.time.Duration.ofSeconds(170))
+        assertEquals(1, ShadowLog.getLogsForTag(TIMING_LOG).count { "radio queue check=forgotten station=1LIVE" in it.msg })
     }
 
     @Test
@@ -848,6 +854,7 @@ class ListeningTest {
 
     @Test
     fun radioGardenUsesOnlyTheRemainingTimeWhenWakingBeforeExpiry() {
+        ShadowLog.setLoggable(TIMING_LOG, android.util.Log.DEBUG)
         startRadioGardenWithKnownLength(byMicrophone = false)
         val model = controllerModel()
         composeRule.runOnIdle { model.setPlayingBar(false) }
@@ -856,8 +863,11 @@ class ListeningTest {
 
         model.refreshSystemState()
         assertEquals("A PLACE TO GO", model.uiState.playingUnnamed?.confirmedQueueSong?.title)
-        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(6))
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(6))
         assertNull(model.uiState.playingUnnamed?.confirmedQueueSong)
+        main.idleFor(java.time.Duration.ofSeconds(355))
+        assertEquals(1, ShadowLog.getLogsForTag(TIMING_LOG).count { "radio queue check=forgotten station=1LIVE" in it.msg })
     }
 
     @Test
@@ -952,8 +962,11 @@ class ListeningTest {
         composeRule.runOnIdle { queueSubtitle("The Kid LAROI - A PLACE TO GO") }
         waitForText("A PLACE TO GO")
         composeRule.runOnIdle { queueSubtitle("Visit example.com - Call 555 1234") }
+        assertTrue(shown("A PLACE TO GO"))
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(191))
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
-        assertTrue(shown("1LIVE"))
+        hearing.next.trySend(Heard.Nothing)
+        waitForText("1LIVE")
         assertFalse(shown("A PLACE TO GO"))
         assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
     }
@@ -1027,6 +1040,8 @@ class ListeningTest {
         waitForText("The chorus of Second Song")
         assertFalse(shown("The chorus of First Song"))
         assertNull(controllerModel().uiState.following)
+        assertNull(field(controllerModel(), "heardClock"))
+        assertTrue(HistoryStore(prefs()).load().any { it.metadata.title == "Second Song" })
         hearing.song("Second Song", 3.0)
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.following?.clock?.positionMs == 3_000L }
     }
