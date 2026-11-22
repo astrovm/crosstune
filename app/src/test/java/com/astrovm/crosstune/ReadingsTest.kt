@@ -387,14 +387,68 @@ class ReadingsTest {
             "そーだと思う", "sooda to omou",
             Triple("そーだ", "sooda", "そう"), Triple("と", "to", "と"), Triple("思う", "omou", "思う")
         )
+        assertDrawnReading(
+            "そーだが信じない", "soodaga shinjinai",
+            Triple("そーだが", "soodaga", "そう"), Triple("信じない", "shinjinai", "信じる")
+        )
         assertDrawnReading("そーす", "soosu", Triple("そーす", "soosu", "ソース"))
         assertDrawnReading("ソーダ", "sooda", Triple("ソーダ", "sooda", "ソーダ"))
     }
 
-    private fun assertDrawnReading(line: String, romaji: String, vararg words: Triple<String, String, String>) {
+    @Test
+    fun repeatedLongMarksKeepTheAdverbWithItsAuxiliary() = assertDrawnReading(
+        "そーーだと思う", "soooda to omou",
+        Triple("そーーだ", "soooda", "そう"), Triple("と", "to", "と"), Triple("思う", "omou", "思う")
+    )
+
+    @Test
+    fun theDictionaryRecognizesDrawnOutAdverbsAndInterjectionsBeforeAnAuxiliary() {
+        assertDrawnReading("こーだ", "kooda", Triple("こーだ", "kooda", "こう"))
+        assertDrawnReading("どーだ", "dooda", Triple("どーだ", "dooda", "どう"))
+        assertDrawnReading("あーだった", "aadatta", Triple("あーだった", "aadatta", "ああ"))
+        assertDrawnReading("じーだ", "jii da", Triple("じー", "jii", "じ"), Triple("だ", "da", "だ"))
+    }
+
+    @Test
+    fun aCaseParticleKeepsTheLongMarkedLoanwordAsANoun() {
+        assertDrawnReading(
+            "そーだを飲む", "sooda o nomu",
+            Triple("そーだ", "sooda", "ソーダ"), Triple("を", "o", "を"), Triple("飲む", "nomu", "飲む"),
+            typed = "sooda wo nomu"
+        )
+        assertDrawnReading(
+            "そーーだを飲む", "soooda o nomu",
+            Triple("そーーだ", "soooda", "ソーダ"), Triple("を", "o", "を"), Triple("飲む", "nomu", "飲む"),
+            typed = "soooda wo nomu"
+        )
+        assertDrawnReading(
+            "そーだより紅茶", "sooda yori koocha",
+            Triple("そーだ", "sooda", "ソーダ"), Triple("より", "yori", "より"), Triple("紅茶", "koocha", "紅茶"),
+            typed = "sooda yori koucha"
+        )
+        assertDrawnReading(
+            "そーだにする", "sooda ni suru",
+            Triple("そーだ", "sooda", "ソーダ"), Triple("に", "ni", "に"), Triple("する", "suru", "する")
+        )
+    }
+
+    @Test
+    fun repeatedLongMarksKeepTheLoanwordsDictionaryForm() {
+        assertDrawnReading("ぱーーてぃーー", "paaatiii", Triple("ぱーーてぃーー", "paaatiii", "パーティー"))
+        val line = "ぱ${"ー".repeat(13)}てぃー"
+        val romaji = "pa${"a".repeat(13)}tii"
+        assertDrawnReading(line, romaji, Triple(line, romaji, "パーティー"))
+    }
+
+    private fun assertDrawnReading(
+        line: String,
+        romaji: String,
+        vararg words: Triple<String, String, String>,
+        typed: String = romaji
+    ) {
         fun reading() = Readings.of(listOf(line), Script.JAPANESE).single().let { it.romanized to it.typed }
         fun groups() = Readings.words(line, Script.JAPANESE).map { Triple(it.text, it.romanized, it.lookup) }
-        val expected = (romaji to romaji) to words.toList()
+        val expected = (romaji to typed) to words.toList()
         assertEquals(listOf(expected, expected), listOf(reading() to groups(), TestUniDic.reading { reading() to groups() }))
     }
 

@@ -232,7 +232,7 @@ internal object Readings {
         var first = 0
         while (first < pieces.size) {
             val replacement = drawnWord(text, pieces, first, draws)
-            out += replacement ?: pieces[first]
+            if (replacement == null) out += pieces[first] else out += replacement
             val end = out.last().end
             do { first++ } while (pieces[first - 1].end < end)
         }
@@ -240,27 +240,75 @@ internal object Readings {
     }
 
     /** The longest known kana word at this split, with the lyric's own vowels kept for romaji. */
-    private fun drawnWord(text: String, pieces: List<Piece>, first: Int, draws: Set<Int>): Piece? {
+    private fun drawnWord(text: String, pieces: List<Piece>, first: Int, draws: Set<Int>): List<Piece>? {
         val head = pieces[first]
         val start = head.end - head.surface.length
-        // In そーだ, IPADIC finds the copula だ. Keep it with the adverb そう, even though ソーダ is a noun.
-        val mark = pieces.getOrNull(first + 1)
-        if (head.surface == "そ" && mark?.surface == "ー" && pieces.getOrNull(first + 2)?.kind == "助動詞") {
-            return Piece("そー", "そー", "副詞", "助詞類接続", "そう", end = mark.end, reader = Reader.RULES)
-        }
+        drawnAuxiliaryHead(text, pieces, first, start)?.let { return listOf(it) }
         // Keep the particle that follows a cry, as in おぉと叫ぶ, where おと would name a sound.
         val cryWithParticle = head.kind == "感動詞" && pieces.getOrNull(first + 1)?.kind == "助詞"
+        val limit = drawnWordEnd(text, start)
         val candidates = (first..pieces.lastIndex).asSequence().map(pieces::get)
-            .takeWhile { it.end - start <= MAX_DRAWN_WORD && it.surface.all(::isSaid) }.drop(1)
+            .takeWhile { it.end <= limit }.drop(1)
         return candidates.mapNotNull { last ->
             val kana = text.substring(start, last.end)
             val lookup = when {
                 'ー' in kana -> longMarkLookup(kana)
                 cryWithParticle -> null
                 else -> smallVowelLookup(kana, start, last, draws)
-            } ?: return@mapNotNull null
-            Piece(kana, kana, "名詞", "一般", lookup, end = last.end, reader = Reader.RULES)
+            }
+            if (lookup != null) listOf(drawnNoun(kana, lookup, last.end)) else drawnNounWithCase(kana, last)
         }.lastOrNull()
+    }
+
+    private fun drawnNoun(kana: String, lookup: String, end: Int) =
+        Piece(kana, kana, "名詞", "一般", lookup, end = end, reader = Reader.RULES)
+
+    /** IPADIC can read だに as one particle. Keep に separate when the preceding sounds name a noun, as in そーだにする. */
+    private fun drawnNounWithCase(kana: String, last: Piece): List<Piece>? {
+        if ('ー' !in kana || last.kind != "助詞" || last.surface.length < 2) return null
+        val noun = kana.dropLast(1)
+        val lookup = longMarkLookup(noun) ?: return null
+        val suffix = kana.takeLast(1)
+        val particle = tokenizer.tokenize(lookup + suffix).lastOrNull() ?: return null
+        if (particle.surface != suffix || !caseNeedsNoun(particle.partOfSpeechLevel2, suffix)) return null
+        return listOf(drawnNoun(noun, lookup, last.end - 1), Piece(suffix, suffix, "助詞", "格助詞", end = last.end, reader = Reader.RULES))
+    }
+
+    /** Keep そーだ as そうだ when だ ends a clause. A case particle such as を asks for a noun, but と can quote the clause. */
+    private fun drawnAuxiliaryHead(text: String, pieces: List<Piece>, first: Int, start: Int): Piece? {
+        val head = pieces[first]
+        val firstMark = head.surface.indexOf('ー').takeIf { it >= 0 }?.plus(start) ?: head.end
+        if (firstMark - start !in 1..2) return null
+        val end = afterLongMarks(text, firstMark)
+        if (end == firstMark || !drawnAuxiliaryFollows(pieces, first + 1, end)) return null
+        val kana = text.substring(start, firstMark)
+        if (kana.any { it !in 'ぁ'..'ゖ' }) return null
+        val vowels = LONG[romaji(kana).lastOrNull()] ?: return null
+        val word = vowels.firstNotNullOfOrNull { vowel ->
+            tokenizer.knownWord(kana + vowel)?.takeIf { it.partOfSpeechLevel1 in DRAWN_AUXILIARY_HEADS }
+        } ?: return null
+        val surface = text.substring(start, end)
+        return Piece(surface, surface, word.partOfSpeechLevel1, word.partOfSpeechLevel2, word.surface, end = end, reader = Reader.RULES)
+    }
+
+    private fun drawnAuxiliaryFollows(pieces: List<Piece>, from: Int, end: Int): Boolean {
+        val next = (from..pieces.lastIndex).firstOrNull { pieces[it].end > end } ?: return false
+        val auxiliary = pieces[next]
+        if (auxiliary.kind != "助動詞" || auxiliary.end - auxiliary.surface.length != end) return false
+        val particle = pieces.getOrNull(next + 1)
+        return !caseNeedsNoun(particle?.subkind, particle?.surface)
+    }
+
+    private fun caseNeedsNoun(subkind: String?, surface: String?) = subkind == "格助詞" && surface != "と"
+
+    /** Count a run of long marks as one letter when looking for a word in the dictionary. */
+    private fun drawnWordEnd(text: String, start: Int): Int {
+        var end = start
+        repeat(MAX_DRAWN_WORD) {
+            if (end == text.length || !isSaid(text[end])) return end
+            end = if (text[end] == 'ー') afterLongMarks(text, end) else end + 1
+        }
+        return end
     }
 
     private fun smallVowelLookup(kana: String, start: Int, last: Piece, draws: Set<Int>): String? {
@@ -274,11 +322,15 @@ internal object Readings {
 
     private fun longMarkLookup(kana: String): String? {
         if (kana.count { it != 'ー' } < 2 || kana.startsWith('ー')) return null
-        if (kana in DRAWN_WORDS) return kana
-        val katakana = kana.map { if (it in 'ぁ'..'ゖ') it + KATAKANA_TO_HIRAGANA else it }.joinToString("")
+        val spelling = buildString {
+            for (c in kana) if (c != 'ー' || lastOrNull() != 'ー') append(c)
+        }
+        if (spelling in DRAWN_WORDS) return spelling
+        val katakana = spelling.map { if (it in 'ぁ'..'ゖ') it + KATAKANA_TO_HIRAGANA else it }.joinToString("")
         return katakana.takeIf(tokenizer::isNoun)
     }
 
+    private val DRAWN_AUXILIARY_HEADS = setOf("副詞", "感動詞")
     // IPADIC has no entry for these words, even in katakana.
     private val DRAWN_WORDS = setOf("めんそーれ", "とぅもろー")
     private const val MAX_DRAWN_WORD = 12
