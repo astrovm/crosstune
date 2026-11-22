@@ -112,7 +112,9 @@ class BaselineTest(unittest.TestCase):
                 (sdk / "build-tools/37.0.0").mkdir(parents=True, exist_ok=True)
                 (sdk / "platforms/android-37").mkdir(parents=True, exist_ok=True)
                 home = self.work / "home"
-                stdlib = home / "box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.4.21/fixture/kotlin-stdlib-2.4.21.jar"
+                # The ref's own Kotlin, not this checkout's: the stdlib must match what the ref compiled with.
+                (checkout / "build.gradle.kts").write_text('id("org.jetbrains.kotlin.plugin.compose") version "2.0.0-fixture"\n', encoding="utf-8")
+                stdlib = home / "box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.0.0-fixture/fixture/kotlin-stdlib-2.0.0-fixture.jar"
                 stdlib.parent.mkdir(parents=True, exist_ok=True)
                 stdlib.write_bytes(b"fixture")
                 failure = subprocess.CalledProcessError(137, ["fixture"]) if failed else None
