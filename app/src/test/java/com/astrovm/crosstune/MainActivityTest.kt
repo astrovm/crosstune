@@ -1950,6 +1950,7 @@ class MainActivityTest {
         val activity = launch(trackLink())
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertTrue(nextStartedActivity()?.dataString.orEmpty().startsWith("https://music.youtube.com/search"))
+        assertNull(HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"])
 
         val model = ViewModelProvider(activity)[MainViewModel::class.java]
         fun openRecent(): String? {

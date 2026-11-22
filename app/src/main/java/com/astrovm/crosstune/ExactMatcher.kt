@@ -85,6 +85,7 @@ internal class ExactMatcher(
     sealed interface Match {
         /** An upload found during a store outage can open now and still need another lookup later. */
         data class Found(val url: String, val lasting: Boolean = true) : Match
+        data object WaitingForNames : Match
         data object Missing : Match
         data object Failed : Match
     }
@@ -231,12 +232,12 @@ internal class ExactMatcher(
         cache?.get(key)?.let { return Match.Found(it) }
         missing[key]?.takeIf { now() - it < missingForMs }?.let { return Match.Missing }
         val firstWait = waitingForNames[key]
-        if (firstWait != null && now() - firstWait < UNSURE_FOR_MS) return Match.Failed
+        if (firstWait != null && now() - firstWait < UNSURE_FOR_MS) return Match.WaitingForNames
         val earlier = unsure[key]
         earlier?.takeIf { now() - it.first < minOf(missingForMs, UNSURE_FOR_MS) }?.let { return it.second }
         val looked = lookUp(firstWait != null || earlier != null)
         val match = looked.match
-        if (shouldHoldForNames(key, looked)) return Match.Failed
+        if (shouldHoldForNames(key, looked)) return Match.WaitingForNames
         when {
             looked.unsure -> unsure[key] = now() to match
             match is Match.Found -> cache?.put(key, match.url)

@@ -1394,7 +1394,7 @@ class ExactMatcherTest {
         var clock = 0L
         val finder = ExactMatcher(fake.client(), "AR", now = { clock })
         namesAndTabs(videos = listOf(unrelated, fan), apple = apple, failing = setOf("US"))
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
 
         fake.requestedUrls.clear()
         clock += ExactMatcher.UNSURE_FOR_MS
@@ -1416,14 +1416,14 @@ class ExactMatcherTest {
         }
 
         for ((title, channel) in listOf(song.title to "Blue Hearts Japan", "Owaranai Uta" to song.artist)) {
-            assertEquals("$title by $channel at 4:30", ExactMatcher.Match.Failed, look(title, channel, "4:30"))
-            assertEquals("$title by $channel without a length", ExactMatcher.Match.Failed, look(title, channel))
+            assertEquals("$title by $channel at 4:30", ExactMatcher.Match.WaitingForNames, look(title, channel, "4:30"))
+            assertEquals("$title by $channel without a length", ExactMatcher.Match.WaitingForNames, look(title, channel))
         }
-        assertEquals(ExactMatcher.Match.Failed, look("An Endless Song", "Buru Hatsu - Topic", "3:12"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, look("An Endless Song", "Buru Hatsu - Topic", "3:12"))
         assertEquals(upload, look("An Endless Song", "Buru Hatsu - Topic", "3:13"))
         assertEquals(upload, look("An Endless Song", "Buru Hatsu - Topic"))
-        assertEquals(ExactMatcher.Match.Failed, look(song.title, "Buru Hatsu - Topic", "4:30"))
-        assertEquals(ExactMatcher.Match.Failed, look("別の歌", "別の人", "3:04", store = "JP"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, look(song.title, "Buru Hatsu - Topic", "4:30"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, look("別の歌", "別の人", "3:04", store = "JP"))
     }
 
     @Test
@@ -1435,7 +1435,7 @@ class ExactMatcherTest {
         for (details in listOf("THE BLUE HEARTS • Album • 3:12", "THE BLUE HEARTS • Album")) {
             val row = youTubeMusicRow("Owaranai Uta", details, videoId = "song0000000")
             namesAndTabs(songs = listOf(row), videos = listOf(fans), apple = apple, failing = setOf("US"))
-            assertEquals(details, ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+            assertEquals(details, ExactMatcher.Match.WaitingForNames, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
             namesAndTabs(
                 songs = listOf(row), videos = listOf(fans), apple = apple,
                 elsewhere = mapOf("US" to appleSong("Owaranai Uta", song.artist, 184_000))
@@ -1454,12 +1454,12 @@ class ExactMatcherTest {
         var clock = 0L
         val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L, now = { clock })
         namesAndTabs(videos = listOf(own, fan), apple = apple, elsewhere = japanese, failing = setOf("JP"))
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
 
         fake.requestedUrls.clear()
         namesAndTabs(videos = listOf(own, fan), apple = apple, elsewhere = japanese)
         clock = ExactMatcher.UNSURE_FOR_MS - 1
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         assertTrue(fake.requestedUrls.isEmpty())
         clock++
         assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=own00000000"), runBlocking {
@@ -1485,7 +1485,7 @@ class ExactMatcherTest {
         var clock = 0L
         val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L, now = { clock })
         namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = us, failing = setOf("US"))
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = us)
         assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), runBlocking {
             matcher().lookFor(MusicService.YOUTUBE_MUSIC, song)
@@ -1495,7 +1495,7 @@ class ExactMatcherTest {
             finder.lookFor(MusicService.YOUTUBE_MUSIC, song)
         })
         namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = us, failing = setOf("US"))
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
     }
 
     @Test
@@ -1505,7 +1505,7 @@ class ExactMatcherTest {
         val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ • 1M views • 4:30", videoId = "own00000000")
         val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
         namesAndTabs(videos = listOf(fan, own), apple = apple, failing = setOf("JP"))
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
     }
 
     @Test
@@ -1518,10 +1518,10 @@ class ExactMatcherTest {
         var clock = 0L
         val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L, now = { clock })
         namesAndTabs(videos = listOf(other, fan), apple = apple, failing = setOf("US"))
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         fake.requestedUrls.clear()
         clock = ExactMatcher.UNSURE_FOR_MS - 1
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         assertTrue(fake.requestedUrls.isEmpty())
         clock++
         assertEquals(upload, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
@@ -1542,7 +1542,7 @@ class ExactMatcherTest {
 
         val finder = ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> error("Wait for the store before picking") })
         namesAndTabs(videos = listOf(own, fan), apple = apple, elsewhere = japanese, failing = setOf("JP"))
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         namesAndTabs(videos = listOf(own, fan), apple = apple, elsewhere = japanese)
         assertEquals("https://music.youtube.com/watch?v=own00000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
     }
@@ -1561,12 +1561,12 @@ class ExactMatcherTest {
         var clock = 0L
         val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L, now = { clock })
         namesAndTabs(songs = listOf(own), videos = listOf(fans), apple = apple, elsewhere = names, failing = setOf("JP"))
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
 
         fake.requestedUrls.clear()
         namesAndTabs(songs = listOf(own), videos = listOf(fans), apple = apple, elsewhere = names)
         clock = ExactMatcher.UNSURE_FOR_MS - 1
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         assertTrue(fake.requestedUrls.isEmpty())
         clock++
         assertEquals("https://music.youtube.com/watch?v=song0000000", runBlocking { finder.find(MusicService.YOUTUBE_MUSIC, song) })

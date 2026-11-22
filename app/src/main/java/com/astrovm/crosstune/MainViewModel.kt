@@ -5323,7 +5323,7 @@ internal class MainViewModel(
         // YouTube and YouTube Music share playlists and videos, so one opens as itself in the other.
         uiState.link?.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
         uiState.link?.takeIf { metadata.type == ItemType.TRACK }?.youtubeVideoOn(service)?.let { return destination.adapt(it) }
-        uiState.destinationUrls[destination]?.takeIf { it.lasting && it.matchingEnabled == uiState.exactMatch }?.let { return it.url.forSharing() }
+        uiState.destinationUrls[destination]?.takeIf(PreparedLink::lasting)?.let { return it.url.forSharing() }
         val match = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
             matcher.lookFor(service, metadata).also { uiState = uiState.copy(isMatching = false) }
@@ -5338,14 +5338,16 @@ internal class MainViewModel(
     private fun preparedLink(destination: Destination, metadata: MusicMetadata, match: ExactMatcher.Match?): PreparedLink {
         val found = match as? ExactMatcher.Match.Found
         val url = found?.url?.let(destination::adapt) ?: destination.searchUrl(searchQuery(metadata))
-        return PreparedLink(url, found != null, matched(match), lasting = found?.lasting != false)
+        val lasting = found?.lasting != false && match != ExactMatcher.Match.WaitingForNames
+        return PreparedLink(url, found != null, matched(match), lasting)
     }
 
     /**
      * Whether a link was prepared with exact matching: not when the lookup got no answer, e.g.
      * offline, so it isn't taken as not being there, and is looked for again next time.
      */
-    private fun matched(match: ExactMatcher.Match?) = uiState.exactMatch && match != ExactMatcher.Match.Failed
+    private fun matched(match: ExactMatcher.Match?) =
+        uiState.exactMatch && match != ExactMatcher.Match.Failed && match != ExactMatcher.Match.WaitingForNames
 
     /** Opens the link in the app it came from, e.g. when it can't be resolved or the user prefers it. */
     fun openOriginal() {

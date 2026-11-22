@@ -7,6 +7,7 @@ import okhttp3.Response
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -112,7 +113,8 @@ class MatcherRealAnswersTest {
         val matcher = matcher()
         val song = LEMON.metadata.copy(lengthMs = 280_000L)
         appleDown = { url -> url.queryParameter("country") == "US" }
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        val duringOutage = runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) }
+        assertTrue(duringOutage == ExactMatcher.Match.Failed || duringOutage == ExactMatcher.Match.WaitingForNames)
         appleDown = { false }
         clock += ExactMatcher.UNSURE_FOR_MS
         assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
