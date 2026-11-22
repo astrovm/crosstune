@@ -705,10 +705,26 @@ internal class ExactMatcher(
 
     private fun couldBeOwnVideo(row: Row, names: Names, recording: RequestedRecording): Boolean {
         if (row.id == null || !keepsRequestedRecording(recording, row, video = true)) return false
-        val channel = row.details.first().removeSuffix(" - Topic")
-        if (!isOwnVideo(row, names) && !names.lookupCouldName(channel)) return false
-        return videoTitleMatches(row.name, names) ||
-            (!isAnotherVideoVersion(row.name, names) && names.lookupCouldName(unconfirmedVideoText(row.name, names)))
+        val uploader = row.details.first()
+        val channel = uploader.removeSuffix(" - Topic")
+        val topic = channel != uploader
+        val knownChannel = isOwnVideo(row, names)
+        if (!knownChannel && !names.lookupCouldName(channel)) return false
+        val closeLength = row.lengthMs != null && sameLength(row, names)
+        // A Topic video with the song's title can be longer than the store's recording.
+        if (videoTitleMatches(row.name, names)) return closeLength || topic
+        if (isAnotherVideoVersion(row.name, names) || !names.lookupCouldName(unconfirmedVideoText(row.name, names))) return false
+        // A title in the missing store's script alone could be any song. Look for support from
+        // the channel and length, or from the title's reading, as with 終わらない歌 and Owaranai Uta.
+        return (closeLength && (knownChannel || topic)) || sameJapaneseVideoTitle(row.name, names)
+    }
+
+    private fun sameJapaneseVideoTitle(title: String, names: Names): Boolean {
+        if (title.none(Readings::isKana)) return false
+        val latin = names.titles.filter(String::hasLatin)
+        if (latin.isEmpty()) return false
+        val reading = Readings.of(listOf(title), Script.JAPANESE).single().typed
+        return latin.any { SongNames.same(it, reading) }
     }
 
     /** What remains of the video's title, including brackets, after removing known names and tags. */
