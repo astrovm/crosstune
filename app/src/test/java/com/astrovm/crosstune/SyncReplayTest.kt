@@ -170,6 +170,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         // The lookup over, not lines found: words without timing have none, and words timed past the recording's end aren't taken.
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } && lyricsLookupFinished() }
         behind.forEachIndexed { time, behindMs ->
+            if (time > 0) composeRule.runOnIdle { model().resumeFollowingNext() }
             val played = play(fromMs, lengthMs, behindMs)
             File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())
             // Stopped at the end, then played again a while later.
@@ -269,6 +270,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             if (index != last && index >= 0) shown.put(JSONObject().put("line", index).put("text", state.lyricLines[index].text).put("at", atMs + behindMs))
             last = index
         }
+        // The play has ended: use the same hook as Crosstune leaving sight, after recording its timing.
+        composeRule.runOnIdle { model().pauseFollowingNext() }
         val lines = JSONArray(model().uiState.lyricLines.map { it.text })
         val saved = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).getString("lyrics_sync", null)
         return JSONObject().put("lines", lines).put("shown", shown).put("placed", placed).put("known", known).put("heard", heardLog).put("notes", notes).put("lyricsSpeed", model().uiState.following?.clock?.speed)

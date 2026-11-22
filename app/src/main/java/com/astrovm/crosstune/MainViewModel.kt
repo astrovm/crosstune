@@ -2439,6 +2439,8 @@ internal class MainViewModel(
     private var farOffMs: Long? = null
     /** Whether the lines shown were moved this time by a while found further off than near lines are looked at, and nothing agreed yet. */
     private var movedFar = false
+    /** A whole while moved the words far this time; report only once later whiles can no longer put them back. */
+    private var farReportPending = false
     /** Whether the words are being lined up to the singing, through the song, with the app's clock sure; lines heard so far stay till it's done. */
     private var liningUp = false
     /** Whether the speech model, offered to be fetched by hand, was turned down; it isn't offered again till Crosstune opens again. */
@@ -3448,9 +3450,9 @@ internal class MainViewModel(
      * differs too. Till then they stay where they are, even after lines heard near. One found further off
      * than near lines are looked at moves them this time only: that's found only where by far the most
      * words heard agree, across the whole song, so it's likely right, but a chorus sung again may still be
-     * timed differently there. A whole while found that far off is still a problem to report, even alone,
-     * without keeping its correction. Till another agrees, each is heard where they're kept first: heard
-     * there, it puts them back, even if it fits where they're shown now too, as the next chorus may.
+     * timed differently there. A whole while found that far off is a problem only if the words stay
+     * moved till they're left or Crosstune goes out of sight. Till another agrees, each is heard where
+     * they're kept first: heard there, it puts them back, even if it fits where they're shown now too, as the next chorus may.
      */
     private fun placeThisTime(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long, whole: Boolean) {
         heardThisTime = true
@@ -3460,6 +3462,7 @@ internal class MainViewModel(
         val keptShift = if (movedFar) SungAlignment.shiftMs(sung, clock::positionAt, kept) else null
         if (keptShift != null && abs(keptShift) < WORDS_OFF_MS) {
             if (whole) movedFar = false
+            farReportPending = false
             farOffMs = null
             heardPoints = heardAt(sung, clock, kept, keptShift, syncPoints).second
             showPoints()
@@ -3477,7 +3480,7 @@ internal class MainViewModel(
                 if (whole) farOffMs = offMs
                 if (abs(shift) <= SungAlignment.MAX_SHIFT_MS) return
                 movedFar = true
-                if (whole && syncPoints.isEmpty()) problemFound(SongProblem.SUNG_OFF)
+                if (whole && syncPoints.isEmpty()) farReportPending = true
             }
             // Near where they're shown, moved there this time by a while found far off: this one says so too.
             whole -> farOffMs = offMs.takeIf { movedFar }
@@ -3559,6 +3562,7 @@ internal class MainViewModel(
         if (heardPoints.isEmpty()) return
         heardPoints = emptyList()
         movedFar = false
+        farReportPending = false
         showPoints()
     }
 
@@ -3775,6 +3779,7 @@ internal class MainViewModel(
 
     /** Crosstune went out of sight with no words floating: the words stay on the song they show until it's back. */
     fun pauseFollowingNext() {
+        reportFarIfStillMoved()
         nextPaused = true
         nextJob?.cancel()
         nextJob = null
@@ -4181,12 +4186,20 @@ internal class MainViewModel(
      * an offer made for them goes.
      */
     private fun leaveWords() {
+        // An offer for words being closed would vanish unseen, using up this session's one offer.
+        if (autoReports.allowed == true) reportFarIfStillMoved()
         closeReport()
         if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) {
             uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
         }
         timedByHand = false
         uiState = uiState.copy(reportOfferFor = emptySet())
+    }
+
+    /** No more of this play will be heard: a lone far match is reported only if nothing put the words back. */
+    private fun reportFarIfStillMoved() {
+        if (farReportPending && movedFar && syncPoints.isEmpty()) problemFound(SongProblem.SUNG_OFF)
+        farReportPending = false
     }
 
     /**
@@ -4341,6 +4354,7 @@ internal class MainViewModel(
         // Put in time by hand or for good, what was heard this time only gives way.
         heardPoints = emptyList()
         movedFar = false
+        farReportPending = false
         // Kept for the words as found, which is how they're found next time. Put in time by the singing, they no longer are by hand.
         keptByHand = timedByHand
         syncStore.save(song, foundLines, withGuess(points), wordsPace, keptByHand)
