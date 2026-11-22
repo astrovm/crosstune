@@ -644,20 +644,28 @@ class ListeningTest {
     }
 
     @Test
-    fun radioGardenStopsShowingAnUnchangedQueueSongAndListensAgain() {
+    fun radioGardenKeepsAThreeMinuteSongUntilItsLengthPlusTheMargin() {
         val queueSubtitle = radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
-        radioGardenCatalog()
+        radioGardenCatalog(lengthMs = 180_000L)
+        prefs().edit().putBoolean("playing_bar", false).commit()
         val hearing = FakeHearing()
         MainActivity.hearingFactory = { hearing }
         allowMicrophone()
         launch()
-        waitForText("A PLACE TO GO")
         val main = shadowOf(Looper.getMainLooper())
-        main.idleFor(java.time.Duration.ofSeconds(45))
+        waitUntil(TIMEOUT_MS) { field(controllerModel(), "queueCheck") != null }
+        main.idleFor(java.time.Duration.ofSeconds(30))
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com/search?" in it })
+        composeRule.runOnIdle { controllerModel().setPlayingBar(true) }
+        waitForText("A PLACE TO GO")
+        main.idleFor(java.time.Duration.ofSeconds(120))
         composeRule.runOnIdle { queueSubtitle("The Kid LAROI - A PLACE TO GO") }
         assertEquals(0, hearing.listens)
         assertTrue(shown("A PLACE TO GO"))
-        main.idleFor(java.time.Duration.ofSeconds(46))
+        main.idleFor(java.time.Duration.ofSeconds(35))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(6))
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         waitForText("1LIVE")
         assertFalse(shown("A PLACE TO GO"))
@@ -666,6 +674,75 @@ class ListeningTest {
         composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
         assertTrue(HistoryStore(prefs()).load().isEmpty())
+    }
+
+    @Test
+    fun radioGardenUsesTheShortDeadlineWhenAppleMusicGivesNoLength() {
+        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
+        radioGardenCatalog()
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitForText("A PLACE TO GO")
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(85))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(6))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        waitForText("1LIVE")
+        assertFalse(shown("A PLACE TO GO"))
+    }
+
+    @Test
+    fun radioGardenDoesNotCheckAQueueClaimThatExpiredBeforeTheBarWasShown() {
+        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
+        radioGardenCatalog(lengthMs = 180_000L)
+        prefs().edit().putBoolean("playing_bar", false).commit()
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { field(controllerModel(), "queueCheck") != null }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(91))
+        composeRule.runOnIdle { controllerModel().setPlayingBar(true) }
+        waitUntil(TIMEOUT_MS) { hearing.listens > 0 || fake.requestedUrls.any { "itunes.apple.com/search?" in it } }
+        assertEquals(1, hearing.listens)
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com/search?" in it })
+        assertTrue(shown("1LIVE"))
+    }
+
+    @Test
+    fun radioGardenConfirmsALongVowelSpelledWithAWaveDash() {
+        radioGarden("1LIVE", "Band - スーパースター")
+        radioGardenCatalog(title = "スーパ～スタ〜", artist = "Band")
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens > 0 || shown("スーパースター") }
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("スーパースター"))
+    }
+
+    @Test
+    fun radioGardenDoesNotSendANewsLabelOrContactDetailsToAppleMusic() {
+        val queueSubtitle = radioGarden("1LIVE", "Radio Desk - Noticias")
+        radioGardenCatalog(lengthMs = 180_000L)
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com/search?" in it })
+        composeRule.runOnIdle { queueSubtitle("The Kid LAROI - A PLACE TO GO") }
+        waitForText("A PLACE TO GO")
+        composeRule.runOnIdle { queueSubtitle("Visit example.com - Call 555 1234") }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        assertTrue(shown("1LIVE"))
+        assertFalse(shown("A PLACE TO GO"))
+        assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
     }
 
     @Test
@@ -789,17 +866,20 @@ class ListeningTest {
         return queueSubtitle to hearing
     }
 
-    private fun radioGardenCatalog(title: String = "A PLACE TO GO", artist: String = "The Kid LAROI") {
+    private fun radioGardenCatalog(title: String = "A PLACE TO GO", artist: String = "The Kid LAROI", lengthMs: Long? = null) {
         fake.handler = { request ->
             val body = if (request.url.host == "itunes.apple.com" && request.url.encodedPath == "/search") {
-                gardenTrack(title, artist)
+                gardenTrack(title, artist, lengthMs)
             } else "{}"
             FakeSpotify.html(request, body)
         }
     }
 
-    private fun gardenTrack(title: String, artist: String) = """{"results":[{"trackName":"$title","artistName":"$artist",
-        "trackViewUrl":"https://music.apple.com/us/album/fixture/123?i=456"}]}"""
+    private fun gardenTrack(title: String, artist: String, lengthMs: Long? = null): String {
+        val length = lengthMs?.let { ""","trackTimeMillis":$it""" }.orEmpty()
+        return """{"results":[{"trackName":"$title","artistName":"$artist",
+            "trackViewUrl":"https://music.apple.com/us/album/fixture/123?i=456"$length}]}"""
+    }
 
     /** Radio Garden's Android session announces a station and puts the stream text in a single queue item. */
     private fun radioGarden(station: String, subtitle: String, activeId: Long = 0, otherSubtitle: String? = null): (String) -> Unit {

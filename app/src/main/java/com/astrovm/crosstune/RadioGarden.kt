@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.media.session.MediaSession
+import androidx.core.util.PatternsCompat
 import java.text.Normalizer
 import java.util.Locale
 
@@ -9,6 +10,26 @@ internal object RadioGarden {
     const val PACKAGE = "com.jonathanpuckey.radiogarden"
 
     private const val IHEART_TITLE = "text=\""
+    private const val PHONE_DIGITS = 7
+
+    // Match whole fields, so a title can still contain words like "live".
+    private val broadcastLabels = listOf(
+        "news", "the news", "live", "on air", "on the air", "now playing",
+        "nachrichten", "die nachrichten", "auf sendung", "jetzt läuft",
+        "noticias", "en vivo", "en directo", "al aire", "sonando ahora",
+        "actualités", "en direct", "à l'antenne", "en cours de lecture",
+        "समाचार", "लाइव", "प्रसारण जारी", "अभी चल रहा है",
+        "berita", "siaran langsung", "sedang mengudara", "sedang diputar",
+        "notizie", "in diretta", "in onda", "in riproduzione",
+        "ニュース", "ライブ", "放送中", "再生中", "オンエア",
+        "뉴스", "라이브", "방송 중", "재생 중",
+        "nieuws", "in de ether", "wordt nu afgespeeld",
+        "wiadomości", "na żywo", "na antenie", "teraz odtwarzane",
+        "notícias", "ao vivo", "no ar", "tocando agora",
+        "новости", "прямой эфир", "в эфире", "сейчас играет",
+        "haberler", "canlı", "yayında", "şimdi çalıyor",
+        "新闻", "新聞", "直播", "播出中", "正在播放", "現正播放",
+    ).mapTo(HashSet(), ::labelKey)
 
     /** The stream's claim, to check in a catalog before showing it. */
     fun queueSong(station: String, queue: List<MediaSession.QueueItem>?, activeId: Long? = null): MusicMetadata? {
@@ -21,7 +42,7 @@ internal object RadioGarden {
         if (hasAdMarker(subtitle) || '<' in subtitle || '>' in subtitle) return null
         val dash = splitAt(subtitle) ?: return null
         val artist = subtitle.substring(0, dash).trimEnd()
-        if (artist.equals(station, ignoreCase = true) || hasKeyValue(artist)) return null
+        if (artist.equals(station, ignoreCase = true) || invalidField(artist)) return null
         val title = readTitle(subtitle.substring(dash + 1).trimStart()) ?: return null
         return MusicMetadata(title, artist)
     }
@@ -64,16 +85,34 @@ internal object RadioGarden {
 
     private fun readTitle(streamTitle: String): String? =
         (if (streamTitle.startsWith("text=")) iheartTitle(streamTitle) else streamTitle)
-            ?.takeUnless { it.isBlank() || hasKeyValue(it) || isNews(it) }
+            ?.takeUnless(::invalidField)
 
-    private fun isNews(text: String): Boolean =
-        isNewsName(text, "the", "news") || isNewsName(text, "die", "nachrichten")
+    private fun invalidField(text: String): Boolean =
+        text.isBlank() || hasKeyValue(text) || isBroadcastText(text)
 
-    private fun isNewsName(text: String, article: String, noun: String): Boolean {
-        if (text.equals(noun, ignoreCase = true)) return true
-        return text.startsWith(article, ignoreCase = true) &&
-            text.getOrNull(article.length)?.isWhitespace() == true &&
-            text.substring(article.length).trimStart().equals(noun, ignoreCase = true)
+    private fun isBroadcastText(text: String): Boolean =
+        labelKey(text) in broadcastLabels || hasAddress(text) || hasPhoneNumber(text)
+
+    private fun labelKey(text: String): String = Normalizer.normalize(text, Normalizer.Form.NFKC)
+        .lowercase(Locale.ROOT).replace('ı', 'i')
+        .filterNot { it.isWhitespace() || it in TitleDelimiters.DASHES || it in "'’!?.,:…\"\u0307" }
+
+    private fun hasAddress(text: String): Boolean {
+        if ("://" in text) return true
+        if ('@' in text && PatternsCompat.EMAIL_ADDRESS.matcher(text).find()) return true
+        return '.' in text && PatternsCompat.WEB_URL.matcher(text).find()
+    }
+
+    private fun hasPhoneNumber(text: String): Boolean {
+        var digits = 0
+        for (char in text) {
+            when {
+                char.isDigit() -> if (++digits >= PHONE_DIGITS) return true
+                char.isWhitespace() || char in "+()." || char in TitleDelimiters.DASHES -> Unit
+                else -> digits = 0
+            }
+        }
+        return false
     }
 
     private fun iheartTitle(text: String): String? {
@@ -112,12 +151,24 @@ internal object RadioGarden {
     fun sameTitle(one: String, another: String): Boolean = titleKey(one) == titleKey(another)
 
     private fun titleKey(title: String): String {
-        val fullWidth = Normalizer.normalize(SongNames.withoutEditionTag(title), Normalizer.Form.NFKC)
+        // NFKC turns a full-width tilde into an ASCII tilde. Keep it with the Japanese wave dash.
+        val waveDashes = SongNames.withoutEditionTag(title).replace('～', '〜')
+        val fullWidth = Normalizer.normalize(waveDashes, Normalizer.Form.NFKC)
         val decomposed = Normalizer.normalize(fullWidth, Normalizer.Form.NFD).lowercase(Locale.ROOT)
         return buildString(decomposed.length) {
+            var afterKana = false
             decomposed.codePoints().forEach { code ->
-                if (Character.isLetterOrDigit(code) || code == '\u3099'.code || code == '\u309a'.code) appendCodePoint(code)
+                if (code == '\u3099'.code || code == '\u309a'.code) {
+                    appendCodePoint(code)
+                } else {
+                    val prolonged = afterKana && code == '〜'.code
+                    if (prolonged) append('ー') else if (Character.isLetterOrDigit(code)) appendCodePoint(code)
+                    afterKana = prolonged || isKana(code)
+                }
             }
         }
     }
+
+    private fun isKana(code: Int): Boolean =
+        code <= Char.MAX_VALUE.code && Character.isLetter(code) && Readings.isKana(code.toChar())
 }

@@ -1280,7 +1280,7 @@ internal class MainViewModel(
             unheardByEar = false
             liveUnnamed = unnamed
             if (unnamed != null && queueCheck?.isFor(unnamed) != true) {
-                queueCheck = unnamed.queueSong?.let { QueueCheck(unnamed.session, unnamed.name, it, now() + QUEUE_SONG_MAX_MS) }
+                queueCheck = unnamed.queueSong?.let { QueueCheck(unnamed.session, unnamed.name, it, now()) }
             }
             showUnnamed()
             if (unnamed == null) return@collectLatest
@@ -1293,8 +1293,21 @@ internal class MainViewModel(
         }
     }
 
-    private class QueueCheck(val session: Int?, val station: String?, val song: MusicMetadata, val until: Long) {
+    private class QueueCheck(
+        private val session: Int?,
+        private val station: String?,
+        val song: MusicMetadata,
+        private val firstSeen: Long
+    ) {
         var confirmed = false
+            private set
+        var until = firstSeen + QUEUE_SONG_UNKNOWN_MS
+            private set
+
+        fun confirm(lengthMs: Long?) {
+            confirmed = true
+            if (lengthMs != null) until = firstSeen + lengthMs + QUEUE_SONG_MARGIN_MS
+        }
 
         fun isFor(unnamed: Unnamed): Boolean =
             session == unnamed.session && station == unnamed.name && song == unnamed.queueSong
@@ -1305,9 +1318,12 @@ internal class MainViewModel(
     /** The catalog checks the name. The station must give fresh text to keep naming songs this way. */
     private suspend fun confirmQueueSong(check: QueueCheck) {
         combine(barInSight, snapshotFlow { followingRadioLyrics }) { bar, lyrics -> bar || lyrics }.first { it }
-        if (now() >= check.until) return
-        if (!check.confirmed) check.confirmed = matcher.confirmsRadioSong(check.song)
-        if (!check.confirmed) return
+        val remaining = check.until - now()
+        if (remaining <= 0) return
+        if (!check.confirmed) {
+            val found = withTimeoutOrNull(remaining) { matcher.findRadioSong(check.song) } ?: return
+            check.confirm(found.lengthMs)
+        }
         showUnnamed()
         delay(check.until - now())
         showUnnamed()
@@ -6112,7 +6128,8 @@ internal class MainViewModel(
 
         /** How long naming by ear waits after a song whose length isn't known: about half a song. */
         const val BY_EAR_UNKNOWN_MS = 90_000L
-        private const val QUEUE_SONG_MAX_MS = 90_000L
+        private const val QUEUE_SONG_UNKNOWN_MS = 90_000L
+        private const val QUEUE_SONG_MARGIN_MS = 10_000L
 
         /** The soonest and the latest naming by ear listens again after a song: the end of a song may be misheard, and a long one may be skipped. */
         const val BY_EAR_SOONEST_MS = 20_000L

@@ -78,6 +78,51 @@ class RadioGardenTest {
     }
 
     @Test
+    fun readsEitherWaveDashAfterKanaAsALongVowel() {
+        assertTrue(RadioGarden.sameTitle("スーパースター", "スーパ～スタ〜"))
+        assertTrue(RadioGarden.sameTitle("スーパ〜スタ～", "スーパースター"))
+        assertTrue(RadioGarden.sameTitle("ガ～", "ガー"))
+        assertFalse(RadioGarden.sameTitle("Rock～", "Rockー"))
+        assertFalse(RadioGarden.sameTitle("A・～", "A・ー"))
+        assertFalse(RadioGarden.sameTitle("ガラス〜", "カラスー"))
+    }
+
+    @Test
+    fun dropsGenericBroadcastLabelsInTheSiteLanguages() {
+        val labels = listOf(
+            "Live", "On-air", "NOW  PLAYING!", "auf Sendung", "Noticias", "Al aire",
+            "En direct", "अभी चल रहा है", "Siaran langsung", "In onda", "放送中",
+            "재생 중", "In de ether", "Na żywo", "No ar", "В эфире", "Yayında",
+            "正在播放", "新聞"
+        )
+        assertEquals(emptyList<String>(), labels.filter { label ->
+            RadioGarden.queueSong("Station", listOf(item("Station", "Radio Desk - $label"))) != null
+        })
+        assertNull(RadioGarden.queueSong("Station", listOf(item("Station", "Now Playing - Song"))))
+    }
+
+    @Test
+    fun dropsWebAddressesEmailAndPhoneNumbersButKeepsOrdinaryNames() {
+        val subtitles = listOf(
+            "Visit example.com - Tune in",
+            "Artist - Visit https://example.com/live",
+            "Artist - Visit http://radio/live",
+            "www.example.com - Song",
+            "Artist - Send to desk+live@example.org",
+            "Radio Desk - Call 555 1234",
+            "Radio Desk - Call +1 (212) 555-1234",
+            """Artist - text="Call 555.1234" song_spot="M" """
+        )
+        assertEquals(emptyList<String>(), subtitles.filter { text ->
+            RadioGarden.queueSong("Station", listOf(item("Station", text))) != null
+        })
+        assertEquals(MusicMetadata("1989", "R.E.M."),
+            RadioGarden.queueSong("Station", listOf(item("Station", "R.E.M. - 1989"))))
+        assertEquals(MusicMetadata("Song - Live", "Artist"),
+            RadioGarden.queueSong("Station", listOf(item("Station", "Artist - Song - Live"))))
+    }
+
+    @Test
     fun requiresOneItemThatBelongsToTheCurrentStation() {
         val item = item("1LIVE", "The Kid LAROI - A PLACE TO GO")
         assertNull(RadioGarden.queueSong("1LIVE", null))

@@ -116,7 +116,7 @@
     ],
     [
       "p",
-      "Avec l'accès aux notifications, Crosstune voit quel morceau jouent vos applis de musique et où elles en sont, pour que les paroles suivent et que son lecteur puisse mettre en pause, passer ou aimer le morceau dans votre appli. Pour Simple Radio, il vérifie aussi que la notification multimédia de la radio s'affiche, sans lire son texte. Cela reste sur votre téléphone. Une carte d'entraînement joue sa ligne dans une appli qui a déjà le morceau ouvert, ou dans un petit lecteur YouTube sur la carte, qui trouve la vidéo du morceau comme le fait un lien. Vous n'y êtes pas connecté à YouTube. Pour Radio Garden, Crosstune envoie à Apple Music les parties du texte de la station sur le morceau en cours qui ressemblent à un titre et à un nom d’artiste. Il vérifie ainsi si elles désignent un morceau."
+      "Avec l'accès aux notifications, Crosstune voit quel morceau jouent vos applis de musique et où elles en sont, pour que les paroles suivent et que son lecteur puisse mettre en pause, passer ou aimer le morceau dans votre appli. Pour Simple Radio, il vérifie aussi que la notification multimédia de la radio s'affiche, sans lire son texte. Cela reste sur votre téléphone. Une carte d'entraînement joue sa ligne dans une appli qui a déjà le morceau ouvert, ou dans un petit lecteur YouTube sur la carte, qui trouve la vidéo du morceau comme le fait un lien. Vous n'y êtes pas connecté à YouTube. Pour Radio Garden, Crosstune sépare le texte de la station sur ce qui passe à l’antenne en un titre et un nom d’artiste, puis envoie ces éléments à Apple Music. Ce texte décrit le plus souvent un morceau. La station peut fournir un autre texte dans ces champs."
     ],
     [
       "h2",

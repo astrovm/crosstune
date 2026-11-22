@@ -116,7 +116,7 @@
     ],
     [
       "p",
-      "Mit Benachrichtigungszugriff sieht Crosstune, welchen Song deine Musik-Apps abspielen und an welcher Stelle sie sind, damit der Songtext mitläuft und sein Player den Song in deiner App pausieren, überspringen oder liken kann. Bei Simple Radio prüft es außerdem, ob die Medienbenachrichtigung des Radios angezeigt wird, ohne ihren Text zu lesen. Das bleibt auf deinem Handy. Eine Übungskarte spielt ihre Zeile in einer App ab, in der der Song schon geöffnet ist, oder in einem kleinen YouTube-Player auf der Karte, der das Video des Songs wie ein Link findet. Du bist dort nicht bei YouTube angemeldet. Bei Radio Garden sendet Crosstune die Teile des Textes zum aktuell gespielten Song, die wie Titel und Interpret aussehen, an Apple Music. So prüft es, ob sie einen Song bezeichnen."
+      "Mit Benachrichtigungszugriff sieht Crosstune, welchen Song deine Musik-Apps abspielen und an welcher Stelle sie sind, damit der Songtext mitläuft und sein Player den Song in deiner App pausieren, überspringen oder liken kann. Bei Simple Radio prüft es außerdem, ob die Medienbenachrichtigung des Radios angezeigt wird, ohne ihren Text zu lesen. Das bleibt auf deinem Handy. Eine Übungskarte spielt ihre Zeile in einer App ab, in der der Song schon geöffnet ist, oder in einem kleinen YouTube-Player auf der Karte, der das Video des Songs wie ein Link findet. Du bist dort nicht bei YouTube angemeldet. Bei Radio Garden teilt Crosstune den Text des Senders zur aktuellen Wiedergabe in Titel und Interpret auf und sendet diese Angaben an Apple Music. Meist beschreiben sie einen Song. Der Sender kann in diesen Feldern auch anderen Text angeben."
     ],
     [
       "h2",
