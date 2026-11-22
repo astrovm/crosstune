@@ -669,22 +669,30 @@ internal class ExactMatcher(
             videos.await() to names.await()
         }
         val rows = items.map(::row)
+        val videoRows = videos.map(::row)
         val named = rows.firstOrNull { isTheSong(it, names) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) }
         val abroad = rows.filter { isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
         // A row the song's name names, but that says it's a take, is the song's, not its studio recording: no row only known by its
         // artist and length takes its place, as the song may be written otherwise, and this one is the song by name.
         val takeNamed = named == null && rows.any { isTheSong(it, names) && keepsRequestedRecording(recording, it) }
         val song = named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedEdition) ?: it }
-            ?: videoNamesSong(metadata, abroad, videos.map(::row), names)
+            ?: videoNamesSong(metadata, abroad, videoRows, names)
             ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
         song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
-        // Someone else's video, e.g. a fan's lyrics video, only where every store answered: one that failed may have named the
-        // artist's own row, as only the US store names 米津玄師 Kenshi Yonezu.
-        videos.map(::row).firstOrNull {
-            isTheSongsVideo(it, names) && (names.complete || isOwnVideo(it, names)) && keepsRequestedRecording(recording, it, video = true)
-        }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+        matchingVideo(rows, videoRows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), final = names.complete, lasting = names.everyStore)
+    }
+
+    private fun matchingVideo(songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording): Row? {
+        val matching = videos.asSequence().filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
+        if (names.complete) return matching.firstOrNull()
+        matching.firstOrNull { isOwnVideo(it, names) }?.let { return it }
+        // A failed lookup can only add names. If a playable song is close enough in length, one of those names
+        // could prove it, as the US store names 米津玄師 Kenshi Yonezu. A row with no length could still be the song.
+        // A failed search may also have lost a length, so wait for it even if there is no song row.
+        if (names.searchFailed || songs.any { it.id != null && sameLength(it, names) }) return null
+        return matching.firstOrNull()
     }
 
     /** Keep a recording note separate when an unbracketed guest credit runs up to it. */
@@ -963,6 +971,8 @@ internal class ExactMatcher(
         val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?,
         /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
         val takeOnAlbum: Boolean,
+        /** A failed Apple or Deezer search could have supplied a length. */
+        val searchFailed: Boolean,
         /**
          * No store that could prove a row failed to answer: when one did, a name or a length that would have proved
          * the artist's own row may be missing. See [namesOf].
@@ -1029,8 +1039,12 @@ internal class ExactMatcher(
             val collection = it.optString("collectionName")
             liveAlbum(collection) || Takes.saysAnotherTake(collection) != null
         }
-        val complete = !(found == null && searching.failed) && unanswered.none { it == "US" || it in homes } && !asked.failed
-        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum, complete, complete && unanswered.isEmpty())
+        val searchFailed = (found == null && searching.failed) || asked.failed
+        val complete = !searchFailed && unanswered.none { it == "US" || it in homes }
+        return Names(
+            titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum,
+            searchFailed, complete, complete && unanswered.isEmpty()
+        )
     }
 
     /**

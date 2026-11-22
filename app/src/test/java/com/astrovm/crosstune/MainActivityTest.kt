@@ -1889,6 +1889,35 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSpotifyLinkOpensTheFansUploadWhenYouTubeMusicHasNoSongRow() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "itunes.apple.com" && url.encodedPath == "/search" -> FakeSpotify.html(
+                    request,
+                    """{"results":[{"trackId":7,"trackName":"終わらない歌","artistName":"THE BLUE HEARTS","trackTimeMillis":184000}]}"""
+                )
+                url.host == "itunes.apple.com" && url.queryParameter("country") == "JP" ->
+                    FakeSpotify.html(request, "{}", code = 503)
+                url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                url.host == "music.youtube.com" && FakeSpotify.bodyOf(request).contains("EgWKAQIQAWoKEAoQAxAEEAkQBQ==") ->
+                    FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                        "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"THE BLUE HEARTS - 終わらない歌"}]}}},
+                        {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Fan • 1K views • 3:04"}]}}}],
+                        "playlistItemData":{"videoId":"fan00000000"}}}]}""")
+                url.host == "music.youtube.com" -> FakeSpotify.html(request, "{}")
+                else -> FakeSpotify.html(request, FakeSpotify.trackPage("終わらない歌", "THE BLUE HEARTS · Song"))
+            }
+        }
+
+        launch(trackLink())
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://music.youtube.com/watch?v=fan00000000", nextStartedActivity()?.dataString)
+        assertTrue(fake.requestedUrls.any { "itunes.apple.com/lookup?id=7&country=JP" in it })
+    }
+
+    @Test
     fun aSongByNameNotThereIsSearchedForWithItsButton() {
         prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""") }
