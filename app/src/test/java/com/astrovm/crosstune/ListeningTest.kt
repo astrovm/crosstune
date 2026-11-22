@@ -593,6 +593,7 @@ class ListeningTest {
     fun radioGardenCanOpenTheConfirmedSongsLyrics() {
         radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
         radioGardenCatalog()
+        allowMicrophone()
         launch()
         waitForText("A PLACE TO GO")
         click(string(R.string.tile_lyrics_label))
