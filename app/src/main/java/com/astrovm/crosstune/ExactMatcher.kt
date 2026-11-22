@@ -1100,6 +1100,7 @@ internal class ExactMatcher(
         }
         val foundLengths = names.lengthsMs.toMutableList()
         addDeezerLength(metadata, tracks, foundLengths)
+        // Without another length, deezerNames keeps only lengths belonging to the identified artist and title.
         val knownLengths = (lengths + foundLengths).ifEmpty {
             tracks.mapNotNull { it.optLong("duration").takeIf { seconds -> seconds > 0 }?.times(1000) }
         }

@@ -1154,6 +1154,7 @@ class ExactMatcherTest {
             } else answer(request)
         }
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = null)) })
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist") {
                 FakeSpotify.html(request, """{"data":[{"id":7,"name":"Other"},{"id":2110,"name":"Tom Petty and the Heartbreakers"}]}""")
@@ -1190,6 +1191,10 @@ class ExactMatcherTest {
         val track = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"duration":240}]"""
         namesAndTabs(songs = listOf(row), deezer = track, deezerArtists = """[{"id":1,"name":"Artist"}]""")
         assertEquals("https://music.youtube.com/watch?v=original000", matcher().find(MusicService.YOUTUBE_MUSIC, song))
+        namesAndTabs(songs = listOf(row), deezer = track.replace("\"id\":1", "\"id\":2"), deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        assertNull(matcher().find(MusicService.YOUTUBE_MUSIC, song))
+        namesAndTabs(songs = listOf(row), deezer = track.replace("\"duration\":240", "\"duration\":0"), deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        assertNull(matcher().find(MusicService.YOUTUBE_MUSIC, song))
     }
 
     @Test
