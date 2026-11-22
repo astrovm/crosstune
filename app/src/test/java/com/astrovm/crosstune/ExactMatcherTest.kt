@@ -331,6 +331,24 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aRerecordingKeptByVersionNineIsLookedForAgain() = runBlocking {
+        val directory = kotlin.io.path.createTempDirectory("lookups").toFile()
+        try {
+            val cache = LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined)
+            cache.put("find@9|YOUTUBE_MUSIC|TRACK|Song|Band|", "https://music.youtube.com/watch?v=rerecorded0")
+            cache.save()
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow("Song", "Band • Album • 4:00", videoId = "original000")),
+                apple = mapOf("AR" to appleSong("Song", "Band", 240_000))
+            )
+            val matcher = ExactMatcher(fake.client(), "AR", Dispatchers.Unconfined, LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined))
+            assertEquals("https://music.youtube.com/watch?v=original000", matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band")))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun uncertainOrMissingMatchesFallBackToSearch() {
         respond("""{"results":[{"trackName":"Beyoncé Song","artistName":"Someone Else","trackViewUrl":"https://x"}]}""")
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) })
@@ -640,11 +658,20 @@ class ExactMatcherTest {
 
     @Test
     fun aRerecordingInAnotherScriptCannotBeInferredFromItsLength() {
+        // Said in its name, or only on its album.
+        for ((name, details) in listOf("別の歌 (G.E.M.重生版)" to "Band • New Album • 4:00", "別の歌" to "Band • 別の歌 (G.E.M.重生版) • 4:00")) {
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow(name, details, videoId = "rerecorded0")),
+                apple = mapOf("AR" to appleSong("Song", "Band", 240_000))
+            )
+            assertNull(details, runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band")) })
+        }
+        // The same row with no label is the song.
         namesAndTabs(
-            songs = listOf(youTubeMusicRow("別の歌 (G.E.M.重生版)", "Band • New Album • 4:00", videoId = "rerecorded0")),
+            songs = listOf(youTubeMusicRow("別の歌", "Band • New Album • 4:00", videoId = "original0")),
             apple = mapOf("AR" to appleSong("Song", "Band", 240_000))
         )
-        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band")) })
+        assertEquals("https://music.youtube.com/watch?v=original0", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band")) })
     }
 
     @Test

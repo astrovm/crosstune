@@ -41,8 +41,10 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * can use an artist's video and a matching store album to name a song in another script.
  * Version 9 learns the US store's name for a song another store found, so YouTube Music's row by Kenshi Yonezu is Lemon
  * by 米津玄師, where a fan's lyrics video was found.
+ * Version 10 doesn't take a re-recording, From THE FIRST TAKE or 重生版, for the song unless it's asked for, so First Love
+ * opens 宇多田ヒカル's own, and takes a credit of two known names together, G.E.M. 鄧紫棋, as the artist's.
  */
-internal const val MATCH_VERSION = 9
+internal const val MATCH_VERSION = 10
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
