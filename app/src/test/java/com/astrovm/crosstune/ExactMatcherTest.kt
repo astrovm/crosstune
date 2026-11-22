@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -10,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -27,8 +29,10 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit.SECONDS
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.io.IOException
+import kotlin.coroutines.CoroutineContext
 
 /** Runs under Robolectric for the real org.json implementation. */
 @RunWith(RobolectricTestRunner::class)
@@ -1692,6 +1696,103 @@ class ExactMatcherTest {
         val result = late.await()
         assertEquals(ownUrl, cache.entries().single().second)
         assertEquals(confirmed, result)
+    }
+
+    @Test
+    fun lateHoldAndFailureKeepTheProvisionalVideoSavedMeanwhile() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("late-hold").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, timeoutMs = 30_000)
+        val storeStarted = CompletableDeferred<Unit>()
+        val videosStarted = CompletableDeferred<Unit>()
+        val failureStarted = CompletableDeferred<Unit>()
+        val mayAnswer = CountDownLatch(1)
+        namesAndTabs(videos = listOf(fan, own), apple = apple, failing = setOf("JP"))
+        val outage = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.queryParameter("country") == "JP") {
+                storeStarted.complete(Unit)
+                check(mayAnswer.await(30, SECONDS))
+            }
+            if (FakeSpotify.bodyOf(request).contains(VIDEOS_TAB)) videosStarted.complete(Unit)
+            outage(request)
+        }
+        val hold = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
+        val provisional = ExactMatcher.Lookup(
+            ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), ExactMatcher.Retry()
+        )
+        val (failure, saved) = try {
+            withTimeout(10_000) {
+                storeStarted.await()
+                videosStarted.await()
+            }
+            fake.handler = { request ->
+                if (request.url.host == "music.youtube.com") {
+                    failureStarted.complete(Unit)
+                    check(mayAnswer.await(30, SECONDS))
+                    FakeSpotify.html(request, "{}", code = 503)
+                } else {
+                    outage(request)
+                }
+            }
+            val failed = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
+            withTimeout(10_000) { failureStarted.await() }
+
+            namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+            assertEquals(provisional, finder.lookup(MusicService.YOUTUBE_MUSIC, song))
+            failed to cache.entries()
+        } finally {
+            mayAnswer.countDown()
+        }
+
+        assertEquals(provisional, hold.await())
+        assertEquals(provisional, failure.await())
+        assertEquals(saved, cache.entries())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun anotherSongCanMatchWhileAnOutageAnswerFlushes() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val other = MusicMetadata("Different Song", "Different Artist")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("slow-flush").toFile().resolve("lookups.json")
+        val disk = StandardTestDispatcher()
+        val paused = AtomicBoolean()
+        val writing = CompletableDeferred<Unit>()
+        val dispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) {
+                if (paused.get()) {
+                    disk.dispatch(context, block)
+                    writing.complete(Unit)
+                } else {
+                    Dispatchers.Default.dispatch(context, block)
+                }
+            }
+        }
+        val cache = LookupCache(file, dispatcher)
+        cache.entries()
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache)
+        namesAndTabs(
+            videos = listOf(fan), apple = apple, failing = setOf("JP"),
+            deezer = """[{"title":"Different Song","link":"https://www.deezer.com/track/1","artist":{"name":"Different Artist"}}]"""
+        )
+        paused.set(true)
+        val upload = async { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) }
+        try {
+            withTimeout(10_000) { writing.await() }
+            val known = withTimeoutOrNull(10_000) { finder.lookFor(MusicService.DEEZER, other) }
+            assertEquals(ExactMatcher.Match.Found("https://www.deezer.com/track/1"), known)
+        } finally {
+            paused.set(false)
+            disk.scheduler.runCurrent()
+        }
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), upload.await())
     }
 
     @Test
