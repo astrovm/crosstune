@@ -758,6 +758,45 @@ class ReadingsTest {
     @Test
     fun aWordBeforeSmallTsuLeavesAWayThroughWithUniDic() = TestUniDic.reading { checkWordBeforeSmallTsu() }
 
+    @Test
+    fun consecutiveSmallTsuAndKatakanaSmallTsuKeepTheirWords() = checkConsecutiveSmallTsu()
+
+    @Test
+    fun consecutiveSmallTsuAndKatakanaSmallTsuKeepTheirWordsWithUniDic() = TestUniDic.reading { checkConsecutiveSmallTsu() }
+
+    private fun checkConsecutiveSmallTsu() {
+        for (line in listOf("りゅうっっさくら", "りゅうっッさくら", "りゅうッっッさくら")) {
+            assertEquals(line, "ryuussakura", Readings.of(listOf(line), Script.JAPANESE).single().romanized)
+            assertEquals(line, listOf("りゅう", "さくら"), Readings.words(line, Script.JAPANESE).map { it.lookup })
+        }
+    }
+
+    @Test
+    fun katakanaSmallTsuKeepsItsWord() {
+        fun check() {
+            val line = "きゅうッりい"
+            assertEquals("kyuurri i", Readings.of(listOf(line), Script.JAPANESE).single().romanized)
+            assertEquals("きゅう", Readings.words(line, Script.JAPANESE).first().lookup)
+            assertEquals("きゅうッり", Readings.words(line, Script.JAPANESE).first().text)
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun measureRepeatedSmallTsu() {
+        val line = "りゅうっっさくら".repeat(20) + "あ".repeat(40)
+        fun measure(): Double {
+            repeat(5) { Readings.of(listOf(line), Script.JAPANESE) }
+            return List(15) {
+                val start = System.nanoTime()
+                Readings.of(listOf(line), Script.JAPANESE)
+                (System.nanoTime() - start) / 1_000_000.0
+            }.sorted()[7]
+        }
+        println("small tsu benchmark: ${line.length} chars, ${line.count { it == 'っ' }} tsu, ipadic ${measure()} ms, unidic ${TestUniDic.reading { measure() }} ms")
+    }
+
     private fun checkWordBeforeSmallTsu() {
         val actual = Readings.words("りゅうっなも", Script.JAPANESE).map { it.text to it.lookup }
         assertEquals(listOf("りゅうっな" to "りゅう", "も" to "も"), actual)
