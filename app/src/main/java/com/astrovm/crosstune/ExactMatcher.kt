@@ -11,7 +11,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeoutOrNull
@@ -133,6 +135,9 @@ internal class ExactMatcher(
     }
 
     private val waitingForNames = java.util.concurrent.ConcurrentHashMap<String, NameHold>()
+
+    /** Keeps checking saved answers and writing them together while lookups run independently. */
+    private val savingAnswers = Mutex()
 
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
@@ -279,19 +284,23 @@ internal class ExactMatcher(
         kind: String, target: String, metadata: MusicMetadata, previous: SavedAnswer? = null, lookUp: suspend () -> Looked
     ): Lookup {
         val key = cacheKey(kind, target, metadata)
-        val saved = savedAnswer(key)
-        // Recent can still have an upload after another open found the artist's video.
-        saved?.confirmedUrl?.let { return Lookup(Match.Found(it)) }
-        val outage = previousOutage(saved, previous)
-        if (outage == null) {
-            missing[key]?.takeIf { now() - it < missingForMs }?.let { return Lookup(Match.Missing) }
-        }
+        val (outage, hold, earlier) = savingAnswers.withLock {
+            val saved = savedAnswer(key)
+            // Recent can still have an upload after another open found the artist's video.
+            saved?.confirmedUrl?.let { return Lookup(Match.Found(it)) }
+            val outage = previousOutage(saved, previous)
+            if (outage == null) {
+                missing[key]?.takeIf { now() - it < missingForMs }?.let { return Lookup(Match.Missing) }
+            }
 
-        val hold = nameHold(key, saved, outage)
-        hold?.takeIf { it.waiting(now()) }?.let { return it.pending() }
-        val earlier = unsure[key]
-        earlier?.takeIf { now() - it.first < minOf(missingForMs, UNSURE_FOR_MS) }?.let { return it.second }
-        return answerLookup(key, saved, outage, hold, earlier?.second, lookUp())
+            val hold = nameHold(key, saved, outage)
+            hold?.takeIf { it.waiting(now()) }?.let { return it.pending() }
+            val earlier = unsure[key]
+            earlier?.takeIf { now() - it.first < minOf(missingForMs, UNSURE_FOR_MS) }?.let { return it.second }
+            Triple(outage, hold, earlier?.second)
+        }
+        val looked = lookUp()
+        return answerLookup(key, outage, hold, earlier, looked)
     }
 
     private fun previousOutage(saved: SavedAnswer?, previous: SavedAnswer?): SavedAnswer? {
@@ -301,15 +310,18 @@ internal class ExactMatcher(
     }
 
     private suspend fun answerLookup(
-        key: String, saved: SavedAnswer?, outage: SavedAnswer?, hold: NameHold?, earlier: Lookup?, looked: Looked
-    ): Lookup {
+        key: String, outage: SavedAnswer?, hold: NameHold?, earlier: Lookup?, looked: Looked
+    ): Lookup = savingAnswers.withLock {
+        val saved = savedAnswer(key)
+        // Another lookup may have saved the artist's video while this one was waiting for the store.
+        saved?.confirmedUrl?.let { return@withLock Lookup(Match.Found(it)) }
         val retry = hold?.let { Retry(it.wallTime) } ?: outage?.retry
         val earlierUrl = (earlier?.match as? Match.Found)?.url
         val provisional = outage?.url ?: earlierUrl.takeIf { looked.waitForNames }
-        if (looked.waitForNames && retry?.heldAtMs == null && provisional == null) return startWaiting(key, saved)
+        if (looked.waitForNames && retry?.heldAtMs == null && provisional == null) return@withLock startWaiting(key, saved)
         val match = if (looked.unsure && provisional != null) Match.Found(provisional, lasting = false)
         else looked.matchAfterOutage(retry != null || earlier != null)
-        return rememberAnswer(key, saved, looked, match, retry, provisional)
+        rememberAnswer(key, saved, looked, match, retry, provisional)
     }
 
     private suspend fun nameHold(key: String, saved: SavedAnswer?, outage: SavedAnswer?): NameHold? {
