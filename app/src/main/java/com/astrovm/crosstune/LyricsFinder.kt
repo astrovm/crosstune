@@ -788,7 +788,7 @@ internal class LyricsFinder(
     }
 
     /** Each line as the letters it's said with: words in Japanese, Chinese or Korean written out in Latin ones. */
-    private suspend fun soundsOf(lines: List<String>): List<String> = withContext(Dispatchers.Default) {
+    private suspend fun soundsOf(lines: List<String>): List<String> = withContext(matching) {
         val script = Readings.scriptOf(lines)
         (if (script == null) lines else Readings.of(lines, script).map { it.romanized }).map(BorrowedTimings::sound)
     }
