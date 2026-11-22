@@ -1348,7 +1348,7 @@ internal class MainViewModel(
         check.confirm(found.lengthMs)
         showUnnamed()
         // The title must expire even when the bar and the playback watcher are out of sight.
-        queueExpiry = viewModelScope.launch {
+        viewModelScope.launchKept({ queueExpiry = it }) {
             while (check.isConfirmedAt(now())) delay(check.expiresAt - now())
             forgetQueueSong(check)
         }
