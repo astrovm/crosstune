@@ -858,24 +858,60 @@ class UnsungTest {
         playerPreviewWaitsForSinging()
     }
 
-    private fun playerPreviewWaitsForSinging() {
-        MainActivity.lookAheadLyrics = true
+    @Test
+    fun anOldSavedSheetIsCheckedBeforeThePlayerPreviewsIt() {
         useAccordian()
-        singing.answers = listOf(music, voice)
-        plays()
+        playsAccordian()
+        lrclib = JSONArray(lrclib).apply { remove(1) }.toString()
+        openAnywhere(::showsWords)
+        checkNotNull(controller).destroyAndSettle()
+        controller = null
+
+        // The old display cache did not say whether a sheet was safe to preview.
+        val disk = LookupCache(File(app.cacheDir, "kept_words.json"), Dispatchers.Unconfined)
+        runBlocking {
+            val (key, json) = disk.entries().single()
+            disk.keep(key, JSONObject(json).apply { remove("canPreview") }.toString())
+        }
+        val lookupCache = File(app.cacheDir, "lyrics.json")
+        assertTrue(lookupCache.delete())
+        lrclib = accordianLyrics()
+        MainActivity.lookAheadLyrics = true
+        val asked = fake.requestedUrls.size
+
+        openCard()
+        waitUntil { model().uiState.playingNow != null }
+        assertFalse(fake.requestedUrls.drop(asked).any { "lrclib.net" in it })
+        composeRule.runOnIdle { model().openPlayingNow() }
+        waitUntil { model().uiState.player != null && lookupCache.isFile }
+        composeRule.waitForIdle()
+        assertTrue(fake.requestedUrls.drop(asked).any { "lrclib.net" in it })
+        assertFalse(previewsAccordian())
+    }
+
+    private fun playsAccordian() {
         playback.onThePhone = Heard.Song(
             checkNotNull(MetadataParsers.appleMusic(JSONObject(ACCORDIAN_INSTRUMENTAL_LOOKUP), ItemType.TRACK)),
             null, app = MusicService.YOUTUBE_MUSIC.packageName
         )
+        plays()
+    }
+
+    // The clock advances during the voice check, so the preview may show either line.
+    private fun previewsAccordian() =
+        composeRule.onAllNodes(hasText("Hold the light") or hasText("Out in the rain")).fetchSemanticsNodes().isNotEmpty()
+
+    private fun playerPreviewWaitsForSinging() {
+        MainActivity.lookAheadLyrics = true
+        useAccordian()
+        singing.answers = listOf(music, voice)
+        playsAccordian()
         openCard()
         waitUntil { model().uiState.playingNow != null }
         composeRule.runOnIdle { model().openPlayingNow() }
         waitUntil { model().uiState.player != null && File(app.cacheDir, "lyrics.json").isFile }
         composeRule.waitForIdle()
 
-        // The clock advances during the voice check, so the preview may show either line.
-        val preview = hasText("Hold the light") or hasText("Out in the rain")
-        fun previewsWords() = composeRule.onAllNodes(preview).fetchSemanticsNodes().isNotEmpty()
         fun openWords() = composeRule.onNode(hasContentDescription(app.getString(R.string.lyrics_button)) and hasClickAction()).performClick()
         fun backToPlayer() = composeRule.runOnIdle { model().dismissLyrics() }
         fun reopenPlayer() = composeRule.runOnIdle {
@@ -883,15 +919,15 @@ class UnsungTest {
             model().openPlayingNow()
         }
 
-        assertFalse(previewsWords())
+        assertFalse(previewsAccordian())
 
         singing.missing = true
         openWords()
         waitUntil { showsWords() && !model().findingWords }
         backToPlayer()
-        assertFalse(previewsWords())
+        assertFalse(previewsAccordian())
         reopenPlayer()
-        assertFalse(previewsWords())
+        assertFalse(previewsAccordian())
 
         singing.reset()
         singing.answers = listOf(music, voice)
@@ -901,9 +937,9 @@ class UnsungTest {
         passes(MainViewModel.VOICE_PAUSE_MS)
         waitUntil(::showsWords)
         backToPlayer()
-        waitUntil { model().uiState.lyricsFor == null && previewsWords() }
+        waitUntil { model().uiState.lyricsFor == null && previewsAccordian() }
         reopenPlayer()
-        waitUntil(::previewsWords)
+        waitUntil(::previewsAccordian)
     }
 
     /** How a listen for a voice ends, set up on the fake before the words open. */
