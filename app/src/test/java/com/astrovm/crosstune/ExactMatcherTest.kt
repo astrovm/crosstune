@@ -6,6 +6,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -26,6 +27,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit.SECONDS
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.GZIPInputStream
 import java.io.IOException
 
 /** Runs under Robolectric for the real org.json implementation. */
@@ -341,6 +343,21 @@ class ExactMatcherTest {
                 songs = listOf(youTubeMusicRow("Song", "Band • Album • 4:00", videoId = "original000")),
                 apple = mapOf("AR" to appleSong("Song", "Band", 240_000))
             )
+            val matcher = ExactMatcher(fake.client(), "AR", Dispatchers.Unconfined, LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined))
+            assertEquals("https://music.youtube.com/watch?v=original000", matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band")))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun aFanUploadKeptByVersionTenIsLookedForAgain() = runBlocking {
+        val directory = kotlin.io.path.createTempDirectory("lookups").toFile()
+        try {
+            val cache = LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined)
+            cache.put("find@10|YOUTUBE_MUSIC|TRACK|Song|Band|", "https://music.youtube.com/watch?v=fan00000000")
+            cache.save()
+            namesAndTabs(songs = listOf(youTubeMusicRow("Song", "Band • Album • 4:00", videoId = "original000")))
             val matcher = ExactMatcher(fake.client(), "AR", Dispatchers.Unconfined, LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined))
             assertEquals("https://music.youtube.com/watch?v=original000", matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band")))
         } finally {
@@ -1118,6 +1135,89 @@ class ExactMatcherTest {
         assertEquals("https://music.youtube.com/watch?v=lightyears0", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
         // Not known by G.E.M. anywhere, it isn't found, and the karaoke doesn't stand in for it.
         namesAndTabs(songs = songs, videos = videos, elsewhere = japan)
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun deezerMustIdentifyTheArtistBeforeNamingARecording() {
+        val song = MusicMetadata("Hometown Blues", "THE BLUE HEARTS", lengthMs = 134_000)
+        val row = youTubeMusicRow("Hometown Blues", "Tom Petty and the Heartbreakers • Album • 2:14", videoId = "wrong000000")
+        val stream = requireNotNull(javaClass.getResourceAsStream("/matcher/deezer-blue-hearts.json.gz"))
+        val kept = org.json.JSONObject(GZIPInputStream(stream).bufferedReader().use { it.readText() })
+        namesAndTabs(songs = listOf(row), deezer = kept.getJSONObject("tracks").getJSONArray("data").toString())
+        val answer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist") {
+                FakeSpotify.html(request, kept.getJSONObject("artists").toString())
+            } else answer(request)
+        }
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist") {
+                FakeSpotify.html(request, """{"data":[{"id":7,"name":"Other"},{"id":2110,"name":"Tom Petty and the Heartbreakers"}]}""")
+            } else answer(request)
+        }
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun anAppleProvedSongDoesNotWaitForDeezer() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")
+        namesAndTabs(songs = listOf(row), apple = mapOf("US" to appleSong("Song", "Artist", 240_000)))
+        val answer = fake.handler
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") release.await(10, SECONDS)
+            answer(request)
+        }
+        try {
+            val found = withTimeoutOrNull(2_000) { ExactMatcher(fake.client(), "US", timeoutMs = 10_000).find(MusicService.YOUTUBE_MUSIC, song) }
+            assertEquals("https://music.youtube.com/watch?v=original000", found)
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun appleProvedRowsBeatDeezerOnlyRows() {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val deezerRow = youTubeMusicRow("Song", "Deezer Artist • Album • 4:00", videoId = "deezer00000")
+        val appleRow = youTubeMusicRow("Song", "Apple Artist • Album • 4:00", videoId = "apple000000")
+        val deezer = """[{"title":"Song","artist":{"id":1,"name":"Deezer Artist"},"duration":240}]"""
+        namesAndTabs(songs = listOf(deezerRow, appleRow), apple = mapOf("US" to appleSong("Song", "Apple Artist", 240_000)), deezer = deezer)
+        assertEquals("https://music.youtube.com/watch?v=apple000000", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun deezerDoesNotNameCoversOrCollaborationArtists() {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "wrong000000")
+        fun find(firstArtist: String, album: String): String? {
+            val track = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"album":{"title":"$album"},"duration":240}]"""
+            namesAndTabs(songs = listOf(row), deezer = track)
+            val answer = fake.handler
+            fake.handler = { request ->
+                if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist") {
+                    FakeSpotify.html(request, """{"data":[{"id":1,"name":"$firstArtist"}]}""")
+                } else answer(request)
+            }
+            return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        for (artist in listOf("Various Artists", "Artist + Other", "Artist, Other", "Artist & Other", "Artist feat. Other")) {
+            assertNull(artist, find(artist, "Album"))
+        }
+        for (album in listOf("Karaoke", "Cover", "Instrumental", "Live")) {
+            assertNull(album, find("Artist", album))
+        }
+        val various = """[{"title":"Song","artist":{"id":1,"name":"Various Artists"},"duration":240}]"""
+        namesAndTabs(songs = listOf(youTubeMusicRow("Song", "Various Artists • Album • 4:00", videoId = "wrong000000")), deezer = various)
+        val answer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist") {
+                FakeSpotify.html(request, """{"data":[{"id":1,"name":"Artist"}]}""")
+            } else answer(request)
+        }
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
     }
 

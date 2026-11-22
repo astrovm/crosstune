@@ -143,7 +143,11 @@ class MatcherRealAnswersTest {
                 if (appleDown(url)) throw IOException("Apple is down")
                 apple(url, answers.getJSONObject("apple"), term)
             }
-            "api.deezer.com" -> answers.getJSONObject("deezer").takeIf { url.encodedPath == "/search/track" && url.queryParameter("q") == term }
+            "api.deezer.com" -> when {
+                url.encodedPath == "/search/track" && url.queryParameter("q") == term -> answers.getJSONObject("deezer")
+                url.encodedPath == "/search/artist" && url.queryParameter("q") == kept.metadata.artist -> answers.optJSONObject("deezerArtists")
+                else -> null
+            }
             "music.youtube.com" -> JSONObject(FakeSpotify.bodyOf(request)).takeIf { it.optString("query") == term }
                 ?.let { answers.getJSONObject(if (it.optString("params") == VIDEOS) "videos" else "songs") }
             else -> null
