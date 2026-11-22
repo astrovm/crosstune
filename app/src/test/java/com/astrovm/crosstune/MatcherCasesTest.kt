@@ -16,7 +16,7 @@ import org.robolectric.shadows.ShadowCloseGuard
  * Holds the YouTube Music matcher to what `origin/main` opens, so a change that takes a right row away, or opens
  * a wrong one or nothing in its place, fails here first. Every made-up input the reviews of PR #947 tried, with
  * what main opened for it ([Case.main]); and a matrix and made-up searches, each in every one of [MODES], held to
- * what main opened for each, kept in the test's resources (see [onMain]).
+ * what main opened for each, kept in the test's resources (see [onMain]), except the named improvements below.
  *
  * A change to the matcher that changes what opens has to make those again on its own code, with [onMain], and
  * show in its PR the counts the matrix and the searches print, main against it, as the judge here only guesses
@@ -862,7 +862,12 @@ class MatcherCasesTest {
             if (onMain) return@forEach
             val was = requireNotNull(main["$index"]) { "$index" }.map { it.takeIf { id -> id != "-" } }
             val key = "$index ${fuzzed.song.title}: ${fuzzed.modes.first().songs} ${fuzzed.modes.first().videos}"
-            broken += broken(key, found, was)
+            val expected = if (index == 1870) {
+                // Isuzu: the Topic upload names the same song and is two seconds longer than main's video.
+                assertEquals(listOf("video0", "video0", "video0", "video0", "video0", "video0", "video1"), was)
+                List(was.size) { "video1" }
+            } else was
+            broken += broken(key, found, expected)
             found.zip(was).forEachIndexed { mode, (now, then) ->
                 val (before, after) = fuzzed.verdict(then) to fuzzed.verdict(now.id)
                 if (before == RIGHT && after != RIGHT) {
