@@ -1720,10 +1720,12 @@ internal class MainViewModel(
             snapshotFlow { uiState.systemStateKnown }.first { it }
             if (uiState.canPlayResult) return playResult()
         }
-        prepareDestination(uiState.resultDestination)
+        val destination = uiState.resultDestination
+        val preparedUrl = prepareDestination(destination)
         if (!pendingOpen) return
         pendingOpen = false
-        open(uiState.resultDestination, finishAfterOpen = true)
+        val target = uiState.resultDestination
+        open(target, finishAfterOpen = true, preparedUrl = preparedUrl.takeIf { target == destination })
     }
 
     private var trackJob: Job? = null
@@ -1885,7 +1887,7 @@ internal class MainViewModel(
                 }
                 // Asked by name, other apps find it; YouTube Music only plays its own link.
                 val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link, mustStart = true) == true
-                if (!playThere(song, app, link, asked, exact)) open(destination, finishAfterOpen = false, tapped = true)
+                if (!playThere(song, app, link, asked, exact)) open(destination, finishAfterOpen = false, tapped = true, preparedUrl = link)
             } finally {
                 uiState = uiState.copy(playingResult = false)
             }
@@ -2259,8 +2261,8 @@ internal class MainViewModel(
     }
 
     /** [tapped] is a tap on its button or in the picker, rather than a link that came in opening on its own. */
-    private suspend fun open(destination: Destination, finishAfterOpen: Boolean, tapped: Boolean = false) {
-        val url = prepareDestination(destination) ?: return
+    private suspend fun open(destination: Destination, finishAfterOpen: Boolean, tapped: Boolean = false, preparedUrl: String? = null) {
+        val url = preparedUrl ?: prepareDestination(destination) ?: return
         val original = uiState.link?.takeIf { it.service != null }
         if (uiState.resultMissing) {
             when (uiState.notFoundAction) {
@@ -5321,7 +5323,7 @@ internal class MainViewModel(
         // YouTube and YouTube Music share playlists and videos, so one opens as itself in the other.
         uiState.link?.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
         uiState.link?.takeIf { metadata.type == ItemType.TRACK }?.youtubeVideoOn(service)?.let { return destination.adapt(it) }
-        uiState.destinationUrls[destination]?.let { return it.url.forSharing() }
+        uiState.destinationUrls[destination]?.takeIf { it.lasting && it.matchingEnabled == uiState.exactMatch }?.let { return it.url.forSharing() }
         val match = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
             matcher.lookFor(service, metadata).also { uiState = uiState.copy(isMatching = false) }
@@ -5334,9 +5336,9 @@ internal class MainViewModel(
     }
 
     private fun preparedLink(destination: Destination, metadata: MusicMetadata, match: ExactMatcher.Match?): PreparedLink {
-        val exactUrl = (match as? ExactMatcher.Match.Found)?.url
-        val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(metadata))
-        return PreparedLink(url, exactUrl != null, matched(match))
+        val found = match as? ExactMatcher.Match.Found
+        val url = found?.url?.let(destination::adapt) ?: destination.searchUrl(searchQuery(metadata))
+        return PreparedLink(url, found != null, matched(match), lasting = found?.lasting != false)
     }
 
     /**
@@ -5450,11 +5452,10 @@ internal class MainViewModel(
         }
         entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { return it.url.forSharing() }
         val match = if (uiState.exactMatch && service != null) matcher.lookFor(service, entry.metadata) else null
-        val exactUrl = (match as? ExactMatcher.Match.Found)?.url
-        val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(entry.metadata))
-        val history = historyStore.remember(entry.link.url, destination.key, PreparedLink(url, exactUrl != null, matched(match)))
+        val prepared = preparedLink(destination, entry.metadata, match)
+        val history = historyStore.remember(entry.link.url, destination.key, prepared)
         uiState = uiState.copy(history = history)
-        return url.forSharing()
+        return prepared.url.forSharing()
     }
 
     /** Kept until the undo offer goes away, so clearing by mistake loses nothing. */

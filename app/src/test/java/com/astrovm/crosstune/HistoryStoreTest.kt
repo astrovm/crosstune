@@ -192,6 +192,17 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun provisionalLinksAreNotSavedWithRecentEntries() {
+        val song = entry(1)
+        val provisional = PreparedLink("https://music.youtube.com/watch?v=fan00000000", exact = true, matchingEnabled = true, lasting = false)
+        store.add(song.copy(destinationLinks = mapOf("YOUTUBE_MUSIC" to provisional)))
+        assertEquals(listOf(song), store.load())
+        store.remember(song.link.url, "YOUTUBE_MUSIC", provisional.copy(lasting = true))
+        store.remember(song.link.url, "YOUTUBE_MUSIC", provisional)
+        assertEquals(listOf(song), HistoryStore(preferences).load())
+    }
+
+    @Test
     fun corruptCachedDestinationsDoNotLoseTheHistoryEntry() {
         preferences.edit {
             putString("history", """[{"type":"TRACK","id":"1","title":"Kept","destinations":{"bad":"text","blank":{"url":""},"good":{"url":"https://example.com/search","exact":false,"matchingEnabled":true}}}]""")

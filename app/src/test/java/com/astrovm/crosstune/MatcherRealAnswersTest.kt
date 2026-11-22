@@ -132,7 +132,7 @@ class MatcherRealAnswersTest {
         kept = SPRING_DAY
         onlySpringDayFan = true
         appleDown = { it.encodedPath == "/lookup" && it.queryParameter("country") == "JP" }
-        assertEquals(ExactMatcher.Match.Found("$WATCH=$SPRING_DAY_FAN"), runBlocking {
+        assertEquals(ExactMatcher.Match.Found("$WATCH=$SPRING_DAY_FAN", lasting = false), runBlocking {
             matcher().lookFor(MusicService.YOUTUBE_MUSIC, SPRING_DAY.metadata)
         })
     }

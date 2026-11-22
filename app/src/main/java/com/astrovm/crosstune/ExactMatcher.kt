@@ -43,8 +43,9 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * by 米津玄師, where a fan's lyrics video was found.
  * Version 10 doesn't take a re-recording, From THE FIRST TAKE or 重生版, for the song unless it's asked for, so First Love
  * opens 宇多田ヒカル's own, and takes a credit of two known names together, G.E.M. 鄧紫棋, as the artist's.
+ * Version 11 gives a missing store one retry before playing a fan upload and keeps that link out of Recent.
  */
-internal const val MATCH_VERSION = 10
+internal const val MATCH_VERSION = 11
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -81,7 +82,8 @@ internal class ExactMatcher(
 
     /** What looking for something came to: found, not there, or no answer, e.g. offline, which says neither. */
     sealed interface Match {
-        data class Found(val url: String) : Match
+        /** An upload found during a store outage can open now and still need another lookup later. */
+        data class Found(val url: String, val lasting: Boolean = true) : Match
         data object Missing : Match
         data object Failed : Match
     }
@@ -91,6 +93,9 @@ internal class ExactMatcher(
 
     /** When each thing was looked for while a store that could have named it failed, and what that came to, by its [cacheKey]. */
     private val unsure = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Match>>()
+
+    /** When each song with a fan upload first had to wait for a store that could name another result. */
+    private val waitingForNames = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
@@ -148,7 +153,10 @@ internal class ExactMatcher(
      * A search's answer: what it found, or else, on YouTube, the songs and videos it turned up for
      * ChatGPT to pick from, given its own while, as it takes a few seconds.
      */
-    private class Answer(val url: String?, val toPick: ToPick? = null, val final: Boolean = true, val lasting: Boolean = true)
+    private class Answer(
+        val url: String?, val toPick: ToPick? = null, val final: Boolean = true, val lasting: Boolean = true,
+        val waitForNames: Boolean = false
+    )
 
     private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthsMs: List<Long>)
 
@@ -156,7 +164,7 @@ internal class ExactMatcher(
      * What [lookUp] came to, and whether it's only for now, as a store that could have named the song failed: [unsure].
      * Then a miss is no answer, and what's found or missed is held a while, not kept.
      */
-    private class Looked(val match: Match, val unsure: Boolean = false)
+    private class Looked(val match: Match, val unsure: Boolean = false, val waitForNames: Boolean = false)
 
     /**
      * What [target] has for [metadata]. A search that failed or timed out is asked once more when
@@ -170,8 +178,9 @@ internal class ExactMatcher(
                 answeredOr(null) { findOn(target, metadata, loosely) }
             }
             if (answer != null) {
-                val match = answer.url?.let(Match::Found) ?: answer.toPick?.let { picked(it) } ?: Match.Missing
-                return if (match == Match.Missing && !answer.final) Looked(Match.Failed, unsure = true) else Looked(match, unsure = !answer.lasting)
+                val match = answer.url?.let { Match.Found(it, answer.lasting) } ?: answer.toPick?.let { picked(it, answer.lasting) } ?: Match.Missing
+                return if (match == Match.Missing && !answer.final) Looked(Match.Failed, unsure = true)
+                else Looked(match, unsure = !answer.lasting, waitForNames = answer.waitForNames)
             }
         }
         return Looked(Match.Failed)
@@ -192,14 +201,14 @@ internal class ExactMatcher(
     }
 
     /** The song ChatGPT picks among the songs, then the videos; no answer in time is no answer. */
-    private suspend fun picked(toPick: ToPick): Match {
+    private suspend fun picked(toPick: ToPick, lasting: Boolean): Match {
         val url = withTimeoutOrNull(pickTimeoutMs) {
             Answer(
                 pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false, toPick.lengthsMs)
                     ?: pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true, toPick.lengthsMs)
             )
         } ?: return Match.Failed
-        return url.url?.let(Match::Found) ?: Match.Missing
+        return url.url?.let { Match.Found(it, lasting) } ?: Match.Missing
     }
 
     /** By the song's length too, when it's known, as an edit of a song is often named just like it; and by how songs are matched, so what was found before is looked for again. */
@@ -212,14 +221,18 @@ internal class ExactMatcher(
      * could have named the song failed is held for a while, at most as long, and then asked again: what
      * it found may be a fan's video where that store's name finds the song. Held, asking again at once,
      * as a card does, doesn't ask every service again for the store that's down.
+     * If a store could name a competing result, give it one hold before opening a fan's video.
      */
     private suspend fun remembered(kind: String, target: String, metadata: MusicMetadata, lookUp: suspend () -> Looked): Match {
         val key = cacheKey(kind, target, metadata)
         cache?.get(key)?.let { return Match.Found(it) }
         missing[key]?.takeIf { now() - it < missingForMs }?.let { return Match.Missing }
+        val firstWait = waitingForNames[key]
+        if (firstWait != null && now() - firstWait < UNSURE_FOR_MS) return Match.Failed
         unsure[key]?.takeIf { now() - it.first < minOf(missingForMs, UNSURE_FOR_MS) }?.let { return it.second }
         val looked = lookUp()
         val match = looked.match
+        if (shouldHoldForNames(key, looked)) return Match.Failed
         when {
             looked.unsure -> unsure[key] = now() to match
             match is Match.Found -> cache?.put(key, match.url)
@@ -227,6 +240,19 @@ internal class ExactMatcher(
             match == Match.Missing -> missing[key] = now()
         }
         return match
+    }
+
+    private fun shouldHoldForNames(key: String, looked: Looked): Boolean {
+        if (looked.waitForNames) {
+            val at = now()
+            val first = waitingForNames.putIfAbsent(key, at) ?: at
+            return at - first < UNSURE_FOR_MS
+        }
+        if (looked.match != Match.Failed) {
+            waitingForNames.remove(key)
+            unsure.remove(key)
+        }
+        return false
     }
 
     /**
@@ -685,38 +711,31 @@ internal class ExactMatcher(
     }
 
     private fun matchingVideo(songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String): Answer? {
-        val matching = videos.asSequence().filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
+        val matching = videos.filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
         fun found(row: Row) = Answer(watchUrl + row.id, lasting = names.everyStore)
-        if (names.everyStore) return matching.firstOrNull()?.let(::found)
         matching.firstOrNull { isOwnVideo(it, names) }?.let { return found(it) }
+        if (names.everyStore) return matching.firstOrNull()?.let(::found)
         // A failed search may have lost a length, even if there is no song row.
-        if (names.searchFailed) return null
-        // A failed lookup can only add names. If a playable song is close enough in length, one of those names
-        // could prove it, as the US store names 米津玄師 Kenshi Yonezu. A row with no length could still be the song.
-        if (!names.complete && songs.any { it.id != null && sameLength(it, names) }) return null
-        val fan = matching.firstOrNull() ?: return null
-        // A fan's title may leave a name in brackets unconfirmed, as on a piano upload. An artist's
-        // own video may also be named by the missing store, and it can run longer than the song.
-        val unresolved = names.lookupCouldName(unconfirmedVideoText(fan.name, names)) ||
-            videos.any { other -> other.id != fan.id && couldBeOwnVideo(other, names, recording) }
-        if (unresolved) return Answer(null, final = false, lasting = false)
-        return found(fan)
+        if (names.searchFailed || matching.isEmpty()) return null
+        // A title can hide an unconfirmed name in brackets, as on a piano upload.
+        val fans = matching.filterNot { names.lookupCouldName(unconfirmedVideoText(it.name, names)) }
+        val fan = fans.firstOrNull() ?: return Answer(null, final = false, lasting = false)
+        // A lookup can prove a playable song in its length window, or a video that could be the artist's.
+        val competingSong = !names.complete && songs.any { it.id != null && sameLength(it, names) }
+        val competingVideo = videos.any { it.id != fan.id && it !in fans && couldBeOwnVideo(it, names, recording) }
+        return Answer(watchUrl + fan.id, lasting = false, waitForNames = competingSong || competingVideo)
     }
 
     private fun couldBeOwnVideo(row: Row, names: Names, recording: RequestedRecording): Boolean {
         if (row.id == null || !keepsRequestedRecording(recording, row, video = true)) return false
-        val uploader = row.details.first()
-        val channel = uploader.removeSuffix(" - Topic")
-        val topic = channel != uploader
+        val channel = row.details.first().removeSuffix(" - Topic")
         val knownChannel = isOwnVideo(row, names)
         if (!knownChannel && !names.lookupCouldName(channel)) return false
-        val closeLength = row.lengthMs != null && sameLength(row, names)
-        // A Topic video with the song's title can be longer than the store's recording.
-        if (videoTitleMatches(row.name, names)) return closeLength || topic
+        if (videoTitleMatches(row.name, names)) return true
         if (isAnotherVideoVersion(row.name, names) || !names.lookupCouldName(unconfirmedVideoText(row.name, names))) return false
-        // A title in the missing store's script alone could be any song. Look for support from
-        // the channel and length, or from the title's reading, as with 終わらない歌 and Owaranai Uta.
-        return (closeLength && (knownChannel || topic)) || sameJapaneseVideoTitle(row.name, names)
+        // Close videos can need both names. An artist's video may run long when one name is already known.
+        val closeLength = row.lengthMs != null && sameLength(row, names)
+        return knownChannel || closeLength || sameJapaneseVideoTitle(row.name, names)
     }
 
     private fun sameJapaneseVideoTitle(title: String, names: Names): Boolean {

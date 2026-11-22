@@ -6,8 +6,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.abs
 
-/** A prepared destination URL, including whether matching was enabled when it was produced. */
-internal data class PreparedLink(val url: String, val exact: Boolean, val matchingEnabled: Boolean)
+/** A prepared destination URL. A link found during an outage can be used on the card before being looked up again. */
+internal data class PreparedLink(val url: String, val exact: Boolean, val matchingEnabled: Boolean, val lasting: Boolean = true)
 
 internal data class HistoryEntry(
     val link: MusicLink,
@@ -31,7 +31,8 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
     }
 
     fun add(entry: HistoryEntry): List<HistoryEntry> {
-        val updated = (listOf(entry) + load().filterNot { it.isSameAs(entry) }).take(MAX_ENTRIES)
+        val remembered = entry.copy(destinationLinks = entry.destinationLinks.filterValues(PreparedLink::lasting))
+        val updated = (listOf(remembered) + load().filterNot { it.isSameAs(entry) }).take(MAX_ENTRIES)
         save(updated)
         return updated
     }
@@ -39,7 +40,9 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
     /** Updates cached links without changing recency or resurrecting cleared history. */
     fun remember(sourceUrl: String, destinationKey: String, prepared: PreparedLink): List<HistoryEntry> {
         val updated = load().map { entry ->
-            if (entry.link.url == sourceUrl) entry.copy(destinationLinks = entry.destinationLinks + (destinationKey to prepared)) else entry
+            if (entry.link.url != sourceUrl) return@map entry
+            val links = if (prepared.lasting) entry.destinationLinks + (destinationKey to prepared) else entry.destinationLinks - destinationKey
+            entry.copy(destinationLinks = links)
         }
         save(updated)
         return updated

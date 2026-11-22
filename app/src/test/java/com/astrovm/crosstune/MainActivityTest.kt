@@ -1915,6 +1915,56 @@ class MainActivityTest {
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=fan00000000", nextStartedActivity()?.dataString)
         assertTrue(fake.requestedUrls.any { "itunes.apple.com/lookup?id=7&country=JP" in it })
+        assertNull(HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"])
+    }
+
+    @Test
+    fun recentLooksAgainAfterOpeningAFanUploadDuringAnOutage() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
+        val source = "https://open.spotify.com/track/$TRACK_ID"
+        val fan = "https://music.youtube.com/watch?v=fan00000000"
+        val own = "https://music.youtube.com/watch?v=own00000000"
+        fun row(title: String, channel: String, id: String) = """{"musicResponsiveListItemRenderer":{
+            "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$title"}]}}},
+            {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$channel • 1K views • 3:04"}]}}}],
+            "playlistItemData":{"videoId":"$id"}}}"""
+        val videos = """{"contents":[${row("THE BLUE HEARTS - 終わらない歌", "Fan", "fan00000000")},
+            ${row("終わらない歌", "ザ・ブルーハーツ - Topic", "own00000000")}]}"""
+        var japanUp = false
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "itunes.apple.com" && url.encodedPath == "/search" -> FakeSpotify.html(
+                    request, """{"results":[{"trackId":7,"trackName":"終わらない歌","artistName":"THE BLUE HEARTS","trackTimeMillis":184000}]}"""
+                )
+                url.host == "itunes.apple.com" && url.queryParameter("country") == "JP" -> if (japanUp) {
+                    FakeSpotify.html(request, """{"results":[{"trackId":7,"trackName":"終わらない歌","artistName":"ザ・ブルーハーツ","trackTimeMillis":184000}]}""")
+                } else FakeSpotify.html(request, "{}", code = 503)
+                url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                url.host == "music.youtube.com" -> FakeSpotify.html(
+                    request, if (FakeSpotify.bodyOf(request).contains("EgWKAQIQAWoKEAoQAxAEEAkQBQ==")) videos else "{}"
+                )
+                else -> FakeSpotify.html(request, FakeSpotify.trackPage("終わらない歌", "THE BLUE HEARTS · Song"))
+            }
+        }
+        val activity = launch(trackLink())
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertTrue(nextStartedActivity()?.dataString.orEmpty().startsWith("https://music.youtube.com/search"))
+
+        val model = ViewModelProvider(activity)[MainViewModel::class.java]
+        fun openRecent(): String? {
+            composeRule.runOnIdle { model.openRecent(source) }
+            waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+            return nextStartedActivity()?.dataString
+        }
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(ExactMatcher.UNSURE_FOR_MS))
+        assertEquals(fan, openRecent())
+        assertNull(HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"])
+
+        japanUp = true
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(ExactMatcher.UNSURE_FOR_MS))
+        assertEquals(own, openRecent())
+        assertEquals(own, HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"]?.url)
     }
 
     @Test
