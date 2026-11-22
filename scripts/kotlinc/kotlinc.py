@@ -19,6 +19,9 @@ import urllib.request
 from pathlib import Path
 from xml.etree import ElementTree
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from gradlebox import gradle_caches
+
 ROOT = Path(__file__).resolve().parents[2]
 LOCK = Path(__file__).with_name("kotlinc.lock")
 MAVEN = "https://repo1.maven.org/maven2"
@@ -68,15 +71,6 @@ def folder(root=ROOT):
     """Where the jars go: $CROSSTUNE_KOTLINC_DIR, or build/kotlinc/VERSION in the checkout."""
     named = os.environ.get("CROSSTUNE_KOTLINC_DIR")
     return Path(named) if named else root / "build" / "kotlinc" / kotlin_version(root)
-
-
-def gradle_caches(home=None):
-    """Gradle's module caches on this machine: gradle-box's slots and seed, and the user's own Gradle."""
-    home = Path(home or Path.home())
-    box = Path(os.environ.get("GRADLE_BOX_DIR") or Path(os.environ.get("XDG_CACHE_HOME") or home / ".cache") / "crosstune-gradle-box")
-    user = Path(os.environ.get("GRADLE_USER_HOME") or home / ".gradle")
-    found = [*sorted(box.glob("*/caches/modules-2/files-2.1")), box / "seed" / "modules-2" / "files-2.1", user / "caches" / "modules-2" / "files-2.1"]
-    return [cache for cache in found if cache.is_dir()]
 
 
 def sha256(path):

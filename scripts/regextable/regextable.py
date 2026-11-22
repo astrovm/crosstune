@@ -40,6 +40,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 import adbtool
+import gradlebox
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 TABLES = ROOT / "app/src/test/regextable"
@@ -209,7 +210,7 @@ def probe(serial):
     serial = emulator(serial)
     env = dict(os.environ, GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
     subprocess.run(["nice", "-n", "10", "scripts/gradle-box/gradle-box.sh", "--max-workers=2", ":app:compileDebugUnitTestKotlin"], cwd=ROOT, env=env, check=True)
-    stdlib = next(Path.home().glob(".cache/crosstune-gradle-box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/*/*/kotlin-stdlib-*[0-9].jar"))
+    stdlib = gradlebox.kotlin_stdlib()
     tools = max((SDK / "build-tools").iterdir())
     platform = max((SDK / "platforms").iterdir()) / "android.jar"
     probe_classes = sorted(str(path) for path in (CLASSES / "com/astrovm/crosstune").glob("RegexTableProbe*.class"))
@@ -235,7 +236,7 @@ def probe(serial):
 def compiled():
     env = dict(os.environ, GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
     subprocess.run(["nice", "-n", "10", "scripts/gradle-box/gradle-box.sh", "--max-workers=2", ":app:compileDebugUnitTestKotlin"], cwd=ROOT, env=env, check=True)
-    stdlib = next(Path.home().glob(".cache/crosstune-gradle-box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/*/*/kotlin-stdlib-*[0-9].jar"))
+    stdlib = gradlebox.kotlin_stdlib()
     tools = max((SDK / "build-tools").iterdir())
     platform = max((SDK / "platforms").iterdir()) / "android.jar"
     return stdlib, tools, platform
