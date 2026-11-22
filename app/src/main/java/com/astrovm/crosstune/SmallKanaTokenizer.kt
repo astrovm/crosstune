@@ -109,7 +109,6 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         if (node.type != ViterbiNode.Type.KNOWN || !Readings.isKana(node.surface.last())) return@mapNotNull null
         if (text.getOrNull(end) !in listOf('っ', 'ッ')) return@mapNotNull null
         val ending = text.substring(end).takeWhile { it in "っッ" }
-        if (text.getOrNull(end + ending.length)?.let(Readings::isKana) != true) return@mapNotNull null
         ViterbiNode(node.wordId, node.surface + ending, tokenInfoDictionary, at, ViterbiNode.Type.KNOWN)
             .also { bridged[it] = (node in offered) to ending }
     }
