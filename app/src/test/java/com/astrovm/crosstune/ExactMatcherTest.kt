@@ -1227,6 +1227,17 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anArtistsOtherVersionOrPartDoesNotReplaceTheFansVideo() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val fan = youTubeMusicRow("Song - アーティスト", "Fan • 1M views • 4:00", videoId = "fan00000000")
+        for ((title, length) in listOf("Song - アーティスト (Japanese Version)" to "4:00", "Song - アーティスト (Part 2)" to "4:00", "Song - アーティスト" to "0:30")) {
+            val own = youTubeMusicRow(title, "アーティスト • 1M views • $length", videoId = "other000000")
+            namesAndTabs(videos = listOf(fan, own), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
+            assertEquals(title, "https://music.youtube.com/watch?v=fan00000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        }
+    }
+
+    @Test
     fun appleProvedRowsBeatDeezerOnlyRows() {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val deezerRow = youTubeMusicRow("Song", "Deezer Artist • Album • 4:00", videoId = "deezer00000")
