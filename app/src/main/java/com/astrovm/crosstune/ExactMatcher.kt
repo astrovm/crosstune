@@ -318,7 +318,9 @@ internal class ExactMatcher(
         val retry = saved?.retry ?: hold?.let { Retry(it.wallTime) } ?: outage?.retry
         val earlierUrl = (earlier?.match as? Match.Found)?.url
         val provisional = saved?.provisionalUrl ?: outage?.url ?: earlierUrl.takeIf { looked.waitForNames }
-        if (looked.waitForNames && retry?.heldAtMs == null && provisional == null) return@updateAnswers startWaiting(key, saved)
+        if (looked.waitForNames && provisional == null) {
+            waitingAnswer(key, saved, retry)?.let { return@updateAnswers it }
+        }
         val match = if (looked.unsure && provisional != null) Match.Found(provisional, lasting = false)
         else looked.matchAfterOutage(retry != null || earlier != null)
         rememberAnswer(key, saved, looked, match, retry, provisional)
@@ -338,10 +340,13 @@ internal class ExactMatcher(
         return hold
     }
 
-    private suspend fun CacheChanges.startWaiting(key: String, saved: SavedAnswer?): Lookup {
+    private suspend fun CacheChanges.waitingAnswer(key: String, saved: SavedAnswer?, retry: Retry?): Lookup? {
+        val existing = waitingForNames[key]
+        if (existing != null) return existing.takeIf { it.waiting(now()) }?.pending()
+        if (retry?.heldAtMs != null) return null
         val hold = NameHold(now(), wallNow())
-        val first = waitingForNames.putIfAbsent(key, hold) ?: hold
-        val pending = first.pending()
+        waitingForNames[key] = hold
+        val pending = hold.pending()
         saveAnswer(key, saved, SavedAnswer(null, pending.retry))
         return pending
     }

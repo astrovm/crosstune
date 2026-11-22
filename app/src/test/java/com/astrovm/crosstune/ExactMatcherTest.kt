@@ -1755,6 +1755,40 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun overlappingLookupsShareTheHoldSavedMeanwhile() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("shared-hold").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, timeoutMs = 30_000, now = { 4_000 }, wallNow = { 100_000 })
+        val firstStoreRequest = AtomicBoolean(true)
+        val started = CompletableDeferred<Unit>()
+        val mayAnswer = CountDownLatch(1)
+        namesAndTabs(videos = listOf(fan, own), apple = apple, failing = setOf("JP"))
+        val outage = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.queryParameter("country") == "JP" && firstStoreRequest.getAndSet(false)) {
+                started.complete(Unit)
+                check(mayAnswer.await(30, SECONDS))
+            }
+            outage(request)
+        }
+        val late = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
+        val pending = ExactMatcher.Lookup(ExactMatcher.Match.WaitingForNames, ExactMatcher.Retry(100_000))
+        val saved = try {
+            withTimeout(10_000) { started.await() }
+            assertEquals(pending, finder.lookup(MusicService.YOUTUBE_MUSIC, song))
+            cache.entries()
+        } finally {
+            mayAnswer.countDown()
+        }
+        assertEquals(pending, late.await())
+        assertEquals(saved, cache.entries())
+    }
+
+    @Test
     @OptIn(ExperimentalCoroutinesApi::class)
     fun anotherSongCanMatchWhileAnOutageAnswerFlushes() = runBlocking {
         val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
