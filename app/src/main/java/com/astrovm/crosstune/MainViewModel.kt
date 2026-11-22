@@ -2628,7 +2628,7 @@ internal class MainViewModel(
             // A translation that failed is asked for again.
             learning.copy(translations = if (learning.translationFailed) emptyList() else learning.translations),
             // Chords none were found for are looked for again.
-            madeWith(), uiState.chords.takeIf { it.sheet != null } ?: uiState.chords.fresh(), wordsPace
+            madeWith(song), uiState.chords.takeIf { it.sheet != null } ?: uiState.chords.fresh(), wordsPace
         )
         kept[key] = words
         keptOnDisk?.let { disk ->
@@ -2642,7 +2642,7 @@ internal class MainViewModel(
      * credit since left out, are worked out again.
      */
     private fun showKept(song: MusicMetadata): Boolean {
-        val kept = kept[RecordingKey.of(song)]?.takeIf { it.madeWith == madeWith() && it.found?.let { found -> LyricsFinder.cleaned(found, song) == found } != false } ?: return false
+        val kept = kept[RecordingKey.of(song)]?.takeIf { it.madeWith == madeWith(song) && it.found?.let { found -> LyricsFinder.cleaned(found, song) == found } != false } ?: return false
         found = kept.found
         foundLines = kept.foundLines
         restored = kept.japanese
@@ -2674,8 +2674,8 @@ internal class MainViewModel(
      * signed in, ChatGPT, how it's asked to translate and its model, which translate them, put their
      * readings right and write romaji in Japanese.
      */
-    private fun madeWith() =
-        listOf(LyricsFinder.CACHE_VERSION, Readings.VERSION, translateInto(), uiState.learning.untranslated.sorted(), usesChatGpt(), uiState.learning.chatGptTranslation, TRANSLATION_VERSION, uiState.chatGpt.model).toString()
+    private fun madeWith(song: MusicMetadata) =
+        listOf(LyricsFinder.cacheVersion(song), Readings.VERSION, translateInto(), uiState.learning.untranslated.sorted(), usesChatGpt(), uiState.learning.chatGptTranslation, TRANSLATION_VERSION, uiState.chatGpt.model).toString()
 
     /**
      * [found], [song]'s words as shown, timed better once that's worked out, e.g. from another copy

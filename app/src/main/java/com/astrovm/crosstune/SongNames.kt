@@ -568,6 +568,15 @@ internal object SongNames {
             (bracketTag.matchesIn(name) + dashTag.matchesIn(name)).any { onlyInstrumental(it.groupValues[1]) }
     }
 
+    /** Whether [title] adds only a trailing instrumental tag to [played], as copies on one album may do. */
+    fun sameWithInstrumentalTag(title: String, played: String): Boolean {
+        val name = Normalizer.normalize(withoutEditionTag(title), Normalizer.Form.NFKC).trim()
+        val tag = (bracketTag.matchesIn(name) + dashTag.matchesIn(name)).firstOrNull { it.range.last == name.lastIndex } ?: return false
+        val description = tag.groupValues[1]
+        val mark = instrumentalWord.find(description) ?: return false
+        return words(description.removeRange(mark.range)).all { it in SAYS_VERSION } && same(name.substring(0, tag.range.first), played)
+    }
+
     /** Whether a [tag], what's in brackets or after a dash, says the whole recording is an instrumental. */
     private fun onlyInstrumental(tag: String): Boolean {
         val said = instrumentalWord.find(tag) ?: return false

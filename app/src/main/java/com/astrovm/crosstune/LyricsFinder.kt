@@ -651,7 +651,7 @@ internal class LyricsFinder(
 
     /** The sheets on the phone for [song]. The reading cache keys use the whole sheet as shown, timed or plain. */
     suspend fun cachedLineSets(song: MusicMetadata): List<List<String>> {
-        val names = cachedNames(song, FIRST_SUNG_LYRICS_CACHE..CACHE_VERSION)
+        val names = cachedNames(song, FIRST_SUNG_LYRICS_CACHE..INSTRUMENTAL_ALBUM_CACHE_VERSION)
         return cache?.entries().orEmpty().flatMap { (key, json) ->
             if (!key.isCachedUnder(names)) return@flatMap emptyList()
             val found = fromCache(json)?.first ?: return@flatMap emptyList()
@@ -668,7 +668,10 @@ internal class LyricsFinder(
         return wanted == null || kept == null || abs(kept - wanted) <= SAME_RECORDING_LENGTH_MS
     }
 
-    private fun cachedNames(metadata: MusicMetadata, versions: Iterable<Int> = listOf(CACHE_VERSION, BEFORE_NETEASE_ARTIST_CHECK, 16, 15)): List<String> {
+    private fun cachedNames(
+        metadata: MusicMetadata,
+        versions: Iterable<Int> = listOf(INSTRUMENTAL_ALBUM_CACHE_VERSION, CACHE_VERSION, BEFORE_NETEASE_ARTIST_CHECK, 16, 15)
+    ): List<String> {
         val name = "${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
         return versions.map { version -> "$version\u0000$name" }
     }
@@ -735,7 +738,7 @@ internal class LyricsFinder(
      * The song, whatever the case or spacing of its name. Words kept by versions that didn't ask
      * YouTube Music or check timings may be worse than what's there now, so they're asked for again.
      */
-    private fun cacheKey(metadata: MusicMetadata, version: Int = CACHE_VERSION) = "$version\u0000${RecordingKey.of(metadata)}"
+    private fun cacheKey(metadata: MusicMetadata, version: Int = cacheVersion(metadata)) = "$version\u0000${RecordingKey.of(metadata)}"
 
     /**
      * [found] timed as a well-timed copy of the song on LRCLIB times the same words, which may be
@@ -1723,15 +1726,19 @@ internal class LyricsFinder(
         /**
          * The very recording, name for name but for a guest or remaster tag, so not "Song (Inst.)" for "Song (feat.
          * Guest)"; by its artist, not one whose name holds theirs, "Band Piano Tribute"; and as long, when both say.
-         * An album of instrumentals names its tracks as the sung ones, so only the same album counts.
+         * An album of instrumentals names its tracks as the sung ones. On that same album a copy may add
+         * an instrumental tag to the title, as LRCLIB does for "Accordian".
          */
         fun isRecording(metadata: MusicMetadata): Boolean {
-            if (!SongNames.same(title, metadata.title) || SongNames.artists(artist).none { it in SongNames.artists(metadata.artist) }) return false
+            if (SongNames.artists(artist).none { it in SongNames.artists(metadata.artist) }) return false
             val playedAlbum = metadata.instrumentalAlbum
             val copyAlbum = json.optString("albumName")
+            val sameInstrumentalAlbum = playedAlbum != null && RecordingKey.sameAlbum(playedAlbum, copyAlbum)
             // A copy with no album says nothing against the played one: it goes by its length and title, as it always did.
             val albumsMatter = playedAlbum != null || SongNames.albumOfInstrumentals(copyAlbum)
-            if (copyAlbum.isNotBlank() && albumsMatter && !RecordingKey.sameAlbum(playedAlbum.orEmpty(), copyAlbum)) return false
+            if (copyAlbum.isNotBlank() && albumsMatter && !sameInstrumentalAlbum) return false
+            val sameTitle = SongNames.same(title, metadata.title)
+            if (!sameTitle && !(sameInstrumentalAlbum && SongNames.sameWithInstrumentalTag(title, metadata.title))) return false
             val copyMs = lengthMs() ?: return true
             val playingMs = metadata.lengthMs ?: return true
             return abs(copyMs - playingMs) <= SAME_LENGTH_MS
@@ -1935,6 +1942,10 @@ internal class LyricsFinder(
          * 17 for a song's words kept for an instrumental recording of it; 18 to check alternate NetEase artist credits again.
          */
         const val CACHE_VERSION = 18
+        // Look again for albums of instrumentals whose saved words predate the title tag check.
+        private const val INSTRUMENTAL_ALBUM_CACHE_VERSION = 19
+        fun cacheVersion(song: MusicMetadata) = if (song.instrumentalAlbum == null) CACHE_VERSION else INSTRUMENTAL_ALBUM_CACHE_VERSION
+
         private const val BEFORE_NETEASE_ARTIST_CHECK = 17
         /** The lyrics cache when the app first kept sung readings. Older sheets can't have a matching answer. */
         private const val FIRST_SUNG_LYRICS_CACHE = 6

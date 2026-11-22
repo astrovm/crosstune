@@ -16,7 +16,9 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -56,7 +58,7 @@ class UnsungTest {
     /** What the phone is: a TV, or else what Android says. */
     @Volatile
     private var phone: Phone? = null
-    private val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
+    private var link = "https://music.youtube.com/watch?v=sPmul8b17AU"
 
     /** The genre the store files the song under, or null when it doesn't list it. */
     @Volatile
@@ -358,6 +360,56 @@ class UnsungTest {
     }
 
     private fun showsWords() = composeRule.onAllNodes(hasText("Hold the light", substring = true)).fetchSemanticsNodes().isNotEmpty()
+
+    private fun useAccordian() {
+        link = "https://music.apple.com/us/album/accordian/41655332?i=41655288"
+        lrclib = accordianLyrics()
+        val answer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.encodedPath == "/lookup") {
+                FakeSpotify.html(request, ACCORDIAN_INSTRUMENTAL_LOOKUP)
+            } else {
+                answer(request)
+            }
+        }
+        singing.answers = listOf(music)
+    }
+
+    @Test
+    fun anInstrumentalOnAnInstrumentalsAlbumKeepsTheSungTwinsWordsOffScreen() {
+        useAccordian()
+        openLyrics { showsWords() || shows(R.string.lyrics_instrumental) }
+        assertTrue("The instrumental screen should replace the sung recording's words", shows(R.string.lyrics_instrumental))
+        waitUntil { singing.hears == 1 }
+        repeat(MainViewModel.VOICE_TRIES) { passes(MainViewModel.VOICE_PAUSE_MS) }
+        assertTrue(shows(R.string.lyrics_instrumental))
+        assertFalse(showsWords())
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
+    fun reopeningAnInstrumentalAlbumChecksLyricsTheOldAppShowed() {
+        useAccordian()
+        lrclib = JSONArray(lrclib).apply { remove(1) }.toString()
+        openLyrics(::showsWords)
+        checkNotNull(controller).destroyAndSettle()
+        controller = null
+
+        // The last app saved what it showed with the lyrics cache version before the title check.
+        val disk = LookupCache(File(app.cacheDir, "kept_words.json"), Dispatchers.Unconfined)
+        runBlocking {
+            val (key, json) = disk.entries().single()
+            val words = requireNotNull(KeptWords.from(json))
+            disk.keep(key, words.copy(madeWith = words.madeWith.replaceBefore(',', "[18")).json())
+        }
+        File(app.cacheDir, "lyrics.json").delete()
+        lrclib = accordianLyrics()
+        val requests = fake.requestedUrls.size
+        TimingLog.clear()
+        openLyrics { showsWords() || shows(R.string.lyrics_instrumental) }
+        assertTrue("${model().uiState.lyricsFor} ${fake.requestedUrls.drop(requests)} ${TimingLog.lastMinute()}", shows(R.string.lyrics_instrumental))
+        assertFalse(showsWords())
+    }
 
     @Test
     fun wordsFoundForASongLrclibMarksInstrumentalShowOnceSomeoneIsHeardSingingIt() {
