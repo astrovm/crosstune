@@ -352,6 +352,26 @@ class FakeDiff(unittest.TestCase):
             # A range that adds nothing counts nothing.
             self.assertEqual([], check_golden.added_code(repo, start, start))
 
+    def test_a_code_file_with_any_name_counts_and_reads_the_same_on_every_machine(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder, golden_text(ROW))
+            names = ["app/src/main/java/com/astrovm/crosstune/新しい.kt", "app/src/main/java/com/astrovm/crosstune/with\ttab.kt"]
+            self.write(repo, READINGS, "one\n")
+            for name in names:
+                self.write(repo, name, "one\n")
+            self.merge(repo, "test: change a reading and add sources with odd names")
+            start = check_golden.git(repo, "rev-parse", "HEAD^1").strip()
+            self.assertEqual(sorted(names), check_golden.added_code(repo, start, "HEAD"))
+            for name in names:
+                self.write(repo, name, "two\n")
+                commit(repo, f"test: change {name} only")
+                self.assertNotEqual(check_golden.readings_digest(repo, start, "HEAD~1"), check_golden.readings_digest(repo, start, "HEAD"), name)
+            digests = set()
+            for quoted in ["true", "false"]:
+                git(repo, "config", "core.quotePath", quoted)
+                digests.add(check_golden.readings_digest(repo, start, "HEAD"))
+            self.assertEqual(1, len(digests))
+
     def test_the_golden_file_in_the_same_pull_request_passes(self):
         with tempfile.TemporaryDirectory() as folder:
             repo = self.repo(folder)

@@ -164,15 +164,21 @@ def verdict(readings_changed, golden_changed, removed, body, lock_changed=(), di
 
 
 def git(repo, *args):
-    return subprocess.check_output(["git", *args], cwd=repo, text=True)
+    """git in [repo], with names as they are: quoted, a name such as 新.kt would read differently on each machine, as
+    its core.quotePath says, and change the digest."""
+    return subprocess.check_output(["git", "-c", "core.quotePath=false", *args], cwd=repo, text=True)
 
 
 def changes(repo, base, head):
     """What this range does to each path: (status letter, paths), the old name first for a rename."""
     out = []
-    for line in git(repo, "diff", "--name-status", "-M", base, head).splitlines():
-        status, *paths = line.split("\t")
-        out.append((status[0], paths))
+    # Split on NULs, which no name holds; a tab or a line break in a name is quoted even with core.quotePath off.
+    fields = git(repo, "diff", "--name-status", "-z", "-M", base, head).split("\0")[:-1]
+    while fields:
+        status = fields.pop(0)[0]
+        count = 2 if status in "RC" else 1
+        out.append((status, fields[:count]))
+        del fields[:count]
     return out
 
 
