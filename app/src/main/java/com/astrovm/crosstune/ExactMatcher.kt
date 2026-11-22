@@ -677,9 +677,9 @@ internal class ExactMatcher(
         if (names.appleFound) {
             songRow(metadata, rows, videoRows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
             videoRows.firstOrNull {
-                isTheSongsVideo(it, names) && (names.complete || isOwnVideo(it, names)) && keepsRequestedRecording(recording, it, video = true)
-            }?.takeIf { isOwnVideo(it, names) || appleNamedArtist(metadata, names) }
-                ?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+                isTheSongsVideo(it, names) && (names.complete || isOwnVideo(it, names)) && keepsRequestedRecording(recording, it, video = true) &&
+                    (isOwnVideo(it, names) || appleNamedArtist(metadata, names))
+            }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         }
         addDeezerNames(metadata, names)
         val song = songRow(metadata, rows, videoRows, names, recording)
