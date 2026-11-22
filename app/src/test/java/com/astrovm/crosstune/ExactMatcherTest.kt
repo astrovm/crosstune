@@ -1227,6 +1227,26 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anArtistPrefixDoesNotHideTheSameVideo() = runBlocking {
+        val song = MusicMetadata("Song", "Artist", lengthMs = 240_000)
+        val fan = youTubeMusicRow("Artist - Song", "Fan • 1M views • 4:00", videoId = "fan00000000")
+        val own = youTubeMusicRow("Song", "Artist • 1M views • 4:00", videoId = "original000")
+        namesAndTabs(videos = listOf(fan, own), apple = mapOf("US" to appleSong("Song", "Artist", 240_000)))
+        assertEquals("https://music.youtube.com/watch?v=original000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().host == "api.deezer.com" })
+    }
+
+    @Test
+    fun anArtistsVideoWithNoDurationCanMatchTheSameTitle() = runBlocking {
+        val song = MusicMetadata("Song", "Artist", lengthMs = 240_000)
+        val fan = youTubeMusicRow("Artist - Song", "Fan • 1M views • 4:00", videoId = "fan00000000")
+        val own = youTubeMusicRow("Artist - Song", "Artist • 1M views", videoId = "original000")
+        namesAndTabs(videos = listOf(fan, own), apple = mapOf("US" to appleSong("Song", "Artist", 240_000)))
+        assertEquals("https://music.youtube.com/watch?v=original000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().host == "api.deezer.com" })
+    }
+
+    @Test
     fun anArtistsOtherVersionOrPartDoesNotReplaceTheFansVideo() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val fan = youTubeMusicRow("Song - アーティスト", "Fan • 1M views • 4:00", videoId = "fan00000000")
