@@ -697,10 +697,31 @@ internal class ExactMatcher(
     }
 
     private fun sameVideoRecording(first: Row, candidate: Row, metadata: MusicMetadata, names: Names): Boolean {
-        if (SongNames.normalize(first.name) != SongNames.normalize(candidate.name)) return false
+        if (videoRecordingTitle(first.name, names) != videoRecordingTitle(candidate.name, names)) return false
+        if (candidate.lengthMs == null) return true
         if (first.lengthMs?.let { !sameRecordingLength(candidate.lengthMs, it) } == true) return false
         val wanted = metadata.lengthMs?.takeIf { it > 0 }?.let(::listOf) ?: names.lengthsMs
         return wanted.isEmpty() || wanted.any { sameRecordingLength(candidate.lengthMs, it) }
+    }
+
+    /** Strip only a whole known artist's prefix; keep recording and language labels in the title. */
+    private fun videoRecordingTitle(title: String, names: Names): String {
+        val known = names.artists.map(SongNames::normalize).toSet()
+        fun artistBefore(at: Int) = at > 0 && SongNames.normalize(title.substring(0, at)) in known
+        val open = title.indexOfFirst { it == '「' || it == '『' }
+        if (open > 0 && artistBefore(open)) {
+            val close = title.indexOf(if (title[open] == '「') '」' else '』', open + 1)
+            if (close > open) {
+                val after = title.substring(close + 1)
+                val suffix = after.takeUnless { SongNames.normalize(it) == "mv" }.orEmpty()
+                return SongNames.normalize(title.substring(open + 1, close) + suffix)
+            }
+        }
+        val dash = title.indices.firstOrNull { title[it] in "-–—" && artistBefore(it) }
+        if (dash != null) return SongNames.normalize(title.substring(dash + 1))
+        val mv = title.indexOf(" MV ", ignoreCase = true)
+        if (mv > 0 && artistBefore(mv)) return SongNames.normalize(title.substring(mv + 4))
+        return SongNames.normalize(title)
     }
 
     private fun appleSongRow(rows: List<Row>, names: Names, recording: RequestedRecording): Row? {
