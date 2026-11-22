@@ -41,7 +41,11 @@ class AlbumOnlyLyricsTest {
         assertEquals(unmarked.copy(markedInstrumental = true), lookup(playing))
 
         val tagged = JSONArray(rows).getJSONObject(1)
-        for (title in listOf("Accordian - Inst.", "Accordian （伴奏版）", "Accordian (Instrumental Version)", "Accordian - Off-Vocal")) {
+        val taggedTitles = listOf(
+            "Accordian(Instrumental)", "Accordian - Inst.", "Accordian （伴奏版）",
+            "Accordian (Instrumental Version)", "Accordian - Off-Vocal"
+        )
+        for (title in taggedTitles) {
             val response = JSONArray(rows).put(1, JSONObject(tagged.toString()).put("trackName", title))
             assertEquals(title, unmarked.copy(markedInstrumental = true), lookup(playing, response.toString()))
         }
