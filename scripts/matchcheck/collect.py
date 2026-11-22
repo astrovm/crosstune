@@ -112,6 +112,10 @@ def main():
         for r in us:
             if not latin(r["trackName"]) or r["trackTimeMillis"] not in native:
                 continue
+            # The app removes some edition tags before it searches. Keep plain titles here so the
+            # captured query can be checked against the app's own searchQuery in MatchReplayTest.
+            if args.native_artist and (any(mark in r["trackName"] for mark in "([") or " - " in r["trackName"]):
+                continue
             if args.native_artist and not any(n["artist"] and not latin(n["artist"]) and n["artist"] != r["artistName"] for n in native[r["trackTimeMillis"]]):
                 continue
             if any(p["title"] == r["trackName"] for p in picked):

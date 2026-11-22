@@ -76,6 +76,7 @@ class PrepareTest(unittest.TestCase):
                 self.assertTrue(os.path.isfile(os.path.join(out, prepared[name])))
             self.assertEqual("米津玄師", prepared["artist"])
             self.assertEqual(255_000, prepared["lengthMs"])
+            self.assertEqual("Lemon 米津玄師", prepared["query"])
 
     def test_answers_never_kept_are_none(self):
         with tempfile.TemporaryDirectory() as out:

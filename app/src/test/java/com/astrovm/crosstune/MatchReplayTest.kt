@@ -29,6 +29,11 @@ class MatchReplayTest {
         assumeTrue(given != null && File(given, "replay.json").isFile)
         dir = requireNotNull(given)
         val songs = JSONArray(File(dir, "replay.json").readText()).let { all -> (0 until all.length()).map(all::getJSONObject) }
+        val wrongQueries = songs.filter { song ->
+            val query = song.optString("query")
+            query.isNotEmpty() && query != searchQuery(MusicMetadata(song.getString("title"), song.getString("artist")))
+        }.map { it.optString("query") }
+        assertTrue("captured queries differ from the app's searches: $wrongQueries", wrongQueries.isEmpty())
         // Every answer is read now, once, and served from here: one that can't be read, missing or not allowed, would be
         // taken for a lookup that failed, and every song would open nothing, the same on main and the branch, which reads
         // as a pass. Read again later, one that went away meanwhile would do the same.

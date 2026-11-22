@@ -134,7 +134,7 @@ def prepare(out, require_answers=False):
         for n in song["native"]:
             native.setdefault(n["store"], {"trackId": song["id"], "trackName": n["title"], "artistName": n["artist"], "collectionName": n["album"], "trackTimeMillis": song["lengthMs"]})
         replay.append({
-            "title": song["title"], "artist": song.get("askedArtist", song["artist"]), "lengthMs": song["lengthMs"],
+            "title": song["title"], "artist": song.get("askedArtist", song["artist"]), "lengthMs": song["lengthMs"], "query": query,
             "us": [{"trackId": song["id"], "trackName": song["title"], "artistName": song["artist"], "collectionName": song["album"], "trackTimeMillis": ms}
                    for ms in (song["editionsMs"] or [song["lengthMs"]])],
             "native": native,
