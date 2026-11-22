@@ -24,6 +24,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -45,6 +46,8 @@ import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.CoroutineContext
 
 /** The timed words lined up to the singing heard in what the phone plays. */
 @RunWith(RobolectricTestRunner::class)
@@ -67,6 +70,13 @@ class SingingTest {
     /** Six lines, three seconds apart, each sung [SHIFT_MS] later than they're timed; a test may give more. */
     private var lines = listOf("Sing to me tonight", "Under the yellow moon", "Every river finds the sea", "Hold the morning light", "Dancing on the water", "Never let it go")
 
+    /** Lyrics answers matched in step with the screen, as Unconfined does, counting each match it's asked for. */
+    private val matched = AtomicInteger()
+    private val matching = object : CoroutineDispatcher() {
+        override fun isDispatchNeeded(context: CoroutineContext): Boolean = false.also { matched.incrementAndGet() }
+        override fun dispatch(context: CoroutineContext, block: Runnable) = block.run()
+    }
+
     /** When the music app's clock started, which is when the singing was heard from too, and where in the song. */
     private var startedAt = 0L
     private var startedFromMs = 0L
@@ -76,7 +86,7 @@ class SingingTest {
         MainActivity.httpClientFactory = { fake.client() }
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
-        MainActivity.lyricsMatchingDispatcher = Dispatchers.Unconfined
+        MainActivity.lyricsMatchingDispatcher = matching
         MainActivity.shellFactory = { emptyList() }
         MainActivity.checksForUpdates = { false }
         MainActivity.playbackFactory = { playback }
@@ -1075,8 +1085,11 @@ class SingingTest {
         File(app.cacheDir, "lyrics.json").delete()
         copies = true
         val asked = fake.requestedUrls.size
+        matched.set(0)
         openLyrics()
         waitUntil(::keptForGood)
+        // Matched where the test set, in step with the screen, not on the shared pool a busy machine fills.
+        assertTrue(matched.get() > 0)
         assertEquals(times, model().uiState.lyricLines.map { it.timeMs })
         assertTrue(fake.requestedUrls.drop(asked).none { "track_name=Demo&" in it })
         // And kept so: opened again once the words as shown aren't kept any more, as after the readings change, they're the
@@ -1107,9 +1120,11 @@ class SingingTest {
         copies = true
         // Only what's asked once the words are opened again counts: the first lookup asked for the bare title too.
         val asked = fake.requestedUrls.size
+        matched.set(0)
         openLyrics()
         waitUntil { fake.requestedUrls.drop(asked).any { "track_name=Demo&" in it } && keptForGood() }
         composeRule.waitForIdle()
+        assertTrue(matched.get() > 0)
         // The copies are looked for, as these lines aren't timed by hand, but the shown ones keep where the singing put them.
         assertEquals(times.map { it + 1_000 }, model().uiState.lyricLines.map { it.timeMs })
     }
