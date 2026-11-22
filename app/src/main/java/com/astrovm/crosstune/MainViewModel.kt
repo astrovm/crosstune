@@ -1020,6 +1020,11 @@ internal class MainViewModel(
     fun listen(lyrics: Boolean = false) {
         // The words of what's playing are the song's heard in what an app plays, while it's still on, without listening again.
         if (lyrics) {
+            uiState.playingUnnamed?.confirmedQueueSong?.let { song ->
+                showSong(song)
+                alongByPhone = true
+                return showLyricsFor(song, playing = true)
+            }
             // Shown as any song is, which stops whatever else was under way, and keeps the player on this song under its words.
             // Only when a tap would open it too; else it's listened to again.
             uiState.playingUnnamed?.heard?.takeIf(::opens)?.let { heard -> return showHeard(heard, lyrics = true, byPhone = true) }
@@ -1228,9 +1233,8 @@ internal class MainViewModel(
     private fun showUnnamed() {
         val shown = liveUnnamed ?: followedUnnamed?.first?.takeIf { heardNow == null }
         val following = followedUnnamed?.takeIf { (followed) -> shown?.reportsState == true && followed.app == shown.app && followed.played == shown.played }?.second
-        val was = uiState.playingUnnamed?.takeIf { it.playing == shown }
-        val heard = was?.heard?.takeIf { liveUnnamed != null }
-        uiState = uiState.copy(playingUnnamed = shown?.let { PlayingUnnamed(it, heard, following) })
+        val was = uiState.playingUnnamed?.takeIf { it.playing == shown && liveUnnamed != null }
+        uiState = uiState.copy(playingUnnamed = shown?.let { PlayingUnnamed(it, was?.heard, following, was?.confirmedQueueSong) })
         showPlayingNow()
     }
 
@@ -1264,8 +1268,8 @@ internal class MainViewModel(
     }
 
     /**
-     * Shows what an app plays while it names no song, e.g. a radio station, and names the song by
-     * ear while its bar is on screen. A new name from the app starts over; the app naming a song ends it.
+     * Names the song while the station's bar is on screen. Checks any title and artist from its queue
+     * first, then listens by ear. A change in the station or its queue starts over.
      */
     private suspend fun nameUnnamed(source: PlaybackSource) {
         source.unnamedUpdates().distinctUntilChanged()
@@ -1281,10 +1285,23 @@ internal class MainViewModel(
             // A station that says nothing of its state shows only while the phone plays sound and no other app's
             // session can be playing it, so that sound is taken for the station's, and it's heard too.
             // Moved on, as by a skip, it's listened to again at once, the listen under way stopped.
-            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight && !it.away } }
+            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight } }
             .combine(byEarAgain) { unnamed, again -> unnamed?.let { it to again } }
             .distinctUntilChanged()
-            .collectLatest { listened -> if (listened != null) nameByEar(source) }
+            .collectLatest { listened ->
+                val unnamed = listened?.first ?: return@collectLatest
+                if (!confirmQueueSong(unnamed) && !unnamed.away) nameByEar(source)
+            }
+    }
+
+    /** A station can put a show or slogan in its queue. Only show songs Apple Music finds by title and artist. */
+    private suspend fun confirmQueueSong(unnamed: Unnamed): Boolean {
+        val song = unnamed.queueSong ?: return false
+        if (matcher.find(MusicService.APPLE_MUSIC, song) == null) return false
+        uiState.playingUnnamed?.takeIf { it.playing == unnamed }?.let {
+            uiState = uiState.copy(playingUnnamed = it.copy(confirmedQueueSong = song))
+        }
+        return true
     }
 
     /**
@@ -1381,6 +1398,7 @@ internal class MainViewModel(
      */
     fun openPlayingUnnamed() {
         val playing = uiState.playingUnnamed ?: return
+        playing.confirmedQueueSong?.let { return showSong(it) }
         playing.heard?.let { heard ->
             if (opens(heard)) return showHeard(heard, lyrics = false, byPhone = true)
             // No longer where it could be, the bar no longer shows it either.

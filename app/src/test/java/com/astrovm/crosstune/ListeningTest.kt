@@ -73,6 +73,15 @@ import android.net.Uri
 import android.os.SystemClock
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
+import android.media.AudioManager
+import android.media.MediaDescription
+import android.media.MediaMetadata
+import android.media.session.MediaController
+import android.media.session.MediaSession
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.provider.Settings
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -515,6 +524,115 @@ class ListeningTest {
         composeRule.onNodeWithTag(RESULT_TAG).assertExists()
         assertEquals(2, microphone.opened)
         assertEquals(listOf("Iris"), HistoryStore(prefs()).load().map { it.metadata.title })
+    }
+
+    @Test
+    fun radioGardenChecksItsQueueBeforeListeningAndOpensTheConfirmedSong() {
+        radioGarden("Groove Salad", "Transient - Innercalm")
+        radioGardenCatalog(title = "Innercalm", artist = "Transient")
+        var listens = 0
+        MainActivity.hearingFactory = { SongHearing { listens++; kotlinx.coroutines.awaitCancellation() } }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { listens > 0 || shown("Innercalm") }
+        assertEquals("Radio Garden already supplied a song", 0, listens)
+        assertTrue(shown("Transient · Radio Garden"))
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.result?.title == "Innercalm" }
+        assertEquals(listOf("Innercalm"), HistoryStore(prefs()).load().map { it.metadata.title })
+    }
+
+    @Test
+    fun radioGardenListensWhenItsQueueNamesOnlyTheCity() {
+        val queueSubtitle = radioGarden("1LIVE", "Cologne, Germany")
+        radioGardenCatalog()
+        var listens = 0
+        var stopped = 0
+        MainActivity.hearingFactory = {
+            SongHearing {
+                listens++
+                try {
+                    kotlinx.coroutines.awaitCancellation()
+                } finally {
+                    stopped++
+                }
+            }
+        }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        assertTrue(shown("1LIVE"))
+        assertTrue(fake.requestedUrls.none { "/search?" in it })
+        assertTrue(HistoryStore(prefs()).load().isEmpty())
+        composeRule.runOnIdle { queueSubtitle("The Kid LAROI - A PLACE TO GO") }
+        waitForText("A PLACE TO GO")
+        assertEquals(1 to 1, listens to stopped)
+        composeRule.runOnIdle { queueSubtitle("Cologne, Germany") }
+        waitUntil(TIMEOUT_MS) { listens == 2 && shown("1LIVE") }
+        assertFalse(shown("A PLACE TO GO"))
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        assertTrue(HistoryStore(prefs()).load().isEmpty())
+    }
+
+    @Test
+    fun radioGardenListensWhenItsQueueLooksLikeASongTheCatalogDoesNotKnow() {
+        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
+        radioGardenCatalog(artist = "Someone else")
+        var listens = 0
+        MainActivity.hearingFactory = { SongHearing { listens++; kotlinx.coroutines.awaitCancellation() } }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        assertTrue(fake.requestedUrls.any { it.startsWith("https://itunes.apple.com/search?") })
+        assertTrue(shown("1LIVE"))
+        assertFalse(shown("A PLACE TO GO"))
+    }
+
+    @Test
+    fun radioGardenCanOpenTheConfirmedSongsLyrics() {
+        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
+        radioGardenCatalog()
+        launch()
+        waitForText("A PLACE TO GO")
+        click(string(R.string.tile_lyrics_label))
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyricsFor?.title == "A PLACE TO GO" }
+    }
+
+    private fun radioGardenCatalog(title: String = "A PLACE TO GO", artist: String = "The Kid LAROI") {
+        fake.handler = { request ->
+            val body = if (request.url.host == "itunes.apple.com" && request.url.encodedPath == "/search") {
+                """{"results":[{"trackName":"$title","artistName":"$artist",
+                    "trackViewUrl":"https://music.apple.com/us/album/fixture/123?i=456"}]}"""
+            } else "{}"
+            FakeSpotify.html(request, body)
+        }
+    }
+
+    /** Radio Garden's Android session announces a station and puts the stream text in a single queue item. */
+    private fun radioGarden(station: String, subtitle: String): (String) -> Unit {
+        val garden = RadioGarden.PACKAGE
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply {
+            packageName = garden
+            applicationInfo = ApplicationInfo().apply { packageName = garden; nonLocalizedLabel = "Radio Garden" }
+        })
+        Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners",
+            ComponentName(app, NowPlayingListener::class.java).flattenToString())
+        shadowOf(app.getSystemService(AudioManager::class.java)).setIsMusicActive(true)
+        val session = MediaSession(app, "KotlinAudioPlayer")
+        val controller = MediaController(app, session.sessionToken)
+        shadowOf(controller).setPackageName(garden)
+        shadowOf(controller).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, station).build())
+        shadowOf(controller).setPlaybackState(PlaybackState.Builder()
+            .setState(PlaybackState.STATE_PLAYING, 0, 1f, SystemClock.elapsedRealtime()).setActiveQueueItemId(0).build())
+        shadowOf(app.getSystemService(MediaSessionManager::class.java)).addController(controller)
+        fun queue(text: String) = mutableListOf(MediaSession.QueueItem(MediaDescription.Builder().setTitle(station).setSubtitle(text).build(), 0))
+        var items = queue(subtitle)
+        MainActivity.playbackFactory = { MediaSessionPlayback(it, queueOf = { items }) }
+        return { text ->
+            items = queue(text)
+            shadowOf(controller).callbacks.forEach { it.onQueueChanged(items) }
+        }
     }
 
     @Test

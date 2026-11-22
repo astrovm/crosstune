@@ -592,8 +592,10 @@ internal class MediaSessionPlayback(
     private fun MediaController.unnamed(): Unnamed {
         val (title, artist) = calls()
         val named = said(this)
+        val garden = packageName == RadioGarden.PACKAGE
         return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let { coverOf(it, sessionToken) }, artist,
-            where = place(), said = named != null, caption = named?.unnamed == true, reportsState = playbackState != null, session = sessionNumbers.of(sessionToken))
+            where = place(), said = named != null, caption = garden || named?.unnamed == true, reportsState = playbackState != null,
+            session = sessionNumbers.of(sessionToken), queueSong = if (garden) RadioGarden.queueSong(title, queueOf(this)) else null)
     }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?, session: Int?) = seekIn(song, positionMs, app, null, session)
@@ -999,6 +1001,7 @@ internal class MediaSessionPlayback(
 
     /** What [controller] plays, as a song, unless it names none; [asked] is how long the song asked for is, when known. */
     private fun playing(controller: MediaController, asked: Long? = null, forRecognition: Boolean = false): Heard.Song? {
+        if (controller.packageName == RadioGarden.PACKAGE) return null
         val metadata = controller.metadata ?: return null
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
@@ -1169,6 +1172,7 @@ internal class MediaSessionPlayback(
     }
 
     private fun MediaController.plays(song: MusicMetadata): Boolean {
+        if (packageName == RadioGarden.PACKAGE) return false
         val playing = metadata ?: return false
         if (anotherRecording(playing, song)) return false
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()

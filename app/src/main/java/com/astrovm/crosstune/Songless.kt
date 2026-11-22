@@ -23,7 +23,9 @@ internal data class Unnamed(
     val said: Boolean = name != null,
     private val caption: Boolean = false,
     val reportsState: Boolean = true,
-    val session: Int? = null
+    val session: Int? = null,
+    /** A song the station says it plays, before the catalog checks it. */
+    val queueSong: MusicMetadata? = null
 ) {
     /** What it plays as the app names it, which its buttons and the player follow it there by, never as a song. */
     val played: MusicMetadata get() = MusicMetadata(name.orEmpty(), artist, artworkUrl = artworkUrl, unnamed = true)

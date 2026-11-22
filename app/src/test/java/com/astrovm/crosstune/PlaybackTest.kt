@@ -2053,6 +2053,36 @@ class PlaybackTest {
     }
 
     @Test
+    fun radioGardenStationMetadataCannotBeOpenedOrMatchedAsASong() {
+        allow()
+        sounding()
+        val station = "Artist - Song"
+        val packageName = RadioGarden.PACKAGE
+        shadowOf(sessions).addController(player(packageName, "Radio Garden", station, "Cologne", album = "Radio Garden"))
+        val item = MediaSession.QueueItem(MediaDescription.Builder().setTitle(station).setSubtitle(station).build(), 0)
+        queues[packageName] = listOf(item)
+
+        val unnamed = checkNotNull(playback.playingUnnamed())
+        assertEquals(station, unnamed.name)
+        assertNull(unnamed.queueSong)
+        assertNull(unnamed.asSong)
+        assertNull(playback.songForRecognition())
+        assertTrue(playback.matching(MusicMetadata(station, "Cologne")).isEmpty())
+        assertNotNull(playback.appFor(unnamed.played, app = packageName))
+    }
+
+    @Test
+    fun anotherAppsQueueDoesNotNameItsStation() {
+        allow()
+        sounding()
+        val packageName = "com.example.radio"
+        shadowOf(sessions).addController(player(packageName, "Other Radio", "1LIVE", null))
+        val item = MediaSession.QueueItem(MediaDescription.Builder().setTitle("1LIVE").setSubtitle("The Kid LAROI - A PLACE TO GO").build(), 0)
+        queues[packageName] = listOf(item)
+        assertNull(checkNotNull(playback.playingUnnamed()).queueSong)
+    }
+
+    @Test
     @Config(shadows = [AppAsked::class])
     fun aRadioStationWithABroadcastCaptionKeepsItsWholeName() {
         allow()

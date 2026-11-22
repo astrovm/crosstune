@@ -392,10 +392,15 @@ internal data class NowPlaying(val song: MusicMetadata, val following: Following
 
 /**
  * An app that plays with no song named, as [playing] has it, and the song [heard] in it once one is,
- * by its sound or the microphone. The app's own name for a song always comes before it. [following]
- * it in the app, for its buttons and where it is, as for a song.
+ * by its sound or the microphone, or [confirmedQueueSong] from the station's queue after a catalog check.
+ * [following] it in the app, for its buttons and where it is, as for a song.
  */
-internal data class PlayingUnnamed(val playing: Unnamed, val heard: Heard.Song? = null, val following: Following? = null) {
+internal data class PlayingUnnamed(
+    val playing: Unnamed,
+    val heard: Heard.Song? = null,
+    val following: Following? = null,
+    val confirmedQueueSong: MusicMetadata? = null
+) {
     val canControl: Boolean get() = playing.reportsState
 }
 
