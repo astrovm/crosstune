@@ -26,6 +26,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -1530,17 +1532,16 @@ class ExactMatcherTest {
         val other = youTubeMusicRow("Another Song", "Random Person - Topic • 1K views • 3:04", videoId = "other000000")
         val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
         val upload = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
-        var clock = 0L
-        val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L, now = { clock })
+        val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L)
         namesAndTabs(videos = listOf(other, fan), apple = apple, failing = setOf("US"))
         assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         fake.requestedUrls.clear()
-        clock = ExactMatcher.UNSURE_FOR_MS - 1
+        ShadowSystemClock.advanceBy(Duration.ofMillis(ExactMatcher.UNSURE_FOR_MS - 1))
         assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         assertTrue(fake.requestedUrls.isEmpty())
-        clock++
+        ShadowSystemClock.advanceBy(Duration.ofMillis(1))
         assertEquals(upload, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
-        clock += ExactMatcher.UNSURE_FOR_MS
+        ShadowSystemClock.advanceBy(Duration.ofMillis(ExactMatcher.UNSURE_FOR_MS))
         assertEquals(upload, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
     }
 
@@ -1909,6 +1910,28 @@ class ExactMatcherTest {
             disk.resume()
         }
         assertEquals(ExactMatcher.Match.Found(ownUrl), confirmed.await())
+    }
+
+    @Test
+    fun aFreshConfirmedAnswerCanReturnWhileItsCacheWriteWaits() = runBlocking {
+        val song = MusicMetadata("Different Song", "Different Artist")
+        val url = "https://www.deezer.com/track/1"
+        val file = kotlin.io.path.createTempDirectory("fresh-answer").toFile().resolve("lookups.json")
+        val disk = PausedCacheDisk()
+        val cache = LookupCache(file, disk)
+        cache.entries()
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache)
+        namesAndTabs(deezer = """[{"title":"${song.title}","link":"$url","artist":{"name":"${song.artist}"}}]""")
+
+        disk.pause()
+        try {
+            val found = withTimeoutOrNull(5_000) { finder.lookFor(MusicService.DEEZER, song) }
+            assertEquals(ExactMatcher.Match.Found(url), found)
+            assertEquals(url, cache.entries().single().second)
+            assertTrue(!file.exists())
+        } finally {
+            disk.resume()
+        }
     }
 
     @Test
