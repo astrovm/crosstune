@@ -355,7 +355,8 @@ class FakeDiff(unittest.TestCase):
     def test_a_code_file_with_any_name_counts_and_reads_the_same_on_every_machine(self):
         with tempfile.TemporaryDirectory() as folder:
             repo = self.repo(folder, golden_text(ROW))
-            names = ["app/src/main/java/com/astrovm/crosstune/新しい.kt", "app/src/main/java/com/astrovm/crosstune/with\ttab.kt"]
+            names = ["app/src/main/java/com/astrovm/crosstune/新しい.kt", "app/src/main/java/com/astrovm/crosstune/with\ttab.kt",
+                     "app/src/main/java/com/astrovm/crosstune/carriage\rreturn.kt"]
             self.write(repo, READINGS, "one\n")
             for name in names:
                 self.write(repo, name, "one\n")

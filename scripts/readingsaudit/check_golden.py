@@ -165,8 +165,9 @@ def verdict(readings_changed, golden_changed, removed, body, lock_changed=(), di
 
 def git(repo, *args):
     """git in [repo], with names as they are: quoted, a name such as 新.kt would read differently on each machine, as
-    its core.quotePath says, and change the digest."""
-    return subprocess.check_output(["git", "-c", "core.quotePath=false", *args], cwd=repo, text=True)
+    its core.quotePath says, and change the digest. Decoded here, not with text=True, which would turn a carriage
+    return in a name into a line feed; surrogateescape keeps any bytes that aren't UTF-8, so the name goes back as it was."""
+    return subprocess.check_output(["git", "-c", "core.quotePath=false", *args], cwd=repo).decode("utf-8", "surrogateescape")
 
 
 def changes(repo, base, head):
