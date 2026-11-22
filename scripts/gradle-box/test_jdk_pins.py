@@ -2,7 +2,6 @@
 import json
 import re
 import unittest
-from collections import Counter
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,23 +52,24 @@ class JdkPinsTest(unittest.TestCase):
         # The rules live in astrovm/repo-settings (config/renovate/astrovm/crosstune.json), which writes this file:
         # a sync without them fails here.
         config = json.loads((ROOT / ".github/renovate.json").read_text())
-        allowed = [
-            re.compile(rule["allowedVersions"].strip("/"))
-            for rule in config.get("packageRules", [])
-            if "docker.io/library/eclipse-temurin" in rule.get("matchPackageNames", [])
-            and "allowedVersions" in rule
+        rules = [
+            rule for rule in config.get("packageRules", [])
+            if "docker.io/library/eclipse-temurin" in rule.get("matchPackageNames", []) and "allowedVersions" in rule
         ]
-        self.assertEqual(1, len(allowed), "no Renovate rule holds eclipse-temurin to long-term JDKs")
-        # Any other condition (a manager, a file, an update type) leaves some pins out of the rule.
-        rule = next(r for r in config["packageRules"] if "docker.io/library/eclipse-temurin" in r.get("matchPackageNames", []))
-        self.assertEqual({"matchDatasources": ["docker"]}, {k: v for k, v in rule.items() if k.startswith("match") and k != "matchPackageNames"})
+        self.assertEqual(1, len(rules), "no Renovate rule holds eclipse-temurin to long-term JDKs")
+        # Any other condition (a manager, a file, an update type, a name left out with "!") leaves some pins out of the rule.
+        self.assertEqual(
+            {"matchDatasources": ["docker"], "matchPackageNames": ["docker.io/library/eclipse-temurin", "eclipse-temurin"]},
+            {k: v for k, v in rules[0].items() if k.startswith("match")},
+        )
+        allowed = re.compile(rules[0]["allowedVersions"].strip("/"))
         # A long-term JDK every two years from 25; the ones between lose their updates in six months.
         for major in range(25, 50):
             for tag in (str(major), f"{major}-jdk"):
-                self.assertEqual((major - 25) % 4 == 0, bool(allowed[0].fullmatch(tag)), tag)
+                self.assertEqual((major - 25) % 4 == 0, bool(allowed.fullmatch(tag)), tag)
         # Renovate reads the box's Containerfile itself; every other pin needs a custom manager that reads it as this
         # image, or an update moves the box alone and the test above fails.
-        read = Counter()
+        read = set()
         for manager in config.get("customManagers", []):
             if (manager.get("depNameTemplate"), manager.get("datasourceTemplate")) != ("docker.io/library/eclipse-temurin", "docker"):
                 continue
@@ -81,10 +81,21 @@ class JdkPinsTest(unittest.TestCase):
             for path in files():
                 name = str(path.relative_to(ROOT))
                 if any(covers(pattern, name) for pattern in manager.get("managerFilePatterns", [])):
-                    # Each pin is counted, so a file with two pins needs both read.
-                    read.update((name, m.group("currentValue").split("-")[0]) for s in strings for m in s.finditer(path.read_text()))
-        left = Counter((name, v) for name, v in pins() if name != "scripts/gradle-box/Containerfile")
-        self.assertEqual(Counter(), left - read, "JDK pins no Renovate manager reads")
+                    # By where each pin's version starts, so a file with two pins needs both read.
+                    text = path.read_text()
+                    read |= {(name, m.start("currentValue")) for s in strings for m in s.finditer(text)}
+        left = {(name, at) for name, at in spots() if name != "scripts/gradle-box/Containerfile"}
+        self.assertEqual(set(), left - read, "JDK pins no Renovate manager reads")
+
+
+def spots() -> set[tuple[str, int]]:
+    """Where each pin's version starts, by file."""
+    return {
+        (str(path.relative_to(ROOT)), m.start(1))
+        for path in files()
+        for pattern in (IMAGE, SETUP, DOCS)
+        for m in pattern.finditer(path.read_text())
+    }
 
 
 def covers(pattern: str, name: str) -> bool:
