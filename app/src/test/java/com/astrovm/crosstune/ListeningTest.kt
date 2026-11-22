@@ -767,12 +767,26 @@ class ListeningTest {
         assertEquals(uptime, SystemClock.uptimeMillis())
         assertEquals("A PLACE TO GO", model.uiState.playingUnnamed?.confirmedQueueSong?.title)
 
-        // onResume refreshes the model before the playback watcher can supply fresh station text.
+        // Run the activity's resume refresh without a new station update or an uptime tick.
         model.refreshSystemState()
         assertNull(model.uiState.playingUnnamed?.confirmedQueueSong)
         activity.restart().resume()
         waitForText("1LIVE")
         assertFalse(shown("A PLACE TO GO"))
+    }
+
+    @Test
+    fun radioGardenUsesOnlyTheRemainingTimeWhenWakingBeforeExpiry() {
+        startRadioGardenWithKnownLength(byMicrophone = false)
+        val model = controllerModel()
+        composeRule.runOnIdle { model.setPlayingBar(false) }
+        waitUntil(TIMEOUT_MS) { !barShown() }
+        org.robolectric.shadows.ShadowSystemClock.simulateDeepSleep(java.time.Duration.ofSeconds(355))
+
+        model.refreshSystemState()
+        assertEquals("A PLACE TO GO", model.uiState.playingUnnamed?.confirmedQueueSong?.title)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(6))
+        assertNull(model.uiState.playingUnnamed?.confirmedQueueSong)
     }
 
     @Test

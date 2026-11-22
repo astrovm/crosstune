@@ -672,6 +672,7 @@ internal class MainViewModel(
      * instance that saves the item and finishes, leaving this one with a stale Recent list.
      */
     fun refreshSystemState() {
+        queueCheck?.takeIf { it.confirmed }?.let(::refreshQueueExpiry)
         val previousDestination = uiState.resultDestination
         uiState = uiState.withDestinations().withOneTap().copy(microphone = microphoneAccess(), lockless = playback?.lockless() == true)
         if (previousDestination != uiState.resultDestination) prepareResultDestination()
@@ -1303,24 +1304,24 @@ internal class MainViewModel(
     ) {
         var confirmed = false
             private set
-        private var lengthMs: Long? = null
+        private var lengthMs = QUEUE_SONG_UNKNOWN_MS
         private var lastEvidence = firstSeen
         var until = firstSeen + QUEUE_SONG_UNKNOWN_MS
             private set
 
-        val expiresAt get() = lastEvidence + (lengthMs?.times(2) ?: QUEUE_SONG_UNKNOWN_MS)
+        val expiresAt get() = lastEvidence + lengthMs * 2
 
         fun isConfirmedAt(at: Long) = confirmed && at < expiresAt
 
         fun confirm(durationMs: Long?) {
             confirmed = true
-            lengthMs = durationMs
+            lengthMs = durationMs ?: QUEUE_SONG_UNKNOWN_MS
             if (durationMs != null) until = firstSeen + durationMs + QUEUE_SONG_MARGIN_MS
         }
 
         fun heardAt(at: Long) {
             lastEvidence = at
-            until = at + (lengthMs ?: QUEUE_SONG_UNKNOWN_MS)
+            until = at + lengthMs
         }
 
         fun forget() {
@@ -1347,7 +1348,16 @@ internal class MainViewModel(
         val found = withTimeoutOrNull(remaining) { matcher.findRadioSong(check.song) } ?: return
         check.confirm(found.lengthMs)
         showUnnamed()
-        // The title must expire even when the bar and the playback watcher are out of sight.
+        refreshQueueExpiry(check)
+    }
+
+    /** Recheck on resume because the title ages during sleep and the dispatcher delay does not. */
+    private fun refreshQueueExpiry(check: QueueCheck) {
+        queueExpiry?.cancel()
+        if (!check.isConfirmedAt(now())) {
+            forgetQueueSong(check)
+            return
+        }
         viewModelScope.launchKept({ queueExpiry = it }) {
             while (check.isConfirmedAt(now())) delay(check.expiresAt - now())
             forgetQueueSong(check)
