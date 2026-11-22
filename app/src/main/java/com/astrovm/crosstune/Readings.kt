@@ -269,19 +269,18 @@ internal object Readings {
         val noun = kana.dropLast(1)
         val lookup = longMarkLookup(noun) ?: return null
         val suffix = kana.takeLast(1)
-        val particle = tokenizer.tokenize(lookup + suffix).lastOrNull() ?: return null
+        val particle = tokenizer.tokenize(lookup + suffix).last()
         if (particle.surface != suffix || !caseNeedsNoun(particle.partOfSpeechLevel2, suffix)) return null
         return listOf(drawnNoun(noun, lookup, last.end - 1), Piece(suffix, suffix, "助詞", "格助詞", end = last.end, reader = Reader.RULES))
     }
 
     /** Keep そーだ as そうだ when だ ends a clause. A case particle such as を asks for a noun, but と can quote the clause. */
     private fun drawnAuxiliaryHead(text: String, pieces: List<Piece>, first: Int, start: Int): Piece? {
-        val head = pieces[first]
-        val firstMark = head.surface.indexOf('ー').takeIf { it >= 0 }?.plus(start) ?: head.end
-        if (firstMark - start !in 1..2) return null
+        val kana = text.substring(start, pieces[first].end).substringBefore('ー')
+        if (kana.length !in 1..2) return null
+        val firstMark = start + kana.length
         val end = afterLongMarks(text, firstMark)
         if (end == firstMark || !drawnAuxiliaryFollows(pieces, first + 1, end)) return null
-        val kana = text.substring(start, firstMark)
         if (kana.any { it !in 'ぁ'..'ゖ' }) return null
         val vowels = LONG[romaji(kana).lastOrNull()] ?: return null
         val word = vowels.firstNotNullOfOrNull { vowel ->
@@ -344,8 +343,8 @@ internal object Readings {
         if ('ー' !in text) return pieces
         return buildList {
             for (piece in pieces) {
-                val marks = afterLongMarks(piece.surface, 0)
-                if (marks in 1 until piece.surface.length) {
+                val marks = piece.surface.indexOfFirst { it != 'ー' }
+                if (marks > 0) {
                     val surface = piece.surface.take(marks)
                     val end = piece.end - piece.surface.length + marks
                     add(Piece(surface, surface, "名詞", "一般", end = end))

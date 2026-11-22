@@ -440,6 +440,77 @@ class ReadingsTest {
         assertDrawnReading(line, romaji, Triple(line, romaji, "パーティー"))
     }
 
+    @Test
+    fun aRepeatedOkinawanGreetingKeepsEveryWord() {
+        // The refrain of 金城賢's めんそーれ沖縄.
+        val word = Triple("めんそーれ", "mensoore", "めんそーれ")
+        assertDrawnReading("めんそーれめんそーれめんそーれ", "mensoore mensoore mensoore", word, word, word)
+    }
+
+    @Test
+    fun aSmallHiraganaVowelCanBelongToALoanword() = assertDrawnReading(
+        // The call ending in こんがらがっちゅれーしょん！ by ふぁんたす！.
+        "ふぁんたじーさぁ", "fantajii saa",
+        Triple("ふぁんたじー", "fantajii", "ファンタジー"), Triple("さぁ", "saa", "さあ")
+    )
+
+    @Test
+    fun aCryAtTheEndOfTheLineKeepsItsOwnLookup() = assertDrawnReading(
+        // The shout in Chevon's ダンス・デカダンス.
+        "あーーーー", "aaaaa", Triple("あーーーー", "aaaaa", "あ")
+    )
+
+    @Test
+    fun aDrawnOutAdverbAfterAnotherWordKeepsItsLookup() = assertDrawnReading(
+        // From BRADIO's Feel all right, with どう drawn out as どー.
+        "調子はどーだ", "chooshi wa dooda",
+        Triple("調子", "chooshi", "調子"), Triple("は", "wa", "は"), Triple("どーだ", "dooda", "どう"),
+        typed = "choushi wa dooda"
+    )
+
+    @Test
+    fun theLastNounAndParticleStaySeparateInBothDictionaries() = assertDrawnReading(
+        // From 井上陽水's Mellow touch, with ソーダ in hiragana.
+        "ゆれるクリームそーだに", "yureru kuriimu sooda ni",
+        Triple("ゆれる", "yureru", "ゆれる"), Triple("クリーム", "kuriimu", "クリーム"),
+        Triple("そーだ", "sooda", "ソーダ"), Triple("に", "ni", "に")
+    )
+
+    @Test
+    fun anEnumeratingParticleStaysWholeWhenALoanwordWouldChangeIt() = assertDrawnReading(
+        // From suzunoki's あーだのこーだの.
+        "こーだの言ったって", "koo dano ittatte",
+        Triple("こー", "koo", "こ"), Triple("だの", "dano", "だの"), Triple("言ったって", "ittatte", "言う")
+    )
+
+    @Test
+    fun aThreeKanaCallStaysOutsideTheShortAdverbRule() = assertDrawnReading(
+        // Put an auxiliary after the drawn-out call in KANA-BOON's シルエット to check the length limit.
+        "いっせーだ", "issee da", Triple("いっせー", "issee", "いっす"), Triple("だ", "da", "だ")
+    )
+
+    @Test
+    fun drawnWordSearchKeepsItsTwelveKanaLimit() {
+        // The refrain of Gacharic Spin's ジェネレーションギャップ, in hiragana.
+        assertDrawnReading(
+            "じぇねれーしょんぎゃっぷ", "jenereeshongyappu",
+            Triple("じぇねれーしょんぎゃっぷ", "jenereeshongyappu", "ジェネレーションギャップ")
+        )
+        // The サーティワンアイスクリーム jingle, in hiragana.
+        assertDrawnReading(
+            "さーてぃわんあいすくりーむ", "saa ti wan aisukuriimu",
+            Triple("さー", "saa", "さ"), Triple("てぃ", "ti", "てぃ"), Triple("わん", "wan", "わん"),
+            Triple("あいすくりーむ", "aisukuriimu", "アイスクリーム")
+        )
+    }
+
+    @Test
+    fun drawnWordSearchStopsAtAKatakanaWord() = assertDrawnReading(
+        // The start of the refrain of 二人だけのセレモニー, with パ written as ぱ.
+        "ぱーティーは", "paa tii wa",
+        Triple("ぱー", "paa", "ぱ"), Triple("ティー", "tii", "ティー"), Triple("は", "wa", "は")
+    )
+
     private fun assertDrawnReading(
         line: String,
         romaji: String,
