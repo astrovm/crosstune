@@ -1234,7 +1234,7 @@ internal class MainViewModel(
         val shown = liveUnnamed ?: followedUnnamed?.first?.takeIf { heardNow == null }
         val following = followedUnnamed?.takeIf { (followed) -> shown?.reportsState == true && followed.app == shown.app && followed.played == shown.played }?.second
         val was = uiState.playingUnnamed?.takeIf { it.playing == shown && liveUnnamed != null }
-        val song = liveUnnamed?.let { live -> queueCheck?.takeIf { it.isFor(live) && it.confirmed && now() < it.until }?.song }
+        val song = confirmedRadioQueue()?.song
         uiState = uiState.copy(playingUnnamed = shown?.let { PlayingUnnamed(it, was?.heard, following, song) })
         showPlayingNow()
     }
@@ -1284,11 +1284,14 @@ internal class MainViewModel(
             }
             showUnnamed()
             if (unnamed == null) return@collectLatest
-            queueCheck?.let { confirmQueueSong(it) }
+            val check = queueCheck
+            if (check != null) confirmQueueSong(check)
+            // With no way to check the queue aloud, its longer deadline applies even off the bar.
+            if (check?.confirmed == true && !canCheckRadioQueue(unnamed)) waitForQueueCheck(unnamed, check)
             // The phone has nothing to hear when the station plays away. A skip restarts the listen.
             if (!unnamed.away) {
                 combine(barInSight, byEarAgain) { inSight, again -> again.takeIf { inSight } }
-                    .distinctUntilChanged().collectLatest { if (it != null) nameByEar(source) }
+                    .distinctUntilChanged().collectLatest { if (it != null) nameByEar(unnamed, check) }
             }
         }
     }
@@ -1301,12 +1304,27 @@ internal class MainViewModel(
     ) {
         var confirmed = false
             private set
+        private var lengthMs: Long? = null
+        private var lastEvidence = firstSeen
         var until = firstSeen + QUEUE_SONG_UNKNOWN_MS
             private set
 
-        fun confirm(lengthMs: Long?) {
+        val withoutMicrophoneUntil get() = lastEvidence + (lengthMs?.times(2) ?: QUEUE_SONG_UNKNOWN_MS)
+
+        fun confirm(durationMs: Long?) {
             confirmed = true
-            if (lengthMs != null) until = firstSeen + lengthMs + QUEUE_SONG_MARGIN_MS
+            lengthMs = durationMs
+            if (durationMs != null) until = firstSeen + durationMs + QUEUE_SONG_MARGIN_MS
+        }
+
+        fun heardAt(at: Long) {
+            lastEvidence = at
+            until = at + (lengthMs ?: QUEUE_SONG_UNKNOWN_MS)
+        }
+
+        fun forget() {
+            confirmed = false
+            until = 0L
         }
 
         fun isFor(unnamed: Unnamed): Boolean =
@@ -1315,18 +1333,43 @@ internal class MainViewModel(
 
     private var queueCheck: QueueCheck? = null
 
-    /** The catalog checks the name. The station must give fresh text to keep naming songs this way. */
+    private fun confirmedRadioQueue(): QueueCheck? =
+        liveUnnamed?.let { live -> queueCheck?.takeIf { it.confirmed && it.isFor(live) } }
+
+    /** The catalog checks a fresh name once. Further evidence comes from the broadcast. */
     private suspend fun confirmQueueSong(check: QueueCheck) {
+        if (check.confirmed) return
         combine(barInSight, snapshotFlow { followingRadioLyrics }) { bar, lyrics -> bar || lyrics }.first { it }
         val remaining = check.until - now()
         if (remaining <= 0) return
-        if (!check.confirmed) {
-            val found = withTimeoutOrNull(remaining) { matcher.findRadioSong(check.song) } ?: return
-            check.confirm(found.lengthMs)
-        }
+        val found = withTimeoutOrNull(remaining) { matcher.findRadioSong(check.song) } ?: return
+        check.confirm(found.lengthMs)
         showUnnamed()
-        delay(check.until - now())
+    }
+
+    private fun mayUseMicrophone() = uiState.phone != Phone.TV && mayCalibrate()
+
+    private fun canCheckRadioQueue(unnamed: Unnamed) = !unnamed.away && mayUseMicrophone()
+
+    /** Waits for the next check, or drops the name at its longer deadline if we cannot listen. */
+    private suspend fun waitForQueueCheck(unnamed: Unnamed, check: QueueCheck) {
+        val deadline = if (canCheckRadioQueue(unnamed)) check.until else minOf(check.until, check.withoutMicrophoneUntil)
+        delay(deadline - now())
+        if (canCheckRadioQueue(unnamed)) return
+        delay(check.withoutMicrophoneUntil - now())
+        if (!canCheckRadioQueue(unnamed)) forgetQueueSong(check)
+    }
+
+    private fun forgetQueueSong(check: QueueCheck) {
+        check.forget()
         showUnnamed()
+    }
+
+    /** Keeps the title when it was heard again. Other answers go through ordinary naming by ear. */
+    private fun checkQueueHearing(check: QueueCheck, heard: Heard): Boolean {
+        val matched = heard is Heard.Song && RadioGarden.sameSong(check.song, heard.metadata)
+        if (matched) check.heardAt(now()) else forgetQueueSong(check)
+        return matched
     }
 
     /**
@@ -1335,14 +1378,15 @@ internal class MainViewModel(
      * the phone plays through, as it can't tell a speaker or a car from headphones. Any failure is quiet:
      * what plays stays named as the app has it.
      */
-    private suspend fun nameByEar(source: PlaybackSource) {
+    private suspend fun nameByEar(unnamed: Unnamed, check: QueueCheck?) {
         byEar = currentCoroutineContext()[Job]
         while (true) {
-            untilByEar()
+            if (check?.confirmed == true) waitForQueueCheck(unnamed, check) else untilByEar()
             // Listening along with the words, or hearing them sung, has the microphone and the phone's sound till it's done.
             listOfNotNull(alongJob, singingJob, voiceJob).forEach { it.join() }
             val ears = earsNow()
-            val byMicrophone = uiState.phone != Phone.TV && mayCalibrate()
+            val byMicrophone = mayUseMicrophone()
+            if (check?.confirmed == true && (!byMicrophone || now() < check.until)) continue
             // How the app said it played as the sound to hear started, which what it says after is checked against.
             val startedWith = uiState.playingUnnamed?.following
             // Stopped for one of those, it's tried again once that's done.
@@ -1352,6 +1396,7 @@ internal class MainViewModel(
                 listening.join()
                 listening.takeUnless { it.isCancelled }?.await()
             } ?: continue
+            if (check?.confirmed == true && checkQueueHearing(check, heard)) continue
             unheardByEar = heard !is Heard.Song
             val wait = when (heard) {
                 is Heard.Song -> {
@@ -2830,7 +2875,11 @@ internal class MainViewModel(
             // Shazam measures against wall time, so its speed already includes the player's rate.
             // Keep that rate before capture: the player can change it while Shazam answers.
             val capturedSpeed = playerSpeed
-            when (val heard = hearAlong(quietly)) {
+            // Radio lyrics already listen. Use that answer if it is still for the current queue claim.
+            val radio = confirmedRadioQueue()?.takeIf { followingRadioLyrics && mayUseMicrophone() }
+            val heard = hearAlong(quietly)
+            checkRadioQueueFromLyrics(radio, heard)
+            when (heard) {
                 is Heard.Song -> {
                     quiet = 0
                     heardAlong(heard, capturedSpeed)
@@ -2861,6 +2910,11 @@ internal class MainViewModel(
                 }
             }
         }
+    }
+
+    private fun checkRadioQueueFromLyrics(radio: QueueCheck?, heard: Heard) {
+        if (radio == null || radio !== confirmedRadioQueue()) return
+        if (now() >= radio.until) checkQueueHearing(radio, heard)
     }
 
     /**
@@ -3856,7 +3910,7 @@ internal class MainViewModel(
             remember(playing)
             showLyricsFor(playing.metadata, playing = true)
         } else if (queued != null) {
-            if (RadioGarden.sameTitle(queued.title, song.title) && SongNames.sameArtist(queued.artist, song.artist)) return
+            if (RadioGarden.sameSong(queued, song)) return
             heardSong = null
             hear(null)
             remember(Heard.Song(queued, appleMusicId = null))

@@ -644,7 +644,7 @@ class ListeningTest {
     }
 
     @Test
-    fun radioGardenKeepsAThreeMinuteSongUntilItsLengthPlusTheMargin() {
+    fun radioGardenKeepsAThreeMinuteSongUntilTheDeadlineListenHearsSilence() {
         val queueSubtitle = radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
         radioGardenCatalog(lengthMs = 180_000L)
         prefs().edit().putBoolean("playing_bar", false).commit()
@@ -667,6 +667,8 @@ class ListeningTest {
         assertTrue(shown("A PLACE TO GO"))
         main.idleFor(java.time.Duration.ofSeconds(6))
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(shown("A PLACE TO GO"))
+        hearing.next.trySend(Heard.Nothing)
         waitForText("1LIVE")
         assertFalse(shown("A PLACE TO GO"))
         composeRule.runOnIdle { queueSubtitle("The Kid LAROI - A PLACE TO GO") }
@@ -674,6 +676,75 @@ class ListeningTest {
         composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
         assertTrue(HistoryStore(prefs()).load().isEmpty())
+    }
+
+    @Test
+    fun radioGardenKeepsALongBroadcastAfterHearingTheSameSong() {
+        val hearing = startRadioGardenWithKnownLength()
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(191))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(shown("A PLACE TO GO"))
+        hearing.song("A PLACE TO GO", 190.0, artist = "The Kid LAROI")
+        composeRule.waitForIdle()
+        main.idleFor(java.time.Duration.ofSeconds(169))
+        assertEquals(1, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        assertNotNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+    }
+
+    @Test
+    fun radioGardenKeepsTheRepeatedSongAndChecksAgainAfterItsLength() {
+        val hearing = startRadioGardenWithKnownLength()
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(191))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        hearing.song("A PLACE TO GO", 11.0, artist = "The Kid LAROI")
+        composeRule.waitForIdle()
+        main.idleFor(java.time.Duration.ofSeconds(179))
+        assertEquals(1, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(2))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        assertNotNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+    }
+
+    @Test
+    fun radioGardenClearsTheConfirmedSongWhenARecheckHearsADifferentSong() {
+        val hearing = startRadioGardenWithKnownLength()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(191))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(shown("A PLACE TO GO"))
+        hearing.song("Next song", 8.0)
+        waitForText("Next song")
+        assertFalse(shown("A PLACE TO GO"))
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+    }
+
+    @Test
+    fun radioGardenKeepsAConfirmedSongForTwiceItsLengthWithoutTheMicrophone() {
+        val hearing = startRadioGardenWithKnownLength(byMicrophone = false)
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(191))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(168))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(2))
+        waitForText("1LIVE")
+        assertFalse(shown("A PLACE TO GO"))
+    }
+
+    private fun startRadioGardenWithKnownLength(byMicrophone: Boolean = true): FakeHearing {
+        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
+        radioGardenCatalog(lengthMs = 180_000L)
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        if (byMicrophone) allowMicrophone()
+        launch()
+        waitForText("A PLACE TO GO")
+        return hearing
     }
 
     @Test
@@ -691,6 +762,8 @@ class ListeningTest {
         assertTrue(shown("A PLACE TO GO"))
         main.idleFor(java.time.Duration.ofSeconds(6))
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(shown("A PLACE TO GO"))
+        hearing.next.trySend(Heard.Nothing)
         waitForText("1LIVE")
         assertFalse(shown("A PLACE TO GO"))
     }
@@ -812,6 +885,18 @@ class ListeningTest {
     }
 
     @Test
+    fun radioGardenUsesTheExistingLyricsListenToCheckTheQueueAtTheDeadline() {
+        val (_, hearing) = radioGardenWithWords(lengthMs = 180_000L)
+        hearing.song("First Song", 12.0)
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.following?.clock?.positionMs == 12_000L }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(191))
+        assertEquals("First Song", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+        hearing.song("Second Song", 10.0)
+        waitForText("The chorus of Second Song")
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+    }
+
+    @Test
     fun radioGardenFollowsTheNextQueueSongWhileItsWordsFloat() {
         val (queueSubtitle) = radioGardenWithWords()
         val floating = floatNow()
@@ -826,7 +911,7 @@ class ListeningTest {
         }
     }
 
-    private fun radioGardenWithWords(): Pair<(String) -> Unit, FakeHearing> {
+    private fun radioGardenWithWords(lengthMs: Long? = null): Pair<(String) -> Unit, FakeHearing> {
         val queueSubtitle = radioGarden("1LIVE", "Band - First Song")
         val hearing = FakeHearing()
         MainActivity.hearingFactory = { hearing }
@@ -834,7 +919,7 @@ class ListeningTest {
         fake.handler = { request ->
             val title = if ("Second" in request.url.toString()) "Second Song" else "First Song"
             val body = when (request.url.host) {
-                "itunes.apple.com" -> gardenTrack(title, "Band")
+                "itunes.apple.com" -> gardenTrack(title, "Band", lengthMs)
                 "lrclib.net" -> """[{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:00.00] The start of $title\n[00:10.00] The chorus of $title"}]"""
                 else -> "{}"
             }

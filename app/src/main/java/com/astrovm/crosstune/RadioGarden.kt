@@ -10,25 +10,30 @@ internal object RadioGarden {
     const val PACKAGE = "com.jonathanpuckey.radiogarden"
 
     private const val IHEART_TITLE = "text=\""
-    private const val PHONE_DIGITS = 7
+    private const val PHONE_DIGITS = 10
 
-    // Match whole fields, so a title can still contain words like "live".
+    // Match whole broadcast phrases. Words such as "Live" can be artist names or song titles.
     private val broadcastLabels = listOf(
-        "news", "the news", "live", "on air", "on the air", "now playing",
-        "nachrichten", "die nachrichten", "auf sendung", "jetzt läuft",
-        "noticias", "en vivo", "en directo", "al aire", "sonando ahora",
-        "actualités", "en direct", "à l'antenne", "en cours de lecture",
-        "समाचार", "लाइव", "प्रसारण जारी", "अभी चल रहा है",
-        "berita", "siaran langsung", "sedang mengudara", "sedang diputar",
-        "notizie", "in diretta", "in onda", "in riproduzione",
-        "ニュース", "ライブ", "放送中", "再生中", "オンエア",
-        "뉴스", "라이브", "방송 중", "재생 중",
-        "nieuws", "in de ether", "wordt nu afgespeeld",
-        "wiadomości", "na żywo", "na antenie", "teraz odtwarzane",
-        "notícias", "ao vivo", "no ar", "tocando agora",
-        "новости", "прямой эфир", "в эфире", "сейчас играет",
-        "haberler", "canlı", "yayında", "şimdi çalıyor",
-        "新闻", "新聞", "直播", "播出中", "正在播放", "現正播放",
+        "on air", "on the air", "on air now", "now playing", "live stream",
+        "auf sendung", "jetzt läuft", "live auf sendung",
+        "en vivo", "en directo", "al aire", "sonando ahora", "transmisión en vivo",
+        "en direct", "à l'antenne", "en cours de lecture", "diffusion en direct",
+        "प्रसारण जारी", "अभी चल रहा है", "सीधा प्रसारण",
+        "siaran langsung", "sedang mengudara", "sedang diputar",
+        "in diretta", "in onda", "in riproduzione",
+        "放送中", "再生中", "ライブ配信中",
+        "방송 중", "재생 중", "실시간 방송",
+        "in de ether", "wordt nu afgespeeld", "live uitzending",
+        "na żywo", "na antenie", "teraz odtwarzane", "transmisja na żywo",
+        "ao vivo", "no ar", "tocando agora", "transmissão ao vivo",
+        "прямой эфир", "в эфире", "сейчас играет",
+        "canlı yayın", "şimdi çalıyor",
+        "播出中", "正在播放", "現正播放", "正在直播", "直播中",
+    ).mapTo(HashSet(), ::labelKey)
+
+    private val newsTitles = listOf(
+        "news", "the news", "nachrichten", "die nachrichten", "noticias", "actualités", "समाचार", "berita",
+        "notizie", "ニュース", "뉴스", "nieuws", "wiadomości", "notícias", "новости", "haberler", "新闻", "新聞",
     ).mapTo(HashSet(), ::labelKey)
 
     /** The stream's claim, to check in a catalog before showing it. */
@@ -43,7 +48,7 @@ internal object RadioGarden {
         val dash = splitAt(subtitle) ?: return null
         val artist = subtitle.substring(0, dash).trimEnd()
         if (artist.equals(station, ignoreCase = true) || invalidField(artist)) return null
-        val title = readTitle(subtitle.substring(dash + 1).trimStart()) ?: return null
+        val title = readTitle(subtitle.substring(dash + 1).trimStart(), station) ?: return null
         return MusicMetadata(title, artist)
     }
 
@@ -83,15 +88,16 @@ internal object RadioGarden {
         last in "_.:-" || Character.isLetterOrDigit(text.codePointBefore(before + 1))
     }
 
-    private fun readTitle(streamTitle: String): String? =
+    private fun readTitle(streamTitle: String, station: String): String? =
         (if (streamTitle.startsWith("text=")) iheartTitle(streamTitle) else streamTitle)
-            ?.takeUnless(::invalidField)
+            ?.takeUnless { it.equals(station, ignoreCase = true) || invalidField(it, title = true) }
 
-    private fun invalidField(text: String): Boolean =
-        text.isBlank() || hasKeyValue(text) || isBroadcastText(text)
-
-    private fun isBroadcastText(text: String): Boolean =
-        labelKey(text) in broadcastLabels || hasAddress(text) || hasPhoneNumber(text)
+    private fun invalidField(text: String, title: Boolean = false): Boolean {
+        if (text.isBlank() || hasKeyValue(text)) return true
+        val key = labelKey(text)
+        val broadcast = key in broadcastLabels || (title && key in newsTitles)
+        return broadcast || hasAddress(text) || hasPhoneNumber(text)
+    }
 
     private fun labelKey(text: String): String = Normalizer.normalize(text, Normalizer.Form.NFKC)
         .lowercase(Locale.ROOT).replace('ı', 'i')
@@ -105,11 +111,15 @@ internal object RadioGarden {
 
     private fun hasPhoneNumber(text: String): Boolean {
         var digits = 0
-        for (char in text) {
+        var leadingPlus = false
+        for ((index, char) in text.withIndex()) {
             when {
-                char.isDigit() -> if (++digits >= PHONE_DIGITS) return true
-                char.isWhitespace() || char in "+()." || char in TitleDelimiters.DASHES -> Unit
-                else -> digits = 0
+                char.isDigit() -> if (leadingPlus || ++digits >= PHONE_DIGITS) return true
+                char.isWhitespace() || char == '.' || Character.getType(char) == Character.DASH_PUNCTUATION.toInt() -> Unit
+                else -> {
+                    digits = 0
+                    leadingPlus = char == '+' && text.getOrNull(index - 1)?.isLetterOrDigit() != true
+                }
             }
         }
         return false
@@ -149,6 +159,9 @@ internal object RadioGarden {
 
     /** Accent-insensitive for Latin names, but a voiced kana and its unvoiced form spell different words. */
     fun sameTitle(one: String, another: String): Boolean = titleKey(one) == titleKey(another)
+
+    fun sameSong(one: MusicMetadata, another: MusicMetadata): Boolean =
+        sameTitle(one.title, another.title) && SongNames.sameArtist(one.artist, another.artist)
 
     private fun titleKey(title: String): String {
         // NFKC turns a full-width tilde into an ASCII tilde. Keep it with the Japanese wave dash.

@@ -90,15 +90,33 @@ class RadioGardenTest {
     @Test
     fun dropsGenericBroadcastLabelsInTheSiteLanguages() {
         val labels = listOf(
-            "Live", "On-air", "NOW  PLAYING!", "auf Sendung", "Noticias", "Al aire",
+            "Live stream", "On-air", "On air now", "NOW  PLAYING!", "auf Sendung", "Noticias", "Al aire",
             "En direct", "अभी चल रहा है", "Siaran langsung", "In onda", "放送中",
-            "재생 중", "In de ether", "Na żywo", "No ar", "В эфире", "Yayında",
+            "재생 중", "In de ether", "Na żywo", "No ar", "В эфире", "Canlı yayın",
             "正在播放", "新聞"
         )
         assertEquals(emptyList<String>(), labels.filter { label ->
             RadioGarden.queueSong("Station", listOf(item("Station", "Radio Desk - $label"))) != null
         })
         assertNull(RadioGarden.queueSong("Station", listOf(item("Station", "Now Playing - Song"))))
+        assertNull(RadioGarden.queueSong("Station", listOf(item("Station", "Artist - Station"))))
+    }
+
+    @Test
+    fun keepsSingleWordNamesAndTitlesWithNumbers() {
+        val songs = listOf(
+            MusicMetadata("Lightning Crashes", "Live"),
+            MusicMetadata("Live Forever", "Live"),
+            MusicMetadata("Live", "Band"),
+            MusicMetadata("867-5309/Jenny", "Tommy Tutone"),
+            MusicMetadata("1999", "Prince"),
+            MusicMetadata("7 rings", "Ariana Grande"),
+            MusicMetadata("99 Luftballons", "Nena"),
+        )
+        val dropped = songs.filter { (title, artist) ->
+            RadioGarden.queueSong("Station", listOf(item("Station", "$artist - $title"))) != MusicMetadata(title, artist)
+        }
+        assertEquals(emptyList<MusicMetadata>(), dropped)
     }
 
     @Test
@@ -109,9 +127,11 @@ class RadioGardenTest {
             "Artist - Visit http://radio/live",
             "www.example.com - Song",
             "Artist - Send to desk+live@example.org",
-            "Radio Desk - Call 555 1234",
+            "Radio Desk - Call 212 555 1234",
+            "Radio Desk - Call 212‑555‑1234",
             "Radio Desk - Call +1 (212) 555-1234",
-            """Artist - text="Call 555.1234" song_spot="M" """
+            "Radio Desk - Call +44 20",
+            """Artist - text="Call 212.555-1234" song_spot="M" """
         )
         assertEquals(emptyList<String>(), subtitles.filter { text ->
             RadioGarden.queueSong("Station", listOf(item("Station", text))) != null
