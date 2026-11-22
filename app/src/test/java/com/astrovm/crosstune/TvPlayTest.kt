@@ -368,8 +368,10 @@ class TvPlayTest {
         pressBack(floating.get())
         waitUntil { shown("Demo two") }
         composeRule.waitForIdle()
-        // Practice is drawn in the words' place, the same screen, so nothing closes: the words give the remote somewhere to be.
+        // Practice is drawn in the words' place, the same screen, so nothing closes: the remote goes back to Study, which
+        // opened it, not the bar's first button (Issue #1137).
         assertEquals(1, composeRule.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().size)
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_study))).assertIsFocused()
     }
 
     @Test

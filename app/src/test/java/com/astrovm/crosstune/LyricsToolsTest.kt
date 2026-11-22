@@ -837,6 +837,26 @@ class LyricsToolsTest {
         assertEquals(1, offers())
     }
 
+    @Test
+    fun onATvTheRemoteGoesBackToStudyFromPracticeOnlyUntilItsUsedOnTheWords() {
+        prefs().edit().putString("saved_lines", """[{"text":"Demo one","translation":"Demo uno","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
+        openLyrics()
+        val study = composeRule.onNode(hasContentDescription(string(R.string.lyrics_study)))
+        study.performClick()
+        composeRule.onAllNodes(hasText(string(R.string.practice_song)))[0].performClick()
+        waitUntil { composeRule.onAllNodes(hasText("Demo two")).fetchSemanticsNodes().isEmpty() }
+        composeRule.runOnIdle { checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed() }
+        waitUntil { composeRule.onAllNodes(hasText("Demo two")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { runCatching { study.assertIsFocused() }.isSuccess }
+        // Used on the words since, the remote is sent to the bar's first tool again, as before Practice.
+        line("Demo two").requestFocus()
+        awayFromTheTools()
+        line("Demo two").performKeyInput { pressKey(Key.DirectionRight) }
+        passes(1)
+        assertTrue(onTheBar())
+        study.assertIsNotFocused()
+    }
+
     private companion object {
         const val TIMEOUT_MS = 10_000L
         const val SHOWN_MS = 5_000L
