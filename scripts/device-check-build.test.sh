@@ -55,8 +55,10 @@ build --dirty CaptureCheck capturecheck || fail "--dirty didn't build: $(cat "$w
 rm "$repo/notes.txt"
 
 # A change made while it builds fails a clean build, but not a --dirty one.
+build OfflineChordCheck chordcheck || fail "a clean tree didn't build: $(cat "$work/out")"
 if FAKE_EDIT=$repo/late.txt build OfflineChordCheck chordcheck; then fail "a change during the build passed"; fi
 grep -q "The source changed during the build" "$work/out" || fail "the late change isn't named"
+[[ -z $(ls -A "$repo/build/chordcheck") ]] || fail "a build that failed left an earlier build's files: $(ls "$repo/build/chordcheck")"
 FAKE_EDIT=$repo/late.txt build --dirty CaptureCheck capturecheck || fail "--dirty failed on a late change"
 rm "$repo/late.txt"
 
@@ -91,9 +93,21 @@ build --at HEAD RecordingNameCheck namescheck || fail "--at HEAD didn't build: $
 [[ $(cat "$repo/build/namescheck/head.txt") == "$fix" ]] || fail "--at HEAD's head.txt isn't the commit alone"
 grep -qx "code of the fix" "$repo/build/namescheck/app-debug.apk" || fail "--at HEAD isn't the fix"
 
-# A failed build leaves no checkout either; an unknown commit, or a runner this checkout hasn't, builds nothing.
-if FAKE_FAIL=1 build --at "$head" RecordingNameCheck failed; then fail "a failed build passed"; fi
+# A failed build leaves no checkout either, nor the APKs an earlier build of that folder made from another commit.
+if FAKE_FAIL=1 build --at "$head" RecordingNameCheck namescheck-main; then fail "a failed build passed"; fi
 [[ $(git -C "$repo" worktree list | wc -l) == 1 && -z $(ls -A "$work/cache") ]] || fail "a failed --at left its checkout behind"
+[[ -z $(ls -A "$repo/build/namescheck-main") ]] || fail "a failed --at left an earlier build's files: $(ls "$repo/build/namescheck-main")"
+
+# A cache path with a $ or a quote in it is removed as it is, built or not.
+odd="$work/odd \$name \"q"
+for fails in "" 1; do
+    if ! CROSSTUNE_AGENT_CACHE=$odd FAKE_FAIL=$fails build --at "$head" RecordingNameCheck namescheck-main && [[ -z $fails ]]; then
+        fail "--at with an odd cache path didn't build: $(cat "$work/out")"
+    fi
+    [[ $(git -C "$repo" worktree list | wc -l) == 1 && -z $(ls -A "$odd") ]] || fail "--at left its checkout in an odd cache path (fails=$fails): $(ls -A "$odd")"
+done
+
+# An unknown commit, or a runner this checkout hasn't, builds nothing.
 if build --at nowhere RecordingNameCheck namescheck-main; then fail "an unknown commit built"; fi
 grep -q "No commit nowhere" "$work/out" || fail "the unknown commit isn't named"
 if build --at "$head" OfflineChordCheck chordcheck-main; then fail "a runner that isn't here built"; fi

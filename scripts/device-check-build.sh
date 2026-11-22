@@ -43,13 +43,19 @@ main() {
         [[ -n ${CROSSTUNE_AGENT_CACHE:-} || ! -d /mnt/data/agent-cache ]] || cache=/mnt/data/agent-cache
         mkdir -p "$cache"
         tree=$(mktemp -d "$cache/crosstune-device-check-$name.XXXXXX")
-        # On any exit, so a failed build leaves no checkout behind.
-        trap 'git -C "'"$here"'" worktree remove --force "'"$tree"'" 2>/dev/null || rm -rf "'"$tree"'"' EXIT
+        # On any exit, so a failed build leaves no checkout behind. %q, so the trap reads each path as it is, whatever
+        # it holds, such as a $ or a quote.
+        local cleanup
+        printf -v cleanup 'git -C %q worktree remove --force %q 2>/dev/null || rm -rf %q' "$here" "$tree" "$tree"
+        trap -- "$cleanup" EXIT
         git worktree add --detach "$tree" "$sha" >/dev/null
         git -C "$tree" submodule update --init --recursive
         mkdir -p "$tree/$(dirname "$source")"
         cp "$source" "$tree/$source"
     fi
+    # What an earlier build left goes first, so a build that fails leaves no APKs of another commit to be taken for it.
+    local out=build/$name apks=(app-debug.apk app-debug-androidTest.apk)
+    rm -f "${apks[@]/#/$out/}" "$out/head.txt" "$out/sha256.txt"
     (
         cd "$tree"
         nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh :app:assembleDebug
@@ -58,7 +64,6 @@ main() {
     [[ $(git rev-parse HEAD) == "$head" ]] || { echo "HEAD moved during the build" >&2; return 1; }
     [[ $(git -C "$tree" rev-parse HEAD) == "$sha" ]] || { echo "The commit built moved during the build" >&2; return 1; }
     [[ $dirty == true || -z $(git status --porcelain) ]] || { echo "The source changed during the build" >&2; return 1; }
-    local out=build/$name
     mkdir -p "$out"
     cp "$tree/app/build/outputs/apk/debug/app-debug.apk" "$tree/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "$out/"
     {
@@ -67,7 +72,6 @@ main() {
         [[ $dirty == false ]] || git status --porcelain
     } > "$out/head.txt"
     # sha256sum's lines, with the bare names, so `sha256sum -c sha256.txt` works from inside the folder.
-    local apks=(app-debug.apk app-debug-androidTest.apk)
     (cd "$out" && sum256 "${apks[@]}" > sha256.txt)
     echo "Built $out/app-debug.apk and $out/app-debug-androidTest.apk from $sha"
 }
