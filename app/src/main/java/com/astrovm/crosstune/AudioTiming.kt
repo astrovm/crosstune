@@ -4,24 +4,19 @@ import kotlin.math.abs
 
 /** Separate audio observations must agree before anything is corrected or remembered. */
 internal object AudioTiming {
-    /** Three separate lines must support the same shift or a gentle drift before anything moves. */
-    fun confirmed(points: List<SyncPoint>): List<SyncPoint> {
+    /**
+     * How far the song is from the words, once three separate lines at least 8 s apart heard it so, within 1.5 s
+     * of each other; null until then. A video's intro moves every line by the same amount, so lines that drift
+     * apart as the song goes on are no lead to remember.
+     */
+    fun confirmedShift(points: List<SyncPoint>): Long? {
         val ordered = points.distinctBy { it.lineMs }.sortedBy { it.lineMs }
-        if (ordered.size < 3) return emptyList()
-        val first = ordered.first()
-        val last = ordered.last()
-        val span = last.lineMs - first.lineMs
-        if (span < 8_000) return emptyList()
+        // Fewer than three lines can't be three steady ones; none would have no middle shift at all.
+        if (ordered.isEmpty()) return null
         val shifts = ordered.map { it.songMs - it.lineMs }.sorted()
         val median = shifts[shifts.size / 2]
         val steady = ordered.filter { abs(it.songMs - it.lineMs - median) <= 1_500 }
-        if (steady.size >= 3 && steady.last().lineMs - steady.first().lineMs >= 8_000) {
-            val agreed = steady.map { it.songMs - it.lineMs }.sorted().let { it[it.size / 2] }
-            return listOf(SyncPoint(steady.first().lineMs, steady.first().lineMs + agreed))
-        }
-        val rate = (last.songMs - first.songMs).toDouble() / span
-        if (span < 30_000 || rate !in 0.9..1.1) return emptyList()
-        if (ordered.any { abs(it.songMs - (first.songMs + (it.lineMs - first.lineMs) * rate)) > 1_000 }) return emptyList()
-        return listOf(first, last)
+        if (steady.size < 3 || steady.last().lineMs - steady.first().lineMs < 8_000) return null
+        return steady.map { it.songMs - it.lineMs }.sorted().let { it[it.size / 2] }
     }
 }
