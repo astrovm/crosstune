@@ -676,9 +676,12 @@ internal class ExactMatcher(
         val videoRows = videos.map(::row)
         if (names.appleFound) {
             songRow(metadata, rows, videoRows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+            fun eligibleVideo(row: Row) = isTheSongsVideo(row, names) && (names.complete || isOwnVideo(row, names)) &&
+                keepsRequestedRecording(recording, row, video = true)
+            val first = videoRows.firstOrNull(::eligibleVideo)
             videoRows.firstOrNull {
-                isTheSongsVideo(it, names) && (names.complete || isOwnVideo(it, names)) && keepsRequestedRecording(recording, it, video = true) &&
-                    (isOwnVideo(it, names) || appleNamedArtist(metadata, names))
+                eligibleVideo(it) && (isOwnVideo(it, names) || appleNamedArtist(metadata, names)) &&
+                    (it === first || first != null && sameVideoRecording(first, it, metadata, names))
             }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         }
         addDeezerNames(metadata, names)
@@ -691,6 +694,13 @@ internal class ExactMatcher(
         }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), final = names.complete, lasting = names.everyStore)
+    }
+
+    private fun sameVideoRecording(first: Row, candidate: Row, metadata: MusicMetadata, names: Names): Boolean {
+        if (SongNames.normalize(first.name) != SongNames.normalize(candidate.name)) return false
+        if (first.lengthMs?.let { !sameRecordingLength(candidate.lengthMs, it) } == true) return false
+        val wanted = metadata.lengthMs?.takeIf { it > 0 }?.let(::listOf) ?: names.lengthsMs
+        return wanted.isEmpty() || wanted.any { sameRecordingLength(candidate.lengthMs, it) }
     }
 
     private fun appleSongRow(rows: List<Row>, names: Names, recording: RequestedRecording): Row? {
