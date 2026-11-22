@@ -129,6 +129,7 @@ class RadioGardenTest {
             "Artist - Send to desk+live@example.org",
             "Radio Desk - Call 212 555 1234",
             "Radio Desk - Call 212‑555‑1234",
+            "Radio Desk - Call (212) 555-1234",
             "Radio Desk - Call +1 (212) 555-1234",
             "Radio Desk - Call +44 20",
             """Artist - text="Call 212.555-1234" song_spot="M" """

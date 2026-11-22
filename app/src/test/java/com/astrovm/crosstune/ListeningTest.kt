@@ -736,6 +736,40 @@ class ListeningTest {
         assertFalse(shown("A PLACE TO GO"))
     }
 
+    @Test
+    fun radioGardenExpiresTheTitleOffScreenAfterMicrophoneAccessIsRevoked() {
+        val hearing = startRadioGardenWithKnownLength()
+        val main = shadowOf(Looper.getMainLooper())
+        composeRule.runOnIdle { controllerModel().setPlayingBar(false) }
+        waitUntil(TIMEOUT_MS) { !barShown() }
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+
+        main.idleFor(java.time.Duration.ofSeconds(359))
+        assertEquals("A PLACE TO GO", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+        main.idleFor(java.time.Duration.ofSeconds(2))
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        assertEquals(0, hearing.listens)
+
+        composeRule.runOnIdle { controllerModel().setPlayingBar(true) }
+        waitForText("1LIVE")
+        assertFalse(shown("A PLACE TO GO"))
+    }
+
+    @Test
+    fun radioGardenChecksAtTheTrackDeadlineIfMicrophoneAccessIsGrantedWhileWaiting() {
+        val hearing = startRadioGardenWithKnownLength(byMicrophone = false)
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(60))
+        allowMicrophone()
+
+        main.idleFor(java.time.Duration.ofSeconds(125))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(6))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(shown("A PLACE TO GO"))
+    }
+
     private fun startRadioGardenWithKnownLength(byMicrophone: Boolean = true): FakeHearing {
         radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
         radioGardenCatalog(lengthMs = 180_000L)
