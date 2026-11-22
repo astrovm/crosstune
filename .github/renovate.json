@@ -16,5 +16,14 @@
       "matchHost": "repo1.maven.org",
       "concurrentRequestLimit": 1
     }
+  ],
+  "packageRules": [
+    {
+      "description": "A JDK major moves every pin at once (the box, setup-java, syncreplay, the docs), which crosstune's test_jdk_pins.py holds equal; Renovate only moves the box, so the bump is made by hand.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["docker.io/library/eclipse-temurin", "eclipse-temurin"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
   ]
 }

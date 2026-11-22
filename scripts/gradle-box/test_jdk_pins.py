@@ -1,4 +1,5 @@
 """Every place that names a JDK names the same major version as the box, so a local build runs what CI runs."""
+import json
 import re
 import unittest
 from pathlib import Path
@@ -46,6 +47,18 @@ class JdkPinsTest(unittest.TestCase):
         self.assertIn((".github/actions/jdk/action.yml", major), found)
         # A pin that isn't a plain major (a matrix, a file, a full version) can't be held equal, so it fails too.
         self.assertEqual([], [(name, v) for name, v in found if v != major])
+
+    def test_renovate_leaves_the_jdk_major_to_a_hand_bump(self):
+        # Renovate moves only the box, so its major update alone fails the test above. The rule lives in
+        # astrovm/repo-settings (config/renovate/astrovm/crosstune.json), which writes this file: a sync without it fails here.
+        rules = json.loads((ROOT / ".github/renovate.json").read_text()).get("packageRules", [])
+        self.assertTrue(any(
+            rule.get("enabled") is False
+            and "docker" in rule.get("matchDatasources", [])
+            and "docker.io/library/eclipse-temurin" in rule.get("matchPackageNames", [])
+            and rule.get("matchUpdateTypes") == ["major"]
+            for rule in rules
+        ), "no Renovate rule turns off eclipse-temurin's major update")
 
 
 if __name__ == "__main__":
