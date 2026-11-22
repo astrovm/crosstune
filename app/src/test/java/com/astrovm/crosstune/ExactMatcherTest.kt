@@ -1989,11 +1989,11 @@ class ExactMatcherTest {
         assertEquals(2, asked.get())
 
         // Nothing found is an answer, so it is not asked twice: once among the songs, once among the
-        // videos, and Apple, in two stores, and Deezer for its other names. Failing twice gives up.
+        // videos, Apple in two stores, and Deezer for its tracks and artist. Failing twice gives up.
         asked.set(0)
         fake.handler = { request -> asked.incrementAndGet(); FakeSpotify.html(request, """{"contents":{}}""") }
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
-        assertEquals(5, asked.get())
+        assertEquals(6, asked.get())
         asked.set(0)
         fake.handler = { asked.incrementAndGet(); throw IOException("offline") }
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })

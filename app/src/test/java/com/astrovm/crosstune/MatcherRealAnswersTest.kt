@@ -77,33 +77,32 @@ class MatcherRealAnswersTest {
     fun lemonOpensWhenAppleIsDownAndDeezerNamesTheSameRecording() {
         appleDown = { true }
         assertEquals(LEMON_SONG, find(LEMON, 256_000L))
+        assertEquals(LEMON_SONG, find(LEMON, null))
     }
 
     // Without a fitting length, the unanswered search is retried when Apple is available again.
     @Test
     fun lemonIsAskedAgainWhenAppleWasDown() {
         val matcher = matcher()
-        for (length in listOf(null, 280_000L)) {
-            val song = LEMON.metadata.copy(lengthMs = length)
-            appleDown = { true }
-            assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
-            asked.clear()
-            assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
-            assertEquals(emptyList<String>(), asked)
-            appleDown = { false }
-            clock += ExactMatcher.UNSURE_FOR_MS
-            assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
-        }
+        val song = LEMON.metadata.copy(lengthMs = 280_000L)
+        appleDown = { true }
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        asked.clear()
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(emptyList<String>(), asked)
+        appleDown = { false }
+        clock += ExactMatcher.UNSURE_FOR_MS
+        assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
     }
 
-    // With Apple down, a queue's song is asked of each service once: two searches of YouTube Music, each store's, and
-    // Deezer's, not all of them twice, as it is when a search fails.
+    // With Apple down, a queue's song is asked once: two searches of YouTube Music, each store's, and Deezer's track
+    // and artist searches. Deezer's answer names the song, so there is no second attempt.
     @Test
     fun aQueuesSongIsAskedOnceWhileAppleIsDown() {
         appleDown = { true }
         val queue = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(LEMON.metadata)) {} }
-        assertEquals(null, queue)
-        assertEquals(mapOf("api.deezer.com/search/track" to 1, "itunes.apple.com/search" to 6, "music.youtube.com/youtubei/v1/search" to 2), asked.groupingBy { it }.eachCount())
+        assertEquals(LEMON_SONG, queue?.url)
+        assertEquals(mapOf("api.deezer.com/search/track" to 1, "api.deezer.com/search/artist" to 1, "itunes.apple.com/search" to 6, "music.youtube.com/youtubei/v1/search" to 2, "www.youtube.com/watch_videos" to 1), asked.groupingBy { it }.eachCount())
     }
 
     // Issue #1103: Japan's store finds the song, but the US store fails. Deezer names its artist and Japan's length
@@ -135,6 +134,9 @@ class MatcherRealAnswersTest {
     private fun answer(request: Request): Response {
         val url = request.url
         asked += url.host + url.encodedPath
+        if (url.host == "www.youtube.com" && url.encodedPath == "/watch_videos") {
+            return FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=3NNhrqHZqlI").build()
+        }
         val answers = kept.answers
         val term = kept.term
         val served = when (url.host) {
