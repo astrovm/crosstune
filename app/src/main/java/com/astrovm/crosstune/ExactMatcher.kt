@@ -133,7 +133,7 @@ internal class ExactMatcher(
         val item = if (metadata.type == ItemType.PLAYLIST && metadata.tracks.isEmpty()) metadata.copy(type = ItemType.ALBUM) else metadata
         // Other apps need an account to search, so there's nothing to look up or remember.
         if (!canMatchExactly(target, item.type)) return Match.Missing
-        return remembered("find", target.name, item) { afterOutage -> lookUp(target, item, afterOutage) }
+        return remembered("find", target.name, item) { lookUp(target, item) }
     }
 
     /**
@@ -148,9 +148,7 @@ internal class ExactMatcher(
         }
         metadata.url?.let(MusicLinks::linkFor)?.youtubeVideoOn(target)?.let { return it }
         cache?.get(cacheKey("find", target.name, metadata))?.let { return it }
-        return (remembered("queue", target.name, metadata) { afterOutage ->
-            lookUp(target, metadata, afterOutage, loosely = true, retrying = true)
-        } as? Match.Found)?.url
+        return (remembered("queue", target.name, metadata) { lookUp(target, metadata, loosely = true, retrying = true) } as? Match.Found)?.url
     }
 
     /**
@@ -159,7 +157,7 @@ internal class ExactMatcher(
      */
     private class Answer(
         val url: String?, val toPick: ToPick? = null, val final: Boolean = true, val lasting: Boolean = true,
-        val waitForNames: Boolean = false
+        val waitForNames: Boolean = false, val artistVideo: String? = null
     )
 
     private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthsMs: List<Long>)
@@ -168,7 +166,13 @@ internal class ExactMatcher(
      * What [lookUp] came to, and whether it's only for now, as a store that could have named the song failed: [unsure].
      * Then a miss is no answer, and what's found or missed is held a while, not kept.
      */
-    private class Looked(val match: Match, val unsure: Boolean = false, val waitForNames: Boolean = false)
+    private class Looked(
+        val match: Match, val unsure: Boolean = false, val waitForNames: Boolean = false,
+        private val artistVideo: String? = null
+    ) {
+        fun matchAfterOutage(afterOutage: Boolean): Match =
+            if (afterOutage && artistVideo != null) Match.Found(artistVideo) else match
+    }
 
     /**
      * What [target] has for [metadata]. A search that failed or timed out is asked once more when
@@ -176,21 +180,21 @@ internal class ExactMatcher(
      * answer of "none" is final, unless what would have proved the song failed: then it's no answer,
      * and not asked again at once, as the store that failed is likely still down.
      */
-    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, afterOutage: Boolean, loosely: Boolean = false, retrying: Boolean = false): Looked {
+    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false, retrying: Boolean = false): Looked {
         repeat(if (retrying) 2 else 1) {
             val answer = withTimeoutOrNull(timeoutMs) {
-                answeredOr(null) { findOn(target, metadata, loosely, afterOutage) }
+                answeredOr(null) { findOn(target, metadata, loosely) }
             }
             if (answer != null) {
                 val match = answer.url?.let { Match.Found(it, answer.lasting) } ?: answer.toPick?.let { picked(it, answer.lasting) } ?: Match.Missing
                 return if (match == Match.Missing && !answer.final) Looked(Match.Failed, unsure = true)
-                else Looked(match, unsure = !answer.lasting, waitForNames = answer.waitForNames)
+                else Looked(match, unsure = !answer.lasting, waitForNames = answer.waitForNames, artistVideo = answer.artistVideo)
             }
         }
         return Looked(Match.Failed)
     }
 
-    private suspend fun findOn(target: MusicService, metadata: MusicMetadata, loosely: Boolean, afterOutage: Boolean): Answer = when (target) {
+    private suspend fun findOn(target: MusicService, metadata: MusicMetadata, loosely: Boolean): Answer = when (target) {
         MusicService.APPLE_MUSIC -> Answer(findOnAppleMusic(metadata))
         MusicService.DEEZER -> Answer(findOnDeezer(metadata))
         MusicService.BANDCAMP -> Answer(findOnBandcamp(metadata))
@@ -199,9 +203,9 @@ internal class ExactMatcher(
         MusicService.SOUNDCLOUD -> Answer(findOnSoundCloud(metadata))
         MusicService.AUDIOMACK -> Answer(findOnAudiomack(metadata))
         MusicService.QOBUZ -> Answer(findOnQobuz(metadata))
-        MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely, afterOutage)
+        MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
         // YouTube.
-        else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely, afterOutage)
+        else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
     }
 
     /** The song ChatGPT picks among the songs, then the videos; no answer in time is no answer. */
@@ -227,7 +231,7 @@ internal class ExactMatcher(
      * as a card does, doesn't ask every service again for the store that's down.
      * If a store could name a competing result, give it one hold before opening a fan's video.
      */
-    private suspend fun remembered(kind: String, target: String, metadata: MusicMetadata, lookUp: suspend (Boolean) -> Looked): Match {
+    private suspend fun remembered(kind: String, target: String, metadata: MusicMetadata, lookUp: suspend () -> Looked): Match {
         val key = cacheKey(kind, target, metadata)
         cache?.get(key)?.let { return Match.Found(it) }
         missing[key]?.takeIf { now() - it < missingForMs }?.let { return Match.Missing }
@@ -235,8 +239,8 @@ internal class ExactMatcher(
         if (firstWait != null && now() - firstWait < UNSURE_FOR_MS) return Match.WaitingForNames
         val earlier = unsure[key]
         earlier?.takeIf { now() - it.first < minOf(missingForMs, UNSURE_FOR_MS) }?.let { return it.second }
-        val looked = lookUp(firstWait != null || earlier != null)
-        val match = looked.match
+        val looked = lookUp()
+        val match = looked.matchAfterOutage(firstWait != null || earlier != null)
         if (shouldHoldForNames(key, looked)) return Match.WaitingForNames
         when {
             looked.unsure -> unsure[key] = now() to match
@@ -652,7 +656,7 @@ internal class ExactMatcher(
      * YouTube Music's search, filtered to songs, albums or artists. Songs are also watchable on
      * YouTube itself, which has no such filter, so [watchUrl] picks the app the video id opens in.
      */
-    private suspend fun findOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String, loosely: Boolean, afterOutage: Boolean): Answer {
+    private suspend fun findOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String, loosely: Boolean): Answer {
         val (params, isSong) = when (metadata.type) {
             ItemType.TRACK -> YOUTUBE_MUSIC_SONGS to true
             ItemType.ALBUM -> YOUTUBE_MUSIC_ALBUMS to false
@@ -710,20 +714,24 @@ internal class ExactMatcher(
             ?: videoNamesSong(metadata, abroad, videoRows, names)
             ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
         song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
-        matchingVideo(rows, videoRows, names, recording, watchUrl, afterOutage)?.let { return it }
+        matchingVideo(rows, videoRows, names, recording, watchUrl)?.let { return it }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), final = names.complete, lasting = names.everyStore)
     }
 
-    private fun matchingVideo(
-        songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String, afterOutage: Boolean
-    ): Answer? {
+    private fun matchingVideo(songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String): Answer? {
         val matching = videos.filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
         val first = matching.firstOrNull() ?: return null
-        fun found(row: Row) = Answer(watchUrl + row.id, lasting = names.everyStore)
-        // After waiting or opening a fan's video, the artist's own video can take its place.
-        if (!names.everyStore || afterOutage) matching.firstOrNull { isOwnVideo(it, names) }?.let { return found(it) }
-        if (names.everyStore) return found(first)
+        val artist = matching.firstOrNull { isOwnVideo(it, names) }?.id?.let { watchUrl + it }
+        // A later lookup can use the artist's video to replace what an outage left it with.
+        if (names.everyStore) return Answer(watchUrl + first.id, artistVideo = artist)
+        if (artist != null) return Answer(artist, lasting = false)
+        return fanVideoDuringOutage(songs, videos, matching, names, recording, watchUrl)
+    }
+
+    private fun fanVideoDuringOutage(
+        songs: List<Row>, videos: List<Row>, matching: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String
+    ): Answer? {
         // A failed search may have lost a length, even if there is no song row.
         if (names.searchFailed) return null
         // A title can hide an unconfirmed name in brackets, as on a piano upload.
