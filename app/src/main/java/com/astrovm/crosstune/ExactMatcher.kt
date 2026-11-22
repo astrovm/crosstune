@@ -104,6 +104,7 @@ internal class ExactMatcher(
 
     private data class SavedAnswer(val url: String?, val retry: Retry? = null) {
         val confirmedUrl: String? get() = url.takeIf { retry == null }
+        val provisionalUrl: String? get() = url.takeIf { retry != null }
 
         fun forCache(): String = retry?.toJson()?.putOpt("url", url)?.toString() ?: url.orEmpty()
     }
@@ -161,17 +162,18 @@ internal class ExactMatcher(
     /** What [target] has for [metadata], telling a song that isn't there from one that couldn't be looked for. */
     suspend fun lookFor(target: MusicService, metadata: MusicMetadata): Match = lookup(target, metadata).match
 
-    /** [retry] can also come from Recent if the cache was cleared since opening the song. */
-    suspend fun lookup(target: MusicService, metadata: MusicMetadata, retry: Retry? = null): Lookup =
-        match(target, metadata, retry).also { cache?.save() }
+    /** Recent can supply the retry and its provisional URL if the cache was cleared. */
+    suspend fun lookup(
+        target: MusicService, metadata: MusicMetadata, retry: Retry? = null, provisionalUrl: String? = null
+    ): Lookup = match(target, metadata, retry?.let { SavedAnswer(provisionalUrl, it) }).also { cache?.save() }
 
-    private suspend fun match(target: MusicService, metadata: MusicMetadata, retry: Retry? = null): Lookup {
+    private suspend fun match(target: MusicService, metadata: MusicMetadata, previous: SavedAnswer? = null): Lookup {
         // A playlist whose songs aren't known may be an album put up as one, e.g. a SoundCloud set,
         // so it's found as that album, by the same artist, or not at all.
         val item = if (metadata.type == ItemType.PLAYLIST && metadata.tracks.isEmpty()) metadata.copy(type = ItemType.ALBUM) else metadata
         // Other apps need an account to search, so there's nothing to look up or remember.
         if (!canMatchExactly(target, item.type)) return Lookup(Match.Missing)
-        return remembered("find", target.name, item, retry) { lookUp(target, item) }
+        return remembered("find", target.name, item, previous) { lookUp(target, item) }
     }
 
     /**
@@ -187,7 +189,7 @@ internal class ExactMatcher(
         metadata.url?.let(MusicLinks::linkFor)?.youtubeVideoOn(target)?.let { return it }
         val single = savedAnswer(cacheKey("find", target.name, metadata))
         single?.confirmedUrl?.let { return it }
-        val queued = remembered("queue", target.name, metadata, single?.retry) { lookUp(target, metadata, loosely = true, retrying = true) }
+        val queued = remembered("queue", target.name, metadata, single) { lookUp(target, metadata, loosely = true, retrying = true) }
         return (queued.match as? Match.Found)?.url
     }
 
@@ -269,39 +271,53 @@ internal class ExactMatcher(
      * could have named the song failed is held for a while, at most as long, and then asked again: what
      * it found may be a fan's video where that store's name finds the song. Held, asking again at once,
      * as a card does, doesn't ask every service again for the store that's down.
-     * If the store could name a competing result, give it a 30-second hold, at most once per hour
-     * while the outage continues. Keep the hold and the earlier lookup with the song across restarts.
+     * Give the store one 30-second hold if it could name a competing result and there is no provisional URL.
+     * After that, open the saved provisional URL if the store still fails. Each open asks again after the
+     * short in-memory pause, so the artist's video can replace the upload once the store answers.
      */
     private suspend fun remembered(
-        kind: String, target: String, metadata: MusicMetadata, retry: Retry? = null, lookUp: suspend () -> Looked
+        kind: String, target: String, metadata: MusicMetadata, previous: SavedAnswer? = null, lookUp: suspend () -> Looked
     ): Lookup {
         val key = cacheKey(kind, target, metadata)
         val saved = savedAnswer(key)
-        if (retry == null && saved?.retry == null) {
+        val outage = previousOutage(saved, previous)
+        if (outage == null) {
             saved?.confirmedUrl?.let { return Lookup(Match.Found(it)) }
             missing[key]?.takeIf { now() - it < missingForMs }?.let { return Lookup(Match.Missing) }
         }
 
-        val previous = listOfNotNull(saved?.retry, retry).maxByOrNull { it.heldAtMs ?: Long.MIN_VALUE }
-        val hold = nameHold(key, previous?.heldAtMs)
+        val hold = nameHold(key, outage)
         hold?.takeIf { it.waiting(now()) }?.let { return it.pending() }
         val earlier = unsure[key]
         earlier?.takeIf { now() - it.first < minOf(missingForMs, UNSURE_FOR_MS) }?.let { return it.second }
-        val looked = lookUp()
-        if (looked.waitForNames && hold == null) return startWaiting(key, saved)
-
-        val prior = hold?.let { Retry(it.wallTime) } ?: previous
-        val match = looked.matchAfterOutage(prior != null || earlier != null)
-        return rememberAnswer(key, saved, looked, match, prior)
+        return answerLookup(key, saved, outage, hold, earlier?.second, lookUp())
     }
 
-    private fun nameHold(key: String, heldAt: Long?): NameHold? {
+    private fun previousOutage(saved: SavedAnswer?, previous: SavedAnswer?): SavedAnswer? {
+        val retry = listOfNotNull(saved?.retry, previous?.retry).maxByOrNull { it.heldAtMs ?: Long.MIN_VALUE } ?: return null
+        return SavedAnswer(saved?.provisionalUrl ?: previous?.provisionalUrl, retry)
+    }
+
+    private suspend fun answerLookup(
+        key: String, saved: SavedAnswer?, outage: SavedAnswer?, hold: NameHold?, earlier: Lookup?, looked: Looked
+    ): Lookup {
+        val retry = hold?.let { Retry(it.wallTime) } ?: outage?.retry
+        val earlierUrl = (earlier?.match as? Match.Found)?.url
+        val provisional = outage?.url ?: earlierUrl.takeIf { looked.waitForNames }
+        if (looked.waitForNames && retry?.heldAtMs == null && provisional == null) return startWaiting(key, saved)
+        val match = if (looked.unsure && provisional != null) Match.Found(provisional, lasting = false)
+        else looked.matchAfterOutage(retry != null || earlier != null)
+        return rememberAnswer(key, saved, looked, match, retry)
+    }
+
+    private fun nameHold(key: String, outage: SavedAnswer?): NameHold? {
+        if (outage?.url != null) return null
+        val heldAt = outage?.retry?.heldAtMs
         val at = now()
         return waitingForNames.compute(key) { _, live ->
-            val recent = live?.takeIf { at - it.startedAt < HOLD_AGAIN_AFTER_MS }
-            if (heldAt == null || recent?.wallTime == heldAt) return@compute recent
-            val age = wallNow() - heldAt
-            if (age in 0 until HOLD_AGAIN_AFTER_MS && (recent == null || heldAt > recent.wallTime)) NameHold(at - age, heldAt) else recent
+            if (heldAt == null || (live != null && heldAt <= live.wallTime)) return@compute live
+            val age = (wallNow() - heldAt).coerceAtLeast(0L)
+            NameHold(at - age, heldAt)
         }
     }
 
@@ -1529,7 +1545,6 @@ internal class ExactMatcher(
 
         /** How long a song missed while a store that could have proved it was down stays no answer, see [remembered]. */
         const val UNSURE_FOR_MS = 30_000L
-        private const val HOLD_AGAIN_AFTER_MS = 60 * 60_000L
 
         private const val HTTP_BAD_REQUEST = 400
         const val QUEUE_LOOKUPS_AT_ONCE = 6

@@ -1929,7 +1929,8 @@ class MainActivityTest {
             "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$title"}]}}},
             {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$channel • 1K views • 3:04"}]}}}],
             "playlistItemData":{"videoId":"$id"}}}"""
-        val videos = """{"contents":[${row("THE BLUE HEARTS - 終わらない歌", "Fan", "fan00000000")},
+        var fanId = "fan00000000"
+        fun videos() = """{"contents":[${row("THE BLUE HEARTS - 終わらない歌", "Fan", fanId)},
             ${row("終わらない歌", "ザ・ブルーハーツ - Topic", "own00000000")}]}"""
         var japanUp = false
         fake.handler = { request ->
@@ -1943,7 +1944,7 @@ class MainActivityTest {
                 } else FakeSpotify.html(request, "{}", code = 503)
                 url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
                 url.host == "music.youtube.com" -> FakeSpotify.html(
-                    request, if (FakeSpotify.bodyOf(request).contains("EgWKAQIQAWoKEAoQAxAEEAkQBQ==")) videos else "{}"
+                    request, if (FakeSpotify.bodyOf(request).contains("EgWKAQIQAWoKEAoQAxAEEAkQBQ==")) videos() else "{}"
                 )
                 else -> FakeSpotify.html(request, FakeSpotify.trackPage("終わらない歌", "THE BLUE HEARTS · Song"))
             }
@@ -1969,6 +1970,10 @@ class MainActivityTest {
         assertEquals(fan, restartAndOpenRecent())
         assertEquals(elapsedHold, HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"]?.retry)
 
+        fanId = "new00000000"
+        assertEquals(fan, restartAndOpenRecent())
+
+        fanId = "fan00000000"
         japanUp = true
         assertEquals(own, restartAndOpenRecent())
         val recovered = HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"]

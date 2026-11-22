@@ -5329,13 +5329,18 @@ internal class MainViewModel(
         saved?.takeIf(PreparedLink::lasting)?.let { return it.url.forSharing() }
         val lookup = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
-            matcher.lookup(service, metadata, saved?.retry).also { uiState = uiState.copy(isMatching = false) }
+            lookupDestination(service, metadata, saved).also { uiState = uiState.copy(isMatching = false) }
         } else {
             null
         }
         val prepared = preparedLink(destination, metadata, lookup)
         rememberDestination(destination, prepared)
         return prepared.url.forSharing()
+    }
+
+    private suspend fun lookupDestination(service: MusicService, metadata: MusicMetadata, saved: PreparedLink?): ExactMatcher.Lookup {
+        val provisional = saved?.takeIf { it.exact && !it.lasting }?.url?.let(MusicLinks::linkFor)?.youtubeVideoOn(service)
+        return matcher.lookup(service, metadata, saved?.retry, provisional)
     }
 
     private fun preparedLink(destination: Destination, metadata: MusicMetadata, lookup: ExactMatcher.Lookup?): PreparedLink {
@@ -5456,7 +5461,7 @@ internal class MainViewModel(
         }
         val saved = entry.destinationLinks[destination.key]
         saved?.takeIf { it.lasting && it.canUseFor(uiState.exactMatch) }?.let { return it.url.forSharing() }
-        val lookup = if (uiState.exactMatch && service != null) matcher.lookup(service, entry.metadata, saved?.retry) else null
+        val lookup = if (uiState.exactMatch && service != null) lookupDestination(service, entry.metadata, saved) else null
         val prepared = preparedLink(destination, entry.metadata, lookup)
         val history = historyStore.remember(entry.link.url, destination.key, prepared)
         uiState = uiState.copy(history = history)
