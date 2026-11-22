@@ -51,6 +51,8 @@ def ytm_path(out, query, params):
 
 # What YouTube adds to an artist's own channel's name, as ExactMatcher's CHANNEL_SUFFIXES: "Band - Topic", "BandVEVO".
 CHANNEL_SUFFIXES = {"topic", "vevo", "official", "music", "tv"}
+# Qobuz names the same artist both ways on this album: https://www.qobuz.com/us-en/album/kifak-inta-fairuz/mx9y215fx1z8a
+ARTIST_ALIASES = {"fairouz": {"fairuz"}, "fairuz": {"fairouz"}}
 # SongNames' leadingArticle, artistSeparator and conjunction, which split a credit into its artists.
 LEADING_ARTICLE = re.compile(r"^the\s+", re.IGNORECASE)
 CREDIT_SEPARATOR = re.compile(r"\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*", re.IGNORECASE)
@@ -82,6 +84,7 @@ def right_ids(song, results, videos):
     """The videoIds of the song results and videos that are the song."""
     native = {analyze.bare(n["title"]) for n in song["native"]} | {analyze.normalize(n["title"]) for n in song["native"]}
     wanted = analyze.artists(song["artist"]) | {a for n in song["native"] for a in analyze.artists(n["artist"])}
+    wanted |= {alias for artist in wanted for alias in ARTIST_ALIASES.get(artist, set())}
 
     def by_eye(row):
         return (song["artist"], row["name"]) in analyze.RIGHT_BY_EYE
@@ -104,7 +107,7 @@ def right_ids(song, results, videos):
     for v in videos:
         if not v["id"] or not named(v) or says_another(v):
             continue
-        if own_channel(v["details"][0], [song["artist"]] + [n["artist"] for n in song["native"]]):
+        if own_channel(v["details"][0], [song["artist"]] + [n["artist"] for n in song["native"]] + list(wanted)):
             ids.add(v["id"])
         elif any(a in analyze.normalize(v["name"]) for a in wanted):
             named_only.add(v["id"])

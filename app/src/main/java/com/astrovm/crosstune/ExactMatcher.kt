@@ -1073,7 +1073,7 @@ internal class ExactMatcher(
             val title = MetadataParsers.deezerTitle(result)
             val artist = result.optJSONObject("artist")?.optString("name").orEmpty()
             val length = result.optLong("duration") * 1000
-            if (artist.isBlank() || length <= 0) return@mapNotNull null
+            if (length <= 0) return@mapNotNull null
             if (!SongNames.same(metadata.title, title) || lengths.none { sameRecordingLength(length, it) }) return@mapNotNull null
             DeezerName(title, artist, length)
         }

@@ -18,6 +18,13 @@ LYRICS_VIDEO = {"id": "Kl5G4bAwpOg", "name": "Lemon - 米津玄師｜歌詞あ�
 
 
 class RightIdsTest(unittest.TestCase):
+    def test_the_checked_fairuz_alias_names_only_her_rows(self):
+        song = {"title": "Kifak Inta", "artist": "Fairouz", "native": []}
+        own = {"id": "own", "name": "Kifak Inta", "details": ["Fairuz", "Kifak Inta", "3:32"]}
+        other = {"id": "other", "name": "Kifak Inta", "details": ["Other", "Kifak Inta", "3:32"]}
+        self.assertEqual(["own"], replay.right_ids(song, [own, other], []))
+        self.assertEqual(["own"], replay.right_ids(song, [], [own]))
+
     def test_a_fans_lyrics_video_is_wrong_where_the_song_is_there(self):
         self.assertEqual(["3NNhrqHZqlI", "SX_ViT4Ra7k"], replay.right_ids(LEMON, [SONG], [OWN_VIDEO, LYRICS_VIDEO]))
 
