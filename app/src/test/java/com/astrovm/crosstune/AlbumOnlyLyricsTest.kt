@@ -43,7 +43,8 @@ class AlbumOnlyLyricsTest {
         val tagged = JSONArray(rows).getJSONObject(1)
         val taggedTitles = listOf(
             "Accordian(Instrumental)", "Accordian - Inst.", "Accordian （伴奏版）",
-            "Accordian (Instrumental Version)", "Accordian - Off-Vocal", "Accordian (feat. Guest) (Instrumental)"
+            "Accordian (Instrumental Version)", "Accordian - Off-Vocal", "Accordian － Ｏｆｆ－Ｖｏｃａｌ",
+            "Accordian (feat. Guest) (Instrumental)"
         )
         for (title in taggedTitles) {
             val response = JSONArray(rows).put(1, JSONObject(tagged.toString()).put("trackName", title))

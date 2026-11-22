@@ -1757,8 +1757,11 @@ internal class LyricsFinder(
             // The tag may name the version as instrumental. A tag like "Instrumental Remix" also names a different mix.
             val words = instrumentalTagWord.matchesIn(SongNames.unaccented(tag)).map(MatchResult::value)
                 .filterNot { it in INSTRUMENTAL_VERSION_WORDS }.toList()
+            if (words.size != 1 && words != listOf("off", "vocal")) return false
             // Check the original title: stripping edition tags can remove a singer credited after this tag.
-            return (words.size == 1 || words == listOf("off", "vocal")) && SongNames.saysInstrumental(title, artist)
+            // LRCLIB joins "Off-Vocal" with a hyphen, which the title reader would treat as a second dash.
+            val credited = Normalizer.normalize(title, Normalizer.Form.NFKC).replace("off-vocal", "off vocal", ignoreCase = true)
+            return SongNames.saysInstrumental(credited, artist)
         }
 
         /**
