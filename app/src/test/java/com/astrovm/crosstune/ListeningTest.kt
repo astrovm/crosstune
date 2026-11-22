@@ -550,6 +550,55 @@ class ListeningTest {
     }
 
     @Test
+    fun radioGardenKeepsTheConfirmedTitleAcrossMissingAndUnusableQueueText() {
+        val song = "The Kid LAROI - A PLACE TO GO"
+        val queueSubtitle = radioGarden("1LIVE", song)
+        radioGardenCatalog(lengthMs = 180_000L)
+        launch()
+        waitForText("A PLACE TO GO")
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(60))
+
+        for (text in listOf(null, song, "Die junge Nacht der ARD", "the kid laroi - a place to go")) {
+            composeRule.runOnIdle { queueSubtitle(text) }
+            composeRule.waitForIdle()
+            assertEquals("A PLACE TO GO", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+            assertTrue(shown("A PLACE TO GO"))
+        }
+        assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
+        main.idleFor(java.time.Duration.ofSeconds(301))
+        waitForText("1LIVE")
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        composeRule.runOnIdle { queueSubtitle(song) }
+        composeRule.waitForIdle()
+        assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
+        assertFalse(shown("A PLACE TO GO"))
+    }
+
+    @Test
+    fun radioGardenKeepsTheConfirmedTitleUntilADifferentQueueSongIsVerified() {
+        val queueSubtitle = radioGarden("1LIVE", "Band - First Song")
+        fake.handler = { request ->
+            val body = when (request.url.queryParameter("term")) {
+                "First Song Band" -> gardenTrack("First Song", "Band")
+                "Second Song Band" -> gardenTrack("Second Song", "Band")
+                else -> "{}"
+            }
+            FakeSpotify.html(request, body)
+        }
+        launch()
+        waitForText("First Song")
+
+        composeRule.runOnIdle { queueSubtitle("ARD - Die junge Nacht der ARD") }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "junge%20Nacht" in it } }
+        assertEquals("First Song", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+        assertTrue(shown("First Song"))
+        composeRule.runOnIdle { queueSubtitle("Band - Second Song") }
+        waitForText("Second Song")
+        assertFalse(shown("First Song"))
+    }
+
+    @Test
     fun radioGardenListensWhenItsQueueNamesOnlyTheCity() {
         val queueSubtitle = radioGarden("1LIVE", "Cologne, Germany")
         radioGardenCatalog()
@@ -1036,7 +1085,7 @@ class ListeningTest {
     }
 
     /** Radio Garden's Android session announces a station and puts the stream text in a single queue item. */
-    private fun radioGarden(station: String, subtitle: String, activeId: Long = 0, otherSubtitle: String? = null): (String) -> Unit {
+    private fun radioGarden(station: String, subtitle: String, activeId: Long = 0, otherSubtitle: String? = null): (String?) -> Unit {
         val garden = RadioGarden.PACKAGE
         val listenerSetting = "enabled_notification_listeners"
         val previous = Settings.Secure.getString(app.contentResolver, listenerSetting)
@@ -1066,7 +1115,7 @@ class ListeningTest {
         shadowOf(app.getSystemService(MediaSessionManager::class.java)).addController(controller)
         fun item(text: String, id: Long) =
             MediaSession.QueueItem(MediaDescription.Builder().setTitle(station).setSubtitle(text).build(), id)
-        fun queue(text: String) = listOfNotNull(item(text, 0), otherSubtitle?.let { item(it, 1) }).toMutableList()
+        fun queue(text: String?) = listOfNotNull(text?.let { item(it, 0) }, otherSubtitle?.let { item(it, 1) }).toMutableList()
         var items = queue(subtitle)
         MainActivity.playbackFactory = { MediaSessionPlayback(it, queueOf = { items }) }
         return { text ->
