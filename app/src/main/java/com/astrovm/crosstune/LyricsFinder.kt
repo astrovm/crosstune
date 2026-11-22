@@ -1738,10 +1738,23 @@ internal class LyricsFinder(
             val albumsMatter = playedAlbum != null || SongNames.albumOfInstrumentals(copyAlbum)
             if (copyAlbum.isNotBlank() && albumsMatter && !sameInstrumentalAlbum) return false
             val sameTitle = SongNames.same(title, metadata.title)
-            if (!sameTitle && !(sameInstrumentalAlbum && SongNames.sameWithInstrumentalTag(title, metadata.title))) return false
+            if (!sameTitle && !(sameInstrumentalAlbum && addsInstrumentalTagTo(metadata.title))) return false
             val copyMs = lengthMs() ?: return true
             val playingMs = metadata.lengthMs ?: return true
             return abs(copyMs - playingMs) <= SAME_LENGTH_MS
+        }
+
+        /** LRCLIB may add its instrumental tag after the title the album uses. */
+        private fun addsInstrumentalTagTo(played: String): Boolean {
+            val name = Normalizer.normalize(SongNames.withoutEditionTag(title), Normalizer.Form.NFKC).trim()
+            val bracket = bracketTags(name, TitleDelimiters.normalizedOpens, TitleDelimiters.normalizedCloses).lastOrNull()
+            val start = bracket?.takeIf { it.last == name.lastIndex }?.first
+                ?: name.indices.lastOrNull { name[it] in TitleDelimiters.tagDashes && isBetweenSpaces(name, it) }
+                ?: return false
+            if (!SongNames.same(name.substring(0, start), played)) return false
+            // The tag may name the version as instrumental. A tag like "Instrumental Remix" also names a different mix.
+            val words = SongNames.wordList(name.substring(start)).filterNot { it in INSTRUMENTAL_VERSION_WORDS }
+            return (words.size == 1 || words == listOf("off", "vocal")) && SongNames.saysInstrumental(name, artist)
         }
 
         /**
@@ -2015,6 +2028,8 @@ internal class LyricsFinder(
 
         /** How far apart two copies of the same take of a song may be in length. */
         const val SAME_LENGTH_MS = 3_000L
+
+        private val INSTRUMENTAL_VERSION_WORDS = setOf("ver", "version", "versao")
 
         /** Fewer LRCLIB copies marked instrumental than this may be a copy someone sent with no words. */
         const val MIN_MARKED = 2
