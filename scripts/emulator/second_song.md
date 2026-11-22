@@ -3,9 +3,11 @@
 ## Inputs and method
 
 The Samsung SM-S908E is selected by model. Each pair takes it through `scripts/devicelock.py`
-(or the test emulator `--serial` names, by its port), waiting in line behind other agents,
-and lets it go after. Don't hold the device yourself while it runs: its first pair would wait
-for your turn to end.
+(or the test emulator `--serial` names, by its port, or the Samsung by its serial), waiting in
+line behind other agents, and lets it go after. Don't hold the device yourself while it runs:
+its first pair would wait for your turn to end. A pair holds the device for at most 10 minutes.
+It stops 5 minutes before that, so it can put Crosstune back as it was before the lock lets go,
+and no command starts that could run past the lock.
 `second_song.py` saves and restores Crosstune's preferences. It reads Android's
 activity tasks and the visible accessibility tree and takes a screenshot for each
 song. `--keep-playing` leaves the destination running between the first and second

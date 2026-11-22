@@ -40,22 +40,31 @@ LINKS = ['https://www.deezer.com/track/3135556', 'https://www.deezer.com/track/9
 # The test emulators, by name, as emulator.py makes them and devicelock.py shares them.
 EMULATORS = json.loads((Path(__file__).resolve().parent / 'emulators.json').read_text())
 DEVICELOCK = Path(__file__).resolve().parents[1] / 'devicelock.py'
-# How long one pair of songs holds the device: about a minute, with room for a slow app.
-PAIR_MINUTES = 5
+# How long one pair of songs holds the device: about a minute, with room for a slow app and for putting the app back.
+PAIR_MINUTES = 10
+# The longest one command runs, and the time kept at the end of a turn to put the app back as it was (force-stop, the
+# settings, stopping the music, the volume, closing the session): five of the longest commands, though each takes seconds.
+COMMAND_SECONDS = 60
+RESTORE_SECONDS = 5 * COMMAND_SECONDS
+# When, by time.monotonic(), the device's turn ends, less the time kept for what's left; None out of a turn. No command
+# starts that could still be running then, so a stuck pair stops before the lock lets go of the device under it.
+deadline = None
 DEEZER_SOURCES = ['https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT', 'https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b']
 
 
 def run(command, **kwargs):
-    result = subprocess.run(command, capture_output=True, text=True, timeout=60, check=False, **kwargs)
+    if deadline is not None and time.monotonic() + COMMAND_SECONDS > deadline:
+        raise TimeoutError(f'{command[0]} could run past the turn on the device, which another agent may take then')
+    result = subprocess.run(command, capture_output=True, text=True, timeout=COMMAND_SECONDS, check=False, **kwargs)
     if result.returncode:
         raise RuntimeError(f'{command[0]} exited {result.returncode}: {result.stdout}{result.stderr}')
     return result.stdout
 
 
-def shared_device(serial):
-    """The name devicelock.py shares serial's device by: the Samsung with no serial, a test emulator by its port. None
-    for any other device, which no one else takes turns on."""
-    if serial is None:
+def shared_device(serial, samsung):
+    """The name devicelock.py shares serial's device by: the Samsung when serial is samsung's, even passed with --serial,
+    a test emulator by its port. None for any other device, which no one else takes turns on."""
+    if serial == samsung:
         return 'samsung'
     return next((name for name, spec in EMULATORS.items() if serial == f"emulator-{spec['port']}"), None)
 
@@ -63,14 +72,26 @@ def shared_device(serial):
 @contextmanager
 def turn(device, who):
     """Holds device through devicelock.py while the block runs, waiting in line behind other agents, and lets it go
-    after; it holds nothing for None. The holder lets go by itself after PAIR_MINUTES, should this stop on the way."""
+    after; it holds nothing for None. The holder lets go by itself after PAIR_MINUTES, should this stop on the way, so
+    commands stop RESTORE_SECONDS before that. The block gets a function to call when it starts putting the app back,
+    which lets commands run until the turn's end."""
+    global deadline
     if device is None:
-        yield
+        yield lambda: None
         return
     subprocess.run([sys.executable, str(DEVICELOCK), 'take', device, '--who', who, '--minutes', str(PAIR_MINUTES)], check=True, stdout=subprocess.DEVNULL)
+    # A few seconds early: the holder's own clock started a moment before take returned.
+    end = time.monotonic() + PAIR_MINUTES * 60 - 5
+    deadline = end - RESTORE_SECONDS
+
+    def restoring():
+        global deadline
+        deadline = end
+
     try:
-        yield
+        yield restoring
     finally:
+        deadline = None
         subprocess.run([sys.executable, str(DEVICELOCK), 'release', device, '--who', who], check=True, stdout=subprocess.DEVNULL)
 
 def main():
@@ -89,9 +110,10 @@ def main():
     adb_cli = adbtool.path()
     devices = run(['timeout', '10', adb_cli, 'devices', '-l'])
     try:
-        wanted = args.serial or adbtool.samsung_serial(devices)
+        samsung = adbtool.samsung_serial(devices)
     except ValueError:
-        wanted = None
+        samsung = None
+    wanted = args.serial or samsung
     serial = next((row.split()[0] for row in devices.splitlines() if row.split()[0] == wanted and row.split()[1] == 'device'), None)
     if not serial:
         raise SystemExit(f'{args.serial or "Samsung"} is not attached; refusing to touch another device')
@@ -159,7 +181,7 @@ def main():
         # Each launch argument is its own token, including text containing spaces.
         device('open', APP, *[token for item in extra for token in ['--launch-args', item]])
 
-    shared = shared_device(args.serial)
+    shared = shared_device(serial, samsung)
     who = f'second_song.py {args.phase} {os.getpid()}'
     for target, label in SERVICES.items():
         if args.service and target != args.service:
@@ -177,7 +199,7 @@ def main():
                 if (args.output / (prefix + '-1.png')).exists():
                     continue
                 # Release between pairs, so other agents can use the shared phone.
-                with turn(shared, who):
+                with turn(shared, who) as restoring:
                     saved = adb('shell', 'run-as', APP, 'cat', 'shared_prefs/crosstune_preferences.xml')
                     quiet()
                     try:
@@ -220,6 +242,7 @@ def main():
                             capture(name)
                             print('Captured', name, flush=True)
                     finally:
+                        restoring()
                         try:
                             adb('shell', 'am', 'force-stop', APP)
                             adb('shell', 'run-as', APP, 'sh', '-c', "'cat > shared_prefs/crosstune_preferences.xml'", input=saved)

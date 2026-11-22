@@ -15,16 +15,35 @@ DEVICELOCK = Path(__file__).resolve().parents[1] / "devicelock.py"
 
 
 class SharedDeviceTest(unittest.TestCase):
-    def test_the_samsung_with_no_serial(self):
-        self.assertEqual("samsung", second_song.shared_device(None))
+    def test_the_samsung_found_by_its_model_or_passed_by_its_serial(self):
+        self.assertEqual("samsung", second_song.shared_device("R5CT1234ABC", "R5CT1234ABC"))
 
     def test_a_test_emulator_by_its_port(self):
         for name, spec in second_song.EMULATORS.items():
-            self.assertEqual(name, second_song.shared_device(f"emulator-{spec['port']}"))
+            self.assertEqual(name, second_song.shared_device(f"emulator-{spec['port']}", "R5CT1234ABC"))
+            self.assertEqual(name, second_song.shared_device(f"emulator-{spec['port']}", None))
 
     def test_no_other_device(self):
-        self.assertIsNone(second_song.shared_device("emulator-5554"))
-        self.assertIsNone(second_song.shared_device("R5CT1234ABC"))
+        self.assertIsNone(second_song.shared_device("emulator-5554", "R5CT1234ABC"))
+        self.assertIsNone(second_song.shared_device("R5CT9999XYZ", "R5CT1234ABC"))
+        self.assertIsNone(second_song.shared_device("R5CT9999XYZ", None))
+
+
+class DeadlineTest(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(setattr, second_song, "deadline", None)
+
+    def test_a_command_runs_out_of_a_turn(self):
+        self.assertEqual("out\n", second_song.run(["echo", "out"]))
+
+    def test_a_command_runs_while_it_can_end_before_the_turn_does(self):
+        second_song.deadline = time.monotonic() + second_song.COMMAND_SECONDS + 30
+        self.assertEqual("in\n", second_song.run(["echo", "in"]))
+
+    def test_no_command_starts_that_could_outlast_the_turn(self):
+        second_song.deadline = time.monotonic() + second_song.COMMAND_SECONDS - 1
+        with self.assertRaises(TimeoutError):
+            second_song.run(["echo", "late"])
 
 
 class TurnTest(unittest.TestCase):
@@ -71,8 +90,23 @@ class TurnTest(unittest.TestCase):
         self.assertEqual("samsung: free", self.lock("who", "samsung").strip())
 
     def test_no_turn_is_taken_for_a_device_no_one_shares(self):
-        with second_song.turn(None, "second song test"):
+        with second_song.turn(None, "second song test") as restoring:
             self.assertEqual("samsung: free", self.lock("who", "samsung").strip())
+            restoring()
+            self.assertIsNone(second_song.deadline)
+
+    def test_a_turn_stops_commands_in_time_to_put_the_app_back_before_the_lock_lets_go(self):
+        took = time.monotonic()
+        with second_song.turn("samsung", "second song test") as restoring:
+            working = second_song.deadline
+            restoring()
+            putting_back = second_song.deadline
+        self.assertIsNone(second_song.deadline)
+        self.assertEqual(second_song.RESTORE_SECONDS, putting_back - working)
+        lease = second_song.PAIR_MINUTES * 60
+        self.assertLess(putting_back, took + lease)
+        self.assertGreater(putting_back, time.monotonic() + lease - 30)
+        self.assertEqual("samsung: free", self.lock("who", "samsung").strip())
 
 
 if __name__ == "__main__":
