@@ -1374,15 +1374,18 @@ internal class MainViewModel(
             else -> QueueCheck(unnamed.name, song, now())
         }
         queueCheck = check
-        if (unnamed.app == RadioGarden.PACKAGE) {
-            val action = when {
-                check == null -> "none"
-                check === previous || check === last -> "kept"
-                else -> "new"
-            }
-            logRadioQueue(action, unnamed.name, song, unnamed.session)
-        }
+        logRadioQueueUpdate(unnamed, check, kept = check === previous || check === last)
         return check?.takeIf { song != null && !it.confirmed }
+    }
+
+    private fun logRadioQueueUpdate(unnamed: Unnamed, check: QueueCheck?, kept: Boolean) {
+        if (unnamed.app != RadioGarden.PACKAGE) return
+        val action = when {
+            check == null -> "none"
+            kept -> "kept"
+            else -> "new"
+        }
+        logRadioQueue(action, unnamed.name, unnamed.queueSong, unnamed.session)
     }
 
     private fun logRadioQueue(action: String, station: String?, song: MusicMetadata?, session: Int? = null) {
