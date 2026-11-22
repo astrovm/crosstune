@@ -1105,8 +1105,10 @@ class SingingTest {
         File(app.cacheDir, "kept_words.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         copies = true
+        // Only what's asked once the words are opened again counts: the first lookup asked for the bare title too.
+        val asked = fake.requestedUrls.size
         openLyrics()
-        waitUntil { fake.requestedUrls.any { "track_name=Demo&" in it } && keptForGood() }
+        waitUntil { fake.requestedUrls.drop(asked).any { "track_name=Demo&" in it } && keptForGood() }
         composeRule.waitForIdle()
         // The copies are looked for, as these lines aren't timed by hand, but the shown ones keep where the singing put them.
         assertEquals(times.map { it + 1_000 }, model().uiState.lyricLines.map { it.timeMs })
