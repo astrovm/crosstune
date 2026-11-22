@@ -63,6 +63,10 @@ LOCK_FILES = (
 )
 
 
+# Where the app's own code is: a file added there may be a reading source main doesn't list yet.
+APP_CODE = "app/src/main/java/"
+
+
 def marks(body):
     """(whether the body says golden: none, the (word, kana) pairs it accepts, whether it says golden: lock changed,
     the digests it says golden: lines checked for, whether it says golden: new audit). Only a whole line counts."""
@@ -160,15 +164,22 @@ def verdict(readings_changed, golden_changed, removed, body, lock_changed=(), di
 
 
 def git(repo, *args):
-    return subprocess.check_output(["git", *args], cwd=repo, text=True)
+    """git in [repo], with names as they are: quoted, a name such as 新.kt would read differently on each machine, as
+    its core.quotePath says, and change the digest. Decoded here, not with text=True, which would turn a carriage
+    return in a name into a line feed; surrogateescape keeps any bytes that aren't UTF-8, so the name goes back as it was."""
+    return subprocess.check_output(["git", "-c", "core.quotePath=false", *args], cwd=repo).decode("utf-8", "surrogateescape")
 
 
 def changes(repo, base, head):
     """What this range does to each path: (status letter, paths), the old name first for a rename."""
     out = []
-    for line in git(repo, "diff", "--name-status", "-M", base, head).splitlines():
-        status, *paths = line.split("\t")
-        out.append((status[0], paths))
+    # Split on NULs, which no name holds; a tab or a line break in a name is quoted even with core.quotePath off.
+    fields = git(repo, "diff", "--name-status", "-z", "-M", base, head).split("\0")[:-1]
+    while fields:
+        status = fields.pop(0)[0]
+        count = 2 if status in "RC" else 1
+        out.append((status, fields[:count]))
+        del fields[:count]
     return out
 
 
@@ -207,7 +218,18 @@ def readings_digest(repo, base, head):
     for commit in (base, head):
         made.append(git(repo, "ls-tree", commit, "--", *READING_SOURCES))
         made += kuromoji_lines(repo, commit)
+    # A file the range adds to the app's code may be a new reading source, named in READING_SOURCES on its branch but not
+    # here yet: it counts too, so each commit that changes it asks for the command again (Issue #1143).
+    added = added_code(repo, base, head)
+    if added:
+        made.append(git(repo, "ls-tree", head, "--", *added))
     return hashlib.sha256("\n".join(made).encode()).hexdigest()[:16]
+
+
+def added_code(repo, base, head):
+    """The files under APP_CODE that [head] has and [base] doesn't, moved and copied ones too, other than READING_SOURCES."""
+    return sorted({paths[-1] for status, paths in changes(repo, base, head)
+                   if status in "ACR" and paths[-1].startswith(APP_CODE) and paths[-1] not in READING_SOURCES})
 
 
 def golden_path(changed):

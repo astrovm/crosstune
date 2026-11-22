@@ -331,6 +331,24 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aRerecordingKeptByVersionNineIsLookedForAgain() = runBlocking {
+        val directory = kotlin.io.path.createTempDirectory("lookups").toFile()
+        try {
+            val cache = LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined)
+            cache.put("find@9|YOUTUBE_MUSIC|TRACK|Song|Band|", "https://music.youtube.com/watch?v=rerecorded0")
+            cache.save()
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow("Song", "Band • Album • 4:00", videoId = "original000")),
+                apple = mapOf("AR" to appleSong("Song", "Band", 240_000))
+            )
+            val matcher = ExactMatcher(fake.client(), "AR", Dispatchers.Unconfined, LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined))
+            assertEquals("https://music.youtube.com/watch?v=original000", matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band")))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun uncertainOrMissingMatchesFallBackToSearch() {
         respond("""{"results":[{"trackName":"Beyoncé Song","artistName":"Someone Else","trackViewUrl":"https://x"}]}""")
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) })
@@ -613,6 +631,95 @@ class ExactMatcherTest {
         assertNull(find("4:09"))
         assertEquals("https://music.youtube.com/watch?v=xyVatKhd4s4", find("4:02"))
         assertNull(find("4:01"))
+    }
+
+    @Test
+    fun aRerecordingCannotReplaceASongEvenWhenItsLengthMatches() {
+        val song = MusicMetadata("Song", "Band")
+        val watch = "https://music.youtube.com/watch?v="
+        for (label in listOf("From THE FIRST TAKE", "G.E.M.重生版")) {
+            val title = "Song ($label)"
+            val rerecorded = youTubeMusicRow(title, "Band • New Album • 3:59", videoId = "rerecorded0")
+            val original = youTubeMusicRow("Song", "Band • Original Album • 4:00", videoId = "original000")
+            namesAndTabs(songs = listOf(rerecorded, original))
+            for (length in listOf(null, 239_000L, 241_000L)) {
+                assertEquals(label, watch + "original000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = length)) })
+            }
+            // The requested title can name the re-recording, including a plain row whose album alone says so.
+            assertEquals(watch + "rerecorded0", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song.copy(title = title)) })
+            namesAndTabs(songs = listOf(youTubeMusicRow("Song", "Band • $title • 3:59", videoId = "rerecorded0"), original))
+            assertEquals(watch + "original000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+            assertEquals(watch + "rerecorded0", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song.copy(title = title)) })
+            // The linked length must not bring the excluded row back through the live-album fallback.
+            namesAndTabs(songs = listOf(original, youTubeMusicRow("Song (Live)", "Band • Live at Venue ($label) • 4:30", videoId = "rerecorded0")))
+            assertEquals(watch + "original000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = 270_000)) })
+        }
+    }
+
+    @Test
+    fun aRerecordingInAnotherScriptCannotBeInferredFromItsLength() {
+        // Said in its name, or only on its album.
+        for ((name, details) in listOf("別の歌 (G.E.M.重生版)" to "Band • New Album • 4:00", "別の歌" to "Band • 別の歌 (G.E.M.重生版) • 4:00")) {
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow(name, details, videoId = "rerecorded0")),
+                apple = mapOf("AR" to appleSong("Song", "Band", 240_000))
+            )
+            assertNull(details, runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band")) })
+        }
+        // The same row with no label is the song.
+        namesAndTabs(
+            songs = listOf(youTubeMusicRow("別の歌", "Band • New Album • 4:00", videoId = "original0")),
+            apple = mapOf("AR" to appleSong("Song", "Band", 240_000))
+        )
+        assertEquals("https://music.youtube.com/watch?v=original0", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band")) })
+    }
+
+    @Test
+    fun aRerecordingCannotBePickedAsASongOrVideo() {
+        val song = MusicMetadata("Song", "Band")
+        val picker = ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> 0 })
+        for (title in listOf("別の歌 - From THE FIRST TAKE", "別の歌 (G.E.M.重生版) - Another Name")) {
+            val row = youTubeMusicRow(title, "Band • New Album • 4:00", videoId = "rerecorded0")
+            namesAndTabs(songs = listOf(row))
+            assertNull(title, runBlocking { picker.find(MusicService.YOUTUBE_MUSIC, song) })
+            namesAndTabs(videos = listOf(row))
+            assertNull(title, runBlocking { picker.find(MusicService.YOUTUBE_MUSIC, song) })
+            // A request for this recording can still pick it when its name is not known locally.
+            assertEquals("https://music.youtube.com/watch?v=rerecorded0", runBlocking {
+                picker.find(MusicService.YOUTUBE_MUSIC, song.copy(title = "Song ($title)"))
+            })
+        }
+    }
+
+    @Test
+    fun aRerecordingLabelDoesNotFilterAlbumOrArtistNames() {
+        for (label in listOf("From THE FIRST TAKE", "G.E.M.重生版")) {
+            val title = "Collection ($label)"
+            respond(youTubeMusicPage(youTubeMusicRow(title, "Album • Band • 2025", browseId = "collection0")))
+            for (type in listOf(ItemType.ALBUM, ItemType.ARTIST)) {
+                val path = if (type == ItemType.ALBUM) "browse" else "channel"
+                assertEquals("https://music.youtube.com/$path/collection0", runBlocking {
+                    matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata(title, "Band", type))
+                })
+            }
+        }
+    }
+
+    @Test
+    fun anArtistCanBeCreditedByTwoKnownNamesTogether() {
+        val song = MusicMetadata("Song", "Fake Band")
+        val known = listOf("Fake Band", "偽バンド", "Fake Band 偽バンド", "偽バンド Fake Band")
+        for (title in listOf("Song", "偽の歌", "別の歌")) {
+            for (credit in known + listOf("Fake Band 偽のバンド", "Unknown 偽バンド", "Fake Band 偽バンド Extra", "Fake Band偽バンド", "Fake Bandx偽バンド")) {
+                namesAndTabs(
+                    songs = listOf(youTubeMusicRow(title, "$credit • Album • 4:00", videoId = "original000")),
+                    apple = mapOf("AR" to appleSong("Song", "Fake Band", 240_000)),
+                    elsewhere = mapOf("JP" to appleSong("偽の歌", "偽バンド", 240_000))
+                )
+                val expected = "https://music.youtube.com/watch?v=original000".takeIf { credit in known }
+                assertEquals("$title | $credit", expected, runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+            }
+        }
     }
 
     @Test

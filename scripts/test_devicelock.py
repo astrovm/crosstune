@@ -186,8 +186,12 @@ class DeviceLockTest(unittest.TestCase):
         self.assertNotIn("waiting:", status)
 
     def test_the_note_records_who_pid_start_and_until(self):
+        took = time.monotonic()
         pid = self.taken("samsung", "ada", minutes="15")
         note = self.note("samsung")
+        # The end by the monotonic clock the holder lets go by, which the clock on the wall moving doesn't shift.
+        self.assertLessEqual(took + 15 * 60, note["ends"])
+        self.assertLessEqual(note["ends"], time.monotonic() + 15 * 60)
         self.assertEqual(note["who"], "ada")
         self.assertEqual(note["pid"], pid)
         start = datetime.fromisoformat(note["start"])
@@ -270,6 +274,20 @@ class DeviceLockTest(unittest.TestCase):
         self.assertNotIn("was held by", released.stdout)
         self.wait_for(lambda: (not pid_alive(pid)) or "")
         self.assertIn("samsung: free", self.who("samsung"))
+
+    def test_release_by_holder_ends_that_hold_only(self):
+        first = self.taken("samsung", "ada")
+        released = self.invoke_ok("release", "samsung", "--holder", str(first))
+        self.assertIn("released samsung", released.stdout)
+        self.wait_for(lambda: (not pid_alive(first)) or "")
+        # Its turn is over and the next one is someone else's, even from this same session: it's left alone.
+        nxt = self.taken("samsung", "bea")
+        again = self.invoke_ok("release", "samsung", "--holder", str(first))
+        self.assertIn(f"no longer held by pid {first}", again.stdout)
+        self.assertTrue(pid_alive(nxt))
+        self.assertIn("held by bea", self.who("samsung"))
+        self.invoke_ok("release", "samsung", "--holder", str(nxt))
+        self.assertIn("samsung is free", self.invoke_ok("release", "samsung", "--holder", str(nxt)).stdout)
 
     def test_who_spots_a_holder_whose_session_is_gone(self):
         proc = subprocess.Popen(

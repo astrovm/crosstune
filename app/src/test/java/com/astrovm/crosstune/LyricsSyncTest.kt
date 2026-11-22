@@ -57,6 +57,54 @@ class LyricsSyncTest {
     }
 
     @Test
+    fun anAutomaticCorrectionCannotExtrapolateTheLongerTakesEndingIntoTheRecording() {
+        val ending = LyricLine(40_000, "Last words", listOf(TimedWord(40_000, "Last "), TimedWord(40_500, "words")), 41_000)
+        val sheet = lines.take(3) + ending
+        val points = listOf(SyncPoint(20_000, 10_000))
+        // The words' take is 60 s: moved 10 s earlier it still ends 20 s past this 30 s recording.
+        val limited = LyricsSync.adjust(sheet, points, durationMs = 30_000, takeMs = 60_000)
+        assertEquals(listOf(0L, 10_000L, 30_000L, 40_000L), limited.map { it.timeMs })
+        assertEquals(ending, limited.last())
+        assertEquals(sheet, LyricsSync.adjust(sheet, emptyList(), durationMs = 30_000, takeMs = 60_000))
+        // A known faster recording can place the ending before its own end without an offset's guess.
+        assertEquals(20_000L, LyricsSync.adjust(sheet, points, pace = 0.5, durationMs = 30_000, takeMs = 60_000).last().timeMs)
+        // Moving later never brings an impossible timestamp into the recording.
+        assertEquals(50_000L, LyricsSync.adjust(sheet, listOf(SyncPoint(20_000, 30_000)), durationMs = 30_000, takeMs = 60_000).last().timeMs)
+    }
+
+    @Test
+    fun aTakeLongerOnlyByWhereItsWordsStartBringsItsEndingIn() {
+        val ending = LyricLine(40_000, "Last words", listOf(TimedWord(40_000, "Last "), TimedWord(40_500, "words")), 41_000)
+        val sheet = lines.take(3) + ending
+        val points = listOf(SyncPoint(20_000, 10_000))
+        // A 41 s take heard 10 s earlier ends with this 30 s recording, give or take a copy's rounding: its last line is in it.
+        assertEquals(30_000L, LyricsSync.adjust(sheet, points, durationMs = 30_000, takeMs = 41_000).last().timeMs)
+        assertEquals(30_000L, LyricsSync.adjust(sheet, points, durationMs = 30_000, takeMs = 43_000).last().timeMs)
+        assertEquals(40_000L, LyricsSync.adjust(sheet, points, durationMs = 30_000, takeMs = 43_001).last().timeMs)
+        // Not knowing the take's length, there's no telling it has a stretch this recording doesn't.
+        assertEquals(30_000L, LyricsSync.adjust(sheet, points, durationMs = 30_000).last().timeMs)
+    }
+
+    @Test
+    fun aLineKeptPastASlowerRecordingsEndStaysPastIt() {
+        // At 1.05 the line at 300 s is sung at 315 s, past this 309 s recording; heard 10 s earlier, it'd land at 300 s, inside it.
+        val line = LyricLine(300_000, "Last words", listOf(TimedWord(300_000, "Last "), TimedWord(302_000, "words")), 304_000)
+        val kept = LyricsSync.adjust(listOf(line), listOf(SyncPoint(100_000, 90_000)), pace = 1.05, durationMs = 309_000, takeMs = 477_000).single()
+        assertEquals(315_000L, kept.timeMs)
+        assertEquals(listOf(315_000L, 317_100L), kept.words.map { it.timeMs })
+        assertEquals(319_200L, kept.endMs)
+    }
+
+    @Test
+    fun linesBeyondTheRecordingCanStillBePlacedByEvidenceThere() {
+        val points = listOf(SyncPoint(20_000, 10_000), SyncPoint(40_000, 20_000))
+        val moved = LyricsSync.adjust(lines, points, durationMs = 30_000, takeMs = 60_000)
+        assertEquals(listOf(0L, 10_000L, 15_000L, 20_000L), moved.map { it.timeMs })
+        // Before the recording's end, an unheard line still follows the correction.
+        assertEquals(29_999L - 10_000, LyricsSync.adjust(listOf(LyricLine(29_999, "Before the end")), points.take(1), durationMs = 30_000, takeMs = 60_000).single().timeMs)
+    }
+
+    @Test
     fun betweenTwoLinesPutInTimeTheOthersStretchToFit() {
         // "One" is right, "Three" came 10 seconds later: "Two" falls halfway, past "Three" all move by 10.
         val points = listOf(SyncPoint(10_000, 10_000), SyncPoint(30_000, 40_000))

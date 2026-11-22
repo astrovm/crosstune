@@ -142,18 +142,6 @@ class LyricsToolsTest {
         composeRule.waitForIdle()
     }
 
-    /** projectM, when it can't start. */
-    private object NoMilkdrop : Milkdrop {
-        override fun open(width: Int, height: Int) = false
-        override fun size(width: Int, height: Int) = Unit
-        override fun show(preset: String, smooth: Boolean) = false
-        override fun hear(samples: ByteArray, count: Int) = Unit
-        override fun draw() = Unit
-        override fun darken(shade: Float, ceiling: Float) = Unit
-        override fun finish() = Unit
-        override fun close() = Unit
-    }
-
     private fun passes(ms: Long) {
         composeRule.mainClock.advanceTimeBy(ms)
         composeRule.waitForIdle()
@@ -835,6 +823,26 @@ class LyricsToolsTest {
         passes(1)
         assertTrue(onTheBar())
         assertEquals(1, offers())
+    }
+
+    @Test
+    fun onATvTheRemoteGoesBackToStudyFromPracticeOnlyUntilItsUsedOnTheWords() {
+        prefs().edit().putString("saved_lines", """[{"text":"Demo one","translation":"Demo uno","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
+        openLyrics()
+        val study = composeRule.onNode(hasContentDescription(string(R.string.lyrics_study)))
+        study.performClick()
+        composeRule.onAllNodes(hasText(string(R.string.practice_song)))[0].performClick()
+        waitUntil { composeRule.onAllNodes(hasText("Demo two")).fetchSemanticsNodes().isEmpty() }
+        composeRule.runOnIdle { checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed() }
+        waitUntil { composeRule.onAllNodes(hasText("Demo two")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { runCatching { study.assertIsFocused() }.isSuccess }
+        // Used on the words since, the remote is sent to the bar's first tool again, as before Practice.
+        line("Demo two").requestFocus()
+        awayFromTheTools()
+        line("Demo two").performKeyInput { pressKey(Key.DirectionRight) }
+        passes(1)
+        assertTrue(onTheBar())
+        study.assertIsNotFocused()
     }
 
     private companion object {

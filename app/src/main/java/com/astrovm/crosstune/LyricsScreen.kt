@@ -164,6 +164,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -231,7 +232,12 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     }
     // Signed in from the sheet, what it's open at is asked for then.
     LaunchedEffect(signedIn) { if (signedIn) songTab?.let(openTab) }
+    // Practice is drawn in the words' place, so what's below starts over once it closes; this, kept out here, sends a TV's
+    // remote back to Study, which opened it, rather than to the bar's first button (Issue #1137). Saved, as on a TV's cover
+    // the words are drawn afresh once Back closes it.
+    var practised by rememberSaveable(song) { mutableStateOf(false) }
     if (state.practice != null) {
+        SideEffect { practised = true }
         PracticeScreen(state, actions)
         return
     }
@@ -280,6 +286,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // On a TV the remote starts on the bar, rather than walk every line to reach it, and Right from a line goes back there.
     val tv = state.phone == Phone.TV
     val bar = remember { FocusRequester() }
+    val study = remember { FocusRequester() }
     var focusBar by remember { mutableStateOf(tv) }
     var infoFocused by remember { mutableStateOf(false) }
     // What the song's info and its report open on a TV give the remote back to.
@@ -317,7 +324,14 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     }
                 }
             }
-            .onPreviewKeyEvent { if (tv && it.type == KeyEventType.KeyDown) touches++; false }
+            .onPreviewKeyEvent {
+                if (tv && it.type == KeyEventType.KeyDown) {
+                    touches++
+                    // The words send the remote to Study each time until it's used: they do more than once as they come back.
+                    practised = false
+                }
+                false
+            }
             .swipeLayers(downFromTop = true)
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
@@ -433,7 +447,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             state, actions, toolsShown, syncing, onOnlyVisuals = { visualsOnly = true },
             onSync = { syncingAsked = !syncing },
             onChooseLines = { practise -> choosing = practise },
-            menu = barMenu, onMenuChange = { barMenu = it }, focus = bar,
+            menu = barMenu, onMenuChange = { barMenu = it }, focus = bar, study = study,
+            // Study is on the bar only with the words.
+            landOn = if (practised && state.lyrics.isNotEmpty()) study else bar,
             focusBar = focusBar, onFocusBar = { focusBar = it }, onBarFocus = { barFocused = it },
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
         )
@@ -689,8 +705,12 @@ private fun LyricsActions(
     onChooseLines: (Boolean) -> Unit,
     menu: BarMenu?,
     onMenuChange: (BarMenu?) -> Unit,
-    /** Where a TV remote lands on the bar. */
+    /** The bar, for a TV remote, which lands on its first tool. */
     focus: FocusRequester,
+    /** Study, on the bar. */
+    study: FocusRequester,
+    /** Where the remote lands when it's sent to the bar: [focus], or [study] back from Practice. */
+    landOn: FocusRequester,
     /** Whether the remote is to land on the bar once it's there to take it. */
     focusBar: Boolean,
     onFocusBar: (Boolean) -> Unit,
@@ -732,7 +752,7 @@ private fun LyricsActions(
                     LaunchedEffect(focusBar) {
                         if (focusBar) {
                             onFocusBar(false)
-                            focus.requestFocus()
+                            landOn.requestFocus()
                         }
                     }
                     Surface(
@@ -741,7 +761,7 @@ private fun LyricsActions(
                         shadowElevation = 6.dp,
                         modifier = Modifier.onSizeChanged { barHeight = maxOf(barHeight, it.height) }
                     ) {
-                        BarTools(state, actions, syncing, menu, onMenuChange, onSync, focus)
+                        BarTools(state, actions, syncing, menu, onMenuChange, onSync, focus, study)
                     }
                 }
             }
@@ -760,7 +780,8 @@ private fun BarTools(
     menu: BarMenu?,
     onMenuChange: (BarMenu?) -> Unit,
     onSync: () -> Unit,
-    focus: FocusRequester
+    focus: FocusRequester,
+    study: FocusRequester
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.focusRequester(focus).focusGroup().padding(horizontal = 6.dp, vertical = 2.dp)) {
         // Offline, what needs the internet waits for it: said once, here, rather than by each part failing.
@@ -770,7 +791,7 @@ private fun BarTools(
         }
         // The song's lines are learned, and lines kept are studied.
         if (state.lyrics.isNotEmpty()) {
-            BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, selected = menu == BarMenu.STUDY, onClick = { onMenuChange(if (menu == BarMenu.STUDY) null else BarMenu.STUDY) })
+            BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, selected = menu == BarMenu.STUDY, modifier = Modifier.focusRequester(study), onClick = { onMenuChange(if (menu == BarMenu.STUDY) null else BarMenu.STUDY) })
         }
         VisualsButton(state.visuals, selected = menu == BarMenu.VISUALS, hears = state.visualsPlay.hears, onClick = { if (state.visuals) onMenuChange(if (menu == BarMenu.VISUALS) null else BarMenu.VISUALS) else actions.onVisualsChange(true) })
         // Floating shows the line being sung, which only timed words have.
@@ -1454,10 +1475,10 @@ private fun ListenAlongButton(listening: Boolean, allowed: Boolean, actions: Scr
 
 /** A tool of the bar, its icon breathing while what it brings is on its way: a translation, or chords. */
 @Composable
-private fun BreathingButton(working: Boolean, @DrawableRes icon: Int, @StringRes description: Int, selected: Boolean = false, onClick: () -> Unit) {
+private fun BreathingButton(working: Boolean, @DrawableRes icon: Int, @StringRes description: Int, selected: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val transition = rememberInfiniteTransition(label = "working")
     val breath by transition.animateFloat(1f, 0.35f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "breath")
-    IconButton(onClick = onClick, modifier = Modifier.semantics { this.selected = selected }) {
+    IconButton(onClick = onClick, modifier = modifier.semantics { this.selected = selected }) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, CircleShape)) {
             Icon(painterResource(icon), contentDescription = stringResource(description), tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp).graphicsLayer { alpha = if (working) breath else 1f })
         }

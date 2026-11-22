@@ -555,7 +555,7 @@ class ReadingsTest {
             "ほんとぉ" to listOf("ほんとぉ" to "ほんと"),
             "しらないぃ" to listOf("しらないぃ" to "しる"),
             "きみがすきぃ" to listOf("きみ" to "きみ", "が" to "が", "すきぃ" to "すく"),
-            "まってよぉぉ" to listOf("まって" to "まつ", "よぉぉ" to "よい"),
+            "まってよぉぉ" to listOf("まって" to "まつ", "よぉぉ" to "よ"),
             "ズットォ" to listOf("ズットォ" to "ズットォ"),
             // A small vowel that spells a long vowel draws it out too: ありがとぅ is ありがとう, not ありが and とぅ.
             "ありがとぅ" to listOf("ありがとぅ" to "ありがとう"),
@@ -693,6 +693,30 @@ class ReadingsTest {
         assertEquals("hitou ga", typed("ひとぅが"))
         // But not the start of one alone: そと starts words the dictionary has, and isn't one of them, so とぅ is tu.
         assertEquals("so tu nai", typed("そとぅない"))
+    }
+
+    @Test
+    fun aDrawnOutYoAfterATeFormIsStillTheEndingParticle() {
+        for ((line, verb) in mapOf("まって" to "まつ", "待って" to "待つ", "あそんで" to "あそぶ", "見て" to "見る")) {
+            for (vowels in listOf("ぉ", "ぉぉ")) {
+                val text = line + "よ" + vowels
+                fun words() = Readings.words(text, Script.JAPANESE).map { it.text to it.lookup }
+                val expected = listOf(line to verb, "よ$vowels" to "よ")
+                assertEquals(text, expected, words())
+                assertEquals(text, expected, TestUniDic.reading { words() })
+                for (word in listOf(Readings.words(text, Script.JAPANESE).last(), TestUniDic.reading { Readings.words(text, Script.JAPANESE).last() })) {
+                    assertNull(text, word.reading)
+                    assertEquals(text, "yo" + "o".repeat(vowels.length), word.romanized)
+                    assertEquals(text, word.romanized, word.typed)
+                    assertEquals(text, listOf(Reader.RULES), word.by)
+                }
+            }
+        }
+        // The call alone and a different ending after the connective keep their own dictionary forms.
+        for ((text, lookup) in mapOf("よぉ" to "よお", "元気？よぉ" to "よお", "まってねぇ" to "ねぇ", "まっておねがいぃ" to "おねがい")) {
+            assertEquals(text, lookup, Readings.words(text, Script.JAPANESE).last().lookup)
+            assertEquals(text, lookup, TestUniDic.reading { Readings.words(text, Script.JAPANESE).last().lookup })
+        }
     }
 
     @Test

@@ -324,6 +324,55 @@ class FakeDiff(unittest.TestCase):
                 self.assertNotEqual(check_golden.readings_digest(repo, start, "HEAD~1"), check_golden.readings_digest(repo, start, "HEAD"), path)
                 self.assertNotEqual(check_golden.readings_digest(repo, "HEAD~1", start), check_golden.readings_digest(repo, "HEAD", start), path)
 
+    def test_a_code_file_the_pull_request_adds_counts_before_main_lists_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder, golden_text(ROW))
+            added = "app/src/main/java/com/astrovm/crosstune/NewReadings.kt"
+            self.write(repo, READINGS, "one\n")
+            self.write(repo, added, "one\n")
+            self.merge(repo, "test: change a reading and add its new source")
+            start = check_golden.git(repo, "rev-parse", "HEAD^1").strip()
+            self.assertEqual([added], check_golden.added_code(repo, start, "HEAD"))
+            line = self.checked(repo)
+            self.assertEqual((0, ""), self.run_check(repo, "golden: none\n" + line))
+            # A later commit that changes only the new file needs the command again (Issue #1143).
+            self.write(repo, added, "two\n")
+            commit(repo, "test: change the new source only")
+            self.assertNotEqual(check_golden.readings_digest(repo, start, "HEAD~1"), check_golden.readings_digest(repo, start, "HEAD"))
+            # Moved, it's still the pull request's own.
+            moved = "app/src/main/java/com/astrovm/crosstune/MovedReadings.kt"
+            git(repo, "mv", added, moved)
+            commit(repo, "test: move the new source")
+            self.assertEqual([moved], check_golden.added_code(repo, start, "HEAD"))
+            # A file added elsewhere, or a test, isn't the app's code.
+            self.write(repo, "app/src/test/java/com/astrovm/crosstune/NewTest.kt", "one\n")
+            self.write(repo, "docs/new.md", "one\n")
+            commit(repo, "test: add a test and a doc")
+            self.assertEqual([moved], check_golden.added_code(repo, start, "HEAD"))
+            # A range that adds nothing counts nothing.
+            self.assertEqual([], check_golden.added_code(repo, start, start))
+
+    def test_a_code_file_with_any_name_counts_and_reads_the_same_on_every_machine(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder, golden_text(ROW))
+            names = ["app/src/main/java/com/astrovm/crosstune/新しい.kt", "app/src/main/java/com/astrovm/crosstune/with\ttab.kt",
+                     "app/src/main/java/com/astrovm/crosstune/carriage\rreturn.kt"]
+            self.write(repo, READINGS, "one\n")
+            for name in names:
+                self.write(repo, name, "one\n")
+            self.merge(repo, "test: change a reading and add sources with odd names")
+            start = check_golden.git(repo, "rev-parse", "HEAD^1").strip()
+            self.assertEqual(sorted(names), check_golden.added_code(repo, start, "HEAD"))
+            for name in names:
+                self.write(repo, name, "two\n")
+                commit(repo, f"test: change {name} only")
+                self.assertNotEqual(check_golden.readings_digest(repo, start, "HEAD~1"), check_golden.readings_digest(repo, start, "HEAD"), name)
+            digests = set()
+            for quoted in ["true", "false"]:
+                git(repo, "config", "core.quotePath", quoted)
+                digests.add(check_golden.readings_digest(repo, start, "HEAD"))
+            self.assertEqual(1, len(digests))
+
     def test_the_golden_file_in_the_same_pull_request_passes(self):
         with tempfile.TemporaryDirectory() as folder:
             repo = self.repo(folder)

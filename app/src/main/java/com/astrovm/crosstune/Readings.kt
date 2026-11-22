@@ -106,8 +106,9 @@ internal object Readings {
      * 11 for standalone old kana read with the built-in dictionary.
      * 12 for a suffix that follows a word it can't join, 等 after a verb, 桜 after a counter, and 千夜.
      * 13 for any word in kana IPADIC starts on a small kana, じゅぎょう and いっしょ, and the small vowels that draw a word out, ありがとぉ.
+     * 14 for a drawn-out よ after a connective, まってよぉ, looked up as the ending particle.
      */
-    const val VERSION = 13
+    const val VERSION = 14
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -259,7 +260,12 @@ internal object Readings {
                 out.removeAt(out.lastIndex)
                 out[out.lastIndex] = word.drawnOutBy(before).drawnOutBy(piece)
             }
-            else -> out[out.lastIndex] = before.drawnOutBy(piece)
+            else -> {
+                // The connective ends the verb: よ in まってよぉ is a particle, though IPADIC calls it よい's stem.
+                val ending = before.surface == "よ" && out.getOrNull(out.lastIndex - 1)?.subkind == "接続助詞"
+                val kept = if (ending) Piece("よ", "よ", "助詞", "終助詞", end = before.end, reader = Reader.RULES) else before
+                out[out.lastIndex] = kept.drawnOutBy(piece)
+            }
         }
         out
     }

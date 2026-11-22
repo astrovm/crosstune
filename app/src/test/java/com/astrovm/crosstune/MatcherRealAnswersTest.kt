@@ -54,8 +54,8 @@ class MatcherRealAnswersTest {
     }
 
     // Songs YouTube Music names as the US store does, in Latin letters, where they're asked for as their artists' country
-    // writes them: by Official Hige Dandism, Hikaru Utada, BTS and G.E.M. At each length Apple has, or none. Main opens
-    // the same; two are later recordings, Issue #1134.
+    // writes them: by Official Hige Dandism, Hikaru Utada, BTS and G.E.M. At each length Apple has, or none.
+    // Issue #1134: a later recording cannot replace the song, even when it is as long as the link.
     @Test
     fun songsNamedOtherwiseOnYouTubeMusicOpenTheArtistsOwn() {
         for ((song, lengths) in OTHERWISE) {
@@ -178,12 +178,12 @@ class MatcherRealAnswersTest {
         val OTHERWISE = mapOf(
             Kept(MusicMetadata("Pretender", "Official髭男dism"), "pretender.json.gz", "$WATCH=37W7Y2RRyiM") to
                 listOf(null, 223_840L, 326_440L, 326_843L, 344_813L),
-            // From THE FIRST TAKE, a 2025 recording, where the original is the artist's video o1sUaVJUeB0: Issue #1134.
-            Kept(MusicMetadata("First Love", "宇多田ヒカル"), "first-love.json.gz", "$WATCH=wcBbqRlOn5s") to
+            // The original is only among videos; the songs include a 2025 recording From THE FIRST TAKE.
+            Kept(MusicMetadata("First Love", "宇多田ヒカル"), "first-love.json.gz", "$WATCH=o1sUaVJUeB0") to
                 listOf(null, 237_752L, 257_894L, 258_627L, 259_385L, 262_030L),
             Kept(MusicMetadata("봄날", "방탄소년단"), "spring-day.json.gz", "$WATCH=ZO1xdXOXarc") to listOf(null, 274_097L, 274_704L),
-            // The G.E.M. Version, re-recorded, where the original is f8IqVtY_4jo: Issue #1134.
-            Kept(MusicMetadata("光年之外", "鄧紫棋"), "light-years-away.json.gz", "$WATCH=djTVgs_zN2Q") to
+            // The G.E.M. Version is a re-recording within a second of the original.
+            Kept(MusicMetadata("光年之外", "鄧紫棋"), "light-years-away.json.gz", "$WATCH=f8IqVtY_4jo") to
                 listOf(null, 217_489L, 234_951L, 235_505L)
         )
     }

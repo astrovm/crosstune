@@ -20,11 +20,26 @@ internal object LyricsSync {
      * [lines] where the user says they are, by [points]. Past the first or last of them, they go on at
      * [pace]: how much of the song plays per ms of the words, when the recording is known to play faster
      * or slower than the one they're timed for, unless the points themselves tell how fast.
+     * With the recording's length, [durationMs], and that of the take the words are timed for, [takeMs]:
+     * when the correction still leaves that take's end past the recording's, the take has a stretch this
+     * recording doesn't, and lines timed past the end may be in it. Unheard, they stay past the end,
+     * where [pace] alone puts them, rather than be brought into the recording. Points can still place them
+     * directly, or between lines heard either side. A take longer only by where its words start, as a
+     * longer intro, ends where the recording does once corrected, so its last lines follow the correction.
+     * A correction by hand has no such limit.
      */
-    fun adjust(lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0): List<LyricLine> =
-        if (points.isEmpty()) lines else lines.map { line ->
-            line.copy(timeMs = timeOf(line.timeMs, points, pace), words = line.words.map { it.copy(timeMs = timeOf(it.timeMs, points, pace)) }, endMs = line.endMs?.let { timeOf(it, points, pace) })
+    fun adjust(lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0, durationMs: Long? = null, takeMs: Long? = null): List<LyricLine> {
+        if (points.isEmpty()) return lines
+        val end = durationMs?.takeIf { takeMs != null && timeOf(takeMs, points, pace) > it + LyricsFinder.SAME_LENGTH_MS }
+        return lines.map { line ->
+            val moved = line.timed { timeOf(it, points, pace) }
+            val paced = line.timed { (it * pace).toLong() }
+            val outside = end != null && paced.timeMs >= end && line.timeMs > points.last().lineMs
+            if (outside && moved.timeMs < paced.timeMs) paced else moved
         }
+    }
+
+    private fun LyricLine.timed(at: (Long) -> Long) = copy(timeMs = at(timeMs), words = words.map { it.copy(timeMs = at(it.timeMs)) }, endMs = endMs?.let(at))
 
     /** Where in the song [lineMs] of the words is, by [points] in order, going on at [pace] past them. */
     fun timeOf(lineMs: Long, points: List<SyncPoint>, pace: Double = 1.0): Long {

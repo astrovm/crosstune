@@ -116,6 +116,7 @@ class MainActivity : ComponentActivity() {
                         client,
                         packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
                         busyPauseMs = lyricsBusyPauseMs,
+                        matching = lyricsMatchingDispatcher ?: Dispatchers.Default.limitedParallelism(1),
                         cache = cache("lyrics.json", maxEntries = 300),
                         youTubeMusicSong = { song -> matcher.find(MusicService.YOUTUBE_MUSIC, song)?.substringAfter("watch?v=", "")?.ifEmpty { null } }
                     ),
@@ -406,6 +407,10 @@ class MainActivity : ComponentActivity() {
         /** Where what's found for songs is read and written; tests do it in step with the screen. */
         @VisibleForTesting
         internal var lookupDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+        /** Where lyrics answers and their timing are compared; tests keep that work in step with the screen. */
+        @VisibleForTesting
+        internal var lyricsMatchingDispatcher: CoroutineDispatcher? = null
 
         /** What music apps are playing, which a song's timed words follow. */
         @VisibleForTesting
