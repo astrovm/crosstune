@@ -603,6 +603,64 @@ class UnsungTest {
         assertEquals(3, lookups)
     }
 
+    @Test
+    fun anOldSavedAlbumCanRetryItsLookupAfterAnOfflineOpenAndAFailure() {
+        val url = "https://www.deezer.com/album/123"
+        val album = "Madvillainy Instrumentals"
+        prefs().edit().putString(
+            HistoryStore.KEY_HISTORY,
+            """[{"service":"DEEZER","type":"ALBUM","id":"123","url":"$url","title":"$album",
+              "tracks":[["Accordian","Madlib & Madvillain","https://example.com/cover.jpg",""]]}]"""
+        ).commit()
+        var lookups = 0
+        val ordinaryAnswer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/album/123") {
+                lookups++
+                if (lookups == 1) throw IOException("Lookup unavailable")
+                FakeSpotify.html(request, """{"title":"$album","tracks":{"data":[
+                  {"id":456,"title":"Accordian","duration":114,"artist":{"name":"Madlib & Madvillain"}}
+                ]}}""")
+            } else {
+                ordinaryAnswer(request)
+            }
+        }
+        controller = Robolectric.buildActivity(MainActivity::class.java, Intent(app, MainActivity::class.java)).setup()
+        waitUntil { model().uiState.history.isNotEmpty() }
+        fun saved() = HistoryStore(prefs()).load().single()
+        fun reopen() {
+            composeRule.runOnIdle { model().pasteLink(url) }
+            waitUntil { model().uiState.result?.title == album && !model().lookingUp }
+        }
+
+        val old = saved()
+        fun assertStillUnchecked() {
+            val entry = saved()
+            assertEquals(old.metadata, entry.metadata)
+            assertFalse(entry.albumChecked)
+            val stored = JSONArray(prefs().getString(HistoryStore.KEY_HISTORY, null))
+            assertFalse(stored.getJSONObject(0).has("album"))
+        }
+        assertFalse(old.albumChecked)
+        composeRule.runOnIdle { model().connectionChanged(online = false) }
+        reopen()
+        assertEquals(0, lookups)
+        assertStillUnchecked()
+
+        composeRule.runOnIdle { model().connectionChanged(online = true) }
+        reopen()
+        assertEquals(1, lookups)
+        assertStillUnchecked()
+
+        reopen()
+        assertEquals(2, lookups)
+        assertEquals(album, model().uiState.result?.tracks?.single()?.album)
+        assertEquals(album, saved().metadata.tracks.single().album)
+        assertTrue(saved().albumChecked)
+        reopen()
+        assertEquals(2, lookups)
+    }
+
     private fun reopenOldAccordian(select: () -> Unit) {
         useAccordian()
         saveOldAccordian()

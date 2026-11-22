@@ -330,6 +330,31 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun aCatalogueRefreshKeepsUnlinkedTracksWithDifferentVersionsOrLengths() {
+        val version = MusicMetadata("Song (Take 1-2)", "Band", lengthMs = 100_000)
+        val longer = MusicMetadata("Another Song", "Band", lengthMs = 100_000)
+        val same = MusicMetadata("  Third Song ", " BAND ", lengthMs = 100_000)
+        val close = MusicMetadata("Fourth Song", "Band", lengthMs = 100_000)
+        val metadata = MusicMetadata("Mix", "", ItemType.PLAYLIST, tracks = listOf(version, longer, same, close))
+        val link = checkNotNull(MusicLinks.linkFor("https://www.deezer.com/playlist/123"))
+        val entry = HistoryEntry(link, metadata, albumChecked = false)
+        val album = "Album (Instrumentals)"
+        val sameUrl = "https://www.deezer.com/track/3"
+        val closeUrl = "https://www.deezer.com/track/4"
+        val latest = metadata.copy(tracks = listOf(
+            version.copy(title = "Song (Take 12)", url = "https://www.deezer.com/track/1", album = album),
+            longer.copy(lengthMs = 102_001, url = "https://www.deezer.com/track/2", album = album),
+            same.copy(title = "Third Song", artist = "Band", url = sameUrl, album = album),
+            close.copy(lengthMs = 102_000, url = closeUrl, album = album)
+        ))
+
+        assertEquals(
+            listOf(version, longer, same.copy(url = sameUrl, album = album), close.copy(url = closeUrl, album = album)),
+            entry.afterAlbumLookup(latest).metadata.tracks
+        )
+    }
+
+    @Test
     fun aPlaylistKeepsItsSongsCoversAndLinksAndCanBeUpdatedInPlace() {
         val store = HistoryStore(preferences)
         val link = MusicLink(MusicService.SPOTIFY, ItemType.PLAYLIST, "1", "https://open.spotify.com/playlist/1")

@@ -173,7 +173,7 @@ private fun HistoryEntry.isSameAs(other: HistoryEntry): Boolean =
     link.url == other.link.url ||
         (link.service != null && link.service == other.link.service && link.type == other.link.type && link.id == other.link.id) ||
         (link.type == ItemType.TRACK && other.link.type == ItemType.TRACK && (link.service == null || link.service != other.link.service) &&
-            metadata.isNamedAs(other.metadata) && metadata.mayBeOnSameAlbum(other.metadata) && mayBeAsLongAs(other))
+            metadata.isNamedAs(other.metadata) && metadata.mayBeOnSameAlbum(other.metadata) && metadata.mayBeAsLongAs(other.metadata))
 
 private val MusicLink.hasCatalogAlbum: Boolean
     get() = type != ItemType.ARTIST && (service == MusicService.APPLE_MUSIC || service == MusicService.DEEZER)
@@ -190,24 +190,26 @@ private fun MusicMetadata.withMissingCatalogueDetails(latest: MusicMetadata): Mu
         album = album ?: latest.album
     )
 
-/** Retain the saved items in order. Match by track ID or by a name unique in both lists. */
+/** Match by track ID or by a name unique in both lists with a compatible length. */
 private fun List<MusicMetadata>.withMissingTrackDetails(latest: List<MusicMetadata>): List<MusicMetadata> {
     if (isEmpty()) return latest
     if (latest.isEmpty()) return this
     val ids = latest.mapNotNull { track -> RecordingKey.trackIdentity(track.url)?.let { it to track } }.toMap()
-    val names = latest.groupBy { it.catalogueName }
-    val savedNames = groupingBy { it.catalogueName }.eachCount()
+    val names = latest.groupByTo(sortedMapOf(catalogueNameOrder)) { it }
+    val savedNames = groupByTo(sortedMapOf(catalogueNameOrder)) { it }
     return map { saved ->
         val id = RecordingKey.trackIdentity(saved.url)
-        val match = id?.let(ids::get) ?: names[saved.catalogueName]?.singleOrNull()?.takeIf {
-            savedNames[saved.catalogueName] == 1 && (id == null || RecordingKey.trackIdentity(it.url) == null)
+        val match = id?.let(ids::get) ?: names[saved]?.singleOrNull()?.takeIf {
+            savedNames[saved]?.size == 1 && (id == null || RecordingKey.trackIdentity(it.url) == null) &&
+                saved.mayBeAsLongAs(it, toleranceMs = 2_000L)
         }
         match?.let(saved::withMissingCatalogueDetails) ?: saved
     }
 }
 
-private val MusicMetadata.catalogueName: Pair<String, String>
-    get() = SongNames.normalize(title) to SongNames.normalize(artist)
+/** Keep the version text and punctuation when comparing names. */
+private val catalogueNameOrder = compareBy<MusicMetadata, String>(String.CASE_INSENSITIVE_ORDER) { it.title.trim() }
+    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.artist.trim() }
 
 private fun MusicMetadata.mayBeOnSameAlbum(other: MusicMetadata): Boolean {
     if ((instrumentalAlbum == null) != (other.instrumentalAlbum == null)) return false
@@ -219,9 +221,9 @@ internal fun MusicMetadata.isNamedAs(other: MusicMetadata) =
     SongNames.normalize(title).let { it.isNotEmpty() && it == SongNames.normalize(other.title) } &&
         SongNames.normalize(artist) == SongNames.normalize(other.artist)
 
-/** Not known to be of different lengths, a second or so apart being the same, as apps don't always agree on one. */
-private fun HistoryEntry.mayBeAsLongAs(other: HistoryEntry): Boolean {
-    val length = metadata.lengthMs ?: return true
-    val otherLength = other.metadata.lengthMs ?: return true
-    return abs(length - otherLength) <= SAME_RECORDING_LENGTH_MS
+/** A small difference is allowed because apps don't always agree on the length. */
+private fun MusicMetadata.mayBeAsLongAs(other: MusicMetadata, toleranceMs: Long = SAME_RECORDING_LENGTH_MS): Boolean {
+    val length = lengthMs ?: return true
+    val otherLength = other.lengthMs ?: return true
+    return abs(length - otherLength) <= toleranceMs
 }
