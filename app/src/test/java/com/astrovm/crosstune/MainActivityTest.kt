@@ -711,6 +711,27 @@ class MainActivityTest {
     }
 
     @Test
+    fun aLinkSharedWithNoAppChosenBeforeAndroidSaysWhatsThereShowsHereAndIsFoundForTheOnlyMusicApp() {
+        prefs().edit().remove("default_target").commit()
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.DEEZER.packageName })
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        // Android's answer about apps and links is held, so the song is found before Deezer is known as the only music app.
+        val gate = Gate().apply { held = true }
+        MainActivity.systemDispatcher = gate
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))
+        fun state() = ViewModelProvider(activity)[MainViewModel::class.java].uiState
+        waitUntil { state().result != null }
+        gate.letGo()
+        // With no app chosen it shows here, so nothing opens nor asks where, as Deezer is saved once known; the song
+        // is found for it.
+        waitUntil { Destination.Service(MusicService.DEEZER) in state().destinationUrls }
+        assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
+        assertEquals(Destination.Service(MusicService.DEEZER), state().resultDestination)
+        assertFalse(state().showDestinationPicker)
+        assertNull(shadowOf(app).peekNextStartedActivity())
+    }
+
+    @Test
     fun viewIntentWithoutDataShowsInvalidUrlError() {
         launch(Intent(Intent.ACTION_VIEW))
         assertTextShown(string(R.string.error_invalid_url))
