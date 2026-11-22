@@ -6010,7 +6010,7 @@ internal class MainViewModel(
         /** How many times through a song with untimed words is heard, all told, to time them: more would hardly time more lines. */
         const val UNTIMED_HEARINGS = 2
 
-        /** Hearings of a video it takes to say how fast it goes, and the speeds it could go at, as by [AudioTiming]. */
+        /** Hearings of a video it takes to say how fast it goes, and the speeds it could go at. */
         const val LEAD_SPEED_HEARINGS = 3
         private val LEAD_SPEEDS = 0.9f..1.1f
         /** Lines sung in what's heard, at least, so enough words to match are heard. */
