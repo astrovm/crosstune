@@ -649,7 +649,7 @@ class MetadataParsersTest {
         val deezer = json("""{"title":"Top","tracks":{"data":[{"title":"Boston","artist":{"name":"Stella"}},{"title":""},{"title":"Solo"},"x"]}}""")
         assertEquals(listOf(MusicMetadata("Boston", "Stella"), MusicMetadata("Solo", "")), checkNotNull(MetadataParsers.deezer(deezer, ItemType.PLAYLIST)) { "Expected MetadataParsers.deezer(deezer, ItemType.PLAYLIST) to be non-null" }.tracks)
         // Albums list theirs the same way.
-        assertEquals(listOf(MusicMetadata("Boston", "Stella"), MusicMetadata("Solo", "")), checkNotNull(MetadataParsers.deezer(deezer, ItemType.ALBUM)) { "Expected MetadataParsers.deezer(deezer, ItemType.ALBUM) to be non-null" }.tracks)
+        assertEquals(listOf(MusicMetadata("Boston", "Stella", album = "Top"), MusicMetadata("Solo", "", album = "Top")), checkNotNull(MetadataParsers.deezer(deezer, ItemType.ALBUM)) { "Expected MetadataParsers.deezer(deezer, ItemType.ALBUM) to be non-null" }.tracks)
     }
 
     @Test
@@ -659,7 +659,7 @@ class MetadataParsersTest {
             {"wrapperType":"track","trackName":"Alone Again","artistName":"The Weeknd"},
             {"wrapperType":"track","trackName":""},
             {"wrapperType":"artist","artistName":"Not a song"}]}""")
-        assertEquals(listOf(MusicMetadata("Alone Again", "The Weeknd")), checkNotNull(MetadataParsers.appleMusic(lookup, ItemType.ALBUM)) { "Expected MetadataParsers.appleMusic(lookup, ItemType.ALBUM) to be non-null" }.tracks)
+        assertEquals(listOf(MusicMetadata("Alone Again", "The Weeknd", album = "After Hours")), checkNotNull(MetadataParsers.appleMusic(lookup, ItemType.ALBUM)) { "Expected MetadataParsers.appleMusic(lookup, ItemType.ALBUM) to be non-null" }.tracks)
 
         val album = """{"name":"Volume Alpha","byArtist":{"name":"C418"},"track":{"itemListElement":[{"item":{"name":"Key"}},{"item":{"name":""}},{}]}}"""
         fun page(data: String) = """<meta property="og:title" content="Volume Alpha, by C418"><script type="application/ld+json" id="tralbum-jsonld">$data</script>"""
