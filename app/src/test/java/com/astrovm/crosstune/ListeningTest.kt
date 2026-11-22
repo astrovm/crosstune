@@ -605,6 +605,7 @@ class ListeningTest {
         waitForText("A PLACE TO GO")
         click(string(R.string.tile_lyrics_label))
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyricsFor?.title == "A PLACE TO GO" }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.result?.title == "A PLACE TO GO" }
     }
 
     private fun radioGardenCatalog(title: String = "A PLACE TO GO", artist: String = "The Kid LAROI") {

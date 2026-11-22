@@ -38,6 +38,8 @@ class RadioGardenTest {
             station,
             "$station - Today's Hits",
             "Stolen Moments with John Bailey",
+            "Artist- Song",
+            "Artist -Song",
             """text="Spot Block End" amgTrackId="9876543" length="00:00:00" """,
             """Artist - text="Spot Block End" amgTrackId="9876543" """,
             """Artist - text="Song" song_spot="A" """,
