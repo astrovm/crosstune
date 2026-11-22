@@ -128,7 +128,7 @@ def prepare(out, require_answers=False):
     for song in songs:
         query = song["query"]
         songs_path, videos_path = ytm_path(out, query, collect.YTM_SONGS), ytm_path(out, query, collect.YTM_VIDEOS)
-        if require_answers and (not songs_path or not videos_path or not song.get("ytmSongs") or not song.get("ytmVideos") or not song.get("deezerAnswered")):
+        if require_answers and (not songs_path or not videos_path or not song.get("ytmSongs") or not song.get("ytmVideos") or not song.get("deezerAnswered") or not song.get("deezerArtistsAnswered")):
             raise ValueError(f"Missing YouTube Music or Deezer answer for {query}")
         results = analyze.rows(read_json(songs_path)) if songs_path else []
         videos = analyze.rows(read_json(videos_path)) if videos_path else []
@@ -141,7 +141,7 @@ def prepare(out, require_answers=False):
             "us": [{"trackId": song["id"], "trackName": song["title"], "artistName": song["artist"], "collectionName": song["album"], "trackTimeMillis": ms}
                    for ms in (song["editionsMs"] or [song["lengthMs"]])],
             "native": native,
-            "deezer": [{"title": d.get("title"), "artist": {"name": d.get("artist")}, "duration": d.get("duration")} for d in song.get("deezer", [])],
+            "deezer": song.get("deezer", []), "deezerArtists": song.get("deezerArtists", []),
             # Where in out, so a copy of the folder, as another task's or the build box's, still finds them.
             "songs": songs_path and os.path.relpath(songs_path, out), "videos": videos_path and os.path.relpath(videos_path, out),
             "right": right_ids(song, results, videos), "names": names,

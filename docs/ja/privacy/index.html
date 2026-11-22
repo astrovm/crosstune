@@ -58,7 +58,7 @@
 <h2>端末内の情報</h2>
 <p>設定、最近の曲、保存した行、練習カードはスマートフォン内にとどまり、Android のバックアップには含まれません。オフライン用に保存した曲は、歌詞、翻訳、コード、ジャケットをスマートフォンに残します。ダウンロードは Wi-Fi のときだけです。Crosstune がリンクを読み取るのは、リンクを開いたとき、共有したとき、貼り付けたときだけで、クリップボードを読み取るのは貼り付けのショートカットを使ったときだけです。開き先として提案できるよう、どの音楽アプリがインストールされているかを確認します。</p>
 <h2>リンクを開く</h2>
-<p>リンクの曲を調べるため、Crosstune はリンク元のサービス (Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack、Shazam、Google) の公開ページまたは公開 API を読み取り、カバー画像を読み込みます。ほかのアプリで開くため、タイトルとアーティストをそのアプリの検索に送ります。その検索で確信が持てないときは、Apple と Deezer の曲検索にも送ります。Spotify の場合は ListenBrainz に送り、アーティスト名は MusicBrainz に送り、Spotify の公開ページを読み込みます。「すべて再生」と「シャッフル」は各曲に対して同じことを行い、YouTube は見つかった動画からプレイリストを作ります。入力した曲名は Deezer と Apple の検索に送られます。自分で追加した開き先には、設定したアドレスの中で検索語が渡されます。</p>
+<p>リンクの曲を調べるため、Crosstune はリンク元のサービス (Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack、Shazam、Google) の公開ページまたは公開 API を読み取り、カバー画像を読み込みます。ほかのアプリで開くため、タイトルとアーティストをそのアプリの検索に送ります。その検索で確信が持てないときは、Apple と Deezer の検索にも送ります。Spotify の場合は ListenBrainz に送り、アーティスト名は MusicBrainz に送り、Spotify の公開ページを読み込みます。「すべて再生」と「シャッフル」は各曲に対して同じことを行い、YouTube は見つかった動画からプレイリストを作ります。入力した曲名は Deezer と Apple の検索に送られます。自分で追加した開き先には、設定したアドレスの中で検索語が渡されます。</p>
 <h2>歌詞、コード、翻訳</h2>
 <p>曲のタイトルとアーティストは、歌詞のために LRCLIB、YouTube Music、NetEase Cloud Music、Letras、Genius に、コードのために Ultimate Guitar、Cifra Club、LaCuerda、U-FRET、J-Total、ChordWiki に、カバー曲の原曲を探すために Apple に、日本語の曲の読みのために UtaTen に送られます。翻訳する行は Google Translate か MyMemory に送られ、意味を調べた単語はそれらか Wiktionary に送られます。すでにあなたの言語になっている歌詞は送られません。読みはスマートフォン上で作られます。ChordWiki は非表示のブラウザページで開かれ、スクリプトが実行され、アプリのブラウザストレージに Cookie が保存されることがあり、Cloudflare や Google に接続することもあります。Maven Central の日本語辞書と Hugging Face の音声モデルは、Wi-Fi のときに一度だけダウンロードされます。</p>
 <h2>音楽の追従</h2>

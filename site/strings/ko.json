@@ -100,7 +100,7 @@
     ],
     [
       "p",
-      "링크의 노래를 알아내기 위해 Crosstune은 그 링크의 서비스(Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam, Google)의 공개 페이지나 API를 읽고 커버 이미지를 불러와요. 다른 앱에서 열려면 제목과 아티스트를 그 앱의 검색으로 보내요. 그 검색이 확실하지 않으면 Apple과 Deezer의 노래 검색에도 보내요. Spotify의 경우 ListenBrainz로 보내고, 아티스트 이름은 MusicBrainz로 보내고, Spotify의 공개 페이지를 읽어요. ‘모두 재생’과 ‘셔플’은 각 노래마다 이렇게 하고, YouTube는 찾은 동영상으로 플레이리스트를 만들어요. 입력한 노래 이름은 Deezer와 Apple의 검색으로 가요. 직접 추가한 대상은 사용자가 설정한 주소에 검색어를 받아요."
+      "링크의 노래를 알아내기 위해 Crosstune은 그 링크의 서비스(Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam, Google)의 공개 페이지나 API를 읽고 커버 이미지를 불러와요. 다른 앱에서 열려면 제목과 아티스트를 그 앱의 검색으로 보내요. 그 검색이 확실하지 않으면 Apple과 Deezer의 검색에도 보내요. Spotify의 경우 ListenBrainz로 보내고, 아티스트 이름은 MusicBrainz로 보내고, Spotify의 공개 페이지를 읽어요. ‘모두 재생’과 ‘셔플’은 각 노래마다 이렇게 하고, YouTube는 찾은 동영상으로 플레이리스트를 만들어요. 입력한 노래 이름은 Deezer와 Apple의 검색으로 가요. 직접 추가한 대상은 사용자가 설정한 주소에 검색어를 받아요."
     ],
     [
       "h2",

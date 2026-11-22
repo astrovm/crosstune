@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import replay
+import collect
 
 # Lemon, as Apple's US store names it, and Japan's; with rows YouTube Music gave for "Lemon 米津玄師" (issue #1103).
 LEMON = {"title": "Lemon", "artist": "Kenshi Yonezu", "native": [{"store": "JP", "title": "Lemon", "artist": "米津玄師", "album": "Lemon - Single"}]}
@@ -25,6 +26,18 @@ class RightIdsTest(unittest.TestCase):
         other = {"id": "other", "name": "Kifak Inta", "details": ["Other", "Kifak Inta", "3:32"]}
         self.assertEqual(["own"], replay.right_ids(song, [own, other], []))
         self.assertEqual(["own"], replay.right_ids(song, [], [own]))
+
+    def test_editions_and_native_names_do_not_cross_artists(self):
+        us = [
+            {"trackName": "Lisa", "artistId": 1, "trackTimeMillis": 200_000},
+            {"trackName": "Lisa", "artistId": 2, "trackTimeMillis": 272_707},
+            {"trackName": "Lisa", "artistId": 1, "trackTimeMillis": 201_000},
+            {"trackName": "Lisa", "artistId": 2, "trackTimeMillis": 200_000},
+        ]
+        self.assertEqual([200_000, 201_000], collect.edition_lengths(us, us[0]))
+        self.assertNotEqual(collect.recording_key(us[0]), collect.recording_key(us[1]))
+        self.assertNotEqual(collect.recording_key(us[0]), collect.recording_key(us[2]))
+        self.assertNotEqual(collect.recording_key(us[0]), collect.recording_key(us[3]))
 
     def test_a_fans_lyrics_video_is_wrong_where_the_song_is_there(self):
         self.assertEqual(["3NNhrqHZqlI", "SX_ViT4Ra7k"], replay.right_ids(LEMON, [SONG], [OWN_VIDEO, LYRICS_VIDEO]))
@@ -63,7 +76,7 @@ class RightIdsTest(unittest.TestCase):
 class PrepareTest(unittest.TestCase):
     def test_the_answers_kept_are_named_where_in_the_folder_so_a_copy_of_it_finds_them(self):
         with tempfile.TemporaryDirectory() as out:
-            song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon 米津玄師", askedArtist="米津玄師", ytmSongs=True, ytmVideos=True, deezerAnswered=True)
+            song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon 米津玄師", askedArtist="米津玄師", ytmSongs=True, ytmVideos=True, deezerAnswered=True, deezerArtistsAnswered=True)
             with open(os.path.join(out, "songs.json"), "w", encoding="utf-8") as kept:
                 json.dump([song], kept)
             os.mkdir(os.path.join(out, "raw"))

@@ -104,7 +104,7 @@ class MatchReplayTest {
                 else song.getJSONObject("native").optJSONObject(store)?.takeIf { names && it.optLong("trackId") == id }
             }?.let { FakeSpotify.html(request, JSONObject().put("results", JSONArray().put(it)).toString()) }
                 ?: FakeSpotify.html(request, """{"results":[]}""")
-            url.host == "api.deezer.com" -> FakeSpotify.html(request, JSONObject().put("data", song.getJSONArray("deezer")).toString())
+            url.host == "api.deezer.com" -> FakeSpotify.html(request, JSONObject().put("data", song.getJSONArray(if (url.encodedPath == "/search/artist") "deezerArtists" else "deezer")).toString())
             url.host == "music.youtube.com" -> {
                 val videos = FakeSpotify.bodyOf(request).contains(VIDEOS)
                 FakeSpotify.html(request, answers[if (videos) "videos" else "songs"] ?: "{}")

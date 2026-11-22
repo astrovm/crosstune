@@ -100,7 +100,7 @@
     ],
     [
       "p",
-      "為了辨識連結裡的歌曲，Crosstune 會讀取該連結所屬服務的公開頁面或 API：Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack、Shazam 或 Google，並載入它的封面。為了在其他應用程式中開啟，標題和藝人會傳送到該應用程式的搜尋。當這個搜尋拿不準時，它們還會傳送到 Apple 和 Deezer 的歌曲搜尋。對於 Spotify，它們會傳送到 ListenBrainz，藝人的名字傳送到 MusicBrainz，並讀取 Spotify 的公開頁面。「全部播放」和「隨機播放」會對每首歌這樣做，YouTube 用找到的影片產生播放清單。你輸入的歌名會傳送到 Deezer 和 Apple 的搜尋。自訂目標會在你設定的網址中收到搜尋詞。"
+      "為了辨識連結裡的歌曲，Crosstune 會讀取該連結所屬服務的公開頁面或 API：Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack、Shazam 或 Google，並載入它的封面。為了在其他應用程式中開啟，標題和藝人會傳送到該應用程式的搜尋。當這個搜尋拿不準時，它們還會傳送到 Apple 和 Deezer 的搜尋。對於 Spotify，它們會傳送到 ListenBrainz，藝人的名字傳送到 MusicBrainz，並讀取 Spotify 的公開頁面。「全部播放」和「隨機播放」會對每首歌這樣做，YouTube 用找到的影片產生播放清單。你輸入的歌名會傳送到 Deezer 和 Apple 的搜尋。自訂目標會在你設定的網址中收到搜尋詞。"
     ],
     [
       "h2",

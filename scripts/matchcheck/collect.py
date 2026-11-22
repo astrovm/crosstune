@@ -89,8 +89,22 @@ def deezer(out, query):
     return None if answer is None or "error" in answer else answer.get("data", [])
 
 
+def deezer_artists(out, artist):
+    asked = urllib.parse.urlencode({"q": artist, "limit": 10})
+    answer = fetch(out, "https://api.deezer.com/search/artist?" + asked, pause=0.3)
+    return None if answer is None or "error" in answer else answer.get("data", [])
+
+
 def latin(text):
     return all(ord(c) < 0x250 or not c.isalpha() for c in text)
+
+
+def recording_key(song):
+    return song.get("artistId"), song.get("trackTimeMillis")
+
+
+def edition_lengths(songs, song):
+    return sorted({other["trackTimeMillis"] for other in songs if other["trackName"] == song["trackName"] and other.get("artistId") == song.get("artistId") and other.get("trackTimeMillis")})
 
 
 def main():
@@ -106,24 +120,25 @@ def main():
         native = {}
         for store in STORES:
             for r in apple_search(args.out, artist, store):
-                if r.get("kind") == "song" and not latin(r.get("trackName", "")):
-                    native.setdefault(r["trackTimeMillis"], []).append({"store": store, "title": r["trackName"], "artist": r["artistName"], "album": r.get("collectionName", "")})
+                if r.get("kind") == "song" and r.get("artistId") and r.get("trackTimeMillis") and not latin(r.get("trackName", "")):
+                    native.setdefault(recording_key(r), []).append({"store": store, "title": r["trackName"], "artist": r["artistName"], "album": r.get("collectionName", "")})
         picked = []
         for r in us:
-            if not latin(r["trackName"]) or r["trackTimeMillis"] not in native:
+            key = recording_key(r)
+            if not r.get("artistId") or not latin(r["trackName"]) or key not in native:
                 continue
             # The app removes some edition tags before it searches. Keep plain titles here so the
             # captured query can be checked against the app's own searchQuery in MatchReplayTest.
             if args.native_artist and (any(mark in r["trackName"] for mark in "([") or " - " in r["trackName"]):
                 continue
-            if args.native_artist and not any(n["artist"] and not latin(n["artist"]) and n["artist"] != r["artistName"] for n in native[r["trackTimeMillis"]]):
+            if args.native_artist and not any(n["artist"] and not latin(n["artist"]) and n["artist"] != r["artistName"] for n in native[key]):
                 continue
-            if any(p["title"] == r["trackName"] for p in picked):
+            if any(p["title"] == r["trackName"] and p["artistId"] == r["artistId"] for p in picked):
                 continue
             picked.append({
                 "id": r["trackId"], "title": r["trackName"], "artist": r["artistName"], "album": r.get("collectionName", ""),
-                "lengthMs": r["trackTimeMillis"], "native": native[r["trackTimeMillis"]],
-                "editionsMs": sorted({o["trackTimeMillis"] for o in us if o["trackName"] == r["trackName"] and o.get("trackTimeMillis")}),
+                "artistId": r["artistId"], "lengthMs": r["trackTimeMillis"], "native": native[key],
+                "editionsMs": edition_lengths(us, r),
             })
             if len(picked) >= args.per_artist:
                 break
@@ -133,6 +148,9 @@ def main():
             if args.native_artist and not native_artist:
                 continue
             song["askedArtist"] = native_artist if args.native_artist else song["artist"]
+            artists = deezer_artists(args.out, song["askedArtist"])
+            song["deezerArtistsAnswered"] = artists is not None
+            song["deezerArtists"] = [{"id": a.get("id"), "name": a.get("name")} for a in (artists or [])]
             query = f"{song['title']} {song['askedArtist']}"
             songs_answer = ytm(args.out, query, YTM_SONGS)
             videos_answer = ytm(args.out, query, YTM_VIDEOS)
@@ -140,7 +158,7 @@ def main():
             song["ytmVideos"] = videos_answer is not None and "contents" in videos_answer
             found = deezer(args.out, query)
             song["deezerAnswered"] = found is not None
-            song["deezer"] = [{"title": d.get("title"), "artist": d.get("artist", {}).get("name"), "duration": d.get("duration")} for d in (found or [])]
+            song["deezer"] = [{"title": d.get("title"), "title_short": d.get("title_short"), "title_version": d.get("title_version"), "artist": d.get("artist", {}), "album": d.get("album", {}), "duration": d.get("duration")} for d in (found or [])]
             song["query"] = query
             songs.append(song)
     with open(os.path.join(args.out, "songs.json"), "w", encoding="utf-8") as kept:

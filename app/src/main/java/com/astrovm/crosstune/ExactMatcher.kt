@@ -44,7 +44,7 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * Version 10 doesn't take a re-recording, From THE FIRST TAKE or 重生版, for the song unless it's asked for, so First Love
  * opens 宇多田ヒカル's own, and takes a credit of two known names together, G.E.M. 鄧紫棋, as the artist's.
  */
-internal const val MATCH_VERSION = 10
+internal const val MATCH_VERSION = 11
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -313,8 +313,12 @@ internal class ExactMatcher(
             ItemType.ALBUM -> "search/album"
             else -> "search/artist"
         }
+        return searchDeezer(path, searchQuery(metadata))
+    }
+
+    private suspend fun searchDeezer(path: String, query: String): List<JSONObject> {
         val url = "https://api.deezer.com/$path".toHttpUrl().newBuilder()
-            .addQueryParameter("q", searchQuery(metadata))
+            .addQueryParameter("q", query)
             .addQueryParameter("limit", "10")
             .build()
         val answer = fetchJson(url.toString())
@@ -669,22 +673,40 @@ internal class ExactMatcher(
             videos.await() to names.await()
         }
         val rows = items.map(::row)
-        val named = rows.firstOrNull { (isTheSong(it, names) || isDeezerSong(it, names)) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) }
-        val abroad = rows.filter { isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
-        // A row the song's name names, but that says it's a take, is the song's, not its studio recording: no row only known by its
-        // artist and length takes its place, as the song may be written otherwise, and this one is the song by name.
-        val takeNamed = named == null && rows.any { (isTheSong(it, names) || isDeezerSong(it, names)) && keepsRequestedRecording(recording, it) }
-        val song = named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedEdition) ?: it }
-            ?: videoNamesSong(metadata, abroad, videos.map(::row), names)
-            ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
+        val videoRows = videos.map(::row)
+        appleSongRow(rows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+        videoRows.firstOrNull {
+            isTheSongsVideo(it, names) && isOwnVideo(it, names) && keepsRequestedRecording(recording, it, video = true)
+        }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+        addDeezerNames(metadata, names)
+        val song = songRow(metadata, rows, videoRows, names, recording)
         song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         // Someone else's video, e.g. a fan's lyrics video, only where every store answered: one that failed may have named the
         // artist's own row, as only the US store names 米津玄師 Kenshi Yonezu.
-        videos.map(::row).firstOrNull {
+        videoRows.firstOrNull {
             isTheSongsVideo(it, names) && (names.complete || isOwnVideo(it, names)) && keepsRequestedRecording(recording, it, video = true)
         }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), final = names.complete, lasting = names.everyStore)
+    }
+
+    private fun appleSongRow(rows: List<Row>, names: Names, recording: RequestedRecording): Row? {
+        val named = rows.firstOrNull { isTheSong(it, names) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) } ?: return null
+        val abroad = rows.filter { isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
+        return linkedEditionInAnotherScript(named, abroad, names.linkedEdition) ?: named
+    }
+
+    private fun songRow(metadata: MusicMetadata, rows: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording): Row? {
+        // An Apple-proved row wins even when a Deezer-only row comes first.
+        appleSongRow(rows, names, recording)?.let { return it }
+        val named = rows.firstOrNull { isDeezerSong(it, names) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) }
+        val abroad = rows.filter { isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
+        // A row the song's name names, but that says it's a take, is the song's, not its studio recording: no row only known by its
+        // artist and length takes its place, as the song may be written otherwise, and this one is the song by name.
+        val takeNamed = named == null && rows.any { (isTheSong(it, names) || isDeezerSong(it, names)) && keepsRequestedRecording(recording, it) }
+        return named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedEdition) ?: it }
+            ?: videoNamesSong(metadata, abroad, videos, names)
+            ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
     }
 
     /** Keep a recording note separate when an unbracketed guest credit runs up to it. */
@@ -959,23 +981,23 @@ internal class ExactMatcher(
      * Spring Day and 松原みき for Miki Matsubara. Deezer can name a song row when its title and length match.
      */
     private class Names(
-        val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, japaneseTitle: String?,
-        val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?, val deezerNames: List<DeezerName>,
+        val titles: Set<String>, val artists: Set<String>, var lengthsMs: List<Long>, japaneseTitle: String?,
+        val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?, var deezerNames: List<DeezerName>,
         /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
         val takeOnAlbum: Boolean,
         /**
          * No store that could prove a row failed to answer: when one did, a name or a length that would have proved
          * the artist's own row may be missing. See [namesOf].
          */
-        val complete: Boolean,
+        var complete: Boolean,
         /**
          * Every store that could name the song answered. When one didn't, what its name finds may be missing, even where
          * the names are [complete]: Japan's alone may name Lemon (Music Box) as YouTube Music has it. See [remembered].
          */
-        val everyStore: Boolean
+        var everyStore: Boolean
     ) {
         /** Apple, or Deezer, knows recordings of the song that differ in length: a live take may be one. */
-        val severalRecordings = lengthsMs.any { one -> lengthsMs.any { other -> one - other > SAME_SONG_LENGTH_MS } }
+        val severalRecordings get() = lengthsMs.any { one -> lengthsMs.any { other -> one - other > SAME_SONG_LENGTH_MS } }
 
         val romanizedJapanese by lazy {
             japaneseTitle?.let { Readings.of(listOf(it), Script.JAPANESE).single().typed }
@@ -1021,11 +1043,6 @@ internal class ExactMatcher(
             unanswered = stores.zip(elsewhere).filter { it.second.second }.map { it.first }
         }
         val homes = SongNames.storesWriting((titles + artists).joinToString(""))
-        val asked = Asked()
-        val needsLength = lengthsMs.isEmpty()
-        val deezer = asked.answer { searchDeezer(metadata) }.orEmpty()
-        addDeezerLength(metadata, deezer, lengthsMs)
-        val deezerNames = deezerNames(metadata, deezer, knownLengths(metadata, found?.editions.orEmpty()))
         val album = found?.editions?.singleOrNull()?.takeIf {
             matches(metadata, it.optString("trackName"), it.optString("artistName")) &&
                 metadata.lengthMs?.let { length -> sameRecordingLength(it.optLong("trackTimeMillis"), length) } != false
@@ -1034,8 +1051,8 @@ internal class ExactMatcher(
             val collection = it.optString("collectionName")
             liveAlbum(collection) || Takes.saysAnotherTake(collection) != null
         }
-        val complete = !(found == null && searching.failed) && unanswered.none { it == "US" || it in homes } && !(needsLength && asked.failed)
-        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, deezerNames, takeOnAlbum, complete, complete && unanswered.isEmpty())
+        val complete = !(found == null && searching.failed) && unanswered.none { it == "US" || it in homes }
+        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, emptyList(), takeOnAlbum, complete, complete && unanswered.isEmpty())
     }
 
     /**
@@ -1061,19 +1078,50 @@ internal class ExactMatcher(
         if (lengths.isEmpty()) deezerLength(metadata, results)?.let(lengths::add)
     }
 
-    private fun knownLengths(metadata: MusicMetadata, editions: List<JSONObject>): List<Long> =
-        listOfNotNull(metadata.lengthMs?.takeIf { it > 0 }) + editions.mapNotNull {
-            it.optLong("trackTimeMillis").takeIf { length -> length > 0 }
+    /** Ask Deezer only after the names already known can't prove a row or the artist's own video. */
+    private suspend fun addDeezerNames(metadata: MusicMetadata, names: Names) {
+        val lengths = listOfNotNull(metadata.lengthMs?.takeIf { it > 0 }) + names.lengthsMs
+        val wanted = SongNames.artists(metadata.artist)
+        val appleNamedArtist = names.artists.any { artist -> SongNames.artists(artist).none(wanted::contains) }
+        val needArtist = !appleNamedArtist && metadata.artist.isNotBlank() && lengths.isNotEmpty()
+        val needsLength = names.lengthsMs.isEmpty()
+        if (!needArtist && !needsLength) return
+        val asked = Asked()
+        val (tracks, artists) = coroutineScope {
+            val tracks = async { asked.answer { searchDeezer(metadata) }.orEmpty() }
+            val artists = async { if (needArtist) asked.answer { searchDeezer("search/artist", metadata.artist) }.orEmpty() else emptyList() }
+            tracks.await() to artists.await()
         }
+        val foundLengths = names.lengthsMs.toMutableList()
+        addDeezerLength(metadata, tracks, foundLengths)
+        names.lengthsMs = foundLengths
+        names.deezerNames = deezerNames(metadata, tracks, lengths, artists.firstOrNull())
+        if (needsLength && asked.failed) {
+            names.complete = false
+            names.everyStore = false
+        }
+    }
+
+    private val deezerCollaboration = phoneRegex("""[,+&]|\bfeat(?:uring)?\.?""", RegexOption.IGNORE_CASE)
+
+    private fun variousArtists(name: String) = "variousartists" in SongNames.artists(name)
 
     /** Only the asked title and artist were searched, so an empty name cannot identify an alternate artist. */
-    private fun deezerNames(metadata: MusicMetadata, results: List<JSONObject>, lengths: List<Long>): List<DeezerName> {
+    private fun deezerNames(metadata: MusicMetadata, results: List<JSONObject>, lengths: List<Long>, first: JSONObject?): List<DeezerName> {
         if (metadata.title.isBlank() || metadata.artist.isBlank()) return emptyList()
+        val name = first?.optString("name").orEmpty()
+        val artistId = first?.optLong("id") ?: 0
+        if (artistId <= 0 || name.isBlank()) return emptyList()
+        if (variousArtists(name) || deezerCollaboration.containsMatchIn(name)) return emptyList()
         return results.mapNotNull { result ->
             val title = MetadataParsers.deezerTitle(result)
-            val artist = result.optJSONObject("artist")?.optString("name").orEmpty()
+            val credit = result.optJSONObject("artist")
+            val artist = credit?.optString("name").orEmpty()
+            val album = result.optJSONObject("album")?.optString("title").orEmpty()
             val length = result.optLong("duration") * 1000
+            if (credit?.optLong("id") != artistId || variousArtists(artist)) return@mapNotNull null
             if (length <= 0) return@mapNotNull null
+            if (SongNames.saysAnotherVersion(title, metadata.title, metadata.artist) || SongNames.saysAnotherVersion(album, metadata.title, metadata.artist)) return@mapNotNull null
             if (!SongNames.same(metadata.title, title) || lengths.none { sameRecordingLength(length, it) }) return@mapNotNull null
             DeezerName(title, artist, length)
         }

@@ -815,6 +815,7 @@ class ExactMatcherTest {
         apple: Map<String, String> = emptyMap(),
         elsewhere: Map<String, String> = emptyMap(),
         deezer: String = "[]",
+        deezerArtists: String = "[]",
         /** The stores whose searches and lookups fail, as offline; the rest that don't have the song answer with none. */
         failing: Set<String> = emptySet(),
         /** The stores Apple says don't exist, with a 400, as Iran's. */
@@ -832,6 +833,7 @@ class ExactMatcherTest {
                 request.url.host == "itunes.apple.com" && request.url.encodedPath == "/search" ->
                     FakeSpotify.html(request, """{"results":[${apple[store].orEmpty()}]}""")
                 request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[${elsewhere[store].orEmpty()}]}""")
+                request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist" -> FakeSpotify.html(request, """{"data":$deezerArtists}""")
                 request.url.host == "api.deezer.com" -> FakeSpotify.html(request, """{"data":$deezer}""")
                 else -> FakeSpotify.html(request, youTubeMusicPage(*(if (FakeSpotify.bodyOf(request).contains(VIDEOS_TAB)) videos else songs).toTypedArray()))
             }
@@ -1210,15 +1212,17 @@ class ExactMatcherTest {
         for (album in listOf("Karaoke", "Cover", "Instrumental", "Live")) {
             assertNull(album, find("Artist", album))
         }
-        val various = """[{"title":"Song","artist":{"id":1,"name":"Various Artists"},"duration":240}]"""
-        namesAndTabs(songs = listOf(youTubeMusicRow("Song", "Various Artists • Album • 4:00", videoId = "wrong000000")), deezer = various)
-        val answer = fake.handler
-        fake.handler = { request ->
-            if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist") {
-                FakeSpotify.html(request, """{"data":[{"id":1,"name":"Artist"}]}""")
-            } else answer(request)
+        for (credit in listOf("Various Artists", "Various Artists & Artist")) {
+            val various = """[{"title":"Song","artist":{"id":1,"name":"$credit"},"duration":240}]"""
+            namesAndTabs(songs = listOf(youTubeMusicRow("Song", "$credit • Album • 4:00", videoId = "wrong000000")), deezer = various)
+            val answer = fake.handler
+            fake.handler = { request ->
+                if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist") {
+                    FakeSpotify.html(request, """{"data":[{"id":1,"name":"Artist"}]}""")
+                } else answer(request)
+            }
+            assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
         }
-        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
     }
 
     @Test
@@ -1226,11 +1230,11 @@ class ExactMatcherTest {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")
         fun find(deezer: String, rows: List<String> = listOf(row), wanted: MusicMetadata = song, apple: Map<String, String> = emptyMap()): String? {
-            namesAndTabs(songs = rows, deezer = deezer, apple = apple)
+            namesAndTabs(songs = rows, deezer = deezer, deezerArtists = """[{"id":1,"name":"Artist"}]""", apple = apple)
             return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, wanted) }
         }
         fun track(title: String = "Song", artist: String = "Artist", duration: Int = 240) =
-            """[{"title":"$title","artist":{"name":"$artist"},"duration":$duration}]"""
+            """[{"title":"$title","artist":{"id":1,"name":"$artist"},"duration":$duration}]"""
         val found = "https://music.youtube.com/watch?v=original000"
         assertEquals(found, find(track(duration = 243)))
         assertTrue(fake.requestedUrls.any { it.toHttpUrl().host == "api.deezer.com" && it.toHttpUrl().queryParameter("q") == "Song アーティスト" })
