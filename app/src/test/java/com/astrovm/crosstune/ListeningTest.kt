@@ -696,24 +696,6 @@ class ListeningTest {
     }
 
     @Test
-    fun radioGardenDoesNotCheckAQueueClaimThatExpiredBeforeTheBarWasShown() {
-        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
-        radioGardenCatalog(lengthMs = 180_000L)
-        prefs().edit().putBoolean("playing_bar", false).commit()
-        val hearing = FakeHearing()
-        MainActivity.hearingFactory = { hearing }
-        allowMicrophone()
-        launch()
-        waitUntil(TIMEOUT_MS) { field(controllerModel(), "queueCheck") != null }
-        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(91))
-        composeRule.runOnIdle { controllerModel().setPlayingBar(true) }
-        waitUntil(TIMEOUT_MS) { hearing.listens > 0 || fake.requestedUrls.any { "itunes.apple.com/search?" in it } }
-        assertEquals(1, hearing.listens)
-        assertTrue(fake.requestedUrls.none { "itunes.apple.com/search?" in it })
-        assertTrue(shown("1LIVE"))
-    }
-
-    @Test
     fun radioGardenConfirmsALongVowelSpelledWithAWaveDash() {
         radioGarden("1LIVE", "Band - スーパースター")
         radioGardenCatalog(title = "スーパ～スタ〜", artist = "Band")

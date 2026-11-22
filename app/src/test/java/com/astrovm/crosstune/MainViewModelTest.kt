@@ -495,6 +495,25 @@ class MainViewModelTest {
     private val untitled = Unnamed("com.example.untitled", "Untitled Player", null, said = false)
 
     @Test
+    fun radioGardenDoesNotCheckAQueueClaimThatExpiredBeforeTheBarWasShown() {
+        val playback = FakePlayback()
+        val ears = EarsOnThePhone(Heard.Nothing)
+        val model = radioModel(ears, playback)
+        val radio = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE",
+            queueSong = MusicMetadata("A PLACE TO GO", "The Kid LAROI"))
+        playback.unnamed.value = radio
+        idle()
+        assertEquals(PlayingUnnamed(radio), model.uiState.playingUnnamed)
+        assertTrue(ears.asked.isEmpty())
+        pass(91_000)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(listOf(true), ears.asked)
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com/search?" in it })
+        assertEquals(PlayingUnnamed(radio), model.uiState.playingUnnamed)
+    }
+
+    @Test
     fun aStationWithoutPlaybackStateIsNamedByEarAndATapOpensTheSongHeard() {
         // Simple Radio says only the station's name (Issue #1000): what it plays is heard, as for any station.
         val hears = EarsOnThePhone(heardSong())
