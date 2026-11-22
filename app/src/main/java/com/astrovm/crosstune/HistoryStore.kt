@@ -190,7 +190,7 @@ private fun MusicMetadata.withMissingCatalogueDetails(latest: MusicMetadata): Mu
         album = album ?: latest.album
     )
 
-/** Match by track ID or by a name unique in both lists with a compatible length. */
+/** Use a name unique in both lists with a compatible length only when the saved track has no ID. */
 private fun List<MusicMetadata>.withMissingTrackDetails(latest: List<MusicMetadata>): List<MusicMetadata> {
     if (isEmpty()) return latest
     if (latest.isEmpty()) return this
@@ -199,9 +199,12 @@ private fun List<MusicMetadata>.withMissingTrackDetails(latest: List<MusicMetada
     val savedNames = groupByTo(sortedMapOf(catalogueNameOrder)) { it }
     return map { saved ->
         val id = RecordingKey.trackIdentity(saved.url)
-        val match = id?.let(ids::get) ?: names[saved]?.singleOrNull()?.takeIf {
-            savedNames[saved]?.size == 1 && (id == null || RecordingKey.trackIdentity(it.url) == null) &&
-                saved.mayBeAsLongAs(it, toleranceMs = 2_000L)
+        val match = if (id != null) {
+            ids[id]
+        } else {
+            names[saved]?.singleOrNull()?.takeIf {
+                savedNames[saved]?.size == 1 && saved.mayBeAsLongAs(it, toleranceMs = 2_000L)
+            }
         }
         match?.let(saved::withMissingCatalogueDetails) ?: saved
     }
