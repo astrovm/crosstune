@@ -674,10 +674,12 @@ internal class ExactMatcher(
         }
         val rows = items.map(::row)
         val videoRows = videos.map(::row)
-        appleSongRow(rows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
-        videoRows.firstOrNull {
-            isTheSongsVideo(it, names) && isOwnVideo(it, names) && keepsRequestedRecording(recording, it, video = true)
-        }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+        if (names.appleFound) {
+            appleSongRow(rows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+            videoRows.firstOrNull {
+                isTheSongsVideo(it, names) && isOwnVideo(it, names) && keepsRequestedRecording(recording, it, video = true)
+            }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+        }
         addDeezerNames(metadata, names)
         val song = songRow(metadata, rows, videoRows, names, recording)
         song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
@@ -982,7 +984,7 @@ internal class ExactMatcher(
      */
     private class Names(
         val titles: Set<String>, val artists: Set<String>, var lengthsMs: List<Long>, japaneseTitle: String?,
-        val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?, var deezerNames: List<DeezerName>,
+        val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?, var deezerNames: List<DeezerName>, val appleFound: Boolean,
         /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
         val takeOnAlbum: Boolean,
         /**
@@ -1052,7 +1054,7 @@ internal class ExactMatcher(
             liveAlbum(collection) || Takes.saysAnotherTake(collection) != null
         }
         val complete = !(found == null && searching.failed) && unanswered.none { it == "US" || it in homes }
-        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, emptyList(), takeOnAlbum, complete, complete && unanswered.isEmpty())
+        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, emptyList(), found != null, takeOnAlbum, complete, complete && unanswered.isEmpty())
     }
 
     /**
@@ -1109,22 +1111,29 @@ internal class ExactMatcher(
     /** Only the asked title and artist were searched, so an empty name cannot identify an alternate artist. */
     private fun deezerNames(metadata: MusicMetadata, results: List<JSONObject>, lengths: List<Long>, first: JSONObject?): List<DeezerName> {
         if (metadata.title.isBlank() || metadata.artist.isBlank()) return emptyList()
+        val artistId = deezerArtistId(first) ?: return emptyList()
+        return results.mapNotNull { result -> deezerName(metadata, result, lengths, artistId) }
+    }
+
+    private fun deezerArtistId(first: JSONObject?): Long? {
         val name = first?.optString("name").orEmpty()
         val artistId = first?.optLong("id") ?: 0
-        if (artistId <= 0 || name.isBlank()) return emptyList()
-        if (variousArtists(name) || deezerCollaboration.containsMatchIn(name)) return emptyList()
-        return results.mapNotNull { result ->
-            val title = MetadataParsers.deezerTitle(result)
-            val credit = result.optJSONObject("artist")
-            val artist = credit?.optString("name").orEmpty()
-            val album = result.optJSONObject("album")?.optString("title").orEmpty()
-            val length = result.optLong("duration") * 1000
-            if (credit?.optLong("id") != artistId || variousArtists(artist)) return@mapNotNull null
-            if (length <= 0) return@mapNotNull null
-            if (SongNames.saysAnotherVersion(title, metadata.title, metadata.artist) || SongNames.saysAnotherVersion(album, metadata.title, metadata.artist)) return@mapNotNull null
-            if (!SongNames.same(metadata.title, title) || lengths.none { sameRecordingLength(length, it) }) return@mapNotNull null
-            DeezerName(title, artist, length)
-        }
+        if (artistId <= 0 || name.isBlank()) return null
+        if (variousArtists(name) || deezerCollaboration.containsMatchIn(name)) return null
+        return artistId
+    }
+
+    private fun deezerName(metadata: MusicMetadata, result: JSONObject, lengths: List<Long>, artistId: Long): DeezerName? {
+        val title = MetadataParsers.deezerTitle(result)
+        val credit = result.optJSONObject("artist")
+        val artist = credit?.optString("name").orEmpty()
+        val album = result.optJSONObject("album")?.optString("title").orEmpty()
+        val length = result.optLong("duration") * 1000
+        if (credit?.optLong("id") != artistId || variousArtists(artist)) return null
+        if (length <= 0) return null
+        if (SongNames.saysAnotherVersion(title, metadata.title, metadata.artist) || SongNames.saysAnotherVersion(album, metadata.title, metadata.artist)) return null
+        if (!SongNames.same(metadata.title, title) || lengths.none { sameRecordingLength(length, it) }) return null
+        return DeezerName(title, artist, length)
     }
 
     /**
