@@ -836,6 +836,23 @@ class ReadingsTest {
     }
 
     @Test
+    fun anIpadicBridgeKeepsItsModernLookup() {
+        fun check() {
+            val tokenizer = SmallKanaTokenizer { Readings.oldKana }
+            for ((line, lookup) in mapOf("思ふっっ" to "思う", "思ひっっ" to "思い")) {
+                val bridge = tokenizer.tokenize(line).filterIsInstance<SmallKanaTokenizer.BridgedToken>().single()
+                val word = Readings.words(line, Script.JAPANESE).single()
+                assertEquals(line, line, word.text)
+                assertEquals(line, lookup, word.lookup)
+                assertEquals(line, false, bridge.jmdict)
+                assertEquals(line, line, bridge.surface)
+            }
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
     fun katakanaSmallTsuKeepsItsWord() {
         fun check() {
             val line = "きゅうッりい"
