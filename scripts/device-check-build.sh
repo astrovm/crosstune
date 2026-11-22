@@ -31,11 +31,11 @@ main() {
     local here=$PWD head status sha tree source=app/src/androidTest/java/com/astrovm/crosstune/$runner.kt
     head=$(git rev-parse HEAD)
     status=$(git status --porcelain)
-    [[ $dirty == true || -z $status ]] || { echo "Commit the candidate before building it" >&2; return 1; }
-    # What an earlier build left goes first, so a build that fails, even before it starts, leaves no APKs of another
-    # commit to be taken for it.
+    # What an earlier build left goes first, so a build that fails or is refused leaves no APKs of another commit to
+    # be taken for it.
     local out=build/$name apks=(app-debug.apk app-debug-androidTest.apk)
     rm -f "${apks[@]/#/$out/}" "$out/head.txt" "$out/sha256.txt"
+    [[ $dirty == true || -z $status ]] || { echo "Commit the candidate before building it" >&2; return 1; }
     sha=$head tree=$here
     if [[ -n $at ]]; then
         sha=$(git rev-parse --verify --quiet "$at^{commit}") || { echo "No commit $at" >&2; return 1; }

@@ -48,6 +48,9 @@ echo change > "$repo/notes.txt"
 if build OfflineChordCheck chordcheck; then fail "a dirty tree built"; fi
 grep -q "Commit the candidate" "$work/out" || fail "the refusal doesn't say why"
 [[ ! -e $repo/build/chordcheck ]] || fail "a refused build wrote its folder"
+# Nor does it leave what an earlier build of that folder made.
+if build PracticeClockCheck clockcheck; then fail "a dirty tree built over an earlier build"; fi
+[[ -z $(ls -A "$repo/build/clockcheck") ]] || fail "a refused build left an earlier build's files: $(ls "$repo/build/clockcheck")"
 
 # --dirty builds them, and lists the changes under the commit.
 build --dirty CaptureCheck capturecheck || fail "--dirty didn't build: $(cat "$work/out")"
