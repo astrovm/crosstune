@@ -76,6 +76,12 @@ class MatcherRealAnswersTest {
     // isn't remembered as missing, and it's asked again, when Apple answers. Not at once, as a practice card asks again
     // straight away: then nothing's asked, as Apple is likely still down.
     @Test
+    fun lemonOpensWhenAppleIsDownAndDeezerNamesTheSameRecording() {
+        appleDown = { true }
+        assertEquals(LEMON_SONG, find(LEMON, 256_000L))
+    }
+
+    @Test
     fun lemonIsAskedAgainWhenAppleWasDown() {
         val matcher = matcher()
         for (length in listOf(null, 256_000L, 280_000L)) {
