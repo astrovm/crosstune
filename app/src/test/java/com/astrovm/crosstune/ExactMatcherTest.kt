@@ -1163,6 +1163,36 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aFailedDeezerArtistSearchIsRetriedWhenAppleKnowsTheLength() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト")
+        val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")
+        val fan = youTubeMusicRow("Song - アーティスト", "Fan • 1M views • 4:00", videoId = "fan00000000")
+        val track = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"duration":240}]"""
+        namesAndTabs(songs = listOf(row), videos = listOf(fan), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)), deezer = track, deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        val answer = fake.handler
+        var offline = true
+        fake.handler = { request ->
+            if (offline && request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist") throw IOException("offline")
+            answer(request)
+        }
+        var clock = 0L
+        val matcher = ExactMatcher(fake.client(), "US", now = { clock })
+        assertEquals(ExactMatcher.Match.Failed, matcher.lookFor(MusicService.YOUTUBE_MUSIC, song))
+        offline = false
+        clock += ExactMatcher.UNSURE_FOR_MS
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=original000"), matcher.lookFor(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun deezerCanFindTheArtistWhenItsTrackSuppliesTheOnlyLength() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト")
+        val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")
+        val track = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"duration":240}]"""
+        namesAndTabs(songs = listOf(row), deezer = track, deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        assertEquals("https://music.youtube.com/watch?v=original000", matcher().find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
     fun anAppleProvedSongDoesNotWaitForDeezer() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")
