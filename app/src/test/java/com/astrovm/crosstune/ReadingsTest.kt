@@ -765,6 +765,9 @@ class ReadingsTest {
         assertEquals("ryuunna mo", line.romanized)
         assertEquals("ryuunna mo", line.typed)
         assertEquals(listOf("ちいさ", "なゃ"), Readings.words("ちいさなゃ", Script.JAPANESE).map { it.text })
+        val after = Readings.words("りゅうっさくら", Script.JAPANESE)
+        assertEquals("さくら", after.last().text)
+        assertEquals("さくら", after.last().lookup)
     }
 
     @Test
