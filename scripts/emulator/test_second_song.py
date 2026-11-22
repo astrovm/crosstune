@@ -7,6 +7,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import second_song
@@ -14,19 +15,33 @@ import second_song
 DEVICELOCK = Path(__file__).resolve().parents[1] / "devicelock.py"
 
 
+SAMSUNG = "R5CT1234ABC          device usb:1-1 product:b0qxxx model:SM_S908E device:b0q transport_id:1"
+OTHER = "R5CT9999XYZ          device usb:1-2 product:a52 model:SM_A525F device:a52q transport_id:2"
+
+
+def listing(*rows):
+    return "List of devices attached\n" + "".join(row + "\n" for row in rows)
+
+
 class SharedDeviceTest(unittest.TestCase):
     def test_the_samsung_found_by_its_model_or_passed_by_its_serial(self):
-        self.assertEqual("samsung", second_song.shared_device("R5CT1234ABC", "R5CT1234ABC"))
+        self.assertEqual("samsung", second_song.shared_device("R5CT1234ABC", listing(SAMSUNG, OTHER)))
+
+    def test_a_samsung_passed_by_its_serial_next_to_another_of_its_model(self):
+        # samsung_serial() refuses two, but the one passed with --serial is still the Samsung's turn.
+        twin = SAMSUNG.replace("R5CT1234ABC", "R5CT5678DEF")
+        self.assertEqual("samsung", second_song.shared_device("R5CT5678DEF", listing(SAMSUNG, twin)))
 
     def test_a_test_emulator_by_its_port(self):
         for name, spec in second_song.EMULATORS.items():
-            self.assertEqual(name, second_song.shared_device(f"emulator-{spec['port']}", "R5CT1234ABC"))
-            self.assertEqual(name, second_song.shared_device(f"emulator-{spec['port']}", None))
+            serial = f"emulator-{spec['port']}"
+            self.assertEqual(name, second_song.shared_device(serial, listing(SAMSUNG, f"{serial}  device product:sdk_gphone64 model:sdk_gphone64_x86_64")))
+            self.assertEqual(name, second_song.shared_device(serial, listing()))
 
     def test_no_other_device(self):
-        self.assertIsNone(second_song.shared_device("emulator-5554", "R5CT1234ABC"))
-        self.assertIsNone(second_song.shared_device("R5CT9999XYZ", "R5CT1234ABC"))
-        self.assertIsNone(second_song.shared_device("R5CT9999XYZ", None))
+        self.assertIsNone(second_song.shared_device("emulator-5554", listing(SAMSUNG, "emulator-5554  device model:sdk_gphone64_x86_64")))
+        self.assertIsNone(second_song.shared_device("R5CT9999XYZ", listing(SAMSUNG, OTHER)))
+        self.assertIsNone(second_song.shared_device("R5CT9999XYZ", listing(OTHER)))
 
 
 class DeadlineTest(unittest.TestCase):
@@ -107,6 +122,29 @@ class TurnTest(unittest.TestCase):
         self.assertLess(putting_back, took + lease)
         self.assertGreater(putting_back, time.monotonic() + lease - 30)
         self.assertEqual("samsung: free", self.lock("who", "samsung").strip())
+
+    def test_the_turn_ends_when_the_holders_note_says_not_when_take_returns(self):
+        # On a busy machine take can return a while after the holder's clock started: the note's end is the one kept.
+        took = time.monotonic()
+        self.lock("take", "samsung", "--who", "late turn", "--minutes", "1")
+        holder = self.lock("who", "samsung")
+        self.assertIn("held by late turn", holder)
+        pid = holder.split("pid ")[1].split()[0]
+        self.assertLess(second_song.lease_end(pid), took + 60)
+        self.assertGreater(second_song.lease_end(pid), time.monotonic() + 55)
+        with self.assertRaises(RuntimeError):
+            second_song.lease_end("999999999")
+
+    def test_a_turn_already_over_leaves_the_next_agents_turn_alone(self):
+        pair = second_song.turn("samsung", "second song test")
+        pair.__enter__()
+        # The holder let go at the end of its minutes, and another agent in the same session took the device after.
+        self.lock("release", "samsung", "--who", "second song test")
+        self.lock("take", "samsung", "--who", "another agent", "--minutes", "1")
+        with mock.patch.object(second_song.time, "monotonic", return_value=time.monotonic() + 3600):
+            pair.__exit__(None, None, None)
+        self.assertIsNone(second_song.deadline)
+        self.assertIn("held by another agent", self.lock("who", "samsung"))
 
 
 if __name__ == "__main__":

@@ -7,7 +7,8 @@ The Samsung SM-S908E is selected by model. Each pair takes it through `scripts/d
 line behind other agents, and lets it go after. Don't hold the device yourself while it runs:
 its first pair would wait for your turn to end. A pair holds the device for at most 10 minutes.
 It stops 5 minutes before that, so it can put Crosstune back as it was before the lock lets go,
-and no command starts that could run past the lock.
+and no command starts that could run past the lock. The turn's end is the one devicelock.py's holder
+writes down. A pair whose turn is already over doesn't release the device, which may be another agent's by then.
 `second_song.py` saves and restores Crosstune's preferences. It reads Android's
 activity tasks and the visible accessibility tree and takes a screenshot for each
 song. `--keep-playing` leaves the destination running between the first and second

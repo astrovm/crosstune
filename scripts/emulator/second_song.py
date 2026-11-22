@@ -19,10 +19,13 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import adbtool
+import devicelock
 
 APP = 'com.astrovm.crosstune.dev'
 SERVICES = {
@@ -61,10 +64,12 @@ def run(command, **kwargs):
     return result.stdout
 
 
-def shared_device(serial, samsung):
-    """The name devicelock.py shares serial's device by: the Samsung when serial is samsung's, even passed with --serial,
-    a test emulator by its port. None for any other device, which no one else takes turns on."""
-    if serial == samsung:
+def shared_device(serial, devices):
+    """The name devicelock.py shares serial's device by: the Samsung when its row in devices, what `adb devices -l`
+    prints, has the Samsung's model, even passed with --serial and next to another; a test emulator by its port. None
+    for any other device, which no one else takes turns on."""
+    row = next((line.split() for line in devices.splitlines() if line.split()[:1] == [serial]), [])
+    if f'model:{adbtool.SAMSUNG_MODEL}' in row:
         return 'samsung'
     return next((name for name, spec in EMULATORS.items() if serial == f"emulator-{spec['port']}"), None)
 
@@ -79,9 +84,8 @@ def turn(device, who):
     if device is None:
         yield lambda: None
         return
-    subprocess.run([sys.executable, str(DEVICELOCK), 'take', device, '--who', who, '--minutes', str(PAIR_MINUTES)], check=True, stdout=subprocess.DEVNULL)
-    # A few seconds early: the holder's own clock started a moment before take returned.
-    end = time.monotonic() + PAIR_MINUTES * 60 - 5
+    holder = subprocess.run([sys.executable, str(DEVICELOCK), 'take', device, '--who', who, '--minutes', str(PAIR_MINUTES)], check=True, capture_output=True, text=True).stdout
+    end = lease_end(holder)
     deadline = end - RESTORE_SECONDS
 
     def restoring():
@@ -92,7 +96,20 @@ def turn(device, who):
         yield restoring
     finally:
         deadline = None
-        subprocess.run([sys.executable, str(DEVICELOCK), 'release', device, '--who', who], check=True, stdout=subprocess.DEVNULL)
+        # Once the turn is over the holder has let go by itself, and the device may be another agent's turn now:
+        # releasing it by name or by session could end theirs.
+        if time.monotonic() < end:
+            subprocess.run([sys.executable, str(DEVICELOCK), 'release', device, '--who', who], check=True, stdout=subprocess.DEVNULL)
+
+
+def lease_end(holder):
+    """When, by time.monotonic(), the turn devicelock.py's holder (its pid, what take prints) keeps ends: from the
+    holder's own note, as it can start a while before take returns, on a busy machine. The note's times are cut to
+    the second, so this is a moment early at most."""
+    note = devicelock.read_note(devicelock.holder_path(int(holder.split()[-1])))
+    if not note or not note.get('until'):
+        raise RuntimeError(f'devicelock.py took the device but left no note for holder {holder.strip()}')
+    return time.monotonic() + (datetime.fromisoformat(note['until']) - datetime.now().astimezone()).total_seconds()
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -181,7 +198,7 @@ def main():
         # Each launch argument is its own token, including text containing spaces.
         device('open', APP, *[token for item in extra for token in ['--launch-args', item]])
 
-    shared = shared_device(serial, samsung)
+    shared = shared_device(serial, devices)
     who = f'second_song.py {args.phase} {os.getpid()}'
     for target, label in SERVICES.items():
         if args.service and target != args.service:
