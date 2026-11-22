@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -1789,44 +1790,118 @@ class ExactMatcherTest {
     }
 
     @Test
-    @OptIn(ExperimentalCoroutinesApi::class)
+    fun aLateFailureReturnsTheHoldSavedMeanwhile() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("late-failed-hold").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, timeoutMs = 30_000, now = { 4_000 }, wallNow = { 100_000 })
+        val started = CompletableDeferred<Unit>()
+        val mayAnswer = CountDownLatch(1)
+        fake.handler = { request ->
+            started.complete(Unit)
+            check(mayAnswer.await(30, SECONDS))
+            FakeSpotify.html(request, "{}", code = 503)
+        }
+        val late = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
+        val pending = ExactMatcher.Lookup(ExactMatcher.Match.WaitingForNames, ExactMatcher.Retry(100_000))
+        val saved = try {
+            withTimeout(10_000) { started.await() }
+            namesAndTabs(videos = listOf(fan, own), apple = apple, failing = setOf("JP"))
+            assertEquals(pending, finder.lookup(MusicService.YOUTUBE_MUSIC, song))
+            cache.entries()
+        } finally {
+            mayAnswer.countDown()
+        }
+        assertEquals(pending, late.await())
+        assertEquals(saved, cache.entries())
+    }
+
+    @Test
+    fun aSecondLookupWaitsForTheSavedRetryToReachDisk() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("retry-flush").toFile().resolve("lookups.json")
+        val disk = PausedCacheDisk()
+        val cache = LookupCache(file, disk)
+        cache.entries()
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, missingForMs = 60_000, now = { 4_000 })
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+        val expected = ExactMatcher.Lookup(
+            ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), ExactMatcher.Retry()
+        )
+        disk.pause()
+        val first = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
+        val second = try {
+            withTimeout(10_000) { disk.writing.await() }
+            fake.requestedUrls.clear()
+            val retry = async(start = CoroutineStart.UNDISPATCHED) {
+                finder.lookup(MusicService.YOUTUBE_MUSIC, song).also {
+                    assertEquals(cache.entries(), LookupCache(file, Dispatchers.Unconfined).entries())
+                }
+            }
+            assertTrue("The second lookup waits for the pending write", !retry.isCompleted)
+            assertTrue("The provisional upload is still only in memory", !file.exists())
+            retry
+        } finally {
+            disk.resume()
+        }
+        assertEquals(expected, second.await())
+        assertEquals(expected, first.await())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
     fun anotherSongCanMatchWhileAnOutageAnswerFlushes() = runBlocking {
         val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
         val other = MusicMetadata("Different Song", "Different Artist")
         val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
         val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
         val file = kotlin.io.path.createTempDirectory("slow-flush").toFile().resolve("lookups.json")
-        val disk = StandardTestDispatcher()
-        val paused = AtomicBoolean()
-        val writing = CompletableDeferred<Unit>()
-        val dispatcher = object : CoroutineDispatcher() {
-            override fun dispatch(context: CoroutineContext, block: Runnable) {
-                if (paused.get()) {
-                    disk.dispatch(context, block)
-                    writing.complete(Unit)
-                } else {
-                    Dispatchers.Default.dispatch(context, block)
-                }
-            }
-        }
-        val cache = LookupCache(file, dispatcher)
+        val disk = PausedCacheDisk()
+        val cache = LookupCache(file, disk)
         cache.entries()
         val finder = ExactMatcher(fake.client(), "AR", cache = cache)
         namesAndTabs(
             videos = listOf(fan), apple = apple, failing = setOf("JP"),
             deezer = """[{"title":"Different Song","link":"https://www.deezer.com/track/1","artist":{"name":"Different Artist"}}]"""
         )
-        paused.set(true)
+        disk.pause()
         val upload = async { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) }
         try {
-            withTimeout(10_000) { writing.await() }
+            withTimeout(10_000) { disk.writing.await() }
             val known = withTimeoutOrNull(10_000) { finder.lookFor(MusicService.DEEZER, other) }
             assertEquals(ExactMatcher.Match.Found("https://www.deezer.com/track/1"), known)
         } finally {
+            disk.resume()
+        }
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), upload.await())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private class PausedCacheDisk : CoroutineDispatcher() {
+        private val disk = StandardTestDispatcher()
+        private val paused = AtomicBoolean()
+        val writing = CompletableDeferred<Unit>()
+
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            if (paused.get()) {
+                disk.dispatch(context, block)
+                writing.complete(Unit)
+            } else {
+                Dispatchers.Default.dispatch(context, block)
+            }
+        }
+
+        fun pause() { paused.set(true) }
+
+        fun resume() {
             paused.set(false)
             disk.scheduler.runCurrent()
         }
-        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), upload.await())
     }
 
     @Test
