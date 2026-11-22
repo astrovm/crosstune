@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.os.SystemClock
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -72,7 +73,7 @@ internal class ExactMatcher(
      * ChatGPT asked again, each time it's opened; none by default.
      */
     private val missingForMs: Long = 0,
-    private val now: () -> Long = System::currentTimeMillis,
+    private val now: () -> Long = SystemClock::elapsedRealtime,
     /** How long a search has, and then ChatGPT to pick from what it found. */
     private val timeoutMs: Long = TIMEOUT_MS,
     private val pickTimeoutMs: Long = PICK_TIMEOUT_MS,

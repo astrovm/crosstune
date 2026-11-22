@@ -122,7 +122,7 @@ class MatcherRealAnswersTest {
     fun springDayOpensItsSongWhileJapansLookupFails() {
         kept = SPRING_DAY
         appleDown = { it.encodedPath == "/lookup" && it.queryParameter("country") == "JP" }
-        assertEquals(ExactMatcher.Match.Found(SPRING_DAY.opens.orEmpty()), runBlocking {
+        assertEquals(ExactMatcher.Match.Found(SPRING_DAY.opens.orEmpty(), lasting = false), runBlocking {
             matcher().lookFor(MusicService.YOUTUBE_MUSIC, SPRING_DAY.metadata)
         })
     }

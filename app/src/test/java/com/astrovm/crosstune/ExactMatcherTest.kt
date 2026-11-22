@@ -1470,7 +1470,7 @@ class ExactMatcherTest {
         val cover = youTubeMusicRow("${song.title} (Cover)", "ザ・ブルーハーツ - Topic • 1M views • 3:04", videoId = "cover000000")
         val other = youTubeMusicRow(song.title, "더 블루 하츠 - Topic • 1M views • 3:04", videoId = "other000000")
         namesAndTabs(videos = listOf(unplayable, cover, other, fan), apple = apple, failing = setOf("JP"))
-        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), runBlocking {
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), runBlocking {
             matcher().lookFor(MusicService.YOUTUBE_MUSIC, song)
         })
     }
