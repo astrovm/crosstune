@@ -55,7 +55,7 @@ class RightIdsTest(unittest.TestCase):
 class PrepareTest(unittest.TestCase):
     def test_the_answers_kept_are_named_where_in_the_folder_so_a_copy_of_it_finds_them(self):
         with tempfile.TemporaryDirectory() as out:
-            song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon Kenshi Yonezu")
+            song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon 米津玄師", askedArtist="米津玄師", ytmSongs=True, ytmVideos=True, deezerAnswered=True)
             with open(os.path.join(out, "songs.json"), "w", encoding="utf-8") as kept:
                 json.dump([song], kept)
             os.mkdir(os.path.join(out, "raw"))
@@ -67,13 +67,15 @@ class PrepareTest(unittest.TestCase):
                 with open(os.path.join(out, "raw", key + ".json"), "w", encoding="utf-8") as kept:
                     json.dump({}, kept)
             with contextlib.redirect_stderr(io.StringIO()):
-                replay.prepare(out)
+                replay.prepare(out, require_answers=True)
             with open(os.path.join(out, "replay.json"), encoding="utf-8") as kept:
                 [prepared] = json.load(kept)
             for name in ("songs", "videos"):
                 self.assertFalse(os.path.isabs(prepared[name]))
                 self.assertTrue(prepared[name].startswith("raw" + os.sep))
                 self.assertTrue(os.path.isfile(os.path.join(out, prepared[name])))
+            self.assertEqual("米津玄師", prepared["artist"])
+            self.assertEqual(255_000, prepared["lengthMs"])
 
     def test_answers_never_kept_are_none(self):
         with tempfile.TemporaryDirectory() as out:
@@ -86,6 +88,8 @@ class PrepareTest(unittest.TestCase):
                 [prepared] = json.load(kept)
             self.assertIsNone(prepared["songs"])
             self.assertIsNone(prepared["videos"])
+            with self.assertRaisesRegex(ValueError, "Missing YouTube Music or Deezer answer"):
+                replay.prepare(out, require_answers=True)
 
 
 if __name__ == "__main__":

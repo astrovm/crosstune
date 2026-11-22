@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Replay the songs collect.py kept through the real ExactMatcher, without the network.
 
-    python3 scripts/matchcheck/replay.py prepare OUT       # OUT/replay.json: what each song is served, and which results are right
-    python3 scripts/matchcheck/replay.py run OUT LABEL      # MatchReplayTest in the Gradle box, in this checkout: OUT/replay-LABEL.json
+    python3 scripts/matchcheck/replay.py prepare OUT --require-answers  # fail if a search wasn't captured
+    python3 scripts/matchcheck/replay.py run OUT LABEL [--apple-down]   # run in the Gradle box
     python3 scripts/matchcheck/replay.py table OUT LABEL [--against OTHER] [-v]
 
 Each song is looked for on YouTube Music as a link from another service would ask for it: by its
@@ -12,6 +12,7 @@ Music with the songs and videos it gave. Four ways:
 1. "names": the JP, KR and TW names served; "latin": not, as when a store has no other name.
 2. "alone": no ChatGPT; "asked": ChatGPT picks a right result when it's shown one, and none otherwise.
 
+A collected length is passed to the matcher. With --apple-down every Apple request fails.
 A song result is right when one of its names is a name a store gives the song, by its artist. A video
 is right when it's named so, says no other version, and is the artist's; or names the artist, where
 no song result and no video of the artist's is right, as someone else's lyrics video is no match where
@@ -117,13 +118,15 @@ def read_json(path):
         return json.load(kept)
 
 
-def prepare(out):
+def prepare(out, require_answers=False):
     with open(os.path.join(out, "songs.json"), encoding="utf-8") as kept:
         songs = json.load(kept)
     replay = []
     for song in songs:
         query = song["query"]
         songs_path, videos_path = ytm_path(out, query, collect.YTM_SONGS), ytm_path(out, query, collect.YTM_VIDEOS)
+        if require_answers and (not songs_path or not videos_path or not song.get("ytmSongs") or not song.get("ytmVideos") or not song.get("deezerAnswered")):
+            raise ValueError(f"Missing YouTube Music or Deezer answer for {query}")
         results = analyze.rows(read_json(songs_path)) if songs_path else []
         videos = analyze.rows(read_json(videos_path)) if videos_path else []
         names = {r["id"]: f"{r['name']} | {' • '.join(r['details'])}" for r in results + videos if r["id"]}
@@ -131,7 +134,7 @@ def prepare(out):
         for n in song["native"]:
             native.setdefault(n["store"], {"trackId": song["id"], "trackName": n["title"], "artistName": n["artist"], "collectionName": n["album"], "trackTimeMillis": song["lengthMs"]})
         replay.append({
-            "title": song["title"], "artist": song["artist"],
+            "title": song["title"], "artist": song.get("askedArtist", song["artist"]), "lengthMs": song["lengthMs"],
             "us": [{"trackId": song["id"], "trackName": song["title"], "artistName": song["artist"], "collectionName": song["album"], "trackTimeMillis": ms}
                    for ms in (song["editionsMs"] or [song["lengthMs"]])],
             "native": native,
@@ -145,11 +148,11 @@ def prepare(out):
     print(f"{len(replay)} songs, {sum(1 for s in replay if s['right'])} with a right result", file=sys.stderr)
 
 
-def run(out, label):
+def run(out, label, apple_down=False):
     """MatchReplayTest in the checkout this is run in, which may be another, e.g. origin/main's, with the same test file
     and gradle-box.sh; run again each time, as Gradle doesn't see that what it's served changed."""
     root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
-    env = dict(os.environ, MATCHCHECK_DIR=os.path.abspath(out), MATCHCHECK_LABEL=label, GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
+    env = dict(os.environ, MATCHCHECK_DIR=os.path.abspath(out), MATCHCHECK_LABEL=label, MATCHCHECK_APPLE_DOWN="1" if apple_down else "0", GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
     subprocess.run(["nice", "-n", "10", os.path.join(root, "scripts/gradle-box/gradle-box.sh"), "--max-workers=2",
                     ":app:testDebugUnitTest", "--tests", "*MatchReplayTest", "--rerun"], cwd=root, env=env, check=True)
 
@@ -204,12 +207,14 @@ def main():
     parser.add_argument("out")
     parser.add_argument("label", nargs="?", default="head")
     parser.add_argument("--against")
+    parser.add_argument("--apple-down", action="store_true", help="make Apple requests fail")
+    parser.add_argument("--require-answers", action="store_true", help="fail preparation if a YouTube Music answer is missing")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     if args.action == "prepare":
-        prepare(args.out)
+        prepare(args.out, args.require_answers)
     elif args.action == "run":
-        run(args.out, args.label)
+        run(args.out, args.label, args.apple_down)
     else:
         table(args.out, args.label, args.against, args.verbose)
 

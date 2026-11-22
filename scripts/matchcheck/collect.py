@@ -7,7 +7,10 @@ names, found by the same length to the millisecond. For each song, YouTube Music
 video search and Deezer's search are asked as the app asks them. Every answer is kept in
 OUT/raw, so replay.py can serve it again without the network.
 
-    python3 scripts/matchcheck/collect.py OUT [--per-artist N]
+    python3 scripts/matchcheck/collect.py OUT [--per-artist N] [--native-artist]
+
+With --native-artist, search by the US title and a native-store artist, to exercise names written
+otherwise. Songs without another artist name are skipped.
 
 Nothing is sent but searches by an artist's or a song's name.
 """
@@ -82,7 +85,8 @@ def ytm(out, query, params):
 def deezer(out, query):
     """Deezer's track search, asked as the app asks it: "title artist", ten results."""
     asked = urllib.parse.urlencode({"q": query, "limit": 10})
-    return (fetch(out, "https://api.deezer.com/search/track?" + asked, pause=0.3) or {}).get("data", [])
+    answer = fetch(out, "https://api.deezer.com/search/track?" + asked, pause=0.3)
+    return None if answer is None or "error" in answer else answer.get("data", [])
 
 
 def latin(text):
@@ -93,6 +97,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("out")
     parser.add_argument("--per-artist", type=int, default=4)
+    parser.add_argument("--native-artist", action="store_true", help="search with the artist's native name")
     args = parser.parse_args()
     os.makedirs(os.path.join(args.out, "raw"), exist_ok=True)
     songs = []
@@ -107,6 +112,8 @@ def main():
         for r in us:
             if not latin(r["trackName"]) or r["trackTimeMillis"] not in native:
                 continue
+            if args.native_artist and not any(n["artist"] and not latin(n["artist"]) and n["artist"] != r["artistName"] for n in native[r["trackTimeMillis"]]):
+                continue
             if any(p["title"] == r["trackName"] for p in picked):
                 continue
             picked.append({
@@ -118,10 +125,18 @@ def main():
                 break
         print(f"{artist}: {len(us)} in US, {len(native)} native lengths, {len(picked)} picked", file=sys.stderr)
         for song in picked:
-            query = f"{song['title']} {song['artist']}"
-            song["ytmSongs"] = ytm(args.out, query, YTM_SONGS) is not None
-            song["ytmVideos"] = ytm(args.out, query, YTM_VIDEOS) is not None
-            song["deezer"] = [{"title": d.get("title"), "artist": d.get("artist", {}).get("name"), "duration": d.get("duration")} for d in deezer(args.out, query)]
+            native_artist = next((n["artist"] for n in song["native"] if n["artist"] and not latin(n["artist"]) and n["artist"] != song["artist"]), None)
+            if args.native_artist and not native_artist:
+                continue
+            song["askedArtist"] = native_artist if args.native_artist else song["artist"]
+            query = f"{song['title']} {song['askedArtist']}"
+            songs_answer = ytm(args.out, query, YTM_SONGS)
+            videos_answer = ytm(args.out, query, YTM_VIDEOS)
+            song["ytmSongs"] = songs_answer is not None and "contents" in songs_answer
+            song["ytmVideos"] = videos_answer is not None and "contents" in videos_answer
+            found = deezer(args.out, query)
+            song["deezerAnswered"] = found is not None
+            song["deezer"] = [{"title": d.get("title"), "artist": d.get("artist", {}).get("name"), "duration": d.get("duration")} for d in (found or [])]
             song["query"] = query
             songs.append(song)
     with open(os.path.join(args.out, "songs.json"), "w", encoding="utf-8") as kept:

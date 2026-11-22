@@ -1122,6 +1122,34 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun deezerNamesOnlyTheSameTimedSongInItsSearch() {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")
+        fun find(deezer: String, rows: List<String> = listOf(row), wanted: MusicMetadata = song, apple: Map<String, String> = emptyMap()): String? {
+            namesAndTabs(songs = rows, deezer = deezer, apple = apple)
+            return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, wanted) }
+        }
+        fun track(title: String = "Song", artist: String = "Artist", duration: Int = 240) =
+            """[{"title":"$title","artist":{"name":"$artist"},"duration":$duration}]"""
+        val found = "https://music.youtube.com/watch?v=original000"
+        assertEquals(found, find(track(duration = 243)))
+        assertTrue(fake.requestedUrls.any { it.toHttpUrl().host == "api.deezer.com" && it.toHttpUrl().queryParameter("q") == "Song アーティスト" })
+        assertNull(find(track(duration = 244)))
+        assertNull(find(track(duration = 0)))
+        assertNull(find(track(title = "Other")))
+        assertNull(find(track(artist = "")))
+        assertNull(find(track(), wanted = song.copy(artist = "")))
+        assertNull(find(track(), wanted = song.copy(lengthMs = null)))
+        assertEquals(found, find(track(), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 4:03", videoId = "original000"))))
+        assertNull(find(track(), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 4:04", videoId = "original000"))))
+        assertNull(find(track(), rows = listOf(youTubeMusicRow("Song", "Artist • Album", videoId = "original000"))))
+        assertNull(find(track(), rows = listOf(youTubeMusicRow("Song", "Artist • Album • 4:00"))))
+        assertNull(find(track(), rows = listOf(youTubeMusicRow("Song", "Other • Album • 4:00", videoId = "original000"))))
+        assertNull(find(track(), rows = listOf(youTubeMusicRow("Other", "Artist • Album • 4:00", videoId = "original000"))))
+        assertEquals(found, find(track(), wanted = song.copy(lengthMs = null), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000))))
+    }
+
+    @Test
     fun anArtistGivenInItsOwnScriptIsFoundByItsNameInLatinLetters() {
         // Korea's store credits Magnetic to 아일릿, the US store and YouTube Music to ILLIT.
         val song = MusicMetadata("Magnetic", "아일릿", lengthMs = 160_688)

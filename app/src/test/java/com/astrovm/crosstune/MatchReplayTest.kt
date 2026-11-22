@@ -72,11 +72,12 @@ class MatchReplayTest {
         }
         // Long whiles, as a busy machine is no answer from a service here: each answer is kept.
         val matcher = ExactMatcher(fake.client(), "US", pick = if (asked) pick else { _, _, _ -> null }, timeoutMs = WHILE_MS, pickTimeoutMs = WHILE_MS)
-        return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata(song.getString("title"), song.getString("artist"))) }
+        return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = song.optLong("lengthMs").takeIf { it > 0 })) }
     }
 
     private fun answer(request: Request, song: JSONObject, answers: Map<String, String?>, names: Boolean): okhttp3.Response {
         val url = request.url
+        if (url.host == "itunes.apple.com" && System.getenv("MATCHCHECK_APPLE_DOWN") == "1") throw IOException("Apple is down")
         return when {
             url.host == "itunes.apple.com" && url.encodedPath == "/search" ->
                 FakeSpotify.html(request, JSONObject().put("results", if (url.queryParameter("country") == "US") song.getJSONArray("us") else JSONArray()).toString())

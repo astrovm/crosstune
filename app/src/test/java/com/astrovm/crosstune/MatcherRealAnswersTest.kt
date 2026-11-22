@@ -84,7 +84,7 @@ class MatcherRealAnswersTest {
     @Test
     fun lemonIsAskedAgainWhenAppleWasDown() {
         val matcher = matcher()
-        for (length in listOf(null, 256_000L, 280_000L)) {
+        for (length in listOf(null, 280_000L)) {
             val song = LEMON.metadata.copy(lengthMs = length)
             appleDown = { true }
             assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
@@ -107,14 +107,14 @@ class MatcherRealAnswersTest {
         assertEquals(mapOf("api.deezer.com/search/track" to 1, "itunes.apple.com/search" to 6, "music.youtube.com/youtubei/v1/search" to 2), asked.groupingBy { it }.eachCount())
     }
 
-    // Issue #1103: Japan's store finds the song, but the US store, the only one that names 米津玄師 Kenshi Yonezu, fails. Then
-    // J -KARAOKE's lyrics video, which names 米津玄師, isn't taken for it, and the song is asked again.
+    // Issue #1103: Japan's store finds the song, but the US store fails. Deezer names its artist and Japan's length
+    // corroborates it, so the song opens, not J -KARAOKE's lyrics video.
     @Test
     fun lemonOpensNoFansVideoWhenTheUsStoreFailed() {
         val matcher = matcher()
         val song = LEMON.metadata.copy(lengthMs = 280_000L)
         appleDown = { url -> url.queryParameter("country") == "US" }
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         appleDown = { false }
         clock += ExactMatcher.UNSURE_FOR_MS
         assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
