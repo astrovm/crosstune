@@ -166,21 +166,7 @@ class LinkInterceptionTest {
         val fork = "org.example.android.apps.youtube.music"
         val plainYouTube = "org.example.android.youtube"
         shadowOf(app).checkActivities(true)
-        listOf(fork, plainYouTube).forEach { name ->
-            shadowOf(app.packageManager).installPackage(installedApp(name, name))
-            val opens = ComponentName(name, "$name.UrlActivity")
-            shadowOf(app.packageManager).addActivityIfNotPresent(opens)
-            shadowOf(app.packageManager).addIntentFilterForActivity(
-                opens, IntentFilter(Intent.ACTION_VIEW).apply {
-                    addCategory(Intent.CATEGORY_DEFAULT)
-                    addCategory(Intent.CATEGORY_BROWSABLE)
-                    addDataScheme("https")
-                    addDataAuthority("music.youtube.com", null)
-                    addDataAuthority("www.youtube.com", null)
-                    addDataAuthority("youtu.be", null)
-                }
-            )
-        }
+        listOf(fork, plainYouTube).forEach { name -> installLinkOpener(app, name, name, "music.youtube.com", "www.youtube.com", "youtu.be") }
         // An app of some other service that opens no such link is not mistaken for one.
         shadowOf(app.packageManager).installPackage(installedApp("org.example.player", "Player"))
         val state = interception.linkState()

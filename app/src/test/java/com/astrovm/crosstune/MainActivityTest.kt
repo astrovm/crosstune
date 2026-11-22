@@ -669,6 +669,69 @@ class MainActivityTest {
     }
 
     @Test
+    fun aLinkSetToOpenInABuildFoundByItsLinksWaitsForAndroidToSayItsThere() {
+        val piko = "app.piko.android.apps.youtube.music"
+        val inPiko = Destination.Service(MusicService.YOUTUBE_MUSIC, piko)
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.YOUTUBE_MUSIC.packageName })
+        installLinkOpener(app, piko, "YT Music Piko", "music.youtube.com")
+        DestinationStore(prefs(), { listOf(piko) }).setDefault(inPiko)
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        // Android's answer about apps and links is held, so the song is found before Piko is.
+        val gate = Gate().apply { held = true }
+        MainActivity.systemDispatcher = gate
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))
+        waitUntil { ViewModelProvider(activity)[MainViewModel::class.java].uiState.result != null }
+        // Not in YouTube Music's own app meanwhile, nor asked where.
+        assertNull(shadowOf(app).peekNextStartedActivity())
+        assertFalse(ViewModelProvider(activity)[MainViewModel::class.java].uiState.showDestinationPicker)
+        gate.letGo()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(piko, checkNotNull(nextStartedActivity()) { "Expected a started activity" }.`package`)
+    }
+
+    @Test
+    fun theSongOnScreenIsFoundAgainForABuildFoundByItsLinksOnceAndroidSaysItsThere() {
+        val piko = "app.piko.android.apps.youtube.music"
+        val inPiko = Destination.Service(MusicService.YOUTUBE_MUSIC, piko)
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.YOUTUBE_MUSIC.packageName })
+        installLinkOpener(app, piko, "YT Music Piko", "music.youtube.com")
+        DestinationStore(prefs(), { listOf(piko) }).setDefault(inPiko)
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        val gate = Gate().apply { held = true }
+        MainActivity.systemDispatcher = gate
+        val activity = launch()
+        resolveTyped()
+        fun state() = ViewModelProvider(activity)[MainViewModel::class.java].uiState
+        // Found for YouTube Music's own app, the only one known yet.
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC), state().resultDestination)
+        assertTrue(Destination.Service(MusicService.YOUTUBE_MUSIC) in state().destinationUrls)
+        gate.letGo()
+        waitUntil { inPiko in state().destinationUrls }
+        assertEquals(inPiko, state().resultDestination)
+    }
+
+    @Test
+    fun aLinkSharedWithNoAppChosenBeforeAndroidSaysWhatsThereShowsHereAndIsFoundForTheOnlyMusicApp() {
+        prefs().edit().remove("default_target").commit()
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.DEEZER.packageName })
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        // Android's answer about apps and links is held, so the song is found before Deezer is known as the only music app.
+        val gate = Gate().apply { held = true }
+        MainActivity.systemDispatcher = gate
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))
+        fun state() = ViewModelProvider(activity)[MainViewModel::class.java].uiState
+        waitUntil { state().result != null }
+        gate.letGo()
+        // With no app chosen it shows here, so nothing opens nor asks where, as Deezer is saved once known; the song
+        // is found for it.
+        waitUntil { Destination.Service(MusicService.DEEZER) in state().destinationUrls }
+        assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
+        assertEquals(Destination.Service(MusicService.DEEZER), state().resultDestination)
+        assertFalse(state().showDestinationPicker)
+        assertNull(shadowOf(app).peekNextStartedActivity())
+    }
+
+    @Test
     fun viewIntentWithoutDataShowsInvalidUrlError() {
         launch(Intent(Intent.ACTION_VIEW))
         assertTextShown(string(R.string.error_invalid_url))
@@ -7264,6 +7327,25 @@ class MainActivityTest {
         waitUntil(TIMEOUT_MS) { prefs().getString("default_target", null) != null }
         assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
         assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC, morphe), ViewModelProvider(activity)[MainViewModel::class.java].uiState.defaultDestination)
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
+
+        // The only one a build Crosstune has no name for, found by the links it opens: songs open in it, not in YouTube
+        // Music's own app, which isn't there.
+        freshInstall()
+        shadowOf(app.packageManager).removePackage(morphe)
+        val piko = "app.piko.android.apps.youtube.music"
+        installLinkOpener(app, piko, "YT Music Piko", "music.youtube.com")
+        val inPiko = launch()
+        waitUntil(TIMEOUT_MS) { prefs().getString("default_target", null) != null }
+        assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
+        val state = ViewModelProvider(inPiko)[MainViewModel::class.java].uiState
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC, piko), state.defaultDestination)
+        assertTrue(Destination.Service(MusicService.YOUTUBE_MUSIC, piko) in state.destinations)
+        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
+
+        // Saved already, nothing's picked when Crosstune opens again, and the saved choice still opens in it once found.
+        val again = launch()
+        waitUntil(TIMEOUT_MS) { ViewModelProvider(again)[MainViewModel::class.java].uiState.defaultDestination.packageName == piko }
     }
 
     @Test
