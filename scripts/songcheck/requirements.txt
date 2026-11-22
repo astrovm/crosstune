@@ -12,7 +12,7 @@ ctranslate2==4.9.0
     # via faster-whisper
 faster-whisper==1.2.1
     # via -r /tmp/crosstune-smart/requirements.txt
-filelock==4.2.10
+filelock==4.2.12
     # via huggingface-hub
 flatbuffers==25.12.19
     # via onnxruntime
