@@ -554,6 +554,7 @@ class ListeningTest {
         val song = "The Kid LAROI - A PLACE TO GO"
         val queueSubtitle = radioGarden("1LIVE", song)
         radioGardenCatalog(lengthMs = 180_000L)
+        ShadowLog.setLoggable(TIMING_LOG, android.util.Log.DEBUG)
         launch()
         waitForText("A PLACE TO GO")
         val main = shadowOf(Looper.getMainLooper())
@@ -573,6 +574,12 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
         assertFalse(shown("A PLACE TO GO"))
+        val logs = ShadowLog.getLogsForTag(TIMING_LOG).map { it.msg }
+        for (status in listOf("new", "confirmed", "kept", "forgotten")) {
+            assertTrue(logs.any { "radio queue check=$status station=1LIVE" in it })
+        }
+        assertTrue(logs.any { "radio queue source station=1LIVE" in it && "Die junge Nacht der ARD" in it })
+        assertFalse("radio queue" in TimingLog.lastMinute())
     }
 
     @Test
@@ -595,6 +602,21 @@ class ListeningTest {
         assertTrue(shown("First Song"))
         composeRule.runOnIdle { queueSubtitle("Band - Second Song") }
         waitForText("Second Song")
+        assertFalse(shown("First Song"))
+    }
+
+    @Test
+    fun radioGardenDropsTheConfirmedTitleWhenTheStationChanges() {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", queueSong = MusicMetadata("First Song", "Band"))
+        val radio = FakePlayback().apply { access = true; unnamed.value = station }
+        MainActivity.playbackFactory = { radio }
+        radioGardenCatalog("First Song", "Band")
+        launch()
+        waitForText("First Song")
+
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(name = "Groove Salad", queueSong = null) }
+        waitForText("Groove Salad")
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
         assertFalse(shown("First Song"))
     }
 

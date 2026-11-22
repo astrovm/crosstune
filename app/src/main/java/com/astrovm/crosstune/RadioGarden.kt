@@ -1,9 +1,11 @@
 package com.astrovm.crosstune
 
 import android.media.session.MediaSession
+import android.util.Log
 import androidx.core.util.PatternsCompat
 import java.text.Normalizer
 import java.util.Locale
+import org.json.JSONObject
 
 /** Radio Garden puts the station in the queue title and the stream's text or the city in its subtitle. */
 internal object RadioGarden {
@@ -38,7 +40,13 @@ internal object RadioGarden {
 
     /** The stream's claim, to check in a catalog before showing it. */
     fun queueSong(station: String, queue: List<MediaSession.QueueItem>?, activeId: Long? = null): MusicMetadata? {
-        val item = activeItem(queue.orEmpty(), activeId)?.description ?: return null
+        val items = queue.orEmpty()
+        val item = activeItem(items, activeId)?.description
+        if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) {
+            val text = item?.subtitle?.toString()?.take(240)?.let(JSONObject::quote)
+            Log.d(TIMING_LOG, "radio queue source station=$station activeId=$activeId items=${items.size} item=${item?.title} subtitle=$text")
+        }
+        if (item == null) return null
         // The queue and session metadata can arrive separately when the user changes stations.
         if (item.title?.toString() != station) return null
         val subtitle = item.subtitle?.toString()?.trim() ?: return null
