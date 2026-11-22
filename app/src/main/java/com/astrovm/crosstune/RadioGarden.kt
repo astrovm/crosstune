@@ -83,9 +83,8 @@ internal object RadioGarden {
 
     private fun hasKeyValue(text: String): Boolean = text.indices.any { at ->
         if (text[at] != '=') return@any false
-        var before = at - 1
-        while (text.getOrNull(before)?.isWhitespace() == true) before--
-        val last = text.getOrNull(before) ?: return@any false
+        val before = (at - 1 downTo 0).firstOrNull { !text[it].isWhitespace() } ?: return@any false
+        val last = text[before]
         last in "_.:-" || Character.isLetterOrDigit(text.codePointBefore(before + 1))
     }
 
