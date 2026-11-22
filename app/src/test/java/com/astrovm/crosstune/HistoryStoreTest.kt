@@ -330,6 +330,17 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun aCatalogueRefreshKeepsAnIdentifiedTrackWhenItsIdIsMissing() {
+        val link = checkNotNull(MusicLinks.linkFor("https://www.deezer.com/playlist/123"))
+        val track = MusicMetadata("Same name", "Band", url = "https://www.deezer.com/track/2", lengthMs = 100_000)
+        val saved = MusicMetadata("Mix", "", ItemType.PLAYLIST, tracks = listOf(track))
+        val entry = HistoryEntry(link, saved, albumChecked = false)
+        val latest = saved.copy(tracks = listOf(track.copy(url = null, album = "Unrelated Album")))
+
+        assertEquals(track, entry.afterAlbumLookup(latest).metadata.tracks.single())
+    }
+
+    @Test
     fun aCatalogueRefreshKeepsUnlinkedTracksWithDifferentVersionsOrLengths() {
         val version = MusicMetadata("Song (Take 1-2)", "Band", lengthMs = 100_000)
         val longer = MusicMetadata("Another Song", "Band", lengthMs = 100_000)
