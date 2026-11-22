@@ -1198,6 +1198,15 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anEmptySongSearchDoesNotAskDeezerForAnArtistName() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        namesAndTabs()
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        val deezer = fake.requestedUrls.map { it.toHttpUrl() }.filter { it.host == "api.deezer.com" }
+        assertEquals(listOf("/search/track"), deezer.map { it.encodedPath })
+    }
+
+    @Test
     fun anAppleProvedSongDoesNotWaitForDeezer() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")
@@ -2036,11 +2045,11 @@ class ExactMatcherTest {
         assertEquals(2, asked.get())
 
         // Nothing found is an answer, so it is not asked twice: once among the songs, once among the
-        // videos, Apple in two stores, and Deezer for its tracks and artist. Failing twice gives up.
+        // videos, Apple in two stores, and Deezer for its tracks. Failing twice gives up.
         asked.set(0)
         fake.handler = { request -> asked.incrementAndGet(); FakeSpotify.html(request, """{"contents":{}}""") }
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
-        assertEquals(6, asked.get())
+        assertEquals(5, asked.get())
         asked.set(0)
         fake.handler = { asked.incrementAndGet(); throw IOException("offline") }
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
