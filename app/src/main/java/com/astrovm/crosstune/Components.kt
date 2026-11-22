@@ -27,6 +27,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DividerDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.Layout
@@ -69,6 +70,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -394,4 +397,25 @@ internal fun Modifier.slidesSideways(): Modifier {
             if (event.type == KeyEventType.KeyDown) focus.moveFocus(direction)
             true
         }
+}
+
+/** A tick by the choice picked in a menu, so it's clear which it is without its color; nothing by the others. */
+@Composable
+internal fun PickedMark(picked: Boolean) {
+    if (picked) AppIcon(R.drawable.ic_check, contentDescription = null, modifier = Modifier.size(20.dp).testTag(PICKED_TAG))
+}
+
+/** The tick by a menu's picked choice, which says nothing of its own: the choice is heard as selected. */
+internal const val PICKED_TAG = "picked"
+
+/** One choice in a menu, with [icon] before it and a tick by the one [picked], which TalkBack hears as selected too. */
+@Composable
+internal fun PickedChoice(text: String, picked: Boolean, onClick: () -> Unit, icon: (@Composable () -> Unit)? = null) {
+    DropdownMenuItem(
+        text = { Text(text) },
+        leadingIcon = icon,
+        trailingIcon = { PickedMark(picked) },
+        modifier = Modifier.semantics { selected = picked },
+        onClick = onClick
+    )
 }

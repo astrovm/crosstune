@@ -12,6 +12,12 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -102,6 +108,55 @@ class SettingsScreenTest {
     }
 
     @Test
+    fun theMusicAppsMenuTicksTheAppItIsSetToAsTheOtherSettingsDo() {
+        val spotify = Destination.Service(MusicService.SPOTIFY)
+        val deezer = Destination.Service(MusicService.DEEZER)
+        show(UiState(destinations = listOf(spotify, deezer), defaultDestination = deezer))
+        composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
+        composeRule.waitForIdle()
+        // One tick, by the app it's set to, not its color alone, which says nothing to someone who can't tell it apart.
+        composeRule.onAllNodes(hasTestTag(PICKED_TAG), useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText(string(R.string.service_spotify))), useUnmergedTree = true).assertIsNotSelected()
+        composeRule.onNode(isSelected() and hasAnyDescendant(hasText(string(R.string.target_deezer))) and hasAnyDescendant(hasTestTag(PICKED_TAG)), useUnmergedTree = true)
+            .assertExists()
+    }
+
+    @Test
+    fun theMusicAppsMenuListsTheAppsOnThePhoneThenMoreAndClosesOnAPick() {
+        val spotify = Destination.Service(MusicService.SPOTIFY)
+        val deezer = Destination.Service(MusicService.DEEZER)
+        val tidal = Destination.Service(MusicService.TIDAL)
+        val picked = mutableListOf<Destination>()
+        show(
+            UiState(destinations = listOf(spotify, deezer, tidal), defaultDestination = deezer, installed = setOf(MusicService.SPOTIFY)),
+            actions = ScreenActions(onTargetChange = { picked += it })
+        )
+        val more = string(R.string.more_button)
+        val tidalName = string(R.string.target_tidal)
+        // The app it's set to shows by its icon beside its name.
+        composeRule.onNodeWithTag("destination-icon:DEEZER", useUnmergedTree = true).assertExists()
+        fun open() {
+            composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
+            composeRule.waitForIdle()
+        }
+        // The apps on the phone and the one it's set to; the rest wait behind More.
+        open()
+        composeRule.onNodeWithText(string(R.string.service_spotify)).assertExists()
+        composeRule.onNodeWithText(tidalName).assertDoesNotExist()
+        composeRule.onNodeWithText(more).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(more).assertDoesNotExist()
+        composeRule.onNodeWithText(tidalName).performClick()
+        composeRule.waitForIdle()
+        // Picked, the menu closes; opened again, it's short again.
+        assertEquals(listOf<Destination>(tidal), picked)
+        composeRule.onNodeWithText(tidalName).assertDoesNotExist()
+        open()
+        composeRule.onNodeWithText(more).assertExists()
+        composeRule.onNodeWithText(tidalName).assertDoesNotExist()
+    }
+
+    @Test
     fun aShortValueStaysBesideItsSettingAtTheUsualFont() {
         show(UiState())
         val name = composeRule.onNodeWithText(string(R.string.setting_language), useUnmergedTree = true).performScrollTo().getBoundsInRoot()
@@ -118,6 +173,16 @@ class SettingsScreenTest {
         composeRule.onNodeWithText(string(R.string.setting_language)).performScrollTo().performClick()
         composeRule.waitForIdle()
         val flags = AppLanguage.tags.mapNotNull(AppLanguage::flag)
+        assertTrue(flags.isNotEmpty())
+        for (flag in flags) assertTrue(flag, composeRule.onAllNodesWithText(flag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun theLanguagesLeftUntranslatedAreMarkedWithTheirFlagsToo() {
+        show(UiState())
+        composeRule.onNodeWithText(string(R.string.setting_untranslated)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        val flags = AppLanguage.untranslatedTags.mapNotNull(AppLanguage::flag)
         assertTrue(flags.isNotEmpty())
         for (flag in flags) assertTrue(flag, composeRule.onAllNodesWithText(flag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
     }

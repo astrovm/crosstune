@@ -383,6 +383,8 @@ class TvPlayTest {
         assertEquals(1, composeRule.onAllNodes(hasText(string(R.string.target_youtube))).fetchSemanticsNodes().size)
         composeRule.onAllNodes(hasText(string(R.string.target_youtube)))[0].performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
+        // Picked, the menu closes: YouTube is only the chip's name now, not a row too.
+        assertEquals(1, composeRule.onAllNodes(hasText(string(R.string.target_youtube))).fetchSemanticsNodes().size)
         // Picked, the song opens in that TV app.
         composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.target_youtube)))
     }

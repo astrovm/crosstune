@@ -1250,54 +1250,6 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
 }
 
 /**
- * "Music app   Spotify ▾": the app songs open and play in, in settings. The whole row is the button,
- * so a screen reader says what's set with what it's for, and the name keeps its words whole beside
- * the app, or over it at a big font.
- */
-@Composable
-internal fun DefaultDestinationMenu(
-    destinations: List<Destination>,
-    selected: Destination,
-    onSelect: (Destination) -> Unit,
-    label: String,
-    modifier: Modifier,
-    installed: Set<MusicService>
-) {
-    var expanded by remember { mutableStateOf(false) }
-    LabelAndValue(
-        label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) },
-        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { expanded = true }.testTag(DEFAULT_MENU_TAG).then(modifier)
-    ) {
-        Box {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                DestinationIcon(selected, installed, size = 20.dp)
-                Spacer(Modifier.size(8.dp))
-                Text(selected.label(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                AppIcon(
-                    R.drawable.ic_expand_more,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(start = 4.dp)
-                        .size(18.dp)
-                        .flipWhen(expanded)
-                )
-            }
-            var all by remember(expanded) { mutableStateOf(false) }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                val short = destinations.shortList(installed, selected).takeUnless { all }
-                (short ?: destinations.installedFirst(installed)).forEach { destination ->
-                    MenuChoice(destination.label(), destination == selected, icon = { DestinationIcon(destination, installed) }) {
-                        expanded = false
-                        onSelect(destination)
-                    }
-                }
-                if (short != null) MoreChoice { all = true }
-            }
-        }
-    }
-}
-
-/**
  * The songs a typed name turned up, to pick from, since a song can be converted without its link.
  * The name searched for is on the sheet, so a list of songs says what it is a list of.
  */
@@ -1375,18 +1327,6 @@ private fun SongSearchSheet(
         confirmButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss_button)) }
         }
-    )
-}
-
-/** One choice in a dropdown, the chosen one in the accent color. */
-@Composable
-private fun MenuChoice(text: String, isSelected: Boolean, icon: @Composable () -> Unit, onClick: () -> Unit) {
-    DropdownMenuItem(
-        text = { Text(text, color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) },
-        leadingIcon = icon,
-        onClick = onClick,
-        // The color alone doesn't tell TalkBack which one is chosen.
-        modifier = Modifier.semantics { this.selected = isSelected }
     )
 }
 
@@ -1816,27 +1756,11 @@ private fun DestinationChip(state: UiState, actions: ScreenActions) {
                 modifier = Modifier.padding(start = 4.dp).size(18.dp).flipWhen(expanded)
             )
         }
-        var all by remember(expanded) { mutableStateOf(false) }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            val short = state.destinations.shortList(state.installed, state.resultDestination).takeUnless { all }
-            (short ?: state.destinations.installedFirst(state.installed)).forEach { destination ->
-                val isSelected = destination == state.resultDestination
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            destination.label(),
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                    },
-                    leadingIcon = { DestinationIcon(destination, state.installed) },
-                    onClick = {
-                        expanded = false
-                        actions.onResultTargetChange(destination)
-                    },
-                    modifier = Modifier.semantics { this.selected = isSelected }
-                )
+            DestinationChoices(state.destinations, state.installed, state.resultDestination) { destination ->
+                expanded = false
+                actions.onResultTargetChange(destination)
             }
-            if (short != null) MoreChoice { all = true }
         }
     }
 }
@@ -2129,6 +2053,17 @@ private fun Destination.isInstalled(installed: Set<MusicService>) =
 internal fun List<Destination>.shortList(installed: Set<MusicService>, chosen: Destination?): List<Destination>? =
     installedFirst(installed).filter { it == chosen || it is Destination.Custom || it.isInstalled(installed) }
         .takeIf { short -> short.size < size && short.any { it.isInstalled(installed) } }
+
+/** A menu of apps: the short list, then More for the rest, with a tick by [chosen]. Closed, it starts short again. */
+@Composable
+internal fun DestinationChoices(destinations: List<Destination>, installed: Set<MusicService>, chosen: Destination, onPick: (Destination) -> Unit) {
+    var all by remember { mutableStateOf(false) }
+    val short = destinations.shortList(installed, chosen).takeUnless { all }
+    (short ?: destinations.installedFirst(installed)).forEach { destination ->
+        PickedChoice(destination.label(), destination == chosen, onClick = { onPick(destination) }) { DestinationIcon(destination, installed) }
+    }
+    if (short != null) MoreChoice { all = true }
+}
 
 /** A menu's last item, which lists the apps left out. */
 @Composable

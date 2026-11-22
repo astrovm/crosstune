@@ -76,7 +76,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -254,14 +253,7 @@ private fun SettingsList(
         // How songs come in and go out: the app they open in, what a link does with it, and whose links Crosstune opens.
         SectionHeader(stringResource(R.string.settings_links_section))
         Group {
-            DefaultDestinationMenu(
-                destinations = state.destinations,
-                selected = state.defaultDestination,
-                onSelect = actions.onTargetChange,
-                installed = state.installed,
-                label = stringResource(R.string.settings_default_label),
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
-            )
+            DefaultDestinationRow(state, actions.onTargetChange)
             SettingSwitch(
                 label = stringResource(R.string.setting_show_in_crosstune_first),
                 description = null,
@@ -1438,12 +1430,6 @@ private fun ThemeRow(theme: ThemeMode, onSelect: (ThemeMode) -> Unit) = ChoiceRo
     onSelect
 )
 
-/** A tick by the choice picked in a menu, so it's clear which it is; nothing by the others. */
-@Composable
-private fun PickedMark(picked: Boolean) {
-    if (picked) AppIcon(R.drawable.ic_check, contentDescription = null, modifier = Modifier.size(20.dp))
-}
-
 /**
  * A setting picked from a short list, with the one picked shown beside its name as [shown]. [mark], when there's
  * one, draws a choice's icon before its name: in the list, and beside the setting for the one picked.
@@ -1458,18 +1444,54 @@ private fun <T> ChoiceRow(
     onSelect: (T) -> Unit,
     shown: String = choices.first { it.first == selected }.second,
     mark: (@Composable (choice: T, inList: Boolean) -> Unit)? = null
+) = MenuRow(label, shown, shownMark = mark?.let { { it(selected, false) } }) { close ->
+    choices.forEach { (choice, name) ->
+        PickedChoice(name, choice == selected, onClick = { close(); onSelect(choice) }, icon = mark?.let { { it(choice, true) } })
+    }
+}
+
+/**
+ * "Music app   Spotify ▾": the app songs open and play in. Its menu lists the apps on the phone first, then More for
+ * the rest, as the one under a song does.
+ */
+@Composable
+private fun DefaultDestinationRow(state: UiState, onSelect: (Destination) -> Unit) = MenuRow(
+    label = stringResource(R.string.settings_default_label),
+    shown = state.defaultDestination.label(),
+    modifier = Modifier.testTag(DEFAULT_MENU_TAG),
+    shownMark = { DestinationIcon(state.defaultDestination, state.installed, size = 20.dp) }
+) { close ->
+    DestinationChoices(state.destinations, state.installed, state.defaultDestination) { destination ->
+        close()
+        onSelect(destination)
+    }
+}
+
+/**
+ * A setting whose value, [shown] after its name, opens [menu], which is handed a way to close it. The whole row is the
+ * button, so a screen reader says what's set with what it's for, and the value keeps its words whole beside the name,
+ * or under it at a big font.
+ */
+@Composable
+private fun MenuRow(
+    label: String,
+    shown: String,
+    modifier: Modifier = Modifier,
+    shownMark: (@Composable () -> Unit)? = null,
+    menu: @Composable (close: () -> Unit) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     LabelAndValue(
         label = { LabelText(label, style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = true }
+            .clickable(role = Role.Button) { expanded = true }
+            .then(modifier)
             .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                mark?.let { Box(Modifier.padding(end = 6.dp)) { it(selected, false) } }
+                shownMark?.let { Box(Modifier.padding(end = 6.dp)) { it() } }
                 Text(
                     text = shown,
                     style = MaterialTheme.typography.bodyMedium,
@@ -1477,20 +1499,7 @@ private fun <T> ChoiceRow(
                 )
                 AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                choices.forEach { (choice, name) ->
-                    DropdownMenuItem(
-                        text = { Text(name) },
-                        leadingIcon = mark?.let { { it(choice, true) } },
-                        trailingIcon = { PickedMark(choice == selected) },
-                        modifier = Modifier.semantics { this.selected = choice == selected },
-                        onClick = {
-                            expanded = false
-                            onSelect(choice)
-                        }
-                    )
-                }
-            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) { menu { expanded = false } }
         }
     }
 }
@@ -1587,7 +1596,7 @@ private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -
         label = { LabelText(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge) },
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = true }
+            .clickable(role = Role.Button) { expanded = true }
             .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
         val none = stringResource(R.string.untranslated_none)
@@ -1607,13 +1616,7 @@ private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 AppLanguage.untranslatedTags.forEach { tag ->
                     val picked = tag in untranslated
-                    DropdownMenuItem(
-                        text = { Text(AppLanguage.displayName(tag)) },
-                        leadingIcon = { LanguageMark(tag) },
-                        trailingIcon = { PickedMark(picked) },
-                        modifier = Modifier.semantics { selected = picked },
-                        onClick = { onChange(if (picked) untranslated - tag else untranslated + tag) }
-                    )
+                    PickedChoice(AppLanguage.displayName(tag), picked, onClick = { onChange(if (picked) untranslated - tag else untranslated + tag) }) { LanguageMark(tag) }
                 }
             }
         }
@@ -1895,26 +1898,15 @@ private fun RuleMenu(rule: Destination?, fallback: Destination, destinations: Li
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text(defaultLabel) },
-                trailingIcon = { PickedMark(rule == null) },
-                modifier = Modifier.semantics { selected = rule == null },
-                onClick = {
-                    expanded = false
-                    onChange(null)
-                }
-            )
+            PickedChoice(defaultLabel, rule == null, onClick = {
+                expanded = false
+                onChange(null)
+            })
             destinations.forEach { destination ->
-                DropdownMenuItem(
-                    text = { Text(destination.label()) },
-                    leadingIcon = { DestinationIcon(destination, installed) },
-                    trailingIcon = { PickedMark(destination == rule) },
-                    modifier = Modifier.semantics { selected = destination == rule },
-                    onClick = {
-                        expanded = false
-                        onChange(destination)
-                    }
-                )
+                PickedChoice(destination.label(), destination == rule, onClick = {
+                    expanded = false
+                    onChange(destination)
+                }) { DestinationIcon(destination, installed) }
             }
         }
     }
