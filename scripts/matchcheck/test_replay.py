@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import replay
@@ -98,6 +99,16 @@ class PrepareTest(unittest.TestCase):
             self.assertIsNone(prepared["videos"])
             with self.assertRaisesRegex(ValueError, "Missing YouTube Music or Deezer answer"):
                 replay.prepare(out, require_answers=True)
+
+
+class RunTest(unittest.TestCase):
+    @patch("replay.subprocess.run")
+    def test_both_apple_states_are_requested_in_one_build(self, run):
+        run.return_value.stdout = "/checkout\n"
+        replay.run("/corpus", "head", both=True)
+        env = run.call_args_list[1].kwargs["env"]
+        self.assertEqual("1", env["MATCHCHECK_BOTH"])
+        self.assertEqual("head", env["MATCHCHECK_LABEL"])
 
 
 if __name__ == "__main__":

@@ -42,6 +42,14 @@ class MatchReplayTest {
             KINDS.associateWith { kind -> keptAnswer(song, kind)?.let { file -> runCatching { file.readText() }.getOrElse { unread += file; null } } }
         }
         assertTrue("replay.json names answers that can't be read (${unread.size}), as ${unread.take(2)}: run replay.py prepare again", unread.isEmpty())
+        val both = System.getenv("MATCHCHECK_BOTH") == "1"
+        val down = System.getenv("MATCHCHECK_APPLE_DOWN") == "1"
+        for (appleDown in if (both) listOf(false, true) else listOf(down)) {
+            replay(songs, kept, appleDown, both)
+        }
+    }
+
+    private fun replay(songs: List<JSONObject>, kept: List<Map<String, String?>>, appleDown: Boolean, both: Boolean) {
         val found = JSONObject()
         val shown = JSONObject()
         for (names in listOf(true, false)) {
@@ -50,7 +58,7 @@ class MatchReplayTest {
                 val asks = JSONArray()
                 songs.zip(kept).forEach { (song, answers) ->
                     val seen = JSONArray()
-                    urls.put(find(song, answers, names, asked, seen) ?: JSONObject.NULL)
+                    urls.put(find(song, answers, names, asked, seen, appleDown) ?: JSONObject.NULL)
                     asks.put(seen)
                 }
                 val mode = "${if (names) "names" else "latin"}, ${if (asked) "asked" else "alone"}"
@@ -59,18 +67,20 @@ class MatchReplayTest {
             }
         }
         found.put("shown", shown)
-        File(dir, "replay-${System.getenv("MATCHCHECK_LABEL") ?: "head"}.json").writeText(found.toString())
+        val label = System.getenv("MATCHCHECK_LABEL") ?: "head"
+        val suffix = if (both) if (appleDown) "-down" else "-up" else ""
+        File(dir, "replay-$label$suffix.json").writeText(found.toString())
     }
 
     /**
      * What [song] opens, with YouTube Music's kept [answers] served, and what ChatGPT was shown put in [seen], each time:
      * the rows, then what it picked.
      */
-    private fun find(song: JSONObject, answers: Map<String, String?>, names: Boolean, asked: Boolean, seen: JSONArray): String? {
+    private fun find(song: JSONObject, answers: Map<String, String?>, names: Boolean, asked: Boolean, seen: JSONArray, appleDown: Boolean): String? {
         val right = song.getJSONArray("right").let { ids -> (0 until ids.length()).map(ids::getString).toSet() }
         val shownNames = song.getJSONObject("names")
         val rightShown = right.mapNotNull { shownNames.optString(it).ifEmpty { null } }.toSet()
-        fake.handler = { request -> answer(request, song, answers, names) }
+        fake.handler = { request -> answer(request, song, answers, names, appleDown) }
         // ChatGPT, when asked, picks the first right result it's shown, and none, -1, when it's shown none.
         val pick: suspend (MusicMetadata, List<String>, Boolean) -> Int? = { _, rows, _ ->
             rows.indexOfFirst { it in rightShown }.also { seen.put(JSONArray().put(JSONArray(rows)).put(it)) }
@@ -80,9 +90,9 @@ class MatchReplayTest {
         return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = song.optLong("lengthMs").takeIf { it > 0 })) }
     }
 
-    private fun answer(request: Request, song: JSONObject, answers: Map<String, String?>, names: Boolean): okhttp3.Response {
+    private fun answer(request: Request, song: JSONObject, answers: Map<String, String?>, names: Boolean, appleDown: Boolean): okhttp3.Response {
         val url = request.url
-        if (url.host == "itunes.apple.com" && System.getenv("MATCHCHECK_APPLE_DOWN") == "1") throw IOException("Apple is down")
+        if (url.host == "itunes.apple.com" && appleDown) throw IOException("Apple is down")
         return when {
             url.host == "itunes.apple.com" && url.encodedPath == "/search" ->
                 FakeSpotify.html(request, JSONObject().put("results", if (url.queryParameter("country") == "US") song.getJSONArray("us") else JSONArray()).toString())

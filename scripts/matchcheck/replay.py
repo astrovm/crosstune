@@ -2,7 +2,7 @@
 """Replay the songs collect.py kept through the real ExactMatcher, without the network.
 
     python3 scripts/matchcheck/replay.py prepare OUT --require-answers  # fail if a search wasn't captured
-    python3 scripts/matchcheck/replay.py run OUT LABEL [--apple-down]   # run in the Gradle box
+    python3 scripts/matchcheck/replay.py run OUT LABEL [--apple-down | --both]  # --both writes LABEL-up and LABEL-down
     python3 scripts/matchcheck/replay.py table OUT LABEL [--against OTHER] [-v]
 
 Each song is looked for on YouTube Music as a link from another service would ask for it: by its
@@ -151,11 +151,11 @@ def prepare(out, require_answers=False):
     print(f"{len(replay)} songs, {sum(1 for s in replay if s['right'])} with a right result", file=sys.stderr)
 
 
-def run(out, label, apple_down=False):
+def run(out, label, apple_down=False, both=False):
     """MatchReplayTest in the checkout this is run in, which may be another, e.g. origin/main's, with the same test file
     and gradle-box.sh; run again each time, as Gradle doesn't see that what it's served changed."""
     root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
-    env = dict(os.environ, MATCHCHECK_DIR=os.path.abspath(out), MATCHCHECK_LABEL=label, MATCHCHECK_APPLE_DOWN="1" if apple_down else "0", GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
+    env = dict(os.environ, MATCHCHECK_DIR=os.path.abspath(out), MATCHCHECK_LABEL=label, MATCHCHECK_APPLE_DOWN="1" if apple_down else "0", MATCHCHECK_BOTH="1" if both else "0", GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
     subprocess.run(["nice", "-n", "10", os.path.join(root, "scripts/gradle-box/gradle-box.sh"), "--max-workers=2",
                     ":app:testDebugUnitTest", "--tests", "*MatchReplayTest", "--rerun"], cwd=root, env=env, check=True)
 
@@ -211,13 +211,14 @@ def main():
     parser.add_argument("label", nargs="?", default="head")
     parser.add_argument("--against")
     parser.add_argument("--apple-down", action="store_true", help="make Apple requests fail")
+    parser.add_argument("--both", action="store_true", help="write LABEL-up and LABEL-down in one run")
     parser.add_argument("--require-answers", action="store_true", help="fail preparation if a YouTube Music answer is missing")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     if args.action == "prepare":
         prepare(args.out, args.require_answers)
     elif args.action == "run":
-        run(args.out, args.label, args.apple_down)
+        run(args.out, args.label, args.apple_down, args.both)
     else:
         table(args.out, args.label, args.against, args.verbose)
 
