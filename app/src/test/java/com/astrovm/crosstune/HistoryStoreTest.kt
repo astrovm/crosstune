@@ -192,14 +192,19 @@ class HistoryStoreTest {
     }
 
     @Test
-    fun provisionalLinksAreNotSavedWithRecentEntries() {
+    fun recentKeepsTheHoldTimestampWithTheProvisionalLink() {
         val song = entry(1)
-        val provisional = PreparedLink("https://music.youtube.com/watch?v=fan00000000", exact = true, matchingEnabled = true, lasting = false)
-        store.add(song.copy(destinationLinks = mapOf("YOUTUBE_MUSIC" to provisional)))
-        assertEquals(listOf(song), store.load())
-        store.remember(song.link.url, "YOUTUBE_MUSIC", provisional.copy(lasting = true))
-        store.remember(song.link.url, "YOUTUBE_MUSIC", provisional)
-        assertEquals(listOf(song), HistoryStore(preferences).load())
+        val key = "YOUTUBE_MUSIC"
+        val heldAt = 4_000L
+        val waiting = PreparedLink("https://music.youtube.com/search?q=Title", false, false, ExactMatcher.Retry(heldAt))
+        val fan = PreparedLink("https://music.youtube.com/watch?v=fan00000000", true, true, ExactMatcher.Retry(heldAt))
+        store.add(song.copy(destinationLinks = mapOf(key to waiting)))
+        assertEquals(waiting, HistoryStore(preferences).load().single().destinationLinks[key])
+        store.remember(song.link.url, key, fan)
+        assertEquals(fan, HistoryStore(preferences).load().single().destinationLinks[key])
+        val own = fan.copy(url = "https://music.youtube.com/watch?v=own00000000", retry = null)
+        store.remember(song.link.url, key, own)
+        assertEquals(own, HistoryStore(preferences).load().single().destinationLinks[key])
     }
 
     @Test

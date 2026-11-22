@@ -1047,7 +1047,7 @@ internal class MainViewModel(
                 if (unnamed) listener.listenToPlaying() else listener.listen { playing ->
                     val found = checkPlayerSong(playing)
                     checked = found
-                    found?.match != ExactMatcher.Match.Missing
+                    found?.lookup?.match != ExactMatcher.Match.Missing
                 }
             } finally {
                 if (isActive) uiState = uiState.copy(listening = false)
@@ -1056,7 +1056,7 @@ internal class MainViewModel(
         }
     }
 
-    private data class CheckedPlayerSong(val song: Heard.Song, val destination: Destination, val match: ExactMatcher.Match)
+    private data class CheckedPlayerSong(val song: Heard.Song, val destination: Destination, val lookup: ExactMatcher.Lookup)
 
     /** Checks the catalog before showing the app's identification. A search that fails tells us nothing about it. */
     private suspend fun checkPlayerSong(playing: Heard.Song): CheckedPlayerSong? {
@@ -1064,7 +1064,7 @@ internal class MainViewModel(
         val destination = uiState.defaultDestination
         val service = destination.matchService ?: return null
         if (!canMatchExactly(service, playing.metadata.type)) return null
-        return CheckedPlayerSong(playing, destination, matcher.lookFor(service, playing.metadata))
+        return CheckedPlayerSong(playing, destination, matcher.lookup(service, playing.metadata))
     }
 
     /** Shows what listening found, its words too when asked for [lyrics]; [byPhone] when it's what an app on the phone plays. */
@@ -1594,7 +1594,9 @@ internal class MainViewModel(
             }
             // A search page saved while exact matching was on means matching failed that time,
             // e.g. on a flaky network, so a new request for the link tries it again.
-            is Resolution.Resolved -> onResolved(resolution, saved?.destinationLinks.orEmpty().filterValues { it.exact || !it.matchingEnabled }, checked)
+            is Resolution.Resolved -> onResolved(
+                resolution, saved?.destinationLinks.orEmpty().filterValues { !it.lasting || it.exact || !it.matchingEnabled }, checked
+            )
         }
     }
 
@@ -1617,7 +1619,7 @@ internal class MainViewModel(
     /** [prepared] are the links already found for it, when it came from Recent. */
     private suspend fun onResolved(resolution: Resolution.Resolved, prepared: Map<String, PreparedLink>, checked: CheckedPlayerSong?) {
         val namedLink = checked?.takeIf { uiState.exactMatch }?.let {
-            it.destination to preparedLink(it.destination, resolution.metadata, it.match)
+            it.destination to preparedLink(it.destination, resolution.metadata, it.lookup)
         }
         val links = if (namedLink == null) prepared else prepared + (namedLink.first.key to namedLink.second)
         val entry = HistoryEntry(resolution.link, resolution.metadata, links)
@@ -1669,7 +1671,7 @@ internal class MainViewModel(
     /** The links saved with [entry] that are still good: found with exact matching as it's set now. */
     private fun savedDestinations(entry: HistoryEntry): Map<Destination, PreparedLink> =
         uiState.destinations.mapNotNull { destination ->
-            entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { destination to it }
+            entry.destinationLinks[destination.key]?.takeIf { it.canUseFor(uiState.exactMatch) }?.let { destination to it }
         }.toMap()
 
     /** A destination or exact-match preference change prepares the current result again. */
@@ -5323,23 +5325,23 @@ internal class MainViewModel(
         // YouTube and YouTube Music share playlists and videos, so one opens as itself in the other.
         uiState.link?.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
         uiState.link?.takeIf { metadata.type == ItemType.TRACK }?.youtubeVideoOn(service)?.let { return destination.adapt(it) }
-        uiState.destinationUrls[destination]?.takeIf(PreparedLink::lasting)?.let { return it.url.forSharing() }
-        val match = if (uiState.exactMatch && service != null) {
+        val saved = uiState.destinationUrls[destination]
+        saved?.takeIf(PreparedLink::lasting)?.let { return it.url.forSharing() }
+        val lookup = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
-            matcher.lookFor(service, metadata).also { uiState = uiState.copy(isMatching = false) }
+            matcher.lookup(service, metadata, saved?.retry).also { uiState = uiState.copy(isMatching = false) }
         } else {
             null
         }
-        val prepared = preparedLink(destination, metadata, match)
+        val prepared = preparedLink(destination, metadata, lookup)
         rememberDestination(destination, prepared)
         return prepared.url.forSharing()
     }
 
-    private fun preparedLink(destination: Destination, metadata: MusicMetadata, match: ExactMatcher.Match?): PreparedLink {
-        val found = match as? ExactMatcher.Match.Found
+    private fun preparedLink(destination: Destination, metadata: MusicMetadata, lookup: ExactMatcher.Lookup?): PreparedLink {
+        val found = lookup?.match as? ExactMatcher.Match.Found
         val url = found?.url?.let(destination::adapt) ?: destination.searchUrl(searchQuery(metadata))
-        val lasting = found?.lasting != false && match != ExactMatcher.Match.WaitingForNames
-        return PreparedLink(url, found != null, matched(match), lasting)
+        return PreparedLink(url, found != null, matched(lookup?.match), lookup?.retry)
     }
 
     /**
@@ -5452,9 +5454,10 @@ internal class MainViewModel(
                 return queue.url
             }
         }
-        entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { return it.url.forSharing() }
-        val match = if (uiState.exactMatch && service != null) matcher.lookFor(service, entry.metadata) else null
-        val prepared = preparedLink(destination, entry.metadata, match)
+        val saved = entry.destinationLinks[destination.key]
+        saved?.takeIf { it.lasting && it.canUseFor(uiState.exactMatch) }?.let { return it.url.forSharing() }
+        val lookup = if (uiState.exactMatch && service != null) matcher.lookup(service, entry.metadata, saved?.retry) else null
+        val prepared = preparedLink(destination, entry.metadata, lookup)
         val history = historyStore.remember(entry.link.url, destination.key, prepared)
         uiState = uiState.copy(history = history)
         return prepared.url.forSharing()

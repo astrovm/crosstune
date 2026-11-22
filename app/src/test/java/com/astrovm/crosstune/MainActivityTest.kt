@@ -1915,7 +1915,8 @@ class MainActivityTest {
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=fan00000000", nextStartedActivity()?.dataString)
         assertTrue(fake.requestedUrls.any { "itunes.apple.com/lookup?id=7&country=JP" in it })
-        assertNull(HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"])
+        val saved = HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"]
+        assertEquals(ExactMatcher.Retry(), saved?.retry)
     }
 
     @Test
@@ -1947,25 +1948,32 @@ class MainActivityTest {
                 else -> FakeSpotify.html(request, FakeSpotify.trackPage("終わらない歌", "THE BLUE HEARTS · Song"))
             }
         }
-        val activity = launch(trackLink())
+        launch(trackLink())
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertTrue(nextStartedActivity()?.dataString.orEmpty().startsWith("https://music.youtube.com/search"))
-        assertNull(HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"])
 
-        val model = ViewModelProvider(activity)[MainViewModel::class.java]
-        fun openRecent(): String? {
+        fun restartAndOpenRecent(): String? {
+            checkNotNull(controller).destroyAndSettle()
+            File(app.cacheDir, "lookups.json").delete()
+            val model = ViewModelProvider(launch())[MainViewModel::class.java]
             composeRule.runOnIdle { model.openRecent(source) }
             waitUntil { shadowOf(app).peekNextStartedActivity() != null }
             return nextStartedActivity()?.dataString
         }
-        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(ExactMatcher.UNSURE_FOR_MS))
-        assertEquals(fan, openRecent())
-        assertNull(HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"])
+        val recent = HistoryStore(prefs())
+        val waiting = checkNotNull(recent.load().first().destinationLinks["YOUTUBE_MUSIC"])
+        val firstHold = checkNotNull(waiting.retry?.heldAtMs)
+        // The saved timestamp uses wall time, separate from Robolectric's elapsed clock.
+        val elapsedHold = ExactMatcher.Retry(firstHold - ExactMatcher.UNSURE_FOR_MS)
+        recent.remember(source, "YOUTUBE_MUSIC", waiting.copy(retry = elapsedHold))
+        assertEquals(fan, restartAndOpenRecent())
+        assertEquals(elapsedHold, HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"]?.retry)
 
         japanUp = true
-        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(ExactMatcher.UNSURE_FOR_MS))
-        assertEquals(own, openRecent())
-        assertEquals(own, HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"]?.url)
+        assertEquals(own, restartAndOpenRecent())
+        val recovered = HistoryStore(prefs()).load().first().destinationLinks["YOUTUBE_MUSIC"]
+        assertEquals(own, recovered?.url)
+        assertEquals(true, recovered?.lasting)
     }
 
     @Test

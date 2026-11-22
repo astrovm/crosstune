@@ -6,8 +6,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.abs
 
-/** A prepared destination URL. A link found during an outage can be used on the card before being looked up again. */
-internal data class PreparedLink(val url: String, val exact: Boolean, val matchingEnabled: Boolean, val lasting: Boolean = true)
+/** A prepared destination URL, with the retry it still needs if a store was down. */
+internal data class PreparedLink(
+    val url: String, val exact: Boolean, val matchingEnabled: Boolean, val retry: ExactMatcher.Retry? = null
+) {
+    val lasting: Boolean get() = retry == null
+
+    fun canUseFor(exactMatch: Boolean): Boolean = if (lasting) matchingEnabled == exactMatch else exactMatch
+}
 
 internal data class HistoryEntry(
     val link: MusicLink,
@@ -31,8 +37,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
     }
 
     fun add(entry: HistoryEntry): List<HistoryEntry> {
-        val remembered = entry.copy(destinationLinks = entry.destinationLinks.filterValues(PreparedLink::lasting))
-        val updated = (listOf(remembered) + load().filterNot { it.isSameAs(entry) }).take(MAX_ENTRIES)
+        val updated = (listOf(entry) + load().filterNot { it.isSameAs(entry) }).take(MAX_ENTRIES)
         save(updated)
         return updated
     }
@@ -41,8 +46,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
     fun remember(sourceUrl: String, destinationKey: String, prepared: PreparedLink): List<HistoryEntry> {
         val updated = load().map { entry ->
             if (entry.link.url != sourceUrl) return@map entry
-            val links = if (prepared.lasting) entry.destinationLinks + (destinationKey to prepared) else entry.destinationLinks - destinationKey
-            entry.copy(destinationLinks = links)
+            entry.copy(destinationLinks = entry.destinationLinks + (destinationKey to prepared))
         }
         save(updated)
         return updated
@@ -92,7 +96,8 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                     .put("destinations", JSONObject().apply {
                         entry.destinationLinks.forEach { (key, prepared) ->
                             put(key, JSONObject().put("url", prepared.url).put("exact", prepared.exact)
-                                .put("matchingEnabled", prepared.matchingEnabled).put("matcher", MATCH_VERSION))
+                                .put("matchingEnabled", prepared.matchingEnabled).put("matcher", MATCH_VERSION)
+                                .putOpt("retry", prepared.retry?.toJson()))
                         }
                     })
             )
@@ -117,7 +122,8 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
             val destinationUrl = value.optString("url").ifBlank { return@mapNotNull null }
             // Found the way songs were matched before, it's found again; a search for it is the same either way.
             if (value.optBoolean("exact") && value.optInt("matcher", 1) != MATCH_VERSION) return@mapNotNull null
-            key to PreparedLink(destinationUrl, value.optBoolean("exact"), value.optBoolean("matchingEnabled"))
+            val retry = value.optJSONObject("retry")?.let { ExactMatcher.Retry.fromJson(it) }
+            key to PreparedLink(destinationUrl, value.optBoolean("exact"), value.optBoolean("matchingEnabled"), retry)
         }.toMap()
         val tracks = optJSONArray("tracks")?.let { list ->
             (0 until list.length()).mapNotNull { index ->
