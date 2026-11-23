@@ -328,7 +328,7 @@ class SongSearcherTest {
         // An artist written with no letters isn't named by any search.
         assertEquals(
             listOf("Song" to "Someone", "歌" to "…"),
-            foundTitles("Song", "Song" to "Someone", "歌" to "…")
+            foundTitles("Song Thing", "Song" to "Someone", "歌" to "…")
         )
         // The artist's own music box is still another recording.
         assertEquals(
@@ -341,8 +341,31 @@ class SongSearcherTest {
     fun aWordOfTheSongThatsAlsoAnArtistDoesntLeadWithThem() {
         // "Heart" is a band, but "Heart of Glass" is Blondie's.
         assertEquals(
-            listOf("Heart of Glass" to "Blondie", "Alone" to "Heart"),
-            foundTitles("Heart of Glass", "Heart of Glass" to "Blondie", "Alone" to "Heart")
+            listOf("Heart of Glass" to "Blondie", "ハート・オブ・グラス" to "Heart"),
+            foundTitles("Heart of Glass", "Heart of Glass" to "Blondie", "ハート・オブ・グラス" to "Heart")
+        )
+        // Nor does a song of theirs whose name has none of the rest of what was typed.
+        assertEquals(
+            listOf("Glass" to "Cover Band", "Alone" to "Heart"),
+            foundTitles("Heart Glass", "Glass" to "Cover Band", "Alone" to "Heart")
+        )
+    }
+
+    @Test
+    fun theArtistAloneOrASongOfTheirsInLatinLettersKeepsDeezersOrder() {
+        // "Idol" is named in Latin letters, so it's that one, then their other songs.
+        assertEquals(
+            listOf("Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI", "Idol" to "Cover Band"),
+            foundTitles("Idol YOASOBI", "Idol" to "Cover Band", "Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI")
+        )
+        assertEquals(
+            listOf("Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI"),
+            foundTitles("YOASOBI", "Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI")
+        )
+        // An artist of two words, typed in full.
+        assertEquals(
+            listOf("感電" to "Kenshi Yonezu", "Kanden Kenshi" to "Band"),
+            foundTitles("Kanden Kenshi Yonezu", "Kanden Kenshi" to "Band", "感電" to "Kenshi Yonezu")
         )
     }
 

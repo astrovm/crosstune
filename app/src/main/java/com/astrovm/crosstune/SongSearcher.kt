@@ -48,12 +48,15 @@ internal class SongSearcher(
             // Each service's own repeated name is one song. A karaoke, a cover, a music box
             // or a piano version goes after the artist's own song. Deezer lists those first
             // when the artist is written in their own script, and Apple already has the song.
-            // Then the songs found by how their name is said, and those by the artist typed
-            // whose name is in another script: Deezer can't tell "Yoru ni Kakeru YOASOBI" is
-            // YOASOBI's 夜に駆ける, and puts covers that spell the name out ahead of it.
+            // Then the songs found by how their name is said, and those by the artist typed:
+            // Deezer can't tell "Yoru ni Kakeru YOASOBI" is YOASOBI's 夜に駆ける, and puts
+            // covers that spell the name out ahead of it.
             val typed = SongNames.words(words)
-            songs.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
-                .sortedWith(compareBy<MusicMetadata> { anotherRecording(it) }.thenBy { it !in spoken && !saidOtherwise(it, typed) })
+            val distinct = songs.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
+            // A song whose name alone is all that was typed, "Heart of Glass", is what was
+            // meant, not a song by Heart.
+            val named = distinct.any { !anotherRecording(it) && SongNames.words(it.title).containsAll(typed) }
+            distinct.sortedWith(compareBy<MusicMetadata> { anotherRecording(it) }.thenBy { it !in spoken && (named || !byArtistTyped(it, typed)) })
         }
     }
 
@@ -70,12 +73,17 @@ internal class SongSearcher(
     }
 
     /**
-     * Whether [song]'s artist is named in full among the [typed] words, "The" or not, and its name
-     * has no word in Latin letters for them to match. A name in Latin letters is matched as it is.
+     * Whether [song] is by an artist named in full among the [typed] words, "The" or not, and its
+     * name is the rest of them: it has one of those words, or none in Latin letters to have. With
+     * nothing else typed, "YOASOBI", it's any of theirs, which Deezer already orders.
      */
-    private fun saidOtherwise(song: MusicMetadata, typed: Set<String>): Boolean =
-        SongNames.words(song.title).isEmpty() &&
-            SongNames.words(SongNames.withoutArticle(song.artist)).let { named -> named.isNotEmpty() && typed.containsAll(named) }
+    private fun byArtistTyped(song: MusicMetadata, typed: Set<String>): Boolean {
+        val artist = SongNames.words(SongNames.withoutArticle(song.artist))
+        if (artist.isEmpty() || !typed.containsAll(artist)) return false
+        val rest = typed - artist
+        val title = SongNames.words(song.title)
+        return rest.isNotEmpty() && (title.isEmpty() || title.any { it in rest })
+    }
 
     /** "Originally Performed by" names the singer and not the people on the row. */
     private fun creditsTheOriginal(title: String): Boolean =
