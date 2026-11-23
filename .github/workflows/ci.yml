@@ -15,8 +15,6 @@ env:
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
-  # Show dependency downloads while measuring this cache change.
-  GRADLE_OPTS: -Dorg.gradle.logging.level=info
 
 # A newer push to the same pull request makes an in-progress run pointless; manual runs always finish.
 concurrency:
@@ -228,7 +226,7 @@ jobs:
       # Lint, release builds and PIT resolve artifacts the unit tests do not. Run the real tasks so
       # every job starts from their dependencies too; a dry run would not download them.
       - name: Resolve the other jobs' dependencies
-        if: steps.jdk.outputs.dependencies-hit != 'true'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
         run: ./gradlew :app:lintDebug :app:detekt :app:assembleDebug :app:assembleRelease :app:bundleRelease :app:cachePitestDependencies --build-cache --configuration-cache
 
       # The cache is immutable. An exact hit needs no save; a new build-file hash gets a new key.
