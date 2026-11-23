@@ -3448,8 +3448,10 @@ internal class MainViewModel(
         val words = uiState.lyrics
         val knownLength = untimedLengthMs(song)
         val length = knownLength ?: heard.maxOfOrNull { it.toMs } ?: return
+        // A lyric source or a different recording can give the wrong length; only the player says this one ended.
+        val playerLengthKnown = appFollowing?.durationMs?.let { it > 0 } == true
         // A long song heard through twice takes a while to line up, so it's done away from the screen.
-        val lines = withContext(systemDispatcher) { SungTiming.timed(words.lines(), heard, length, knownLength != null) }
+        val lines = withContext(systemDispatcher) { SungTiming.timed(words.lines(), heard, length, playerLengthKnown) }
         // Timed words found meanwhile, or these written otherwise, as in their own script: this is out of date.
         // Left, or heard again, the job doing this is stopped, so it never gets here.
         if (foundLines.isNotEmpty() || uiState.lyrics != words) return
