@@ -86,7 +86,9 @@ internal class ExactMatcher(
     private val spotifyArtist: suspend (String) -> String? = { null },
     /** Independent names of an artist, or none when they cannot be established. */
     private val artistAliases: suspend (String) -> Set<String>? = { null },
-    private val wallNow: () -> Long = { System.currentTimeMillis() }
+    private val wallNow: () -> Long = { System.currentTimeMillis() },
+    private val artistAliasTimeoutMs: Long = ARTIST_ALIAS_WAIT_MS,
+    private val appleProofWaitMs: Long = APPLE_PROOF_WAIT_MS
 ) {
 
     /** What looking for something came to: found, not there, or no answer, e.g. offline, which says neither. */
@@ -944,14 +946,13 @@ internal class ExactMatcher(
         apple: Deferred<Row?>, fallback: Answer, names: Names, available: Names, watchUrl: String
     ): Pair<Answer?, Names> {
         // Give an in-flight Apple proof a short chance to outrank this provisional answer.
-        val proved = withTimeoutOrNull(APPLE_PROOF_WAIT_MS) { apple.await() }
+        val proved = withTimeoutOrNull(appleProofWaitMs) { apple.await() }
         if (proved != null) return Answer(watchUrl + proved.id, lasting = names.everyStore) to names
         if (apple.isCompleted) {
             mergeAppleEvidence(names, available)
             return null to available
         }
         apple.cancel()
-        available.complete = false
         return Answer(fallback.url, lasting = false, waitForNames = fallback.waitForNames, artistVideo = fallback.artistVideo) to available
     }
 
@@ -964,11 +965,8 @@ internal class ExactMatcher(
         val firstTitle = videoRecordingTitle(first.name, names)
         val candidateTitle = videoRecordingTitle(candidate.name, names)
         val knownTitles = names.titles.map(SongNames::normalize).toSet()
-        if (firstTitle != candidateTitle && (firstTitle !in knownTitles || candidateTitle !in knownTitles)) return false
-        if (candidate.lengthMs == null) return first.lengthMs == null && firstTitle == candidateTitle
-        if (first.lengthMs?.let { !sameRecordingLength(candidate.lengthMs, it) } == true) return false
         val wanted = metadata.lengthMs?.takeIf { it > 0 }?.let(::listOf) ?: names.lengthsMs
-        return wanted.isEmpty() || wanted.any { sameRecordingLength(candidate.lengthMs, it) }
+        return sameVideoEvidence(firstTitle, candidateTitle, knownTitles, first.lengthMs, candidate.lengthMs, wanted)
     }
 
     /** Strip only a whole known artist's prefix; keep recording and language labels in the title. */
@@ -1202,9 +1200,6 @@ internal class ExactMatcher(
     )
     private val liveAlbumStarts = listOf("live at ", "live in ", "live from ")
 
-    private fun sameRecordingLength(time: Long?, wanted: Long): Boolean =
-        time != null && kotlin.math.abs(time - wanted) <= SAME_SONG_LENGTH_MS
-
     private class RequestedRecording(val live: Boolean, val part: NumberedPart?, val title: String)
 
     /** These labels name a new performance, even when it runs as long as the original. */
@@ -1435,7 +1430,7 @@ internal class ExactMatcher(
      * Spring Day and 松原みき for Miki Matsubara. Deezer can name a song row when its title and length match.
      */
     private class Names(
-        val titles: Set<String>, val artists: Set<String>, var lengthsMs: List<Long>, val japaneseTitle: String?,
+        val titles: Set<String>, val artists: Set<String>, var lengthsMs: List<Long>, private val japaneseTitle: String?,
         val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?, var deezerNames: List<DeezerName>, val appleFound: Boolean,
         val appleIds: Set<Long>,
         /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
@@ -1588,19 +1583,14 @@ internal class ExactMatcher(
         }
         val first = artists.firstOrNull()
         val candidates = deezerNames(metadata, tracks, knownLengths, first)
-        val sameArtist = if (candidates.isNotEmpty()) sameDeezerArtist(metadata.artist, first) else false
+        val sameArtist = if (candidates.isNotEmpty()) deezerArtistMatches(metadata.artist, first?.optString("name").orEmpty()) {
+            withTimeoutOrNull(artistAliasTimeoutMs) { artistAliases(metadata.artist) }
+        } else false
         if (sameArtist == null) names.complete = false
         names.deezerNames = if (sameArtist == true) candidates else emptyList()
         if (foundLengths.isEmpty()) foundLengths.addAll(names.deezerNames.map { it.lengthMs })
         names.lengthsMs = foundLengths
         if (trackSearch.failed || artistSearch.failed) names.complete = false
-    }
-
-    private suspend fun sameDeezerArtist(artist: String, first: JSONObject?): Boolean? {
-        val deezerArtist = first?.optString("name").orEmpty()
-        if (artist.isBlank() || deezerArtist.isBlank()) return false
-        if (SongNames.sameArtist(artist, deezerArtist)) return true
-        return withTimeoutOrNull(ARTIST_ALIAS_WAIT_MS) { artistAliases(artist) }?.any { SongNames.sameArtist(it, deezerArtist) }
     }
 
     private fun deezerCollaboration(name: String): Boolean =
@@ -2023,6 +2013,26 @@ internal class ExactMatcher(
         const val PICKED_VIDEO_LENGTH_MS = 45_000L
 
     }
+}
+
+private fun sameRecordingLength(time: Long?, wanted: Long): Boolean =
+    time != null && kotlin.math.abs(time - wanted) <= ExactMatcher.SAME_SONG_LENGTH_MS
+
+/** Compare already-normalized video titles and all known recording durations. */
+internal fun sameVideoEvidence(
+    firstTitle: String, candidateTitle: String, knownTitles: Set<String>, firstLength: Long?, candidateLength: Long?, wanted: List<Long>
+): Boolean {
+    if (firstTitle != candidateTitle && (firstTitle !in knownTitles || candidateTitle !in knownTitles)) return false
+    if (candidateLength == null) return firstLength == null && firstTitle == candidateTitle
+    if (firstLength?.let { !sameRecordingLength(candidateLength, it) } == true) return false
+    return wanted.isEmpty() || wanted.any { sameRecordingLength(candidateLength, it) }
+}
+
+/** A missing alias answer is uncertain; an empty answer rules out the alias. */
+internal suspend fun deezerArtistMatches(artist: String, deezerArtist: String, aliases: suspend () -> Set<String>?): Boolean? {
+    if (artist.isBlank() || deezerArtist.isBlank()) return false
+    if (SongNames.sameArtist(artist, deezerArtist)) return true
+    return aliases()?.any { SongNames.sameArtist(it, deezerArtist) }
 }
 
 /** The apps whose search needs no account. Spotify's does, so its songs are found another way, but not its albums or artists. */

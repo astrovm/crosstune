@@ -34,6 +34,9 @@ internal class MusicBrainz(
     /** How long to leave between two requests, which MusicBrainz limits to one a second; tests pass 0. */
     private val gapMs: Long = ASK_GAP_MS
 ) {
+    /** The same artist-name lookup for single songs and queues. */
+    val matcherArtistAliases: suspend (String) -> Set<String>? = ::artistAliases
+
     /** Names MusicBrainz gives one exact artist; ambiguous names do not establish an identity. */
     suspend fun artistAliases(name: String): Set<String>? {
         val wanted = SongNames.normalize(name)

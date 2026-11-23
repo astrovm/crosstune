@@ -107,7 +107,7 @@ class MainActivity : ComponentActivity() {
                 // Signed in, ChatGPT picks a song named otherwise among the results when nothing matches by name.
                 val matcher = ExactMatcher(
                     client, cache = cache("lookups.json"), apis = apis, pick = tutor::pickSong,
-                    missingForMs = MISSING_FOR_MS, spotifyArtist = musicBrainz::spotifyArtist, artistAliases = musicBrainz::artistAliases
+                    missingForMs = MISSING_FOR_MS, spotifyArtist = musicBrainz::spotifyArtist, artistAliases = musicBrainz.matcherArtistAliases
                 )
                 MainViewModel(
                     LinkResolver(client, apis = apis),
@@ -446,7 +446,7 @@ class MainActivity : ComponentActivity() {
             val matcher = ExactMatcher(
                 client, cache = LookupCache(File(app.cacheDir, "queue_lookups.json"), lookupDispatcher),
                 missingForMs = MISSING_FOR_MS, timeoutMs = QUEUE_LOOKUP_MS, spotifyArtist = musicBrainz::spotifyArtist,
-                artistAliases = musicBrainz::artistAliases
+                artistAliases = musicBrainz.matcherArtistAliases
             )
             return PlayQueue(
                 playbackFactory(app),

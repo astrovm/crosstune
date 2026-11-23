@@ -10,6 +10,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -1579,6 +1580,96 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anAppleProvedCandidateCancelsAnInFlightArtistLookup() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val candidate = youTubeMusicRow("別名", "アーティスト • Album • 4:00", videoId = "apple000000")
+        val deezerRow = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "deezer00000")
+        val track = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"duration":240}]"""
+        namesAndTabs(songs = listOf(candidate, deezerRow), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)),
+            deezer = track, deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        val answer = fake.handler
+        val aliasStarted = CountDownLatch(1)
+        val aliasCancelled = AtomicBoolean(false)
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.queryParameter("term") == "別名 アーティスト") {
+                assertTrue(aliasStarted.await(5, SECONDS))
+                FakeSpotify.html(request, """{"results":[${appleSong("別名", "アーティスト", 240_000)}]}""")
+            } else answer(request)
+        }
+        val finder = ExactMatcher(fake.client(), "US", timeoutMs = 30_000, artistAliases = {
+            aliasStarted.countDown()
+            try { awaitCancellation() } finally { aliasCancelled.set(true) }
+        }, artistAliasTimeoutMs = 30_000)
+        assertEquals("https://music.youtube.com/watch?v=apple000000", withTimeoutOrNull(5_000) { finder.find(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(aliasCancelled.get())
+    }
+
+    @Test
+    fun aFailedCandidateSearchIsNotRememberedAsFinalInEitherResponseOrder() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val candidate = youTubeMusicRow("別曲", "アーティスト • Album • 4:00", videoId = "other000000")
+        val track = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"duration":240}]"""
+        for (appleFirst in listOf(true, false)) {
+            namesAndTabs(songs = listOf(candidate), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)),
+                deezer = track, deezerArtists = """[{"id":1,"name":"Artist"}]""")
+            val answer = fake.handler
+            val started = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            fake.handler = { request ->
+                val candidateSearch = request.url.host == "itunes.apple.com" && request.url.queryParameter("term") == "別曲 アーティスト"
+                val deezerSearch = request.url.host == "api.deezer.com"
+                if (candidateSearch && !appleFirst || deezerSearch && appleFirst) assertTrue(release.await(5, SECONDS))
+                if (candidateSearch && appleFirst || deezerSearch && !appleFirst) started.countDown()
+                if (candidateSearch) throw IOException("candidate search failed")
+                answer(request)
+            }
+            try {
+                val finder = ExactMatcher(fake.client(), "US", timeoutMs = 30_000, artistAliases = ::artistAliases)
+                val found = async(Dispatchers.Default) { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) }
+                assertTrue(started.await(5, SECONDS))
+                delay(250)
+                release.countDown()
+                assertEquals("appleFirst=$appleFirst", ExactMatcher.Match.Found("https://music.youtube.com/watch?v=other000000", lasting = false),
+                    withTimeoutOrNull(5_000) { found.await() })
+            } finally {
+                release.countDown()
+            }
+        }
+    }
+
+    @Test
+    fun aFailedCandidateStillNeedsRetryWhenDeezerFindsAFanVideoFirst() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val candidate = youTubeMusicRow("別曲", "アーティスト • Album • 4:00", videoId = "other000000")
+        val fan = youTubeMusicRow("アーティスト - Song", "Fan • 1M views • 4:00", videoId = "fan00000000")
+        val track = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"duration":240}]"""
+        namesAndTabs(songs = listOf(candidate), videos = listOf(fan), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)),
+            deezer = track, deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        val answer = fake.handler
+        val deezerAnswered = CountDownLatch(1)
+        val releaseApple = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.queryParameter("term") == "別曲 アーティスト") {
+                assertTrue(releaseApple.await(5, SECONDS))
+                throw IOException("candidate search failed")
+            }
+            if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist") deezerAnswered.countDown()
+            answer(request)
+        }
+        try {
+            val finder = ExactMatcher(fake.client(), "US", timeoutMs = 30_000, artistAliases = ::artistAliases, appleProofWaitMs = 5_000)
+            val found = async(Dispatchers.Default) { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) }
+            assertTrue(deezerAnswered.await(5, SECONDS))
+            delay(250)
+            releaseApple.countDown()
+            assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=other000000", lasting = false),
+                withTimeoutOrNull(5_000) { found.await() })
+        } finally {
+            releaseApple.countDown()
+        }
+    }
+
+    @Test
     fun anAppleCandidateSearchIsReusedForDuplicateRows() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val candidate = youTubeMusicRow("別名", "アーティスト • Album • 4:00", videoId = "apple000000")
@@ -1640,6 +1731,16 @@ class ExactMatcherTest {
             } else answer(request)
         }
         assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun zeroOrNegativeSourceLengthDoesNotDisambiguateSongRows() = runBlocking {
+        val first = youTubeMusicRow("別名", "アーティスト • First • 4:00", videoId = "first000000")
+        val second = youTubeMusicRow("別名", "アーティスト • Second • 4:00", videoId = "second00000")
+        for (length in listOf(null, 0L, -1L)) {
+            namesAndTabs(songs = listOf(first, second), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
+            assertNull("length=$length", matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "アーティスト", lengthMs = length)))
+        }
     }
 
     @Test

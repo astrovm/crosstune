@@ -42,7 +42,7 @@ class MusicBrainzTest {
         val response = """{"artists":[{"id":"artist-1","name":"米津玄師","aliases":[{"name":"Kenshi Yonezu","type":"Artist name"},{"name":"Unrelated","type":"Search hint"}]}]}"""
         fake.handler = { request -> FakeSpotify.html(request, response) }
         val service = brainz()
-        assertEquals(setOf("米津玄師", "Kenshi Yonezu"), service.artistAliases("米津玄師"))
+        assertEquals(setOf("米津玄師", "Kenshi Yonezu"), service.matcherArtistAliases("米津玄師"))
         assertEquals(setOf("米津玄師", "Kenshi Yonezu"), service.artistAliases("米津玄師"))
         assertEquals(1, fake.requestedUrls.size)
         val ambiguous = """{"artists":[{"id":"artist-1","name":"Same"},{"id":"artist-2","name":"Same"}]}"""
