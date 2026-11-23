@@ -154,6 +154,9 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             )
         }
         val intent = if (fingerprints == null) {
+            if (asked.optBoolean("identifiedPlayer")) {
+                playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "video:$song"), null)
+            }
             Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
         } else {
             replayFingerprints(fingerprints, fromMs, lengthMs)
@@ -178,7 +181,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
                 composeRule.runOnIdle { model().resumeFollowingNext() }
             }
             val until = if (time == 0 && behind.size > 1) asked.optLong("firstUntil", lengthMs).coerceAtMost(lengthMs) else lengthMs
-            val played = play(fromMs, lengthMs, behindMs, until)
+            val playFrom = if (time > 0) asked.optLong("againFrom", fromMs) else fromMs
+            val played = play(playFrom, lengthMs, behindMs, until)
             File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())
             // Stopped at the end, then played again a while later.
             playback.playing.value = Following(PlaybackClock(lengthMs, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)

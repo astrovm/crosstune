@@ -736,6 +736,16 @@ class HeardWhenAskedTest(unittest.TestCase):
             r.run(self.run_args(behind_again=500, skew=None, shazam_ahead=0, words_length=None, video=False))
         heard.assert_called_once_with('fake', ['fake.from0.first.shown.json', 'fake.from0.shown.json'])
 
+    def test_an_identified_player_is_sent_to_the_replay(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None):
+            def replay(*_, **__):
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertTrue(asked['identifiedPlayer'])
+                return argparse.Namespace(returncode=0)
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(identified_player=True))
+
     def test_reopening_needs_a_second_play_and_is_sent_to_the_app(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
                 patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None):
@@ -767,8 +777,36 @@ class HeardWhenAskedTest(unittest.TestCase):
             with patch.object(r.subprocess, 'run', side_effect=replay):
                 r.run(self.run_args(first_until=64000, behind_again=0))
 
+    def test_a_second_play_can_start_at_another_position(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None):
+            with self.assertRaisesRegex(ValueError, 'needs --behind-again'):
+                r.run(self.run_args(again_from=79000))
+            def replay(*_, **__):
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertEqual(79000, asked['againFrom'])
+                return argparse.Namespace(returncode=0)
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(again_from=79000, behind_again=0))
+
 
 class ReplayAllTest(unittest.TestCase):
+    def test_it_can_reopen_identified_recordings_at_another_position(self):
+        asked = []
+        def replay(*_, **__):
+            asked.append(json.loads((r.OUT / 'replay.json').read_text()))
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', side_effect=replay), \
+                patch.object(r, 'score_all'):
+            r.run_all(argparse.Namespace(gradle='fake', start=14000, work=4500, behind=0, songs=None, heard='.cached',
+                                         identified_player=True, first_until=64000, again_from=79000))
+        self.assertEqual(asked[0]['songs'][0]['firstUntil'], 64000)
+        self.assertEqual(asked[0]['songs'][0]['againFrom'], 79000)
+        self.assertTrue(asked[0]['songs'][0]['identifiedPlayer'])
+        self.assertTrue(asked[0]['songs'][0]['reopenAgain'])
+        self.assertEqual(asked[0]['songs'][0]['behindAgain'], 0)
+
     def test_it_replays_the_set_of_what_was_heard_it_is_asked_for(self):
         asked = []
         def replay(*_, **__):
@@ -808,6 +846,15 @@ class ReplayAllTest(unittest.TestCase):
             (r.OUT / 'fake.truth.jsonl').write_text(''.join(json.dumps(dict(line=n, start=at)) + '\n' for n, at in [(0, 1.0), (1, 15.0)]))
             with patch('sys.stdout', io.StringIO()) as table:
                 r.run_all(argparse.Namespace(gradle='fake-gradle', start=14000, work=4500, behind=0, songs=None, heard='.cached'))
+        self.assertRegex(table.getvalue(), r'all +1 +1 +1 +0 +0')
+
+    def test_a_second_play_scores_only_lines_sung_after_its_start(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            (r.OUT / 'fake.from14000.shown.json').write_text(json.dumps(dict(lines=['One', 'Two'], shown=[dict(line=1, at=80000)])))
+            (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[0, 'One'], [0, 'Two']]))
+            (r.OUT / 'fake.truth.jsonl').write_text(''.join(json.dumps(dict(line=n, start=at)) + '\n' for n, at in [(0, 30.0), (1, 80.0)]))
+            with patch('sys.stdout', io.StringIO()) as table:
+                r.score_all(['fake'], 14000, 79000)
         self.assertRegex(table.getvalue(), r'all +1 +1 +1 +0 +0')
 
 

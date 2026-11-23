@@ -265,6 +265,11 @@ class LyricsSyncTest {
         val linked = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
         store.rememberPending(linked, lines, PendingShift(22_000, 40_000))
         assertEquals(PendingShift(22_000, 40_000), store.pending(linked, lines))
+        val blankId = linked.copy(recordingId = "")
+        val otherLink = blankId.copy(url = "https://music.youtube.com/watch?v=lmnopqrstuv")
+        store.rememberPending(blankId, lines, PendingShift(24_000, 60_000))
+        assertEquals(PendingShift(24_000, 60_000), store.pending(blankId, lines))
+        assertNull(store.pending(otherLink, lines))
     }
 
     @Test

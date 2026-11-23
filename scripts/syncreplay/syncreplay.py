@@ -466,6 +466,11 @@ def run(args):
         replay.update(works=args.works, whiles=args.whiles)
     if args.behind_again is not None:
         replay["behindAgain"] = args.behind_again
+    again_from = getattr(args, 'again_from', None)
+    if again_from is not None:
+        if args.behind_again is None:
+            raise ValueError('--again-from needs --behind-again')
+        replay['againFrom'] = again_from
     first_until = getattr(args, 'first_until', None)
     if first_until is not None:
         if args.behind_again is None:
@@ -484,6 +489,8 @@ def run(args):
         replay["wordsLength"] = args.words_length
     if args.video:
         replay["video"] = True
+    if getattr(args, "identified_player", False):
+        replay["identifiedPlayer"] = True
     if getattr(args, "fingerprints", None):
         replay["fingerprints"] = json.loads(Path(args.fingerprints).read_text())
     plays = ([f"{args.id}.from{args.start}.first.shown.json"] if args.behind_again is not None else []) + [f"{args.id}.from{args.start}.shown.json"]
@@ -556,7 +563,9 @@ def compare(phone_lit, shown):
 
 def score(args):
     shown = json.loads((own() / f"{args.id}.from{args.start}.shown.json").read_text())
-    sung = sung_after(args.id, shown["lines"], args.start)
+    scored_from = getattr(args, 'again_from', None)
+    scored_from = args.start if scored_from is None else scored_from
+    sung = sung_after(args.id, shown["lines"], scored_from)
     # The app's line to the n-th line with words.
     nth = {}
     for i, text in enumerate(shown["lines"]):
@@ -576,7 +585,7 @@ def score(args):
     fixed = shown["placed"][1]["at"] / 1000 if len(shown["placed"]) > 1 else 0
     live = [lag for k, lag in lags.items() if sung[k] > fixed]
     how = f"median {statistics.median(abs(x) for x in live):.2f} s, worst {max(live, key=abs):+.1f} s" if live else "none shown"
-    print(f"{args.id} from {args.start} ms: lines sung after the first fix at {fixed:.1f} s: "
+    print(f"{args.id} from {scored_from} ms: lines sung after the first fix at {fixed:.1f} s: "
           f"{sum(abs(x) <= ON_TIME_S for x in live)}/{len(live)} within {ON_TIME_S} s, {how}; never shown {sum(k not in first for k in sung)}")
     early = [lag for lag in lags.values() if lag < -ON_TIME_S]
     print(f"shown sung early, before its voice: {len(early)}/{len(lags)} lines" + (f", by up to {-min(early):.1f} s" if early else ""))
@@ -1102,7 +1111,19 @@ def run_all(args):
     except ValueError as error:
         sys.exit(str(error))
     asked = own() / "replay.json"
-    asked.write_text(json.dumps({"songs": [{"song": song, "from": args.start, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]}))
+    first_until = getattr(args, 'first_until', None)
+    again_from = getattr(args, 'again_from', None)
+    if (first_until is None) != (again_from is None):
+        raise ValueError('--first-until and --again-from must be given together')
+    if first_until is not None and first_until <= args.start:
+        raise ValueError('--first-until must be after --from')
+    requests = [{"song": song, "from": args.start, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]
+    for request in requests:
+        if getattr(args, 'identified_player', False):
+            request['identifiedPlayer'] = True
+        if first_until is not None:
+            request.update(firstUntil=first_until, againFrom=again_from, behindAgain=args.behind, reopenAgain=True)
+    asked.write_text(json.dumps({"songs": requests}))
     # Their names too, one a line, as SyncReplayTest reads them before it can read JSON.
     names = own() / "replay.songs"
     wanted = asked.read_text()
@@ -1119,12 +1140,12 @@ def run_all(args):
         if args.heard:
             break
         with ThreadPoolExecutor(SONGS_HEARD_AT_ONCE) as pool:
-            if not sum(pool.map(lambda song: hear_asked(song, [f"{song}.from{args.start}.shown.json"]), songs)):
+            if not sum(pool.map(lambda song: hear_asked(song, ([f"{song}.from{args.start}.first.shown.json"] if first_until is not None else []) + [f"{song}.from{args.start}.shown.json"]), songs)):
                 break
-    score_all(songs, args.start)
+    score_all(songs, args.start, again_from)
 
 
-def score_all(songs, start):
+def score_all(songs, start, scored_from=None):
     """Score saved replays again without repeating the app runs."""
     titles = {song.get("id"): song["title"] for song in json.loads((OUT / "set.json").read_text())} if (OUT / "set.json").exists() else {}
     totals = dict(lines=0, close=0, on=0, dark=0, early=0)
@@ -1133,7 +1154,7 @@ def score_all(songs, start):
     print(f"{'song':12} {'lines':>5} {'0.3 s':>6} {'0.5 s':>6} {'dark':>5} {'early':>5} {'worst':>6}  title")
     for song in songs:
         shown = json.loads((own() / f"{song}.from{start}.shown.json").read_text())
-        sung = sung_after(song, shown["lines"], start)
+        sung = sung_after(song, shown["lines"], start if scored_from is None else scored_from)
         first = lit_first(shown)
         lags = [first[k] - sung[k] for k in sung if k in first]
         all_lags.extend(lags)
@@ -1149,7 +1170,7 @@ def score_all(songs, start):
     print(f"{'all':12} {t['lines']:5} {t['close']:6} {t['on']:6} {t['dark']:5} {t['early']:5} {worst:>6}  "
           f"{100 * t['close'] / max(t['lines'], 1):.0f}% within 0.3 s, {100 * t['on'] / max(t['lines'], 1):.0f}% within {ON_TIME_S} s, {t['dark']} dark")
     print(f"Reference coverage: {t['lines']}/{lyric_lines} nonempty lyric lines. Unmatched lines have no truth and are not scored."
-          + (" Lines sung before the replay start are excluded." if start else ""))
+          + (" Lines sung before the replay start are excluded." if (start if scored_from is None else scored_from) else ""))
 
 
 def lit_first(shown):
@@ -1488,8 +1509,10 @@ def main():
             p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
             p.add_argument("--model", default=APP_MODEL, help="whose hearing to play, made first with `hear --model`")
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
+            p.add_argument('--again-from', type=int, help='start the second play at this position in ms; requires --behind-again')
             p.add_argument('--first-until', type=int, help='end the first play at this song position in ms; requires --behind-again')
             p.add_argument('--reopen-again', action='store_true', help='close and reopen the lyrics between plays; requires --behind-again')
+            p.add_argument('--identified-player', action='store_true', help='the player identifies the recording across plays')
             # ZnrSNEah_20 as on the phone: --video --skew 0.0349 --shazam-ahead 45467 --words-length 0, as Shazam
             # heard it (app/src/test/resources/shazam/faster.jsonl), with words that don't say how long they're timed for.
             p.add_argument("--player-speed", type=float, default=1.0, help="player rate; replay cached words at that rate and include it in Shazam answers")
@@ -1519,6 +1542,9 @@ def main():
     p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
     p.add_argument("--heard", default="", help="replay another set of what was heard: .thin5 reads ID.heard20.thin5.json")
     p.add_argument('--songs', nargs='+', help='use exactly these prepared recording IDs')
+    p.add_argument('--identified-player', action='store_true', help='each player identifies its recording across plays')
+    p.add_argument('--first-until', type=int, help='end the first play here; requires --again-from')
+    p.add_argument('--again-from', type=int, help='reopen and start the second play here; requires --first-until')
     p.set_defaults(go=run_all)
     p = steps.add_parser("hear")
     p.add_argument("id")
