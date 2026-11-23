@@ -1181,7 +1181,7 @@ class SingingTest {
     }
 
     @Test
-    fun recordedJapaneseHearingWaitsForConfirmation() {
+    fun recordedJapaneseHearingLeavesTheCurrentPlayUnchangedAndDoesNotSave() {
         // Plastic Love, heard from 53.505 s: the phone model's saved 54 s window and the sheet
         // selected with the recording's length. Unrelated lines keep their times but use filler words.
         val times = listOf(30490, 39910, 47620, 57100, 67930, 77360, 85200, 94520, 105320, 114750, 123720, 133360, 139560, 159210, 168690, 177550, 187480, 194590, 204250, 212140, 221540, 232040, 241540, 250980, 260140, 269710, 278970)
