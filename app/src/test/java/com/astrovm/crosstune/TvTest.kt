@@ -796,6 +796,9 @@ class TvTest {
         play.assertIsFocused()
         pressOnFocused(Key.DirectionLeft)
         row.assertIsFocused()
+        // Any other key is left to the screen: with nothing past the row's start, the remote stays on it.
+        pressOnFocused(Key.DirectionLeft)
+        row.assertIsFocused()
     }
 
     @Test
