@@ -1018,7 +1018,7 @@ class SingingTest {
         lyricsTimedFor(null, times)
         openLyrics()
         val song = checkNotNull(model().uiState.lyricsFor)
-        LyricsSyncStore(prefs()).rememberPending(song, model().uiState.lyricLines, PendingShift(-27_400, 61_000))
+        LyricsSyncStore(prefs()).rememberPending(song, model().uiState.lyricLines, PendingShift(-27_400, 61_000, 101_000))
         composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
         waitUntil { model().uiState.lyricLines.size == lines.size }
         singing.answer = {

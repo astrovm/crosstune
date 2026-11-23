@@ -11,7 +11,9 @@ import kotlin.math.abs
 internal data class SyncPoint(val lineMs: Long, val songMs: Long)
 
 /** A far hearing that still needs a separate hearing before it can change saved timing. */
-internal data class PendingShift(val offsetMs: Long, val fromMs: Long)
+internal data class PendingShift(val offsetMs: Long, val fromMs: Long, val toMs: Long) {
+    fun separateFrom(other: PendingShift) = toMs <= other.fromMs || other.toMs <= fromMs
+}
 
 /**
  * Timed words put right by hand. Words timed for another take of the song, or timed badly, drift
@@ -126,7 +128,9 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
         if (saved.optString("words") != fingerprint(lines)) return null
         val offset = saved.opt("offset") as? Number ?: return null
         val from = saved.opt("from") as? Number ?: return null
-        return PendingShift(offset.toLong(), from.toLong())
+        val to = saved.opt("to") as? Number ?: return null
+        if (to.toLong() <= from.toLong()) return null
+        return PendingShift(offset.toLong(), from.toLong(), to.toLong())
     }
 
     fun rememberPending(song: MusicMetadata, lines: List<LyricLine>, pending: PendingShift) {
@@ -134,7 +138,7 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
         val all = pendingAll()
         val key = keyOf(song)
         all.remove(key)
-        all.put(key, JSONObject().put("words", fingerprint(lines)).put("offset", pending.offsetMs).put("from", pending.fromMs))
+        all.put(key, JSONObject().put("words", fingerprint(lines)).put("offset", pending.offsetMs).put("from", pending.fromMs).put("to", pending.toMs))
         while (all.length() > MAX_SONGS) all.remove(all.keys().next())
         preferences.edit { putString(KEY_PENDING, all.toString()) }
     }

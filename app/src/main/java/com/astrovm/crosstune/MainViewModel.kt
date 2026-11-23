@@ -3535,8 +3535,10 @@ internal class MainViewModel(
         // How far off the words as found are, by this while: the lines shown may be moved already.
         val offMs = shift + shown[line].timeMs - foundLines[line].timeMs
         val fromMs = clock.positionAt(sung.startedAtMs)
+        val toMs = clock.positionAt(sung.startedAtMs + SingingListener.SECONDS * 1000L)
+        val current = PendingShift(offMs, minOf(fromMs, toMs), maxOf(fromMs, toMs))
         val agrees = farOffMs?.let { abs(it - offMs) < agreeingMs(offMs) } == true ||
-            pendingAgrees(PendingShift(offMs, fromMs), whole)
+            pendingAgrees(current, whole)
         when {
             keeps(shift, agrees) -> return keepFarOff(song, heard)
             abs(shift) >= WORDS_OFF_MS -> {
@@ -3544,7 +3546,7 @@ internal class MainViewModel(
                 // most words heard agree, they're shown there this time; otherwise they stay where they are.
                 if (whole) {
                     farOffMs = offMs
-                    rememberPending(song, PendingShift(offMs, fromMs))
+                    rememberPending(song, current)
                 }
                 if (abs(shift) <= SungAlignment.MAX_SHIFT_MS) return
                 movedFar = true
@@ -3571,7 +3573,7 @@ internal class MainViewModel(
         val previous = pendingBeforePlay ?: return false
         // Allow a second's uncertainty for each hearing when comparing two independent estimates.
         val tolerance = maxOf(2 * SUNG_OFF_MS, agreeingMs(current.offsetMs))
-        return abs(previous.fromMs - current.fromMs) >= SingingListener.SECONDS * 1000L &&
+        return current.toMs > current.fromMs && previous.separateFrom(current) &&
             abs(previous.offsetMs - current.offsetMs) < tolerance
     }
 
