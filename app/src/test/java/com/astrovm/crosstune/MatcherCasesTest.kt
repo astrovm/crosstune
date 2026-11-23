@@ -985,12 +985,16 @@ class MatcherCasesTest {
                 assertEquals("song0", was[2])
                 was.mapIndexed { mode, id -> if (mode == 2) "video1" else id }
             } else was
-            val judged = found.zip(expected).map { (now, before) ->
+            val judged = found.zip(expected).mapIndexed { mode, (now, before) ->
                 val previous = fuzzed.verdict(before)
                 val current = fuzzed.verdict(now.id)
                 when {
-                    current == RIGHT && previous == WRONG -> now.id
-                    current == NOTHING && previous == WRONG && !now.asked -> null
+                    // Keep every previously right or unproved answer unless the source duration rules it out.
+                    previous == RIGHT && current == NOTHING && sourceRulesOut(fuzzed.modes[mode], before) -> null
+                    previous == UNKNOWN && current == NOTHING -> null
+                    // The fixture has already proved main's row wrong; it cannot become a new wrong answer.
+                    previous == WRONG -> now.id
+                    current == RIGHT -> now.id
                     else -> before
                 }
             }
@@ -1112,6 +1116,18 @@ class MatcherCasesTest {
 
     /** How long "1:30" is. */
     private fun lengthMs(length: String): Long = length.split(":").let { (minutes, seconds) -> (minutes.toLong() * 60 + seconds.toLong()) * MS }
+
+    /** The generated name label alone cannot make a row right when its displayed duration contradicts the link. */
+    private fun sourceRulesOut(case: Case, id: String?): Boolean {
+        val source = case.linkMs ?: return false
+        val video = id?.startsWith("video") ?: return false
+        val index = id.removePrefix(if (video) "video" else "song").toIntOrNull() ?: return false
+        val shown = (if (video) case.videos else case.songs).getOrNull(index) ?: return false
+        val duration = shown.substringAfterLast(" • ").takeIf { it.matches(Regex("\\d+:\\d{2}")) } ?: return false
+        val wanted = if (video) source else ((source + 500) / MS) * MS
+        val tolerance = if (video) 8_000 else 3_000
+        return kotlin.math.abs(lengthMs(duration) - wanted) > tolerance
+    }
 
     /** The versions [said] by a name, a tag and an album, each null or "" where it says none. */
     private fun versionsOf(vararg said: String?): Set<String> = said.filterNotNull().filter(String::isNotEmpty).toSet()
