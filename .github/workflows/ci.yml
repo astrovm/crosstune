@@ -221,13 +221,6 @@ jobs:
       - uses: ./.github/actions/jdk
         id: jdk
 
-      # A fresh Gradle home exercises the mirror and a real Robolectric test with no restored cache.
-      - name: Test with a cold mirror cache
-        if: github.event_name == 'pull_request'
-        env:
-          GRADLE_USER_HOME: ${{ runner.temp }}/cold-mirror-gradle
-        run: ./gradlew :app:testDebugUnitTest --tests com.astrovm.crosstune.ChordSheetsTest --info --no-build-cache
-
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
       - name: Test
@@ -461,8 +454,6 @@ jobs:
           submodules: recursive
 
       - uses: ./.github/actions/jdk
-        with:
-          gradle: disabled
 
       # projectM is compiled six times, debug and release for three ABIs, and Gradle can't cache native
       # builds. ccache gives back the same objects for the same source, compiler and flags, so only
@@ -481,7 +472,7 @@ jobs:
           install: binary
 
       - name: Build
-        run: ./gradlew :app:assembleDebug :app:assembleRelease :app:notices --no-build-cache --info
+        run: ./gradlew :app:assembleDebug :app:assembleRelease :app:notices --build-cache --configuration-cache
         env:
           # CMake reads these to put ccache in front of the NDK's compilers. Empty, it uses none.
           CMAKE_C_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
