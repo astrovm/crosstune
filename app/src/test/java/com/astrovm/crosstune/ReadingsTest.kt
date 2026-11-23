@@ -793,6 +793,13 @@ class ReadingsTest {
     }
 
     @Test
+    fun aCommonKanaWordDoesNotSplitAnInflectedVerb() {
+        fun check() = assertEquals("shimatchaeba", Readings.of(listOf("しまっちゃえば"), Script.JAPANESE).single().romanized)
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
     fun dictionaryWordsKeepTheirReadingsInContext() {
         val cases = mapOf(
             "薄化粧" to "うすげしょう", "丸印" to "まるじるし", "一口" to "ひとくち", "丸印の" to "まるじるしの"

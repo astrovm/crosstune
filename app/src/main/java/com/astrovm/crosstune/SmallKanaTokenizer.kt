@@ -47,6 +47,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
             if (wrong < next) continue
             val token = tokens[wrong]
             val crossing = if (token.isKnown && token.surface in KEPT_TSU_WORDS) null else crossingWord(text, token.position)
+                ?.takeUnless { startsInsideInflected(it, tokens.getOrNull(wrong - 1)) }
             if (!wrongStart(text, token) && crossing == null) continue
             val (first, last) = searchWindow(text, tokens, wrong, next, crossing)
             out += tokens.subList(next, first)
@@ -58,6 +59,10 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         out += tokens.subList(next, tokens.size)
         return out
     }
+
+    /** A kana noun such as まっちゃ must not split the inflected verb しまっ. */
+    private fun startsInsideInflected(range: IntRange, token: Token?): Boolean =
+        token != null && token.partOfSpeechLevel1 in setOf("動詞", "形容詞") && range.first > token.position
 
     /** Search the pieces a crossing word spans, or the pieces needed to say the small kana together. */
     private fun searchWindow(text: String, tokens: List<Token>, wrong: Int, next: Int, crossing: IntRange?): Pair<Int, Int> {
