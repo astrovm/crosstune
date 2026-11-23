@@ -1132,7 +1132,7 @@ internal class ExactMatcher(
         val ambiguous = indistinguishableCandidates(rows, metadata.lengthMs?.takeIf { it > 0 })
         // A row the song's name names, but that says it's a take, is the song's, not its studio recording: no row only known by its
         // artist and length takes its place, as the song may be written otherwise, and this one is the song by name.
-        val bilingual = bilingualSongRow(metadata, abroad)
+        val bilingual = bilingualSongRow(metadata, abroad, names)
         val takeNamed = named == null && hasNamedTake(rows, names, recording) && !hasLinkedNamedEdition(abroad, names)
         return named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedEdition) ?: it }
             ?: bilingual
@@ -1145,8 +1145,8 @@ internal class ExactMatcher(
             }
     }
 
-    private fun bilingualSongRow(metadata: MusicMetadata, rows: List<Row>): Row? = rows.singleOrNull {
-        (bilingualTitleNames(metadata.title, it.name) || titleInParentheses(metadata.title, it.name)) &&
+    private fun bilingualSongRow(metadata: MusicMetadata, rows: List<Row>, names: Names): Row? = rows.singleOrNull {
+        (bilingualTitleNames(metadata.title, it.name) || knownParenthesizedTitle(metadata.title, it.name, names)) &&
             !SongNames.saysAnotherVersion(it.name, metadata.title, metadata.artist)
     }
 
@@ -1189,6 +1189,7 @@ internal class ExactMatcher(
         val plausible = rows.filter { plausibleAnotherScriptRow(it, names, recording, liveNames) }
         val ambiguous = indistinguishableCandidates(plausible, sourceLength)
         val eligible = rows.filter { eligibleAnotherScriptRow(it, names, recording, sourceLength, liveNames) &&
+            (!titleInParentheses(metadata.title, it.name) || knownParenthesizedTitle(metadata.title, it.name, names)) &&
             !conflictingOffLengthRow(it, rows, metadata, names) }
         val takes = rows.filter { isAnotherTake(it, names) && Takes.saysAnotherTake(it.name, names.artists + it.details.first()) != null }
             .map(::candidateName).toSet()
@@ -1230,8 +1231,11 @@ internal class ExactMatcher(
 
     private fun namesTitleInRow(row: String, names: Names): Boolean = names.titles.any { title ->
         SongNames.titleNames(row).any { part -> SongNames.same(title, part) || SongNames.same(title, SongNames.bareTitle(part)) } ||
-            bilingualTitleNames(title, row) || titleInParentheses(title, row)
+            bilingualTitleNames(title, row)
     }
+
+    private fun knownParenthesizedTitle(title: String, name: String, names: Names): Boolean = titleInParentheses(title, name) &&
+        names.titles.any { SongNames.same(it, name.substringBefore('(').substringBefore('（')) }
 
     private fun titleInParentheses(title: String, name: String): Boolean {
         val base = name.substringBefore('(').substringBefore('（')

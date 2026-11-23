@@ -602,7 +602,7 @@ class MatcherCasesTest {
     @Test
     fun aTitleInParenthesesCanNameTheSourceRecording() {
         val case = Case("parenthesized title", "song0", title = "I Want To Know", lengthMs = 211_888, linkMs = 211_888,
-            editions = listOf("Live" to 270_000), songs = listOf(
+            editions = listOf("Live" to 270_000), korea = "알고 싶어요" to "Fake Band", songs = listOf(
                 row("알고 싶어요(I want to know)", "I Want to Know", length = "3:30"),
                 row("I want to know (알고 싶어요)", "Live", length = "4:30")
             ))
