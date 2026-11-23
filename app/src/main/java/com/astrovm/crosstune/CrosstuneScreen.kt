@@ -16,6 +16,7 @@ import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalWindowInfo
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.animation.AnimatedVisibility
@@ -872,19 +873,23 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         // The song on screen isn't listed again right below it.
         val history = state.history.filterNot { state.result != null && it.link.url == state.link?.url }
         // So the Recent row the remote opened a song from goes, and Android would put the remote anywhere,
-        // as on the top bar's buttons: it goes to the song's main button, or Open while Play can't be pressed,
-        // once the card's there.
-        var toCard by remember { mutableStateOf(false) }
+        // as on the top bar's buttons: it goes to that song's main button, or Open while Play can't be pressed.
+        // Only for the song it opened: a ▶ that goes straight to the user's app leaves the remote on it.
+        var toCard by remember { mutableStateOf<String?>(null) }
         val screenFocus = LocalScreenFocus.current
+        val focusCard = { listOf(MAIN_FOCUS, OPEN_FOCUS).any { screenFocus?.run { goBackTo(it); restore() } == true } }
         LaunchedEffect(toCard, state.result, state.isMatching, state.isLoading) {
-            if (!toCard) return@LaunchedEffect
-            if (state.result == null && !state.isLoading) toCard = false
-            else if (listOf(MAIN_FOCUS, OPEN_FOCUS).any { screenFocus?.run { goBackTo(it); restore() } == true }) toCard = false
+            val url = toCard ?: return@LaunchedEffect
+            if (!state.isLoading && (state.result == null || state.link?.url != url)) toCard = null
+            // The card's buttons may be placed only on the next frame, so it tries once more then.
+            else if (!state.isLoading && (focusCard() || run { withFrameNanos {}; focusCard() })) toCard = null
         }
-        val recent = if (state.phone != Phone.TV) actions else actions.copy(
-            onHistoryEntryClick = { toCard = true; actions.onHistoryEntryClick(it) },
-            onHistoryOpen = { toCard = true; actions.onHistoryOpen(it) }
-        )
+        val recent = remember(actions, state.phone) {
+            if (state.phone != Phone.TV) actions else actions.copy(
+                onHistoryEntryClick = { toCard = it.link.url; actions.onHistoryEntryClick(it) },
+                onHistoryOpen = { toCard = it.link.url; actions.onHistoryOpen(it) }
+            )
+        }
         // Keyed on whether there's any, so clearing it fades the last list out rather than an empty one.
         AnimatedContent(targetState = history, contentKey = { it.isEmpty() }, transitionSpec = { fade() }, label = "history") { shown ->
             if (shown.isNotEmpty()) Column { HistorySection(shown, state, recent) }

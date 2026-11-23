@@ -766,6 +766,25 @@ class TvTest {
     }
 
     @Test
+    fun onATvARecentPlayThatGoesStraightToTheAppLeavesTheRemoteOnIt() {
+        for (n in 1..3) {
+            val url = "https://open.spotify.com/track/song$n"
+            HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band")))
+        }
+        launch()
+        composeRule.onNode(hasText("Song 2") and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 2" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        // With links not shown in Crosstune, ▶ opens the song in the user's app, and Song 2's card stays.
+        val play = composeRule.onNode(hasContentDescription(string(R.string.history_open, "Song 1")) and hasClickAction())
+        play.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        assertEquals("Song 2", model().uiState.result?.title)
+        play.assertIsFocused()
+    }
+
+    @Test
     fun onATvBackFromTheStepsASettingOpensLandsOnThatSetting() {
         settingsByRemote()
         val follow = composeRule.onNode(hasText(string(R.string.setting_lyrics_follow)))
