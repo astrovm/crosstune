@@ -1122,8 +1122,8 @@ internal class MainViewModel(
         followedUnnamed = null
         // The station may have paused out of sight. Keep expired text tied to its old deadline.
         if (lastConfirmedQueue?.isConfirmedAt(now()) == true) forgetRadioPlayback()
-        if (shownUnnamed?.confirmedQueueSong != null) {
-            uiState = uiState.copy(playingUnnamed = shownUnnamed.copy(confirmedQueueSong = null))
+        if (shownUnnamed?.playing?.app == RadioGarden.PACKAGE) {
+            uiState = uiState.copy(playingUnnamed = shownUnnamed.copy(heard = null, confirmedQueueSong = null))
         }
         val source = playback?.takeIf { it.hasAccess() }
         if (source == null) {
@@ -1180,7 +1180,7 @@ internal class MainViewModel(
                 if (unnamed?.reportsState != true) return@collectLatest
                 source.follow(unnamed.played, unnamed.app, unnamed.session).collect { following ->
                     followedUnnamed = following?.let { unnamed to it }
-                    checkHeard(following)
+                    if (unnamed.app != RadioGarden.PACKAGE) checkHeard(following)
                     showUnnamed()
                 }
             }
@@ -1241,11 +1241,23 @@ internal class MainViewModel(
     private fun showUnnamed() {
         val shown = liveUnnamed ?: followedUnnamed?.first?.takeIf { heardNow == null }
         val following = followedUnnamed?.takeIf { (followed) -> shown?.reportsState == true && followed.app == shown.app && followed.played == shown.played }?.second
-        val was = uiState.playingUnnamed?.takeIf { it.playing == shown && liveUnnamed != null }
         val song = confirmedRadioQueue(shown)?.song
-        uiState = uiState.copy(playingUnnamed = shown?.let { PlayingUnnamed(it, was?.heard, following, song) })
+        val heard = uiState.playingUnnamed?.takeIf {
+            liveUnnamed != null && (it.playing == shown || it.playing.sameRadioPlayback(shown))
+        }?.heard?.takeIf { song == null || RadioGarden.sameSong(song, it.metadata) }
+        uiState = uiState.copy(playingUnnamed = shown?.let { PlayingUnnamed(it, heard, following, song) })
         showPlayingNow()
     }
+
+    /** The queue and logo can change while the same Radio Garden station plays on. */
+    private fun Unnamed.sameRadioPlayback(other: Unnamed?): Boolean {
+        if (app != RadioGarden.PACKAGE || other?.app != RadioGarden.PACKAGE) return false
+        return name == other.name && session == other.session && where == other.where
+    }
+
+    /** Radio Garden's clock measures the stream. A song heard in it has its own clock. */
+    private val PlayingUnnamed?.followingForHearing: Following?
+        get() = this?.takeUnless { it.playing.app == RadioGarden.PACKAGE }?.following
 
     /** Tells whether the bar with what's playing is on screen, as it comes and goes. */
     fun playingBarInSight(shown: Boolean) {
@@ -1266,7 +1278,7 @@ internal class MainViewModel(
     private fun showHeardByEar(heard: Heard.Song, startedWith: Following?): Boolean {
         heardFrom = HeardFrom(heard, startedWith, heard.startedAtMs ?: now())
         uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = heard)) }
-        checkHeard(uiState.playingUnnamed?.following)
+        checkHeard(uiState.playingUnnamed.followingForHearing)
         if (heardFrom?.heard !== heard) return false
         viewModelScope.launch {
             delay(endOf(heard)?.minus(now()) ?: BY_EAR_UNKNOWN_MS)
@@ -1283,9 +1295,11 @@ internal class MainViewModel(
     private suspend fun nameUnnamed(source: PlaybackSource) {
         source.unnamedUpdates().distinctUntilChanged().collectLatest { unnamed ->
             // Started, paused or played again, it's listened to at once once it plays.
-            nextByEarAtMs = 0L
-            quietByEar = 0
-            unheardByEar = false
+            if (unnamed?.sameRadioPlayback(liveUnnamed) != true) {
+                nextByEarAtMs = 0L
+                quietByEar = 0
+                unheardByEar = false
+            }
             liveUnnamed = unnamed
             val check = updateRadioQueue(unnamed)
             showUnnamed()
@@ -1485,7 +1499,7 @@ internal class MainViewModel(
             val check = confirmedRadioQueue()
             if (check != null && (!byMicrophone || !check.isDueAt(now()))) continue
             // How the app said it played as the sound to hear started, which what it says after is checked against.
-            val startedWith = uiState.playingUnnamed?.following
+            val startedWith = uiState.playingUnnamed.followingForHearing
             // Stopped for one of those, it's tried again once that's done.
             val heard = coroutineScope {
                 val listening = async { listener.listenToPlaying(byMicrophone) }
@@ -1609,7 +1623,7 @@ internal class MainViewModel(
         val length = heard.metadata.lengthMs ?: return false
         val at = heard.offsetMs ?: return false
         val from = heardFrom?.takeIf { it.heard === heard }
-        val clock = uiState.playingUnnamed?.following?.clock
+        val clock = uiState.playingUnnamed.followingForHearing?.clock
         val appAt = from?.appAtMs
         if (from == null || appAt == null || clock == null) return appAt == null && clock == null && now() < endOf(heard, length, at)
         return (at + (clock.positionAt(now()) - appAt) / from.appSpeed * heard.speed).toLong() in 0 until length
