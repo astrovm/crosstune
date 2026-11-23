@@ -3440,14 +3440,14 @@ internal class MainViewModel(
     }
 
     /** How long [song] is, where the app plays it, as the singing heard is timed by its clock: as the app says, or else the song or its words. */
-    private fun untimedLengthMs(song: MusicMetadata) = appFollowing?.durationMs ?: song.lengthMs ?: found?.lengthMs
+    private fun untimedLengthMs(song: MusicMetadata) = appFollowing?.durationMs?.takeIf { it > 0 } ?: song.lengthMs ?: found?.lengthMs
 
     /** [song]'s words, found with no timing, timed by the singing heard in [heardStretches], once any line's been heard. */
     private suspend fun timeByEar(song: MusicMetadata) {
         val heard = heardStretches
         val words = uiState.lyrics
         val knownLength = untimedLengthMs(song)
-        val length = knownLength ?: heard.maxOfOrNull { it.toMs } ?: return
+        val length = knownLength ?: heard.map { it.toMs }.maxOrNull() ?: return
         // A lyric source or a different recording can give the wrong length; only the player says this one ended.
         val playerLengthKnown = appFollowing?.durationMs?.let { it > 0 } == true
         // A long song heard through twice takes a while to line up, so it's done away from the screen.

@@ -56,7 +56,7 @@ class UntimedSingingTest {
     private val realSinging = MainActivity.singingFactory
 
     /** Six lines with no timing, sung three seconds apart from two seconds in. */
-    private val lines = listOf("Sing to me tonight", "Under the yellow moon", "Every river finds the sea", "Hold the morning light", "Dancing on the water", "Never let it go")
+    private var lines = listOf("Sing to me tonight", "Under the yellow moon", "Every river finds the sea", "Hold the morning light", "Dancing on the water", "Never let it go")
 
     private var startedAt = 0L
     private var startedFromMs = 0L
@@ -178,6 +178,52 @@ class UntimedSingingTest {
     private fun lineStarts() = state().lyricLines.map { it.timeMs }
 
     private fun shows(text: String) = composeRule.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
+
+    private fun recordedChorusWithPlayerDuration(durationMs: Long?) {
+        val stretches = mutableListOf<HeardStretch>()
+        val recorded = mutableListOf<String>()
+        checkNotNull(javaClass.getResourceAsStream("/syncreplay/wrong-chorus.tsv")).bufferedReader().useLines { rows ->
+            rows.forEach { row ->
+                val cells = row.split('\t')
+                when (cells[0]) {
+                    "L" -> recorded += cells[1]
+                    "S" -> stretches += HeardStretch(cells[1].toLong(), cells[2].toLong(), emptyList())
+                    "W" -> stretches[stretches.lastIndex] = stretches.last().let { it.copy(words = it.words + (cells[2] to cells[1].toLong())) }
+                }
+            }
+        }
+        lines = recorded
+        untimedWords(seconds = 283)
+        openLyrics()
+        plays(durationMs = durationMs)
+        val song = checkNotNull(state().lyricsFor)
+        val words = state().lyrics
+        checkNotNull(controller).destroyAndSettle()
+        kotlinx.coroutines.runBlocking {
+            val cache = LookupCache(File(app.cacheDir, "heard_untimed.json"), Dispatchers.Unconfined)
+            HeardSongs(cache).save(song, words, stretches)
+        }
+        openLyrics()
+        waitUntil { state().lyricsTimedByEar }
+    }
+
+    @Test
+    fun aPlayerLengthMarksTheRecordedFirstPlayComplete() {
+        recordedChorusWithPlayerDuration(283_000)
+        assertEquals(LyricLine.NOT_HEARD, state().lyricLines[27].timeMs)
+    }
+
+    @Test
+    fun noPlayerLengthDoesNotMarkTheRecordedFirstPlayComplete() {
+        recordedChorusWithPlayerDuration(null)
+        assertEquals(176_490L, state().lyricLines[27].timeMs)
+    }
+
+    @Test
+    fun aZeroPlayerLengthDoesNotMarkTheRecordedFirstPlayComplete() {
+        recordedChorusWithPlayerDuration(0)
+        assertEquals(176_490L, state().lyricLines[27].timeMs)
+    }
 
     @Test
     fun linesHeardAreTimedWhereTheyreSungAndTheRestStayUnlit() {

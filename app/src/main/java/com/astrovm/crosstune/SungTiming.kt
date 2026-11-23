@@ -80,6 +80,7 @@ internal object SungTiming {
                 Placed(line, ms, score - PRIOR * maxOf(0.0, abs(ms - expected) / lengthMs - TOLERANCE), alike, heardMs, pieces.first().written, owned)
             }
         }.filter { it.support >= MIN_SUPPORT }
+        if (candidates.isEmpty()) return emptyMap()
         val firstLetters = byLine.mapValues { (_, its) -> its.first().letters }
         val durations = byLine.mapValues { (_, pieces) -> pieces.sumOf { SpokenWords.sungLetters(it.text) } * LETTER_MS }
         // Before the end, an unplaced copy may simply not have been sung yet. A guessed length can't say the song ended.
@@ -89,9 +90,9 @@ internal object SungTiming {
         return placed.filter { placed -> stretches.any { placed.ms in it.fromMs - EDGE_MS..it.toMs } }.associate { it.line to it.ms }
     }
 
-    /** The first play was heard from near its start through its end, without a restart or a long gap. */
+    /** The nonempty hearing covers the first play from near its start through its end, without a restart or a long gap. */
     private fun heardOnePlay(heard: List<HeardStretch>, lengthMs: Long): Boolean {
-        val first = heard.firstOrNull() ?: return false
+        val first = heard.first()
         if (first.fromMs > COMPLETE_MARGIN_MS || heard.last().toMs < lengthMs - COMPLETE_MARGIN_MS) return false
         return heard.zipWithNext().all { (a, b) -> b.fromMs >= a.fromMs && b.fromMs - a.toMs <= COMPLETE_GAP_MS }
     }
