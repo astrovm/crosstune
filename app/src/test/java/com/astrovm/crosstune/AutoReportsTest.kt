@@ -37,6 +37,53 @@ class AutoReportsTest {
     private fun paid(owed: AutoReports.Owed, reports: AutoReports = this.reports) = reports.went(checkNotNull(reports.take(owed)), Delivery.SENT)
 
     @Test
+    fun aDeferredReportIsOnlyOfferedForItsOwnRecording() {
+        reports.allowed = null
+        val first = song("Demo").copy(recordingId = "player:first")
+        val second = first.copy(recordingId = "player:second")
+        reports.owe(first, SongProblem.SUNG_OFF, json("first"))
+        assertTrue(reports.owes(first, SongProblem.SUNG_OFF))
+        assertFalse(reports.owes(second, SongProblem.SUNG_OFF))
+        reports.owe(second, SongProblem.SUNG_OFF, json("second"))
+        assertEquals(listOf("first", "second"), reports.owed().names())
+    }
+
+    @Test
+    fun otherProblemsForDifferentRecordingsAreKeptSeparately() {
+        val first = song("Demo").copy(recordingId = "player:first")
+        val second = first.copy(recordingId = "player:second")
+        reports.owe(first, SongProblem.NO_LYRICS, json("first"))
+        assertFalse(reports.owes(second, SongProblem.NO_LYRICS))
+        reports.owe(second, SongProblem.NO_LYRICS, json("second"))
+        assertEquals(listOf("first", "second"), reports.owed().names())
+    }
+
+    @Test
+    fun legacyOwedReportsRemainReadable() {
+        val old = JSONObject().put("key", "sung_off\u0000demo\u0000band").put("json", json("old"))
+        preferences.edit().putString("auto_reports_owed", JSONArray().put(old).toString()).commit()
+        assertEquals(listOf("old"), reports.owed().names())
+        assertTrue(reports.owes(song("Demo"), SongProblem.SUNG_OFF))
+        assertFalse(reports.owes(song("Demo").copy(recordingId = "player:other"), SongProblem.SUNG_OFF))
+        paid(reports.owed().single())
+        assertTrue(reports.owed().isEmpty())
+    }
+
+    @Test
+    fun anInterruptedOfferCanBeAskedAgainButAClosedOfferCannot() {
+        preferences.edit().clear().commit()
+        reports.asked()
+        assertFalse(reports.mayAsk())
+        reports.offerInterrupted()
+        assertTrue(reports.mayAsk())
+        reports.offerInterrupted()
+        assertTrue(reports.mayAsk())
+        reports.asked()
+        reports.closed()
+        assertFalse(reports.mayAsk())
+    }
+
+    @Test
     fun undecidedUntilTheUserSaysAndThenRemembered() {
         preferences.edit().clear().commit()
         assertNull(reports.allowed)

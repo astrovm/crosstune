@@ -234,6 +234,43 @@ class LyricsSyncTest {
     }
 
     @Test
+    fun timingSavedWithABlankPlayerIdSurvivesAnUpdateWithOrWithoutALink() {
+        val store = LyricsSyncStore(prefs)
+        val points = listOf(SyncPoint(10_000, 12_000))
+        for (id in listOf("", "  ")) {
+            val blank = song.copy(recordingId = id)
+            val temporary = blank.copy(recordingId = "temporary")
+            store.save(temporary, lines, points)
+            val all = JSONObject(checkNotNull(prefs.getString("lyrics_sync", null)))
+            val saved = all.remove(RecordingKey.of(temporary))
+            val mainKey = "${SongNames.normalize(blank.title)}\u0000${SongNames.normalize(blank.artist)}\u0000$id"
+            all.put(mainKey, saved)
+            prefs.edit().putString("lyrics_sync", all.toString()).commit()
+            assertEquals(points, store.load(blank, lines))
+            assertEquals(points, store.load(blank.copy(url = "https://music.youtube.com/watch?v=abcdefghijk"), lines))
+        }
+    }
+
+    @Test
+    fun changingSheetsDiscardsPendingEvidenceEvenIfTheOldSheetReturns() {
+        val store = LyricsSyncStore(prefs)
+        val recording = song.copy(recordingId = "player:one")
+        store.rememberPending(recording, lines, PendingShift(22_000, 40_000, 60_000))
+        assertNull(store.pending(recording, lines.dropLast(1)))
+        assertNull(store.pending(recording, lines))
+    }
+
+    @Test
+    fun blankPlayerIdsUseTheLinkOnlyForPendingEvidence() {
+        val store = LyricsSyncStore(prefs)
+        val first = song.copy(recordingId = "", url = "https://music.youtube.com/watch?v=abcdefghijk")
+        val second = first.copy(url = "https://music.youtube.com/watch?v=lmnopqrstuv")
+        store.rememberPending(first, lines, PendingShift(22_000, 40_000, 60_000))
+        assertNull(store.pending(second, lines))
+        assertEquals(PendingShift(22_000, 40_000, 60_000), store.pending(first, lines))
+    }
+
+    @Test
     fun malformedPendingEvidenceCannotConfirmTiming() {
         val store = LyricsSyncStore(prefs)
         val song = song.copy(recordingId = "player:one")

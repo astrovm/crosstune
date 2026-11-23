@@ -66,8 +66,7 @@ internal class AutoReports(
             }
         }
 
-    private fun keyOf(song: MusicMetadata, problem: SongProblem) =
-        "${problem.key}\u0000${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
+    private fun keyOf(song: MusicMetadata, problem: SongProblem) = "${problem.key}\u0000${RecordingKey.of(song)}"
 
     /** Whether the offer to allow them wasn't made yet in this app session: the process, so it's asked again once the app is started anew. */
     fun mayAsk(): Boolean = preferences.getLong(KEY_ASKED_IN, NEVER) != session
@@ -75,6 +74,11 @@ internal class AutoReports(
     /** The offer is made now, so it isn't again until the app is started anew. */
     fun asked() {
         preferences.edit().putLong(KEY_ASKED_IN, session).apply()
+    }
+
+    /** An offer hidden by closing the lyrics was not answered. */
+    fun offerInterrupted() {
+        if (!mayAsk()) preferences.edit().remove(KEY_ASKED_IN).apply()
     }
 
     /**
@@ -229,7 +233,9 @@ internal class AutoReports(
             val earlier = songs.keys().asSequence().mapNotNull { key ->
                 val owed = earlierReport(key, songs.optJSONObject(key) ?: return@mapNotNull null, sung, version, android) ?: return@mapNotNull null
                 // A song whose timing went already, by hand in this version, or kept, isn't sent again.
-                owed.takeIf { it.key !in sent && "${SongProblem.TIMED_BY_HAND.key}\u0000${key.split('\u0000').take(2).joinToString("\u0000")}" !in sent }
+                val hand = "${SongProblem.TIMED_BY_HAND.key}\u0000"
+                val legacy = key.split('\u0000').take(2).joinToString("\u0000")
+                owed.takeIf { it.key !in sent && hand + key !in sent && hand + legacy !in sent }
             }.toList()
             keep(kept() + earlier)
             preferences.edit().putBoolean(KEY_EARLIER_READ, true).commit()

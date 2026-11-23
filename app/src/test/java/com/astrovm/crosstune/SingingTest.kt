@@ -1336,6 +1336,33 @@ class SingingTest {
     }
 
     @Test
+    fun farReportDueWhenTheAppGoesOutOfSightIsKeptBeforeClosing() {
+        chorusHeardFarFromWhereItsSung()
+        val song = checkNotNull(model().uiState.lyricsFor)
+        composeRule.runOnIdle { model().pauseFollowingNext() }
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        assertTrue(offerShown())
+    }
+
+    @Test
+    fun farReportDueWhenPlaybackRestartsIsKeptBeforeClosing() {
+        chorusHeardFarFromWhereItsSung()
+        val song = checkNotNull(model().uiState.lyricsFor)
+        plays(positionMs = 0)
+        composeRule.waitForIdle()
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        assertTrue(offerShown())
+    }
+
+    @Test
     fun closingFarWordsOffersTheirReportWhenTheyOpenAgain() {
         chorusHeardFarFromWhereItsSung()
         composeRule.runOnIdle { model().dismissLyrics() }

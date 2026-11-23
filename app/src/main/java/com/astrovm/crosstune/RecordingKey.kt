@@ -15,7 +15,7 @@ internal object RecordingKey {
      */
     fun of(song: MusicMetadata): String {
         val name = "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
-        val recording = song.recordingId?.takeIf { it.isNotBlank() } ?: track(song.url)?.let { "${it.service}:${it.id}" }
+        val recording = song.recordingId ?: track(song.url)?.let { "${it.service}:${it.id}" }
         return name + recording?.let { "\u0000$it" }.orEmpty() + song.lengthMs?.takeIf { it > 0 }?.let { "\u0000$it" }.orEmpty() +
             instrumentalAlbumKey(song)?.let { "\u0000$it" }.orEmpty()
     }

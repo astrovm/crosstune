@@ -124,8 +124,11 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
 
     fun pending(song: MusicMetadata, lines: List<LyricLine>): PendingShift? {
         if (!RecordingKey.identifiesRecording(song)) return null
-        val saved = pendingAll().optJSONObject(keyOf(song)) ?: return null
-        if (saved.optString("words") != fingerprint(lines)) return null
+        val saved = pendingAll().optJSONObject(pendingKey(song)) ?: return null
+        if (saved.optString("words") != fingerprint(lines)) {
+            clearPending(song)
+            return null
+        }
         val offset = saved.opt("offset") as? Number ?: return null
         val from = saved.opt("from") as? Number ?: return null
         val to = saved.opt("to") as? Number ?: return null
@@ -136,7 +139,7 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
     fun rememberPending(song: MusicMetadata, lines: List<LyricLine>, pending: PendingShift) {
         if (!RecordingKey.identifiesRecording(song)) return
         val all = pendingAll()
-        val key = keyOf(song)
+        val key = pendingKey(song)
         all.remove(key)
         all.put(key, JSONObject().put("words", fingerprint(lines)).put("offset", pending.offsetMs).put("from", pending.fromMs).put("to", pending.toMs))
         while (all.length() > MAX_SONGS) all.remove(all.keys().next())
@@ -145,7 +148,7 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
 
     fun clearPending(song: MusicMetadata) {
         val all = pendingAll()
-        if (all.remove(keyOf(song)) != null) preferences.edit { putString(KEY_PENDING, all.toString()) }
+        if (all.remove(pendingKey(song)) != null) preferences.edit { putString(KEY_PENDING, all.toString()) }
     }
 
     private fun pendingAll(): JSONObject = preferences.getString(KEY_PENDING, null)?.let {
@@ -189,6 +192,9 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
     }
 
     private fun keyOf(song: MusicMetadata) = RecordingKey.of(song)
+
+    /** Pending evidence can use a link when a player supplies only a blank ID. */
+    private fun pendingKey(song: MusicMetadata) = RecordingKey.of(song.copy(recordingId = song.recordingId?.takeIf { it.isNotBlank() }))
 
     /** Which words these are, timings and all, in a few characters. */
     private fun fingerprint(lines: List<LyricLine>) = lines.joinToString("\n") { "${it.timeMs} ${it.text}" }.hashCode().toString(16)

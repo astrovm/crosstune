@@ -4578,14 +4578,12 @@ internal class MainViewModel(
         // An offer for words being closed would vanish unseen, using up this session's one offer.
         if (autoReports.allowed == true) reportFarIfStillMoved()
         else if (autoReports.allowed == null && farReportIsDue()) {
-            val song = uiState.lyricsFor
-            val sender = reports
-            if (song != null && sender != null) {
-                val report = reportOn(sender, song, problem = SongProblem.SUNG_OFF).copy(id = autoReports.idFor(song, SongProblem.SUNG_OFF))
-                autoReports.owe(song, SongProblem.SUNG_OFF, report.json())
-            }
+            keepFarReport()
             farReportPending = false
         }
+        if (autoReports.allowed == null && SongProblem.SUNG_OFF in uiState.reportOfferFor &&
+            uiState.lyricsFor?.let { autoReports.owes(it, SongProblem.SUNG_OFF) } == true
+        ) autoReports.offerInterrupted()
         closeReport()
         if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) {
             uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
@@ -4601,8 +4599,19 @@ internal class MainViewModel(
 
     /** No more of this play will be heard: a lone far match is reported only if nothing put the words back. */
     private fun reportFarIfStillMoved() {
-        if (farReportIsDue()) problemFound(SongProblem.SUNG_OFF)
+        if (farReportIsDue()) {
+            if (autoReports.allowed == null) keepFarReport()
+            problemFound(SongProblem.SUNG_OFF)
+        }
         farReportPending = false
+    }
+
+    /** Keep the original report until consent is decided, even if the screen later closes. */
+    private fun keepFarReport() {
+        val song = uiState.lyricsFor ?: return
+        val sender = reports ?: return
+        val report = reportOn(sender, song, problem = SongProblem.SUNG_OFF).copy(id = autoReports.idFor(song, SongProblem.SUNG_OFF))
+        autoReports.owe(song, SongProblem.SUNG_OFF, report.json())
     }
 
     private fun farReportIsDue() = farReportPending && movedFar && syncPoints.isEmpty()
