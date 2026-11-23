@@ -83,11 +83,17 @@ internal object SungTiming {
         val firstLetters = byLine.mapValues { (_, its) -> its.first().letters }
         val durations = byLine.mapValues { (_, pieces) -> pieces.sumOf { SpokenWords.sungLetters(it.text) } * LETTER_MS }
         // Before the end, an unplaced copy may simply not have been sung yet. A guessed length can't say the song ended.
-        val oneCompletePlay = knownLength && heard.isNotEmpty() && heard.last().toMs >= lengthMs - COMPLETE_MARGIN_MS &&
-            heard.zipWithNext().none { (a, b) -> b.fromMs < a.fromMs }
+        val oneCompletePlay = knownLength && heardOnePlay(heard, lengthMs)
         val chain = backed(sure(candidates, byLine.keys.max() + 2, durations, if (oneCompletePlay) lines else emptyList()), firstLetters)
         val placed = chain + filled(chain, firstLetters, stretches, byLine)
         return placed.filter { placed -> stretches.any { placed.ms in it.fromMs - EDGE_MS..it.toMs } }.associate { it.line to it.ms }
+    }
+
+    /** The first play was heard from near its start through its end, without a restart. */
+    private fun heardOnePlay(heard: List<HeardStretch>, lengthMs: Long): Boolean {
+        val first = heard.firstOrNull() ?: return false
+        if (first.fromMs > COMPLETE_MARGIN_MS || heard.last().toMs < lengthMs - COMPLETE_MARGIN_MS) return false
+        return heard.zipWithNext().none { (a, b) -> b.fromMs < a.fromMs }
     }
 
     /** A raw ASR word has one time even when it covers many written syllables. */
