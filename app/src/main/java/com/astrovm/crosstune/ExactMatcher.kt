@@ -865,10 +865,9 @@ internal class ExactMatcher(
                 }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
             }
         }
+        appleProvedCandidate(metadata, rows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         addDeezerNames(metadata, names, rows.any { it.id != null && it.lengthMs != null })
         val song = songRow(metadata, rows, videoRows, names, recording)
-        if (song != null && (isTheSong(song, names) || isDeezerSong(song, names))) return Answer(watchUrl + song.id, lasting = names.everyStore)
-        appleProvedCandidate(metadata, rows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         matchingVideo(metadata, rows, videoRows, names, recording, watchUrl)?.let { return it }
         // Last, the songs, then the videos, are picked from, each asked about apart.

@@ -8,6 +8,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 
 /** YouTube Music and Deezer answers captured by matchcheck; Apple editions are reconstructed as in its replay. */
@@ -22,7 +24,7 @@ class MatcherRecordingEvidenceTest {
         JSONArray(GZIPInputStream(stream).bufferedReader().use { it.readText() })
     }
 
-    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false, reverseDown: Boolean = false): String? {
+    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false, reverseDown: Boolean = false, deezerHeld: Boolean = false): String? {
         val song = captured.getJSONObject(index)
         val metadata = MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = song.getLong("lengthMs"))
         val us = JSONArray().also { results ->
@@ -54,7 +56,10 @@ class MatcherRecordingEvidenceTest {
                     } else JSONArray()
                     JSONObject().put("results", results)
                 }
-                "api.deezer.com" -> JSONObject().put("data", song.getJSONArray(if (url.encodedPath == "/search/artist") "artists" else "tracks"))
+                "api.deezer.com" -> {
+                    if (deezerHeld && !CountDownLatch(1).await(2, TimeUnit.SECONDS)) throw IOException("Deezer is still waiting")
+                    JSONObject().put("data", song.getJSONArray(if (url.encodedPath == "/search/artist") "artists" else "tracks"))
+                }
                 "music.youtube.com" -> song.getJSONObject(if (FakeSpotify.bodyOf(request).contains(VIDEOS)) "videos" else "songs")
                 else -> throw IOException("not captured: $url")
             }
@@ -73,6 +78,11 @@ class MatcherRecordingEvidenceTest {
     @Test fun jealousOpensTheJapaneseSongWithoutAppleNativeNames() = assertEquals(WATCH + "8eQdsCZWrLg", find(3, false))
 
     @Test fun aDifferentAppleRecordingDoesNotProveTheJapaneseSong() = assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, differentRecording = true))
+
+    @Test fun anAppleProvedCandidateDoesNotWaitForDeezer() {
+        assertEquals(WATCH + "8eQdsCZWrLg", find(3, false, deezerHeld = true))
+        assertTrue(fake.requestedUrls.none { it.contains("api.deezer.com") })
+    }
 
     @Test fun aFailedCandidateSearchHoldsTheFanUploadForRetry() {
         assertEquals(null, find(2, false, reverseDown = true))
