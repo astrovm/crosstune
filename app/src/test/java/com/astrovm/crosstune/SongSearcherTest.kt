@@ -315,6 +315,11 @@ class SongSearcherTest {
                 "Idol" to "YOASOBI"
             )
         )
+        // A cover named "Song - Artist" isn't a song named what was typed: its name is the song's.
+        assertEquals(
+            listOf("夜に駆ける" to "YOASOBI", "Yoru Ni Kakeru - YOASOBI" to "Cover Artist"),
+            foundTitles("Yoru ni Kakeru YOASOBI", "Yoru Ni Kakeru - YOASOBI" to "Cover Artist", "夜に駆ける" to "YOASOBI")
+        )
         // "The" needn't be typed.
         assertEquals(
             listOf("上を向いて歩こう" to "The Peanuts", "Ue o Muite Arukou" to "Cover Band"),
