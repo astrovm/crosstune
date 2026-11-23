@@ -77,6 +77,7 @@ class TvPlayTest {
         running = emptySet()
     }
     private val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+    private val morpheMusic = "app.morphe.android.apps.youtube.music"
     private val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
     private val lines = "[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"
 
@@ -675,12 +676,12 @@ class TvPlayTest {
     @Test
     fun onAPhoneThePlayersPlayDoesntOpenTheAppItCantAsk() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         launch()
         click(play)
         waitUntil { playback.opened.size == 1 }
         // The phone's own app plays it, as it's installed.
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         waitUntil { playback.cameBack == 1 }
         playback.playing.value = null
         composeRule.waitForIdle()
@@ -690,12 +691,12 @@ class TvPlayTest {
     }
 
     /**
-     * On a phone, Play pressed in an app that only plays in front, as YouTube Music without Premium: running, it's asked
+     * On a phone, Play pressed in an app that only plays in front: running, it's asked
      * from behind, where it won't, so it opens on the song.
      */
     private fun playInFront() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         playback.running = null
         playback.startsInBackground = false
         launch()
@@ -716,7 +717,7 @@ class TvPlayTest {
         assertEquals(WindowManager.LayoutParams.MATCH_PARENT, params(floating.get()).width)
         assertEquals(WindowManager.LayoutParams.MATCH_PARENT, params(floating.get()).height)
         // Once it plays there, its words show over it, and Crosstune stays behind.
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         waitUntil { shown("Demo one") }
         assertEquals(0, playback.cameBack)
         // Back goes back through Crosstune, then leaves it to the app, which plays on.
@@ -727,7 +728,7 @@ class TvPlayTest {
     fun onAPhoneNotAllowedToShowOverAppsAnAppThatOnlyPlaysInFrontIsLeftThere() {
         ShadowSettings.setCanDrawOverlays(false)
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         playback.running = null
         playback.startsInBackground = false
         launch()
@@ -738,19 +739,19 @@ class TvPlayTest {
         checkNotNull(controller) { "Expected controller to be non-null" }.get().answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
         composeRule.waitForIdle()
         waitUntil { playback.opened.size == 1 }
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         composeRule.waitForIdle()
         shadowOf(android.os.Looper.getMainLooper()).idle()
         assertNull(shadowOf(app).peekNextStartedService())
         assertEquals(0, playback.cameBack)
     }
 
-    /** On a phone, Play pressed on a song paused in an app that only plays in front, as YouTube Music without Premium. */
+    /** On a phone, Play pressed on a song paused in an app that only plays in front. */
     private fun playOnPaused() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         playback.startsInBackground = false
-        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         launch()
         click(play)
     }
@@ -778,7 +779,7 @@ class TvPlayTest {
     @Test
     fun onAPhoneAnAppOpenedOnTheSongThatStopsOnceLeftIsBroughtBackCovered() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         // Not running, it can't be asked from behind, so it's opened on the song, not known yet to play only in front.
         playback.running = emptySet()
         playback.startsInBackground = false
@@ -786,15 +787,15 @@ class TvPlayTest {
         click(play)
         waitUntil { playback.opened.size == 1 }
         // Crosstune comes back once it plays there, not as soon as it shows the song: YouTube Music, left before it starts, never does.
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         composeRule.waitForIdle()
         shadowOf(android.os.Looper.getMainLooper()).idle()
         assertEquals(0, playback.cameBack)
         assertNull(shadowOf(app).peekNextStartedService())
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         waitUntil { playback.cameBack == 1 }
         // Left, it stops, as it only plays in front: it's brought back there, covered, to play on.
-        playback.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         waitUntil { playback.broughtToFront.size == 1 }
         waitUntil { shadowOf(app).peekNextStartedService() != null }
         assertTrue(shadowOf(app).nextStartedService.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
@@ -803,16 +804,16 @@ class TvPlayTest {
     @Test
     fun onAPhoneAnAppOpenedOnTheSongThatPlaysOnOnceLeftIsLeftToIt() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         playback.running = emptySet()
         launch()
         click(play)
         waitUntil { playback.opened.size == 1 }
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         waitUntil { playback.cameBack == 1 }
         // Paused from Crosstune, it isn't taken for one that stopped once left.
         click(string(R.string.lyrics_pause))
-        playback.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         composeRule.waitForIdle()
         shadowOf(android.os.Looper.getMainLooper()).idle()
         assertEquals(listOf(false), playback.plays)
@@ -822,17 +823,17 @@ class TvPlayTest {
     @Test
     fun onAPhoneTheSongPlayingInAnotherBuildOfTheAppAskedIsntTakenForIt() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         playback.running = null
         // Another build of YouTube Music plays it, not the one asked, which is on the phone.
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YT Music Morphe", canSeek = true, appPackage = "app.morphe.android.apps.youtube.music")
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
         launch()
         click(play)
         waitUntil { playback.songsAsked.isNotEmpty() }
         // Not seen to play there, the app asked is opened on the song.
         shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.LOAD_SONG_MS))
         waitUntil { playback.opened.isNotEmpty() }
-        assertEquals(listOf(youTubeMusic to link), playback.opened)
+        assertEquals(listOf(morpheMusic to link), playback.opened)
     }
 
     @Test
