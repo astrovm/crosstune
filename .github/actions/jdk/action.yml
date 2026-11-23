@@ -63,7 +63,9 @@ runs:
           ~/.gradle/caches/modules-2
           !~/.gradle/caches/modules-2/modules-2.lock
           !~/.gradle/caches/modules-2/gc.properties
-        key: gradle-shared-dependencies-v1-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/*.versions.toml', '**/versions.properties') }}
+        # A changed build file or gradle.properties gets a fresh key. Bump v1 if a repository
+        # changes an artifact without changing those files, since an exact hit cannot be updated.
+        key: gradle-shared-dependencies-v1-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle.properties', '**/gradle-wrapper.properties', 'gradle/*.versions.toml', '**/versions.properties') }}
         restore-keys: gradle-shared-dependencies-v1-${{ runner.os }}-
 
     - if: inputs.gradle == 'disabled'
