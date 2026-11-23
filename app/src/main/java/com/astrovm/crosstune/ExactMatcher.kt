@@ -1578,7 +1578,8 @@ internal class ExactMatcher(
     }
 
     private fun safePickedVideo(row: Row, names: Names): Boolean = !isAnotherVideoVersion(row.name, names) &&
-        (namedInAnotherScript(row.name) || videoTitleMatches(row.name, names))
+        (videoTitleMatches(row.name, names) || namedInAnotherScript(SongNames.bareTitle(row.name)) &&
+            names.titles.none(::namedInAnotherScript))
 
     private fun namesThePickedPart(part: NumberedPart, row: Row, video: Boolean): Boolean {
         val names = if (video) SongNames.titleNames(row.name) else listOf(row.name)
