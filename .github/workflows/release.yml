@@ -79,9 +79,10 @@ jobs:
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Main's test cache may hold mirror downloads; resolve the release from Central itself.
       - uses: ./.github/actions/jdk
         with:
-          gradle: read-only
+          gradle: central
 
       # The same checks as CI, which also build the minified release APK, plus the App Bundle
       # that Google Play needs.
@@ -218,8 +219,8 @@ jobs:
           path: Crosstune-${{ env.TAG }}.aab
           if-no-files-found: error
 
-  # Rebuilds the commit from scratch, with no Gradle cache, as F-Droid does before shipping our APK. It needs
-  # nothing from the other jobs, so it runs while they do; verify then compares the signed APK with it.
+  # Rebuilds independently with no Gradle cache: it downloads its own dependencies from Central, so verify
+  # compares the signed APK with a build that did not share its dependency files or build outputs.
   rebuild:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
