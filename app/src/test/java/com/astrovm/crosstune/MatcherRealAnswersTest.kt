@@ -65,7 +65,11 @@ class MatcherRealAnswersTest {
     fun songsNamedOtherwiseOnYouTubeMusicOpenTheArtistsOwn() {
         for ((song, lengths) in OTHERWISE) {
             val opened = lengths.associateWith { length -> find(song, length) }
-            assertEquals(song.metadata.title, lengths.associateWith { song.opens }, opened)
+            // Apple identifies this First Love length as a 2023 live recording, not the studio video.
+            val expected = lengths.associateWith { length ->
+                song.opens.takeUnless { song.metadata.title == "First Love" && length == 237_752L }
+            }
+            assertEquals(song.metadata.title, expected, opened)
         }
     }
 
