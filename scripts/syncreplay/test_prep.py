@@ -819,6 +819,41 @@ class HeardWhenAskedTest(unittest.TestCase):
 
 
 class ReplayAllTest(unittest.TestCase):
+    def test_it_scores_a_third_opening_after_a_short_second_play(self):
+        asked = []
+        def replay(*_, **__):
+            asked.append(json.loads((r.OUT / 'replay.json').read_text()))
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', side_effect=replay), \
+                patch.object(r, 'score_all') as score:
+            r.run_all(argparse.Namespace(gradle='fake', start=14000, work=4500, behind=0, songs=None, heard='.cached',
+                                         identified_player=True, first_until=64000, again_from=79000,
+                                         second_until=120000, third_from=79000))
+        self.assertEqual(asked[0]['songs'][0]['secondUntil'], 120000)
+        self.assertEqual(asked[0]['songs'][0]['thirdFrom'], 79000)
+        score.assert_called_once_with(['fake'], 14000, 79000)
+
+    def test_a_third_opening_requires_a_later_end_to_the_second(self):
+        args = dict(gradle='fake', start=14000, work=4500, behind=0, songs=None, heard='',
+                    first_until=64000, again_from=79000)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']):
+            with self.assertRaisesRegex(ValueError, 'third-from.*second-until'):
+                r.run_all(argparse.Namespace(**args, third_from=79000))
+            with self.assertRaisesRegex(ValueError, 'after the second start'):
+                r.run_all(argparse.Namespace(**args, second_until=79000, third_from=79000))
+
+    def test_it_hears_windows_requested_on_all_three_plays(self):
+        def replay(*_, **__):
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', side_effect=replay), \
+                patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score_all'):
+            r.run_all(argparse.Namespace(gradle='fake', start=14000, work=4500, behind=0, songs=None, heard='',
+                                         first_until=64000, again_from=79000, second_until=120000, third_from=79000))
+        heard.assert_called_once_with('fake', ['fake.from14000.first.shown.json', 'fake.from14000.second.shown.json', 'fake.from14000.shown.json'])
+
     def test_it_can_reopen_identified_recordings_at_another_position(self):
         asked = []
         def replay(*_, **__):

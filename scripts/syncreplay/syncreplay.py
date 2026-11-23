@@ -1125,16 +1125,24 @@ def run_all(args):
     asked = own() / "replay.json"
     first_until = getattr(args, 'first_until', None)
     again_from = getattr(args, 'again_from', None)
+    second_until = getattr(args, 'second_until', None)
+    third_from = getattr(args, 'third_from', None)
     if (first_until is None) != (again_from is None):
         raise ValueError('--first-until and --again-from must be given together')
     if first_until is not None and first_until <= args.start:
         raise ValueError('--first-until must be after --from')
+    if (second_until is None) != (third_from is None) or (third_from is not None and again_from is None):
+        raise ValueError('--third-from and --second-until need each other and --again-from')
+    if second_until is not None and second_until <= again_from:
+        raise ValueError('--second-until must be after the second start')
     requests = [{"song": song, "from": args.start, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]
     for request in requests:
         if getattr(args, 'identified_player', False):
             request['identifiedPlayer'] = True
         if first_until is not None:
             request.update(firstUntil=first_until, againFrom=again_from, behindAgain=args.behind, reopenAgain=True)
+        if third_from is not None:
+            request.update(secondUntil=second_until, thirdFrom=third_from)
     asked.write_text(json.dumps({"songs": requests}))
     # Their names too, one a line, as SyncReplayTest reads them before it can read JSON.
     names = own() / "replay.songs"
@@ -1152,9 +1160,9 @@ def run_all(args):
         if args.heard:
             break
         with ThreadPoolExecutor(SONGS_HEARD_AT_ONCE) as pool:
-            if not sum(pool.map(lambda song: hear_asked(song, ([f"{song}.from{args.start}.first.shown.json"] if first_until is not None else []) + [f"{song}.from{args.start}.shown.json"]), songs)):
+            if not sum(pool.map(lambda song: hear_asked(song, ([f"{song}.from{args.start}.first.shown.json"] if first_until is not None else []) + ([f"{song}.from{args.start}.second.shown.json"] if third_from is not None else []) + [f"{song}.from{args.start}.shown.json"]), songs)):
                 break
-    score_all(songs, args.start, again_from)
+    score_all(songs, args.start, third_from if third_from is not None else again_from)
 
 
 def score_all(songs, start, scored_from=None):
@@ -1559,6 +1567,8 @@ def main():
     p.add_argument('--identified-player', action='store_true', help='each player identifies its recording across plays')
     p.add_argument('--first-until', type=int, help='end the first play here; requires --again-from')
     p.add_argument('--again-from', type=int, help='reopen and start the second play here; requires --first-until')
+    p.add_argument('--second-until', type=int, help='end the second play here; requires --third-from')
+    p.add_argument('--third-from', type=int, help='reopen and start the third play here; requires --second-until')
     p.set_defaults(go=run_all)
     p = steps.add_parser("hear")
     p.add_argument("id")
