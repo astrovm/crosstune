@@ -76,7 +76,7 @@ internal object RadioGarden {
         if (!text.startsWith(spot, at, ignoreCase = true) || text.getOrNull(at - 1)?.isLetterOrDigit() == true) return@any false
         val afterSpot = at + spot.length
         if (text.getOrNull(afterSpot)?.isWhitespace() != true) return@any false
-        val blockStart = text.afterSpaces(afterSpot) ?: return@any false
+        val blockStart = (afterSpot + 1 until text.length).first { !text[it].isWhitespace() }
         val block = "block"
         text.startsWith(block, blockStart, ignoreCase = true) && text.getOrNull(blockStart + block.length)?.isLetterOrDigit() != true
     }
@@ -133,12 +133,12 @@ internal object RadioGarden {
         return text.substring(IHEART_TITLE.length, end).trim()
     }
 
-    /** The remaining text must be quoted fields. A spot type other than music makes the whole item unusable. */
+    /** The trimmed text must end with quoted fields. A spot type other than music makes the whole item unusable. */
     private fun iheartMusicFields(text: String, start: Int): Boolean {
         var at = start
         while (at < text.length) {
             if (!text[at].isWhitespace()) return false
-            val keyStart = text.afterSpaces(at) ?: return false
+            val keyStart = (at + 1 until text.length).first { !text[it].isWhitespace() }
             val equals = text.indexOf('=', keyStart)
             if (equals <= keyStart || text.getOrNull(equals + 1) != '"') return false
             val key = text.substring(keyStart, equals)
@@ -151,8 +151,6 @@ internal object RadioGarden {
         }
         return true
     }
-
-    private fun String.afterSpaces(from: Int): Int? = (from until length).firstOrNull { !this[it].isWhitespace() }
 
     /** Accent-insensitive for Latin names, but a voiced kana and its unvoiced form spell different words. */
     fun sameTitle(one: String, another: String): Boolean = titleKey(one) == titleKey(another)
