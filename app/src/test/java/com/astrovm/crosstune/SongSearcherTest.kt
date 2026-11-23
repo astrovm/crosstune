@@ -330,6 +330,16 @@ class SongSearcherTest {
             listOf("Song" to "Someone", "歌" to "…"),
             foundTitles("Song Thing", "Song" to "Someone", "歌" to "…")
         )
+        // A karaoke named just as typed is no reason to think the song was named in Latin letters.
+        assertEquals(
+            listOf("夜に駆ける" to "YOASOBI", "Yoru Ni Kakeru" to "Cover Band", "Yoru ni Kakeru YOASOBI (Karaoke)" to "Sing King"),
+            foundTitles(
+                "Yoru ni Kakeru YOASOBI",
+                "Yoru ni Kakeru YOASOBI (Karaoke)" to "Sing King",
+                "Yoru Ni Kakeru" to "Cover Band",
+                "夜に駆ける" to "YOASOBI"
+            )
+        )
         // The artist's own music box is still another recording.
         assertEquals(
             listOf("Yoru ni Kakeru" to "Someone", "夜に駆ける（オルゴール）" to "YOASOBI"),
@@ -344,23 +354,44 @@ class SongSearcherTest {
             listOf("Heart of Glass" to "Blondie", "ハート・オブ・グラス" to "Heart"),
             foundTitles("Heart of Glass", "Heart of Glass" to "Blondie", "ハート・オブ・グラス" to "Heart")
         )
+        // Its tag aside, the name is still word for word what was typed.
+        assertEquals(
+            listOf("Heart Of Glass (Single Version / Remastered)" to "Blondie", "ハート・オブ・グラス" to "Heart"),
+            foundTitles("Heart of Glass", "Heart Of Glass (Single Version / Remastered)" to "Blondie", "ハート・オブ・グラス" to "Heart")
+        )
+        // Not in another order: "Glass of Heart" is a song by Heart, called that in Japanese.
+        assertEquals(
+            listOf("ガラスの心" to "Heart", "Of Heart Glass" to "Band"),
+            foundTitles("Glass of Heart", "Of Heart Glass" to "Band", "ガラスの心" to "Heart")
+        )
         // Nor does a song of theirs whose name has none of the rest of what was typed.
         assertEquals(
             listOf("Glass" to "Cover Band", "Alone" to "Heart"),
             foundTitles("Heart Glass", "Glass" to "Cover Band", "Alone" to "Heart")
         )
+        // Or only some of it: "Can't Buy Me Love" isn't "Love Me Do".
+        assertEquals(
+            listOf("Love Me Do" to "The Beatles", "Love Me Do" to "BPC", "Can't Buy Me Love" to "The Beatles"),
+            foundTitles("Love Me Do Beatles", "Love Me Do" to "The Beatles", "Love Me Do" to "BPC", "Can't Buy Me Love" to "The Beatles")
+        )
     }
 
     @Test
-    fun theArtistAloneOrASongOfTheirsInLatinLettersKeepsDeezersOrder() {
+    fun theArtistAloneOrASongOfTheirsInLatinLettersLeadInDeezersOrder() {
         // "Idol" is named in Latin letters, so it's that one, then their other songs.
         assertEquals(
             listOf("Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI", "Idol" to "Cover Band"),
             foundTitles("Idol YOASOBI", "Idol" to "Cover Band", "Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI")
         )
+        // The artist alone is any of theirs, before a song that only has their name in it.
         assertEquals(
-            listOf("Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI"),
-            foundTitles("YOASOBI", "Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI")
+            listOf("Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI", "Yoasobi Night" to "Band"),
+            foundTitles("YOASOBI", "Yoasobi Night" to "Band", "Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI")
+        )
+        // As Deezer answered on the phone: covers naming the artist in their names first.
+        assertEquals(
+            listOf("アイドル" to "YOASOBI", "Idol Yoasobi Instrumental アイドル - Oshi no Ko" to "Bluee", "Idol (Yoasobi)" to "Noctave"),
+            foundTitles("Idol YOASOBI", "Idol Yoasobi Instrumental アイドル - Oshi no Ko" to "Bluee", "Idol (Yoasobi)" to "Noctave", "アイドル" to "YOASOBI")
         )
         // An artist of two words, typed in full.
         assertEquals(
