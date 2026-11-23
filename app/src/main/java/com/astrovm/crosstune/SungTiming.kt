@@ -57,8 +57,8 @@ internal object SungTiming {
      * it's sung, and ends where the next starts or, with the next not heard, once it's sung through. A
      * line not heard is [LyricLine.NOT_HEARD], so it's never lit. None at all when none is heard.
      */
-    fun timed(lines: List<String>, heard: List<HeardStretch>, lengthMs: Long): List<LyricLine> {
-        val starts = linesMs(lines, heard, lengthMs)
+    fun timed(lines: List<String>, heard: List<HeardStretch>, lengthMs: Long, knownLength: Boolean = true): List<LyricLine> {
+        val starts = linesMs(lines, heard, lengthMs, knownLength)
         if (starts.isEmpty()) return emptyList()
         return lines.mapIndexed { index, text ->
             val start = starts[index] ?: return@mapIndexed LyricLine(LyricLine.NOT_HEARD, text)
@@ -67,7 +67,7 @@ internal object SungTiming {
     }
 
     /** Where each of [lines] heard sung starts in the song, [lengthMs] long, by index. Lines not heard have none. */
-    fun linesMs(lines: List<String>, heard: List<HeardStretch>, lengthMs: Long): Map<Int, Long> {
+    fun linesMs(lines: List<String>, heard: List<HeardStretch>, lengthMs: Long, knownLength: Boolean = true): Map<Int, Long> {
         val stretches = heard.sortedBy { it.fromMs }
         val written = written(lines)
         if (written.isEmpty()) return emptyMap()
@@ -82,7 +82,10 @@ internal object SungTiming {
         }.filter { it.support >= MIN_SUPPORT }
         val firstLetters = byLine.mapValues { (_, its) -> its.first().letters }
         val durations = byLine.mapValues { (_, pieces) -> pieces.sumOf { SpokenWords.sungLetters(it.text) } * LETTER_MS }
-        val chain = backed(sure(candidates, byLine.keys.max() + 2, durations, lines), firstLetters)
+        // Before the end, an unplaced copy may simply not have been sung yet. A guessed length can't say the song ended.
+        val oneCompletePlay = knownLength && heard.isNotEmpty() && heard.last().toMs >= lengthMs - COMPLETE_MARGIN_MS &&
+            heard.zipWithNext().none { (a, b) -> b.fromMs < a.fromMs }
+        val chain = backed(sure(candidates, byLine.keys.max() + 2, durations, if (oneCompletePlay) lines else emptyList()), firstLetters)
         val placed = chain + filled(chain, firstLetters, stretches, byLine)
         return placed.filter { placed -> stretches.any { placed.ms in it.fromMs - EDGE_MS..it.toMs } }.associate { it.line to it.ms }
     }
@@ -539,6 +542,7 @@ internal object SungTiming {
     private const val CHORUS_PLACE_MS = 2_000L
     private const val CHORUS_SUPPORT = 2.0
     private const val CHORUS_CHAIN_SHARE = 0.9
+    private const val COMPLETE_MARGIN_MS = 1_000L
 
     /** How sure a line found has to be, by its words alike, as [matchScore] has them. */
     private const val MIN_SUPPORT = 1.0
