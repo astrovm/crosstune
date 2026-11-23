@@ -777,6 +777,37 @@ class ListeningTest {
     }
 
     @Test
+    fun radioGardenKeepsTheConfirmedTitleWhenTheVisibleBarFollowsTheStationAgain() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        val stream = Following(PlaybackClock(30_000, SystemClock.elapsedRealtime()), "Radio Garden", canSeek = false,
+            appPackage = station.app, session = 1)
+        composeRule.runOnIdle { radio.playing.value = stream }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.following == stream }
+        val follows = radio.followed.size
+        val withNewLogo = station.copy(artworkUrl = "https://example.test/1live.png")
+        val transportReady = kotlinx.coroutines.CompletableDeferred<Unit>()
+        try {
+            composeRule.runOnIdle {
+                radio.said = transportReady
+                radio.unnamed.value = withNewLogo
+            }
+            waitUntil(TIMEOUT_MS) {
+                radio.followed.size > follows && controllerModel().uiState.playingUnnamed?.playing == withNewLogo
+            }
+            assertNull(controllerModel().uiState.playingUnnamed?.following)
+            assertEquals("First Song", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+            composeRule.onNode(hasTestTag(NOW_PLAYING_TAG) and hasText("First Song")).assertIsDisplayed()
+            assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
+
+            transportReady.complete(Unit)
+            waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.following == stream }
+            composeRule.onNode(hasTestTag(NOW_PLAYING_TAG) and hasText("First Song")).assertIsDisplayed()
+        } finally {
+            transportReady.complete(Unit)
+        }
+    }
+
+    @Test
     fun radioGardenConfirmsTheQueueAgainWhenThePlaybackWatcherRestarts() {
         val (radio, station) = radioGardenSessionWithConfirmedTitle()
         val activity = requireNotNull(controller)
