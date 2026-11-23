@@ -743,6 +743,45 @@ class ReadingsTest {
     }
 
     @Test
+    fun kanaWordsMissingFromOldKanaKeepTheirDictionaryLookups() {
+        val cases = mapOf(
+            "でんしゃでまち" to listOf("でんしゃ" to "電車", "で" to "で", "まち" to "まち"),
+            "きょねんのゆめ" to listOf("きょねん" to "去年", "の" to "の", "ゆめ" to "ゆめ"),
+            "しゅみはうた" to listOf("しゅみ" to "趣味", "は" to "は", "うた" to "うた"),
+            "にっきをかく" to listOf("にっき" to "日記", "を" to "を", "かく" to "かく")
+        )
+        fun check() = cases.forEach { (line, expected) ->
+            assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun kanaWordsStayWholeBeforeIpadicsSmallTsuWords() {
+        val cases = mapOf(
+            "いえはいっしょ" to listOf("いえ", "は", "いっしょ"),
+            "いえはずっと" to listOf("いえ", "は", "ずっと"),
+            "きみってだれ" to listOf("きみ", "って", "だれ")
+        )
+        fun check() = cases.forEach { (line, expected) ->
+            assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text })
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun dictionaryWordsKeepTheirReadingsInContext() {
+        val cases = mapOf("身体中" to "からだじゅう", "薄化粧" to "うすげしょう", "丸印" to "まるじるし", "一口" to "ひとくち")
+        fun check() = cases.forEach { (line, expected) ->
+            assertEquals(line, expected, Readings.of(listOf(line), Script.JAPANESE).single().reading)
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
     fun noWordOfALineInKanaStartsOnASmallKana() {
         // IPADIC alone splits each of these before a small kana: じ and ゅぎょう, し and ゅくだい, に and っ and き.
         val lines = mapOf(
