@@ -102,7 +102,7 @@ class ParallelOrderTest(unittest.TestCase):
     def test_guard_set_has_fixed_distinct_recordings(self):
         rows = [line.split('\t') for line in Path(__file__).with_name('guard.tsv').read_text().splitlines()
                 if line and not line.startswith('#')]
-        self.assertEqual(10, len(rows))
+        self.assertEqual(11, len(rows))
         self.assertTrue(all(len(row) == 4 and len(row[3]) == 11 for row in rows))
         self.assertEqual(len(rows), len({row[3] for row in rows}))
 
