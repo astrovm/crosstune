@@ -159,6 +159,28 @@ def table_header(date, version):
             "# Made by scripts/readingsaudit/readingsaudit.py table."]
 
 
+def kana_lookup(entry, kana):
+    """The usual written form, or the kana when JMdict normally writes it that way."""
+    if any("uk" in sense.get("misc", []) for sense in entry.get("sense", [])):
+        return kana["text"]
+    forms = [k["text"] for k in entry["kanji"] if not set(k["tags"]) & ODD_FORMS
+             and ("*" in kana["appliesToKanji"] or k["text"] in kana["appliesToKanji"])]
+    common = [k["text"] for k in entry["kanji"] if k.get("common") and k["text"] in forms]
+    return (common or forms or [kana["text"]])[0]
+
+
+def small_kana(words):
+    """Common kana words with a small kana, for the tokenizer's search."""
+    found = defaultdict(set)
+    for entry in words:
+        for kana in entry["kana"]:
+            text = kana["text"]
+            if (kana.get("common") and any(c in "ゃゅょっぁぃぅぇぉゎ" for c in text[1:])
+                    and all("ぁ" <= c <= "ゖ" for c in text) and not set(kana["tags"]) & ODD_KANA):
+                found[text].add(kana_lookup(entry, kana))
+    return {kana: next(iter(forms)) if len(forms) == 1 else kana for kana, forms in sorted(found.items())}
+
+
 def old_kana(words):
     """The words in kana a word in old kana may be today, {kana: lookup}, and the words in kana with ひ, ふ or ほ after their first kana.
 
@@ -170,7 +192,6 @@ def old_kana(words):
     modern = set()
     for entry in words:
         senses = entry.get("sense", [])
-        kana_usually = any("uk" in sense.get("misc", []) for sense in senses)
         archaic = bool(senses) and all(set(sense.get("misc", [])) & {"arch", "obs"} for sense in senses)
         for kana in entry["kana"]:
             text = kana["text"]
@@ -181,10 +202,7 @@ def old_kana(words):
             # An adjective's い was never ひ, 古い is ふるし: ふるひ is 降る日.
             adjective = any("adj-i" in sense.get("partOfSpeech", []) for sense in senses)
             if kana.get("common") and any(c in "いうお" for c in text[1:]) and not adjective:
-                forms = [k["text"] for k in entry["kanji"] if not set(k["tags"]) & ODD_FORMS
-                         and ("*" in kana["appliesToKanji"] or k["text"] in kana["appliesToKanji"])]
-                common = [k["text"] for k in entry["kanji"] if k.get("common") and k["text"] in forms]
-                looked_up[text].add(text if kana_usually or not forms else (common or forms)[0])
+                looked_up[text].add(kana_lookup(entry, kana))
     return {kana: next(iter(lookups)) if len(lookups) == 1 else kana for kana, lookups in sorted(looked_up.items())}, sorted(modern)
 
 
@@ -194,7 +212,8 @@ def old_kana_header(date, version):
             f"# through jmdict-simplified {version}. Licensed under CC BY-SA 4.0, {CC_BY_SA_URL}",
             f"# as the Group's licence asks, {EDRDG_LICENCE_URL}",
             "# Changed: only the common words in kana with い, う or お after their first kana, each with how it's looked up,",
-            "# then the words in kana with ひ, ふ or ほ after their first kana, which are no old spelling.",
+            "# then the words in kana with ひ, ふ or ほ after their first kana, which are no old spelling,",
+            "# and + entries for common words with small kana, for the tokenizer's search.",
             "# Made by scripts/readingsaudit/readingsaudit.py oldkana."]
 
 
@@ -204,8 +223,10 @@ def oldkana(folder):
     no_downgrade(jmdict["dictDate"], OLD_KANA)
     today, modern = old_kana(jmdict["words"])
     header = old_kana_header(jmdict["dictDate"], jmdict["version"])
-    OLD_KANA.write_text("\n".join(header + [f"{kana}\t{lookup}" for kana, lookup in today.items()] + modern) + "\n")
-    print(f"{len(today)} words today and {len(modern)} modern words in {OLD_KANA}")
+    small = small_kana(jmdict["words"])
+    OLD_KANA.write_text("\n".join(header + [f"{kana}\t{lookup}" for kana, lookup in today.items()] + modern
+                                   + [f"+{kana}\t{lookup}" for kana, lookup in small.items()]) + "\n")
+    print(f"{len(today)} words today and {len(modern)} modern words in {OLD_KANA}; {len(small)} small-kana words for search")
 
 
 OLD_KANA = ROOT / "app/src/main/resources/com/astrovm/crosstune/old-kana.txt"

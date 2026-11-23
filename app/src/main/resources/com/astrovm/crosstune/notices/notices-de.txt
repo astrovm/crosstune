@@ -5,7 +5,7 @@
 
 JMdict
 from: e24ab7fdbdb1
-note: Die Wortlisten, die Crosstune aus JMdict gemacht hat, sind verändert. Die Lesungen: nur Wörter aus zwei oder mehr Kanji, die JMdict nur auf eine Art liest und Crosstune anders. Die Wörter in Kana: nur die häufigen mit い oder う nach ihrem ersten Kana, jedes damit, wie es nachgeschlagen wird, und die mit ひ oder ふ an dieser Stelle. Auch sie stehen unter CC BY-SA 4.0. Unten stehen die Lizenz der Group (https://www.edrdg.org/edrdg/licence.html), die Lizenz CC BY-SA 4.0 und die Dokumentation von JMdict.
+note: Die Wortlisten, die Crosstune aus JMdict gemacht hat, sind verändert. Die Lesungen: nur Wörter aus zwei oder mehr Kanji, die JMdict nur auf eine Art liest und Crosstune anders. Die Wörter in Kana: Wörter zum Erkennen alter Schreibweisen und häufige Wörter mit kleinen Kana für die Suche. Auch sie stehen unter CC BY-SA 4.0. Unten stehen die Lizenz der Group (https://www.edrdg.org/edrdg/licence.html), die Lizenz CC BY-SA 4.0 und die Dokumentation von JMdict.
 
 Kuromoji
 from: 962013f376a7

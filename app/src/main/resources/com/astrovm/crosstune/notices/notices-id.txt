@@ -5,7 +5,7 @@
 
 JMdict
 from: e24ab7fdbdb1
-note: Daftar kata yang dibuat Crosstune dari JMdict sudah diubah. Bacaannya: hanya kata dari dua kanji atau lebih yang dibaca JMdict dengan satu cara saja, sementara Crosstune membacanya dengan cara lain. Kata dalam kana: hanya kata umum dengan い atau う setelah kana pertamanya, masing-masing dengan cara mencarinya, dan kata yang punya ひ atau ふ di situ. Semuanya juga di bawah CC BY-SA 4.0. Di bawah ada lisensi Group (https://www.edrdg.org/edrdg/licence.html), lisensi CC BY-SA 4.0, dan dokumentasi JMdict.
+note: Daftar kata yang dibuat Crosstune dari JMdict sudah diubah. Bacaannya: hanya kata dari dua kanji atau lebih yang dibaca JMdict dengan satu cara saja, sementara Crosstune membacanya dengan cara lain. Kata dalam kana: kata untuk mengenali ejaan lama dan kata umum dengan kana kecil untuk pencarian. Semuanya juga di bawah CC BY-SA 4.0. Di bawah ada lisensi Group (https://www.edrdg.org/edrdg/licence.html), lisensi CC BY-SA 4.0, dan dokumentasi JMdict.
 
 Kuromoji
 from: 962013f376a7

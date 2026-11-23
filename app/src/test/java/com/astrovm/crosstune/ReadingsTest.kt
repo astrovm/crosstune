@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import com.atilika.kuromoji.ipadic.Tokenizer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -753,6 +754,13 @@ class ReadingsTest {
         fun words() = cases.keys.map { line -> Readings.words(line, Script.JAPANESE).map { it.text to it.lookup } }
         val expected = cases.values.toList()
         assertEquals(listOf(expected, expected), listOf(words(), TestUniDic.reading { words() }))
+    }
+
+    @Test
+    fun smallKanaSearchWordsDoNotChangeOldKanaVocabulary() {
+        val words = Readings.oldKana
+        assertEquals("電車", words.search["でんしゃ"])
+        assertFalse(words.today.containsKey("でんしゃ"))
     }
 
     @Test

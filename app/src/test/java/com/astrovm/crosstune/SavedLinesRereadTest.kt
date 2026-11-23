@@ -134,13 +134,13 @@ class SavedLinesRereadTest {
     }
 
     @Test
-    fun anOldDictionaryReadingIsNotMistakenForAUsersCorrection() {
+    fun anUnmarkedOldReadingThatMayBeAUsersCorrectionIsKept() {
         val line = SavedLine(
             "都会の夜", reading = "まちのよ", title = "Demo", artist = "Band",
             ruby = listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よ")), readByHand = true
         )
         assertEquals(
-            listOf(Ruby("都会", "まち", Reader.USER), Ruby("の"), Ruby("夜", "よ")),
+            listOf(Ruby("都会", "まち", Reader.USER), Ruby("の"), Ruby("夜", "よ", Reader.USER)),
             line.marked(Script.JAPANESE)
         )
     }

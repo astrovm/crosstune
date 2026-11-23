@@ -589,10 +589,12 @@ internal object Readings {
     private val tables = Any()
 
     /** Words in kana from JMdict: those a word in old kana alone may be [today], each with the form it's looked up by, and those written with ひ, ふ or ほ today, [modern]. */
-    internal class OldKana(val today: Map<String, String>, val modern: Set<String>) {
+    internal class OldKana(val today: Map<String, String>, val modern: Set<String>, val small: Map<String, String> = emptyMap()) {
         val modernWithHiOrFu = modern.filter { word -> (1..word.lastIndex).any { word[it] in "ひふ" } }.toSet()
         val longest = modern.maxOf { it.length }
         val longestToday = today.keys.maxOfOrNull { it.length } ?: 0
+        val search = small + today
+        val longestSearch = search.keys.maxOfOrNull { it.length } ?: 0
     }
 
     /**
@@ -606,8 +608,10 @@ internal object Readings {
         get() = oldKanaRead ?: synchronized(tables) { oldKanaRead ?: readOldKana().also { oldKanaRead = it } }
 
     private fun readOldKana(): OldKana = checkNotNull(Readings::class.java.getResourceAsStream(OLD_KANA_WORDS)).bufferedReader().useLines { lines ->
-        val (today, modern) = lines.filterNot { it.startsWith('#') }.partition { '\t' in it }
-        OldKana(today.associate { it.substringBefore('\t') to it.substringAfter('\t') }, modern.toSet())
+        val (small, rest) = lines.filterNot { it.startsWith('#') }.partition { it.startsWith('+') }
+        val (today, modern) = rest.partition { '\t' in it }
+        OldKana(today.associate { it.substringBefore('\t') to it.substringAfter('\t') }, modern.toSet(),
+            small.associate { it.substringAfter('+').substringBefore('\t') to it.substringAfter('\t') })
     }
 
     private const val OLD_KANA_WORDS = "/com/astrovm/crosstune/old-kana.txt"

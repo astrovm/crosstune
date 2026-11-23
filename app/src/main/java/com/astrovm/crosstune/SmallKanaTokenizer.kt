@@ -43,17 +43,20 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         val tokens = plain.tokenize(text)
         val out = ArrayList<Token>(tokens.size)
         var next = 0
-        for (wrong in tokens.indices.filter { wrongStart(text, tokens[it]) }) {
+        for (wrong in tokens.indices) {
             if (wrong < next) continue
+            val crossing = crossingWord(text, tokens[wrong])
+            if (!wrongStart(text, tokens[wrong]) && crossing == null) continue
             // A word that starts wrong is searched again with the word before it, as the kana it starts on is said
             // with that word's last, and with the one before that while that one starts on a small kana too, っし in
             // ないっしゅん, so the search knows what kana it comes after.
             var first = wrong - 1
-            while (first > next && smallAfterKana(text, tokens[first].position)) first--
+            while (first > next && (smallAfterKana(text, tokens[first].position) || (crossing != null && tokens[first].position > crossing.first))) first--
             // Words that start wrong one after another are searched again together, and a small っ at the end doubles
             // the kana after it, so that word is searched again with it, にっ and き.
             var last = wrong
-            while (last + 1 < tokens.size && (tokens[last].surface.last() in "っッ" || wrongStart(text, tokens[last + 1]))) last++
+            while (last + 1 < tokens.size && (tokens[last].surface.last() in "っッ" || wrongStart(text, tokens[last + 1]) ||
+                    (crossing != null && tokens[last].position + tokens[last].surface.length <= crossing.last))) last++
             out += tokens.subList(next, first)
             val from = tokens[first].position
             val to = tokens[last].position + tokens[last].surface.length
@@ -149,11 +152,11 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     /** JMdict's words in kana at [at] in [text], each as IPADIC's word for how JMdict writes it, when that reads so. */
     private fun offer(text: String, at: Int): List<ViterbiNode> {
         val words = words()
-        return (at + 2..minOf(text.length, at + words.longestToday)).mapNotNull { end ->
+        return (at + 2..minOf(text.length, at + words.longestSearch)).mapNotNull { end ->
             // A word may go on in a small vowel after it: ちょうだぃ is ちょうだい, not 長打 drawn out.
             if (drawsOut(text, end)) return@mapNotNull null
             val kana = text.substring(at, end)
-            val written = words.today[kana]?.takeIf { it != kana } ?: return@mapNotNull null
+            val written = words.search[kana]?.takeIf { it != kana } ?: return@mapNotNull null
             val word = plain.tokenize(written).singleOrNull()?.takeIf { it.isKnown && Readings.hiragana(it.reading) == kana }
                 ?: return@mapNotNull null
             startingAt(written, 0, unknown = false)
@@ -219,6 +222,22 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     private fun saidWith(text: String, at: Int) = smallAfterKana(text, at) && !drawsOut(text, at)
 
     private fun wrongStart(text: String, token: Token) = wrongStart(text, token.position, token.isKnown, token.surface)
+
+    /** Search again if a common word with small kana crosses an IPADIC split, including IPADIC's own っ words. */
+    private fun crossingWord(text: String, token: Token): IntRange? {
+        val at = token.position
+        if (at == 0 || !Readings.isKana(text[at - 1]) || !Readings.isKana(text[at])) return null
+        val known = words()
+        var longest: IntRange? = null
+        for (start in maxOf(0, at - known.longestSearch + 1) until at) {
+            for (end in at + 1..minOf(text.length, start + known.longestSearch)) {
+                if (end - start > (longest?.let { it.last - it.first + 1 } ?: 0) && text.substring(start, end) in known.small) {
+                    longest = start until end
+                }
+            }
+        }
+        return longest
+    }
 
     /**
      * A word at [at] that starts on a small kana after another kana. Not small vowels alone that draw out the word

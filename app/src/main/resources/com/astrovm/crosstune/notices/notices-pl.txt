@@ -5,7 +5,7 @@
 
 JMdict
 from: e24ab7fdbdb1
-note: Listy słów, które Crosstune zrobił z JMdict, są zmienione. Odczyty: tylko słowa z dwóch lub więcej kanji, które JMdict czyta tylko na jeden sposób, a Crosstune czyta inaczej. Słowa w kanie: tylko popularne z い lub う po pierwszym znaku kany, każde z tym, jak się go szuka, oraz te z ひ lub ふ w tym miejscu. One też są na licencji CC BY-SA 4.0. Poniżej są licencja Group (https://www.edrdg.org/edrdg/licence.html), licencja CC BY-SA 4.0 i dokumentacja JMdict.
+note: Listy słów, które Crosstune zrobił z JMdict, są zmienione. Odczyty: tylko słowa z dwóch lub więcej kanji, które JMdict czyta tylko na jeden sposób, a Crosstune czyta inaczej. Słowa w kanie: słowa do rozpoznawania dawnej pisowni i popularne słowa z małą kaną do wyszukiwania. One też są na licencji CC BY-SA 4.0. Poniżej są licencja Group (https://www.edrdg.org/edrdg/licence.html), licencja CC BY-SA 4.0 i dokumentacja JMdict.
 
 Kuromoji
 from: 962013f376a7
