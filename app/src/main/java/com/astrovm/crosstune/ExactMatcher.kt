@@ -216,7 +216,7 @@ internal class ExactMatcher(
     )
 
     private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthsMs: List<Long>,
-        val allowedSongs: Set<String?>)
+        val allowedSongs: Set<String?>, val names: Names)
 
     /**
      * What [lookUp] came to, and whether it's only for now, as a store that could have named the song failed: [unsure].
@@ -268,8 +268,8 @@ internal class ExactMatcher(
     private suspend fun picked(toPick: ToPick, lasting: Boolean): Match {
         val url = withTimeoutOrNull(pickTimeoutMs) {
             Answer(
-                pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false, toPick.lengthsMs, toPick.allowedSongs)
-                    ?: pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true, toPick.lengthsMs, null)
+                pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false, toPick.lengthsMs, toPick.allowedSongs, toPick.names)
+                    ?: pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true, toPick.lengthsMs, null, toPick.names)
             )
         } ?: return Match.Failed
         return url.url?.let { Match.Found(it, lasting) } ?: Match.Missing
@@ -898,7 +898,8 @@ internal class ExactMatcher(
         val sourceDiffers = sourceLength != null && names.lengthsMs.isNotEmpty() && names.lengthsMs.none { sameRecordingLength(it, sourceLength) }
         val rejectedKnownSong = rows.any { isTheSong(it, names) && !rowFitsSource(it, sourceLength) && !appleAliasTitle(it, metadata, names) }
         val videoRows = videos.map(::row).filter { video ->
-            (!sourceDiffers || video.lengthMs == null || kotlin.math.abs(video.lengthMs - sourceLength) <= SAME_LENGTH_MS) &&
+            (!sourceDiffers || video.lengthMs == null || kotlin.math.abs(video.lengthMs - sourceLength) <= SAME_LENGTH_MS &&
+                names.lengthsMs.any { kotlin.math.abs(video.lengthMs - it) <= SAME_LENGTH_MS }) &&
                 (!rejectedKnownSong || isOwnVideo(video, names)) &&
                 (videoAmbiguous.isEmpty() || safeVideoBesideAmbiguousSongs(video, metadata, names))
         }
@@ -935,7 +936,7 @@ internal class ExactMatcher(
         val videosToPick = (if (recording.live) pickableVideos else namedVideos + pickableVideos.filterNot { it in namedVideos }).take(PICK_FROM)
         val directTies = ambiguous.filter { name -> directStudioTie(metadata, rows.filter { candidateName(it) == name }) }.toSet()
         val allowedSongs = (pickableSongs + songs.filter { candidateName(it) in directTies }).map { it.id }.toSet()
-        return Answer(null, ToPick(metadata, songs, videosToPick, watchUrl, available.lengthsMs, allowedSongs),
+        return Answer(null, ToPick(metadata, songs, videosToPick, watchUrl, available.lengthsMs, allowedSongs, available),
             final = available.complete, lasting = available.everyStore)
     }
 
@@ -1212,13 +1213,17 @@ internal class ExactMatcher(
         liveNames: Set<Pair<String, String>>
     ): Boolean = eligibleAnotherScriptRow(row, names, recording, sourceLength, liveNames) &&
         (!titleInParentheses(metadata.title, row.name) || knownParenthesizedTitle(metadata.title, row.name, names)) &&
+        !unprovedAppleEditions(row, names, sourceLength) &&
         !conflictingOffLengthRow(row, rows, metadata, names)
+
+    private fun unprovedAppleEditions(row: Row, names: Names, sourceLength: Long?): Boolean = sourceLength != null &&
+        names.severalRecordings && names.linkedEdition == null && names.appleIds.size > 2 && !namesTitleInRow(row.name, names)
 
     private fun eligibleAnotherScriptRow(row: Row, names: Names, recording: RequestedRecording, sourceLength: Long?, liveNames: Set<Pair<String, String>>): Boolean =
         row.id != null && row.id !in names.rejectedCandidates &&
             rowFitsSource(row, sourceLength) &&
             names.linkedEdition?.let { it.live == rowIsLive(row) } != false &&
-            isTheSongInAnotherScript(row, names) && keepsRerecording(recording, row.name, row.details.getOrNull(1).orEmpty()) &&
+            isTheSongInAnotherScript(row, names) && keepsRequestedRecording(recording, row) &&
             (candidateName(row) !in liveNames || rowIsLive(row))
 
     private fun conflictingOffLengthRow(row: Row, rows: List<Row>, metadata: MusicMetadata, names: Names): Boolean {
@@ -1245,18 +1250,35 @@ internal class ExactMatcher(
     private fun titleInParentheses(title: String, name: String): Boolean {
         val base = name.substringBefore('(').substringBefore('（')
         if (!namedInAnotherScript(base)) return false
-        return Regex("[(（]([^()（）]+)[)）]").findAll(name).any { SongNames.same(title, it.groupValues[1]) }
+        var at = base.length
+        while (at < name.length) {
+            val open = name.indexOfAny(charArrayOf('(', '（'), at)
+            if (open < 0) return false
+            val close = name.indexOf(if (name[open] == '(') ')' else '）', open + 1)
+            if (close < 0) return false
+            if (SongNames.same(title, name.substring(open + 1, close))) return true
+            at = close + 1
+        }
+        return false
     }
 
     private fun bilingualTitleNames(title: String, name: String): Boolean {
         val parts = name.split(" - ").takeIf { it.size == 2 } ?: return false
-        val pattern = Regex("^(.+?)[(（]([^()（）]+)[)）]$")
-        val first = pattern.matchEntire(parts[0].trim()) ?: return false
-        val second = pattern.matchEntire(parts[1].trim()) ?: return false
-        if (!SongNames.same(title, first.groupValues[1]) || !SongNames.same(title, second.groupValues[1])) return false
-        val japanese = first.groupValues[2]
+        val first = titleAndTag(parts[0]) ?: return false
+        val second = titleAndTag(parts[1]) ?: return false
+        if (!SongNames.same(title, first.first) || !SongNames.same(title, second.first)) return false
+        val japanese = first.second
         if (japanese.none { it.code > 0x7f }) return false
-        return SongNames.same(Readings.of(listOf(japanese), Script.JAPANESE).single().typed, second.groupValues[2])
+        return SongNames.same(Readings.of(listOf(japanese), Script.JAPANESE).single().typed, second.second)
+    }
+
+    private fun titleAndTag(text: String): Pair<String, String>? {
+        val name = text.trim()
+        val open = name.indexOfAny(charArrayOf('(', '（'))
+        if (open <= 0 || name.lastOrNull() != if (name[open] == '(') ')' else '）') return null
+        val tag = name.substring(open + 1, name.lastIndex)
+        if (tag.isEmpty() || tag.any { it in "()（）" }) return null
+        return name.substring(0, open) to tag
     }
 
     private fun versionSeparatedRows(rows: List<Row>, eligible: List<Row>, names: Names, recording: RequestedRecording): Map<Pair<String, String>, String?> {
@@ -1421,7 +1443,8 @@ internal class ExactMatcher(
 
     private fun keepsRequestedRecording(wanted: RequestedRecording, name: String, album: String, fullName: String = name): Boolean {
         val part = wanted.part?.number
-        val keepsPart = part == null || part == (numberedPartBeforeNotes(name) ?: partOnAlbum(name, album))?.number
+        val foundPart = numberedPartBeforeNotes(fullName) ?: numberedPartBeforeNotes(name) ?: partOnAlbum(name, album)
+        val keepsPart = if (part == null) foundPart == null else part == foundPart?.number
         if (!keepsRerecording(wanted, fullName, album)) return false
         return keepsPart && (!wanted.live || saysLive(name) || liveAlbum(album))
     }
@@ -1539,11 +1562,12 @@ internal class ExactMatcher(
      * seconds for a song, more for a video, which may open with more.
      */
     private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row>, watchUrl: String, videos: Boolean, lengthsMs: List<Long>,
-        allowed: Set<String?>?): String? {
+        allowed: Set<String?>?, names: Names): String? {
         val recording = requestedRecording(metadata.title)
         val part = recording.part
         // Keep the row numbers while omitting any names that local evidence already rules out.
-        val offered = rows.map { it.takeIf { row -> (allowed == null || row.id in allowed) && keepsRequestedRecording(recording, row, video = videos) &&
+        val offered = rows.map { it.takeIf { row -> (allowed == null || row.id in allowed) && (!videos || safePickedVideo(row, names)) &&
+            keepsRequestedRecording(recording, row, video = videos) &&
             (part == null || namesThePickedPart(part, row, videos)) } }
         if (offered.none { it != null }) return null
         val shown = offered.map { it?.let { row -> "${row.name} | ${row.details.joinToString(" • ")}" }.orEmpty() }
@@ -1552,6 +1576,9 @@ internal class ExactMatcher(
         val off = row.lengthMs?.let { length -> lengthsMs.minOfOrNull { kotlin.math.abs(it - length) } } ?: 0L
         return (watchUrl + row.id).takeIf { off <= if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS }
     }
+
+    private fun safePickedVideo(row: Row, names: Names): Boolean = !isAnotherVideoVersion(row.name, names) &&
+        (namedInAnotherScript(row.name) || videoTitleMatches(row.name, names))
 
     private fun namesThePickedPart(part: NumberedPart, row: Row, video: Boolean): Boolean {
         val names = if (video) SongNames.titleNames(row.name) else listOf(row.name)

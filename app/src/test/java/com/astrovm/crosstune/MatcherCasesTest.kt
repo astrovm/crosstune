@@ -587,6 +587,26 @@ class MatcherCasesTest {
     }
 
     @Test
+    fun filteringRowsDoesNotReplaceAnUnprovedOrRightResultWithAWrongOne() {
+        val cases = fuzzed()
+        val main = stored(FUZZ)
+        val indices = listOf(77, 104, 172, 354, 706, 805, 824, 1234, 1631, 2247, 2347, 2417, 2466, 2663, 2883, 3239, 3518)
+        val wrong = mutableListOf<String>()
+        for (index in indices) {
+            val case = cases[index]
+            val before = requireNotNull(main[index.toString()])
+            case.modes.forEachIndexed { mode, search ->
+                val was = before[mode].takeUnless { it == "-" }
+                val actual = found(search).id
+                if (case.verdict(was) != WRONG && case.verdict(actual) == WRONG) {
+                    wrong += "case $index, ${MODES[mode]}: $was -> $actual, source ${search.linkMs}"
+                }
+            }
+        }
+        assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
     fun aBilingualTitleKeepsTheSourceLengthWhenOtherEditionsAreLonger() {
         assertEquals("kakusei", Readings.of(listOf("覚醒"), Script.JAPANESE).single().typed)
         assertEquals(false, SongNames.saysAnotherVersion("AWAKENING（覚醒） - Awakening (Kakusei)", "Awakening", "Fake Band"))
