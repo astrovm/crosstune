@@ -504,6 +504,7 @@ val robolectricJvmArgs = listOf(
 )
 
 tasks.withType<Test>().configureEach {
+    System.getProperty("user.timezone")?.let { systemProperty("user.timezone", it) }
     if (name != "shots") filter.excludeTestsMatching("com.astrovm.crosstune.shots.*")
     if (name != "songCheck") filter.excludeTestsMatching("com.astrovm.crosstune.songcheck.*")
     if (name != "notices") filter.excludeTestsMatching("com.astrovm.crosstune.notices.*")

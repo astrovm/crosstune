@@ -1,5 +1,9 @@
 package com.astrovm.crosstune
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -8,6 +12,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -21,12 +26,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit.SECONDS
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.io.IOException
+import kotlin.coroutines.CoroutineContext
 
 /** Runs under Robolectric for the real org.json implementation. */
 @RunWith(RobolectricTestRunner::class)
@@ -816,7 +825,8 @@ class ExactMatcherTest {
         /** The stores Apple says don't exist, with a 400, as Iran's. */
         noStore: Set<String> = emptySet(),
         /** The stores Apple says are busy, with a 503. */
-        busy: Set<String> = emptySet()
+        busy: Set<String> = emptySet(),
+        deezerDown: Boolean = false
     ) {
         fake.handler = { request ->
             val store = request.url.queryParameter("country").orEmpty()
@@ -828,6 +838,7 @@ class ExactMatcherTest {
                 request.url.host == "itunes.apple.com" && request.url.encodedPath == "/search" ->
                     FakeSpotify.html(request, """{"results":[${apple[store].orEmpty()}]}""")
                 request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[${elsewhere[store].orEmpty()}]}""")
+                request.url.host == "api.deezer.com" && deezerDown -> throw IOException("Deezer is down")
                 request.url.host == "api.deezer.com" -> FakeSpotify.html(request, """{"data":$deezer}""")
                 else -> FakeSpotify.html(request, youTubeMusicPage(*(if (FakeSpotify.bodyOf(request).contains(VIDEOS_TAB)) videos else songs).toTypedArray()))
             }
@@ -938,17 +949,17 @@ class ExactMatcherTest {
 
     @Test
     fun aSongNotFoundStaysNotFoundForAWhileButNoAnswerIsAskedAgain() {
-        var clock = 0L
+        var clock = 4_000L
         var asked = 0
         val matcher = ExactMatcher(fake.client(), "AR", missingForMs = 1_000, now = { clock })
         val song = MusicMetadata("Song", "Band")
         fake.handler = { request -> asked++; FakeSpotify.html(request, """{"data":[]}""") }
         assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher.lookFor(MusicService.DEEZER, song) })
-        clock = 999
+        clock += 999
         assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher.lookFor(MusicService.DEEZER, song) })
         assertEquals(1, asked)
         // A while later, it's looked for again, and found.
-        clock = 1_000
+        clock++
         respond("""{"data":[{"title":"Song","link":"https://www.deezer.com/track/1","artist":{"name":"Band"}}]}""")
         assertEquals(ExactMatcher.Match.Found("https://www.deezer.com/track/1"), runBlocking { matcher.lookFor(MusicService.DEEZER, song) })
         // No answer isn't kept: the next time asks again.
@@ -1245,11 +1256,40 @@ class ExactMatcherTest {
         assertEquals("https://music.youtube.com/watch?v=piano000000", find("Fan • 1.4K views • 3:59", known))
     }
 
+    @Test
+    fun aPianoUploadWithAnUnconfirmedTitleWaitsForJapansLookup() {
+        val song = MusicMetadata("A Cruel Angel's Thesis", "高橋洋子")
+        val piano = youTubeMusicRow(
+            "高橋洋子「残酷な天使のテーゼ」/ A  Cruel Angel’s Thesis", "Fan • 1.4K views • 3:59", videoId = "piano000000"
+        )
+        namesAndTabs(videos = listOf(piano), apple = mapOf("AR" to appleSong(song.title, song.artist, 239_000)), failing = setOf("JP"))
+        var clock = 0L
+        val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L, now = { clock })
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        clock += ExactMatcher.UNSURE_FOR_MS
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        val withPicker = ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> error("The unconfirmed upload should not reach the picker") })
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { withPicker.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun anUnconfirmedLatinTitleWaitsForTheUsLookup() {
+        val song = MusicMetadata("終わらない歌", "ザ・ブルーハーツ")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fan = youTubeMusicRow(
+            "ザ・ブルーハーツ - 終わらない歌 (Owaranai Uta)", "Fan • 1K views • 3:04", videoId = "fan00000000"
+        )
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("US"))
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+        assertEquals("https://music.youtube.com/watch?v=fan00000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
     // As Apple names Lemon (Music Box), track 1501298975 in MatcherRealAnswersTest's Lemon: every store in Latin letters but
     // Japan's, and YouTube Music only as Japan's does. With Japan's lookup failing, a fan's video is all there is to open. It
-    // isn't kept, as Japan's name finds the song: asked again once Japan answers, the song opens.
+    // needs another lookup. Once Japan answers, its name finds the song.
     @Test
-    fun whatsFoundWhileAStoreThatNamesTheSongFailedIsntKept() {
+    fun aSavedOutageUploadIsTriedAgainWhenAStoreThatNamesItRecovers() {
         val song = MusicMetadata("Lemon (Music Box)", "Orgel Sound J-Pop", lengthMs = 223_760)
         val latin = appleSong("Lemon (Music Box)", "Orgel Sound J-Pop", 223_760, id = 1501298975)
         val japanese = appleSong("Lemon ~ドラマ「アンナチュラル」主題歌~ (オルゴール)", "オルゴールサウンド J-POP", 223_760, id = 1501298975)
@@ -1262,10 +1302,10 @@ class ExactMatcherTest {
             fake.client(), "US", Dispatchers.Unconfined, LookupCache(file, Dispatchers.Unconfined), missingForMs = 60 * 60_000L, now = { clock }
         )
         namesAndTabs(songs = songs, videos = videos, apple = mapOf("US" to latin), elsewhere = elsewhere, failing = setOf("JP"))
-        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         // Asked again at once, as a card does, it's held, and nothing's asked.
         fake.requestedUrls.clear()
-        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         assertEquals(emptyList<String>(), fake.requestedUrls)
         namesAndTabs(songs = songs, videos = videos, apple = mapOf("US" to latin), elsewhere = elsewhere)
         clock += ExactMatcher.UNSURE_FOR_MS
@@ -1340,15 +1380,6 @@ class ExactMatcherTest {
         // found it in another script, the US store's failing does matter: MatcherRealAnswersTest, for Lemon.
         namesAndTabs(videos = listOf(fans), apple = apple, elsewhere = japanese, failing = setOf("US"))
         assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=japan000000"), runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
-        // But it isn't taken while Japan's failed, the store of the country its name is written in, as Taiwan's name for it says.
-        namesAndTabs(videos = listOf(fans), apple = apple, elsewhere = mapOf("TW" to japanese.getValue("JP")), failing = setOf("JP"))
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
-        // Korea's store writing the band in Hangul, as it writes Japanese artists, doesn't make it a Korean song.
-        namesAndTabs(
-            videos = listOf(fans), apple = apple, failing = setOf("JP"),
-            elsewhere = mapOf("TW" to japanese.getValue("JP"), "KR" to appleSong("Owaranai Uta", "더 블루 하츠", 184_000))
-        )
-        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
         // Nor while every store's search failed, any of which could have found it.
         namesAndTabs(videos = listOf(fans), failing = setOf("AR", "US"))
         assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
@@ -1358,6 +1389,715 @@ class ExactMatcherTest {
             apple = apple, elsewhere = mapOf("TW" to japanese.getValue("JP")), failing = setOf("JP")
         )
         assertEquals("https://music.youtube.com/watch?v=own00000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun aFansUploadOpensWhileANameLookupFailsWhenNoSongRowCanMatch() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fans = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val anotherFan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌 Lyrics", "Another Fan • 1K views • 3:04", videoId = "lyrics00000")
+        val expected = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
+        for (store in listOf("JP", "US")) {
+            namesAndTabs(videos = listOf(fans, anotherFan), apple = apple, failing = setOf(store))
+            assertEquals(store, expected, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        }
+        val tooLong = youTubeMusicRow("Owaranai Uta", "THE BLUE HEARTS • Album • 3:13", videoId = "long0000000")
+        val noId = youTubeMusicRow("Owaranai Uta", "THE BLUE HEARTS • Album • 3:04")
+        namesAndTabs(songs = listOf(tooLong, noId), videos = listOf(fans), apple = apple, failing = setOf("US"))
+        assertEquals(expected, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun anUnrelatedPlainVideoHoldsAFanUploadOnlyOnce() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val unrelated = youTubeMusicRow("Another Song", "Random Person • 1K views • 3:04", videoId = "other000000")
+        val expected = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
+        var clock = 0L
+        val finder = ExactMatcher(fake.client(), "AR", now = { clock })
+        namesAndTabs(videos = listOf(unrelated, fan), apple = apple, failing = setOf("US"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+
+        fake.requestedUrls.clear()
+        clock += ExactMatcher.UNSURE_FOR_MS
+        assertEquals(expected, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(fake.requestedUrls.any { "itunes.apple.com/lookup?id=7&country=US" in it })
+    }
+
+    @Test
+    fun aCompetingVideoCanBeCloseOrHaveAKnownName() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val upload = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
+        fun look(title: String, channel: String, length: String? = null, store: String = "US"): ExactMatcher.Match {
+            val details = "$channel • 1K views" + length?.let { " • $it" }.orEmpty()
+            val video = youTubeMusicRow(title, details, videoId = "other000000")
+            namesAndTabs(videos = listOf(video, fan), apple = apple, failing = setOf(store))
+            return runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) }
+        }
+
+        for ((title, channel) in listOf(song.title to "Blue Hearts Japan", "Owaranai Uta" to song.artist)) {
+            assertEquals("$title by $channel at 4:30", ExactMatcher.Match.WaitingForNames, look(title, channel, "4:30"))
+            assertEquals("$title by $channel without a length", ExactMatcher.Match.WaitingForNames, look(title, channel))
+        }
+        assertEquals(ExactMatcher.Match.WaitingForNames, look("An Endless Song", "Buru Hatsu - Topic", "3:12"))
+        assertEquals(upload, look("An Endless Song", "Buru Hatsu - Topic", "3:13"))
+        assertEquals(upload, look("An Endless Song", "Buru Hatsu - Topic"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, look(song.title, "Buru Hatsu - Topic", "4:30"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, look("別の歌", "別の人", "3:04", store = "JP"))
+    }
+
+    @Test
+    fun aFansUploadWaitsWhenAnotherNameCouldProveASongRow() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fans = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        // A row with a matching or unknown length can take the upload's place when its store answers.
+        for (details in listOf("THE BLUE HEARTS • Album • 3:12", "THE BLUE HEARTS • Album")) {
+            val row = youTubeMusicRow("Owaranai Uta", details, videoId = "song0000000")
+            namesAndTabs(songs = listOf(row), videos = listOf(fans), apple = apple, failing = setOf("US"))
+            assertEquals(details, ExactMatcher.Match.WaitingForNames, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+            namesAndTabs(
+                songs = listOf(row), videos = listOf(fans), apple = apple,
+                elsewhere = mapOf("US" to appleSong("Owaranai Uta", song.artist, 184_000))
+            )
+            assertEquals("https://music.youtube.com/watch?v=song0000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        }
+    }
+
+    @Test
+    fun aFansUploadWaitsWhenAnotherNameCouldProveTheArtistsVideo() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val japanese = mapOf("JP" to appleSong(song.title, "ザ・ブルーハーツ", 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1M views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        var clock = 0L
+        val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L, now = { clock })
+        namesAndTabs(videos = listOf(own, fan), apple = apple, elsewhere = japanese, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+
+        fake.requestedUrls.clear()
+        namesAndTabs(videos = listOf(own, fan), apple = apple, elsewhere = japanese)
+        clock = ExactMatcher.UNSURE_FOR_MS - 1
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(fake.requestedUrls.isEmpty())
+        clock++
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=own00000000"), runBlocking {
+            finder.lookFor(MusicService.YOUTUBE_MUSIC, song)
+        })
+
+        val unplayable = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1M views • 3:04")
+        val cover = youTubeMusicRow("${song.title} (Cover)", "ザ・ブルーハーツ - Topic • 1M views • 3:04", videoId = "cover000000")
+        val other = youTubeMusicRow(song.title, "더 블루 하츠 - Topic • 1M views • 3:04", videoId = "other000000")
+        namesAndTabs(videos = listOf(unplayable, cover, other, fan), apple = apple, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), runBlocking {
+            matcher().lookFor(MusicService.YOUTUBE_MUSIC, song)
+        })
+    }
+
+    @Test
+    fun aCloseVideoCanNeedBothUsNames() {
+        val song = MusicMetadata("馬と鹿", "米津玄師")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val us = mapOf("US" to appleSong("Uma to Shika", "Kenshi Yonezu", 184_000))
+        val own = youTubeMusicRow("Uma to Shika", "Kenshi Yonezu • 1M views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("米津玄師 - 馬と鹿", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        var clock = 0L
+        val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L, now = { clock })
+        namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = us, failing = setOf("US"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = us)
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), runBlocking {
+            matcher().lookFor(MusicService.YOUTUBE_MUSIC, song)
+        })
+        clock += ExactMatcher.UNSURE_FOR_MS
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=own00000000"), runBlocking {
+            finder.lookFor(MusicService.YOUTUBE_MUSIC, song)
+        })
+        namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = us, failing = setOf("US"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun aLongArtistVideoCanNeedJapansName() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ • 1M views • 4:30", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        namesAndTabs(videos = listOf(fan, own), apple = apple, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+
+        val unrelated = youTubeMusicRow("別のうた", "ザ・ブルーハーツ • 1M views • 4:30", videoId = "other000000")
+        namesAndTabs(videos = listOf(fan, unrelated), apple = apple, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), runBlocking {
+            matcher().lookFor(MusicService.YOUTUBE_MUSIC, song)
+        })
+    }
+
+    @Test
+    fun anUnrelatedTopicVideoHoldsAFanUploadOnlyOnce() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val other = youTubeMusicRow("Another Song", "Random Person - Topic • 1K views • 3:04", videoId = "other000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val upload = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
+        val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L)
+        namesAndTabs(videos = listOf(other, fan), apple = apple, failing = setOf("US"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        fake.requestedUrls.clear()
+        ShadowSystemClock.advanceBy(Duration.ofMillis(ExactMatcher.UNSURE_FOR_MS - 1))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(fake.requestedUrls.isEmpty())
+        ShadowSystemClock.advanceBy(Duration.ofMillis(1))
+        assertEquals(upload, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        ShadowSystemClock.advanceBy(Duration.ofMillis(ExactMatcher.UNSURE_FOR_MS))
+        assertEquals(upload, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun restartingDuringAnOutageDoesNotStartAnotherHold() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("restart-hold").toFile().resolve("lookups.json")
+        var clock = 0L
+        fun restart() = ExactMatcher(
+            fake.client(), "AR", Dispatchers.Unconfined, LookupCache(file, Dispatchers.Unconfined),
+            now = { clock }, wallNow = { clock }
+        )
+        namesAndTabs(videos = listOf(fan, own), apple = apple, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { restart().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        clock += ExactMatcher.UNSURE_FOR_MS - 1
+        fake.requestedUrls.clear()
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { restart().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(fake.requestedUrls.isEmpty())
+
+        clock++
+        val upload = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
+        assertEquals(upload, runBlocking { restart().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        val otherFan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Another Fan • 1K views • 3:04", videoId = "other000000")
+        namesAndTabs(videos = listOf(otherFan, own), apple = apple, failing = setOf("JP"))
+        clock = 60 * 60_000L + 1
+        fake.requestedUrls.clear()
+        assertEquals(upload, runBlocking { restart().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(fake.requestedUrls.any { "country=JP" in it })
+    }
+
+    @Test
+    fun aFailedYouTubeLookupKeepsTheSavedProvisionalAnswer() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("failed-provisional").toFile().resolve("lookups.json")
+        fun cache() = LookupCache(file, Dispatchers.Unconfined)
+        fun restart() = ExactMatcher(fake.client(), "AR", Dispatchers.Unconfined, cache(), now = { 4_000 }, wallNow = { 4_000 })
+        val video = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
+        val provisional = ExactMatcher.Lookup(video, ExactMatcher.Retry())
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+        assertEquals(provisional, runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song) })
+        val saved = runBlocking { cache().entries() }
+
+        fake.handler = { request -> FakeSpotify.html(request, "{}", code = 503) }
+        // Recent still has a hold. The cache has the upload, so there is no wait.
+        val retried = runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song, ExactMatcher.Retry(4_000)) }
+        assertEquals(provisional, retried)
+        assertEquals(false, (retried.match as ExactMatcher.Match.Found).lasting)
+        assertEquals(saved, runBlocking { cache().entries() })
+    }
+
+    @Test
+    fun aHoldFromRecentDoesNotNeedADiskWriteWhenItsClockIsRight() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val file = kotlin.io.path.createTempDirectory("recent-hold").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, now = { 5_000 }, wallNow = { 105_000 })
+        val retry = ExactMatcher.Retry(100_000)
+
+        assertEquals(ExactMatcher.Lookup(ExactMatcher.Match.WaitingForNames, retry), finder.lookup(MusicService.YOUTUBE_MUSIC, song, retry))
+        assertTrue(fake.requestedUrls.isEmpty())
+        assertTrue(cache.entries().isEmpty())
+    }
+
+    @Test
+    fun restartingAfterTheClockMovesBackKeepsTheSavedHold() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("restart-clock").toFile().resolve("lookups.json")
+        var elapsed = 4_000L
+        var wall = 100_000L
+        fun restart() = ExactMatcher(
+            fake.client(), "AR", Dispatchers.Unconfined, LookupCache(file, Dispatchers.Unconfined),
+            now = { elapsed }, wallNow = { wall }
+        )
+        namesAndTabs(videos = listOf(fan, own), apple = apple, failing = setOf("JP"))
+        val pending = ExactMatcher.Lookup(ExactMatcher.Match.WaitingForNames, ExactMatcher.Retry(wall))
+        assertEquals(pending, runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song) })
+
+        elapsed += 10_000
+        wall -= 60_000
+        fake.requestedUrls.clear()
+        val corrected = pending.copy(retry = ExactMatcher.Retry(wall))
+        assertEquals(corrected, runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song, pending.retry) })
+        repeat(2) {
+            elapsed += 10_000
+            wall += 10_000
+            assertEquals(corrected, runBlocking { restart().lookup(MusicService.YOUTUBE_MUSIC, song, pending.retry) })
+        }
+        assertTrue(fake.requestedUrls.isEmpty())
+
+        elapsed += 10_000
+        wall += 10_000
+        val upload = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
+        assertEquals(ExactMatcher.Lookup(upload, corrected.retry), runBlocking {
+            restart().lookup(MusicService.YOUTUBE_MUSIC, song, pending.retry)
+        })
+    }
+
+    @Test
+    fun restartingAfterAFanUploadStillLetsTheArtistVideoReplaceIt() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val japan = mapOf("JP" to appleSong(song.title, "ザ・ブルーハーツ", 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("restart-fan").toFile().resolve("lookups.json")
+        var clock = 4_000L
+        fun restart() = ExactMatcher(
+            fake.client(), "AR", Dispatchers.Unconfined, LookupCache(file, Dispatchers.Unconfined),
+            now = { clock }, wallNow = { clock }
+        )
+        val first = restart()
+        namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = japan, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { first.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        clock += ExactMatcher.UNSURE_FOR_MS
+        val fanUrl = "https://music.youtube.com/watch?v=fan00000000"
+        val stale = runBlocking { first.lookup(MusicService.YOUTUBE_MUSIC, song) }
+        assertEquals(ExactMatcher.Match.Found(fanUrl, lasting = false), stale.match)
+        namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = japan)
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=own00000000"), runBlocking {
+            restart().lookFor(MusicService.YOUTUBE_MUSIC, song)
+        })
+        namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = japan, failing = setOf("JP"))
+        fake.requestedUrls.clear()
+        val ownUrl = "https://music.youtube.com/watch?v=own00000000"
+        assertEquals(ExactMatcher.Lookup(ExactMatcher.Match.Found(ownUrl)), runBlocking {
+            restart().lookup(MusicService.YOUTUBE_MUSIC, song, stale.retry, fanUrl)
+        })
+        assertEquals(ownUrl, runBlocking { restart().find(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun aLateOutageAnswerKeepsTheConfirmedVideo() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val japan = mapOf("JP" to appleSong(song.title, "ザ・ブルーハーツ", 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("late-outage").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, timeoutMs = 30_000)
+        val fanUrl = "https://music.youtube.com/watch?v=fan00000000"
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+        val provisional = ExactMatcher.Lookup(ExactMatcher.Match.Found(fanUrl, lasting = false), ExactMatcher.Retry())
+        assertEquals(provisional, finder.lookup(MusicService.YOUTUBE_MUSIC, song))
+
+        val started = CompletableDeferred<Unit>()
+        val mayAnswer = CountDownLatch(1)
+        val outage = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.queryParameter("country") == "JP") {
+                started.complete(Unit)
+                check(mayAnswer.await(30, SECONDS)) { "The late lookup never got its answer" }
+            }
+            outage(request)
+        }
+        // Recent still has an earlier hold, so saving the late answer would change the provisional entry.
+        val late = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song, ExactMatcher.Retry(4_000), fanUrl) }
+        val ownUrl = "https://music.youtube.com/watch?v=own00000000"
+        val confirmed = ExactMatcher.Lookup(ExactMatcher.Match.Found(ownUrl))
+        try {
+            withTimeout(10_000) { started.await() }
+            namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = japan)
+            assertEquals(confirmed, finder.lookup(MusicService.YOUTUBE_MUSIC, song))
+            assertEquals(ownUrl, cache.entries().single().second)
+        } finally {
+            mayAnswer.countDown()
+        }
+
+        val result = late.await()
+        assertEquals(ownUrl, cache.entries().single().second)
+        assertEquals(confirmed, result)
+        assertEquals(true, (result.match as ExactMatcher.Match.Found).lasting)
+    }
+
+    @Test
+    fun lateHoldAndFailureKeepTheProvisionalVideoSavedMeanwhile() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("late-hold").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, timeoutMs = 30_000)
+        val storeStarted = CompletableDeferred<Unit>()
+        val videosStarted = CompletableDeferred<Unit>()
+        val failureStarted = CompletableDeferred<Unit>()
+        val mayAnswer = CountDownLatch(1)
+        namesAndTabs(videos = listOf(fan, own), apple = apple, failing = setOf("JP"))
+        val outage = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.queryParameter("country") == "JP") {
+                storeStarted.complete(Unit)
+                check(mayAnswer.await(30, SECONDS))
+            }
+            if (FakeSpotify.bodyOf(request).contains(VIDEOS_TAB)) videosStarted.complete(Unit)
+            outage(request)
+        }
+        val hold = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
+        val provisional = ExactMatcher.Lookup(
+            ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), ExactMatcher.Retry()
+        )
+        val (failure, saved) = try {
+            withTimeout(10_000) {
+                storeStarted.await()
+                videosStarted.await()
+            }
+            fake.handler = { request ->
+                if (request.url.host == "music.youtube.com") {
+                    failureStarted.complete(Unit)
+                    check(mayAnswer.await(30, SECONDS))
+                    FakeSpotify.html(request, "{}", code = 503)
+                } else {
+                    outage(request)
+                }
+            }
+            val failed = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
+            withTimeout(10_000) { failureStarted.await() }
+
+            namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+            assertEquals(provisional, finder.lookup(MusicService.YOUTUBE_MUSIC, song))
+            failed to cache.entries()
+        } finally {
+            mayAnswer.countDown()
+        }
+
+        assertEquals(provisional, hold.await())
+        assertEquals(provisional, failure.await())
+        assertEquals(saved, cache.entries())
+    }
+
+    @Test
+    fun overlappingLookupsShareTheHoldSavedMeanwhile() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("shared-hold").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, timeoutMs = 30_000, now = { 4_000 }, wallNow = { 100_000 })
+        val firstStoreRequest = AtomicBoolean(true)
+        val started = CompletableDeferred<Unit>()
+        val mayAnswer = CountDownLatch(1)
+        namesAndTabs(videos = listOf(fan, own), apple = apple, failing = setOf("JP"))
+        val outage = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.queryParameter("country") == "JP" && firstStoreRequest.getAndSet(false)) {
+                started.complete(Unit)
+                check(mayAnswer.await(30, SECONDS))
+            }
+            outage(request)
+        }
+        val late = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
+        val pending = ExactMatcher.Lookup(ExactMatcher.Match.WaitingForNames, ExactMatcher.Retry(100_000))
+        val saved = try {
+            withTimeout(10_000) { started.await() }
+            assertEquals(pending, finder.lookup(MusicService.YOUTUBE_MUSIC, song))
+            cache.entries()
+        } finally {
+            mayAnswer.countDown()
+        }
+        assertEquals(pending, late.await())
+        assertEquals(saved, cache.entries())
+    }
+
+    @Test
+    fun aLateFailureReturnsTheHoldSavedMeanwhile() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("late-failed-hold").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, timeoutMs = 30_000, now = { 4_000 }, wallNow = { 100_000 })
+        val started = CompletableDeferred<Unit>()
+        val mayAnswer = CountDownLatch(1)
+        fake.handler = { request ->
+            started.complete(Unit)
+            check(mayAnswer.await(30, SECONDS))
+            FakeSpotify.html(request, "{}", code = 503)
+        }
+        val late = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
+        val pending = ExactMatcher.Lookup(ExactMatcher.Match.WaitingForNames, ExactMatcher.Retry(100_000))
+        val saved = try {
+            withTimeout(10_000) { started.await() }
+            namesAndTabs(videos = listOf(fan, own), apple = apple, failing = setOf("JP"))
+            assertEquals(pending, finder.lookup(MusicService.YOUTUBE_MUSIC, song))
+            cache.entries()
+        } finally {
+            mayAnswer.countDown()
+        }
+        assertEquals(pending, late.await())
+        assertEquals(saved, cache.entries())
+    }
+
+    @Test
+    fun aSecondLookupWaitsForTheSavedRetryToReachDisk() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("retry-flush").toFile().resolve("lookups.json")
+        val disk = PausedCacheDisk()
+        val cache = LookupCache(file, disk)
+        cache.entries()
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache, missingForMs = 60_000, now = { 4_000 })
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+        val expected = ExactMatcher.Lookup(
+            ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), ExactMatcher.Retry()
+        )
+        disk.pause()
+        val first = async(Dispatchers.Default) { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
+        val second = try {
+            disk.awaitWrite()
+            fake.requestedUrls.clear()
+            val retry = async(start = CoroutineStart.UNDISPATCHED) {
+                finder.lookup(MusicService.YOUTUBE_MUSIC, song).also {
+                    assertEquals(cache.entries(), LookupCache(file, Dispatchers.Unconfined).entries())
+                }
+            }
+            assertTrue("The second lookup waits for the pending write", !retry.isCompleted)
+            assertTrue("The provisional upload is still only in memory", !file.exists())
+            retry
+        } finally {
+            disk.resume()
+        }
+        assertEquals(expected, second.await())
+        assertEquals(expected, first.await())
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun anUpgradeWritesOverTheProvisionalAnswerBeforeReturning() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val japan = mapOf("JP" to appleSong(song.title, "ザ・ブルーハーツ", 184_000))
+        val own = youTubeMusicRow(song.title, "ザ・ブルーハーツ - Topic • 1K views • 3:04", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("upgrade-flush").toFile().resolve("lookups.json")
+        val disk = PausedCacheDisk()
+        val finder = ExactMatcher(fake.client(), "AR", cache = LookupCache(file, disk))
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), finder.lookFor(MusicService.YOUTUBE_MUSIC, song))
+        val provisional = LookupCache(file, Dispatchers.Unconfined).entries()
+
+        namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = japan)
+        val ownUrl = "https://music.youtube.com/watch?v=own00000000"
+        disk.pause()
+        val confirmed = async(Dispatchers.Default) {
+            finder.lookFor(MusicService.YOUTUBE_MUSIC, song).also {
+                assertEquals(ownUrl, LookupCache(file, Dispatchers.Unconfined).entries().single().second)
+            }
+        }
+        try {
+            disk.awaitWrite()
+            assertTrue("The upgrade waits for the confirmed link to be written", !confirmed.isCompleted)
+            assertEquals(provisional, LookupCache(file, Dispatchers.Unconfined).entries())
+        } finally {
+            disk.resume()
+        }
+        assertEquals(ExactMatcher.Match.Found(ownUrl), confirmed.await())
+    }
+
+    @Test
+    fun aFreshConfirmedAnswerCanReturnWhileItsCacheWriteWaits() = runBlocking {
+        val song = MusicMetadata("Different Song", "Different Artist")
+        val url = "https://www.deezer.com/track/1"
+        val file = kotlin.io.path.createTempDirectory("fresh-answer").toFile().resolve("lookups.json")
+        val disk = PausedCacheDisk()
+        val cache = LookupCache(file, disk)
+        cache.entries()
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache)
+        namesAndTabs(deezer = """[{"title":"${song.title}","link":"$url","artist":{"name":"${song.artist}"}}]""")
+
+        disk.pause()
+        try {
+            val found = lookUpWhileDiskWaits { finder.lookFor(MusicService.DEEZER, song) }
+            assertEquals(ExactMatcher.Match.Found(url), found)
+            assertEquals(url, cache.entries().single().second)
+            assertTrue(!file.exists())
+        } finally {
+            disk.resume()
+        }
+    }
+
+    @Test
+    fun anotherSongCanMatchWhileAnOutageAnswerFlushes() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val other = MusicMetadata("Different Song", "Different Artist")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("slow-flush").toFile().resolve("lookups.json")
+        val disk = PausedCacheDisk()
+        val cache = LookupCache(file, disk)
+        cache.entries()
+        val finder = ExactMatcher(fake.client(), "AR", cache = cache)
+        namesAndTabs(
+            videos = listOf(fan), apple = apple, failing = setOf("JP"),
+            deezer = """[{"title":"Different Song","link":"https://www.deezer.com/track/1","artist":{"name":"Different Artist"}}]"""
+        )
+        disk.pause()
+        val upload = async(Dispatchers.Default) { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) }
+        try {
+            disk.awaitWrite()
+            val known = lookUpWhileDiskWaits { finder.lookFor(MusicService.DEEZER, other) }
+            assertEquals(ExactMatcher.Match.Found("https://www.deezer.com/track/1"), known)
+        } finally {
+            disk.resume()
+        }
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), upload.await())
+    }
+
+    private suspend fun CoroutineScope.lookUpWhileDiskWaits(lookUp: suspend () -> ExactMatcher.Match): ExactMatcher.Match {
+        val finished = CountDownLatch(1)
+        val answer = async(Dispatchers.Default) { lookUp() }
+        answer.invokeOnCompletion { finished.countDown() }
+        assertTrue("The lookup should return before disk writes resume", finished.await(5, SECONDS))
+        return answer.await()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private class PausedCacheDisk : CoroutineDispatcher() {
+        private val disk = StandardTestDispatcher()
+        private val pauseLock = Any()
+        private val writing = CountDownLatch(1)
+        private var paused = false
+
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            synchronized(pauseLock) {
+                if (paused) {
+                    disk.dispatch(context, block)
+                    writing.countDown()
+                    return
+                }
+            }
+            Dispatchers.Default.dispatch(context, block)
+        }
+
+        fun pause() = synchronized(pauseLock) { paused = true }
+
+        fun awaitWrite() {
+            assertTrue("The lookup should reach the paused disk", writing.await(5, SECONDS))
+        }
+
+        fun resume() {
+            synchronized(pauseLock) { paused = false }
+            disk.scheduler.runCurrent()
+        }
+    }
+
+    @Test
+    fun aHealthyMissClearsTheSavedOutageRetry() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val file = kotlin.io.path.createTempDirectory("restart-miss").toFile().resolve("lookups.json")
+        fun cache() = LookupCache(file, Dispatchers.Unconfined)
+        fun restart() = ExactMatcher(fake.client(), "AR", Dispatchers.Unconfined, cache())
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"))
+        assertEquals("https://music.youtube.com/watch?v=fan00000000", runBlocking { restart().find(MusicService.YOUTUBE_MUSIC, song) })
+        namesAndTabs(videos = emptyList(), apple = apple)
+        assertEquals(ExactMatcher.Match.Missing, runBlocking { restart().lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(runBlocking { cache().entries().isEmpty() })
+    }
+
+    @Test
+    fun anArtistVideoCanNeedBothNamesFromTheFailedLookup() {
+        val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val japanese = mapOf("JP" to appleSong("終わらない歌", "ザ・ブルーハーツ", 184_000))
+        val own = youTubeMusicRow("終わらない歌", "ザ・ブルーハーツ • 1M views • 4:30", videoId = "own00000000")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - Owaranai Uta", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val other = youTubeMusicRow("別の歌", "ザ・ブルーハーツ • 1M views • 4:30", videoId = "other000000")
+        namesAndTabs(videos = listOf(other, fan), apple = apple, elsewhere = japanese, failing = setOf("JP"))
+        assertEquals("https://music.youtube.com/watch?v=fan00000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+
+        val finder = ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> error("Wait for the store before picking") })
+        namesAndTabs(videos = listOf(own, fan), apple = apple, elsewhere = japanese, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        namesAndTabs(videos = listOf(own, fan), apple = apple, elsewhere = japanese)
+        assertEquals("https://music.youtube.com/watch?v=own00000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun aJapaneseSongWaitsForJapansNameEvenWhenKoreaWritesItsArtistInHangul() {
+        val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fans = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val own = youTubeMusicRow("終わらない歌", "ザ・ブルーハーツ • Album • 3:04", videoId = "song0000000")
+        val names = mapOf(
+            "TW" to appleSong("終わらない歌", song.artist, 184_000),
+            "KR" to appleSong(song.title, "더 블루 하츠", 184_000),
+            "JP" to appleSong("終わらない歌", "ザ・ブルーハーツ", 184_000)
+        )
+        var clock = 0L
+        val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L, now = { clock })
+        namesAndTabs(songs = listOf(own), videos = listOf(fans), apple = apple, elsewhere = names, failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+
+        fake.requestedUrls.clear()
+        namesAndTabs(songs = listOf(own), videos = listOf(fans), apple = apple, elsewhere = names)
+        clock = ExactMatcher.UNSURE_FOR_MS - 1
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(fake.requestedUrls.isEmpty())
+        clock++
+        assertEquals("https://music.youtube.com/watch?v=song0000000", runBlocking { finder.find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun aFansUploadFoundWhileANameLookupFailedIsAskedAgain() {
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val fans = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val own = youTubeMusicRow("終わらない歌", "THE BLUE HEARTS • 1M views • 3:04", videoId = "own00000000")
+        var clock = 0L
+        val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L, now = { clock })
+        val upload = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false)
+        namesAndTabs(videos = listOf(fans), apple = apple, failing = setOf("JP"))
+        assertEquals(upload, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+
+        fake.requestedUrls.clear()
+        namesAndTabs(videos = listOf(fans, own), apple = apple, failing = setOf("JP"))
+        clock = ExactMatcher.UNSURE_FOR_MS - 1
+        assertEquals(upload, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(fake.requestedUrls.isEmpty())
+        clock++
+        assertEquals("https://music.youtube.com/watch?v=own00000000", runBlocking { finder.find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun aFansUploadStillNeedsAnAnswerForItsLength() {
+        val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS")
+        val fans = youTubeMusicRow("THE BLUE HEARTS - Owaranai Uta", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, lengthMs = 0))
+        namesAndTabs(videos = listOf(fans), apple = apple, deezerDown = true)
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.YOUTUBE_MUSIC, song) })
     }
 
     @Test
