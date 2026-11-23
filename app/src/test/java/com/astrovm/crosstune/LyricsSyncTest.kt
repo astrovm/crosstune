@@ -267,7 +267,9 @@ class LyricsSyncTest {
     @Test
     fun oldestPendingEvidenceGoesFirst() {
         val store = LyricsSyncStore(prefs)
-        repeat(201) { store.rememberPending(MusicMetadata("Song $it", "Artist", recordingId = "player:$it"), lines, PendingShift(22_000, 40_000, 60_000)) }
+        repeat(200) { store.rememberPending(MusicMetadata("Song $it", "Artist", recordingId = "player:$it"), lines, PendingShift(22_000, 40_000, 60_000)) }
+        assertEquals(PendingShift(22_000, 40_000, 60_000), store.pending(MusicMetadata("Song 0", "Artist", recordingId = "player:0"), lines))
+        store.rememberPending(MusicMetadata("Song 200", "Artist", recordingId = "player:200"), lines, PendingShift(22_000, 40_000, 60_000))
         assertNull(store.pending(MusicMetadata("Song 0", "Artist", recordingId = "player:0"), lines))
         assertEquals(PendingShift(22_000, 40_000, 60_000), store.pending(MusicMetadata("Song 200", "Artist", recordingId = "player:200"), lines))
     }
