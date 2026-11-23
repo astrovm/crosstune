@@ -750,11 +750,9 @@ class ReadingsTest {
             "しゅみはうた" to listOf("しゅみ" to "趣味", "は" to "は", "うた" to "うた"),
             "にっきをかく" to listOf("にっき" to "日記", "を" to "を", "かく" to "かく")
         )
-        fun check() = cases.forEach { (line, expected) ->
-            assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
-        }
-        check()
-        TestUniDic.reading { check() }
+        fun words() = cases.keys.map { line -> Readings.words(line, Script.JAPANESE).map { it.text to it.lookup } }
+        val expected = cases.values.toList()
+        assertEquals(listOf(expected, expected), listOf(words(), TestUniDic.reading { words() }))
     }
 
     @Test
@@ -764,21 +762,28 @@ class ReadingsTest {
             "いえはずっと" to listOf("いえ", "は", "ずっと"),
             "きみってだれ" to listOf("きみ", "って", "だれ")
         )
-        fun check() = cases.forEach { (line, expected) ->
-            assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text })
+        fun words() = cases.keys.map { line -> Readings.words(line, Script.JAPANESE).map { it.text } }
+        val expected = cases.values.toList()
+        assertEquals(listOf(expected, expected), listOf(words(), TestUniDic.reading { words() }))
+    }
+
+    @Test
+    fun okinawanTuAfterAWordEndingInToKeepsItsSound() {
+        // Okinawan folk song, as transcribed at https://530sanshin.seesaa.net/.
+        val line = "やまとぅから　下たる　あかわんぬ　ぬるわしや"
+        fun readings() = listOf(line, "ひとぅが").map { Readings.of(listOf(it), Script.JAPANESE).single().typed }
+        for (said in listOf(readings(), TestUniDic.reading { readings() })) {
+            assertTrue("$line: ${said[0]}", said[0].startsWith("yamatu"))
+            assertEquals("hitou ga", said[1])
         }
-        check()
-        TestUniDic.reading { check() }
     }
 
     @Test
     fun dictionaryWordsKeepTheirReadingsInContext() {
         val cases = mapOf("身体中" to "からだじゅう", "薄化粧" to "うすげしょう", "丸印" to "まるじるし", "一口" to "ひとくち")
-        fun check() = cases.forEach { (line, expected) ->
-            assertEquals(line, expected, Readings.of(listOf(line), Script.JAPANESE).single().reading)
-        }
-        check()
-        TestUniDic.reading { check() }
+        fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.reading }
+        val expected = cases.values.toList()
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
     }
 
     @Test
