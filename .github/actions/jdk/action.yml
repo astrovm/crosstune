@@ -6,8 +6,8 @@ description: >-
 inputs:
   gradle:
     description: >-
-      Gradle's caches: read-write (saved by main's runs of CI only, as setup-gradle decides), read-only,
-      disabled, or none for a job that runs no Gradle.
+      Gradle's caches: read-write or read-only restore the shared dependencies, disabled skips caching,
+      and none is for a job that runs no Gradle. Main's test job saves the shared dependencies.
     default: read-write
   kotlinc:
     description: true fetches the Kotlin compiler's jars into build/kotlinc, for the readings guard and syncreplay.
@@ -40,21 +40,20 @@ runs:
       shell: bash
       run: python3 scripts/kotlinc/kotlinc.py fetch
 
-    # Three steps, not one with inputs: read-write leaves setup-gradle's own default, which saves only on main.
-    - if: inputs.gradle == 'read-write'
+    # The enhanced provider can restore old per-job dependencies even when they are excluded from saves.
+    # Use only our shared cache; old entries expire, and transforms and wrapper downloads are no longer cached.
+    - if: inputs.gradle == 'read-write' || inputs.gradle == 'read-only'
       uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       with:
-        # One complete dependency cache comes from the test job, not a different one per job.
-        gradle-home-cache-excludes: caches/modules-2
+        cache-provider: external
 
-    # Main's runs of CI save the caches; this one only reads them.
-    - if: inputs.gradle == 'read-only'
-      uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-      with:
-        cache-read-only: true
-        gradle-home-cache-excludes: caches/modules-2
+    # A new month starts with an empty cache so fallback keys cannot carry old artifacts forever.
+    - if: inputs.gradle == 'read-write' || inputs.gradle == 'read-only'
+      id: cache-period
+      shell: bash
+      run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
 
-    # Restore after setup-gradle so its other caches do not mask this shared set of dependencies.
+    # Restore after setup-gradle, which leaves the Gradle home to this cache.
     - if: inputs.gradle == 'read-write' || inputs.gradle == 'read-only'
       id: dependencies
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -63,10 +62,10 @@ runs:
           ~/.gradle/caches/modules-2
           !~/.gradle/caches/modules-2/modules-2.lock
           !~/.gradle/caches/modules-2/gc.properties
-        # A changed build file or gradle.properties gets a fresh key. Bump v1 if a repository
+        # A changed build file or gradle.properties gets a fresh key. Bump v2 if a repository
         # changes an artifact without changing those files, since an exact hit cannot be updated.
-        key: gradle-shared-dependencies-v1-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle.properties', '**/gradle-wrapper.properties', 'gradle/*.versions.toml', '**/versions.properties') }}
-        restore-keys: gradle-shared-dependencies-v1-${{ runner.os }}-
+        key: gradle-shared-dependencies-v2-${{ runner.os }}-${{ steps.cache-period.outputs.month }}-${{ hashFiles('**/*.gradle*', '**/gradle.properties', '**/gradle-wrapper.properties', 'gradle/*.versions.toml', '**/versions.properties', '.github/workflows/*.yml', '.github/actions/jdk/action.yml') }}
+        restore-keys: gradle-shared-dependencies-v2-${{ runner.os }}-${{ steps.cache-period.outputs.month }}-
 
     - if: inputs.gradle == 'disabled'
       uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
