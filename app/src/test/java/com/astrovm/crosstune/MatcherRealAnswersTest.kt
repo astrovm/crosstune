@@ -117,8 +117,7 @@ class MatcherRealAnswersTest {
         val matcher = matcher()
         val song = LEMON.metadata.copy(lengthMs = 280_000L)
         appleDown = { url -> url.queryParameter("country") == "US" }
-        assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
-
+        assertEquals(ExactMatcher.Match.Found(LEMON_SONG, lasting = false), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         appleDown = { false }
         clock += ExactMatcher.UNSURE_FOR_MS
         assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })

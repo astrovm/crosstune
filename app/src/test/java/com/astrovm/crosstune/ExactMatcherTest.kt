@@ -1874,6 +1874,18 @@ class ExactMatcherTest {
         val finder = ExactMatcher(fake.client(), "AR", missingForMs = 60 * 60_000L, now = { clock })
         namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = us, failing = setOf("US"))
         assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+
+        // Different titles need a duration even when Apple knows both names.
+        val untimed = youTubeMusicRow("Uma to Shika", "Kenshi Yonezu • 1M views", videoId = "own00000000")
+        clock = 0L
+        val retry = ExactMatcher(fake.client(), "AR", now = { clock })
+        namesAndTabs(videos = listOf(fan, untimed), apple = apple, elsewhere = us, failing = setOf("US"))
+        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { retry.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        namesAndTabs(videos = listOf(fan, untimed), apple = apple, elsewhere = us)
+        clock += ExactMatcher.UNSURE_FOR_MS
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), runBlocking {
+            retry.lookFor(MusicService.YOUTUBE_MUSIC, song)
+        })
         namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = us)
         assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), runBlocking {
             matcher().lookFor(MusicService.YOUTUBE_MUSIC, song)

@@ -875,7 +875,7 @@ internal class ExactMatcher(
         val candidateTitle = videoRecordingTitle(candidate.name, names)
         val knownTitles = names.titles.map(SongNames::normalize).toSet()
         if (firstTitle != candidateTitle && (firstTitle !in knownTitles || candidateTitle !in knownTitles)) return false
-        if (candidate.lengthMs == null) return true
+        if (candidate.lengthMs == null) return firstTitle == candidateTitle
         if (first.lengthMs?.let { !sameRecordingLength(candidate.lengthMs, it) } == true) return false
         val wanted = metadata.lengthMs?.takeIf { it > 0 }?.let(::listOf) ?: names.lengthsMs
         return wanted.isEmpty() || wanted.any { sameRecordingLength(candidate.lengthMs, it) }
