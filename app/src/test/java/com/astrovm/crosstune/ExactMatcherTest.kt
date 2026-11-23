@@ -1186,6 +1186,15 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anAppleLengthGuessDoesNotProveAnotherArtistsRecordingId() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val other = youTubeMusicRow("別の歌", "別の人 • Album • 4:00", videoId = "other000000")
+        namesAndTabs(songs = listOf(other), apple = mapOf("US" to appleSong("Song", "Other Artist", 240_000)))
+        matcher("US").find(MusicService.YOUTUBE_MUSIC, song)
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().queryParameter("term") == "別の歌 別の人" })
+    }
+
+    @Test
     fun aFailedDeezerArtistSearchIsRetriedWhenAppleKnowsTheLength() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト")
         val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")

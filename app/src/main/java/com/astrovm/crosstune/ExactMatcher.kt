@@ -1354,11 +1354,12 @@ internal class ExactMatcher(
         }
         val searchFailed = found == null && searching.failed
         val complete = !searchFailed && unanswered.none { it == "US" || it in homes }
+        val proved = found?.song?.takeIf { matches(metadata, it.optString("trackName"), it.optString("artistName")) }
         return Names(
             titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album,
             emptyList(), found != null, found?.editions.orEmpty().filter {
-                val length = metadata.lengthMs ?: found?.song?.optLong("trackTimeMillis")
-                length != null && sameRecordingLength(it.optLong("trackTimeMillis"), length)
+                val length = metadata.lengthMs ?: proved?.optLong("trackTimeMillis")
+                proved != null && length != null && sameRecordingLength(it.optLong("trackTimeMillis"), length)
             }.map { it.optLong("trackId") }.filter { it > 0 }.toSet(), takeOnAlbum, searchFailed, complete, unanswered
         )
     }
