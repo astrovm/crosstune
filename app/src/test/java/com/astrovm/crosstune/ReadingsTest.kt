@@ -776,6 +776,15 @@ class ReadingsTest {
     }
 
     @Test
+    fun aSmallTsuWordCannotCutACommonWordDuringSearch() {
+        val tokenizer = SmallKanaTokenizer { Readings.oldKana }
+        val split = tokenizer.searched("はずっと", 0)
+        assertEquals(listOf("は", "ずっと"), split?.map { it.surface })
+        val particle = tokenizer.searched("きみってだれ", 0)
+        assertEquals(listOf("きみ", "って", "だれ"), particle?.map { it.surface })
+    }
+
+    @Test
     fun okinawanTuAfterAWordEndingInToKeepsItsSound() {
         // Okinawan folk song, as transcribed at https://530sanshin.seesaa.net/.
         val line = "やまとぅから　下たる　あかわんぬ　ぬるわしや"
