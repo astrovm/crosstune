@@ -1299,6 +1299,7 @@ internal class MainViewModel(
 
     internal class QueueCheck(
         val station: String?,
+        val session: Int?,
         val song: MusicMetadata,
         private val firstSeen: Long
     ) {
@@ -1341,7 +1342,8 @@ internal class MainViewModel(
             until = 0L
         }
 
-        fun isForStation(unnamed: Unnamed): Boolean = unnamed.app == RadioGarden.PACKAGE && station == unnamed.name
+        fun isForStation(unnamed: Unnamed): Boolean =
+            unnamed.app == RadioGarden.PACKAGE && station == unnamed.name && session == unnamed.session
 
         fun isForSong(unnamed: Unnamed): Boolean =
             isForStation(unnamed) && unnamed.queueSong?.let { RadioGarden.sameSong(song, it) } == true
@@ -1358,24 +1360,29 @@ internal class MainViewModel(
         val previous = queueCheck
         val last = lastConfirmedQueue
         if (unnamed == null) {
-            (last ?: previous)?.let { logRadioQueue("kept", it.station, null) }
+            // The live broadcast can move on while this session is paused or stopped.
+            clearRadioQueue(last ?: previous)
+            queueCheck = null
             return null
         }
-        if (last != null && !last.isForStation(unnamed)) {
-            queueExpiry?.cancel()
-            lastConfirmedQueue = null
-            logRadioQueue("forgotten", last.station, last.song)
-        }
+        if (last != null && !last.isForStation(unnamed)) clearRadioQueue(last)
         val song = unnamed.queueSong
         val check = when {
             song == null -> previous?.takeIf { it.isForStation(unnamed) }
             last?.isForSong(unnamed) == true -> last
             previous?.isForSong(unnamed) == true -> previous
-            else -> QueueCheck(unnamed.name, song, now())
+            else -> QueueCheck(unnamed.name, unnamed.session, song, now())
         }
         queueCheck = check
         logRadioQueueUpdate(unnamed, check, kept = check === previous || check === last)
         return check?.takeIf { song != null && !it.confirmed }
+    }
+
+    private fun clearRadioQueue(check: QueueCheck?) {
+        queueExpiry?.cancel()
+        queueExpiry = null
+        lastConfirmedQueue = null
+        check?.let { logRadioQueue("forgotten", it.station, it.song, it.session) }
     }
 
     private fun logRadioQueueUpdate(unnamed: Unnamed, check: QueueCheck?, kept: Boolean) {
@@ -1401,7 +1408,7 @@ internal class MainViewModel(
         val found = withTimeoutOrNull(remaining) { matcher.findRadioSong(check.song) } ?: return
         check.confirm(found.lengthMs)
         lastConfirmedQueue = check
-        logRadioQueue("confirmed", check.station, check.song, liveUnnamed?.session)
+        logRadioQueue("confirmed", check.station, check.song, check.session)
         showUnnamed()
         refreshQueueExpiry(check)
         byEarAgain.value = Any()
@@ -1433,7 +1440,7 @@ internal class MainViewModel(
 
     private fun forgetQueueSong(check: QueueCheck) {
         check.forget()
-        logRadioQueue("forgotten", check.station, check.song, liveUnnamed?.session)
+        logRadioQueue("forgotten", check.station, check.song, check.session)
         showUnnamed()
     }
 

@@ -515,7 +515,7 @@ class MainViewModelTest {
 
     @Test
     fun radioGardenQueueUsesTheExactListenAndExpiryBoundaries() {
-        val check = MainViewModel.QueueCheck("1LIVE", MusicMetadata("Song", "Band"), firstSeen = 10_000L)
+        val check = MainViewModel.QueueCheck("1LIVE", 1, MusicMetadata("Song", "Band"), firstSeen = 10_000L)
         check.confirm(180_000L)
         val due = 200_000L
         val expiry = 370_000L
