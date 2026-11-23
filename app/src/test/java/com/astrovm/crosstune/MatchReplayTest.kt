@@ -5,6 +5,8 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,6 +27,17 @@ class MatchReplayTest {
     private lateinit var dir: File
     private var proofs = JSONObject()
     private val missingProofs = ConcurrentHashMap.newKeySet<String>()
+
+    @Test
+    fun candidateSearchesNeedTheirOwnCapturedAnswers() {
+        val song = JSONObject().put("query", "Song Artist").put("us", JSONArray())
+        val request = Request.Builder().url("https://itunes.apple.com/search?country=JP&term=Candidate%20Artist").build()
+        assertThrows(IOException::class.java) { answer(request, song, emptyMap(), false, false) }
+        assertEquals(setOf("JP|Candidate Artist"), missingProofs)
+        proofs.put("JP|Candidate Artist", JSONArray().put(JSONObject().put("trackId", 17)))
+        val result = answer(request, song, emptyMap(), false, false).body.string()
+        assertEquals(17, JSONObject(result).getJSONArray("results").getJSONObject(0).getInt("trackId"))
+    }
 
     @Test
     fun replay() {

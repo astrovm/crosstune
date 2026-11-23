@@ -70,12 +70,15 @@ class MatcherRecordingEvidenceTest {
         return (lastMatch as? ExactMatcher.Match.Found)?.url
     }
 
+    // Issue #1199: the artist's 4:25 video and a 3:58 fan video are both in the captured search.
     @Test fun peaceSignPrefersTheArtistsVideo() = assertEquals(WATCH + "9aJVr5tTTWk", find(0, true))
 
     @Test fun bayCityKeepsTheLongRecording() = assertEquals(WATCH + "HNfnjWbO4ds", find(1, true))
 
+    // Issue #1127: neither source lookup gives the native names in these two checks.
     @Test fun mizuiroNoAmeOpensTheJapaneseSongWithoutAppleNativeNames() = assertEquals(WATCH + "M3-K4knCeLE", find(2, false))
 
+    // Issues #992, #983 and #945: before ID proof, the 4:00 row for another song by this artist opened.
     @Test fun jealousOpensTheJapaneseSongWithoutAppleNativeNames() = assertEquals(WATCH + "8eQdsCZWrLg", find(3, false))
 
     @Test fun aDifferentAppleRecordingDoesNotProveTheJapaneseSong() = assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, differentRecording = true))
