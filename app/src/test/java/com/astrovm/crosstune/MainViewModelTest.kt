@@ -2,6 +2,11 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.content.Context
+import android.media.MediaMetadata
+import android.media.session.MediaController
+import android.media.session.MediaSession
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -4549,13 +4554,79 @@ class MainViewModelTest {
     }
 
     @Test
-    fun aPausedSongWithoutAPositiveDurationCanResumeFromTheCard() {
+    fun thePlayerFollowsAReplacementSessionAfterTheOldOneIsReleasedBeforePlay() {
+        val sessions = shadowOf(app.getSystemService(MediaSessionManager::class.java))
+        val media = MediaSessionPlayback(app)
+        val receivers = mutableListOf<MediaSession>()
+        fun publish(packageName: String, state: Int, position: Long): MediaSession {
+            val receiver = MediaSession(app, packageName).also { receivers += it }
+            val controller = MediaController(app, receiver.sessionToken)
+            shadowOf(controller).apply {
+                setPackageName(packageName)
+                setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Dakare Ni Kita Onna")
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "Kingo Hamada").build())
+                setPlaybackState(PlaybackState.Builder().setState(state, position, 1f).build())
+            }
+            sessions.addController(controller)
+            return receiver
+        }
+        val old = publish(ytMusic, PlaybackState.STATE_PAUSED, 15_000)
+        val resumes = mutableListOf<Int?>()
+        val fakePlayback = FakePlayback().apply { access = true }
+        val playback = object : PlaybackSource by fakePlayback {
+            override fun follow(song: MusicMetadata, app: String?, session: Int?) = media.follow(song, app, session)
+
+            override suspend fun resume(song: MusicMetadata, app: String?, session: Int?): Boolean {
+                resumes += session
+                sessions.clearControllers()
+                old.release()
+                receivers.remove(old)
+                return media.resume(song, app, session)
+            }
+
+            override suspend fun bringToFront(song: MusicMetadata, app: String?, session: Int?) = media.bringToFront(song, app, session)
+        }
+        val model = ytMusicModel(playback)
+        val watching = model.viewModelScope.launch { model.watchPlayingNow() }
+        try {
+            until("the paused session is offered") { model.uiState.canPlayResult }
+            val oldNumber = media.matching(checkNotNull(model.uiState.result)).single().session
+            model.playResult()
+            until("Play reached the released session") { resumes.isNotEmpty() }
+            assertEquals(listOf(oldNumber), resumes)
+            assertEquals(oldNumber, model.uiState.player?.session)
+            assertTrue(media.matching(checkNotNull(model.uiState.result)).isEmpty())
+
+            publish(MusicService.SPOTIFY.packageName, PlaybackState.STATE_PLAYING, 30_000)
+            idle()
+            assertNull(model.uiState.player?.following)
+            publish(ytMusic, PlaybackState.STATE_PLAYING, 45_000)
+            idle()
+            val followed = checkNotNull(model.uiState.player?.following)
+            assertEquals(ytMusic, followed.appPackage)
+            assertTrue(followed.session != oldNumber)
+            assertEquals(45_000L, followed.clock.positionMs)
+        } finally {
+            watching.cancel()
+            model.closePlayer()
+            sessions.clearControllers()
+            receivers.forEach(MediaSession::release)
+        }
+    }
+
+    @Test
+    fun aPausedSongWithZeroDurationCanResumeFromTheCard() = resumesWithUnknownDuration(0)
+
+    @Test
+    fun aPausedSongWithNegativeDurationCanResumeFromTheCard() = resumesWithUnknownDuration(-1)
+
+    private fun resumesWithUnknownDuration(durationMs: Long) {
         val playback = FakePlayback().apply { access = true }
         val model = ytMusicModel(playback)
         val watching = model.viewModelScope.launch { model.watchPlayingNow() }
         try {
             playback.playing.value = Following(PlaybackClock(0, 0, playing = false), "YouTube Music", canSeek = true,
-                appPackage = ytMusic, durationMs = 0)
+                appPackage = ytMusic, durationMs = durationMs)
             idle()
             assertTrue(model.uiState.canPlayResult)
             model.playResult()
@@ -4568,7 +4639,7 @@ class MainViewModelTest {
     }
 
     @Test
-    fun aSongPausedAtItsEndOpensOnItsLink() {
+    fun aPlayingSongInItsFinalSecondStaysEligibleWhileAPausedSongOpensItsLink() {
         val playback = FakePlayback().apply { access = true }
         val model = ytMusicModel(playback)
         val watching = model.viewModelScope.launch { model.watchPlayingNow() }

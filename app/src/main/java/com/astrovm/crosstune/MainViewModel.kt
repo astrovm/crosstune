@@ -2312,8 +2312,7 @@ internal class MainViewModel(
         }
         val song = opened.song
         viewModelScope.launchKept({ playerJob = it }) {
-            // What names no song is only told apart by the app that plays it.
-            combine(source.follow(song, opened.askedOf, opened.session), source.nowPlayingUpdates(), source.unnamedUpdates(), ::Triple).collect { (following, playing, unnamed) ->
+            combine(source.follow(song, opened.followApp, opened.session), source.nowPlayingUpdates(), source.unnamedUpdates(), ::Triple).collect { (following, playing, unnamed) ->
                 val player = uiState.player ?: return@collect
                 val played = player.played || following?.clock?.playing == true
                 // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
@@ -2406,6 +2405,9 @@ internal class MainViewModel(
 
     /** The app the player's buttons ask, by package: for what names no song, its own, whatever it calls it, even nothing; else whichever plays the song. */
     private val PlayerState.askedOf: String? get() = app.takeIf { songless }
+
+    /** Keep following the selected app if the session it resumed goes away. */
+    private val PlayerState.followApp: String? get() = askedOf ?: app.takeIf { session != null }
 
     /**
      * Plays or pauses the player's song; asked of its app again when it isn't playing it. What names no song has no
