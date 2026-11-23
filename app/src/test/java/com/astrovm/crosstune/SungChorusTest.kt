@@ -6,7 +6,7 @@ import org.junit.Test
 
 /** Recorded words heard over one play, including repeated choruses. */
 class SungChorusTest {
-    private fun replay(name: String, knownLength: Boolean = true, startAgain: Boolean = false): Map<Int, Long> {
+    private fun replay(name: String, knownLength: Boolean = true, startAgain: Boolean = false, startLate: Boolean = false): Map<Int, Long> {
         val lines = mutableListOf<String>()
         val stretches = mutableListOf<HeardStretch>()
         var lengthMs = 0L
@@ -21,7 +21,11 @@ class SungChorusTest {
                 }
             }
         }
-        val heard = if (startAgain) stretches + stretches.first() else stretches
+        val heard = when {
+            startAgain -> stretches + stretches.first()
+            startLate -> stretches.drop(1)
+            else -> stretches
+        }
         return SungTiming.linesMs(lines, heard, lengthMs, knownLength)
     }
 
@@ -50,5 +54,10 @@ class SungChorusTest {
     @Test
     fun aSecondPlayKeepsTheExistingPlacementWhileItIsHeard() {
         assertEquals(replay("wrong-chorus", knownLength = false, startAgain = true), replay("wrong-chorus", startAgain = true))
+    }
+
+    @Test
+    fun reachingTheEndAfterOpeningLateIsNotACompleteFirstPlay() {
+        assertEquals(replay("wrong-chorus", knownLength = false, startLate = true), replay("wrong-chorus", startLate = true))
     }
 }
