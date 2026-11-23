@@ -934,6 +934,14 @@ class SingingTest {
         waitUntil { model().uiState.lyricLines.size == lines.size }
         waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
         assertTrue(offerShown())
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
+        val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
+        assertEquals("sung_off", sent.getString("problem"))
+        assertTrue(sent.getJSONObject("song").getString("log").contains("sung -25000 off"))
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        composeRule.waitForIdle()
+        assertFalse(offerShown())
     }
 
     @Test

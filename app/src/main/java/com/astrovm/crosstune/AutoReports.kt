@@ -192,6 +192,9 @@ internal class AutoReports(
     /** What's owed, unless it went by now. */
     fun owed(): List<Owed> = kept().filter { it.key !in sent() }
 
+    /** Whether a report for this song and problem is waiting on the phone. */
+    fun owes(song: MusicMetadata, problem: SongProblem): Boolean = owed().any { it.key == keyOf(song, problem) }
+
     private fun kept(): List<Owed> = runCatching {
         val list = JSONArray(preferences.getString(KEY_OWED, null) ?: return emptyList())
         (0 until list.length()).map { list.getJSONObject(it) }.map { Owed(it.getString("key"), it.getString("json")) }

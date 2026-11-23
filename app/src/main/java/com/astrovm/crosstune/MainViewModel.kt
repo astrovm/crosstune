@@ -2600,6 +2600,7 @@ internal class MainViewModel(
                 reportUntimed()
             }
         }
+        if (autoReports.allowed == null && autoReports.owes(song, SongProblem.SUNG_OFF)) offerToReport(SongProblem.SUNG_OFF)
         watchNext(song)
         // A song Crosstune just heard is still playing nearby, so it keeps listening, to stay in time with it.
         if (heardSong?.let { sameSong(it, song) } == true) listenAlong()
@@ -4254,6 +4255,15 @@ internal class MainViewModel(
     private fun leaveWords() {
         // An offer for words being closed would vanish unseen, using up this session's one offer.
         if (autoReports.allowed == true) reportFarIfStillMoved()
+        else if (autoReports.allowed == null && farReportPending && movedFar && syncPoints.isEmpty()) {
+            val song = uiState.lyricsFor
+            val sender = reports
+            if (song != null && sender != null) {
+                val report = reportOn(sender, song, problem = SongProblem.SUNG_OFF).copy(id = autoReports.idFor(song, SongProblem.SUNG_OFF))
+                autoReports.owe(song, SongProblem.SUNG_OFF, report.json())
+            }
+            farReportPending = false
+        }
         closeReport()
         if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) {
             uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
@@ -4336,7 +4346,9 @@ internal class MainViewModel(
         uiState = uiState.copy(autoReports = allowed, reportOfferFor = emptySet())
         if (!allowed) return
         // The words put in time by hand go once they're left; those of other songs, put in time before, go now.
-        (offered - SongProblem.TIMED_BY_HAND).forEach(::problemFound)
+        (offered - SongProblem.TIMED_BY_HAND).filterNot { problem ->
+            uiState.lyricsFor?.let { autoReports.owes(it, problem) } == true
+        }.forEach(::problemFound)
         sendOwed()
     }
 
