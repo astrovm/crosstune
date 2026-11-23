@@ -587,7 +587,8 @@ class MatcherCasesTest {
         val cases = fuzzed()
         val main = stored(FUZZ)
         val wrong = mutableListOf<String>()
-        for (index in listOf(2, 38, 50, 51, 54, 56, 96, 99)) {
+        for (index in listOf(2, 38, 50, 51, 54, 56, 96, 99, 265, 674, 847, 914, 1118, 1146, 1401,
+            1450, 1545, 1619, 1735, 2043, 2161, 2643, 2691, 3074, 3308, 3773, 3885)) {
             val search = cases[index]
             val before = requireNotNull(main[index.toString()])
             search.modes.forEachIndexed { mode, case ->

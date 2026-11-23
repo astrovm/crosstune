@@ -921,7 +921,7 @@ internal class ExactMatcher(
         val source = metadata.lengthMs?.takeIf { it > 0 } ?: return false
         val length = video.lengthMs ?: return false
         return isOwnVideo(video, names) && (videoTitleMatches(video.name, names) || pickedArtistVideoNamesSource(metadata, video, names)) &&
-            kotlin.math.abs(length - source) <= SAME_LENGTH_MS
+            kotlin.math.abs(length - source) <= SAME_LENGTH_MS && names.lengthsMs.all { kotlin.math.abs(length - it) <= SAME_LENGTH_MS }
     }
 
     private fun safeVideoBesideAmbiguousSongs(video: Row, metadata: MusicMetadata, names: Names): Boolean {
@@ -1424,7 +1424,7 @@ internal class ExactMatcher(
     private fun canOfferPickedRow(metadata: MusicMetadata, row: Row, names: Names, videos: Boolean, requireKnownTitle: Boolean): Boolean {
         if (!videos && !safePickedSong(metadata, row)) return false
         if (!requireKnownTitle) return true
-        return if (videos) videoTitleMatches(row.name, names) || pickedArtistVideoNamesSource(metadata, row, names)
+        return if (videos) knownVideoFitsSource(metadata, row, names)
         else isTheSong(row, names) || isDeezerSong(row, names)
     }
 
