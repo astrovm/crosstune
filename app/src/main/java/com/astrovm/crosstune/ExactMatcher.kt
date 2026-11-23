@@ -1188,9 +1188,7 @@ internal class ExactMatcher(
         val liveNames = if (wantsLive) rows.filter(::rowIsLive).map(::candidateName).toSet() else emptySet()
         val plausible = rows.filter { plausibleAnotherScriptRow(it, names, recording, liveNames) }
         val ambiguous = indistinguishableCandidates(plausible, sourceLength)
-        val eligible = rows.filter { eligibleAnotherScriptRow(it, names, recording, sourceLength, liveNames) &&
-            (!titleInParentheses(metadata.title, it.name) || knownParenthesizedTitle(metadata.title, it.name, names)) &&
-            !conflictingOffLengthRow(it, rows, metadata, names) }
+        val eligible = rows.filter { safeAnotherScriptRow(it, rows, metadata, names, recording, sourceLength, liveNames) }
         val takes = rows.filter { isAnotherTake(it, names) && Takes.saysAnotherTake(it.name, names.artists + it.details.first()) != null }
             .map(::candidateName).toSet()
         val album = names.corroboratingAlbum.takeIf { plainLinkedTitle(metadata) || recording.part != null }
@@ -1208,6 +1206,13 @@ internal class ExactMatcher(
         knownArtist(row.details.first(), names) && (names.corroboratingAlbum == null || !isAnotherTake(row, names)) &&
             keepsRerecording(recording, row.name, row.details.getOrNull(1).orEmpty()) &&
             (candidateName(row) !in liveNames || rowIsLive(row))
+
+    private fun safeAnotherScriptRow(
+        row: Row, rows: List<Row>, metadata: MusicMetadata, names: Names, recording: RequestedRecording, sourceLength: Long?,
+        liveNames: Set<Pair<String, String>>
+    ): Boolean = eligibleAnotherScriptRow(row, names, recording, sourceLength, liveNames) &&
+        (!titleInParentheses(metadata.title, row.name) || knownParenthesizedTitle(metadata.title, row.name, names)) &&
+        !conflictingOffLengthRow(row, rows, metadata, names)
 
     private fun eligibleAnotherScriptRow(row: Row, names: Names, recording: RequestedRecording, sourceLength: Long?, liveNames: Set<Pair<String, String>>): Boolean =
         row.id != null && row.id !in names.rejectedCandidates &&
