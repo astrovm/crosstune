@@ -4,7 +4,7 @@
 # and gives the new from: to set once the block is translated again.
 
 JMdict
-from: e24ab7fdbdb1
+from: 93aaea2be9a2
 note: Daftar kata yang dibuat Crosstune dari JMdict sudah diubah. Bacaannya: hanya kata yang dibaca JMdict dengan satu cara dan Crosstune dengan cara lain. Kata dalam kana: kata untuk mengenali ejaan lama dan kata umum dengan kana kecil untuk pencarian. Semuanya juga di bawah CC BY-SA 4.0. Di bawah ada lisensi Group (https://www.edrdg.org/edrdg/licence.html), lisensi CC BY-SA 4.0, dan dokumentasi JMdict.
 
 Kuromoji

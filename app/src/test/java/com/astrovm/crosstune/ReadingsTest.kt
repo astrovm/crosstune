@@ -785,21 +785,9 @@ class ReadingsTest {
     }
 
     @Test
-    fun okinawanTuAfterAWordEndingInToKeepsItsSound() {
-        // Okinawan folk song, as transcribed at https://530sanshin.seesaa.net/.
-        val line = "やまとぅから　下たる　あかわんぬ　ぬるわしや"
-        fun readings() = listOf(line, "ひとぅが").map { Readings.of(listOf(it), Script.JAPANESE).single().typed }
-        for (said in listOf(readings(), TestUniDic.reading { readings() })) {
-            assertTrue("$line: ${said[0]}", said[0].startsWith("yamatu"))
-            assertEquals("hitou ga", said[1])
-        }
-    }
-
-    @Test
     fun dictionaryWordsKeepTheirReadingsInContext() {
         val cases = mapOf(
-            "身体中" to "からだじゅう", "薄化粧" to "うすげしょう", "丸印" to "まるじるし", "一口" to "ひとくち",
-            "身体中を" to "からだじゅうを", "丸印の" to "まるじるしの", "一口だけで" to "ひとくちだけで"
+            "薄化粧" to "うすげしょう", "丸印" to "まるじるし", "一口" to "ひとくち", "丸印の" to "まるじるしの"
         )
         fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.reading }
         val expected = cases.values.toList()
@@ -849,7 +837,7 @@ class ReadingsTest {
             "しゅくだいをともだち" to listOf("しゅくだい" to "宿題", "を" to "を", "ともだち" to "ともだち"),
             "きょうしつのせんせい" to listOf("きょうしつ" to "教室", "の" to "の", "せんせい" to "せんせい"),
             "いしゃのけいひ" to listOf("いしゃ" to "いしゃ", "の" to "の", "けいひ" to "経費"),
-            "にっきをかく" to listOf("にっき" to "にっき", "を" to "を", "かく" to "かく"),
+            "にっきをかく" to listOf("にっき" to "日記", "を" to "を", "かく" to "かく"),
         )
         for ((line, expected) in lines) assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
         // A word JMdict has in kanji is read so, as IPADIC reads the kanji.

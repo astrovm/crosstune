@@ -4,7 +4,7 @@
 # and gives the new from: to set once the block is translated again.
 
 JMdict
-from: e24ab7fdbdb1
+from: 93aaea2be9a2
 note: Les listes de mots que Crosstune a faites à partir de JMdict sont modifiées. Les lectures : seulement les mots que JMdict lit d’une seule façon et que Crosstune lit autrement. Les mots en kana : des mots pour reconnaître les anciennes écritures et des mots courants avec de petits kana pour les recherches. Ils sont aussi sous CC BY-SA 4.0. Ci-dessous se trouvent la licence du Group (https://www.edrdg.org/edrdg/licence.html), la licence CC BY-SA 4.0 et la documentation de JMdict.
 
 Kuromoji

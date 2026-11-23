@@ -4,7 +4,7 @@
 # and gives the new from: to set once the block is translated again.
 
 JMdict
-from: e24ab7fdbdb1
+from: 93aaea2be9a2
 note: Списки слов, которые Crosstune сделал из JMdict, изменены. Чтения: только слова, которые JMdict читает одним способом, а Crosstune иначе. Слова каной: слова для распознавания старого написания и распространённые слова с маленькой каной для поиска. Они тоже под CC BY-SA 4.0. Ниже лицензия Group (https://www.edrdg.org/edrdg/licence.html), лицензия CC BY-SA 4.0 и документация JMdict.
 
 Kuromoji

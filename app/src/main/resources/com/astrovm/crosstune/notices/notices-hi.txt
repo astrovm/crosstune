@@ -4,7 +4,7 @@
 # and gives the new from: to set once the block is translated again.
 
 JMdict
-from: e24ab7fdbdb1
+from: 93aaea2be9a2
 note: Crosstune ने JMdict से जो शब्द-सूचियां बनाईं, वे बदली गई हैं। उच्चारण: सिर्फ़ वे शब्द जिन्हें JMdict एक ही तरह और Crosstune दूसरी तरह पढ़ता है। काना वाले शब्द: पुरानी वर्तनी पहचानने के शब्द और खोज के लिए छोटे काना वाले आम शब्द। ये भी CC BY-SA 4.0 के तहत हैं। नीचे Group का लाइसेंस (https://www.edrdg.org/edrdg/licence.html), CC BY-SA 4.0 लाइसेंस और JMdict का दस्तावेज़ है।
 
 Kuromoji

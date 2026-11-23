@@ -990,6 +990,7 @@ internal object Readings {
             // A prefix of kanji goes before a word with kanji, 今世紀 or 前前前世; before one in kana, 今となり, it's a word.
             val strayBefore = last?.takeIf { it.kind == "接頭詞" && it.surface.all(::isHan) && piece.surface.none(::isHan) }?.let { alone(it.surface) }
             val next = pieces.getOrNull(index + 1)
+            val inflected = last?.let { inflectedCompound(it, piece, next) }
             // A suffix said with a voice after a word it can't be part of is the noun it is alone: いつか日, 一度星.
             val apart = last?.takeIf { standsApart(it, piece) }?.let { alone(piece.surface) }
             // A noun said with a voice after a number and a counter: 千本桜 せんぼんざくら, 二枚刃 にまいば.
@@ -997,6 +998,7 @@ internal object Readings {
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
             when {
+                inflected != null -> out[out.lastIndex] = inflected
                 word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般", reader = Reader.RULES)
                 last != null && count != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, count, "名詞", "一般", reader = Reader.RULES)
                 tenth -> out += piece.read("ぶ")
@@ -1047,6 +1049,17 @@ internal object Readings {
             }
         }
         return listedWords(out)
+    }
+
+    /** A compound noun can hide two verbs before そう, as 溺れ死 and に in 溺れ死にそう. */
+    private fun inflectedCompound(before: Piece, ending: Piece, after: Piece?): Piece? {
+        if (before.kind != "名詞" || !isHan(before.surface.last())) return null
+        if (ending.kind !in GRAMMAR || after?.surface != "そう") return null
+        val left = tokenizer.knownWord(before.surface.dropLast(1)) ?: return null
+        val right = tokenizer.knownWord(before.surface.takeLast(1) + ending.surface) ?: return null
+        if (left.partOfSpeechLevel1 != "動詞" || right.partOfSpeechLevel1 != "動詞") return null
+        val kana = listOf(left.reading, right.reading).takeIf { parts -> parts.all { it != null && it != "*" } } ?: return null
+        return Piece(before.surface + ending.surface, kana.joinToString("") { hiragana(it) }, "動詞", "自立", reader = Reader.RULES)
     }
 
     /**
@@ -1198,13 +1211,16 @@ internal object Readings {
         if (word.size == 1 && !word[0].unknown) return null
         val last = word.last()
         val runsOn = word.dropLast(1).none { it.kind in GRAMMAR || it.kind in INFLECTED }
-        if (!isHan(word[0].surface[0]) || last.kind in GRAMMAR || !runsOn) return null
+        if (!isHan(word[0].surface[0]) || !runsOn) return null
         val surface = word.joinToString("") { it.surface }
         val unreadRu = word.any { it.unknown } && surface.drop(1) in setOf("る", "るる")
+        if (last.kind in GRAMMAR && !unreadRu) return null
         if ((word.size == 1 || surface.count(::isHan) < 2) && !unreadRu) return null
         val kana = table[surface] ?: conjugated(word, table) ?: return null
         if (kana == word.joinToString("") { it.kana }) return null
-        return Piece(surface, kana, last.kind, last.subkind, reader = Reader.JMDICT)
+        val kind = if (unreadRu) "動詞" else last.kind
+        val subkind = if (unreadRu) "自立" else last.subkind
+        return Piece(surface, kana, kind, subkind, reader = Reader.JMDICT)
     }
 
     /**

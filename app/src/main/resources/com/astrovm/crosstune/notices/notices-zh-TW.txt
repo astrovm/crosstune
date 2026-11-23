@@ -4,7 +4,7 @@
 # and gives the new from: to set once the block is translated again.
 
 JMdict
-from: e24ab7fdbdb1
+from: 93aaea2be9a2
 note: Crosstune 用 JMdict 做的詞表經過修改。讀音：只有 JMdict 只給一種讀法而 Crosstune 讀法不同的詞。假名詞：用來辨識舊拼寫的詞，以及用於搜尋的含小假名常用詞。它們同樣採用 CC BY-SA 4.0。下面是 Group 的授權條款 (https://www.edrdg.org/edrdg/licence.html)、CC BY-SA 4.0 授權條款和 JMdict 的文件。
 
 Kuromoji
