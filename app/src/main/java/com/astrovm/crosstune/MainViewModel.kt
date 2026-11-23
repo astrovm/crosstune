@@ -2406,7 +2406,7 @@ internal class MainViewModel(
     /** The app the player's buttons ask, by package: for what names no song, its own, whatever it calls it, even nothing; else whichever plays the song. */
     private val PlayerState.askedOf: String? get() = app.takeIf { songless }
 
-    /** Keep following the selected app if the session it resumed goes away. */
+    /** The app to follow while its selected session is still available. */
     private val PlayerState.followApp: String? get() = askedOf ?: app.takeIf { session != null }
 
     /**

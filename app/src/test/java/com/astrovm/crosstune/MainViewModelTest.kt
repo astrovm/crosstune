@@ -4554,17 +4554,18 @@ class MainViewModelTest {
     }
 
     @Test
-    fun thePlayerFollowsAReplacementSessionAfterTheOldOneIsReleasedBeforePlay() {
+    fun thePlayerFollowsTheRequestedSongAcrossAppsAfterItsSessionIsReleased() {
         val sessions = shadowOf(app.getSystemService(MediaSessionManager::class.java))
         val media = MediaSessionPlayback(app)
         val receivers = mutableListOf<MediaSession>()
-        fun publish(packageName: String, state: Int, position: Long): MediaSession {
+        val requested = MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada")
+        fun publish(packageName: String, state: Int, position: Long, song: MusicMetadata = requested): MediaSession {
             val receiver = MediaSession(app, packageName).also { receivers += it }
             val controller = MediaController(app, receiver.sessionToken)
             shadowOf(controller).apply {
                 setPackageName(packageName)
-                setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Dakare Ni Kita Onna")
-                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "Kingo Hamada").build())
+                setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, song.title)
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, song.artist).build())
                 setPlaybackState(PlaybackState.Builder().setState(state, position, 1f).build())
             }
             sessions.addController(controller)
@@ -4597,9 +4598,19 @@ class MainViewModelTest {
             assertEquals(oldNumber, model.uiState.player?.session)
             assertTrue(media.matching(checkNotNull(model.uiState.result)).isEmpty())
 
-            publish(MusicService.SPOTIFY.packageName, PlaybackState.STATE_PLAYING, 30_000)
+            val spotify = MusicService.SPOTIFY.packageName
+            val next = MusicMetadata("Next Song", "Next Artist")
+            publish(spotify, PlaybackState.STATE_PAUSED, 30_000)
+            publish(ytMusic, PlaybackState.STATE_PLAYING, 0, next)
+            fakePlayback.onThePhone = Heard.Song(next, null, app = ytMusic)
             idle()
-            assertNull(model.uiState.player?.following)
+            assertEquals(requested.title, model.uiState.player?.song?.title)
+            assertEquals(spotify, model.uiState.player?.following?.appPackage)
+            assertEquals(30_000L, model.uiState.player?.following?.clock?.positionMs)
+
+            fakePlayback.onThePhone = null
+            idle()
+            sessions.clearControllers()
             publish(ytMusic, PlaybackState.STATE_PLAYING, 45_000)
             idle()
             val followed = checkNotNull(model.uiState.player?.following)

@@ -231,7 +231,7 @@ internal interface PlaybackSource {
 
     /**
      * Where [song] is in the app playing it, as that changes; null while no app plays it. Only [app], by package, when
-     * one is named. A named song with both [app] and [session] follows the package if that session goes away.
+     * one is named. A named song with both [app] and [session] can follow the same song in any app if that session goes away.
      * Asked of [app], what plays with no song named is [song] by just what it calls it, as
      * [Unnamed.played], even nothing; see [playingUnnamed]. So is it for each control asked of [app] below.
      */
@@ -556,10 +556,10 @@ internal class MediaSessionPlayback(
     private fun controllerToFollow(
         song: MusicMetadata, controllers: List<MediaController>, app: String?, token: MediaSession.Token?, session: Int?
     ): MediaController? {
-        val pinned = session?.takeUnless { number ->
+        val released = session?.let { number ->
             app != null && token == null && !song.unnamed && controllers.none { sessionNumbers.peek(it.sessionToken) == number }
-        }
-        return appFor(song, controllers, app, token, pinned)
+        } == true
+        return if (released) appFor(song, controllers) else appFor(song, controllers, app, token, session)
     }
 
     /** [app]'s clock kept steady; see [SteadyClock]. With no app, there's nothing to keep. */
