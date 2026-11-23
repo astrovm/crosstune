@@ -892,6 +892,30 @@ class SingingTest {
     }
 
     @Test
+    fun recordedJapaneseHearingMovesItsEarlySheet() {
+        // Plastic Love, heard from 53.505 s: the phone model's saved 54 s window and the sheet
+        // selected with the recording's length. Unrelated lines keep their times but use filler words.
+        val times = listOf(30490, 39910, 47620, 57100, 67930, 77360, 85200, 94520, 105320, 114750, 123720, 133360, 139560, 159210, 168690, 177550, 187480, 194590, 204250, 212140, 221540, 232040, 241540, 250980, 260140, 269710, 278970)
+        val nearby = mapOf(1 to "恋のプログラムを 狂わせないでね", 2 to "出逢いと別れ 上手に打ち込んで", 3 to "時間がくれば終わる don't hurry", 4 to "愛に傷ついた あの日からずっと")
+        lines = times.indices.map { nearby[it] ?: "filler$it" }
+        val synced = lines.zip(times) { line, at -> "[%02d:%02d.%02d] %s".format(at / 60_000, at / 1000 % 60, at % 1000 / 10, line) }.joinToString("\n")
+        fake.handler = { request ->
+            FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":309,"syncedLyrics":"$synced"}]""" else """{"title":"Demo","author_name":"Band"}""")
+        }
+        singing.answer = {
+            val heard = listOf(1120L to "僕は背ないでね", 4360L to "目会いとは", 6240L to "ファレッツ", 8000L to "衝突にく", 10780L to "自動で", 13660L to "時間が来るレッファ", 16500L to "オーブーの光り")
+            Sung(startedAt, heard.map { (at, text) -> HeardWord(text, at + 495) })
+        }
+        openLyrics()
+        plays(positionMs = 53_505)
+        passes(2_500)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        val placed = model().uiState.lyricLines[2].timeMs
+        assertTrue("Expected the recorded line near 58 s, got $placed ms", placed in 57_500L..58_500L)
+    }
+
+    @Test
     fun aLoneFarWhileIsReportedOnLeavingOnlyOnceItsWholeAnswerIsIn() {
         val times = listOf(2, 4, 6, 30, 32, 34)
         lyricsTimedFor(null, times)
