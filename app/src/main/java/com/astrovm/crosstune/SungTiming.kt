@@ -89,11 +89,11 @@ internal object SungTiming {
         return placed.filter { placed -> stretches.any { placed.ms in it.fromMs - EDGE_MS..it.toMs } }.associate { it.line to it.ms }
     }
 
-    /** The first play was heard from near its start through its end, without a restart. */
+    /** The first play was heard from near its start through its end, without a restart or a long gap. */
     private fun heardOnePlay(heard: List<HeardStretch>, lengthMs: Long): Boolean {
         val first = heard.firstOrNull() ?: return false
         if (first.fromMs > COMPLETE_MARGIN_MS || heard.last().toMs < lengthMs - COMPLETE_MARGIN_MS) return false
-        return heard.zipWithNext().none { (a, b) -> b.fromMs < a.fromMs }
+        return heard.zipWithNext().all { (a, b) -> b.fromMs >= a.fromMs && b.fromMs - a.toMs <= COMPLETE_GAP_MS }
     }
 
     /** A raw ASR word has one time even when it covers many written syllables. */
@@ -549,6 +549,7 @@ internal object SungTiming {
     private const val CHORUS_SUPPORT = 2.0
     private const val CHORUS_CHAIN_SHARE = 0.9
     private const val COMPLETE_MARGIN_MS = 1_000L
+    private const val COMPLETE_GAP_MS = 10_000L
 
     /** How sure a line found has to be, by its words alike, as [matchScore] has them. */
     private const val MIN_SUPPORT = 1.0
