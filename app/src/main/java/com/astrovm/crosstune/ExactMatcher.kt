@@ -916,7 +916,7 @@ internal class ExactMatcher(
         if (names.appleIds.isEmpty()) return null
         val candidates = rows.filter { row ->
             row.id != null && row.lengthMs != null && names.lengthsMs.any { sameRecordingLength(row.lengthMs, it) } &&
-                metadata.lengthMs?.let { sameRecordingLength(row.lengthMs, it) } != false &&
+                metadata.lengthMs?.takeIf { it > 0 }?.let { sameRecordingLength(row.lengthMs, it) } != false &&
                 namedInAnotherScript(row.name) && !isAnotherTake(row, names) &&
                 !SongNames.saysAnotherVersion(row.name, metadata.title, metadata.artist) && keepsRequestedRecording(recording, row)
         }.take(5)
@@ -1360,7 +1360,7 @@ internal class ExactMatcher(
         return Names(
             titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album,
             emptyList(), found != null, found?.editions.orEmpty().filter {
-                val length = metadata.lengthMs ?: proved?.optLong("trackTimeMillis")
+                val length = metadata.lengthMs?.takeIf { it > 0 } ?: proved?.optLong("trackTimeMillis")
                 proved != null && length != null && sameRecordingLength(it.optLong("trackTimeMillis"), length)
             }.map { it.optLong("trackId") }.filter { it > 0 }.toSet(), takeOnAlbum, searchFailed, complete, unanswered
         )
