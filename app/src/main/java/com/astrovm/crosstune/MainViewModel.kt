@@ -4255,7 +4255,7 @@ internal class MainViewModel(
     private fun leaveWords() {
         // An offer for words being closed would vanish unseen, using up this session's one offer.
         if (autoReports.allowed == true) reportFarIfStillMoved()
-        else if (autoReports.allowed == null && farReportPending && movedFar && syncPoints.isEmpty()) {
+        else if (autoReports.allowed == null && farReportIsDue()) {
             val song = uiState.lyricsFor
             val sender = reports
             if (song != null && sender != null) {
@@ -4279,9 +4279,11 @@ internal class MainViewModel(
 
     /** No more of this play will be heard: a lone far match is reported only if nothing put the words back. */
     private fun reportFarIfStillMoved() {
-        if (farReportPending && movedFar && syncPoints.isEmpty()) problemFound(SongProblem.SUNG_OFF)
+        if (farReportIsDue()) problemFound(SongProblem.SUNG_OFF)
         farReportPending = false
     }
+
+    private fun farReportIsDue() = farReportPending && movedFar && syncPoints.isEmpty()
 
     /**
      * Words put in time by hand are reported once they're left, so a report on them is kept owed, whatever the

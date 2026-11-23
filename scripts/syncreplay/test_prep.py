@@ -8,6 +8,7 @@ import os
 import random
 import re
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -53,6 +54,60 @@ class ReplayContainerTest(unittest.TestCase):
                 patch.object(r, 'kotlin_jars', return_value=[Path('/compiler/kotlin-stdlib-2.jar')]), patch.object(r.subprocess, 'run') as run:
             r.synthetic(SimpleNamespace(timing=None))
         self.assertEqual(run.call_args.args[0][:-4], r.replay_container((r.OUT, r.OUT, 'ro'), (Path('/compiler'), Path('/compiler'), 'ro')))
+
+
+class SharedSlotTest(unittest.TestCase):
+    def test_a_slot_is_also_exclusive_across_processes(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            lock = Path(directory) / 'locks' / 'gpu-0.lock'
+            code = ('import fcntl,sys; f=open(sys.argv[1], "a"); '
+                    'fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)')
+            with r.shared_slot('gpu', 1):
+                held = subprocess.run([sys.executable, '-c', code, str(lock)], capture_output=True, check=False)
+            free = subprocess.run([sys.executable, '-c', code, str(lock)], capture_output=True, check=False)
+            self.assertNotEqual(0, held.returncode)
+            self.assertEqual(0, free.returncode, free.stderr)
+
+    def test_only_one_separation_runs_and_the_slot_is_released_after_failure(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            entered = threading.Event()
+            release = threading.Event()
+            second = threading.Event()
+
+            def first():
+                with r.shared_slot('gpu', 1):
+                    entered.set()
+                    release.wait(timeout=5)
+
+            def other():
+                entered.wait(timeout=5)
+                with r.shared_slot('gpu', 1):
+                    second.set()
+
+            with ThreadPoolExecutor(2) as pool:
+                a, b = pool.submit(first), pool.submit(other)
+                self.assertTrue(entered.wait(timeout=5))
+                self.assertFalse(second.wait(timeout=0.2))
+                release.set()
+                a.result(timeout=5)
+                b.result(timeout=5)
+            self.assertTrue(second.is_set())
+            with self.assertRaisesRegex(ValueError, 'failure'), r.shared_slot('gpu', 1):
+                raise ValueError('failure')
+            with r.shared_slot('gpu', 1):
+                pass
+
+
+class ParallelOrderTest(unittest.TestCase):
+    def test_priority_songs_run_first_and_missing_lyrics_are_reported(self):
+        spec = importlib.util.spec_from_file_location('parallel', Path(__file__).with_name('prep-parallel.py'))
+        parallel = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(parallel)
+        songs = [dict(id='one', lines=3), dict(id='two', lines=2), dict(id='empty', lines=0)]
+        self.assertEqual(['two', 'one'], parallel.order_songs(songs, ['two']))
+        self.assertEqual(['two'], parallel.order_songs(songs, ['two'], only_first=True))
+        with self.assertRaisesRegex(ValueError, 'empty'):
+            parallel.order_songs(songs, ['empty'])
 
 
 class ResumeTest(unittest.TestCase):

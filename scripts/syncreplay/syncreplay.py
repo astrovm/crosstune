@@ -69,6 +69,7 @@ and a replay hears the rest it asks for, keeping it, so a change to the app's ti
 Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
+import contextlib
 import errno
 import fcntl
 import functools
@@ -108,6 +109,26 @@ APP_MODEL = "tiny-q5_1"
 # However many songs are being heard: at 10 for each of 4 songs, a machine someone's using is left with nothing.
 HEARD_AT_ONCE = 4
 HEARING = threading.BoundedSemaphore(HEARD_AT_ONCE)
+
+
+@contextlib.contextmanager
+def shared_slot(name, count):
+    """A bounded resource shared by separate preparations using the same replay cache."""
+    locks = OUT / 'locks'
+    locks.mkdir(parents=True, exist_ok=True)
+    while True:
+        for slot in range(count):
+            with open(locks / f'{name}-{slot}.lock', 'a') as lock:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    continue
+                try:
+                    yield
+                finally:
+                    fcntl.flock(lock, fcntl.LOCK_UN)
+                return
+        time.sleep(0.1)
 # Songs at once when a replay asks for more, as each has only a few stretches to hear.
 SONGS_HEARD_AT_ONCE = 4
 SEED_EVERY = 20
@@ -162,7 +183,7 @@ def audio(path, kind="f32le"):
 
 def heard_binary():
     # Songs are heard at once, and the first of each would otherwise all build it, over each other.
-    with HEARD_BUILT:
+    with HEARD_BUILT, shared_slot('binary', 1):
         if not (HEARD / "heard").exists():
             subprocess.run(["cmake", "-S", str(Path(__file__).parent), "-B", str(HEARD), "-DCMAKE_BUILD_TYPE=Release"], check=True)
             subprocess.run(["cmake", "--build", str(HEARD), "-j", "4"], check=True)
@@ -171,7 +192,11 @@ def heard_binary():
 
 def model_file(model):
     path = OUT / f"ggml-{model}.bin"
-    if not path.exists():
+    if path.exists():
+        return path
+    with shared_slot(f'model-{model}', 1):
+        if path.exists():
+            return path
         temporary = path.with_name(path.name + ".download")
         subprocess.run(["curl", "-fsSL", "--retry", "2", "-o", str(temporary), MODEL_URL.format(model)], check=True)
         temporary.replace(path)
@@ -219,8 +244,9 @@ def windows(song, wav, length, model=APP_MODEL, clean=False, wanted=None):
     def hear(start):
         seg = a[start * 16:(start + length) * 16]
         # A model that can't run hears nothing, so it fails here rather than passing for silence.
-        with HEARING:
-            text = subprocess.run([str(binary), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True, env={**os.environ, "HEARD_THREADS": "1"}).stdout.decode("utf-8", "replace")
+        with HEARING, shared_slot('hearing', int(os.environ.get('SYNCREPLAY_HEARING_SLOTS', str(HEARD_AT_ONCE)))):
+            text = subprocess.run([str(binary), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True,
+                                  env={**os.environ, "HEARD_THREADS": os.environ.get('SYNCREPLAY_HEARD_THREADS', '1')}).stdout.decode("utf-8", "replace")
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]
 
     with ThreadPoolExecutor(HEARD_AT_ONCE) as pool:
@@ -244,7 +270,11 @@ def atomic_text(path, text):
 
 def separated_voice(song, wav):
     vocals = OUT / "htdemucs" / song / "vocals.wav"
-    if not vocals.exists():
+    if vocals.exists():
+        return vocals
+    with shared_slot('gpu', 1):
+        if vocals.exists():
+            return vocals
         temporary = OUT / "separating"
         subprocess.run([os.environ.get("DEMUCS_PYTHON", sys.executable), "-m", "demucs", "--two-stems=vocals",
                         "-d", os.environ.get("DEMUCS_DEVICE", "cpu"), "-j", "1", "-o", str(temporary), str(wav)], check=True)
@@ -256,7 +286,7 @@ def separated_voice(song, wav):
 
 def truth_model():
     from faster_whisper import WhisperModel
-    return WhisperModel("medium", device="cpu", compute_type="int8", cpu_threads=4)
+    return WhisperModel("medium", device="cpu", compute_type="int8", cpu_threads=int(os.environ.get('SYNCREPLAY_TRUTH_THREADS', '4')))
 
 
 # Languages with a writing of their own, which their lyrics show.
@@ -282,8 +312,9 @@ def words_heard(vocals, language):
     (measurements.md), once with faster-whisper on the CPU, where a second would take minutes more."""
     gpu = os.environ.get("WHISPER_PYTHON")
     if gpu:
-        said = subprocess.run([gpu, "-I", str(Path(__file__).with_name("whisper_gpu.py")), str(vocals), language],
-                              check=True, stdout=subprocess.PIPE, text=True).stdout
+        with shared_slot('gpu', 1):
+            said = subprocess.run([gpu, "-I", str(Path(__file__).with_name("whisper_gpu.py")), str(vocals), language],
+                                  check=True, stdout=subprocess.PIPE, text=True).stdout
         hearings = json.loads(said)
     else:
         segments, _ = truth_model().transcribe(audio(vocals), language=language, word_timestamps=True, condition_on_previous_text=False, beam_size=5)
