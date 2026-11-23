@@ -78,8 +78,8 @@ class MatcherRecordingEvidenceTest {
         return (lastMatch as? ExactMatcher.Match.Found)?.url
     }
 
-    // Issue #1199: the artist's 4:25 video and a 3:58 fan video are both in the captured search.
-    @Test fun peaceSignPrefersTheArtistsVideo() = assertEquals(WATCH + "9aJVr5tTTWk", find(0, true))
+    // Issue #1199: the 4:25 artist video may be another recording; the 3:58 fan video matches the source length.
+    @Test fun peaceSignKeepsTheFanWhenTheArtistVideoHasAnotherLength() = assertEquals(WATCH + "LlqIAiDzgpM", find(0, true))
 
     @Test fun bayCityKeepsTheLongRecording() = assertEquals(WATCH + "HNfnjWbO4ds", find(1, true))
 
