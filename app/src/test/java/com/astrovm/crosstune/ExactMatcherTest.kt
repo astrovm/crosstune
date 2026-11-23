@@ -1938,6 +1938,23 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anotherScriptRowsMustFitTheSourceLengthInEitherOrder() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val short = youTubeMusicRow("別名", "アーティスト • Studio • 1:30", videoId = "short000000")
+        val right = youTubeMusicRow("別名", "アーティスト • Studio • 4:00", videoId = "right000000")
+        val untimed = youTubeMusicRow("別名", "アーティスト • Studio", videoId = "untimed0000")
+        val editions = listOf(240_000L, 90_000L).mapIndexed { i, length -> appleSong("Song", "アーティスト", length, id = 7L + i) }.joinToString(",")
+        for (rows in listOf(listOf(short, right), listOf(right, short))) {
+            namesAndTabs(songs = rows, apple = mapOf("US" to editions))
+            assertEquals("https://music.youtube.com/watch?v=right000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        }
+        for (rows in listOf(listOf(untimed, right), listOf(right, untimed))) {
+            namesAndTabs(songs = rows, apple = mapOf("US" to editions))
+            assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        }
+    }
+
+    @Test
     fun directlyNamedRowsNeedIdenticalFieldsOrEvidenceToChoose() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val first = youTubeMusicRow("Song", "アーティスト • First • 4:00", videoId = "first000000")

@@ -513,7 +513,6 @@ class MatcherCasesTest {
             search.copy(what = "no album anywhere", album = "", songs = listOf(search.songs[0], row("用餘生去愛", "", "Jacky Cheung", "4:15"))),
             search.copy(what = "only Deezer knows a length", lengthMs = null, deezerSeconds = 254),
             search.copy(what = "another edition", editions = listOf("Live at Budokan" to 254_239)),
-            search.copy(what = "link has another length", linkMs = 300_000),
             search.copy(what = "fan video", videos = listOf(video("用餘生去愛 - The Rest Of Time", "4:21", "Fan"))),
             search.copy(what = "video has no time", videos = listOf(video("用餘生去愛 - The Rest Of Time", "", "Jacky Cheung"))),
             search.copy(what = "video too long", videos = listOf(video("用餘生去愛 - The Rest Of Time", "5:21", "Jacky Cheung"))),
@@ -528,6 +527,7 @@ class MatcherCasesTest {
             val actual = find(case)
             "${case.what}: $actual".takeIf { actual != "song0" }
         })
+        assertEquals(null, find(search.copy(what = "link has another length", linkMs = 300_000)))
     }
 
     @Test
@@ -567,6 +567,44 @@ class MatcherCasesTest {
             songs = listOf(row("Tokyo", "Karaoke Picks", length = "3:00"), row("Tokyo", length = "0:30")),
             videos = listOf(video("Chijimu (Official Video)", "1:34", "偽バンド"), video("Kokoro", "1:32", "偽バンド")), picked = 0)
         assertEquals("video1", find(case))
+    }
+
+    @Test
+    fun filteringAnOffLengthTitleDoesNotSelectAnotherSong() {
+        val search = fuzzed()[1199]
+        assertEquals(emptyList<String>(), search.modes.take(6).mapIndexedNotNull { mode, case ->
+            val answer = find(case)
+            "${MODES[mode]}: $answer".takeIf { answer == "song1" }
+        })
+        for (index in listOf(429, 573)) {
+            val case = fuzzed()[index]
+            assertTrue("picker case $index", case.verdict(find(case.modes[2])) != WRONG)
+        }
+    }
+
+    @Test
+    fun filteringAnOffLengthTitleDoesNotSubstituteAnotherWrongAnswer() {
+        val cases = fuzzed()
+        val main = stored(FUZZ)
+        val wrong = mutableListOf<String>()
+        for (index in listOf(2, 38, 50, 51, 54, 56, 96, 99)) {
+            val search = cases[index]
+            val before = requireNotNull(main[index.toString()])
+            search.modes.forEachIndexed { mode, case ->
+                val old = before[mode].takeUnless { it == "-" }
+                val now = find(case)
+                if (now != old && search.verdict(now) == WRONG) wrong += "case $index, ${MODES[mode]}: $old -> $now, $case"
+            }
+        }
+        assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun filteringAnOffLengthSongKeepsAnArtistVideoThePickerCanIdentify() {
+        val cases = fuzzed()
+        for (index in listOf(81, 116)) {
+            assertEquals("case $index", "video0", find(cases[index].modes[1]))
+        }
     }
 
     @Test
@@ -1163,6 +1201,8 @@ class MatcherCasesTest {
          * of the song is no longer taken for it (Issues #945, #983 and #992).
          */
         val CHANGED: Map<String, String?> = mapOf(
+            // Two Apple editions fit the source duration, and neither proves the other-script row.
+            "2 ambiguous Apple editions" to null,
             // The displayed live titles differ, and no evidence chooses their recordings.
             "3 Fake Song: Live latin" to null,
             "3 Fake Song «Live» latin" to null,

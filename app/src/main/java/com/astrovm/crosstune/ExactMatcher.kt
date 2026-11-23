@@ -214,7 +214,10 @@ internal class ExactMatcher(
         val waitForNames: Boolean = false, val artistVideo: String? = null
     )
 
-    private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthsMs: List<Long>)
+    private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthsMs: List<Long>,
+        val names: Names, val rejectedSourceLength: Boolean)
+
+    private class Picked(val url: String?, val rejected: Boolean)
 
     /**
      * What [lookUp] came to, and whether it's only for now, as a store that could have named the song failed: [unsure].
@@ -265,10 +268,10 @@ internal class ExactMatcher(
     /** The song ChatGPT picks among the songs, then the videos; no answer in time is no answer. */
     private suspend fun picked(toPick: ToPick, lasting: Boolean): Match {
         val url = withTimeoutOrNull(pickTimeoutMs) {
-            Answer(
-                pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false, toPick.lengthsMs)
-                    ?: pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true, toPick.lengthsMs)
-            )
+            val song = pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false, toPick.lengthsMs, toPick.names, toPick.rejectedSourceLength)
+            val video = if (song.url == null) pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true, toPick.lengthsMs,
+                toPick.names, song.rejected || toPick.rejectedSourceLength).url else null
+            Answer(song.url ?: video)
         } ?: return Match.Failed
         return url.url?.let { Match.Found(it, lasting) } ?: Match.Missing
     }
@@ -875,8 +878,10 @@ internal class ExactMatcher(
         val plausible = rows.filter { row -> knownArtist(row.details.first(), names) &&
             (names.lengthsMs.isEmpty() || row.lengthMs == null || names.lengthsMs.any { sameRecordingLength(row.lengthMs, it) }) }
         val videoAmbiguous = indistinguishableCandidates(plausible, metadata.lengthMs?.takeIf { it > 0 })
+        val rejectedSourceLength = rejectsKnownSourceLength(metadata, rows, names)
         val videoRows = videos.map(::row).filter { video ->
-            videoAmbiguous.isEmpty() || safeVideoBesideAmbiguousSongs(video, metadata, names)
+            (videoAmbiguous.isEmpty() || safeVideoBesideAmbiguousSongs(video, metadata, names)) &&
+                (!rejectedSourceLength || knownVideoFitsSource(metadata, video, names))
         }
         val appleSong = appleSongRow(rows, names, recording, metadata.lengthMs?.takeIf { it > 0 })
         val initialSong = songRow(metadata, rows, videoRows, names, recording, appleSong)
@@ -902,7 +907,21 @@ internal class ExactMatcher(
         val pickableSongs = playable(items).filter { it.id !in available.rejectedCandidates && candidateName(it) !in ambiguous }
         val pickableVideos = videoRows.filter { it.id != null }
         val namedVideos = pickableVideos.filter { ambiguous.isNotEmpty() && videoTitleMatches(it.name, available) && keepsRequestedRecording(recording, it, video = true) }
-        return Answer(null, ToPick(metadata, pickableSongs.take(PICK_FROM), namedVideos.ifEmpty { pickableVideos }.take(PICK_FROM), watchUrl, available.lengthsMs), final = available.complete, lasting = available.everyStore)
+        return Answer(null, ToPick(metadata, pickableSongs.take(PICK_FROM), namedVideos.ifEmpty { pickableVideos }.take(PICK_FROM),
+            watchUrl, available.lengthsMs, available, rejectedSourceLength), final = available.complete, lasting = available.everyStore)
+    }
+
+    private fun rejectsKnownSourceLength(metadata: MusicMetadata, rows: List<Row>, names: Names): Boolean {
+        val source = metadata.lengthMs?.takeIf { it > 0 } ?: return false
+        return rows.any { row -> row.id != null && row.lengthMs != null && !sameRecordingLength(row.lengthMs, source) &&
+            (isTheSong(row, names) || isTheSongInAnotherScript(row, names)) }
+    }
+
+    private fun knownVideoFitsSource(metadata: MusicMetadata, video: Row, names: Names): Boolean {
+        val source = metadata.lengthMs?.takeIf { it > 0 } ?: return false
+        val length = video.lengthMs ?: return false
+        return isOwnVideo(video, names) && (videoTitleMatches(video.name, names) || pickedArtistVideoNamesSource(metadata, video, names)) &&
+            kotlin.math.abs(length - source) <= SAME_LENGTH_MS
     }
 
     private fun safeVideoBesideAmbiguousSongs(video: Row, metadata: MusicMetadata, names: Names): Boolean {
@@ -1080,9 +1099,11 @@ internal class ExactMatcher(
     private fun sameDisplayedRows(rows: List<Row>) = rows.map { Triple(it.name, it.details, it.explicit) }.distinct().size == 1
 
     private fun anotherScriptRows(rows: List<Row>, names: Names, recording: RequestedRecording, metadata: MusicMetadata): List<Row> {
-        val ambiguous = indistinguishableCandidates(rows, metadata.lengthMs?.takeIf { it > 0 })
-        val eligible = rows.filter { it.id != null && it.id !in names.rejectedCandidates &&
+        val sourceLength = metadata.lengthMs?.takeIf { it > 0 }
+        val ambiguous = indistinguishableCandidates(rows, sourceLength)
+        val candidates = rows.filter { it.id != null && it.id !in names.rejectedCandidates &&
             isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
+        val eligible = sourceFittingCandidates(candidates, sourceLength, names)
         val album = names.corroboratingAlbum.takeIf { plainLinkedTitle(metadata) || recording.part != null }
         val known = eligible.filter { row -> names.titles.any { title -> SongNames.same(title, row.name) ||
             samePart(numberedPartBeforeNotes(title), numberedPartBeforeNotes(row.name)) } }
@@ -1092,6 +1113,20 @@ internal class ExactMatcher(
         val byVersion = versionSeparatedRows(rows, known, names, recording)
         return eligible.filter { candidateName(it) !in ambiguous || byAlbum[candidateName(it)] == it.id || byVersion[candidateName(it)] == it.id }
     }
+
+    private fun sourceFittingCandidates(candidates: List<Row>, sourceLength: Long?, names: Names): List<Row> {
+        val first = candidates.firstOrNull()
+        val excludedName = first?.takeIf { sourceLength != null && it.lengthMs != null && !sameRecordingLength(it.lengthMs, sourceLength) }
+            ?.let(::candidateName)
+        return candidates.filter { row ->
+            (sourceLength == null || row.lengthMs == null || sameRecordingLength(row.lengthMs, sourceLength)) &&
+                (excludedName == null || candidateName(row) == excludedName || names.titles.any { SongNames.same(it, row.name) } ||
+                    linkedTakeOf(first, row, names.linkedEdition))
+        }
+    }
+
+    private fun linkedTakeOf(first: Row, row: Row, edition: LinkedEdition?): Boolean = edition != null &&
+        rowIsLive(row) == edition.live && SongNames.same(SongNames.bareTitle(first.name), SongNames.bareTitle(row.name))
 
     private fun versionSeparatedRows(rows: List<Row>, eligible: List<Row>, names: Names, recording: RequestedRecording): Map<Pair<String, String>, String?> {
         if (names.corroboratingAlbum == null || names.takeOnAlbum) return emptyMap()
@@ -1370,18 +1405,42 @@ internal class ExactMatcher(
      * are anyone's, and may say anything, so one far from all of the song's [lengthsMs] isn't taken: a few
      * seconds for a song, more for a video, which may open with more.
      */
-    private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row>, watchUrl: String, videos: Boolean, lengthsMs: List<Long>): String? {
+    private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row>, watchUrl: String, videos: Boolean, lengthsMs: List<Long>,
+        names: Names, requireKnownTitle: Boolean): Picked {
         val recording = requestedRecording(metadata.title)
         val part = recording.part
         // Keep the row numbers while omitting any names that local evidence already rules out.
-        val offered = rows.map { it.takeIf { row -> keepsRequestedRecording(recording, row, video = videos) &&
-            (part == null || namesThePickedPart(part, row, videos)) } }
-        if (offered.none { it != null }) return null
+        val offered = rows.map { it.takeIf { row -> canOfferPickedRow(metadata, row, names, videos, requireKnownTitle) &&
+            keepsRequestedRecording(recording, row, video = videos) && (part == null || namesThePickedPart(part, row, videos)) } }
+        if (offered.none { it != null }) return Picked(null, !videos && rows.any { !safePickedSong(metadata, it) })
         val shown = offered.map { it?.let { row -> "${row.name} | ${row.details.joinToString(" • ")}" }.orEmpty() }
-        val index = pick(metadata, shown, videos) ?: return null
-        val row = offered.getOrNull(index) ?: return null
+        val index = pick(metadata, shown, videos) ?: return Picked(null, false)
+        val row = offered.getOrNull(index) ?: return Picked(null, !videos && rows.getOrNull(index)?.let { !safePickedSong(metadata, it) } == true)
         val off = row.lengthMs?.let { length -> lengthsMs.minOfOrNull { kotlin.math.abs(it - length) } } ?: 0L
-        return (watchUrl + row.id).takeIf { off <= if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS }
+        val url = (watchUrl + row.id).takeIf { off <= if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS }
+        return Picked(url, false)
+    }
+
+    private fun canOfferPickedRow(metadata: MusicMetadata, row: Row, names: Names, videos: Boolean, requireKnownTitle: Boolean): Boolean {
+        if (!videos && !safePickedSong(metadata, row)) return false
+        if (!requireKnownTitle) return true
+        return if (videos) videoTitleMatches(row.name, names) || pickedArtistVideoNamesSource(metadata, row, names)
+        else isTheSong(row, names) || isDeezerSong(row, names)
+    }
+
+    private fun pickedArtistVideoNamesSource(metadata: MusicMetadata, row: Row, names: Names): Boolean {
+        val sourceLength = metadata.lengthMs?.takeIf { it > 0 } ?: return false
+        if (!isOwnVideo(row, names) || row.lengthMs == null || !sameRecordingLength(row.lengthMs, sourceLength)) return false
+        val title = SongNames.withoutEditionTag(metadata.title)
+        return SongNames.titleNames(row.name).any { SongNames.same(SongNames.withoutEditionTag(it), title) }
+    }
+
+    private fun safePickedSong(metadata: MusicMetadata, row: Row): Boolean {
+        val source = metadata.lengthMs?.takeIf { it > 0 } ?: return true
+        if (row.lengthMs != null && !sameRecordingLength(row.lengthMs, source)) return false
+        val artist = row.details.first()
+        if (metadata.artist.isBlank() || artist.isBlank()) return true
+        return namedInAnotherScript(metadata.artist) || namedInAnotherScript(artist) || SongNames.sameArtist(metadata.artist, artist)
     }
 
     private fun namesThePickedPart(part: NumberedPart, row: Row, video: Boolean): Boolean {
