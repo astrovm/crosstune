@@ -1114,11 +1114,17 @@ internal class MainViewModel(
      */
     suspend fun watchPlayingNow() {
         val previous = uiState.playingNow?.song
-        val previousUnnamed = uiState.playingUnnamed?.playing
+        val shownUnnamed = uiState.playingUnnamed
+        val previousUnnamed = shownUnnamed?.playing
         heardNow = null
         followedNow = null
         liveUnnamed = null
         followedUnnamed = null
+        // The station may have paused out of sight. Keep expired text tied to its old deadline.
+        if (lastConfirmedQueue?.isConfirmedAt(now()) == true) forgetRadioPlayback()
+        if (shownUnnamed?.confirmedQueueSong != null) {
+            uiState = uiState.copy(playingUnnamed = shownUnnamed.copy(confirmedQueueSong = null))
+        }
         val source = playback?.takeIf { it.hasAccess() }
         if (source == null) {
             uiState = uiState.copy(playingNow = null, playingUnnamed = null)
@@ -1357,14 +1363,13 @@ internal class MainViewModel(
         unnamed?.let { live -> lastConfirmedQueue?.takeIf { it.isForStation(live) && it.isConfirmedAt(now()) } }
 
     private fun updateRadioQueue(unnamed: Unnamed?): QueueCheck? {
-        val previous = queueCheck
-        val last = lastConfirmedQueue
         if (unnamed == null) {
             // The live broadcast can move on while this session is paused or stopped.
-            clearRadioQueue(last ?: previous)
-            queueCheck = null
+            forgetRadioPlayback()
             return null
         }
+        val previous = queueCheck
+        val last = lastConfirmedQueue
         if (last != null && !last.isForStation(unnamed)) clearRadioQueue(last)
         val song = unnamed.queueSong
         val check = when {
@@ -1376,6 +1381,11 @@ internal class MainViewModel(
         queueCheck = check
         logRadioQueueUpdate(unnamed, check, kept = check === previous || check === last)
         return check?.takeIf { song != null && !it.confirmed }
+    }
+
+    private fun forgetRadioPlayback() {
+        clearRadioQueue(lastConfirmedQueue ?: queueCheck)
+        queueCheck = null
     }
 
     private fun clearRadioQueue(check: QueueCheck?) {
