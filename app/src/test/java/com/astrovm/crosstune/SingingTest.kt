@@ -360,9 +360,11 @@ class SingingTest {
         openLyrics()
         plays(positionMs = 3_000)
         waitUntil { singing.hears == 1 }
+        assertEquals(-3_540L, LyricsSyncStore(prefs()).pending(checkNotNull(model().uiState.lyricsFor), model().uiState.lyricLines)?.offsetMs)
         passes(30_000)
         waitUntil { singing.hears >= 2 }
         composeRule.waitForIdle()
+        assertTrue(TimingLog.lastMinute(), TimingLog.lastMinute().contains("sung -2170 off"))
         assertFalse(model().uiState.lyricsSynced)
         assertFalse(prefs().contains("lyrics_sync"))
     }
