@@ -40,7 +40,7 @@ class HistoryStoreTest {
         store.remember(url, "DEEZER", PreparedLink("https://www.deezer.com/search/Title", exact = false, matchingEnabled = true))
         // The old exact link is looked for again. The destination's ordinary search stays.
         val old = org.json.JSONArray(preferences.getString(HistoryStore.KEY_HISTORY, null))
-        old.getJSONObject(0).getJSONObject("destinations").getJSONObject("YOUTUBE_MUSIC").put("matcher", 10)
+        old.getJSONObject(0).getJSONObject("destinations").getJSONObject("YOUTUBE_MUSIC").put("matcher", 11)
         preferences.edit().putString(HistoryStore.KEY_HISTORY, old.toString()).commit()
         assertEquals(setOf("DEEZER"), HistoryStore(preferences).load().first().destinationLinks.keys)
     }
@@ -222,6 +222,22 @@ class HistoryStoreTest {
         val forgotten = store.forget("frontend:INVIDIOUS")
         assertEquals(listOf(entry(2), entry(1).copy(destinationLinks = mapOf("YOUTUBE_MUSIC" to app))), forgotten)
         assertEquals(forgotten, HistoryStore(preferences).load())
+    }
+
+    @Test
+    fun recentKeepsTheHoldTimestampWithTheProvisionalLink() {
+        val song = entry(1)
+        val key = "YOUTUBE_MUSIC"
+        val heldAt = 4_000L
+        val waiting = PreparedLink("https://music.youtube.com/search?q=Title", false, false, ExactMatcher.Retry(heldAt))
+        val fan = PreparedLink("https://music.youtube.com/watch?v=fan00000000", true, true, ExactMatcher.Retry(heldAt))
+        store.add(song.copy(destinationLinks = mapOf(key to waiting)))
+        assertEquals(waiting, HistoryStore(preferences).load().single().destinationLinks[key])
+        store.remember(song.link.url, key, fan)
+        assertEquals(fan, HistoryStore(preferences).load().single().destinationLinks[key])
+        val own = fan.copy(url = "https://music.youtube.com/watch?v=own00000000", retry = null)
+        store.remember(song.link.url, key, own)
+        assertEquals(own, HistoryStore(preferences).load().single().destinationLinks[key])
     }
 
     @Test

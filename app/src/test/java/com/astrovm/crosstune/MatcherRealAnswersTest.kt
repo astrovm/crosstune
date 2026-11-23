@@ -7,6 +7,7 @@ import okhttp3.Response
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -34,6 +35,10 @@ class MatcherRealAnswersTest {
     /** Which of Apple's answers fail, as offline. */
     @Volatile
     private var appleDown: (HttpUrl) -> Boolean = { false }
+
+    /** Serve just the saved lyrics upload, as if YouTube Music had only that video. */
+    @Volatile
+    private var onlySpringDayFan = false
 
     /** The song whose answers are served. */
     @Volatile
@@ -113,9 +118,29 @@ class MatcherRealAnswersTest {
         val song = LEMON.metadata.copy(lengthMs = 280_000L)
         appleDown = { url -> url.queryParameter("country") == "US" }
         assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+
         appleDown = { false }
         clock += ExactMatcher.UNSURE_FOR_MS
         assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun springDayOpensItsSongWhileJapansLookupFails() {
+        kept = SPRING_DAY
+        appleDown = { it.encodedPath == "/lookup" && it.queryParameter("country") == "JP" }
+        assertEquals(ExactMatcher.Match.Found(SPRING_DAY.opens.orEmpty(), lasting = false), runBlocking {
+            matcher().lookFor(MusicService.YOUTUBE_MUSIC, SPRING_DAY.metadata)
+        })
+    }
+
+    @Test
+    fun springDayOpensAFansUploadWhileJapansLookupFails() {
+        kept = SPRING_DAY
+        onlySpringDayFan = true
+        appleDown = { it.encodedPath == "/lookup" && it.queryParameter("country") == "JP" }
+        assertEquals(ExactMatcher.Match.Found("$WATCH=$SPRING_DAY_FAN", lasting = false), runBlocking {
+            matcher().lookFor(MusicService.YOUTUBE_MUSIC, SPRING_DAY.metadata)
+        })
     }
 
     private fun matcher(): ExactMatcher {
@@ -150,10 +175,23 @@ class MatcherRealAnswersTest {
                 else -> null
             }
             "music.youtube.com" -> JSONObject(FakeSpotify.bodyOf(request)).takeIf { it.optString("query") == term }
-                ?.let { answers.getJSONObject(if (it.optString("params") == VIDEOS) "videos" else "songs") }
+                ?.let { youtube(answers, it.optString("params") == VIDEOS) }
             else -> null
         }
         return FakeSpotify.html(request, served?.toString() ?: throw IOException("not kept: $url").also { unkept += url.toString() })
+    }
+
+    private fun youtube(answers: JSONObject, videos: Boolean): JSONObject {
+        if (!onlySpringDayFan) return answers.getJSONObject(if (videos) "videos" else "songs")
+        if (!videos) return JSONObject()
+        val rows = answers.getJSONObject("videos").getJSONObject("contents").getJSONObject("tabbedSearchResultsRenderer")
+            .getJSONArray("tabs").getJSONObject(0).getJSONObject("tabRenderer").getJSONObject("content")
+            .getJSONObject("sectionListRenderer").getJSONArray("contents").getJSONObject(0)
+            .getJSONObject("musicShelfRenderer").getJSONArray("contents")
+        val fan = (0 until rows.length()).map(rows::getJSONObject).single {
+            it.getJSONObject("musicResponsiveListItemRenderer").getJSONObject("playlistItemData").getString("videoId") == SPRING_DAY_FAN
+        }
+        return JSONObject().put("contents", fan)
     }
 
     private fun apple(url: HttpUrl, apple: JSONObject, term: String): JSONObject? {
@@ -178,6 +216,7 @@ class MatcherRealAnswersTest {
     private companion object {
         const val WATCH = "https://music.youtube.com/watch?v"
         const val LEMON_SONG = "$WATCH=3NNhrqHZqlI"
+        const val SPRING_DAY_FAN = "9zNcHOD1Hdk"
         const val VIDEOS = "EgWKAQIQAWoKEAoQAxAEEAkQBQ=="
 
         /** Long, as a busy machine is no answer from a service here: each answer is kept. */
@@ -185,6 +224,7 @@ class MatcherRealAnswersTest {
 
         /** What each service answered, in November 2026. */
         val LEMON = Kept(MusicMetadata("Lemon", "米津玄師"), "lemon.json.gz", LEMON_SONG)
+        val SPRING_DAY = Kept(MusicMetadata("봄날", "방탄소년단"), "spring-day.json.gz", "$WATCH=ZO1xdXOXarc")
 
         val OTHERWISE = mapOf(
             Kept(MusicMetadata("Pretender", "Official髭男dism"), "pretender.json.gz", "$WATCH=37W7Y2RRyiM") to
@@ -192,7 +232,7 @@ class MatcherRealAnswersTest {
             // The original is only among videos; the songs include a 2025 recording From THE FIRST TAKE.
             Kept(MusicMetadata("First Love", "宇多田ヒカル"), "first-love.json.gz", "$WATCH=o1sUaVJUeB0") to
                 listOf(null, 237_752L, 257_894L, 258_627L, 259_385L, 262_030L),
-            Kept(MusicMetadata("봄날", "방탄소년단"), "spring-day.json.gz", "$WATCH=ZO1xdXOXarc") to listOf(null, 274_097L, 274_704L),
+            SPRING_DAY to listOf(null, 274_097L, 274_704L),
             // The G.E.M. Version is a re-recording within a second of the original.
             Kept(MusicMetadata("光年之外", "鄧紫棋"), "light-years-away.json.gz", "$WATCH=f8IqVtY_4jo") to
                 listOf(null, 217_489L, 234_951L, 235_505L)
