@@ -13,7 +13,7 @@ internal data class UiState(
     val listening: Boolean = false,
     val result: MusicMetadata? = null,
     /** The card's song and package once the selected app reports a session for it. */
-    val resultInApp: Pair<MusicMetadata, String>? = null,
+    private val resultInApp: Pair<MusicMetadata, String>? = null,
     /** Set when [result] lists songs like the one it's named after, as ChatGPT found them. */
     val songsLike: Boolean = false,
     /** Prepared direct links or search fallbacks, reused by Open, Copy and Share for this result. */

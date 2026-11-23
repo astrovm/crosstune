@@ -103,6 +103,8 @@ import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performFirstLinkClick
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
@@ -640,6 +642,27 @@ class ListeningTest {
     }
 
     @Test
+    fun movingRadioGardenToAnotherOutputClearsTheSongHeardOnThePhone() {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1)
+        val radio = FakePlayback().apply { access = true; unnamed.value = station }
+        val hearing = FakeHearing()
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        hearing.song("Love Sober", 8.0, artist = "KAMRAD")
+        waitForText("Love Sober")
+
+        val cast = station.copy(where = Place.CAST)
+        composeRule.runOnIdle { radio.unnamed.value = cast }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing == cast }
+        assertNull(controllerModel().uiState.playingUnnamed?.heard)
+        assertFalse(shown("Love Sober"))
+        assertTrue(shown("1LIVE"))
+    }
+
+    @Test
     fun radioGardenUsesTheHearingClockUntilPlaybackPausesOrChangesSession() {
         val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1)
         val following = Following(PlaybackClock(30_000, SystemClock.elapsedRealtime()), "Radio Garden", canSeek = false,
@@ -804,6 +827,25 @@ class ListeningTest {
             composeRule.onNode(hasTestTag(NOW_PLAYING_TAG) and hasText("First Song")).assertIsDisplayed()
         } finally {
             transportReady.complete(Unit)
+        }
+    }
+
+    @Test
+    fun restartingTheWatcherClearsTheRadioTitleBeforeTheFirstNewPlaybackUpdate() {
+        radioGardenSessionWithConfirmedTitle()
+        val model = controllerModel()
+        requireNotNull(controller).pause().stop()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("First Song", model.uiState.playingUnnamed?.confirmedQueueSong?.title)
+
+        val watcher = CoroutineScope(Dispatchers.Main).launch(start = CoroutineStart.UNDISPATCHED) { model.watchPlayingNow() }
+        try {
+            // The restarted watcher has registered its collectors, and the main looper has not delivered their updates.
+            val bar = requireNotNull(model.uiState.playingUnnamed)
+            assertEquals("1LIVE", bar.playing.name)
+            assertNull(bar.confirmedQueueSong)
+        } finally {
+            watcher.cancel()
         }
     }
 
@@ -1073,6 +1115,7 @@ class ListeningTest {
         assertTrue(shown("A PLACE TO GO"))
         hearing.song("A PLACE TO GO", 190.0, artist = "The Kid LAROI")
         composeRule.waitForIdle()
+        assertNull(controllerModel().uiState.playingUnnamed?.heard)
         main.idleFor(java.time.Duration.ofSeconds(169))
         assertEquals(1, hearing.listens)
         assertTrue(shown("A PLACE TO GO"))
