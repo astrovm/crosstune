@@ -82,7 +82,7 @@ internal object SungTiming {
         }.filter { it.support >= MIN_SUPPORT }
         val firstLetters = byLine.mapValues { (_, its) -> its.first().letters }
         val durations = byLine.mapValues { (_, pieces) -> pieces.sumOf { SpokenWords.sungLetters(it.text) } * LETTER_MS }
-        val chain = backed(sure(candidates, byLine.keys.max() + 2, durations), firstLetters)
+        val chain = backed(sure(candidates, byLine.keys.max() + 2, durations, lines), firstLetters)
         val placed = chain + filled(chain, firstLetters, stretches, byLine)
         return placed.filter { placed -> stretches.any { placed.ms in it.fromMs - EDGE_MS..it.toMs } }.associate { it.line to it.ms }
     }
@@ -112,11 +112,12 @@ internal object SungTiming {
      * another line found at its time often takes its place, as a chorus sung again has the same words.
      * Of two such chains, nothing heard says which is right, so the line isn't put at all.
      */
-    internal fun sure(candidates: List<Placed>, lines: Int, durations: Map<Int, Long>): List<Placed> {
+    internal fun sure(candidates: List<Placed>, lines: Int, durations: Map<Int, Long>, text: List<String> = emptyList()): List<Placed> {
         val sorted = candidates.sortedBy { it.ms }
         val (ending, from) = ending(sorted)
         val best = chained(sorted, ending, from)
         val weight = best.sumOf { it.support }
+        val present = best.map { it.line }.toSet()
         val (starting, after) = starting(sorted, lines)
         return best.filter { placed ->
             val elsewhere = sorted.indices.filter { sorted[it].line == placed.line && elsewhere(placed, sorted[it], durations.getValue(placed.line)) }
@@ -126,9 +127,17 @@ internal object SungTiming {
                 before.maxOfOrNull { ending[it] + after[it][placed.line + 1] } ?: 0.0,
                 sorted.indices.filter { sorted[it].line > placed.line }.maxOfOrNull { starting[it] } ?: 0.0,
             )
-            maxOf(elsewhere, skipped) < weight - placed.support * SURE_SHARE
+            // A whole repeated chorus can move together, so skipping one line cannot find its alternative.
+            // A copy already in the best chain has its own hearing and is not an alternative to this one.
+            val otherChorus = if (text.isEmpty() || placed.support < CHORUS_SUPPORT) 0.0 else sorted.indices
+                .filter { k -> unplacedCopy(placed, sorted[k], text, present) }
+                .maxOfOrNull { ending[it] + starting[it] - sorted[it].support } ?: 0.0
+            maxOf(elsewhere, skipped) < weight - placed.support * SURE_SHARE && otherChorus < weight * CHORUS_CHAIN_SHARE
         }
     }
+
+    private fun unplacedCopy(placed: Placed, other: Placed, text: List<String>, present: Set<Int>): Boolean =
+        other.line !in present && abs(other.ms - placed.ms) < CHORUS_PLACE_MS && text[other.line].equals(text[placed.line], ignoreCase = true)
 
     /** One phrase heard as one word has no internal timing to make two separate singings one observation. */
     private fun elsewhere(a: Placed, b: Placed, durationMs: Long): Boolean {
@@ -525,6 +534,11 @@ internal object SungTiming {
      */
     private const val SAME_PLACE_MS = 6_000L
     private const val SURE_SHARE = 0.5
+
+    /** An unplaced copy may own the same hearing when its whole chain comes close to the best one. */
+    private const val CHORUS_PLACE_MS = 2_000L
+    private const val CHORUS_SUPPORT = 2.0
+    private const val CHORUS_CHAIN_SHARE = 0.9
 
     /** How sure a line found has to be, by its words alike, as [matchScore] has them. */
     private const val MIN_SUPPORT = 1.0
