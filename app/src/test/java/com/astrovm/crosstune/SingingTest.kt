@@ -941,8 +941,8 @@ class SingingTest {
 
     @Test
     fun aFarHearingIsConfirmedByAnotherPartAfterReopening() {
-        lines = lines + listOf("Over hills we wander", "All the stars are shining", "Home is where we go")
-        val times = listOf(60, 63, 66, 90, 93, 96, 130, 133, 136)
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
         lyricsTimedFor(null, times)
         singing.answer = { sungAt(times, times.map { -27_400L }) }
         openLyrics()
@@ -955,9 +955,12 @@ class SingingTest {
         waitUntil { model().uiState.lyricLines.size == lines.size }
         assertEquals(90_000L, model().uiState.lyricLines[3].timeMs)
         plays(positionMs = 101_000)
-        waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
+        passes(1_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.lyricsSynced)
         assertTrue(prefs().contains("lyrics_sync"))
-        assertEquals(102_600L, model().uiState.lyricLines[6].timeMs)
+        assertEquals(102_600L, model().uiState.lyricLines[9].timeMs)
     }
 
     @Test
@@ -980,8 +983,8 @@ class SingingTest {
 
     @Test
     fun aLaterNearHearingDiscardsUnconfirmedFarEvidence() {
-        lines = lines + listOf("Over hills we wander", "All the stars are shining", "Home is where we go")
-        val times = listOf(60, 63, 66, 90, 93, 96, 130, 133, 136)
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
         lyricsTimedFor(null, times)
         singing.answer = { sungAt(times, times.map { -27_400L }) }
         openLyrics()
@@ -999,6 +1002,7 @@ class SingingTest {
         waitUntil { model().uiState.lyricLines.size == lines.size }
         singing.answer = { sungAt(times, times.map { -27_400L }) }
         plays(positionMs = 101_000)
+        passes(1_000)
         waitUntil { singing.hears >= 3 }
         composeRule.waitForIdle()
         assertFalse(model().uiState.lyricsSynced)
