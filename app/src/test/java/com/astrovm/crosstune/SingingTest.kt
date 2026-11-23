@@ -926,6 +926,17 @@ class SingingTest {
     }
 
     @Test
+    fun closingFarWordsOffersTheirReportWhenTheyOpenAgain() {
+        chorusHeardFarFromWhereItsSung()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertFalse(offerShown())
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        assertTrue(offerShown())
+    }
+
+    @Test
     fun pickedUpPartwayLinesMovedByOneWrongWhileGoBackByOneRightOne() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         val times = chorusHeardFarFromWhereItsSung()
