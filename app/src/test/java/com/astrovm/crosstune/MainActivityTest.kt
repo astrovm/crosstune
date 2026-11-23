@@ -4046,10 +4046,11 @@ class MainActivityTest {
         MainActivity.playbackFactory = { playback }
         shadowOf(app.packageManager).installPackage(installedApp(service.packageName, "YouTube Music"))
         prefs().edit().putString("default_target", service.name).commit()
+        val words = """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"One\nTwo\nThree",""" +
+            """"syncedLyrics":"[00:01.00] One\n[00:20.00] Two\n[00:40.00] Three"}]"""
         fake.handler = { request ->
-            if (request.url.host == "lrclib.net") FakeSpotify.html(
-                request, """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"One\nTwo"}]"""
-            ) else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, words)
+            else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
         }
         launch()
         resolveTyped(link)
