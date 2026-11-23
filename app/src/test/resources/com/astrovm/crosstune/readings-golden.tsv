@@ -16,7 +16,7 @@
 # The command adds rows. It does not remove or change a row.
 # A row the app now reads otherwise is a regression, and the command exits 1.
 # A change you mean drops that lock: python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA
-# audit: 3549 lines, 14925 right readings, sha256 532d1ad0061f0cf5
+# audit: 3549 lines, 14929 right readings, sha256 532d1ad0061f0cf5
 # rows: 7559
    何にもならな	何		なん	何=なん		何=なん	unidic
    夜の孤独	夜		よる	夜=よる	yoru|yoru	夜=よる	both
