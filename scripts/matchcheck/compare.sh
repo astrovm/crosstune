@@ -17,7 +17,15 @@ for file in app/src/test/java/com/astrovm/crosstune/MatchReplayTest.kt scripts/m
     cp "$root/$file" "$base/$file"
 done
 # The baseline matcher has no independent artist-alias callback.
-sed -i '/MATCHCHECK_ARTIST_ALIASES/d' "$base/app/src/test/java/com/astrovm/crosstune/MatchReplayTest.kt"
+python3 - "$base/app/src/test/java/com/astrovm/crosstune/MatchReplayTest.kt" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+lines = path.read_text().splitlines(keepends=True)
+assert sum("MATCHCHECK_ARTIST_ALIASES" in line for line in lines) == 1
+path.write_text("".join(line for line in lines if "MATCHCHECK_ARTIST_ALIASES" not in line))
+PY
 cd "$root"
 python3 scripts/matchcheck/replay.py prepare "$out" --require-answers --also-latin
 # The probe only records missing searches. Its match results are not used in the comparison.

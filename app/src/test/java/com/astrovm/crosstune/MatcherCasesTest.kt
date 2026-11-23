@@ -539,6 +539,29 @@ class MatcherCasesTest {
     }
 
     @Test
+    fun thePickerCannotChooseALiveRecordingWhenSameNamedRowsAreAmbiguous() {
+        val case = Case("ambiguous studio and live", null,
+            songs = listOf(row("偽の歌"), row("偽の歌", "Live at Budokan")), picked = 1)
+        assertEquals(null, find(case))
+    }
+
+    @Test
+    fun anAmbiguousSongCannotFallThroughToAShortTeaser() {
+        val case = Case("ambiguous songs and teaser", null,
+            songs = listOf(row("偽の歌"), row("偽の歌")), videos = listOf(video("Fake Song (Teaser)", "0:30")))
+        assertEquals(null, find(case))
+    }
+
+    @Test
+    fun duplicateSongsOutsideTheKnownLengthDoNotHideTheMatchingVideo() {
+        val case = Case("off-length duplicates", null, title = "Kokoro",
+            songs = listOf(row("Tokyo", "Karaoke Picks", length = "3:00"), row("Tokyo", length = "0:30")),
+            videos = listOf(video("Chijimu (Official Video)", "1:34", "偽バンド"), video("Kokoro", "1:32", "偽バンド")),
+            chooses = { rows -> rows.indexOfFirst { it.startsWith("Kokoro |") }.takeIf { it >= 0 } })
+        assertEquals("video1", find(case))
+    }
+
+    @Test
     fun aLinkedLengthCanChooseTheLiveAlbumWithinTheSearchResults() {
         val liveLink = tenth.single { it.what == "2 two editions" }
         val result = found(liveLink) { urls ->
@@ -834,7 +857,13 @@ class MatcherCasesTest {
             opened += "$key\t${results.joinToString(" ") { it.id ?: "-" }}"
             if (onMain) continue
             val was = requireNotNull(main[key]) { key }.map { it.takeIf { id -> id != "-" } }
-            worse += broken(key, results, was)
+            val indistinguishable = first != null && second != null &&
+                SongNames.normalize(first.name) == SongNames.normalize(second.name)
+            // A same-named pair may hide two recordings. Withholding a row is safe; opening a different one is not.
+            val expected = if (indistinguishable) results.zip(was).map { (now, before) ->
+                if (now.id == null && !now.asked) null else before
+            } else was
+            worse += broken(key, results, expected)
             fun verdict(id: String?) = when {
                 id == null -> NOTHING
                 isIt(if (id.startsWith("video")) requireNotNull(video) else rows[id.removePrefix("song").toInt()], song) -> RIGHT
@@ -1108,13 +1137,13 @@ class MatcherCasesTest {
             "9 op size picked" to "song1",
             "plain live" to "song1",
             "plain live asked" to "song1",
-            "plain first plain" to "song1",
+            "plain first plain" to null,
             "plain song's subtitle" to "song1",
             "plain song's credit" to "song1",
             "plain tagged" to "song1",
             "plain other script" to "song1",
             "plain live album" to null,
-            "plain live in name" to "song1",
+            "plain live in name" to null,
             "plain not as close" to "song1",
             "plain not as close though shorter" to "song1",
             "plain closer though longer" to "song1",

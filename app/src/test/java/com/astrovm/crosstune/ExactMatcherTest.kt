@@ -9,6 +9,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -1442,6 +1443,18 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aHeldArtistAliasLookupDoesNotConsumeTheMatcherDeadline() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")
+        val fan = youTubeMusicRow("アーティスト - Song", "Fan • 1M views • 4:00", videoId = "fan00000000")
+        val track = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"duration":240}]"""
+        namesAndTabs(songs = listOf(row), videos = listOf(fan), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)),
+            deezer = track, deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        val finder = ExactMatcher(fake.client(), "US", timeoutMs = 30_000, artistAliases = { awaitCancellation() })
+        assertEquals(ExactMatcher.Match.WaitingForNames, withTimeoutOrNull(3_000) { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
     fun anArtistsVideoAfterAFanDoesNotWaitForDeezer() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val fan = youTubeMusicRow("Song - アーティスト", "Fan • 1M views • 4:00", videoId = "fan00000000")
@@ -1548,24 +1561,19 @@ class ExactMatcherTest {
 
         namesAndTabs(songs = listOf(deezerRow, appleRow), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)), deezer = deezer, deezerArtists = artists)
         val answer = fake.handler
-        val entered = CountDownLatch(1)
-        val release = CountDownLatch(1)
+        val deezerAnswered = CountDownLatch(1)
         fake.handler = { request ->
-            if (request.url.host == "api.deezer.com") {
-                entered.countDown()
-                release.await(20, SECONDS)
-            }
             if (request.url.host == "itunes.apple.com" && request.url.queryParameter("term") == "別名 アーティスト") {
-                assertTrue(entered.await(5, SECONDS))
+                assertTrue(deezerAnswered.await(5, SECONDS))
                 FakeSpotify.html(request, """{"results":[${appleSong("別名", "アーティスト", 240_000)}]}""")
-            } else answer(request)
+            } else {
+                val response = answer(request)
+                if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist") deezerAnswered.countDown()
+                response
+            }
         }
-        try {
-            val finder = ExactMatcher(fake.client(), "US", timeoutMs = 30_000, artistAliases = aliases)
-            assertEquals("https://music.youtube.com/watch?v=apple000000", withTimeoutOrNull(5_000) { finder.find(MusicService.YOUTUBE_MUSIC, song) })
-        } finally {
-            release.countDown()
-        }
+        val finder = ExactMatcher(fake.client(), "US", timeoutMs = 30_000, artistAliases = aliases)
+        assertEquals("https://music.youtube.com/watch?v=apple000000", withTimeoutOrNull(5_000) { finder.find(MusicService.YOUTUBE_MUSIC, song) })
     }
 
     @Test
@@ -1599,6 +1607,22 @@ class ExactMatcherTest {
             } else answer(request)
         }
         assertEquals("https://music.youtube.com/watch?v=studio00000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun anAppleSearchWithIndistinguishableStudioAndLiveResultsCannotProveTheRow() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val candidate = youTubeMusicRow("別名", "アーティスト • Unknown • 4:00", videoId = "wrong000000")
+        namesAndTabs(songs = listOf(candidate), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000, id = 7, album = "Studio")))
+        val answer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.queryParameter("term") == "別名 アーティスト") {
+                val studio = appleSong("別名", "アーティスト", 240_000, id = 7, album = "Studio")
+                val live = appleSong("別名", "アーティスト", 241_000, id = 8, album = "Live at Budokan")
+                FakeSpotify.html(request, """{"results":[$studio,$live]}""")
+            } else answer(request)
+        }
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
     }
 
     @Test

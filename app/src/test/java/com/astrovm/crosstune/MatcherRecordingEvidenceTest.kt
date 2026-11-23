@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeout
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -28,12 +29,12 @@ class MatcherRecordingEvidenceTest {
         JSONArray(GZIPInputStream(stream).bufferedReader().use { it.readText() })
     }
 
-    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false, reverseDown: Boolean = false, deezerHeld: Boolean = false, inputLength: Long? = null, held: Pair<CountDownLatch, CountDownLatch>? = null, withoutLength: Boolean = false, liveImposter: Boolean = false): String? {
+    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false, reverseDown: Boolean = false, deezerHeld: Boolean = false, inputLength: Long? = null, held: Pair<CountDownLatch, CountDownLatch>? = null, withoutLength: Boolean = false, liveImposter: Boolean = false, invalidSourceId: Boolean = false): String? {
         val song = captured.getJSONObject(index)
         val metadata = MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = if (withoutLength) null else inputLength ?: song.getLong("lengthMs"))
         val us = JSONArray().also { results ->
             val editions = song.getJSONArray("editionsMs")
-            for (i in 0 until editions.length()) results.put(JSONObject().put("trackId", song.getLong("id"))
+            for (i in 0 until editions.length()) results.put(JSONObject().put("trackId", if (invalidSourceId) 0 else song.getLong("id"))
                 .put("trackName", song.getString("title")).put("artistName", song.getString("storeArtist"))
                 .put("collectionName", song.getString("album")).put("trackTimeMillis", editions.getLong(i)))
             if (liveImposter) results.put(JSONObject().put("trackId", 123456789L).put("trackName", song.getString("title"))
@@ -54,9 +55,9 @@ class MatcherRecordingEvidenceTest {
                         if (held != null) assertTrue(held.first.await(3, TimeUnit.SECONDS))
                         if (reverseDown) throw IOException("candidate search is down")
                         val recorded = song.getJSONObject("reverse").getJSONArray("results")
-                        if (!differentRecording && !liveImposter) recorded else JSONArray(recorded.toString()).also { answers ->
+                        if (!differentRecording && !liveImposter && !invalidSourceId) recorded else JSONArray(recorded.toString()).also { answers ->
                             for (i in 0 until answers.length()) if (answers.getJSONObject(i).optLong("trackId") == song.getLong("id")) {
-                                answers.getJSONObject(i).put("trackId", 123456789L)
+                                answers.getJSONObject(i).put("trackId", if (invalidSourceId) 0 else 123456789L)
                             }
                         }
                     } else if (url.encodedPath == "/search" && term == "${metadata.title} ${metadata.artist}" && store == "US") us else if (url.encodedPath == "/lookup" && nativeNames) {
@@ -99,6 +100,11 @@ class MatcherRecordingEvidenceTest {
     @Test fun aDifferentAppleRecordingDoesNotProveTheJapaneseSong() = assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, differentRecording = true))
 
     @Test fun aLiveAlbumEditionDoesNotProveTheStudioRecording() = assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, liveImposter = true))
+
+    @Test fun aMissingAppleRecordingIdCannotProveACandidate() {
+        assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, invalidSourceId = true))
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().queryParameter("term") == "みずいろの雨 八神純子" })
+    }
 
     @Test fun anAppleProvedCandidateDoesNotWaitForDeezer() {
         assertEquals(WATCH + "8eQdsCZWrLg", find(3, false, deezerHeld = true))
