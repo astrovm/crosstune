@@ -2503,10 +2503,10 @@ class ExactMatcherTest {
 
     @Test
     fun anAppleProvedOwnVideoDoesNotWaitForDeezerAfterAnUnrelatedFanVideo() = runBlocking {
-        val song = MusicMetadata("Song", "Artist")
-        val fan = youTubeMusicRow("Artist - Song", "Fan • 1K views • 4:00", videoId = "fan00000000")
-        val own = youTubeMusicRow("Song", "Artist • 1M views • 4:30", videoId = "own00000000")
-        namesAndTabs(videos = listOf(fan, own), apple = mapOf("AR" to appleSong("Song", "Artist", 240_000)), failing = setOf("JP"))
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS")
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 4:00", videoId = "fan00000000")
+        val own = youTubeMusicRow("終わらない歌", "THE BLUE HEARTS • 1M views • 4:30", videoId = "own00000000")
+        namesAndTabs(videos = listOf(fan, own), apple = mapOf("AR" to appleSong(song.title, song.artist, 240_000)), failing = setOf("JP"))
         assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=own00000000", lasting = false), matcher().lookFor(MusicService.YOUTUBE_MUSIC, song))
         assertTrue(fake.requestedUrls.none { it.toHttpUrl().host == "api.deezer.com" })
     }
