@@ -28,6 +28,22 @@ class UiStateTest {
     }
 
     @Test
+    fun phoneClientsThatOpenTheirOwnScreenAreNotOfferedBackgroundPlay() {
+        val openOnly = listOf(
+            MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.AUDIOMACK,
+            MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE,
+        )
+        for (service in openOnly) {
+            val state = UiState(
+                result = song, lyricsFor = song,
+                selectedDestination = Destination.Service(service), installed = setOf(service),
+            )
+            assertFalse(service.name, state.canPlayResult)
+            assertFalse(service.name, state.canPlayFromLyrics)
+        }
+    }
+
+    @Test
     fun aSongIsOfferedToPlayOnlyWhereItsAppPlaysOneAskedFor() {
         val youTubeMusic = UiState(result = song, selectedDestination = Destination.Service(MusicService.YOUTUBE_MUSIC), installed = setOf(MusicService.YOUTUBE_MUSIC))
         assertTrue(youTubeMusic.canPlayResult)
