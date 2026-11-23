@@ -1211,6 +1211,7 @@ internal class ExactMatcher(
     private fun eligibleAnotherScriptRow(row: Row, names: Names, recording: RequestedRecording, sourceLength: Long?, liveNames: Set<Pair<String, String>>): Boolean =
         row.id != null && row.id !in names.rejectedCandidates &&
             rowFitsSource(row, sourceLength) &&
+            names.linkedEdition?.let { it.live == rowIsLive(row) } != false &&
             isTheSongInAnotherScript(row, names) && keepsRerecording(recording, row.name, row.details.getOrNull(1).orEmpty()) &&
             (candidateName(row) !in liveNames || rowIsLive(row))
 
