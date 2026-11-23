@@ -879,6 +879,24 @@ class SingingTest {
     }
 
     @Test
+    fun oneWrongChorusNineSecondsLateDoesNotMoveOrKeepTheSheet() {
+        val times = listOf(2, 5, 8, 11, 14, 17)
+        lyricsTimedFor(null, times)
+        singing.answer = {
+            Sung(startedAt, lines.take(3).flatMapIndexed { line, text ->
+                text.split(' ').mapIndexed { word, piece -> HeardWord(piece, 1_000L + line * 3_000L + SungAlignment.HEARD_LATE_MS + word * 300L) }
+            })
+        }
+        openLyrics()
+        plays(positionMs = 10_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
     fun pickedUpLateOneWhileHeardFarEarlierIsReportedWithoutKeepingIt() {
         val times = listOf(60, 63, 66, 90, 93, 96)
         lyricsTimedFor(null, times)
