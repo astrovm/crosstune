@@ -86,12 +86,8 @@ internal enum class MusicService(
     /**
      * Whether its app can start a requested song through a media session. Spotify ignores apps it
      * doesn't know, Amazon Music's free plan plays the artist's radio, and Bandcamp opens a search.
-     * Apple Music, Deezer and Audiomack opened their own screens without playing in the device check.
      */
-    val playsAskedSongs: Boolean get() = when (this) {
-        SPOTIFY, AMAZON_MUSIC, BANDCAMP, APPLE_MUSIC, DEEZER, AUDIOMACK -> false
-        else -> true
-    }
+    val playsAskedSongs: Boolean get() = this != SPOTIFY && this != AMAZON_MUSIC && this != BANDCAMP
 
     /**
      * Whether its app takes no list of songs, so a playlist plays there one song after another, see

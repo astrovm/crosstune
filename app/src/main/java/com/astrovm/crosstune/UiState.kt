@@ -12,6 +12,8 @@ internal data class UiState(
     /** Set while the microphone is listening for a song playing nearby. */
     val listening: Boolean = false,
     val result: MusicMetadata? = null,
+    /** The card's song and package once the selected app reports a session for it. */
+    val resultInApp: Pair<MusicMetadata, String>? = null,
     /** Set when [result] lists songs like the one it's named after, as ChatGPT found them. */
     val songsLike: Boolean = false,
     /** Prepared direct links or search fallbacks, reused by Open, Copy and Share for this result. */
@@ -273,19 +275,23 @@ internal data class UiState(
 
     private val songApp: Destination.Service?
         get() = (resultDestination as? Destination.Service)?.takeIf {
-            result?.type == ItemType.TRACK && it.service in installed && !resultMissing
+            result?.type == ItemType.TRACK && it.service in installed
         }
+
+    /** When a new song would open the app, watch for an existing session that can play it here. */
+    val resultSessionToWatch: Pair<MusicMetadata, String>?
+        get() = songApp?.takeIf { it.opensAppToStartSong(phone) }?.let { app -> result?.let { it to app.packageName } }
 
     /** Whether the installed app can be asked to play this song while Crosstune stays open. */
     val canPlayResult: Boolean
-        get() = songApp?.let { it.service.playsAskedSongs && !it.opensFromSong(phone) } == true
+        get() = resultSessionToWatch?.let { it == resultInApp } ?: (songApp?.service?.playsAskedSongs == true && !resultMissing)
 
     /** Whether the words open are the result's, found and not followed in an app yet, so they can start it there. */
     val canPlayFromLyrics: Boolean
         get() = canPlayResult && canUseAppFromLyrics
 
     val canOpenFromLyrics: Boolean
-        get() = canUseAppFromLyrics && songApp?.opensFromSong(phone) == true
+        get() = canUseAppFromLyrics && !resultMissing && resultSessionToWatch?.let { it != resultInApp } == true
 
     private val canUseAppFromLyrics: Boolean
         get() = following?.app == null && !isLoadingLyrics &&

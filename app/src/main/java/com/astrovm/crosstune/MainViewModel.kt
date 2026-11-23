@@ -1159,6 +1159,24 @@ internal class MainViewModel(
             }
             launch { nameUnnamed(source) }
             launch { followUnnamed(source, previousUnnamed) }
+            launch { watchResultSession(source) }
+        }
+    }
+
+    /** Whether the selected app already has the song, including when it was paused before Crosstune opened. */
+    private suspend fun watchResultSession(source: PlaybackSource) {
+        try {
+            snapshotFlow { uiState.resultSessionToWatch }.collectLatest { target ->
+                uiState = uiState.copy(resultInApp = null)
+                if (target != null) {
+                    val (song, app) = target
+                    source.follow(song, app).map { it?.appPackage == app }.distinctUntilChanged().collect { hasSong ->
+                        uiState = uiState.copy(resultInApp = target.takeIf { hasSong })
+                    }
+                }
+            }
+        } finally {
+            uiState = uiState.copy(resultInApp = null)
         }
     }
 
@@ -2101,24 +2119,32 @@ internal class MainViewModel(
             uiState = uiState.copy(playingResult = true)
             try {
                 val link = prepareDestination(destination) ?: return@launchKept
-                // The link only a search when it was looked up and not found.
-                val exact = uiState.destinationUrls[destination]?.exact != false
-                val source = playback
-                val app = destination.packageName
-                openPlayer(song, app, link)
-                // Already in that app, playing or paused, it carries on from where it is, not from the start.
-                val there = source?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(app, it.appPackage, interception::isInstalled) }
-                if (there != null) {
-                    if (!there.clock.playing) source.playPause(song, true)
-                    return@launchKept
-                }
-                // Asked by name, other apps find it; YouTube Music only plays its own link.
-                val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link, mustStart = true) == true
-                if (!playThere(song, app, link, asked, exact)) open(destination, finishAfterOpen = false, tapped = true, preparedUrl = link)
+                playPreparedSong(song, destination, link)
             } finally {
                 uiState = uiState.copy(playingResult = false)
             }
         }
+    }
+
+    private suspend fun playPreparedSong(song: MusicMetadata, destination: Destination.Service, link: String) {
+        val source = playback
+        val app = destination.packageName
+        val opensToStart = destination.opensAppToStartSong(uiState.phone)
+        if (!opensToStart) openPlayer(song, app, link)
+        // Already in that app, playing or paused, it carries on from where it is.
+        val there = source?.takeIf { it.hasAccess() }?.follow(song, app.takeIf { opensToStart })?.first()
+            ?.takeIf { sameApp(app, it.appPackage, interception::isInstalled) }
+        if (there != null) {
+            if (opensToStart) openPlayer(song, app, link)
+            if (!there.clock.playing) source.playPause(song, true, there.appPackage, there.session)
+            return
+        }
+        // The session can change between showing Play and the tap.
+        if (opensToStart) return open(destination, finishAfterOpen = false, tapped = true, preparedUrl = link)
+        // Other apps can be asked by name. YouTube Music needs its own exact link.
+        val exact = uiState.destinationUrls[destination]?.exact != false
+        val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link, mustStart = true) == true
+        if (!playThere(song, app, link, asked, exact)) open(destination, finishAfterOpen = false, tapped = true, preparedUrl = link)
     }
 
     /**

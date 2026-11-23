@@ -4065,15 +4065,54 @@ class MainActivityTest {
 
         composeRule.runOnIdle {
             paused.value = Following(PlaybackClock(60_000, SystemClock.elapsedRealtime(), playing = false), "Apple Music",
-                canSeek = true, appPackage = service.packageName)
+                canSeek = true, appPackage = service.packageName, session = 17)
         }
         waitForDescription(play)
         click(play)
         waitForDescription(string(R.string.player_playing_in, "Apple Music"))
         assertEquals(listOf(true), playback.plays.toList())
         assertEquals(listOf(service.packageName), playback.playedApps.toList())
+        assertEquals(listOf(17), playback.playedSessions.toList())
         assertTrue(playback.songsAsked.isEmpty())
         assertNull(nextStartedActivity())
+    }
+
+    @Test
+    fun theCardOpensDeezerAudiomackAndYouTubeToStartANewSong() {
+        val links = mapOf(
+            MusicService.DEEZER to "https://www.deezer.com/track/123",
+            MusicService.AUDIOMACK to "https://audiomack.com/artist/song/fixture",
+            MusicService.YOUTUBE to "https://www.youtube.com/watch?v=sPmul8b17AU",
+        )
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        val playback = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { playback }
+        linksShowHere()
+        prefs().edit().putString("default_target", MusicService.DEEZER.name).commit()
+        for (service in links.keys) {
+            shadowOf(app.packageManager).installPackage(installedApp(service.packageName, string(service.labelRes)))
+        }
+        HistoryStore(prefs()).add(
+            HistoryEntry(
+                MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, "https://open.spotify.com/track/$TRACK_ID"),
+                song,
+                links.map { (service, link) -> service.name to PreparedLink(link, exact = true, matchingEnabled = true) }.toMap(),
+            )
+        )
+        launch()
+        click(string(R.string.history_open, song.title))
+        for ((service, link) in links) {
+            val label = string(service.labelRes)
+            chooseDefault(label)
+            waitForDestinationReady()
+            composeRule.onNodeWithContentDescription(string(R.string.play_in_background, label)).assertDoesNotExist()
+            click(string(service.openLabelRes))
+            waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+            val opened = checkNotNull(nextStartedActivity())
+            assertEquals(service.packageName, opened.`package`)
+            assertEquals(link, opened.dataString)
+        }
+        assertTrue(playback.songsAsked.isEmpty())
     }
 
     @Test

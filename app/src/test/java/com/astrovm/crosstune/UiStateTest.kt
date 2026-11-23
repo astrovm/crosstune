@@ -42,6 +42,11 @@ class UiStateTest {
             assertFalse(service.name, state.canPlayFromLyrics)
             assertTrue(service.name, state.canOpenFromLyrics)
             assertFalse(state.copy(following = Following(PlaybackClock(0, 0), "Player", canSeek = false)).canOpenFromLyrics)
+            val there = state.copy(resultInApp = song to service.packageName)
+            assertTrue(service.name, there.canPlayResult)
+            assertTrue(service.name, there.canPlayFromLyrics)
+            assertFalse(service.name, there.canOpenFromLyrics)
+            assertFalse(there.copy(result = song.copy(title = "Other")).canPlayResult)
         }
     }
 
