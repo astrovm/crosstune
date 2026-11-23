@@ -1424,7 +1424,7 @@ internal class ExactMatcher(
         addDeezerLength(metadata, tracks, foundLengths)
         // Without another length, deezerNames keeps only lengths belonging to the identified artist and title.
         val knownLengths = (lengths + foundLengths).ifEmpty {
-            tracks.map { it.optLong("duration") * 1000 }
+            tracks.map { it.optLong("duration").coerceAtLeast(0) * 1000 }
         }
         names.deezerNames = deezerNames(metadata, tracks, knownLengths, artists.firstOrNull())
         if (foundLengths.isEmpty()) foundLengths.addAll(names.deezerNames.map { it.lengthMs })
