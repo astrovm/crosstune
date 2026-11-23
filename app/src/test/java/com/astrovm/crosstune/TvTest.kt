@@ -785,6 +785,20 @@ class TvTest {
     }
 
     @Test
+    fun onATvRightAndLeftGoBetweenARecentRowAndItsPlay() {
+        val url = "https://open.spotify.com/track/song1"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song1", url), MusicMetadata("Song 1", "Band")))
+        launch()
+        val row = composeRule.onNode(hasText("Song 1") and hasClickAction())
+        val play = composeRule.onNode(hasContentDescription(string(R.string.history_open, "Song 1")) and hasClickAction())
+        row.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionRight)
+        play.assertIsFocused()
+        pressOnFocused(Key.DirectionLeft)
+        row.assertIsFocused()
+    }
+
+    @Test
     fun onATvBackFromTheStepsASettingOpensLandsOnThatSetting() {
         settingsByRemote()
         val follow = composeRule.onNode(hasText(string(R.string.setting_lyrics_follow)))
