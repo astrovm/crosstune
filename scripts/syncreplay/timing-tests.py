@@ -7,9 +7,9 @@ SYNCREPLAY_DIR has the same meaning as in syncreplay.py. All outputs stay ignore
 import argparse
 import shutil
 import subprocess
-from pathlib import Path
 
 import syncreplay as replay
+from gradlebox import gradle_caches
 
 TEST_FOLDER = replay.ROOT / 'app/src/test/java/com/astrovm/crosstune'
 TEST_SOURCES = ('SungTimingTest.kt', 'SyntheticSinging.kt', 'SyntheticSingingTest.kt')
@@ -20,7 +20,7 @@ def junit_jars():
     """Copy only the existing test libraries. Never mount a host Gradle home in a test container."""
     folder = replay.own() / 'unit-libs'
     folder.mkdir(exist_ok=True)
-    caches = (Path.home() / '.cache/crosstune-gradle-box', Path.home() / '.gradle')
+    caches = gradle_caches()
     jars = []
     for name in ('junit-4.13.2.jar', 'hamcrest-core-1.3.jar'):
         target = folder / name

@@ -64,6 +64,14 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         return out
     }
 
+    /** The word IPADIC knows for [text], when it keeps it whole. */
+    fun knownWord(text: String): Token? = plain.tokenize(text).singleOrNull()?.takeIf { it.isKnown }
+
+    /** A noun IPADIC knows as one word, read as written. */
+    fun isNoun(text: String): Boolean = knownWord(text)?.let {
+        it.partOfSpeechLevel1 == "名詞" && Readings.hiragana(it.reading) == Readings.hiragana(text)
+    } == true
+
     /**
      * [text] as Kuromoji searches it, bar the words that start wrong, with JMdict's words in kana offered too; null
      * when no way through it is left.

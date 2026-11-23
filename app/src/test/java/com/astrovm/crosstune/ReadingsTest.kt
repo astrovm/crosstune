@@ -307,6 +307,223 @@ class ReadingsTest {
     }
 
     @Test
+    fun longMarksDrawOutKanaAcrossDictionarySplits() {
+        val lines = mapOf(
+            "ぱーてぃー" to "paatii",
+            "めんそーれ" to "mensoore",
+            "やっ ほー" to "ya hoo",
+            "とぅもろー" to "tumoroo",
+            "ひぇー" to "hyee"
+        )
+        fun readings() = Readings.of(lines.keys.toList(), Script.JAPANESE).map { it.romanized to it.typed }
+        val expected = lines.values.map { it to it }
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+    }
+
+    @Test
+    fun longMarksStayWithTheVowelWithoutTakingTheNextWord() {
+        val lines = mapOf("ほーー" to "hooo", "うれしーよ" to "ureshii yo", "ねーきみは" to "nee kimi wa", "ぎたーを" to "gitaa o", "ほ ー" to "ho")
+        fun readings() = Readings.of(lines.keys.toList(), Script.JAPANESE).map { it.romanized }
+        val expected = lines.values.toList()
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+    }
+
+    @Test
+    fun wordsWithLongMarksStayWholeOnTheWordSheet() {
+        val lines = mapOf("ぱーてぃー" to "paatii", "めんそーれ" to "mensoore", "とぅもろー" to "tumoroo", "ひぇー" to "hyee")
+        fun readings() = lines.keys.map { line ->
+            Readings.words(line, Script.JAPANESE).map { Triple(it.text, it.romanized, it.typed) }
+        }
+        val expected = lines.map { (line, romaji) -> listOf(Triple(line, romaji, romaji)) }
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+    }
+
+    @Test
+    fun smallVowelsKeepTheDictionaryWordTheyDrawOut() {
+        fun readings() = listOf("だぁいすき", "ばかぁ").map { line ->
+            Readings.words(line, Script.JAPANESE).map { Triple(it.text, it.romanized, it.lookup) }
+        }
+        val expected = listOf(listOf(Triple("だぁいすき", "daaisuki", "大好き")), listOf(Triple("ばかぁ", "bakaa", "ばか")))
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+    }
+
+    @Test
+    fun longMarkKeepsTheNextWordSeparate() = assertDrawnReading(
+        "食べるー好きだよ", "taberuu sukida yo",
+        Triple("食べるー", "taberuu", "食べる"), Triple("好きだ", "sukida", "好き"), Triple("よ", "yo", "よ")
+    )
+
+    @Test
+    fun onlyTheLeadingLongMarksOfATokenAttach() {
+        assertDrawnReading(
+            "食べるーーコーヒー", "taberuuu koohii",
+            Triple("食べるーー", "taberuuu", "食べる"), Triple("コーヒー", "koohii", "コーヒー")
+        )
+        assertDrawnReading(
+            "おぉーーコーヒー飲む", "oooo koohii nomu",
+            Triple("おぉーー", "oooo", "おお"), Triple("コーヒー", "koohii", "コーヒー"), Triple("飲む", "nomu", "飲む")
+        )
+        assertDrawnReading(
+            "食べるーコーヒーぃ", "taberuu koohiii",
+            Triple("食べるー", "taberuu", "食べる"), Triple("コーヒーぃ", "koohiii", "コーヒー")
+        )
+    }
+
+    @Test
+    fun smallTsuBeforeALongMarkDoesNotDoubleTheNextWord() {
+        assertDrawnReading("あっーた", "a ta", Triple("あっー", "a", "あっ"), Triple("た", "ta", "た"))
+        assertEquals("ata", Readings.romaji("あっーーた"))
+    }
+
+    @Test
+    fun drawnOutInterjectionKeepsItsParticleSeparate() = assertDrawnReading(
+        "おぉと叫ぶ", "oo to sakebu",
+        Triple("おぉ", "oo", "おお"), Triple("と", "to", "と"), Triple("叫ぶ", "sakebu", "叫ぶ")
+    )
+
+    @Test
+    fun drawnOutAdverbKeepsItsDictionaryForm() {
+        assertDrawnReading(
+            "そーだと思う", "sooda to omou",
+            Triple("そーだ", "sooda", "そう"), Triple("と", "to", "と"), Triple("思う", "omou", "思う")
+        )
+        assertDrawnReading(
+            "そーだが信じない", "soodaga shinjinai",
+            Triple("そーだが", "soodaga", "そう"), Triple("信じない", "shinjinai", "信じる")
+        )
+        assertDrawnReading("そーす", "soosu", Triple("そーす", "soosu", "ソース"))
+        assertDrawnReading("ソーダ", "sooda", Triple("ソーダ", "sooda", "ソーダ"))
+    }
+
+    @Test
+    fun repeatedLongMarksKeepTheAdverbWithItsAuxiliary() = assertDrawnReading(
+        "そーーだと思う", "soooda to omou",
+        Triple("そーーだ", "soooda", "そう"), Triple("と", "to", "と"), Triple("思う", "omou", "思う")
+    )
+
+    @Test
+    fun theDictionaryRecognizesDrawnOutAdverbsAndInterjectionsBeforeAnAuxiliary() {
+        assertDrawnReading("こーだ", "kooda", Triple("こーだ", "kooda", "こう"))
+        assertDrawnReading("どーだ", "dooda", Triple("どーだ", "dooda", "どう"))
+        assertDrawnReading("あーだった", "aadatta", Triple("あーだった", "aadatta", "ああ"))
+        assertDrawnReading("じーだ", "jii da", Triple("じー", "jii", "じ"), Triple("だ", "da", "だ"))
+    }
+
+    @Test
+    fun aCaseParticleKeepsTheLongMarkedLoanwordAsANoun() {
+        assertDrawnReading(
+            "そーだを飲む", "sooda o nomu",
+            Triple("そーだ", "sooda", "ソーダ"), Triple("を", "o", "を"), Triple("飲む", "nomu", "飲む"),
+            typed = "sooda wo nomu"
+        )
+        assertDrawnReading(
+            "そーーだを飲む", "soooda o nomu",
+            Triple("そーーだ", "soooda", "ソーダ"), Triple("を", "o", "を"), Triple("飲む", "nomu", "飲む"),
+            typed = "soooda wo nomu"
+        )
+        assertDrawnReading(
+            "そーだより紅茶", "sooda yori koocha",
+            Triple("そーだ", "sooda", "ソーダ"), Triple("より", "yori", "より"), Triple("紅茶", "koocha", "紅茶"),
+            typed = "sooda yori koucha"
+        )
+        assertDrawnReading(
+            "そーだにする", "sooda ni suru",
+            Triple("そーだ", "sooda", "ソーダ"), Triple("に", "ni", "に"), Triple("する", "suru", "する")
+        )
+    }
+
+    @Test
+    fun repeatedLongMarksKeepTheLoanwordsDictionaryForm() {
+        assertDrawnReading("ぱーーてぃーー", "paaatiii", Triple("ぱーーてぃーー", "paaatiii", "パーティー"))
+        val line = "ぱ${"ー".repeat(13)}てぃー"
+        val romaji = "pa${"a".repeat(13)}tii"
+        assertDrawnReading(line, romaji, Triple(line, romaji, "パーティー"))
+    }
+
+    @Test
+    fun aRepeatedOkinawanGreetingKeepsEveryWord() {
+        // The refrain of 金城賢's めんそーれ沖縄.
+        val word = Triple("めんそーれ", "mensoore", "めんそーれ")
+        assertDrawnReading("めんそーれめんそーれめんそーれ", "mensoore mensoore mensoore", word, word, word)
+    }
+
+    @Test
+    fun aSmallHiraganaVowelCanBelongToALoanword() = assertDrawnReading(
+        // The call ending in こんがらがっちゅれーしょん！ by ふぁんたす！.
+        "ふぁんたじーさぁ", "fantajii saa",
+        Triple("ふぁんたじー", "fantajii", "ファンタジー"), Triple("さぁ", "saa", "さあ")
+    )
+
+    @Test
+    fun aCryAtTheEndOfTheLineKeepsItsOwnLookup() = assertDrawnReading(
+        // The shout in Chevon's ダンス・デカダンス.
+        "あーーーー", "aaaaa", Triple("あーーーー", "aaaaa", "あ")
+    )
+
+    @Test
+    fun aDrawnOutAdverbAfterAnotherWordKeepsItsLookup() = assertDrawnReading(
+        // From BRADIO's Feel all right, with どう drawn out as どー.
+        "調子はどーだ", "chooshi wa dooda",
+        Triple("調子", "chooshi", "調子"), Triple("は", "wa", "は"), Triple("どーだ", "dooda", "どう"),
+        typed = "choushi wa dooda"
+    )
+
+    @Test
+    fun theLastNounAndParticleStaySeparateInBothDictionaries() = assertDrawnReading(
+        // From 井上陽水's Mellow touch, with ソーダ in hiragana.
+        "ゆれるクリームそーだに", "yureru kuriimu sooda ni",
+        Triple("ゆれる", "yureru", "ゆれる"), Triple("クリーム", "kuriimu", "クリーム"),
+        Triple("そーだ", "sooda", "ソーダ"), Triple("に", "ni", "に")
+    )
+
+    @Test
+    fun anEnumeratingParticleStaysWholeWhenALoanwordWouldChangeIt() = assertDrawnReading(
+        // From suzunoki's あーだのこーだの.
+        "こーだの言ったって", "koo dano ittatte",
+        Triple("こー", "koo", "こ"), Triple("だの", "dano", "だの"), Triple("言ったって", "ittatte", "言う")
+    )
+
+    @Test
+    fun aThreeKanaCallStaysOutsideTheShortAdverbRule() = assertDrawnReading(
+        // Put an auxiliary after the drawn-out call in KANA-BOON's シルエット to check the length limit.
+        "いっせーだ", "issee da", Triple("いっせー", "issee", "いっす"), Triple("だ", "da", "だ")
+    )
+
+    @Test
+    fun drawnWordSearchKeepsItsTwelveKanaLimit() {
+        // The refrain of Gacharic Spin's ジェネレーションギャップ, in hiragana.
+        assertDrawnReading(
+            "じぇねれーしょんぎゃっぷ", "jenereeshongyappu",
+            Triple("じぇねれーしょんぎゃっぷ", "jenereeshongyappu", "ジェネレーションギャップ")
+        )
+        // The サーティワンアイスクリーム jingle, in hiragana.
+        assertDrawnReading(
+            "さーてぃわんあいすくりーむ", "saa ti wan aisukuriimu",
+            Triple("さー", "saa", "さ"), Triple("てぃ", "ti", "てぃ"), Triple("わん", "wan", "わん"),
+            Triple("あいすくりーむ", "aisukuriimu", "アイスクリーム")
+        )
+    }
+
+    @Test
+    fun drawnWordSearchStopsAtAKatakanaWord() = assertDrawnReading(
+        // The start of the refrain of 二人だけのセレモニー, with パ written as ぱ.
+        "ぱーティーは", "paa tii wa",
+        Triple("ぱー", "paa", "ぱ"), Triple("ティー", "tii", "ティー"), Triple("は", "wa", "は")
+    )
+
+    private fun assertDrawnReading(
+        line: String,
+        romaji: String,
+        vararg words: Triple<String, String, String>,
+        typed: String = romaji
+    ) {
+        fun reading() = Readings.of(listOf(line), Script.JAPANESE).single().let { it.romanized to it.typed }
+        fun groups() = Readings.words(line, Script.JAPANESE).map { Triple(it.text, it.romanized, it.lookup) }
+        val expected = (romaji to typed) to words.toList()
+        assertEquals(listOf(expected, expected), listOf(reading() to groups(), TestUniDic.reading { reading() to groups() }))
+    }
+
+    @Test
     fun romajiCanBeSpelledAsAKeyboardTypesIt() {
         fun read(line: String) = Readings.of(listOf(line), Script.JAPANESE).single()
         // Long vowels as the kana write them, and を as wo; the particles は and へ still wa and e.
@@ -603,7 +820,6 @@ class ReadingsTest {
             assertEquals(line, typed, Readings.of(listOf(line), Script.JAPANESE).single().typed)
             assertEquals(line, typed, TestUniDic.reading { Readings.of(listOf(line), Script.JAPANESE).single().typed })
         }
-        assertTrue(Readings.of(listOf("やっ ほー"), Script.JAPANESE).single().typed.startsWith("ya ho"))
     }
 
     @Test
@@ -621,10 +837,9 @@ class ReadingsTest {
             assertEquals(line, romaji, read(line))
             assertEquals(line, romaji, TestUniDic.reading { read(line) })
         }
-        for (line in listOf("とぅもろー", "とぅるるる")) {
-            assertEquals(line, "tu", read(line).second.take(2))
-            assertEquals(line, "tu", TestUniDic.reading { read(line).second.take(2) })
-        }
+        val sound = "とぅるるる"
+        assertEquals(sound, "tu", read(sound).second.take(2))
+        assertEquals(sound, "tu", TestUniDic.reading { read(sound).second.take(2) })
     }
 
     @Test
@@ -647,10 +862,10 @@ class ReadingsTest {
             // Not a word read right before, ない, split for another: しらな and いい.
             "しらないぃ" to listOf("しらないぃ" to "しる"),
             // A small ぇ after the い row is a sound: ひぇー is a cry, not ひる.
-            "ひぇー" to listOf("ひぇ" to "ひぇ"),
-            "きぇー" to listOf("きぇ" to "きぇ"),
+            "ひぇー" to listOf("ひぇー" to "ひぇ"),
+            "きぇー" to listOf("きぇー" to "きぇ"),
         )
-        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }.filter { it.first != "ー" }
+        fun words(line: String) = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
         for ((line, expected) in lines) {
             assertEquals(line, expected, words(line))
             assertEquals(line, expected, TestUniDic.reading { words(line) })

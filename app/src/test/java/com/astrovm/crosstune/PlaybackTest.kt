@@ -542,7 +542,7 @@ class PlaybackTest {
     fun anEmptyMediaUriLeavesTheTrackIdAvailableToIdentifyTheRecording() {
         allow()
         val id = "1234567890Abcdefghijkl"
-        val opened = song.copy(url = "https://open.spotify.com/track/$id", instrumentalAlbum = "Fixture Album (Instrumentals)")
+        val opened = song.copy(url = "https://open.spotify.com/track/$id", album = "Fixture Album (Instrumentals)")
         val linked = player("com.spotify.music", "Spotify", song.title, song.artist, art = mapOf(
             MediaMetadata.METADATA_KEY_MEDIA_URI to "",
             MediaMetadata.METADATA_KEY_MEDIA_ID to "spotify:track:$id"
@@ -1334,7 +1334,7 @@ class PlaybackTest {
         assertNull(playback.whatPlays())
 
         shadowOf(sessions).addController(player("com.example.music", "Music", song.title, song.artist, album = "Fixture Album"))
-        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertEquals(song.copy(album = "Fixture Album"), playback.nowPlaying()?.metadata)
     }
 
     @Test
@@ -1363,7 +1363,7 @@ class PlaybackTest {
         // Said just now, it's still named, but with no place to follow.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.radio", "Radio", "Blinding Lights", "The Weeknd", album = "Live", at = NOW, position = -1))
-        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertEquals(song.copy(album = "Live"), playback.nowPlaying()?.metadata)
         assertNull(playback.nowPlaying()?.clock)
         assertNull(followed().last())
     }
@@ -1378,7 +1378,7 @@ class PlaybackTest {
         shadowOf(sessions).addController(computer)
         assertNull(playback.nowPlaying())
         shadowOf(sessions).addController(player("com.music", "Music", "Blinding Lights", "The Weeknd", album = "After Hours", at = NOW - 60_000))
-        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertEquals(song.copy(album = "After Hours"), playback.nowPlaying()?.metadata)
     }
 
     @Test
@@ -1400,7 +1400,7 @@ class PlaybackTest {
         // A music player on the computer, shown through KDE Connect (#609): the phone itself is quiet.
         val strawberry = computer("Blinding Lights", "The Weeknd", album = "After Hours")
         shadowOf(sessions).addController(strawberry)
-        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertEquals(song.copy(album = "After Hours"), playback.nowPlaying()?.metadata)
         assertEquals(42_000L, playback.nowPlaying()?.clock?.positionMs)
         assertEquals(song.title, playback.recording(song)?.title)
         // Followed, so its controls reach it.
@@ -1436,7 +1436,7 @@ class PlaybackTest {
         // Cast, the phone itself plays nothing, and the computer's video shown through KDE Connect still isn't it.
         shadowOf(sessions).addController(remote(player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Talk Show - Episode 12", "Fake Channel", at = NOW)))
         shadowOf(sessions).addController(remote(player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours", at = NOW - 60_000)))
-        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertEquals(song.copy(album = "After Hours"), playback.nowPlaying()?.metadata)
         assertEquals(song.title, playback.recording(song)?.title)
 
         // A song the phone itself plays comes first, though the cast one said where it is later.
@@ -1445,7 +1445,7 @@ class PlaybackTest {
         shadowOf(sessions).addController(player("com.music", "Music", "Blinding Lights", "The Weeknd", album = "After Hours", at = NOW - 60_000))
         assertEquals("Save Your Tears", playback.nowPlaying()?.metadata?.title)
         sounding()
-        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertEquals(song.copy(album = "After Hours"), playback.nowPlaying()?.metadata)
     }
 
     @Test
@@ -1481,7 +1481,7 @@ class PlaybackTest {
         sounding()
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours"))
-        assertEquals(Heard.Song(song, appleMusicId = null, offsetMs = 42_000, startedAtMs = PLAYED_AT, app = "com.spotify.music"), playback.nowPlaying())
+        assertEquals(Heard.Song(song.copy(album = "After Hours"), appleMusicId = null, offsetMs = 42_000, startedAtMs = PLAYED_AT, app = "com.spotify.music"), playback.nowPlaying())
     }
 
     @Test
@@ -1496,7 +1496,7 @@ class PlaybackTest {
         assertNull(playback.nowPlaying())
 
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours"))
-        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertEquals(song.copy(album = "After Hours"), playback.nowPlaying()?.metadata)
     }
 
     @Test
@@ -1524,7 +1524,7 @@ class PlaybackTest {
         // A title with a real artist is a song, even one shaped like a recording's name.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.example.player", "Player", "Demo 20230415", "Fake Artist", album = "Fake Album"))
-        assertEquals(MusicMetadata("Demo 20230415", "Fake Artist"), playback.nowPlaying()?.metadata)
+        assertEquals(MusicMetadata("Demo 20230415", "Fake Artist", album = "Fake Album"), playback.nowPlaying()?.metadata)
         assertNull(playback.playingUnnamed())
     }
 
@@ -1532,7 +1532,7 @@ class PlaybackTest {
     fun aRadioSongsTrailingSeparatorDoesNotReachItsLookups() {
         allow()
         sounding()
-        val expected = MusicMetadata("Fake Song", "Fake Artist")
+        val expected = MusicMetadata("Fake Song", "Fake Artist", album = "Fake Radio Stream")
         for (dash in listOf("-", "–", "—")) {
             ShadowMediaSessionManager.reset()
             shadowOf(sessions).addController(player("com.example.radio", "Fake Radio", "Fake Song $dash ", "Fake Artist", album = "Fake Radio Stream"))
@@ -1552,7 +1552,7 @@ class PlaybackTest {
         sounding(false)
         assertNull(playback.nowPlaying())
         sounding()
-        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertEquals(song.copy(album = "After Hours"), playback.nowPlaying()?.metadata)
     }
 
     @Test
@@ -1591,7 +1591,7 @@ class PlaybackTest {
         allow()
         sounding()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Here Comes The Sun - Remastered 2019", "The Beatles", album = "Abbey Road"))
-        assertEquals(MusicMetadata("Here Comes The Sun - Remastered 2019", "The Beatles"), playback.nowPlaying()?.metadata)
+        assertEquals(MusicMetadata("Here Comes The Sun - Remastered 2019", "The Beatles", album = "Abbey Road"), playback.nowPlaying()?.metadata)
     }
 
     @Test
@@ -1624,7 +1624,7 @@ class PlaybackTest {
             ShadowMediaSessionManager.reset()
             shadowOf(sessions).addController(player(music, "YouTube Music", title, artist, album = album, duration = 354_000))
             val now = playback.nowPlaying()
-            assertEquals(title, heard.copy(recordingId = "$music:duration:354000"), now?.metadata)
+            assertEquals(title, heard.copy(recordingId = "$music:duration:354000", album = album), now?.metadata)
             // Where a video is isn't where its song is.
             assertEquals(title, if (album == null) null else 42_000L, now?.offsetMs)
             assertEquals(title, album == null, followed(heard).last()?.video)
@@ -2016,8 +2016,8 @@ class PlaybackTest {
         for (various in listOf("Various Artists", "Varios Artistas", "VA")) {
             ShadowMediaSessionManager.reset()
             shadowOf(sessions).addController(player("com.other.player", "Other", "Vanishing Point - Provision", various, album = "Metal Compilation"))
-            assertEquals(MusicMetadata("Provision", "Vanishing Point"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
-            assertEquals(MusicMetadata("Provision", "Vanishing Point"), playback.recording(MusicMetadata("Provision", "Vanishing Point"))?.copy(lengthMs = null, recordingId = null))
+            assertEquals(MusicMetadata("Provision", "Vanishing Point", album = "Metal Compilation"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+            assertEquals(MusicMetadata("Provision", "Vanishing Point", album = "Metal Compilation"), playback.recording(MusicMetadata("Provision", "Vanishing Point"))?.copy(lengthMs = null, recordingId = null))
         }
         // With no artist in its title either, it plays, but there's nobody to name, so it's listened to.
         ShadowMediaSessionManager.reset()
@@ -2038,7 +2038,7 @@ class PlaybackTest {
         // An artist named as the app that plays them is a song, as "Trust Me" by Pandora in the Pandora app.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.pandora.android", "Pandora", "Trust Me", "Pandora", album = "Fake Album"))
-        assertEquals(MusicMetadata("Trust Me", "Pandora"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertEquals(MusicMetadata("Trust Me", "Pandora", album = "Fake Album"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
         assertNull(playback.playingUnnamed())
         // As Radio Garden names one: the station, where it is as the artist, and no length, as a video has.
         ShadowMediaSessionManager.reset()
@@ -2048,7 +2048,7 @@ class PlaybackTest {
         // A station that sends what it plays, as ICY says it, names the song.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.ilv.vradio", "VRadio", "Fake Artist - Fake Song", "", album = "VRadio"))
-        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist", album = "VRadio"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
         assertNull(playback.playingUnnamed())
     }
 
@@ -2350,19 +2350,19 @@ class PlaybackTest {
         val vlog = { player("com.google.android.youtube", "YouTube", "Fake Vlog Day 3", "Fake Channel", at = PLAYED_AT + 5) }
         shadowOf(sessions).addController(vlog())
         shadowOf(sessions).addController(elsewhere(player("com.spotify.music", "Spotify", "Fake Song", "Fake Band", album = "Fake Album")))
-        assertEquals(MusicMetadata("Fake Song", "Fake Band"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertEquals(MusicMetadata("Fake Song", "Fake Band", album = "Fake Album"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
         assertNull(playback.playingUnnamed())
-        assertEquals(MusicMetadata("Fake Song", "Fake Band"), (playback.whatPlays() as WhatPlays.Named).song.metadata.copy(lengthMs = null))
+        assertEquals(MusicMetadata("Fake Song", "Fake Band", album = "Fake Album"), (playback.whatPlays() as WhatPlays.Named).song.metadata.copy(lengthMs = null))
         // And after a song on a computer.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(vlog())
         shadowOf(sessions).addController(elsewhere(player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Song", "Fake Band", album = "Fake Album")))
-        assertEquals(MusicMetadata("Fake Song", "Fake Band"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertEquals(MusicMetadata("Fake Song", "Fake Band", album = "Fake Album"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
         // A session with no title comes after a song, though it said where it is since.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Fake Song", "Fake Band", album = "Fake Album"))
         shadowOf(sessions).addController(player("com.example.player", "Player", "", null, at = PLAYED_AT + 5))
-        assertEquals(MusicMetadata("Fake Song", "Fake Band"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+        assertEquals(MusicMetadata("Fake Song", "Fake Band", album = "Fake Album"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
         // With nothing else playing, it's what plays.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(vlog())
