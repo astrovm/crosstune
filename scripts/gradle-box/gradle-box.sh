@@ -344,6 +344,9 @@ fi
 if [[ -n ${SYNCREPLAY_DIR:-} ]]; then
     box+=(-v "$SYNCREPLAY_DIR:$SYNCREPLAY_DIR" -e "SYNCREPLAY_DIR=$SYNCREPLAY_DIR")
 fi
+if [[ ${SYNCREPLAY_ACTIVE:-} == 1 ]]; then
+    box+=(-e SYNCREPLAY_ACTIVE=1)
+fi
 # So are SongCheck's, as songs' words are people's and stay out of every checkout (scripts/readingsaudit).
 if [[ -n ${SONGCHECK_DIR:-} ]]; then
     box+=(-v "$SONGCHECK_DIR:$SONGCHECK_DIR")

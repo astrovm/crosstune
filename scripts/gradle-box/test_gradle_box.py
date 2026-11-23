@@ -198,6 +198,12 @@ class GradleBoxTest(unittest.TestCase):
         self.assertIn(f"-v {kept}:{kept}", self.asked()[0])
         self.assertIn(f"-e SYNCREPLAY_DIR={kept}", self.asked()[0])
 
+    def test_replay_opt_in_is_passed_only_when_requested(self):
+        box = self.start("replay", ":app:testDebugUnitTest", SYNCREPLAY_ACTIVE="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertIn("-e SYNCREPLAY_ACTIVE=1", self.asked()[0])
+
     def box_that_runs(self):
         """A podman that runs what the box is asked in its working folder, with a gradlew that says where it ran."""
         podman = self.dir / "bin" / "podman"
@@ -288,6 +294,7 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         output, _ = box.communicate(timeout=20)
         self.assertEqual(box.returncode, 0, output)
         self.assertNotIn("SYNCREPLAY_DIR", self.asked()[0])
+        self.assertNotIn("SYNCREPLAY_ACTIVE", self.asked()[0])
         self.assertNotIn("MATCHCHECK", self.asked()[0])
 
     def test_runs_gradle_in_the_container_with_only_what_it_needs(self):

@@ -376,7 +376,9 @@ class SyncReplayTest(private val name: String, private val index: Int) {
 
     companion object {
         /** Where scripts/syncreplay leaves what to replay, run from the app's own folder or the project's. */
-        private fun replays() = listOf(File("../build/syncreplay"), File("build/syncreplay")).firstOrNull { File(it, "replay.json").exists() }
+        private fun replays() = listOf(File("../build/syncreplay"), File("build/syncreplay")).firstOrNull {
+            System.getenv("SYNCREPLAY_ACTIVE") == "1" && File(it, "replay.json").exists()
+        }
 
         /**
          * Each song asked for: several named in replay.songs, one line each, in replay.json's "songs" in

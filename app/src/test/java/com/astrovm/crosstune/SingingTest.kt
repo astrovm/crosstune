@@ -3,6 +3,8 @@ package com.astrovm.crosstune
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.material3.Text
+import androidx.activity.compose.setContent
 import android.Manifest
 import android.app.Application
 import android.content.Context
@@ -1842,6 +1844,7 @@ class SingingTest {
         val heard = CompletableDeferred<Sung?>()
         singing.answer = { heard.await() }
         openLyrics()
+        TimingLog.clear()
         plays(positionMs = 3_000)
         waitUntil { singing.hears == 1 }
         passes(2_300)
@@ -1853,6 +1856,16 @@ class SingingTest {
         composeRule.waitForIdle()
         passes(1_000)
         assertFalse(TimingLog.lastMinute(), Regex("lit 0 ").containsMatchIn(TimingLog.lastMinute()))
+    }
+
+    @Test
+    fun theFirstHeardLineGoesDarkAfterItEnds() {
+        openLyrics()
+        val following = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), 1f, true), "YouTube Music", canSeek = true)
+        val lines = listOf(LyricLine(0, "A line", endMs = 2_000))
+        composeRule.runOnIdle { checkNotNull(controller).get().setContent { Text(rememberSungLine(lines, following, byEar = true).toString()) } }
+        composeRule.onNodeWithText("0").assertExists()
+        waitUntil { composeRule.onAllNodesWithText("-1").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

@@ -1374,6 +1374,37 @@ class FitsAlongTest(unittest.TestCase):
         self.assertAlmostEqual(10000, r.found_at_rate(song, heard, 9500, 1.05), delta=15)
 
 
+class ReplayRequestTest(unittest.TestCase):
+    def test_replay_requests_in_one_checkout_do_not_overlap(self):
+        entered = threading.Event()
+        release = threading.Event()
+        second = threading.Event()
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.dict(os.environ, {}, clear=True):
+            def first():
+                with r.replay_request():
+                    entered.set()
+                    release.wait(5)
+            def other():
+                with r.replay_request():
+                    second.set()
+            a = threading.Thread(target=first)
+            b = threading.Thread(target=other)
+            a.start()
+            self.assertTrue(entered.wait(5))
+            b.start()
+            self.assertFalse(second.wait(0.2))
+            release.set()
+            a.join(5)
+            b.join(5)
+            self.assertTrue(second.is_set())
+
+    def test_replay_opt_in_is_removed_after_the_request(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.dict(os.environ, {}, clear=True):
+            with r.replay_request():
+                self.assertEqual('1', os.environ['SYNCREPLAY_ACTIVE'])
+            self.assertNotIn('SYNCREPLAY_ACTIVE', os.environ)
+
+
 class PhoneVolumeTest(unittest.TestCase):
     def volumes_with_the_phone_at(self, level):
         """The phone's media volume while the song plays, and after."""

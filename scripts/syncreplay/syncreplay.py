@@ -176,6 +176,23 @@ def own():
     return folder
 
 
+@contextlib.contextmanager
+def replay_request():
+    """Keep a checkout's request and results together, and opt only its Gradle run into replaying."""
+    with open(own() / 'request.lock', 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        previous = os.environ.get('SYNCREPLAY_ACTIVE')
+        os.environ['SYNCREPLAY_ACTIVE'] = '1'
+        try:
+            yield
+        finally:
+            if previous is None:
+                os.environ.pop('SYNCREPLAY_ACTIVE', None)
+            else:
+                os.environ['SYNCREPLAY_ACTIVE'] = previous
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
 def audio(path, kind="f32le"):
     import numpy as np
     raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(path), "-ac", "1", "-ar", "16000", "-f", kind, "-"], capture_output=True, check=True).stdout
@@ -1599,7 +1616,11 @@ def main():
     p.add_argument("--uri", help="what to open in that app instead of the song's link, like a tagged file on the phone")
     p.set_defaults(go=phone)
     args = parser.parse_args()
-    args.go(args)
+    if args.go in (run, run_all):
+        with replay_request():
+            args.go(args)
+    else:
+        args.go(args)
 
 
 if __name__ == "__main__":
