@@ -107,17 +107,13 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     internal fun searched(text: String, offset: Int): List<Token>? = searched(text, offset, HashMap())
 
     private fun searched(text: String, offset: Int, lookups: MutableMap<String, Lookup>): List<Token>? {
-        val work = SearchWork(text.length)
-        return search(text, offset, false, lookups, work) ?: run {
-            work.lattice = ViterbiLattice(text.length + 2).apply { addBos() }
-            search(text, offset, true, lookups, work)
-        }
+        val work = SearchWork()
+        return search(text, offset, false, lookups, work) ?: search(text, offset, true, lookups, work)
     }
 
     private class Lookup(val wordId: Int?)
 
-    private class SearchWork(length: Int) {
-        var lattice = ViterbiLattice(length + 2).apply { addBos() }
+    private class SearchWork {
         val offered = HashSet<ViterbiNode>()
         val bridged = HashMap<ViterbiNode, Pair<Boolean, String>>()
         val starts = HashMap<Pair<Int, Boolean>, List<ViterbiNode>>()
@@ -125,7 +121,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     }
 
     private fun search(text: String, offset: Int, bridge: Boolean, lookups: MutableMap<String, Lookup>, work: SearchWork): List<Token>? {
-        val lattice = work.lattice
+        val lattice = ViterbiLattice(text.length + 2).apply { addBos() }
         val reached = BooleanArray(text.length + 1).also { it[0] = true }
         var unknownEnd = -1
         for (at in text.indices) {

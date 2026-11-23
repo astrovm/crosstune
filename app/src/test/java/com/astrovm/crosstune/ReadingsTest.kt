@@ -896,7 +896,9 @@ class ReadingsTest {
             tokens?.map { listOf(it.surface, it.reading, it.baseForm, it.position.toString(), it.allFeatures) }
         val first = "りゅうっっさくら"
         val second = "きゅうッりい"
-        tokenizer.searched(first, 0)
+        val retry = checkNotNull(tokenizer.searched(first, 0))
+        assertEquals(listOf("りゅうっっ", "さくら"), retry.map { it.surface })
+        assertEquals(listOf(0, 5), retry.map { it.position })
         assertEquals(signature(SmallKanaTokenizer { Readings.oldKana }.searched(second, 0)), signature(tokenizer.searched(second, 0)))
         for (text in listOf(first, second, "にっき", "あ りょこう", "あ りゅうっっさくら")) {
             val atZero = checkNotNull(tokenizer.searched(text, 0))
@@ -904,7 +906,9 @@ class ReadingsTest {
             assertEquals(text, atZero.map { it.position + 11 }, atEleven.map { it.position })
             assertEquals(text, atZero.map { it.surface to it.allFeatures }, atEleven.map { it.surface to it.allFeatures })
         }
-        assertTrue(checkNotNull(tokenizer.searched("あ りょこう", 0)).any { it is SmallKanaTokenizer.JmdictToken && it.position > 0 })
+        val offered = checkNotNull(tokenizer.searched("あ りょこう", 0)).filterIsInstance<SmallKanaTokenizer.JmdictToken>().single()
+        assertEquals(2, offered.position)
+        assertEquals(Tokenizer().tokenize("旅行").single().allFeatures, offered.allFeatures)
         assertTrue(checkNotNull(tokenizer.searched("あ りゅうっっさくら", 0)).any { it is SmallKanaTokenizer.BridgedToken && it.position > 0 })
         val line = "$first $second"
         assertEquals(signature(SmallKanaTokenizer { Readings.oldKana }.tokenize(line)), signature(tokenizer.tokenize(line)))
@@ -929,6 +933,24 @@ class ReadingsTest {
         }
         checkReading()
         TestUniDic.reading { checkReading() }
+    }
+
+    @Test
+    fun aKanaCandidateWithTheWrongWrittenReadingIsNotOffered() {
+        val vocabulary = Readings.OldKana(emptyMap(), setOf("あ"), mapOf("りょこう" to "東京", "にっき" to "東京"))
+        val tokenizer = SmallKanaTokenizer { vocabulary }
+        for (text in listOf("りょこう", "にっき", "あ りょこう", "あ にっき")) {
+            val actual = checkNotNull(tokenizer.searched(text, 0))
+            assertTrue(text, actual.none { it is SmallKanaTokenizer.JmdictToken })
+        }
+    }
+
+    @Test
+    fun aRetrySelectsTheDictionaryPathFromTheStartOfTheLine() {
+        val tokens = checkNotNull(SmallKanaTokenizer { Readings.oldKana }.searched("きょうっっさくら", 0))
+        assertEquals(listOf("きょうっっ", "さくら"), tokens.map { it.surface })
+        assertEquals(listOf(0, 5), tokens.map { it.position })
+        assertEquals("副詞可能", tokens.first().partOfSpeechLevel2)
     }
 
     @Test
