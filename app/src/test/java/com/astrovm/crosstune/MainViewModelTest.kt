@@ -514,6 +514,43 @@ class MainViewModelTest {
     }
 
     @Test
+    fun radioGardenClearsTheHeldTitleBeforeAttachingTheNewWatcher() {
+        val song = MusicMetadata("First Song", "Band")
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1, queueSong = song)
+        val radio = FakePlayback().apply { access = true; unnamed.value = station }
+        val titlesAtAttach = mutableListOf<MusicMetadata?>()
+        var restarting = false
+        lateinit var vm: MainViewModel
+        val source = object : PlaybackSource by radio {
+            override fun hasAccess(): Boolean {
+                if (restarting) titlesAtAttach += vm.uiState.playingUnnamed?.confirmedQueueSong
+                return radio.hasAccess()
+            }
+        }
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"results":[{"trackName":"First Song","artistName":"Band",
+                "trackViewUrl":"https://music.apple.com/us/album/fixture/123?i=456","trackTimeMillis":180000}]}""")
+        }
+        vm = model(playback = source)
+        vm.playingBarInSight(true)
+        val first = vm.viewModelScope.launch { vm.watchPlayingNow() }
+        idle()
+        assertEquals(song, vm.uiState.playingUnnamed?.confirmedQueueSong)
+        first.cancel()
+        idle()
+
+        restarting = true
+        val next = vm.viewModelScope.launch { vm.watchPlayingNow() }
+        try {
+            idle()
+            assertTrue(titlesAtAttach.isNotEmpty())
+            assertNull(titlesAtAttach.first())
+        } finally {
+            next.cancel()
+        }
+    }
+
+    @Test
     fun radioGardenQueueUsesTheExactListenAndExpiryBoundaries() {
         val check = MainViewModel.QueueCheck("1LIVE", 1, MusicMetadata("Song", "Band"), firstSeen = 10_000L)
         check.confirm(180_000L)
