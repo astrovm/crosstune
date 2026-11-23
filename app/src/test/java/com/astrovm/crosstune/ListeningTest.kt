@@ -919,11 +919,11 @@ class ListeningTest {
                     fake.requestedUrls.count { "itunes.apple.com/search?" in it } == 2
             }
             val main = shadowOf(Looper.getMainLooper())
-            main.idleFor(java.time.Duration.ofSeconds(5))
+            main.idleFor(java.time.Duration.ofSeconds(2))
             assertTrue(shown("First Song"))
             answering.countDown()
             waitForText("Second Song")
-            main.idleFor(java.time.Duration.ofSeconds(24))
+            main.idleFor(java.time.Duration.ofSeconds(27))
             assertEquals(0, hearing.listens)
             main.idleFor(java.time.Duration.ofSeconds(2))
             assertEquals(1, hearing.listens)
