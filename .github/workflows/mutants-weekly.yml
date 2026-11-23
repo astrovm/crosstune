@@ -77,6 +77,8 @@ jobs:
     needs: plan
     runs-on: ubuntu-26.04
     timeout-minutes: 300
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     strategy:
       fail-fast: false
       matrix:

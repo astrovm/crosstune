@@ -79,9 +79,10 @@ jobs:
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Main's test cache may hold mirror downloads; resolve the release from Central itself.
       - uses: ./.github/actions/jdk
         with:
-          gradle: read-only
+          gradle: disabled
 
       # The same checks as CI, which also build the minified release APK, plus the App Bundle
       # that Google Play needs.

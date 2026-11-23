@@ -210,6 +210,8 @@ jobs:
     runs-on: ubuntu-26.04
     # Main also warms lint, release builds and PIT on a shared-cache miss.
     timeout-minutes: 30
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     steps:
       # A shallow clone keeps the Git-derived version constant, so task outputs are reused across commits.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -218,6 +220,13 @@ jobs:
 
       - uses: ./.github/actions/jdk
         id: jdk
+
+      # A fresh Gradle home measures whether the test-only mirror can fill the Robolectric cache.
+      - name: Verify a cold mirror download
+        if: github.event_name == 'pull_request'
+        env:
+          GRADLE_USER_HOME: ${{ runner.temp }}/cold-mirror-gradle
+        run: ./gradlew :app:robolectricDeps --info --no-build-cache
 
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
@@ -262,6 +271,8 @@ jobs:
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 15
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -290,6 +301,8 @@ jobs:
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 15
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -323,6 +336,8 @@ jobs:
 
   lint:
     needs: changes
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 30
@@ -446,6 +461,8 @@ jobs:
           submodules: recursive
 
       - uses: ./.github/actions/jdk
+        with:
+          gradle: disabled
 
       # projectM is compiled six times, debug and release for three ABIs, and Gradle can't cache native
       # builds. ccache gives back the same objects for the same source, compiler and flags, so only
@@ -464,7 +481,7 @@ jobs:
           install: binary
 
       - name: Build
-        run: ./gradlew :app:assembleDebug :app:assembleRelease :app:notices --build-cache --configuration-cache
+        run: ./gradlew :app:assembleDebug :app:assembleRelease :app:notices --no-build-cache --info
         env:
           # CMake reads these to put ccache in front of the NDK's compilers. Empty, it uses none.
           CMAKE_C_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
