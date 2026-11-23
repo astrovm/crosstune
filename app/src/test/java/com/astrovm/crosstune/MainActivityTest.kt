@@ -4116,6 +4116,41 @@ class MainActivityTest {
     }
 
     @Test
+    fun audiomackSearchShowsSearchWithoutOfferingPlay() {
+        val service = MusicService.AUDIOMACK
+        val label = string(service.labelRes)
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        val searchUrl = "https://audiomack.com/search?q=Fixture%20Song%20Fixture%20Artist"
+        val playback = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { playback }
+        shadowOf(app.packageManager).installPackage(installedApp(service.packageName, label))
+        linksShowHere()
+        prefs().edit().putString("default_target", service.name).commit()
+        HistoryStore(prefs()).add(
+            HistoryEntry(
+                MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, "https://open.spotify.com/track/$TRACK_ID"),
+                song,
+                mapOf(service.name to PreparedLink(searchUrl, exact = false, matchingEnabled = true)),
+            )
+        )
+        launch()
+        click(string(R.string.history_open, song.title))
+        waitForDestinationReady()
+        composeRule.onNode(
+            hasText(string(R.string.search_button)) and hasAnyAncestor(hasTestTag(RESULT_TAG)),
+            useUnmergedTree = true,
+        ).assertExists()
+        composeRule.onNodeWithContentDescription(string(service.openLabelRes)).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.play_in_background, label)).assertDoesNotExist()
+        click(string(R.string.search_in_destination, label))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = checkNotNull(nextStartedActivity())
+        assertEquals(service.packageName, opened.`package`)
+        assertEquals(searchUrl, opened.dataString)
+        assertTrue(playback.songsAsked.isEmpty())
+    }
+
+    @Test
     fun officialYouTubeMusicOpensFromTheSongAndItsWordsWithoutOfferingPlay() {
         val service = MusicService.YOUTUBE_MUSIC
         val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
