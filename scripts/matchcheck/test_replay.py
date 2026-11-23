@@ -20,6 +20,14 @@ LYRICS_VIDEO = {"id": "Kl5G4bAwpOg", "name": "Lemon - 米津玄師｜歌詞あ�
 
 
 class RightIdsTest(unittest.TestCase):
+    def test_a_longer_medley_with_an_extra_song_is_not_the_three_song_recording(self):
+        song = {"title": "After 5 Crash / Tokyo Tower / Hatsukoi", "artist": "Toshiki Kadomatsu", "native": []}
+        short = {"id": "short", "name": "After 5 Crash / Tokyo Tower / 初恋 - After 5 Crash / Tokyo Tower / Hatsukoi",
+                 "details": ["Toshiki Kadomatsu", "After 5 Crash / Tokyo Tower / Hatsukoi", "6:44"]}
+        long = {"id": "long", "name": "After 5 Crash / Tokyo Tower / 初恋 / I'll Do My Best - After 5 Crash / Tokyo Tower / Hatsukoi / I'll Do My Best",
+                "details": ["Toshiki Kadomatsu", "Inherit The Life II", "10:06"]}
+        self.assertEqual(["short"], replay.right_ids(song, [short, long], []))
+
     def test_the_checked_fairuz_alias_names_only_her_rows(self):
         song = {"title": "Kifak Inta", "artist": "Fairouz", "native": []}
         own = {"id": "own", "name": "Kifak Inta", "details": ["Fairuz", "Kifak Inta", "3:32"]}
