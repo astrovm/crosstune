@@ -642,7 +642,8 @@ class ListeningTest {
     @Test
     fun radioGardenUsesTheHearingClockUntilPlaybackPausesOrChangesSession() {
         val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1)
-        val following = Following(PlaybackClock(30_000, SystemClock.elapsedRealtime()), "Radio Garden", appPackage = station.app, session = 1)
+        val following = Following(PlaybackClock(30_000, SystemClock.elapsedRealtime()), "Radio Garden", canSeek = false,
+            appPackage = station.app, session = 1)
         val radio = FakePlayback().apply { access = true; unnamed.value = station; playing.value = following }
         MainActivity.playbackFactory = { radio }
         val hearing = FakeHearing()
