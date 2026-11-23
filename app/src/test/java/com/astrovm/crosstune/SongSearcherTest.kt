@@ -297,14 +297,14 @@ class SongSearcherTest {
     }
 
     @Test
-    fun theArtistTypedLeadsACoverThatSpellsOutMoreOfIt() {
-        // As Deezer answered on the phone: the song's own title is in Japanese, so the covers
+    fun theArtistTypedLeadsACoverThatSpellsOutASongNamedInAnotherScript() {
+        // As Deezer answered on the phone: the song's own name is in Japanese, so the covers
         // spelling it out in Latin letters had more of what was typed.
         assertEquals(
             listOf(
                 "夜に駆ける" to "YOASOBI",
-                "Idol" to "YOASOBI",
                 "Racing into the Night [Yoru Ni Kaeru]" to "Vangakuz",
+                "Idol" to "YOASOBI",
                 "YOASOBI - Racing Into The Night - 夜に駆ける - Yoru Ni Kakeru [2 pianos version]" to "KayThePianist"
             ),
             foundTitles(
@@ -317,13 +317,48 @@ class SongSearcherTest {
         )
         // "The" needn't be typed.
         assertEquals(
-            listOf("Roxanne" to "The Police", "Roxanne Police Tribute" to "Sting Tribute Band"),
-            foundTitles("Roxanne Police", "Roxanne Police Tribute" to "Sting Tribute Band", "Roxanne" to "The Police")
+            listOf("上を向いて歩こう" to "The Peanuts", "Ue o Muite Arukou" to "Cover Band"),
+            foundTitles("Ue o Muite Arukou Peanuts", "Ue o Muite Arukou" to "Cover Band", "上を向いて歩こう" to "The Peanuts")
+        )
+        // Half an artist's name isn't the artist.
+        assertEquals(
+            listOf("Lemon" to "Cover Band", "レモン" to "Kenshi Yonezu"),
+            foundTitles("Lemon Kenshi", "Lemon" to "Cover Band", "レモン" to "Kenshi Yonezu")
         )
         // An artist written with no letters isn't named by any search.
         assertEquals(
-            listOf("Song" to "Someone", "Song" to "…"),
-            foundTitles("Song", "Song" to "Someone", "Song" to "…")
+            listOf("Song" to "Someone", "歌" to "…"),
+            foundTitles("Song", "Song" to "Someone", "歌" to "…")
+        )
+        // The artist's own music box is still another recording.
+        assertEquals(
+            listOf("Yoru ni Kakeru" to "Someone", "夜に駆ける（オルゴール）" to "YOASOBI"),
+            foundTitles("Yoru ni Kakeru YOASOBI", "Yoru ni Kakeru" to "Someone", "夜に駆ける（オルゴール）" to "YOASOBI")
+        )
+    }
+
+    @Test
+    fun aWordOfTheSongThatsAlsoAnArtistDoesntLeadWithThem() {
+        // "Heart" is a band, but "Heart of Glass" is Blondie's.
+        assertEquals(
+            listOf("Heart of Glass" to "Blondie", "Alone" to "Heart"),
+            foundTitles("Heart of Glass", "Heart of Glass" to "Blondie", "Alone" to "Heart")
+        )
+    }
+
+    @Test
+    fun aSongSaidInPinyinStillLeadsTheArtistTyped() {
+        fake.handler = { request: Request ->
+            val body = when {
+                request.url.queryParameter("country") == "HK" -> jayChou
+                request.url.host == "api.deezer.com" -> deezer("晴天 (Live)" to "Jay Chou", "晴天" to "Jay Chou")
+                else -> """{"results":[]}"""
+            }
+            FakeSpotify.html(request, body)
+        }
+        assertEquals(
+            listOf("晴天" to "周杰倫", "晴天" to "Jay Chou", "晴天 (Live)" to "Jay Chou"),
+            found("qing tian jay chou").map { it.title to it.artist }
         )
     }
 

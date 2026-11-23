@@ -43,15 +43,17 @@ internal class SongSearcher(
                 val found = withTimeoutOrNull(timeoutMs) { answering { itunes(words, PINYIN_STORE) } }.orEmpty()
                 found.filter { song -> Readings.pinyinLetters(SongNames.bareTitle(song.title))?.let { it in typed } == true }
             }
-            val songs = pinyin.await() + deezer.await() + itunes.await()
+            val spoken = pinyin.await()
+            val songs = spoken + deezer.await() + itunes.await()
             // Each service's own repeated name is one song. A karaoke, a cover, a music box
             // or a piano version goes after the artist's own song. Deezer lists those first
             // when the artist is written in their own script, and Apple already has the song.
-            // Then the songs by an artist named in the search: "Yoru ni Kakeru YOASOBI" is
-            // YOASOBI's 夜に駆ける before a cover whose title spells out more of what was typed.
+            // Then the songs found by how their name is said, and those by the artist typed
+            // whose name is in another script: Deezer can't tell "Yoru ni Kakeru YOASOBI" is
+            // YOASOBI's 夜に駆ける, and puts covers that spell the name out ahead of it.
             val typed = SongNames.words(words)
             songs.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
-                .sortedWith(compareBy<MusicMetadata> { anotherRecording(it) }.thenBy { !byArtistTyped(it, typed) })
+                .sortedWith(compareBy<MusicMetadata> { anotherRecording(it) }.thenBy { it !in spoken && !saidOtherwise(it, typed) })
         }
     }
 
@@ -67,9 +69,13 @@ internal class SongSearcher(
         return remakeOfAnotherSong(song.title)
     }
 
-    /** Whether [song]'s artist is named in full among the [typed] words, "The" or not. */
-    private fun byArtistTyped(song: MusicMetadata, typed: Set<String>): Boolean =
-        SongNames.words(SongNames.withoutArticle(song.artist)).let { named -> named.isNotEmpty() && typed.containsAll(named) }
+    /**
+     * Whether [song]'s artist is named in full among the [typed] words, "The" or not, and its name
+     * has no word in Latin letters for them to match. A name in Latin letters is matched as it is.
+     */
+    private fun saidOtherwise(song: MusicMetadata, typed: Set<String>): Boolean =
+        SongNames.words(song.title).isEmpty() &&
+            SongNames.words(SongNames.withoutArticle(song.artist)).let { named -> named.isNotEmpty() && typed.containsAll(named) }
 
     /** "Originally Performed by" names the singer and not the people on the row. */
     private fun creditsTheOriginal(title: String): Boolean =
