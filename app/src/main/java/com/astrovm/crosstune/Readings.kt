@@ -588,7 +588,7 @@ internal object Readings {
     /** Held while [listed] or [oldKana] is read from its file, so two threads that ask at once read it once. */
     private val tables = Any()
 
-    /** Words in kana from JMdict: those a word in old kana alone may be [today], each with the form it's looked up by, and those written with ひ, ふ or ほ today, [modern]. */
+    /** JMdict words for old-kana readings, modern spellings that protect them, and [small] words for tokenizer searches. */
     internal class OldKana(val today: Map<String, String>, val modern: Set<String>, val small: Map<String, String> = emptyMap()) {
         val modernWithHiOrFu = modern.filter { word -> (1..word.lastIndex).any { word[it] in "ひふ" } }.toSet()
         val longest = modern.maxOf { it.length }
