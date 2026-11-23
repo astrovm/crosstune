@@ -906,24 +906,27 @@ class PracticeRemindersTest {
 
     /**
      * A reboot, an update, or a new clock drops both alarms. Android starts the receiver with the
-     * phone's own clock, and each one sets the exact alarm and the spare for the same minute.
+     * phone's clock, and each one sets the exact alarm and the spare for the same minute.
      */
     @Test
     fun everyChangeOfTheClockOrTheAppSetsTheBestAlarmStillAllowed() {
         setUpWith(line("One"))
         val manager = app.getSystemService(AlarmManager::class.java)
-        val minute = requireNotNull(reminders.state.minute)
-        listOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED).forEach { action ->
-            manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
-            manager.cancel(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE)))
-            assertTrue(action, alarms.scheduledAlarms.isEmpty())
-            PracticeReminderReceiver().onReceive(app, Intent(action))
-            val set = alarms.scheduledAlarms
-            val whenDue = nextReminderAt(minute, System.currentTimeMillis(), ZoneId.systemDefault())
-            assertEquals(action, 2, set.size)
-            assertTrue(action, set.all { it.triggerAtMs == whenDue })
-            assertEquals(action, 1, set.count { it.windowLengthMs == 0L })
-            assertTrue(action, set.any { it.windowLengthMs != 0L && it.isAllowWhileIdle })
+        val receiver = PracticeReminderReceiver { PracticeReminders(it, now = { clock }, zone = { zone }) }
+        val actions = listOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED)
+        for ((now, whenDue) in listOf(at(2, 20, 5) to at(3, 20, 5), at(4, 21) to at(4, 20, 5))) {
+            clock = now
+            actions.forEach { action ->
+                manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+                manager.cancel(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE)))
+                assertTrue(action, alarms.scheduledAlarms.isEmpty())
+                receiver.onReceive(app, Intent(action))
+                val set = alarms.scheduledAlarms
+                assertEquals(action, 2, set.size)
+                assertTrue(action, set.all { it.triggerAtMs == whenDue })
+                assertEquals(action, 1, set.count { it.windowLengthMs == 0L })
+                assertTrue(action, set.any { it.windowLengthMs != 0L && it.isAllowWhileIdle })
+            }
         }
     }
 

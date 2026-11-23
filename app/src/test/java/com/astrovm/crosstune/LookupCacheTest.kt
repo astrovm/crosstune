@@ -22,6 +22,17 @@ class LookupCacheTest {
     private fun cache(file: File = this.file) = LookupCache(file, Dispatchers.Unconfined)
 
     @Test
+    fun flushWritesAnAnswerThatHasNotBeenSavedYet() = runBlocking {
+        val cache = cache()
+        cache.put("song", "provisional")
+        assertNull(cache().get("song"))
+
+        cache.flush()
+
+        assertEquals("provisional", cache().get("song"))
+    }
+
+    @Test
     fun discardingAnAnswerThatWasReplacedKeepsTheReplacement() = runBlocking {
         val cache = cache()
         cache.put("song", "old sheet")
