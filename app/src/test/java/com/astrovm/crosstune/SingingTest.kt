@@ -348,7 +348,7 @@ class SingingTest {
     @Test
     fun twoDifferentOffsetsInOnePlayDoNotUseCrossPlayTolerance() {
         playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
-        val times = listOf(10, 13, 16, 38, 41, 44)
+        val times = listOf(4, 7, 10, 32, 35, 38)
         lyricsTimedFor(null, times)
         singing.answer = {
             when (singing.hears) {
@@ -360,7 +360,7 @@ class SingingTest {
         openLyrics()
         plays(positionMs = 3_000)
         waitUntil { singing.hears == 1 }
-        passes(35_000)
+        passes(30_000)
         waitUntil { singing.hears >= 2 }
         composeRule.waitForIdle()
         assertFalse(model().uiState.lyricsSynced)
