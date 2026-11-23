@@ -70,7 +70,7 @@ jobs:
       - uses: ./.github/actions/jdk
         with:
           # The generated lists ship in the app, so do not use the test cache's mirror downloads.
-          gradle: disabled
+          gradle: central
           kotlinc: true
 
       - name: Test the scripts

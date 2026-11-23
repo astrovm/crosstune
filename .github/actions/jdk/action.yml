@@ -6,8 +6,8 @@ description: >-
 inputs:
   gradle:
     description: >-
-      Gradle's caches: read-write or read-only restore the shared dependencies, disabled skips caching,
-      and none is for a job that runs no Gradle. Main's test job saves the shared dependencies.
+      Gradle's caches: read-write or read-only restore test dependencies, central restores only Central
+      dependencies, disabled skips caching, and none is for a job that runs no Gradle.
     default: read-write
   kotlinc:
     description: true fetches the Kotlin compiler's jars into build/kotlinc, for the readings guard and syncreplay.
@@ -40,6 +40,15 @@ runs:
       shell: bash
       run: python3 scripts/kotlinc/kotlinc.py fetch
 
+    # Test jobs may use the mirror cache. Anything that ships uses only the separate Central cache.
+    - if: inputs.gradle == 'central'
+      shell: bash
+      run: |
+        if [[ ${CROSSTUNE_MAVEN_MIRROR:-} == true ]]; then
+          echo '::error::The Central cache cannot be used with the Maven mirror.'
+          exit 1
+        fi
+
     # Old per-job dependencies can restore until main saves new entries; those exclude them.
     - if: inputs.gradle == 'read-write'
       uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
@@ -52,14 +61,20 @@ runs:
         cache-read-only: true
         gradle-home-cache-excludes: caches/modules-2
 
+    # The enhanced provider can restore old mirror entries even when excluded from new saves.
+    - if: inputs.gradle == 'central'
+      uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      with:
+        cache-provider: external
+
     # A new month starts with an empty cache so fallback keys cannot carry old artifacts forever.
-    - if: inputs.gradle == 'read-write' || inputs.gradle == 'read-only'
+    - if: inputs.gradle == 'read-write' || inputs.gradle == 'read-only' || inputs.gradle == 'central'
       id: cache-period
       shell: bash
       run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
 
     # Restore the shared set after setup-gradle's other caches.
-    - if: inputs.gradle == 'read-write' || inputs.gradle == 'read-only'
+    - if: inputs.gradle == 'read-write' || inputs.gradle == 'read-only' || inputs.gradle == 'central'
       id: dependencies
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
@@ -67,20 +82,20 @@ runs:
           ~/.gradle/caches/modules-2
           !~/.gradle/caches/modules-2/modules-2.lock
           !~/.gradle/caches/modules-2/gc.properties
-        # A changed build file or gradle.properties gets a fresh key. Bump v2 if a repository
+        # A changed build file or gradle.properties gets a fresh key. Bump v3 if a repository
         # changes an artifact without changing those files, since an exact hit cannot be updated.
-        key: gradle-shared-dependencies-v2-${{ runner.os }}-${{ steps.cache-period.outputs.month }}-${{ hashFiles('**/*.gradle*', '**/gradle.properties', '**/gradle-wrapper.properties', 'gradle/*.versions.toml', '**/versions.properties', '.github/workflows/*.yml', '.github/actions/jdk/action.yml') }}
-        restore-keys: gradle-shared-dependencies-v2-${{ runner.os }}-${{ steps.cache-period.outputs.month }}-
+        key: gradle-${{ inputs.gradle == 'central' && 'central' || 'mirror' }}-dependencies-v3-${{ runner.os }}-${{ steps.cache-period.outputs.month }}-${{ hashFiles('**/*.gradle*', '**/gradle.properties', '**/gradle-wrapper.properties', 'gradle/*.versions.toml', '**/versions.properties', '.github/workflows/*.yml', '.github/actions/jdk/action.yml') }}
+        restore-keys: gradle-${{ inputs.gradle == 'central' && 'central' || 'mirror' }}-dependencies-v3-${{ runner.os }}-${{ steps.cache-period.outputs.month }}-
 
     - if: inputs.gradle == 'disabled'
       uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       with:
         cache-disabled: true
 
-    - if: ${{ !contains(fromJSON('["read-write", "read-only", "disabled", "none"]'), inputs.gradle) }}
+    - if: ${{ !contains(fromJSON('["read-write", "read-only", "central", "disabled", "none"]'), inputs.gradle) }}
       shell: bash
       env:
         GRADLE: ${{ inputs.gradle }}
       run: |
-        echo "::error::gradle is read-write, read-only, disabled or none, not '$GRADLE'"
+        echo "::error::gradle is read-write, read-only, central, disabled or none, not '$GRADLE'"
         exit 1

@@ -445,7 +445,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    # Main also fills the Central-only release cache on a miss.
+    timeout-minutes: ${{ github.event_name == 'push' && 60 || 20 }}
+    env:
+      CROSSTUNE_MAVEN_MIRROR: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -454,6 +457,9 @@ jobs:
           submodules: recursive
 
       - uses: ./.github/actions/jdk
+        id: jdk
+        with:
+          gradle: ${{ github.event_name == 'pull_request' && 'read-only' || 'central' }}
 
       # projectM is compiled six times, debug and release for three ABIs, and Gradle can't cache native
       # builds. ccache gives back the same objects for the same source, compiler and flags, so only
@@ -483,6 +489,21 @@ jobs:
       # F-Droid ships the GitHub APK only when its own build of the tag, in other folders, matches it.
       - name: Check the native library doesn't depend on where it's built
         run: python3 scripts/release/check_native_paths.py
+
+      # The release runs the full checks and bundle; save their Central dependencies for it on main.
+      - name: Resolve release dependencies
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
+        run: ./gradlew :app:ci :app:bundleRelease :app:cachePitestDependencies --build-cache --configuration-cache
+
+      - name: Save Central dependencies
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            !~/.gradle/caches/modules-2/modules-2.lock
+            !~/.gradle/caches/modules-2/gc.properties
+          key: ${{ steps.jdk.outputs.dependencies-key }}
 
   required-ci:
     name: CI / Required

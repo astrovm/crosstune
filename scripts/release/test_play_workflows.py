@@ -35,14 +35,16 @@ class PlayWorkflowsTest(unittest.TestCase):
     def test_release_builds_do_not_use_the_ci_mirror_or_its_cache(self):
         release_text = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
         self.assertNotIn("CROSSTUNE_MAVEN_MIRROR", release_text)
-        self.assertNotIn("CROSSTUNE_MAVEN_MIRROR", (ROOT / ".github/actions/jdk/action.yml").read_text(encoding="utf-8"))
+        action = (ROOT / ".github/actions/jdk/action.yml").read_text(encoding="utf-8")
+        self.assertNotRegex(action, r"(?m)^\s*CROSSTUNE_MAVEN_MIRROR\s*:")
+        self.assertIn('${CROSSTUNE_MAVEN_MIRROR:-}', action)
+        self.assertRegex(action, r"(?s)if: inputs\.gradle == 'central'\n\s+uses: gradle/actions/setup-gradle@[^\n]+\n\s+with:\n\s+cache-provider: external")
         release = jobs(release_text)
-        for name in ("build", "rebuild"):
-            with self.subTest(job=name):
-                self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: disabled", release[name])
+        self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: central", release["build"])
+        self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: disabled", release["rebuild"])
         jmdict = (WORKFLOWS / "jmdict.yml").read_text(encoding="utf-8")
         self.assertNotIn("CROSSTUNE_MAVEN_MIRROR", jmdict)
-        self.assertIn("gradle: disabled", jobs(jmdict)["remake"])
+        self.assertIn("gradle: central", jobs(jmdict)["remake"])
 
     def test_release_keeps_the_supported_signature_and_uses_checked_verifier_wheels(self):
         release = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))

@@ -82,7 +82,7 @@ jobs:
       # Main's test cache may hold mirror downloads; resolve the release from Central itself.
       - uses: ./.github/actions/jdk
         with:
-          gradle: disabled
+          gradle: central
 
       # The same checks as CI, which also build the minified release APK, plus the App Bundle
       # that Google Play needs.
