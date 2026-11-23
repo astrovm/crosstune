@@ -1170,7 +1170,7 @@ internal class MainViewModel(
                 uiState = uiState.copy(resultInApp = null)
                 if (target != null) {
                     val (song, app) = target
-                    source.follow(song, app).map { it?.appPackage == app }.distinctUntilChanged().collect { hasSong ->
+                    followResultSession(source, song, app).map { it != null }.distinctUntilChanged().collect { hasSong ->
                         uiState = uiState.copy(resultInApp = target.takeIf { hasSong })
                     }
                 }
@@ -1179,6 +1179,20 @@ internal class MainViewModel(
             uiState = uiState.copy(resultInApp = null)
         }
     }
+
+    private fun followResultSession(source: PlaybackSource, song: MusicMetadata, app: String): Flow<Following?> {
+        val installed = interception::isInstalled
+        val packages = MusicService.ofOwnApp(app)?.appPackages.orEmpty()
+            .filter { installed(it) && sameApp(app, it, installed) }.ifEmpty { listOf(app) }
+        return combine(packages.map { source.follow(song, it) }) { sessions ->
+            sessions.filterNotNull().filter { it.canContinueIn(app) }.maxByOrNull { it.clock.playing }
+        }
+    }
+
+    /** A song paused in its final second can be opened again from its link. */
+    private fun Following.canContinueIn(app: String?): Boolean =
+        sameApp(app, appPackage, interception::isInstalled) &&
+            (clock.playing || durationMs?.let { clock.positionMs < it - RESUME_END_MARGIN_MS } != false)
 
     /**
      * Follows the last thing an app played with no song named in that app, for the bar's buttons and where it is,
@@ -2132,10 +2146,9 @@ internal class MainViewModel(
         val opensToStart = destination.opensAppToStartSong(uiState.phone)
         if (!opensToStart) openPlayer(song, app, link)
         // Already in that app, playing or paused, it carries on from where it is.
-        val there = source?.takeIf { it.hasAccess() }?.follow(song, app.takeIf { opensToStart })?.first()
-            ?.takeIf { sameApp(app, it.appPackage, interception::isInstalled) }
+        val there = source?.takeIf { it.hasAccess() }?.let { followResultSession(it, song, app).first() }
         if (there != null) {
-            if (opensToStart) openPlayer(song, app, link)
+            if (opensToStart) openPlayer(song, there.appPackage, link, session = there.session)
             if (!there.clock.playing) source.playPause(song, true, there.appPackage, there.session)
             return
         }
@@ -2238,12 +2251,12 @@ internal class MainViewModel(
     private var playerJob: Job? = null
 
     /** Opens the player on [song], asked of [app] at [link], and follows it there as it plays; [unnamed] when it names no song. */
-    private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false, unnamed: Unnamed? = null) {
+    private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false, unnamed: Unnamed? = null, session: Int? = unnamed?.session) {
         // The app may be on another song as it's asked, which isn't the one it goes on to play.
         val over = playback?.takeIf { !played && it.hasAccess() }?.nowPlaying()?.takeIf { sameApp(app, it.app, interception::isInstalled) }?.metadata
         val stationApp = unnamed?.takeUnless { it.reportsState }?.let { it.label ?: it.app }
         uiState = uiState.copy(
-            player = PlayerState(song, app, link, played = played, over = over, songless = unnamed != null, stationAppLabel = stationApp, session = unnamed?.session),
+            player = PlayerState(song, app, link, played = played, over = over, songless = unnamed != null, stationAppLabel = stationApp, session = session),
             canFollowApps = playback?.hasAccess() == true
         )
         followPlayer()
@@ -2542,7 +2555,7 @@ internal class MainViewModel(
         // Already in that app, playing or paused, it's brought forward, not asked for again, which would restart it.
         // Only a song plays: an album or a playlist named as the song playing opens as itself.
         val there = uiState.result?.takeIf { tapped && it.type == ItemType.TRACK }?.let { song ->
-            playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(destination.packageName, it.appPackage, interception::isInstalled) }
+            playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { it.canContinueIn(destination.packageName) }
         }
         if (there?.appPackage != null) return effectChannel.send(Effect.Show(there.appPackage, finishAfterOpen))
         effectChannel.send(opening(url, destination.packageName, finishAfterOpen))
@@ -6440,6 +6453,7 @@ internal class MainViewModel(
         /** How many times, and how long apart, setup in one tap looks for lyrics being let follow music apps. */
         private const val FOLLOW_WAITS = 10
         private const val FOLLOW_WAIT_MS = 100L
+        private const val RESUME_END_MARGIN_MS = 1_000L
         private const val KEY_SETUP_COMPLETE = "setup_complete"
 
         /** Preferences only an install from before first-run setup can have. */

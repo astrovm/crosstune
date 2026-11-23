@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -4505,6 +4506,77 @@ class MainViewModelTest {
         assertEquals(ytLink, opened.url)
         assertTrue(playback.songsAsked.isEmpty())
         assertNull(model.uiState.player)
+    }
+
+    @Test
+    fun anAbsentOfficialDestinationResumesThePausedBuildThatStandsInForIt() {
+        val playback = FakePlayback().apply { access = true }
+        val sessionNumber = 23
+        val source = object : PlaybackSource by playback {
+            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> {
+                val wanted = if (session == sessionNumber) morpheMusic else app
+                return playback.follow(song, wanted, session).map { it?.takeIf { wanted == null || it.appPackage == wanted } }
+            }
+        }
+        val model = ytMusicModel(source, packageName = morpheMusic)
+        val official = Destination.Service(MusicService.YOUTUBE_MUSIC)
+        model.selectResultDestination(official)
+        assertEquals(official, model.uiState.resultDestination)
+        val morphe = MutableStateFlow<Following?>(null)
+        playback.appPlaying[morpheMusic] = morphe
+        // The exact-package follow must find the paused build even when another app plays the song.
+        appPlays(playback, packageName = MusicService.SPOTIFY.packageName)
+        val watching = model.viewModelScope.launch { model.watchPlayingNow() }
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        try {
+            idle()
+            assertFalse(model.uiState.canPlayResult)
+            morphe.value = Following(PlaybackClock(60_000, 0, playing = false), "YT Music Morphe", canSeek = true,
+                appPackage = morpheMusic, session = sessionNumber)
+            until("the build's paused song can play") { model.uiState.canPlayResult }
+            model.playResult()
+            until("the same session resumes") { playback.plays.isNotEmpty() }
+            assertEquals(listOf(morpheMusic), playback.playedApps.toList())
+            assertEquals(listOf(sessionNumber), playback.playedSessions.toList())
+            until("the player follows that session") { model.uiState.player?.following?.appPackage == morpheMusic }
+            assertTrue(effects.isEmpty())
+            assertTrue(playback.songsAsked.isEmpty())
+        } finally {
+            watching.cancel()
+        }
+    }
+
+    @Test
+    fun aSongPausedAtItsEndOpensOnItsLink() {
+        val playback = FakePlayback().apply { access = true }
+        val model = ytMusicModel(playback)
+        val watching = model.viewModelScope.launch { model.watchPlayingNow() }
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        try {
+            val beforeEnd = Following(PlaybackClock(198_999, 0, playing = false), "YouTube Music", canSeek = true,
+                appPackage = ytMusic, durationMs = 200_000)
+            playback.playing.value = beforeEnd
+            until("a song that can still resume") { model.uiState.canPlayResult }
+
+            playback.playing.value = beforeEnd.copy(clock = beforeEnd.clock.copy(positionMs = 199_000))
+            idle()
+            assertFalse(model.uiState.canPlayResult)
+            model.playResult()
+            until("the asked recording opens") { effects.isNotEmpty() }
+            val opened = effects.single() as Effect.Open
+            assertEquals(ytMusic, opened.packageName)
+            assertEquals(ytLink, opened.url)
+            assertTrue(playback.plays.isEmpty())
+            assertNull(model.uiState.player)
+            effects.clear()
+            model.openResult()
+            until("Open also starts from the asked link") { effects.isNotEmpty() }
+            assertEquals(ytLink, (effects.single() as Effect.Open).url)
+        } finally {
+            watching.cancel()
+        }
     }
 
     @Test
