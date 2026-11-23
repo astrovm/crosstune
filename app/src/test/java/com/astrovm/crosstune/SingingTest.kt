@@ -986,6 +986,28 @@ class SingingTest {
     }
 
     @Test
+    fun farHearingsThatDifferByMoreThanTheirUncertaintyDoNotConfirm() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        openLyrics()
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        plays(positionMs = 61_000, playing = false)
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        singing.answer = { sungAt(times, times.map { -24_000L }) }
+        plays(positionMs = 101_000)
+        passes(1_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
     fun aLaterNearHearingDiscardsUnconfirmedFarEvidence() {
         playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
         lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
@@ -1067,6 +1089,7 @@ class SingingTest {
         waitUntil { singing.hears == 1 }
         composeRule.waitForIdle()
         assertFalse(prefs().contains("lyrics_sync"))
+        assertEquals(9_647L, LyricsSyncStore(prefs()).pending(checkNotNull(model().uiState.lyricsFor), model().uiState.lyricLines)?.offsetMs)
         plays(positionMs = 53_505, playing = false)
         composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
         waitUntil { model().uiState.lyricLines.size == lines.size }

@@ -3566,8 +3566,10 @@ internal class MainViewModel(
     private fun pendingAgrees(song: MusicMetadata, current: PendingShift, whole: Boolean): Boolean {
         if (!whole || !mayKeepPending()) return false
         val previous = syncStore.pending(song, foundLines) ?: return false
+        // Allow a second's uncertainty for each hearing when comparing two independent estimates.
+        val tolerance = maxOf(2 * SUNG_OFF_MS, agreeingMs(current.offsetMs))
         return abs(previous.fromMs - current.fromMs) >= SingingListener.SECONDS * 1000L &&
-            abs(previous.offsetMs - current.offsetMs) < agreeingMs(current.offsetMs)
+            abs(previous.offsetMs - current.offsetMs) < tolerance
     }
 
     private fun rememberPending(song: MusicMetadata, pending: PendingShift) {
