@@ -1333,10 +1333,11 @@ def held_to_main(args, rows):
     """With --write-main, [rows]' lines within ON_TIME_UNTIMED_S are kept as main's, for the replay run this way;
     otherwise, when main's are kept for it, the lines main had right and doesn't now are shown."""
     key = untimed_key(args)
-    stored = json.loads(UNTIMED_MAIN.read_text()) if UNTIMED_MAIN.exists() else {}
+    baseline = Path(args.baseline) if args.baseline else UNTIMED_MAIN
+    stored = json.loads(baseline.read_text()) if baseline.exists() else {}
     if args.write_main:
         stored[key] = {**stored.get(key, {}), **{song: row["right"] for song, row in rows.items()}}
-        UNTIMED_MAIN.write_text(json.dumps(stored, indent=1, sort_keys=True) + "\n")
+        baseline.write_text(json.dumps(stored, indent=1, sort_keys=True) + "\n")
     elif key in stored:
         print_against_main(against_main(stored[key], rows), args.verbose)
 
@@ -1527,6 +1528,7 @@ def main():
     p.add_argument("--part", type=part_arg, help="tune: the songs a change is tuned on; held: those it's then checked on; K/N: part K of N, by song ID")
     p.add_argument("--timing", help="another SungTiming.kt to replay, as main's")
     p.add_argument("--write-main", action="store_true", help="keep the lines this run puts within 1 s as main's, in untimed-main.json")
+    p.add_argument('--baseline', help='read or write main results in this file instead of untimed-main.json')
     p.set_defaults(go=untimed)
     p = steps.add_parser("synthetic", help="made-up lines heard a word at a time, each writing at each pace")
     p.add_argument("--timing", help="another SungTiming.kt to score, as main's")

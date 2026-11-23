@@ -263,7 +263,7 @@ class AgainstMainTest(unittest.TestCase):
     """Each run held to the lines main put within 1 s, run the same way: right on main and wrong or dark now."""
 
     def run_as(self, **given):
-        return argparse.Namespace(**{**dict(start=0, work=4500, again=None, heard='', nearest=False, write_main=False, verbose=False), **given})
+        return argparse.Namespace(**{**dict(start=0, work=4500, again=None, heard='', nearest=False, write_main=False, verbose=False, baseline=None), **given})
 
     def test_a_run_is_kept_by_how_it_was_run(self):
         self.assertEqual(r.untimed_key(self.run_as()), 'from 0 work 4500')
@@ -286,6 +286,16 @@ class AgainstMainTest(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()) as shown:
                 r.held_to_main(self.run_as(work=3000), dict(a=dict(right=[], put=[1])))
             self.assertEqual(shown.getvalue(), '')
+
+    def test_a_fresh_reference_can_be_kept_separately_from_the_historical_one(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'UNTIMED_MAIN', Path(directory) / 'old.json'):
+            fresh = Path(directory) / 'fresh.json'
+            r.UNTIMED_MAIN.write_text(json.dumps({'from 0 work 4500': {'a': [9]}}))
+            r.held_to_main(self.run_as(write_main=True, baseline=str(fresh)), dict(a=dict(right=[1], put=[1])))
+            with contextlib.redirect_stdout(io.StringIO()) as shown:
+                r.held_to_main(self.run_as(baseline=str(fresh)), dict(a=dict(right=[], put=[1])))
+            self.assertIn('right on main, wrong now: 1', shown.getvalue())
+            self.assertEqual(json.loads(r.UNTIMED_MAIN.read_text()), {'from 0 work 4500': {'a': [9]}})
 
     def test_another_timing_takes_the_checkouts_place(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
