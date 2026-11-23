@@ -21,7 +21,9 @@ internal object RecordingKey {
     }
 
     /** Whether the player or link identifies a recording, rather than only naming the song. */
-    fun identifiesRecording(song: MusicMetadata): Boolean = !song.recordingId.isNullOrBlank() || track(song.url) != null
+    fun identifiesRecording(song: MusicMetadata): Boolean = song.recordingId?.takeIf { it.isNotBlank() }?.let {
+        !it.substringAfter(':').startsWith("duration:")
+    } ?: (track(song.url) != null)
 
     /** Words from another take can only be borrowed offline within the same instrumental album, or with none known for either. */
     fun sameInstrumentalAlbum(key: String, song: MusicMetadata): Boolean =

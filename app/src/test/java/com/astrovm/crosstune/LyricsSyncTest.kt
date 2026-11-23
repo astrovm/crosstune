@@ -216,6 +216,7 @@ class LyricsSyncTest {
         val store = LyricsSyncStore(prefs)
         val song = song.copy(recordingId = "player:one")
         assertNull(store.pending(song, lines))
+        assertFalse(RecordingKey.identifiesRecording(song.copy(recordingId = "player:duration:180000")))
         store.rememberPending(song, lines, PendingShift(22_000, 40_000))
         assertEquals(PendingShift(22_000, 40_000), LyricsSyncStore(prefs).pending(song, lines))
         assertNull(store.pending(song, lines.dropLast(1)))

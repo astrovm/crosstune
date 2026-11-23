@@ -941,6 +941,7 @@ class SingingTest {
 
     @Test
     fun aFarHearingIsConfirmedByAnotherPartAfterReopening() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
         lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
         val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
         lyricsTimedFor(null, times)
@@ -948,6 +949,8 @@ class SingingTest {
         openLyrics()
         plays(positionMs = 61_000)
         waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        assertTrue("The song must identify its recording: ${model().uiState.lyricsFor}", RecordingKey.identifiesRecording(checkNotNull(model().uiState.lyricsFor)))
+        assertTrue("The first hearing must be retained", prefs().contains("lyrics_sync_pending"))
         plays(positionMs = 61_000, playing = false)
         composeRule.runOnIdle { model().dismissLyrics() }
         assertFalse(prefs().contains("lyrics_sync"))
@@ -965,6 +968,7 @@ class SingingTest {
 
     @Test
     fun hearingTheSameFarWindowAfterReopeningDoesNotConfirmIt() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
         val times = listOf(60, 63, 66, 90, 93, 96)
         lyricsTimedFor(null, times)
         singing.answer = { sungAt(times, times.map { -27_400L }) }
@@ -983,6 +987,7 @@ class SingingTest {
 
     @Test
     fun aLaterNearHearingDiscardsUnconfirmedFarEvidence() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
         lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
         val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
         lyricsTimedFor(null, times)
