@@ -4,8 +4,8 @@
 # and gives the new from: to set once the block is translated again.
 
 JMdict
-from: e24ab7fdbdb1
-note: Gli elenchi di parole che Crosstune ha fatto con JMdict sono modificati. Le letture: solo parole di due o più kanji che JMdict legge in un solo modo, dove Crosstune le legge in un altro. Le parole in kana: solo quelle comuni con い o う dopo il primo kana, ognuna con il modo in cui si cerca, e quelle con ひ o ふ in quel punto. Anche loro sono sotto CC BY-SA 4.0. Qui sotto ci sono la licenza del Group (https://www.edrdg.org/edrdg/licence.html), la licenza CC BY-SA 4.0 e la documentazione di JMdict.
+from: 93aaea2be9a2
+note: Gli elenchi di parole che Crosstune ha fatto con JMdict sono modificati. Le letture: solo parole che JMdict legge in un modo e Crosstune in un altro. Le parole in kana: parole per riconoscere le grafie antiche e parole comuni con kana piccoli per le ricerche. Anche loro sono sotto CC BY-SA 4.0. Qui sotto ci sono la licenza del Group (https://www.edrdg.org/edrdg/licence.html), la licenza CC BY-SA 4.0 e la documentazione di JMdict.
 
 Kuromoji
 from: 962013f376a7

@@ -16,7 +16,7 @@ internal enum class Script(val glyph: String) {
 
 /**
  * What gave a word its reading, as a report on a wrong one names it by [key]: for Japanese, the
- * dictionaries on the phone, IPADIC and UniDic, JMdict's words of more than one kanji, Crosstune's own rules (二人 as ふたり, 側 as そば),
+ * dictionaries on the phone, IPADIC and UniDic, JMdict's words, Crosstune's own rules (二人 as ふたり, 側 as そば),
  * the lyrics' own reading in brackets, UtaTen's sung readings, ChatGPT's, or the user's own on a
  * kept line; for Chinese, Android's pinyin; for Korean, Crosstune's romaja; for the rest, Android's
  * Latin letters.
@@ -108,8 +108,9 @@ internal object Readings {
      * 13 for any word in kana IPADIC starts on a small kana, じゅぎょう and いっしょ, and the small vowels that draw a word out, ありがとぉ.
      * 14 for a drawn-out よ after a connective, まってよぉ, looked up as the ending particle.
      * 15 for a long mark or a small vowel that draws out a word IPADIC split.
+     * 16 for a word before small っ that left the tokenizer with no way through.
      */
-    const val VERSION = 15
+    const val VERSION = 16
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -368,18 +369,20 @@ internal object Readings {
     private fun ipadicPiece(line: String, token: com.atilika.kuromoji.ipadic.Token, offset: Int): Piece {
         // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
         val reading = token.reading?.takeIf { it != "*" }
+        val bridge = token as? SmallKanaTokenizer.BridgedToken
+        val ending = bridge?.ending?.let(::hiragana).orEmpty()
         val start = offset + token.position
         val end = start + token.surface.length
         return Piece(
             line.substring(start, end),
-            reading?.let(::hiragana) ?: token.surface,
+            reading?.let { hiragana(it) + ending } ?: token.surface,
             token.partOfSpeechLevel1,
             token.partOfSpeechLevel2,
             token.baseForm?.takeIf { it != "*" } ?: token.surface,
-            token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) },
+            token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) + ending },
             end,
             unread = reading == null,
-            reader = if (token is SmallKanaTokenizer.JmdictToken) Reader.JMDICT else Reader.IPADIC
+            reader = if (token is SmallKanaTokenizer.JmdictToken || bridge?.jmdict == true) Reader.JMDICT else Reader.IPADIC
         )
     }
 
@@ -585,11 +588,15 @@ internal object Readings {
     /** Held while [listed] or [oldKana] is read from its file, so two threads that ask at once read it once. */
     private val tables = Any()
 
-    /** Words in kana from JMdict: those a word in old kana alone may be [today], each with the form it's looked up by, and those written with ひ, ふ or ほ today, [modern]. */
-    internal class OldKana(val today: Map<String, String>, val modern: Set<String>) {
+    /** JMdict words for old-kana readings, modern spellings that protect them, and [small] words for tokenizer searches. */
+    internal class OldKana(val today: Map<String, String>, val modern: Set<String>, small: Map<String, String> = emptyMap()) {
         val modernWithHiOrFu = modern.filter { word -> (1..word.lastIndex).any { word[it] in "ひふ" } }.toSet()
         val longest = modern.maxOf { it.length }
         val longestToday = today.keys.maxOfOrNull { it.length } ?: 0
+        val search = small + today
+        val longestSearch = search.keys.maxOfOrNull { it.length } ?: 0
+        val smallByPrefix = small.keys.filter { it.length >= 2 }.groupBy { (it[0].code shl 16) or it[1].code }
+            .mapValues { (_, words) -> words.sortedByDescending { it.length } }
     }
 
     /**
@@ -603,8 +610,10 @@ internal object Readings {
         get() = oldKanaRead ?: synchronized(tables) { oldKanaRead ?: readOldKana().also { oldKanaRead = it } }
 
     private fun readOldKana(): OldKana = checkNotNull(Readings::class.java.getResourceAsStream(OLD_KANA_WORDS)).bufferedReader().useLines { lines ->
-        val (today, modern) = lines.filterNot { it.startsWith('#') }.partition { '\t' in it }
-        OldKana(today.associate { it.substringBefore('\t') to it.substringAfter('\t') }, modern.toSet())
+        val (small, rest) = lines.filterNot { it.startsWith('#') }.partition { it.startsWith('+') }
+        val (today, modern) = rest.partition { '\t' in it }
+        OldKana(today.associate { it.substringBefore('\t') to it.substringAfter('\t') }, modern.toSet(),
+            small.associate { it.substringAfter('+').substringBefore('\t') to it.substringAfter('\t') })
     }
 
     private const val OLD_KANA_WORDS = "/com/astrovm/crosstune/old-kana.txt"
@@ -983,6 +992,7 @@ internal object Readings {
             // A prefix of kanji goes before a word with kanji, 今世紀 or 前前前世; before one in kana, 今となり, it's a word.
             val strayBefore = last?.takeIf { it.kind == "接頭詞" && it.surface.all(::isHan) && piece.surface.none(::isHan) }?.let { alone(it.surface) }
             val next = pieces.getOrNull(index + 1)
+            val inflected = last?.let { inflectedCompound(it, piece, next) }
             // A suffix said with a voice after a word it can't be part of is the noun it is alone: いつか日, 一度星.
             val apart = last?.takeIf { standsApart(it, piece) }?.let { alone(piece.surface) }
             // A noun said with a voice after a number and a counter: 千本桜 せんぼんざくら, 二枚刃 にまいば.
@@ -990,6 +1000,7 @@ internal object Readings {
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
             when {
+                inflected != null -> out[out.lastIndex] = inflected
                 word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般", reader = Reader.RULES)
                 last != null && count != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, count, "名詞", "一般", reader = Reader.RULES)
                 tenth -> out += piece.read("ぶ")
@@ -1040,6 +1051,17 @@ internal object Readings {
             }
         }
         return listedWords(out)
+    }
+
+    /** A compound noun can hide two verbs before そう, as 溺れ死 and に in 溺れ死にそう. */
+    private fun inflectedCompound(before: Piece, ending: Piece, after: Piece?): Piece? {
+        if (before.kind != "名詞" || !isHan(before.surface.last())) return null
+        if (ending.kind !in GRAMMAR || after?.surface != "そう") return null
+        val left = tokenizer.knownWord(before.surface.dropLast(1)) ?: return null
+        val right = tokenizer.knownWord(before.surface.takeLast(1) + ending.surface) ?: return null
+        if (left.partOfSpeechLevel1 != "動詞" || right.partOfSpeechLevel1 != "動詞") return null
+        val kana = listOf(left.reading, right.reading).takeIf { parts -> parts.all { it != null && it != "*" } } ?: return null
+        return Piece(before.surface + ending.surface, kana.joinToString("") { hiragana(it) }, "動詞", "自立", reader = Reader.RULES)
     }
 
     /**
@@ -1131,7 +1153,7 @@ internal object Readings {
     }
 
     /**
-     * Words of two kanji or more that JMdict reads one way only, and the dictionaries on the phone read
+     * Words of two kanji or more, and single-kanji る forms, that JMdict reads one way only and the phone reads
      * another, 体中 からだじゅう for からだちゅう, kept in [LISTED]: made by `scripts/readingsaudit`, see
      * CONTRIBUTING.md. Read once, when a line first needs them, whatever threads ask at once; null to read them
      * again, empty to read without them.
@@ -1151,8 +1173,9 @@ internal object Readings {
      * make one: 体 and 中 are 体中, からだじゅう, and 一番 and 星 are 一番星, いちばんぼし. A verb is
      * looked up as the dictionary writes it, 肉付く for 肉付いた. Only whole pieces, so 一人舞 is not taken
      * out of 一人舞う; never starting or ending in a particle, so 今日は stays きょうは; and never one piece
-     * alone, as the dictionary read it as a word it knows, 上野 うえの, which JMdict has only as こうずけ; nor
-     * a number that starts a longer word, 一重 of 一重項: see [numberGoesOn].
+     * alone when the dictionary knows it, as 上野 うえの, which JMdict has only as こうずけ. An unread kanji followed by
+     * る or るる can use its one JMdict reading. Never take a number that starts a longer word, 一重 of 一重項;
+     * see [numberGoesOn].
      */
     private fun listedWords(pieces: List<Piece>): List<Piece> {
         val table = listed.orEmpty()
@@ -1160,7 +1183,7 @@ internal object Readings {
         val out = mutableListOf<Piece>()
         var at = 0
         while (at < pieces.size) {
-            val found = (minOf(LISTED_PIECES, pieces.size - at) downTo 2).firstNotNullOfOrNull { count ->
+            val found = (minOf(LISTED_PIECES, pieces.size - at) downTo 1).firstNotNullOfOrNull { count ->
                 listedAs(pieces.subList(at, at + count), table)?.takeUnless { numberGoesOn(pieces, at, count) }?.let { count to it }
             }
             if (found == null) out += pieces[at++] else {
@@ -1189,13 +1212,19 @@ internal object Readings {
     private fun listedAs(word: List<Piece>, table: Map<String, String>): Piece? {
         val last = word.last()
         val runsOn = word.dropLast(1).none { it.kind in GRAMMAR || it.kind in INFLECTED }
-        if (!isHan(word[0].surface[0]) || last.kind in GRAMMAR || !runsOn) return null
+        if (!isHan(word[0].surface[0]) || !runsOn) return null
         val surface = word.joinToString("") { it.surface }
-        if (surface.count(::isHan) < 2) return null
+        val unreadRu = word.any { it.unknown } && surface.drop(1) in setOf("る", "るる")
+        if (!listedShape(word, surface, unreadRu)) return null
         val kana = table[surface] ?: conjugated(word, table) ?: return null
         if (kana == word.joinToString("") { it.kana }) return null
-        return Piece(surface, kana, last.kind, last.subkind, reader = Reader.JMDICT)
+        val kind = if (unreadRu) "動詞" else last.kind
+        val subkind = if (unreadRu) "自立" else last.subkind
+        return Piece(surface, kana, kind, subkind, reader = Reader.JMDICT)
     }
+
+    private fun listedShape(word: List<Piece>, surface: String, unreadRu: Boolean): Boolean =
+        unreadRu || (word.last().kind !in GRAMMAR && word.size > 1 && surface.count(::isHan) >= 2)
 
     /**
      * How [word] reads when its last piece is a verb or an adjective JMdict has in its dictionary form:
