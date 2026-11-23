@@ -14,6 +14,8 @@ import java.util.zip.GZIPInputStream
 @RunWith(RobolectricTestRunner::class)
 class MatcherRecordingEvidenceTest {
     private val fake = FakeSpotify()
+    private var clock = 0L
+    private val matcher by lazy { ExactMatcher(fake.client(), "US", now = { clock }, timeoutMs = 60_000) }
     private var lastMatch: ExactMatcher.Match? = null
     private val captured by lazy {
         val stream = requireNotNull(javaClass.getResourceAsStream("/matcher/recording-evidence.json.gz"))
@@ -58,7 +60,7 @@ class MatcherRecordingEvidenceTest {
             }
             FakeSpotify.html(request, response.toString())
         }
-        lastMatch = runBlocking { ExactMatcher(fake.client(), "US", timeoutMs = 60_000).lookFor(MusicService.YOUTUBE_MUSIC, metadata) }
+        lastMatch = runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, metadata) }
         return (lastMatch as? ExactMatcher.Match.Found)?.url
     }
 
@@ -72,9 +74,11 @@ class MatcherRecordingEvidenceTest {
 
     @Test fun aDifferentAppleRecordingDoesNotProveTheJapaneseSong() = assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, differentRecording = true))
 
-    @Test fun aFailedCandidateSearchDoesNotMakeTheFanUploadLasting() {
-        assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, reverseDown = true))
-        assertEquals(ExactMatcher.Match.Found(WATCH + "tTN1GZbKU3w", lasting = false), lastMatch)
+    @Test fun aFailedCandidateSearchHoldsTheFanUploadForRetry() {
+        assertEquals(null, find(2, false, reverseDown = true))
+        assertEquals(ExactMatcher.Match.WaitingForNames, lastMatch)
+        clock += ExactMatcher.UNSURE_FOR_MS
+        assertEquals(WATCH + "M3-K4knCeLE", find(2, false))
     }
 
     private companion object {
