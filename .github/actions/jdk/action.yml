@@ -13,6 +13,11 @@ inputs:
     description: true fetches the Kotlin compiler's jars into build/kotlinc, for the readings guard and syncreplay.
     default: "false"
 
+outputs:
+  dependencies-key:
+    description: The key for the shared Gradle dependency cache.
+    value: ${{ steps.dependencies.outputs.cache-primary-key }}
+
 runs:
   using: composite
   steps:
@@ -35,12 +40,28 @@ runs:
     # Three steps, not one with inputs: read-write leaves setup-gradle's own default, which saves only on main.
     - if: inputs.gradle == 'read-write'
       uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      with:
+        # One complete dependency cache comes from the test job, not a different one per job.
+        gradle-home-cache-excludes: caches/modules-2
 
     # Main's runs of CI save the caches; this one only reads them.
     - if: inputs.gradle == 'read-only'
       uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       with:
         cache-read-only: true
+        gradle-home-cache-excludes: caches/modules-2
+
+    # Restore after setup-gradle so its other caches do not mask this shared set of dependencies.
+    - if: inputs.gradle == 'read-write' || inputs.gradle == 'read-only'
+      id: dependencies
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.gradle/caches/modules-2
+          !~/.gradle/caches/modules-2/modules-2.lock
+          !~/.gradle/caches/modules-2/gc.properties
+        key: gradle-shared-dependencies-v1-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/*.versions.toml', '**/versions.properties') }}
+        restore-keys: gradle-shared-dependencies-v1-${{ runner.os }}-
 
     - if: inputs.gradle == 'disabled'
       uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1

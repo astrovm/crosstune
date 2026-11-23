@@ -216,11 +216,23 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/jdk
+        id: jdk
 
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
       - name: Test
         run: ./gradlew :app:testDebugUnitTest :pitest-changed-lines:test :app:koverLogDebug :app:koverXmlReportDebug :app:koverVerifyDebug --build-cache --configuration-cache
+
+      # Tests resolve every Robolectric runtime. Only main saves them for all jobs to share.
+      - name: Save Gradle dependencies
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            !~/.gradle/caches/modules-2/modules-2.lock
+            !~/.gradle/caches/modules-2/gc.properties
+          key: ${{ steps.jdk.outputs.dependencies-key }}
 
       - name: Upload test and coverage reports
         if: always()
