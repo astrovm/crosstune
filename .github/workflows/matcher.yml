@@ -20,6 +20,8 @@ jobs:
   matcher:
     runs-on: ubuntu-26.04
     timeout-minutes: 40
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
