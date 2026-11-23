@@ -45,7 +45,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         var next = 0
         for (wrong in tokens.indices) {
             if (wrong < next) continue
-            val crossing = crossingWord(text, tokens[wrong])
+            val crossing = crossingWord(text, tokens[wrong].position)
             if (!wrongStart(text, tokens[wrong]) && !crossing) continue
             val (first, last) = searchWindow(text, tokens, wrong, next, crossing)
             out += tokens.subList(next, first)
@@ -98,8 +98,9 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         var unknownEnd = -1
         for (at in text.indices) {
             if (!reached[at]) continue
+            val crossedTsu = text[at] in "っッ" && crossingWord(text, at)
             val kept = (startingAt(text, at, at >= unknownEnd) + offer(text, at).also(offered::addAll))
-                .filterNot { wrongStart(text, at, it.type == ViterbiNode.Type.KNOWN, it.surface) }
+                .filterNot { blockedNode(text, at, it, crossedTsu) }
             val extended = if (bridge) bridge(text, at, kept, offered, bridged) else emptyList()
             for (node in kept + spanning(text, at, kept) + extended) {
                 lattice.place(node, at)
@@ -118,6 +119,12 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
             else if (node in offered) JmdictToken(node.wordId, node.surface, offset + node.startIndex, tokenInfoDictionary)
             else Token(node.wordId, node.surface, node.type, offset + node.startIndex, dictionary)
         }
+    }
+
+    /** A known っ word cannot cut a common word in two, but って still works when no common word crosses it. */
+    private fun blockedNode(text: String, at: Int, node: ViterbiNode, crossedTsu: Boolean): Boolean {
+        val known = node.type == ViterbiNode.Type.KNOWN
+        return (crossedTsu && known) || wrongStart(text, at, known, node.surface)
     }
 
     /** Carry stranded small っ on the known word before them, without taking the following word's lookup. */
@@ -232,8 +239,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     private fun wrongStart(text: String, token: Token) = wrongStart(text, token.position, token.isKnown, token.surface)
 
     /** Search again if a common word with small kana crosses an IPADIC split, including IPADIC's own っ words. */
-    private fun crossingWord(text: String, token: Token): Boolean {
-        val at = token.position
+    private fun crossingWord(text: String, at: Int): Boolean {
         if (at == 0 || !Readings.isKana(text[at - 1]) || !Readings.isKana(text[at])) return false
         val known = words()
         return (maxOf(0, at - known.longestSearch + 1) until at).any { start ->
