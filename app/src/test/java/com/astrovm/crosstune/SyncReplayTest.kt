@@ -112,7 +112,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         workMs = asked.optLong("work", WORK_MS)
         workedOut = asked.optJSONArray("works")?.let { works -> (0 until works.length()).map { works.getLong(it) } }.orEmpty()
         whilesFrom = asked.optJSONArray("whiles")?.let { whiles -> (0 until whiles.length()).map { whiles.getLong(it) } }.orEmpty()
-        val behind = listOf(asked.optLong("behind", 0L)) + (if (asked.has("behindAgain")) listOf(asked.getLong("behindAgain")) else emptyList())
+        val behind = listOf(asked.optLong("behind", 0L)) + (if (asked.has("behindAgain")) listOf(asked.getLong("behindAgain")) else emptyList()) +
+            (if (asked.has("thirdFrom")) listOf(asked.getLong("behindAgain")) else emptyList())
         // The words as the app really found them, when kept, over those prep was given.
         val kept = listOf(dir, inputs).map { File(it, "$song.found.json") }.firstOrNull { it.exists() }?.let { JSONObject(it.readText()) }
         val lyrics = kept?.getJSONArray("lines")?.takeIf { it.length() > 0 }?.let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
@@ -180,10 +181,19 @@ class SyncReplayTest(private val name: String, private val index: Int) {
                 }
                 composeRule.runOnIdle { model().resumeFollowingNext() }
             }
-            val until = if (time == 0 && behind.size > 1) asked.optLong("firstUntil", lengthMs).coerceAtMost(lengthMs) else lengthMs
-            val playFrom = if (time > 0) asked.optLong("againFrom", fromMs) else fromMs
+            val until = when {
+                time == 0 && behind.size > 1 -> asked.optLong("firstUntil", lengthMs).coerceAtMost(lengthMs)
+                time == 1 && behind.size > 2 -> asked.optLong("secondUntil", lengthMs).coerceAtMost(lengthMs)
+                else -> lengthMs
+            }
+            val playFrom = when (time) {
+                0 -> fromMs
+                1 -> asked.optLong("againFrom", fromMs)
+                else -> asked.optLong("thirdFrom", fromMs)
+            }
             val played = play(playFrom, lengthMs, behindMs, until)
-            File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())
+            val suffix = if (time == behind.lastIndex) "" else if (time == 0) ".first" else ".second"
+            File(dir, "$song.from$fromMs$suffix.shown.json").writeText(played.toString())
             // Stopped at the end, then played again a while later.
             playback.playing.value = Following(PlaybackClock(lengthMs, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
             shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(AGAIN_MS))

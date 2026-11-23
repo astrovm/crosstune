@@ -472,6 +472,14 @@ def run(args):
         if args.behind_again is None:
             raise ValueError('--again-from needs --behind-again')
         replay['againFrom'] = again_from
+    third_from = getattr(args, 'third_from', None)
+    second_until = getattr(args, 'second_until', None)
+    if (third_from is None) != (second_until is None) or (third_from is not None and args.behind_again is None):
+        raise ValueError('--third-from and --second-until need each other and --behind-again')
+    if third_from is not None:
+        if second_until <= (args.start if again_from is None else again_from):
+            raise ValueError('--second-until must be after the second start')
+        replay.update(thirdFrom=third_from, secondUntil=second_until)
     first_until = getattr(args, 'first_until', None)
     if first_until is not None:
         if args.behind_again is None:
@@ -494,7 +502,8 @@ def run(args):
         replay["identifiedPlayer"] = True
     if getattr(args, "fingerprints", None):
         replay["fingerprints"] = json.loads(Path(args.fingerprints).read_text())
-    plays = ([f"{args.id}.from{args.start}.first.shown.json"] if args.behind_again is not None else []) + [f"{args.id}.from{args.start}.shown.json"]
+    plays = ([f"{args.id}.from{args.start}.first.shown.json"] if args.behind_again is not None else []) + \
+        ([f"{args.id}.from{args.start}.second.shown.json"] if third_from is not None else []) + [f"{args.id}.from{args.start}.shown.json"]
     while True:
         asked.write_text(json.dumps(replay))
         try:
@@ -564,7 +573,9 @@ def compare(phone_lit, shown):
 
 def score(args):
     shown = json.loads((own() / f"{args.id}.from{args.start}.shown.json").read_text())
-    scored_from = getattr(args, 'again_from', None)
+    scored_from = getattr(args, 'third_from', None)
+    if scored_from is None:
+        scored_from = getattr(args, 'again_from', None)
     scored_from = args.start if scored_from is None else scored_from
     sung = sung_after(args.id, shown["lines"], scored_from)
     # The app's line to the n-th line with words.
@@ -1511,6 +1522,8 @@ def main():
             p.add_argument("--model", default=APP_MODEL, help="whose hearing to play, made first with `hear --model`")
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
             p.add_argument('--again-from', type=int, help='start the second play at this position in ms; requires --behind-again')
+            p.add_argument('--second-until', type=int, help='end the second play here; requires --third-from')
+            p.add_argument('--third-from', type=int, help='start a third play here; requires --second-until and --behind-again')
             p.add_argument('--first-until', type=int, help='end the first play at this song position in ms; requires --behind-again')
             p.add_argument('--reopen-again', action='store_true', help='close and reopen the lyrics between plays; requires --behind-again')
             p.add_argument('--identified-player', action='store_true', help='the player identifies the recording across plays')

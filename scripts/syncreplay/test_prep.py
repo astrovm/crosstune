@@ -801,6 +801,22 @@ class HeardWhenAskedTest(unittest.TestCase):
             with patch.object(r.subprocess, 'run', side_effect=replay):
                 r.run(self.run_args(again_from=79000, behind_again=0))
 
+    def test_a_third_play_can_follow_a_short_second_play(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score', return_value=None):
+            with self.assertRaisesRegex(ValueError, 'third-from.*second-until'):
+                r.run(self.run_args(behind_again=0, third_from=180000))
+            with self.assertRaisesRegex(ValueError, 'after the second start'):
+                r.run(self.run_args(behind_again=0, again_from=180000, third_from=180000, second_until=180000))
+            def replay(*_, **__):
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertEqual(215000, asked['secondUntil'])
+                self.assertEqual(180000, asked['thirdFrom'])
+                return argparse.Namespace(returncode=0)
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(behind_again=0, again_from=180000, second_until=215000, third_from=180000))
+        heard.assert_called_once_with('fake', ['fake.from0.first.shown.json', 'fake.from0.second.shown.json', 'fake.from0.shown.json'])
+
 
 class ReplayAllTest(unittest.TestCase):
     def test_it_can_reopen_identified_recordings_at_another_position(self):
@@ -1031,6 +1047,13 @@ class WordsShownTest(unittest.TestCase):
             r.score(argparse.Namespace(id='song', start=3000, placed=False))
         self.assertIn('never shown 3', said.getvalue())
         self.assertNotIn('sung    1.0', said.getvalue())
+
+    def test_a_third_play_scores_from_its_own_start(self):
+        (r.OUT / 'song.from3000.shown.json').write_text(json.dumps(dict(lines=[], shown=[], placed=[dict(at=5000, times=[])], known=[], heard=[])))
+        with contextlib.redirect_stdout(io.StringIO()) as said:
+            r.score(argparse.Namespace(id='song', start=3000, again_from=4000, third_from=5000, placed=False))
+        self.assertIn('never shown 1', said.getvalue())
+        self.assertNotIn('sung    4.2', said.getvalue())
 
     def test_words_kept_are_this_songs_though_the_next_songs_came_after(self):
         kept = r.OUT / 'kept'
