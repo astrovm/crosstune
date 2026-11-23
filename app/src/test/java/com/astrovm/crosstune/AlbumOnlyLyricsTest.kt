@@ -1,51 +1,99 @@
 package com.astrovm.crosstune
 
+import java.io.IOException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class AlbumOnlyLyricsTest {
+    @get:Rule
+    val temp = TemporaryFolder()
+
+    private fun catalogTrack() = requireNotNull(MetadataParsers.appleMusic(JSONObject(ACCORDIAN_INSTRUMENTAL_LOOKUP), ItemType.TRACK))
+
     @Test
     fun onlyTheNamedInstrumentalAlbumCanUseBothMarks() = runBlocking {
-        // US iTunes lookup for 41655288, 2026-11-18. No instrumental tag in the track title.
-        val track = JSONObject("""{"results":[{"trackName":"Accordian","artistName":"Madlib & Madvillain",
-            "collectionName":"Madvillainy Instrumentals","trackTimeMillis":113867}]}""")
-        val playing = requireNotNull(MetadataParsers.appleMusic(track, ItemType.TRACK))
+        val playing = catalogTrack()
         assertEquals("Madvillainy Instrumentals", playing.instrumentalAlbum)
 
-        // The three rows from LRCLIB's exact track/artist search, with invented lyrics in the sung row.
-        val exact = listOf(
-            """{"id":38645248,"trackName":"Accordian","artistName":"Madlib, Madvillain",
-                "albumName":"Madvillainy Instrumentals","duration":114,"instrumental":true}""",
-            """{"id":2523046,"trackName":"Accordian (Instrumental)","artistName":"Madvillain & Madlib",
-                "albumName":"Madvillainy Instrumentals","duration":114,"instrumental":true}""",
-            """{"id":2288911,"trackName":"Accordian","artistName":"Madvillain, Madlib & MF Doom",
-                "albumName":"Madvillainy","duration":117,
-                "syncedLyrics":"[00:10.00] Studio first\n[00:20.00] Studio second"}"""
-        )
-        // A second same-title mark from the wider `q=Accordian Madvillainy Instrumentals` search.
-        // Put both in one answer to replay the two-vote threshold, not to claim the exact search returns both.
-        val second = """{"id":13180878,"trackName":"Accordian","artistName":"Madvillain",
-            "albumName":"Madvillainy Instrumentals","duration":114,"instrumental":true}"""
-        suspend fun lookup(song: MusicMetadata, rows: List<String>): LyricsFinder.Lyrics.Found {
+        val rows = accordianLyrics()
+        suspend fun lookup(song: MusicMetadata, response: String = rows): LyricsFinder.Lyrics.Found {
             val fake = FakeSpotify()
             fake.handler = { request ->
-                val body = if (request.url.host == "lrclib.net") rows.joinToString(",", "[", "]") else "{}"
+                val body = if (request.url.host == "lrclib.net") response else "{}"
                 FakeSpotify.html(request, body)
             }
             val answer = LyricsFinder(fake.client(), "test", busyPauseMs = 0).lyricsOf(song)
             return checkNotNull(answer as? LyricsFinder.Lyrics.Found) { answer.toString() }
         }
 
-        val rows = exact + second
-        val unmarked = lookup(playing.copy(instrumentalAlbum = null), rows)
-        assertEquals("Studio first\nStudio second", unmarked.words)
+        val unmarked = lookup(playing.copy(album = null, lengthMs = 117_000))
+        assertEquals("Hold the light\nOut in the rain", unmarked.words)
         assertEquals(false, unmarked.markedInstrumental)
-        assertEquals(false, lookup(playing, exact).markedInstrumental)
-        assertEquals(unmarked.copy(markedInstrumental = true), lookup(playing, rows))
+        assertEquals(unmarked.copy(markedInstrumental = true), lookup(playing))
+
+        val tagged = JSONArray(rows).getJSONObject(1)
+        val taggedTitles = listOf(
+            "Accordian(Instrumental)", "Accordian - Inst.", "Accordian （伴奏版）",
+            "Accordian (Instrumental Version)", "Accordian - Off-Vocal", "Accordian － Ｏｆｆ－Ｖｏｃａｌ",
+            "Accordian (feat. Guest) (Instrumental)"
+        )
+        for (title in taggedTitles) {
+            val response = JSONArray(rows).put(1, JSONObject(tagged.toString()).put("trackName", title))
+            assertEquals(title, unmarked.copy(markedInstrumental = true), lookup(playing, response.toString()))
+        }
+        for ((field, other) in listOf(
+            "trackName" to "Accordian Extended",
+            "trackName" to "Accordian (Live)",
+            "trackName" to "Accordian (Remix) (Instrumental)",
+            "trackName" to "Accordian (Instrumental Remix)",
+            "trackName" to "Accordian (Instrumental 混音)",
+            "trackName" to "Accordian (Instrumental) (feat. Guest)",
+            "trackName" to "Accordian (Instrumental) Encore",
+            "trackName" to "Accordian (Vocal Mix)",
+            "albumName" to "",
+            "albumName" to "Other Album (Instrumentals)",
+            "artistName" to "Other Artist",
+            "duration" to 150
+        )) {
+            val changed = JSONObject(tagged.toString()).put(field, other)
+            val response = JSONArray(rows).put(1, changed)
+            assertEquals(changed.toString(), unmarked, lookup(playing, response.toString()))
+        }
+    }
+
+    @Test
+    fun anInstrumentalAlbumsOldWordsAreCheckedAgainWhenOnline() = runBlocking {
+        val playing = catalogTrack()
+        val cache = LookupCache(temp.newFile(), Dispatchers.Unconfined)
+        cache.put("18\u0000${RecordingKey.of(playing)}", """{"words":"Older sheet","lines":[]}""")
+        val fake = FakeSpotify()
+        val finder = LyricsFinder(fake.client(), "test", busyPauseMs = 0, cache = cache)
+        fake.handler = { throw IOException("offline") }
+        assertEquals("Older sheet", (finder.lyricsOf(playing) as LyricsFinder.Lyrics.Found).words)
+
+        val rows = accordianLyrics()
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") rows else "{}") }
+        val found = finder.lyricsOf(playing) as LyricsFinder.Lyrics.Found
+        assertEquals("Hold the light\nOut in the rain", found.words)
+        assertEquals(true, found.markedInstrumental)
+
+        fake.handler = { throw AssertionError("The fresh result is cached") }
+        assertEquals(found, finder.lyricsOf(playing))
     }
 }
+
+// US iTunes lookup for 41655288. The title has no instrumental tag.
+internal const val ACCORDIAN_INSTRUMENTAL_LOOKUP = """{"results":[{"trackName":"Accordian","artistName":"Madlib & Madvillain",
+    "collectionName":"Madvillainy Instrumentals","trackTimeMillis":113867}]}"""
+
+// Exact LRCLIB track/artist search on 2026-11-22. The sung row has made-up words.
+internal fun accordianLyrics() = requireNotNull(AlbumOnlyLyricsTest::class.java.getResource("/lrclib-accordian.json")).readText()

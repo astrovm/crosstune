@@ -21,7 +21,9 @@ internal data class KeptWords(
     val madeWith: String,
     val chords: ChordsState,
     /** How much of the song plays per ms of the words past [syncPoints], see [LyricsSync.adjust]. */
-    val pace: Double = 1.0
+    val pace: Double = 1.0,
+    /** The player can preview marked words once someone sang them. Null for older saved sheets. */
+    val canPreview: Boolean? = null
 ) {
     /** Whether [lines] are timed by the singing heard: words found with no timing, with lines timed since. */
     val timedByEar: Boolean get() = foundLines.isEmpty() && lines.isNotEmpty()
@@ -44,6 +46,7 @@ internal data class KeptWords(
         .put("chordsTried", chords.tried)
         .put("chords", chords.sheet?.let(::sheetJson))
         .put("pace", pace)
+        .put("canPreview", canPreview)
         .toString()
 
     companion object {
@@ -71,7 +74,8 @@ internal data class KeptWords(
                 kept.getString("madeWith"),
                 ChordsState(tried = kept.getBoolean("chordsTried"), sheet = kept.optJSONObject("chords")?.let(::sheet)),
                 // Kept before the pace was, they go on as timed.
-                kept.optDouble("pace", 1.0)
+                kept.optDouble("pace", 1.0),
+                kept.opt("canPreview") as? Boolean
             )
         } catch (_: JSONException) {
             null

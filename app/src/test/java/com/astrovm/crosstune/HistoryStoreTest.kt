@@ -112,6 +112,39 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun similarLengthsDoNotMergeDifferentAlbumReleases() {
+        val apple = entry(1, service = MusicService.APPLE_MUSIC).copy(metadata = MusicMetadata("Song", "Band", lengthMs = 114_000))
+        val deezer = entry(2).copy(metadata = MusicMetadata("Song", "Band", lengthMs = 116_000))
+        for ((a, b) in listOf(
+            "Album (Instrumentals)" to null,
+            "Album (Instrumentals)" to "Album",
+            "Album (Instrumentals)" to "Other Album (Instrumentals)",
+            "Album" to "Other Album"
+        )) {
+            store.clear()
+            val first = apple.copy(metadata = apple.metadata.copy(album = a))
+            val second = deezer.copy(metadata = deezer.metadata.copy(album = b))
+            store.add(first)
+            assertEquals(listOf(second, first), store.add(second))
+            assertEquals(listOf(second, first), HistoryStore(preferences).load())
+        }
+        store.clear()
+        store.add(apple.copy(metadata = apple.metadata.copy(album = "Album (Instrumentals)")))
+        val same = deezer.copy(metadata = deezer.metadata.copy(album = "Album (Instrumental)"))
+        assertEquals(listOf(same), store.add(same))
+    }
+
+    @Test
+    fun readsInstrumentalAlbumNamesKeptByAnOlderApp() {
+        preferences.edit {
+            putString(HistoryStore.KEY_HISTORY, """[{"service":"APPLE_MUSIC","type":"TRACK","id":"1","title":"Song","instrumentalAlbum":"Album (Instrumentals)"}]""")
+        }
+        val old = store.load().single()
+        assertEquals("Album (Instrumentals)", old.metadata.instrumentalAlbum)
+        assertTrue(old.albumChecked)
+    }
+
+    @Test
     fun twoVersionsOfASongKnownByNameAreTwoEntries() {
         // A 2:54 single and a 4:22 album take of one name, each heard as an app played it.
         fun named(lengthMs: Long?) = MusicMetadata("Plastic Love", "Mariya Takeuchi", lengthMs = lengthMs).let { song ->
@@ -239,9 +272,10 @@ class HistoryStoreTest {
 
     @Test
     fun keepsAPlaylistsSongs() {
+        val song = MusicMetadata("One", "Band", album = "An Album (Instrumentals)")
         val playlist = HistoryEntry(
             MusicLink(MusicService.DEEZER, ItemType.PLAYLIST, "1", "https://www.deezer.com/playlist/1"),
-            MusicMetadata("Top", "", ItemType.PLAYLIST, tracks = listOf(MusicMetadata("One", "Band"), MusicMetadata("Two", "")))
+            MusicMetadata("Top", "", ItemType.PLAYLIST, tracks = listOf(song, MusicMetadata("Two", "")))
         )
         store.add(playlist)
         assertEquals(playlist, HistoryStore(preferences).load().single())
@@ -252,6 +286,83 @@ class HistoryStoreTest {
             """[{"type":"PLAYLIST","id":"1","title":"Top","service":"DEEZER","url":"https://www.deezer.com/playlist/1","tracks":[["One","Band"],["",""],"x"]}]"""
         ).commit()
         assertEquals(listOf(MusicMetadata("One", "Band")), HistoryStore(preferences).load().single().metadata.tracks)
+    }
+
+    @Test
+    fun oldCollectionsAreCheckedOnceWhenAnyTrackLacksAnAlbum() {
+        for ((service, type) in listOf("DEEZER" to "PLAYLIST", "DEEZER" to "ALBUM", "APPLE_MUSIC" to "ALBUM", "APPLE_MUSIC" to "PLAYLIST")) {
+            preferences.edit {
+                putString(HistoryStore.KEY_HISTORY, """[{"service":"$service","type":"$type","id":"1","title":"List","tracks":[["One","Band"],["Two","Band","","","Album"]]}]""")
+            }
+            val old = store.load().single()
+            assertEquals(false, old.albumChecked)
+            val refreshed = old.afterAlbumLookup(old.metadata.copy(tracks = listOf(MusicMetadata("One", "Band", lengthMs = 100_000))))
+            store.add(refreshed)
+            assertEquals(refreshed, HistoryStore(preferences).load().single())
+        }
+    }
+
+    @Test
+    fun aCatalogueRefreshMatchesIdsAndSkipsAmbiguousOrDifferentTracks() {
+        val link = checkNotNull(MusicLinks.linkFor("https://www.deezer.com/playlist/123"))
+        val track = MusicMetadata("Saved title", "Band", url = "https://www.deezer.com/track/1")
+        val differentTrack = MusicMetadata("Same name", "Band", url = "https://www.deezer.com/track/2")
+        val unnamedRelease = MusicMetadata("Duplicate", "Band")
+        val saved = MusicMetadata("List", "", ItemType.PLAYLIST, tracks = listOf(track, differentTrack, unnamedRelease, unnamedRelease))
+        val fresh = saved.copy(tracks = listOf(
+            track.copy(title = "Catalogue title", lengthMs = 114_000, album = "Album (Instrumentals)"),
+            differentTrack.copy(url = "https://www.deezer.com/track/3", album = "Unrelated Album"),
+            unnamedRelease.copy(album = "Another Album")
+        ))
+        val entry = HistoryEntry(link, saved, albumChecked = false)
+        val checked = entry.afterAlbumLookup(fresh)
+        val recovered = track.copy(lengthMs = 114_000, album = "Album (Instrumentals)")
+        assertEquals(listOf(recovered, differentTrack, unnamedRelease, unnamedRelease), checked.metadata.tracks)
+        assertEquals(saved.tracks, entry.afterAlbumLookup(fresh.copy(tracks = emptyList())).metadata.tracks)
+
+        // A cover fetch started before the catalogue answered must keep the recovered details.
+        store.add(checked)
+        val cover = "https://example.com/track.jpg"
+        store.update(link.url, saved.copy(tracks = listOf(track.copy(artworkUrl = cover), differentTrack, unnamedRelease, unnamedRelease)))
+        val reopened = HistoryStore(preferences).load().single()
+        assertTrue(reopened.albumChecked)
+        assertEquals(recovered.copy(artworkUrl = cover), reopened.metadata.tracks.first())
+    }
+
+    @Test
+    fun aCatalogueRefreshKeepsAnIdentifiedTrackWhenItsIdIsMissing() {
+        val link = checkNotNull(MusicLinks.linkFor("https://www.deezer.com/playlist/123"))
+        val track = MusicMetadata("Same name", "Band", url = "https://www.deezer.com/track/2", lengthMs = 100_000)
+        val saved = MusicMetadata("Mix", "", ItemType.PLAYLIST, tracks = listOf(track))
+        val entry = HistoryEntry(link, saved, albumChecked = false)
+        val latest = saved.copy(tracks = listOf(track.copy(url = null, album = "Unrelated Album")))
+
+        assertEquals(track, entry.afterAlbumLookup(latest).metadata.tracks.single())
+    }
+
+    @Test
+    fun aCatalogueRefreshKeepsUnlinkedTracksWithDifferentVersionsOrLengths() {
+        val version = MusicMetadata("Song (Take 1-2)", "Band", lengthMs = 100_000)
+        val longer = MusicMetadata("Another Song", "Band", lengthMs = 100_000)
+        val same = MusicMetadata("  Third Song ", " BAND ", lengthMs = 100_000)
+        val close = MusicMetadata("Fourth Song", "Band", lengthMs = 100_000)
+        val metadata = MusicMetadata("Mix", "", ItemType.PLAYLIST, tracks = listOf(version, longer, same, close))
+        val link = checkNotNull(MusicLinks.linkFor("https://www.deezer.com/playlist/123"))
+        val entry = HistoryEntry(link, metadata, albumChecked = false)
+        val album = "Album (Instrumentals)"
+        val sameUrl = "https://www.deezer.com/track/3"
+        val closeUrl = "https://www.deezer.com/track/4"
+        val latest = metadata.copy(tracks = listOf(
+            version.copy(title = "Song (Take 12)", url = "https://www.deezer.com/track/1", album = album),
+            longer.copy(lengthMs = 102_001, url = "https://www.deezer.com/track/2", album = album),
+            same.copy(title = "Third Song", artist = "Band", url = sameUrl, album = album),
+            close.copy(lengthMs = 102_000, url = closeUrl, album = album)
+        ))
+
+        assertEquals(
+            listOf(version, longer, same.copy(url = sameUrl, album = album), close.copy(url = closeUrl, album = album)),
+            entry.afterAlbumLookup(latest).metadata.tracks
+        )
     }
 
     @Test
