@@ -16,6 +16,8 @@ trap 'git -C "$root" worktree remove --force "$base"' EXIT
 for file in app/src/test/java/com/astrovm/crosstune/MatchReplayTest.kt scripts/matchcheck/replay.py scripts/matchcheck/collect.py scripts/matchcheck/analyze.py scripts/gradle-box/gradle-box.sh; do
     cp "$root/$file" "$base/$file"
 done
+# The baseline matcher has no independent artist-alias callback.
+sed -i '/MATCHCHECK_ARTIST_ALIASES/d' "$base/app/src/test/java/com/astrovm/crosstune/MatchReplayTest.kt"
 cd "$root"
 python3 scripts/matchcheck/replay.py prepare "$out" --require-answers --also-latin
 # The probe only records missing searches. Its match results are not used in the comparison.

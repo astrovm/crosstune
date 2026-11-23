@@ -27,6 +27,8 @@ class MatchReplayTest {
     private lateinit var dir: File
     private var proofs = JSONObject()
     private val missingProofs = ConcurrentHashMap.newKeySet<String>()
+    private var aliases = JSONObject()
+    private val missingAliases = ConcurrentHashMap.newKeySet<String>()
 
     @Test
     fun candidateSearchesNeedTheirOwnCapturedAnswers() {
@@ -46,6 +48,9 @@ class MatchReplayTest {
         dir = requireNotNull(given)
         proofs = if (System.getenv("MATCHCHECK_PROBE") == "1") JSONObject() else {
             File(dir, "candidate-proofs.json").takeIf(File::isFile)?.let { JSONObject(it.readText()) } ?: JSONObject()
+        }
+        aliases = if (System.getenv("MATCHCHECK_PROBE") == "1") JSONObject() else {
+            File(dir, "artist-aliases.json").takeIf(File::isFile)?.let { JSONObject(it.readText()) } ?: JSONObject()
         }
         val songs = JSONArray(File(dir, "replay.json").readText()).let { all -> (0 until all.length()).map(all::getJSONObject) }
         val wrongQueries = songs.filter { song ->
@@ -67,7 +72,9 @@ class MatchReplayTest {
             replay(songs, kept, appleDown, both)
         }
         File(dir, "missing-proofs.json").writeText(JSONArray(missingProofs.sorted()).toString())
+        File(dir, "missing-aliases.json").writeText(JSONArray(missingAliases.sorted()).toString())
         if (System.getenv("MATCHCHECK_REQUIRE_PROOFS") == "1") assertTrue("Missing candidate Apple searches: $missingProofs", missingProofs.isEmpty())
+        if (System.getenv("MATCHCHECK_REQUIRE_PROOFS") == "1") assertTrue("Missing artist aliases: $missingAliases", missingAliases.isEmpty())
     }
 
     private fun replay(songs: List<JSONObject>, kept: List<Map<String, String?>>, appleDown: Boolean, both: Boolean) {
@@ -107,7 +114,9 @@ class MatchReplayTest {
             rows.indexOfFirst { it in rightShown }.also { seen.put(JSONArray().put(JSONArray(rows)).put(it)) }
         }
         // Long whiles, as a busy machine is no answer from a service here: each answer is kept.
-        val matcher = ExactMatcher(fake.client(), "US", pick = if (asked) pick else { _, _, _ -> null }, timeoutMs = WHILE_MS, pickTimeoutMs = WHILE_MS)
+        val matcher = ExactMatcher(fake.client(), "US", pick = if (asked) pick else { _, _, _ -> null }, timeoutMs = WHILE_MS, pickTimeoutMs = WHILE_MS,
+            artistAliases = { name -> aliases.optJSONArray(name)?.strings()?.toSet() ?: run { missingAliases += name; null } }, // MATCHCHECK_ARTIST_ALIASES
+        )
         return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = song.optLong("lengthMs").takeIf { it > 0 })) }
     }
 

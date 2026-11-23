@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.os.SystemClock
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -83,6 +84,8 @@ internal class ExactMatcher(
     private val pickTimeoutMs: Long = PICK_TIMEOUT_MS,
     /** A Spotify artist's id by their name, see [MusicBrainz.spotifyArtist]; none by default. */
     private val spotifyArtist: suspend (String) -> String? = { null },
+    /** Independent names of an artist, or none when they cannot be established. */
+    private val artistAliases: suspend (String) -> Set<String>? = { null },
     private val wallNow: () -> Long = { System.currentTimeMillis() }
 ) {
 
@@ -854,9 +857,10 @@ internal class ExactMatcher(
         }
         val rows = items.map(::row)
         val videoRows = videos.map(::row)
+        val appleSong = appleSongRow(rows, names, recording)
         if (names.appleFound) {
-            appleSongRow(rows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
-            val initialSong = songRow(metadata, rows, videoRows, names, recording)
+            appleSong?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+            val initialSong = songRow(metadata, rows, videoRows, names, recording, appleSong)
             if (initialSong == null) {
                 fun eligibleVideo(row: Row) = isTheSongsVideo(row, names) && (names.complete || isOwnVideo(row, names)) &&
                     keepsRequestedRecording(recording, row, video = true)
@@ -867,13 +871,59 @@ internal class ExactMatcher(
                 }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
             }
         }
-        appleProvedCandidate(metadata, rows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
-        addDeezerNames(metadata, names, rows.any { it.id != null && it.lengthMs != null })
-        val song = songRow(metadata, rows, videoRows, names, recording)
-        song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
-        matchingVideo(metadata, rows, videoRows, names, recording, watchUrl)?.let { return it }
+        val resolved = resolveNamesAndCandidate(metadata, rows, videoRows, names, recording, watchUrl)
+        resolved.first?.let { return it }
+        val available = resolved.second
+        val song = songRow(metadata, rows, videoRows, available, recording, appleSong)
+        song?.let { return Answer(watchUrl + it.id, lasting = available.everyStore) }
+        matchingVideo(metadata, rows, videoRows, available, recording, watchUrl)?.let { return it }
         // Last, the songs, then the videos, are picked from, each asked about apart.
-        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), final = names.complete, lasting = names.everyStore)
+        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, available.lengthsMs), final = available.complete, lasting = available.everyStore)
+    }
+
+    private suspend fun resolveNamesAndCandidate(
+        metadata: MusicMetadata, rows: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String
+    ): Pair<Answer?, Names> = coroutineScope {
+        val apple = async { appleProvedCandidate(metadata, rows, names, recording) }
+        val deezer = async { names.copyForDeezer().also { addDeezerNames(metadata, it, rows.any { row -> row.id != null && row.lengthMs != null }) } }
+        select {
+            apple.onAwait { proved ->
+                if (proved != null) {
+                    deezer.cancel()
+                    Answer(watchUrl + proved.id, lasting = names.everyStore) to names
+                } else {
+                    val available = deezer.await()
+                    if (!names.complete) available.complete = false
+                    null to available
+                }
+            }
+            deezer.onAwait { available ->
+                val named = rows.firstOrNull { isDeezerSong(it, available) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, available) }
+                val fallback = named?.let { Answer(watchUrl + it.id) } ?: matchingVideo(metadata, rows, videos, available, recording, watchUrl)
+                if (fallback?.url != null && !apple.isCompleted) {
+                    waitForAppleOrFallback(apple, fallback, names, available, watchUrl)
+                } else {
+                    val proved = apple.await()
+                    if (!names.complete) available.complete = false
+                    proved?.let { Answer(watchUrl + it.id, lasting = names.everyStore) } to available
+                }
+            }
+        }
+    }
+
+    private suspend fun waitForAppleOrFallback(
+        apple: Deferred<Row?>, fallback: Answer, names: Names, available: Names, watchUrl: String
+    ): Pair<Answer?, Names> {
+        // Give an in-flight Apple proof a short chance to outrank this provisional answer.
+        val proved = withTimeoutOrNull(APPLE_PROOF_WAIT_MS) { apple.await() }
+        if (proved != null) return Answer(watchUrl + proved.id, lasting = names.everyStore) to names
+        if (apple.isCompleted) {
+            if (!names.complete) available.complete = false
+            return null to available
+        }
+        apple.cancel()
+        available.complete = false
+        return Answer(fallback.url, lasting = false, waitForNames = fallback.waitForNames, artistVideo = fallback.artistVideo) to available
     }
 
     private fun sameVideoRecording(first: Row, candidate: Row, metadata: MusicMetadata, names: Names): Boolean {
@@ -881,7 +931,7 @@ internal class ExactMatcher(
         val candidateTitle = videoRecordingTitle(candidate.name, names)
         val knownTitles = names.titles.map(SongNames::normalize).toSet()
         if (firstTitle != candidateTitle && (firstTitle !in knownTitles || candidateTitle !in knownTitles)) return false
-        if (candidate.lengthMs == null) return firstTitle == candidateTitle
+        if (candidate.lengthMs == null) return first.lengthMs == null && firstTitle == candidateTitle
         if (first.lengthMs?.let { !sameRecordingLength(candidate.lengthMs, it) } == true) return false
         val wanted = metadata.lengthMs?.takeIf { it > 0 }?.let(::listOf) ?: names.lengthsMs
         return wanted.isEmpty() || wanted.any { sameRecordingLength(candidate.lengthMs, it) }
@@ -920,8 +970,11 @@ internal class ExactMatcher(
             row.id != null && row.lengthMs != null && names.lengthsMs.any { sameRecordingLength(row.lengthMs, it) } &&
                 metadata.lengthMs?.takeIf { it > 0 }?.let { sameRecordingLength(row.lengthMs, it) } != false &&
                 namedInAnotherScript(row.name) && !isAnotherTake(row, names) &&
-                !SongNames.saysAnotherVersion(row.name, metadata.title, metadata.artist) && keepsRequestedRecording(recording, row)
-        }.take(5)
+                !SongNames.saysAnotherVersion(row.name, metadata.title, metadata.artist) &&
+                !SongNames.saysAnotherVersion(row.details.getOrNull(1).orEmpty(), metadata.title, metadata.artist) &&
+                keepsRequestedRecording(recording, row)
+        }.groupBy(::candidateName).values
+            .mapNotNull { group -> group.firstOrNull()?.takeIf { group.map(Row::id).distinct().size == 1 } }.take(5)
         return coroutineScope {
             val answers = Channel<Pair<Row?, Boolean>>(Channel.UNLIMITED)
             val searches = candidates.map { candidate -> launch { answers.send(appleCandidateProof(candidate, names)) } }
@@ -953,11 +1006,12 @@ internal class ExactMatcher(
         return proved to asked.failed
     }
 
-    private fun songRow(metadata: MusicMetadata, rows: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording): Row? {
+    private fun songRow(metadata: MusicMetadata, rows: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, appleSong: Row?): Row? {
         // An Apple-proved row wins even when a Deezer-only row comes first.
-        appleSongRow(rows, names, recording)?.let { return it }
+        appleSong?.let { return it }
         val named = rows.firstOrNull { isDeezerSong(it, names) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) }
-        val abroad = rows.filter { isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
+        val ambiguous = indistinguishableCandidates(rows, metadata.lengthMs?.takeIf { it > 0 })
+        val abroad = rows.filter { candidateName(it) !in ambiguous && isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
         // A row the song's name names, but that says it's a take, is the song's, not its studio recording: no row only known by its
         // artist and length takes its place, as the song may be written otherwise, and this one is the song by name.
         val takeNamed = named == null && rows.any { (isTheSong(it, names) || isDeezerSong(it, names)) && keepsRequestedRecording(recording, it) }
@@ -965,6 +1019,12 @@ internal class ExactMatcher(
             ?: videoNamesSong(metadata, abroad, videos, names)
             ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
     }
+
+    private fun candidateName(row: Row) = SongNames.normalize(row.name) to SongNames.normalize(row.details.first())
+
+    private fun indistinguishableCandidates(rows: List<Row>, sourceLength: Long?): Set<Pair<String, String>> = rows.filter { row ->
+        row.id != null && (sourceLength == null || row.lengthMs == null || sameRecordingLength(row.lengthMs, sourceLength))
+    }.groupBy(::candidateName).filterValues { group -> group.map(Row::id).distinct().size > 1 }.keys
 
     private fun matchingVideo(metadata: MusicMetadata, songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String): Answer? {
         val matching = videos.filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
@@ -1291,7 +1351,7 @@ internal class ExactMatcher(
      * Spring Day and 松原みき for Miki Matsubara. Deezer can name a song row when its title and length match.
      */
     private class Names(
-        val titles: Set<String>, val artists: Set<String>, var lengthsMs: List<Long>, japaneseTitle: String?,
+        val titles: Set<String>, val artists: Set<String>, var lengthsMs: List<Long>, val japaneseTitle: String?,
         val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?, var deezerNames: List<DeezerName>, val appleFound: Boolean,
         val appleIds: Set<Long>,
         /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
@@ -1305,6 +1365,9 @@ internal class ExactMatcher(
         var complete: Boolean,
         val failedLookups: Set<String>
     ) {
+        fun copyForDeezer() = Names(titles, artists, lengthsMs, japaneseTitle, linkedEdition, corroboratingAlbum, deezerNames,
+            appleFound, appleIds, takeOnAlbum, searchFailed, complete, failedLookups)
+
         // A failed lookup can leave a name missing even where the names are complete, as for Lemon (Music Box).
         val everyStore get() = complete && failedLookups.isEmpty()
 
@@ -1372,10 +1435,8 @@ internal class ExactMatcher(
         val proved = found?.song?.takeIf { matches(metadata, it.optString("trackName"), it.optString("artistName")) }
         return Names(
             titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album,
-            emptyList(), found != null, found?.editions.orEmpty().filter {
-                val length = metadata.lengthMs?.takeIf { it > 0 } ?: proved?.optLong("trackTimeMillis")
-                proved != null && length != null && sameRecordingLength(it.optLong("trackTimeMillis"), length)
-            }.map { it.optLong("trackId") }.filter { it > 0 }.toSet(), takeOnAlbum, searchFailed, complete, unanswered
+            emptyList(), found != null, setOfNotNull(proved?.optLong("trackId")?.takeIf { it > 0 }),
+            takeOnAlbum, searchFailed, complete, unanswered
         )
     }
 
@@ -1426,10 +1487,21 @@ internal class ExactMatcher(
         val knownLengths = (lengths + foundLengths).ifEmpty {
             tracks.map { it.optLong("duration").coerceAtLeast(0) * 1000 }
         }
-        names.deezerNames = deezerNames(metadata, tracks, knownLengths, artists.firstOrNull())
+        val first = artists.firstOrNull()
+        val candidates = deezerNames(metadata, tracks, knownLengths, first)
+        val sameArtist = if (candidates.isNotEmpty()) sameDeezerArtist(metadata.artist, first) else false
+        if (sameArtist == null) names.complete = false
+        names.deezerNames = if (sameArtist == true) candidates else emptyList()
         if (foundLengths.isEmpty()) foundLengths.addAll(names.deezerNames.map { it.lengthMs })
         names.lengthsMs = foundLengths
         if (trackSearch.failed || artistSearch.failed) names.complete = false
+    }
+
+    private suspend fun sameDeezerArtist(artist: String, first: JSONObject?): Boolean? {
+        val deezerArtist = first?.optString("name").orEmpty()
+        if (artist.isBlank() || deezerArtist.isBlank()) return false
+        if (SongNames.sameArtist(artist, deezerArtist)) return true
+        return artistAliases(artist)?.any { SongNames.sameArtist(it, deezerArtist) }
     }
 
     private fun deezerCollaboration(name: String): Boolean =
@@ -1763,6 +1835,7 @@ internal class ExactMatcher(
         SongNames.wordsMatch(name, metadata.title) && SongNames.artistInside(artist, metadata.artist)
 
     internal companion object {
+        private const val APPLE_PROOF_WAIT_MS = 500L
         const val TIMEOUT_MS = 5_000L
 
         /** How many of the Spotify songs ListenBrainz knows by a name are read to find the one. */

@@ -20,6 +20,12 @@ LYRICS_VIDEO = {"id": "Kl5G4bAwpOg", "name": "Lemon - 米津玄師｜歌詞あ�
 
 
 class RightIdsTest(unittest.TestCase):
+    def test_artist_alias_capture_rejects_ambiguity_and_search_hints(self):
+        one = {"artists": [{"id": "artist-1", "name": "米津玄師", "aliases": [{"name": "Kenshi Yonezu", "type": "Artist name"},
+                                                          {"name": "Other", "type": "Search hint"}]}]}
+        self.assertEqual(["Kenshi Yonezu", "米津玄師"], replay.checked_artist_aliases("米津玄師", one))
+        self.assertEqual([], replay.checked_artist_aliases("米津玄師", {"artists": one["artists"] * 2}))
+
     def test_a_longer_medley_with_an_extra_song_is_not_the_three_song_recording(self):
         song = {"title": "After 5 Crash / Tokyo Tower / Hatsukoi", "artist": "Toshiki Kadomatsu", "native": []}
         short = {"id": "short", "name": "After 5 Crash / Tokyo Tower / 初恋 - After 5 Crash / Tokyo Tower / Hatsukoi",
@@ -155,6 +161,8 @@ class RunTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as out:
             with open(os.path.join(out, "missing-proofs.json"), "w", encoding="utf-8") as missing:
                 json.dump(["JP|ジェラス 八神純子"], missing)
+            with open(os.path.join(out, "missing-aliases.json"), "w", encoding="utf-8") as missing:
+                json.dump([], missing)
             with contextlib.redirect_stderr(io.StringIO()):
                 replay.capture_proofs(out)
             with open(os.path.join(out, "candidate-proofs.json"), encoding="utf-8") as kept:

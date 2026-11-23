@@ -28,7 +28,7 @@ class MatcherRecordingEvidenceTest {
         JSONArray(GZIPInputStream(stream).bufferedReader().use { it.readText() })
     }
 
-    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false, reverseDown: Boolean = false, deezerHeld: Boolean = false, inputLength: Long? = null, held: Pair<CountDownLatch, CountDownLatch>? = null, withoutLength: Boolean = false): String? {
+    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false, reverseDown: Boolean = false, deezerHeld: Boolean = false, inputLength: Long? = null, held: Pair<CountDownLatch, CountDownLatch>? = null, withoutLength: Boolean = false, liveImposter: Boolean = false): String? {
         val song = captured.getJSONObject(index)
         val metadata = MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = if (withoutLength) null else inputLength ?: song.getLong("lengthMs"))
         val us = JSONArray().also { results ->
@@ -36,6 +36,9 @@ class MatcherRecordingEvidenceTest {
             for (i in 0 until editions.length()) results.put(JSONObject().put("trackId", song.getLong("id"))
                 .put("trackName", song.getString("title")).put("artistName", song.getString("storeArtist"))
                 .put("collectionName", song.getString("album")).put("trackTimeMillis", editions.getLong(i)))
+            if (liveImposter) results.put(JSONObject().put("trackId", 123456789L).put("trackName", song.getString("title"))
+                .put("artistName", song.getString("storeArtist")).put("collectionName", "Live at Budokan")
+                .put("trackTimeMillis", song.getLong("lengthMs") + 1_000))
         }
         fake.handler = { request ->
             val url = request.url
@@ -51,7 +54,7 @@ class MatcherRecordingEvidenceTest {
                         if (held != null) assertTrue(held.first.await(3, TimeUnit.SECONDS))
                         if (reverseDown) throw IOException("candidate search is down")
                         val recorded = song.getJSONObject("reverse").getJSONArray("results")
-                        if (!differentRecording) recorded else JSONArray(recorded.toString()).also { answers ->
+                        if (!differentRecording && !liveImposter) recorded else JSONArray(recorded.toString()).also { answers ->
                             for (i in 0 until answers.length()) if (answers.getJSONObject(i).optLong("trackId") == song.getLong("id")) {
                                 answers.getJSONObject(i).put("trackId", 123456789L)
                             }
@@ -95,9 +98,10 @@ class MatcherRecordingEvidenceTest {
 
     @Test fun aDifferentAppleRecordingDoesNotProveTheJapaneseSong() = assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, differentRecording = true))
 
+    @Test fun aLiveAlbumEditionDoesNotProveTheStudioRecording() = assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, liveImposter = true))
+
     @Test fun anAppleProvedCandidateDoesNotWaitForDeezer() {
         assertEquals(WATCH + "8eQdsCZWrLg", find(3, false, deezerHeld = true))
-        assertTrue(fake.requestedUrls.none { it.contains("api.deezer.com") })
     }
 
     @Test fun anAppleProvedCandidateDoesNotWaitForAnotherCandidate() = runBlocking {

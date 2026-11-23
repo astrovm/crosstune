@@ -37,6 +37,33 @@ class MusicBrainzTest {
 
     private val app: Context = ApplicationProvider.getApplicationContext()
 
+    @Test
+    fun anArtistAliasRequiresOneExactArtistAndIgnoresSearchHints() = runBlocking {
+        val response = """{"artists":[{"id":"artist-1","name":"米津玄師","aliases":[{"name":"Kenshi Yonezu","type":"Artist name"},{"name":"Unrelated","type":"Search hint"}]}]}"""
+        fake.handler = { request -> FakeSpotify.html(request, response) }
+        val service = brainz()
+        assertEquals(setOf("米津玄師", "Kenshi Yonezu"), service.artistAliases("米津玄師"))
+        assertEquals(setOf("米津玄師", "Kenshi Yonezu"), service.artistAliases("米津玄師"))
+        assertEquals(1, fake.requestedUrls.size)
+        val ambiguous = """{"artists":[{"id":"artist-1","name":"Same"},{"id":"artist-2","name":"Same"}]}"""
+        fake.handler = { request -> FakeSpotify.html(request, ambiguous) }
+        assertEquals(emptySet<String>(), service.artistAliases("Same"))
+        fake.handler = { request -> FakeSpotify.html(request, """{"artists":[{"name":"No ID"}]}""") }
+        assertEquals(emptySet<String>(), service.artistAliases("No ID"))
+    }
+
+    @Test
+    fun aFailedArtistAliasSearchIsRetried() = runBlocking {
+        val service = brainz()
+        assertEquals(emptySet<String>(), service.artistAliases(""))
+        fake.handler = { throw IOException("offline") }
+        assertNull(service.artistAliases("米津玄師"))
+        fake.handler = { request -> FakeSpotify.html(request, "not json") }
+        assertNull(service.artistAliases("米津玄師"))
+        fake.handler = { request -> FakeSpotify.html(request, """{"artists":[{"id":"artist-1","name":"米津玄師"}]}""") }
+        assertEquals(setOf("米津玄師"), service.artistAliases("米津玄師"))
+    }
+
     private fun brainz(file: File = File(folder.root, "musicbrainz.json"), gapMs: Long = 0, turn: MusicBrainz.Turn = MusicBrainz.Turn()) =
         MusicBrainz(fake.client(), "2.3.3", LookupCache(file, Dispatchers.Unconfined), turn, Dispatchers.Unconfined, gapMs)
 

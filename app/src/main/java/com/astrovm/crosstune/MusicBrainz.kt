@@ -9,6 +9,7 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
@@ -33,6 +34,29 @@ internal class MusicBrainz(
     /** How long to leave between two requests, which MusicBrainz limits to one a second; tests pass 0. */
     private val gapMs: Long = ASK_GAP_MS
 ) {
+    /** Names MusicBrainz gives one exact artist; ambiguous names do not establish an identity. */
+    suspend fun artistAliases(name: String): Set<String>? {
+        val wanted = SongNames.normalize(name)
+        if (wanted.isEmpty()) return emptySet()
+        val key = "artist-aliases|$name"
+        cache.get(key)?.let { return JSONArray(it).strings().toSet() }
+        val aliases = try {
+            val url = "$API/artist".toHttpUrl().newBuilder().addQueryParameter("query", "artist:${quoted(name)}")
+                .addQueryParameter("limit", "10").build()
+            val artists = get(url).optJSONArray("artists").objects().filter { it.optString("id").isNotBlank() }.map { artist ->
+                (listOf(artist.optString("name")) + artist.optJSONArray("aliases").objects()
+                    .filter { it.optString("type") == "Artist name" }.map { it.optString("name") }).filter(String::isNotBlank).toSet()
+            }.filter { names -> names.any { SongNames.normalize(it) == wanted } }
+            artists.singleOrNull().orEmpty()
+        } catch (_: IOException) {
+            return null
+        } catch (_: JSONException) {
+            return null
+        }
+        cache.keep(key, JSONArray(aliases.toList()).toString())
+        return aliases
+    }
+
     /** [song]'s facts; null when MusicBrainz isn't sure which song it is, or couldn't be asked. */
     suspend fun release(song: MusicMetadata): ReleaseFacts? {
         val artist = SongNames.artistNames(song.artist).firstOrNull() ?: return null

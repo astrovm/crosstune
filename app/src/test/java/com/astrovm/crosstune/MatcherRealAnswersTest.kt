@@ -144,14 +144,17 @@ class MatcherRealAnswersTest {
 
     private fun matcher(): ExactMatcher {
         fake.handler = ::answer
-        return ExactMatcher(fake.client(), "US", missingForMs = 60 * 60_000L, now = { clock }, timeoutMs = WHILE_MS)
+        return ExactMatcher(fake.client(), "US", missingForMs = 60 * 60_000L, now = { clock }, timeoutMs = WHILE_MS, artistAliases = ::artistAliases)
     }
 
     private fun find(song: Kept, lengthMs: Long?): String? {
         kept = song
         fake.handler = ::answer
-        return runBlocking { ExactMatcher(fake.client(), "US", timeoutMs = WHILE_MS).find(MusicService.YOUTUBE_MUSIC, song.metadata.copy(lengthMs = lengthMs)) }
+        return runBlocking { ExactMatcher(fake.client(), "US", timeoutMs = WHILE_MS, artistAliases = ::artistAliases).find(MusicService.YOUTUBE_MUSIC, song.metadata.copy(lengthMs = lengthMs)) }
     }
+
+    // The two artist names in MusicBrainz's captured artist search are independent of Deezer's answer.
+    private suspend fun artistAliases(name: String): Set<String> = if (name == "米津玄師") setOf("米津玄師", "Kenshi Yonezu") else emptySet()
 
     private fun apple() = asked.filter { it.startsWith("itunes.apple.com") }.groupingBy { it }.eachCount()
 

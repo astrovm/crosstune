@@ -29,8 +29,10 @@ import os
 import re
 import subprocess
 import sys
+import time
 import unicodedata
 import urllib.parse
+import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import analyze
@@ -207,6 +209,48 @@ def capture_proofs(out):
         with open(path, "w", encoding="utf-8") as kept:
             json.dump(proofs, kept, ensure_ascii=False)
     print(f"{len(missing)} candidate searches, {len(proofs)} answers kept", file=sys.stderr)
+    capture_aliases(out)
+
+
+def checked_artist_aliases(name, answer):
+    """Match the MusicBrainz parser: one exact artist and artist-name aliases, not search hints."""
+    matches = []
+    for artist in answer.get("artists", []):
+        if not artist.get("id", "").strip():
+            continue
+        names = {artist.get("name", "")} | {a.get("name", "") for a in artist.get("aliases", []) if a.get("type") == "Artist name"}
+        names.discard("")
+        if any(normalized(n) == normalized(name) for n in names):
+            matches.append(names)
+    return sorted(matches[0]) if len(matches) == 1 else []
+
+
+def capture_aliases(out):
+    missing = read_json(os.path.join(out, "missing-aliases.json"))
+    path = os.path.join(out, "artist-aliases.json")
+    aliases = read_json(path) if os.path.exists(path) else {}
+    for name in missing:
+        if isinstance(aliases.get(name), list):
+            continue
+        quoted = name.replace('"', '').replace('\\', '')
+        url = "https://musicbrainz.org/ws/2/artist?" + urllib.parse.urlencode({"query": f'artist:"{quoted}"', "limit": 10, "fmt": "json"})
+        request = urllib.request.Request(url, headers={"User-Agent": "Crosstune/1 (https://github.com/astrovm/crosstune)", "Accept": "application/json"})
+        for attempt in range(4):
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    answer = json.load(response)
+                break
+            except (OSError, ValueError) as error:
+                if attempt == 3:
+                    raise ValueError(f"MusicBrainz did not answer artist search {name}: {error}") from error
+                time.sleep(2 * (attempt + 1))
+        if not isinstance(answer.get("artists"), list):
+            raise ValueError(f"MusicBrainz did not answer artist search {name}")
+        aliases[name] = checked_artist_aliases(name, answer)
+        with open(path, "w", encoding="utf-8") as kept:
+            json.dump(aliases, kept, ensure_ascii=False)
+        time.sleep(1)
+    print(f"{len(missing)} artist searches, {len(aliases)} answers kept", file=sys.stderr)
 
 
 MODES = ("names, alone", "names, asked", "latin, alone", "latin, asked")
