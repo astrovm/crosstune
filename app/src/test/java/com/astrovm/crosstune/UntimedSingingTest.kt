@@ -409,17 +409,26 @@ class UntimedSingingTest {
 
     @Test
     fun doubleSpeedHearingsCoverTheirFullSongTime() {
+        assertHearingsAtSpeed(2f, 2)
+    }
+
+    @Test
+    fun halfSpeedHearingsCoverTheirFullSongTime() {
+        assertHearingsAtSpeed(0.5f, 8)
+    }
+
+    private fun assertHearingsAtSpeed(speed: Float, expected: Int) {
         singing.answer = {
             val at = SystemClock.elapsedRealtime()
             ShadowSystemClock.advanceBy(Duration.ofSeconds(SingingListener.SECONDS.toLong()))
             Sung(at, listOf(HeardWord("Sing", 1_000)))
         }
         openLyrics()
-        plays(durationMs = 40_000, speed = 2f)
-        waitUntil { singing.hears >= 2 }
+        plays(durationMs = 40_000, speed = speed)
+        waitUntil { singing.hears >= expected }
         composeRule.waitForIdle()
-        // Two 20-second hearings cover 80 seconds of song at double speed, or two plays.
-        assertEquals(2, singing.hears)
+        // The hearings cover 80 seconds of song, or two plays, at either speed.
+        assertEquals(expected, singing.hears)
     }
 
     @Test

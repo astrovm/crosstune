@@ -3423,8 +3423,9 @@ internal class MainViewModel(
         if (!same || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return null
         if (sung.words.isNotEmpty()) singingTries = 0
         val from = clock.positionAt(sung.startedAtMs)
+        val to = clock.positionAt(sung.startedAtMs + SingingListener.SECONDS * 1000L)
         val heard = sung.words.filter { it.atMs >= 0 }.map { it.text to clock.positionAt(sung.startedAtMs + it.atMs) }
-        return HeardStretch(from, from + SingingListener.SECONDS * 1000L, heard)
+        return HeardStretch(from, to, heard)
     }
 
     /**
