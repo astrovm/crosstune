@@ -1303,6 +1303,28 @@ class SingingTest {
     }
 
     @Test
+    fun aLookupRefreshRestoresHandTimingWhenItFindsTheSameTimestampsAgain() {
+        remixWithCopies({ true })
+        openLyrics()
+        waitUntil { !model().findingWords && keptForGood() }
+        val song = checkNotNull(model().uiState.lyricsFor)
+        val retimed = model().uiState.lyricLines
+        assertEquals(10_000L, retimed.first().timeMs)
+        val corrected = retimed.map { it.timeMs + 1_500 }
+        LyricsSyncStore(prefs()).save(song, retimed, listOf(SyncPoint(10_000, corrected.first())), byHand = true)
+        checkNotNull(controller).destroyAndSettle()
+        controller = null
+
+        // A refresh asks for the original timestamps first. The copies then give back the sheet we corrected.
+        File(app.cacheDir, "kept_words.json").delete()
+        File(app.cacheDir, "lyrics.json").delete()
+        openLyrics()
+        waitUntil { !model().findingWords && keptForGood() }
+        assertEquals(corrected, model().uiState.lyricLines.map { it.timeMs })
+        assertTrue(model().uiState.lyricsSynced)
+    }
+
+    @Test
     fun wordsPutInTimeByHandWhileCopiesAreLookedForStayAsTheyAre() {
         val asked = CountDownLatch(1)
         val answer = CountDownLatch(1)

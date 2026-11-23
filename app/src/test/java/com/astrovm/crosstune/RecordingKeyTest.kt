@@ -8,7 +8,7 @@ class RecordingKeyTest {
 
     @Test fun anExactPlayingLinkCanKeepItsInstrumentalAlbumWhenTheSessionOmitsIt() {
         val album = "Album (Instrumentals)"
-        val opened = song.copy(url = "https://www.deezer.com/us/track/123", instrumentalAlbum = album)
+        val opened = song.copy(url = "https://www.deezer.com/us/track/123", album = album)
         val played = song.copy(url = "https://www.deezer.com/track/123", recordingId = "deezer:123")
         assertEquals(album, RecordingKey.asPlayed(opened, played).instrumentalAlbum)
         assertNull(RecordingKey.asPlayed(opened, played.copy(url = "https://www.deezer.com/track/456")).instrumentalAlbum)
@@ -61,24 +61,24 @@ class RecordingKeyTest {
         val one = song.copy(lengthMs = 200_000)
         val other = song.copy(lengthMs = 200_000, artworkUrl = "https://example.com/other.jpg")
         assertEquals(RecordingKey.of(one), RecordingKey.of(other))
-        assertNotEquals(RecordingKey.of(one), RecordingKey.of(other.copy(instrumentalAlbum = "Album (Instrumentals)")))
+        assertNotEquals(RecordingKey.of(one), RecordingKey.of(other.copy(album = "Album (Instrumentals)")))
         assertNotEquals(RecordingKey.of(one), RecordingKey.of(other.copy(recordingId = "player:other")))
     }
 
     @Test fun anAlbumOfInstrumentalsIsTheSameAlbumWhateverItsPlural() {
-        val plural = song.copy(lengthMs = 200_000, instrumentalAlbum = "Album (Instrumentals)")
-        val singular = plural.copy(instrumentalAlbum = "Album (Instrumental)")
+        val plural = song.copy(lengthMs = 200_000, album = "Album (Instrumentals)")
+        val singular = plural.copy(album = "Album (Instrumental)")
         assertEquals(RecordingKey.of(plural), RecordingKey.of(singular))
-        assertNotEquals(RecordingKey.of(plural), RecordingKey.of(plural.copy(instrumentalAlbum = "Other Album (Instrumentals)")))
+        assertNotEquals(RecordingKey.of(plural), RecordingKey.of(plural.copy(album = "Other Album (Instrumentals)")))
     }
 
     @Test fun theLengthAKeyHoldsComesAheadOfItsAlbum() {
         val album = "Album (Instrumentals)"
         assertEquals(200_000L, RecordingKey.lengthIn("17\u0000demo\u0000band\u0000200000"))
-        assertEquals(200_000L, RecordingKey.lengthIn(RecordingKey.of(song.copy(lengthMs = 200_000, instrumentalAlbum = album)).let { "17\u0000$it" }))
-        assertEquals(200_000L, RecordingKey.lengthIn(RecordingKey.of(song.copy(recordingId = "a:1", lengthMs = 200_000, instrumentalAlbum = album)).let { "17\u0000$it" }))
+        assertEquals(200_000L, RecordingKey.lengthIn(RecordingKey.of(song.copy(lengthMs = 200_000, album = album)).let { "17\u0000$it" }))
+        assertEquals(200_000L, RecordingKey.lengthIn(RecordingKey.of(song.copy(recordingId = "a:1", lengthMs = 200_000, album = album)).let { "17\u0000$it" }))
         assertNull(RecordingKey.lengthIn("17\u0000demo\u0000band"))
-        assertNull(RecordingKey.lengthIn("17\u0000" + RecordingKey.of(song.copy(instrumentalAlbum = album))))
+        assertNull(RecordingKey.lengthIn("17\u0000" + RecordingKey.of(song.copy(album = album))))
         assertNull(RecordingKey.lengthIn("17\u0000demo\u0000band\u0000player:one"))
     }
 

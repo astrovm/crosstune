@@ -1617,14 +1617,25 @@ internal class MainViewModel(
      */
     fun openPlayingNow() {
         val now = uiState.playingNow ?: return
-        if (uiState.result?.let { sameSong(it, now.song) } != true) showSong(now.song)
-        if (uiState.player?.song != now.song) openPlayer(now.song, now.following?.appPackage, played = true)
+        val song = withCollectionTrackAlbum(now.song)
+        if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
+        if (uiState.player?.song != song) openPlayer(song, now.following?.appPackage, played = true)
     }
 
     /** The player on the song playing now, alone, as a swipe up from the bar opens it before it's let go. */
     fun peekPlayingNow() {
         val now = uiState.playingNow ?: return
-        openPlayer(now.song, now.following?.appPackage, played = true)
+        openPlayer(withCollectionTrackAlbum(now.song), now.following?.appPackage, played = true)
+    }
+
+    /** A player may name the track opened from its collection and leave the album out. */
+    private fun withCollectionTrackAlbum(song: MusicMetadata): MusicMetadata {
+        if (song.album != null) return song
+        val id = RecordingKey.trackIdentity(song.url) ?: return song
+        val album = uiState.result?.tracks?.firstNotNullOfOrNull { track ->
+            track.album?.takeIf { RecordingKey.trackIdentity(track.url) == id }
+        } ?: return song
+        return song.copy(album = album)
     }
 
     /** Pauses the song playing now, or plays it again: as its button shows, playing when its app doesn't say where it is. */
@@ -1710,8 +1721,8 @@ internal class MainViewModel(
             )
         }
         if (!copied) showLoading()
-        // A link already in Recent is shown from there rather than looked up again. A short link's
-        // target isn't known until it's followed, so it's always looked up.
+        // A link already in Recent uses what was saved, after checking for a missing album on older entries.
+        // A short link's target isn't known until it's followed, so it's always looked up.
         val link = (input as? LinkInput.Link)?.link
         val saved = link?.let(::savedAs)
         viewModelScope.launchKept({ job = it }) {
@@ -1719,9 +1730,14 @@ internal class MainViewModel(
             // Crosstune; one copied, or that YouTube Music can't tell about, e.g. offline, is let be.
             val video = link?.takeIf { (copied || here || openWhenReady && destination == null) && it.mayNotBeMusic }
             // Looked up while asking whether it's music, so a music video costs one wait, not two.
-            val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input)) }
+            val lookup = async {
+                val entry = saved?.let { refreshSavedAlbum(it) }
+                val resolution = entry?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input))
+                resolution to entry
+            }
             if (!lookupGoesOn(video, copied, lookup, ::showLoading)) return@launchKept
-            lookedUp(lookup.await(), saved, checked)
+            val (resolution, entry) = lookup.await()
+            lookedUp(resolution, entry, checked)
         }
     }
 
@@ -1751,6 +1767,13 @@ internal class MainViewModel(
         // An album or playlist kept without its songs, e.g. by a version that couldn't read them, is looked up again for them.
         ?.takeUnless { (it.link.type == ItemType.ALBUM || it.link.type == ItemType.PLAYLIST) && it.metadata.tracks.isEmpty() }
 
+    /** Checks the catalogue once after an upgrade. If it can't answer, keep the old entry for another try. */
+    private suspend fun refreshSavedAlbum(entry: HistoryEntry): HistoryEntry {
+        if (entry.albumChecked || uiState.offline) return entry
+        val refreshed = resolver.resolve(LinkInput.Link(entry.link)) as? Resolution.Resolved ?: return entry
+        return entry.afterAlbumLookup(refreshed.metadata)
+    }
+
     /** What a link's lookup found, or why it failed; [saved] is how Recent had it. */
     private suspend fun lookedUp(resolution: Resolution, saved: HistoryEntry?, checked: CheckedPlayerSong?) {
         when (resolution) {
@@ -1767,7 +1790,7 @@ internal class MainViewModel(
             }
             // A search page saved while exact matching was on means matching failed that time,
             // e.g. on a flaky network, so a new request for the link tries it again.
-            is Resolution.Resolved -> onResolved(resolution, saved?.destinationLinks.orEmpty().filterValues { it.exact || !it.matchingEnabled }, checked)
+            is Resolution.Resolved -> onResolved(resolution, saved, checked)
         }
     }
 
@@ -1787,13 +1810,14 @@ internal class MainViewModel(
         return resolution.copy(metadata = resolution.metadata.copy(artworkUrl = cover))
     }
 
-    /** [prepared] are the links already found for it, when it came from Recent. */
-    private suspend fun onResolved(resolution: Resolution.Resolved, prepared: Map<String, PreparedLink>, checked: CheckedPlayerSong?) {
+    /** [saved] is how Recent has it, including the links already found for it. */
+    private suspend fun onResolved(resolution: Resolution.Resolved, saved: HistoryEntry?, checked: CheckedPlayerSong?) {
+        val prepared = saved?.destinationLinks.orEmpty().filterValues { it.exact || !it.matchingEnabled }
         val namedLink = checked?.takeIf { uiState.exactMatch }?.let {
             it.destination to preparedLink(it.destination, resolution.metadata, it.match)
         }
         val links = if (namedLink == null) prepared else prepared + (namedLink.first.key to namedLink.second)
-        val entry = HistoryEntry(resolution.link, resolution.metadata, links)
+        val entry = HistoryEntry(resolution.link, resolution.metadata, links, albumChecked = saved?.albumChecked ?: true)
         val history = historyStore.add(entry)
         // The box shows the clean link Crosstune works with, e.g. without "?si=" or a short link's redirect.
         uiState = uiState.copy(
@@ -2180,11 +2204,16 @@ internal class MainViewModel(
         val song = uiState.player?.takeIf { !it.songless }?.song ?: return
         val asked = asPlayed(song)
         val key = RecordingKey.of(asked)
-        kept[key]?.let { return showPeek(song, it.lines, it.lyrics, it.timedByEar) }
+        kept[key]?.takeIf { it.madeWith == madeWith(asked) }?.let { words ->
+            if (words.canPreview == true) return showPeek(song, words.lines, words.lyrics, words.timedByEar)
+            if (words.canPreview == false) return
+        }
         val finder = lyricsFinder?.takeIf { lookAhead && asked.type == ItemType.TRACK && asked.artist.isNotBlank() } ?: return
         val look = lookingAhead[key] ?: lookUpAhead(finder, key, asked)
         viewModelScope.launchKept({ peekJob = it }) {
-            (look.await().lyrics as? LyricsFinder.Lyrics.Found)?.let { showPeek(song, it.lines, it.words, byEar = false) }
+            val result = look.await()
+            val words = result.lyrics as? LyricsFinder.Lyrics.Found ?: return@launchKept
+            if (!result.fallback && !words.markedInstrumental) showPeek(song, words.lines, words.words, byEar = false)
         }
     }
 
@@ -2643,8 +2672,9 @@ internal class MainViewModel(
 
     /** [requested] as its words are looked up: as the app playing it has it, when one does. */
     private fun asPlayed(requested: MusicMetadata): MusicMetadata {
-        val current = playback?.recording(requested)?.takeIf { sameSong(it, requested) && it.recordingId != null }
-        return current?.let { RecordingKey.asPlayed(requested, it) } ?: requested
+        val current = playback?.recording(requested)?.takeIf { sameSong(it, requested) && it.recordingId != null } ?: return requested
+        val sourceUrl = requested.url ?: uiState.link?.url?.takeIf { uiState.result?.copy(artworkUrl = requested.artworkUrl) == requested }
+        return RecordingKey.asPlayed(requested, current, sourceUrl)
     }
 
     /** The words of songs shown, by recording, while they're being looked up ahead. */
@@ -2683,6 +2713,9 @@ internal class MainViewModel(
         if (firstSong) listenAlong()
     }
 
+    private var lyricsFromFallback = false
+    private var lyricsCanPreview: Boolean? = null
+
     private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false) {
         val song = asPlayed(requested)
         // Only a song has words, and one whose artist is unknown can't be looked up safely.
@@ -2700,6 +2733,8 @@ internal class MainViewModel(
         stopFollowing()
         foundLines = emptyList()
         found = null
+        lyricsFromFallback = false
+        lyricsCanPreview = null
         heardStretches = emptyList()
         timedBy = emptyList()
         unsung = null
@@ -2726,6 +2761,7 @@ internal class MainViewModel(
                     // show as soon as they're found, and their timing may get better after.
                     val look = lookingAhead.remove(RecordingKey.of(song))?.await() ?: finder.firstLook(song)
                     first = look
+                    lyricsFromFallback = look.fallback
                     when (val answer = look.lyrics) {
                         is LyricsFinder.Lyrics.Found -> if (answer.markedInstrumental) held(song, answer, look.final) else showWords(song, answer)
                         // No words were shown while looking, so there's none to clear.
@@ -2754,12 +2790,9 @@ internal class MainViewModel(
     }
 
     /** [answer], the words found for [song], shown. */
-    private suspend fun showWords(song: MusicMetadata, answer: LyricsFinder.Lyrics.Found) {
-        foundLines = answer.lines
-        found = answer
-        syncPoints = syncStore.load(song, answer.lines)
-        wordsPace = syncStore.pace(song, answer.lines)
-        keptByHand = syncStore.byHand(song, answer.lines)
+    private suspend fun showWords(song: MusicMetadata, answer: LyricsFinder.Lyrics.Found, heardSinging: Boolean = false) {
+        lyricsCanPreview = !answer.markedInstrumental || heardSinging
+        useFoundTiming(song, answer)
         uiState = uiState.copy(
             lyrics = answer.words, lyricLines = adjustedLines(syncPoints), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
             lyricsInstrumental = false, lyricsOffTake = timedForAnother(song)
@@ -2777,6 +2810,15 @@ internal class MainViewModel(
         // Japanese in romaji or Korean in Latin letters is written back in its own script, so it
         // reads like any song in it.
         if (usesChatGpt()) romanizedScript(answer.words)?.let { writeInOwnScript(song, it) }
+    }
+
+    /** Restore saved points for these timestamps, including when retiming returns the sheet they were set on. */
+    private fun useFoundTiming(song: MusicMetadata, answer: LyricsFinder.Lyrics.Found) {
+        foundLines = answer.lines
+        found = answer
+        syncPoints = syncStore.load(song, foundLines)
+        wordsPace = syncStore.pace(song, foundLines)
+        keptByHand = syncStore.byHand(song, foundLines)
     }
 
     /**
@@ -2802,9 +2844,8 @@ internal class MainViewModel(
      */
     private fun keepShown() {
         val song = uiState.lyricsFor ?: return
+        if (!wordsReadyToKeep()) return
         val learning = uiState.learning
-        val working = uiState.isLoadingLyrics || lyricsJob?.isActive == true || readingsJob?.isActive == true || restoreJob?.isActive == true || learning.translating || uiState.chords.loading
-        if (uiState.lyrics.isEmpty() || working) return
         val key = RecordingKey.of(song)
         // Where lines were heard this time only isn't kept: next time the app's clock may be sure.
         val points = withGuess(syncPoints)
@@ -2814,7 +2855,7 @@ internal class MainViewModel(
             // A translation that failed is asked for again.
             learning.copy(translations = if (learning.translationFailed) emptyList() else learning.translations),
             // Chords none were found for are looked for again.
-            madeWith(), uiState.chords.takeIf { it.sheet != null } ?: uiState.chords.fresh(), wordsPace
+            madeWith(song), uiState.chords.takeIf { it.sheet != null } ?: uiState.chords.fresh(), wordsPace, canPreview = lyricsCanPreview
         )
         kept[key] = words
         keptOnDisk?.let { disk ->
@@ -2822,15 +2863,23 @@ internal class MainViewModel(
         }
     }
 
+    /** Words borrowed offline still need a lookup, and work in progress can be kept when it finishes. */
+    private fun wordsReadyToKeep(): Boolean =
+        !lyricsFromFallback && uiState.lyrics.isNotEmpty() && !uiState.isLoadingLyrics && lyricsJob?.isActive != true &&
+            readingsJob?.isActive != true && restoreJob?.isActive != true && !uiState.learning.translating && !uiState.chords.loading
+
     /**
      * Shows [song]'s words as they were left, when they're kept and were worked out as they would
      * be now, and says whether they were. Words with more in them than would be shown now, e.g. a
      * credit since left out, are worked out again.
      */
     private fun showKept(song: MusicMetadata): Boolean {
-        val kept = kept[RecordingKey.of(song)]?.takeIf { it.madeWith == madeWith() && it.found?.let { found -> LyricsFinder.cleaned(found, song) == found } != false } ?: return false
+        val kept = kept[RecordingKey.of(song)]?.takeIf {
+            it.madeWith == madeWith(song) && it.canPreview != false && it.found?.let { found -> LyricsFinder.cleaned(found, song) == found } != false
+        } ?: return false
         found = kept.found
         foundLines = kept.foundLines
+        lyricsCanPreview = kept.canPreview
         restored = kept.japanese
         syncPoints = kept.syncPoints
         wordsPace = kept.pace
@@ -2860,8 +2909,8 @@ internal class MainViewModel(
      * signed in, ChatGPT, how it's asked to translate and its model, which translate them, put their
      * readings right and write romaji in Japanese.
      */
-    private fun madeWith() =
-        listOf(LyricsFinder.CACHE_VERSION, Readings.VERSION, translateInto(), uiState.learning.untranslated.sorted(), usesChatGpt(), uiState.learning.chatGptTranslation, TRANSLATION_VERSION, uiState.chatGpt.model).toString()
+    private fun madeWith(song: MusicMetadata) =
+        listOf(LyricsFinder.cacheVersion(song), Readings.VERSION, translateInto(), uiState.learning.untranslated.sorted(), usesChatGpt(), uiState.learning.chatGptTranslation, TRANSLATION_VERSION, uiState.chatGpt.model).toString()
 
     /**
      * [found], [song]'s words as shown, timed better once that's worked out, e.g. from another copy
@@ -2879,9 +2928,8 @@ internal class MainViewModel(
         // Or put in time by hand while the copies were looked for, which kept the better times meanwhile.
         if (byHand(song)) return finder.keep(song, found)
         if (!mayRetime(song)) return
-        foundLines = better.lines
-        this.found = better
-        uiState = uiState.copy(lyricLines = better.lines, lyricsTimedByEar = false, lyricsOffTake = timedForAnother(song))
+        useFoundTiming(song, better)
+        uiState = uiState.copy(lyricLines = adjustedLines(syncPoints), lyricsSynced = syncPoints.isNotEmpty(), lyricsTimedByEar = false, lyricsOffTake = timedForAnother(song))
         followSavedLines(song)
     }
 
@@ -3420,7 +3468,7 @@ internal class MainViewModel(
             return false
         }
         unsung = null
-        showWords(heard.song, words)
+        showWords(heard.song, words, heardSinging = listen == Listen.VOICE)
         return true
     }
 
@@ -4656,6 +4704,7 @@ internal class MainViewModel(
         unsung = null
         leaveWords()
         keepShown()
+        previewHeardLyrics()
         lyricsJob?.cancel()
         lyricsJob = null
         nextJob?.cancel()
@@ -4669,6 +4718,16 @@ internal class MainViewModel(
             lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsTimedByEar = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
             learning = uiState.learning.fresh(), chords = uiState.chords.fresh()
         )
+    }
+
+    /** Give the player its preview once the user returns from lyrics and a listen confirmed the singing. */
+    private fun previewHeardLyrics() {
+        val shown = uiState.lyricsFor ?: return
+        if (found?.markedInstrumental != true || lyricsCanPreview != true) return
+        val song = uiState.player?.song ?: return
+        if (RecordingKey.of(asPlayed(song)) == RecordingKey.of(shown)) {
+            showPeek(song, uiState.lyricLines, uiState.lyrics, uiState.lyricsTimedByEar)
+        }
     }
 
     private var readingsJob: Job? = null
@@ -5598,9 +5657,18 @@ internal class MainViewModel(
     fun showHistoryEntry(entry: HistoryEntry, play: Boolean = false) {
         selectHistoryEntry(entry)
         pendingPlay = play
-        lookAhead()
-        loadTrackCovers()
-        prepareResultDestination()
+        val refresh = !entry.albumChecked && !uiState.offline
+        if (refresh) uiState = uiState.copy(result = null, isLoading = true)
+        viewModelScope.launchKept({ job = it }) {
+            if (refresh) {
+                val updated = refreshSavedAlbum(entry)
+                val history = if (updated.albumChecked) historyStore.update(entry.link.url, updated.metadata, albumChecked = true) else uiState.history
+                uiState = uiState.copy(result = updated.metadata, history = history, isLoading = false)
+            }
+            lookAhead()
+            loadTrackCovers()
+            prepareResult()
+        }
     }
 
     /**
@@ -6220,7 +6288,7 @@ internal class MainViewModel(
         /** How many times through a song with untimed words is heard, all told, to time them: more would hardly time more lines. */
         const val UNTIMED_HEARINGS = 2
 
-        /** Hearings of a video it takes to say how fast it goes, and the speeds it could go at, as by [AudioTiming]. */
+        /** Hearings of a video it takes to say how fast it goes, and the speeds it could go at. */
         const val LEAD_SPEED_HEARINGS = 3
         private val LEAD_SPEEDS = 0.9f..1.1f
         /** Lines sung in what's heard, at least, so enough words to match are heard. */

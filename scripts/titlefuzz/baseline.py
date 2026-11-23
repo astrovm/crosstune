@@ -50,6 +50,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 import adbtool
+import gradlebox
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
@@ -98,7 +99,8 @@ def on_emulator(checkout, serial, count, long=None):
         for found in (tests / "com/astrovm/crosstune").glob(f"{name}*.class"):
             shutil.copy(found, classes / "com/astrovm/crosstune" / found.name)
     shutil.make_archive(str(work / "classes"), "zip", classes)
-    stdlib = next(Path.home().glob(".cache/crosstune-gradle-box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/*/*/kotlin-stdlib-*[0-9].jar"))
+    # The ref being measured can build with another Kotlin than this checkout.
+    stdlib = gradlebox.kotlin_stdlib(checkout)
     tools = max((regextable.SDK / "build-tools").iterdir())
     platform = max((regextable.SDK / "platforms").iterdir()) / "android.jar"
     # The app's resource ids, which the readers' enums name.
