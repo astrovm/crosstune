@@ -144,11 +144,11 @@ class TvPlayTest {
     }
 
     /** The song's card, shown as a link shared to Crosstune is. */
-    private fun launch() {
+    private fun launch(action: String = play) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
         controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
         composeRule.waitForIdle()
-        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { composeRule.onAllNodes((hasContentDescription(action) or hasText(action)) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun playing() {
@@ -343,7 +343,7 @@ class TvPlayTest {
     @Test
     fun onAPhoneBackFromTheWordsPutsNothingBackInFocus() {
         phone = Phone.PIXEL
-        launch()
+        launch(action = string(R.string.lyrics_button))
         composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
         val words = composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasClickAction())
         words.requestFocus()
@@ -861,7 +861,7 @@ class TvPlayTest {
     @Test
     fun onAPhoneTheWordsBarIsLeftAlone() {
         phone = Phone.OTHER
-        launch()
+        launch(action = string(R.string.lyrics_button))
         click(string(R.string.lyrics_button))
         waitUntil { shown("Demo one") }
         val learn = composeRule.onNode(hasContentDescription(string(R.string.lyrics_learn)))
