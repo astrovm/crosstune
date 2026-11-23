@@ -1291,6 +1291,21 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anUntimedSongDoesNotLetAnUnneededDeezerFailureBlockAVideo() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val untimed = youTubeMusicRow("Song", "Artist • Album", videoId = "other000000")
+        val video = youTubeMusicRow("Song - アーティスト", "Fan • 1M views • 4:00", videoId = "fan00000000")
+        namesAndTabs(songs = listOf(untimed), videos = listOf(video), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
+        val answer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/artist") throw IOException("offline")
+            answer(request)
+        }
+        assertEquals("https://music.youtube.com/watch?v=fan00000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().host == "api.deezer.com" })
+    }
+
+    @Test
     fun anAppleProvedSongDoesNotWaitForDeezer() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")
