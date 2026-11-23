@@ -253,6 +253,22 @@ class PlaybackTest {
     }
 
     @Test
+    fun anotherPlaybackFollowsASessionByTheNumberThisOneGaveIt() {
+        allow()
+        val other = MusicMetadata("Other Track", "Other Artist")
+        shadowOf(sessions).addController(player("com.example.other", "Other", other.title, other.artist))
+        shadowOf(sessions).addController(player("com.example.music", "Music", song.title, song.artist))
+        // The sleep timer's own playback, which numbered another app's session first, then is handed the player's number.
+        val timers = MediaSessionPlayback(app, now = { NOW }, modes = modes, queueOf = { queues[it.packageName] }, clockLog = PracticeClockLog(true), radioNotices = radioNotices)
+        timers.matching(other)
+        val session = playback.matching(song).single().session
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { timers.follow(song, "com.example.music", session).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("com.example.music"), seen.map { it?.appPackage })
+    }
+
+    @Test
     fun clockEvidenceKeepsALateCallbacksOriginalSession() {
         ShadowLog.setLoggable("CrosstuneClock", android.util.Log.DEBUG)
         allow()

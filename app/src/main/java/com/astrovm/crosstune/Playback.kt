@@ -49,6 +49,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -402,11 +403,8 @@ internal class MediaSessionPlayback(
         return songsRead.of(Triple(title, artist, musicVideo))
     }
 
-    /** How many sessions were numbered; see [sessionNumbers]. */
-    private val sessionsNumbered = AtomicInteger()
-
-    /** Each session's number, by its token, the same in every follow of it; see [Following.session]. */
-    private val sessionNumbers = KeptReads<MediaSession.Token, Int>(SESSIONS_KEPT) { sessionsNumbered.getAndIncrement() }
+    /** Each session's number, by its token; see [sessionNumbersOf]. */
+    private val sessionNumbers = sessionNumbersOf(context)
 
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
     private val audio: AudioManager = context.getSystemService(AudioManager::class.java)
@@ -1252,6 +1250,22 @@ private const val SONGS_READ_KEPT = 32
 
 /** How many sessions keep their numbers: more than a phone has apps playing at once. */
 private const val SESSIONS_KEPT = 32
+
+/** Each app's session numbers, by its application; see [sessionNumbersOf]. */
+private val sessionNumbersByApp = WeakHashMap<Context, KeptReads<MediaSession.Token, Int>>()
+
+/**
+ * Each session's number, by its token, the same in every follow of it; see [Following.session]. One numbering
+ * for all of [context]'s app, not one for each [MediaSessionPlayback]: the player hands its number on to the
+ * sleep timer, which follows with one of its own, and a number from another numbering named no app there, so
+ * the timer paused at once.
+ */
+private fun sessionNumbersOf(context: Context): KeptReads<MediaSession.Token, Int> = synchronized(sessionNumbersByApp) {
+    sessionNumbersByApp.getOrPut(context.applicationContext) {
+        val numbered = AtomicInteger()
+        KeptReads(SESSIONS_KEPT) { numbered.getAndIncrement() }
+    }
+}
 
 /** How full [KeptReads]' map may get before it grows, as Java's own maps have it. */
 private const val LOAD_FACTOR = 0.75f
