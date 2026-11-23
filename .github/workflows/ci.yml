@@ -494,6 +494,10 @@ jobs:
       - name: Resolve release dependencies
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
         run: ./gradlew :app:ci :app:bundleRelease :app:cachePitestDependencies --build-cache --configuration-cache
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
+          CMAKE_CXX_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
+          CCACHE_COMPILERCHECK: content
 
       - name: Save Central dependencies
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
