@@ -61,7 +61,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
 
     /** Search the pieces a crossing word spans, or the pieces needed to say the small kana together. */
     private fun searchWindow(text: String, tokens: List<Token>, wrong: Int, next: Int, crossing: IntRange?): Pair<Int, Int> {
-        var first = wrong - 1
+        var first = maxOf(next, wrong - 1)
         while (first > next && includeBefore(text, tokens, first, crossing)) first--
         var last = wrong
         while (last + 1 < tokens.size && includeAfter(text, tokens, last, crossing)) last++
@@ -99,11 +99,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         var unknownEnd = -1
         for (at in text.indices) {
             if (!reached[at]) continue
-            val crossedTsu = text[at] in "っッ" && crossingWord(text, at) != null
-            val kept = (startingAt(text, at, at >= unknownEnd) + offer(text, at).also(offered::addAll))
-                .filterNot { blockedNode(text, at, it, crossedTsu) }
-            val extended = if (bridge) bridge(text, at, kept, offered, bridged) else emptyList()
-            for (node in kept + spanning(text, at, kept) + extended) {
+            for (node in candidates(text, at, at >= unknownEnd, bridge, offered, bridged)) {
                 lattice.place(node, at)
                 reached[at + node.surface.length] = true
                 if (node.type == ViterbiNode.Type.UNKNOWN) unknownEnd = at + node.surface.length
@@ -120,6 +116,17 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
             else if (node in offered) JmdictToken(node.wordId, node.surface, offset + node.startIndex, tokenInfoDictionary)
             else Token(node.wordId, node.surface, node.type, offset + node.startIndex, dictionary)
         }
+    }
+
+    private fun candidates(
+        text: String, at: Int, unknown: Boolean, bridge: Boolean,
+        offered: MutableSet<ViterbiNode>, bridged: MutableMap<ViterbiNode, Pair<Boolean, String>>
+    ): List<ViterbiNode> {
+        val crossedTsu = text[at] in "っッ" && crossingWord(text, at) != null
+        val kept = (startingAt(text, at, unknown) + offer(text, at).also(offered::addAll))
+            .filterNot { blockedNode(text, at, it, crossedTsu) }
+        val extended = if (bridge) bridge(text, at, kept, offered, bridged) else emptyList()
+        return kept + spanning(text, at, kept) + extended
     }
 
     /** A known っ word cannot cut a common word in two, but って still works when no common word crosses it. */

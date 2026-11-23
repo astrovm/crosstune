@@ -785,6 +785,14 @@ class ReadingsTest {
     }
 
     @Test
+    fun consecutiveKanaSearchWindowsKeepTheirText() {
+        val line = "もっともっともっと"
+        fun check() = assertEquals(line, line, Readings.words(line, Script.JAPANESE).joinToString("") { it.text })
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
     fun dictionaryWordsKeepTheirReadingsInContext() {
         val cases = mapOf(
             "薄化粧" to "うすげしょう", "丸印" to "まるじるし", "一口" to "ひとくち", "丸印の" to "まるじるしの"

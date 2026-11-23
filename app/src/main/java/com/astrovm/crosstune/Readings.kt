@@ -1214,14 +1214,16 @@ internal object Readings {
         if (!isHan(word[0].surface[0]) || !runsOn) return null
         val surface = word.joinToString("") { it.surface }
         val unreadRu = word.any { it.unknown } && surface.drop(1) in setOf("る", "るる")
-        if (last.kind in GRAMMAR && !unreadRu) return null
-        if ((word.size == 1 || surface.count(::isHan) < 2) && !unreadRu) return null
+        if (!listedShape(word, surface, unreadRu)) return null
         val kana = table[surface] ?: conjugated(word, table) ?: return null
         if (kana == word.joinToString("") { it.kana }) return null
         val kind = if (unreadRu) "動詞" else last.kind
         val subkind = if (unreadRu) "自立" else last.subkind
         return Piece(surface, kana, kind, subkind, reader = Reader.JMDICT)
     }
+
+    private fun listedShape(word: List<Piece>, surface: String, unreadRu: Boolean): Boolean =
+        unreadRu || (word.last().kind !in GRAMMAR && word.size > 1 && surface.count(::isHan) >= 2)
 
     /**
      * How [word] reads when its last piece is a verb or an adjective JMdict has in its dictionary form:
