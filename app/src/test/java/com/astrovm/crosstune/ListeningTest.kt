@@ -606,6 +606,74 @@ class ListeningTest {
     }
 
     @Test
+    fun radioGardenKeepsTheHeardTitleWhileTheQueuePolls() {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1)
+        val radio = FakePlayback().apply { access = true; unnamed.value = station }
+        val hearing = FakeHearing()
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        hearing.song("Love Sober", 8.0, artist = "KAMRAD")
+        waitForText("Love Sober")
+
+        val polls = listOf(null, "Die junge Nacht der ARD", "Bad Bunny - DtMF", "Bad Bunny - DtMF")
+        for ((index, subtitle) in polls.withIndex()) {
+            val item = MediaSession.QueueItem(MediaDescription.Builder().setTitle("1LIVE").setSubtitle(subtitle).build(), 0)
+            val claim = RadioGarden.queueSong("1LIVE", if (subtitle != null) listOf(item) else emptyList())
+            val update = station.copy(artworkUrl = "https://example.test/station-$index.png", queueSong = claim)
+            composeRule.runOnIdle { radio.unnamed.value = update }
+            waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing == update }
+            assertEquals("Love Sober", controllerModel().uiState.playingUnnamed?.heard?.metadata?.title)
+            assertTrue(shown("Love Sober"))
+            assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+            assertEquals(1, hearing.listens)
+        }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "DtMF" in it } }
+
+        radioGardenCatalog("Down", "Jay Sean", lengthMs = 10_000L)
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(queueSong = MusicMetadata("Down", "Jay Sean")) }
+        waitForText("Down")
+        assertNull(controllerModel().uiState.playingUnnamed?.heard)
+        assertFalse(shown("Love Sober"))
+    }
+
+    @Test
+    fun radioGardenUsesTheHearingClockUntilPlaybackPausesOrChangesSession() {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1)
+        val following = Following(PlaybackClock(30_000, SystemClock.elapsedRealtime()), "Radio Garden", appPackage = station.app, session = 1)
+        val radio = FakePlayback().apply { access = true; unnamed.value = station; playing.value = following }
+        MainActivity.playbackFactory = { radio }
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.following == following && hearing.listens > 0 }
+        hearing.song("DtMF", 8.0, artist = "Bad Bunny")
+        waitForText("DtMF")
+
+        val refreshed = following.copy(clock = PlaybackClock(0, SystemClock.elapsedRealtime()))
+        composeRule.runOnIdle { radio.playing.value = refreshed }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.following == refreshed }
+        assertEquals("DtMF", controllerModel().uiState.playingUnnamed?.heard?.metadata?.title)
+        assertTrue(shown("DtMF"))
+
+        composeRule.runOnIdle { radio.playing.value = refreshed.copy(clock = refreshed.clock.copy(playing = false)) }
+        waitForText("1LIVE")
+        assertFalse(shown("DtMF"))
+        val listens = hearing.listens
+        composeRule.runOnIdle { radio.playing.value = refreshed }
+        waitUntil(TIMEOUT_MS) { hearing.listens > listens }
+        hearing.song("Love Sober", 8.0, artist = "KAMRAD")
+        waitForText("Love Sober")
+
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(session = 2) }
+        waitForText("1LIVE")
+        assertFalse(shown("Love Sober"))
+    }
+
+    @Test
     fun radioGardenDropsTheConfirmedTitleWhenTheStationChanges() {
         val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", queueSong = MusicMetadata("First Song", "Band"))
         val radio = FakePlayback().apply { access = true; unnamed.value = station }
