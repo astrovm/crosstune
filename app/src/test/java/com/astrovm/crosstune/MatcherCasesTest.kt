@@ -637,6 +637,15 @@ class MatcherCasesTest {
     }
 
     @Test
+    fun aRerecordedLiveAlbumCannotReplaceTheNamedSong() {
+        val live = Case("rerecorded live album", "song0", lengthMs = 210_000, linkMs = 240_000,
+            editions = listOf("Live at Budokan" to 240_000), japan = japanese("偽の歌"), songs = listOf(
+                row("偽の歌", length = "3:30"), row("偽の歌 (ライブ)", "Live at Budokan From THE FIRST TAKE", length = "4:00")
+            ))
+        assertEquals("song0", find(live))
+    }
+
+    @Test
     fun aNamedRemixCannotTakeThePlaceOfTheLinkedLiveRecording() {
         assertEquals("song0", find(Case("named live remix", "song0", linkMs = 240_000, songs = listOf(
             row("Fake Song", length = "3:30"), row("Fake Song (Remix) - Live Version", "Live at Budokan", length = "4:00")

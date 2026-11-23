@@ -1223,6 +1223,28 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aVideoFoundWhileDeezersTrackSearchIsDownIsAskedAgain() = runBlocking {
+        val song = MusicMetadata("Song", "Artist")
+        val video = youTubeMusicRow("Artist - Song", "Artist • 1M views • 4:00", videoId = "video000000")
+        namesAndTabs(videos = listOf(video))
+        val answer = fake.handler
+        fake.handler = { request -> if (request.url.host == "api.deezer.com") throw IOException("offline") else answer(request) }
+        val directory = kotlin.io.path.createTempDirectory("lookups").toFile()
+        try {
+            var clock = 0L
+            val cache = LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined)
+            val matcher = ExactMatcher(fake.client(), "US", Dispatchers.Unconfined, cache, now = { clock })
+            assertEquals("https://music.youtube.com/watch?v=video000000", matcher.find(MusicService.YOUTUBE_MUSIC, song))
+            val row = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")
+            namesAndTabs(songs = listOf(row), videos = listOf(video))
+            clock += ExactMatcher.UNSURE_FOR_MS
+            assertEquals("https://music.youtube.com/watch?v=original000", matcher.find(MusicService.YOUTUBE_MUSIC, song))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun aDeezerLengthDoesNotWidenAnAppleRecording() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト")
         val other = youTubeMusicRow("Other", "Artist • Album • 4:03", videoId = "other000000")
@@ -1350,6 +1372,15 @@ class ExactMatcherTest {
         val own = youTubeMusicRow("Official - Song", "Artist • 1M views • 4:00", videoId = "original000")
         namesAndTabs(videos = listOf(fan, own), apple = mapOf("US" to appleSong("Song", "Artist", 240_000)))
         assertEquals("https://music.youtube.com/watch?v=fan00000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun aClosingBracketInTheArtistsNameDoesNotEndTheSong() = runBlocking {
+        val song = MusicMetadata("Song", "Artist」", lengthMs = 240_000)
+        val fan = youTubeMusicRow("Artist」「Song」MV", "Fan • 1M views • 4:00", videoId = "fan00000000")
+        val own = youTubeMusicRow("Song", "Artist」 • 1M views • 4:00", videoId = "original000")
+        namesAndTabs(videos = listOf(fan, own), apple = mapOf("US" to appleSong("Song", "Artist」", 240_000)))
+        assertEquals("https://music.youtube.com/watch?v=original000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
     }
 
     @Test
