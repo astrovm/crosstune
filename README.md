@@ -93,7 +93,7 @@ In **Settings** → **Practice**, use **Allow exact time**. Without it, Android 
 - A song's title and artist go to the music services that find and open it, and to lyrics, chords and translation sites.
 - Signed in with ChatGPT, the AI features send OpenAI the song, its lyrics and what you ask.
 - The [browser extension](extension) sends the developer nothing. It sends a link's title and artist where the app does, and, while its lyrics panel is open, to LRCLIB, YouTube Music, NetEase Cloud Music, Letras and Genius for the words.
-- Crosstune's only server gets the problem reports you send, or turn on. It keeps no IP address, and deletes each report after 180 days.
+- Crosstune's only server gets the problem reports you send, or turn on. A report about singing heard far off can wait on your phone until you decide about automatic reports. It keeps no IP address, and deletes each report after 180 days.
 
 The full [privacy policy](https://crosstune.cc/privacy/) names every service and what each report carries.
 
