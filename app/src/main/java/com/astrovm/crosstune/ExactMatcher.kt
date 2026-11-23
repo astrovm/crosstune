@@ -924,25 +924,7 @@ internal class ExactMatcher(
         }.take(5)
         return coroutineScope {
             val answers = Channel<Pair<Row?, Boolean>>(Channel.UNLIMITED)
-            val searches = candidates.map { candidate -> launch {
-                val artist = candidate.details.firstOrNull().orEmpty()
-                val wanted = MusicMetadata(candidate.name, artist, lengthMs = candidate.lengthMs)
-                val store = SongNames.homeStore(candidate.name + artist)
-                if (store == null) {
-                    answers.send(null to false)
-                    return@launch
-                }
-                val asked = Asked()
-                val answer = appleSong(wanted, store, asked, mutableMapOf())
-                val proved = candidate.takeIf {
-                    answer?.editions.orEmpty().any { edition ->
-                        edition.optLong("trackId") in names.appleIds &&
-                            matches(wanted, edition.optString("trackName"), edition.optString("artistName")) &&
-                            sameRecordingLength(candidate.lengthMs, edition.optLong("trackTimeMillis"))
-                    }
-                }
-                answers.send(proved to asked.failed)
-            } }
+            val searches = candidates.map { candidate -> launch { answers.send(appleCandidateProof(candidate, names)) } }
             repeat(searches.size) {
                 val (proved, failed) = answers.receive()
                 if (failed) names.complete = false
@@ -953,6 +935,22 @@ internal class ExactMatcher(
             }
             null
         }
+    }
+
+    private suspend fun appleCandidateProof(candidate: Row, names: Names): Pair<Row?, Boolean> {
+        val artist = candidate.details.first()
+        val wanted = MusicMetadata(candidate.name, artist, lengthMs = candidate.lengthMs)
+        val store = SongNames.homeStore(candidate.name + artist) ?: return null to false
+        val asked = Asked()
+        val answer = appleSong(wanted, store, asked, mutableMapOf())
+        val proved = candidate.takeIf {
+            answer?.editions.orEmpty().any { edition ->
+                edition.optLong("trackId") in names.appleIds &&
+                    matches(wanted, edition.optString("trackName"), edition.optString("artistName")) &&
+                    sameRecordingLength(candidate.lengthMs, edition.optLong("trackTimeMillis"))
+            }
+        }
+        return proved to asked.failed
     }
 
     private fun songRow(metadata: MusicMetadata, rows: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording): Row? {

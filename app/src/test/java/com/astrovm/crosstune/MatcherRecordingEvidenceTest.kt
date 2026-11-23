@@ -28,9 +28,9 @@ class MatcherRecordingEvidenceTest {
         JSONArray(GZIPInputStream(stream).bufferedReader().use { it.readText() })
     }
 
-    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false, reverseDown: Boolean = false, deezerHeld: Boolean = false, inputLength: Long? = null, held: Pair<CountDownLatch, CountDownLatch>? = null): String? {
+    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false, reverseDown: Boolean = false, deezerHeld: Boolean = false, inputLength: Long? = null, held: Pair<CountDownLatch, CountDownLatch>? = null, withoutLength: Boolean = false): String? {
         val song = captured.getJSONObject(index)
-        val metadata = MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = inputLength ?: song.getLong("lengthMs"))
+        val metadata = MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = if (withoutLength) null else inputLength ?: song.getLong("lengthMs"))
         val us = JSONArray().also { results ->
             val editions = song.getJSONArray("editionsMs")
             for (i in 0 until editions.length()) results.put(JSONObject().put("trackId", song.getLong("id"))
@@ -90,6 +90,8 @@ class MatcherRecordingEvidenceTest {
     @Test fun jealousOpensTheJapaneseSongWithoutAppleNativeNames() = assertEquals(WATCH + "8eQdsCZWrLg", find(3, false))
 
     @Test fun zeroInputLengthDoesNotHideAnAppleProvedSong() = assertEquals(WATCH + "M3-K4knCeLE", find(2, false, inputLength = 0))
+
+    @Test fun noInputLengthUsesTheAppleRecordingLength() = assertEquals(WATCH + "M3-K4knCeLE", find(2, false, withoutLength = true))
 
     @Test fun aDifferentAppleRecordingDoesNotProveTheJapaneseSong() = assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, differentRecording = true))
 
