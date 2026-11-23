@@ -1554,6 +1554,46 @@ class LyricsReportTest {
     }
 
     @Test
+    fun timingReportWaitsIfItsLyricsOpenDuringThePacingDelay() {
+        timingReportWaitsForLyricsDuringPacing(legacy = false, reopen = false)
+    }
+
+    @Test
+    fun legacyTimingReportWaitsIfItsLyricsCloseAndReopenDuringThePacingDelay() {
+        timingReportWaitsForLyricsDuringPacing(legacy = true, reopen = true)
+    }
+
+    private fun timingReportWaitsForLyricsDuringPacing(legacy: Boolean, reopen: Boolean) {
+        MainActivity.reportPaceMs = MainViewModel.REPORT_PACE_MS
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        openLyrics()
+        val song = checkNotNull(model().uiState.lyricsFor)
+        assertTrue(RecordingKey.of(song).split('\u0000').size > 2)
+        owedFor("Old one")
+        owe(song, SongProblem.TIMED_BY_HAND, JSONObject().put("fake", "Demo"))
+        if (legacy) {
+            val saved = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]"))
+            saved.getJSONObject(1).put("key", "timed_by_hand\u0000demo\u0000band")
+            prefs().edit().putString("auto_reports_owed", saved.toString()).commit()
+        }
+        composeRule.runOnIdle { model().dismissLyrics(); model().allowAutoReports(true) }
+        waitUntil { sentFakes().size == 1 }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricsFor != null && shown("Demo one") }
+        if (reopen) {
+            composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+            waitUntil { model().uiState.lyricsFor != null && shown("Demo one") }
+        }
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.REPORT_PACE_MS))
+        composeRule.waitForIdle()
+        assertEquals(listOf("Old one"), sentFakes().map { JSONObject(it).getString("fake") })
+        assertEquals(1, owed())
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { sentFakes().size == 2 }
+        assertEquals(listOf("Old one", "Demo"), sentFakes().map { JSONObject(it).getString("fake") })
+    }
+
+    @Test
     fun reportsOwedArePacedUnderTheBoxsLimit() {
         MainActivity.reportPaceMs = MainViewModel.REPORT_PACE_MS
         prefs().edit().putBoolean("auto_reports", true).commit()

@@ -2802,7 +2802,7 @@ internal class MainViewModel(
         if (uiState.lyricsFor == song && (uiState.lyrics.isNotEmpty() || uiState.isLoadingLyrics)) return
         // A song just heard, or playing as it's shown, is followed on to the next one; one picked to read stays.
         shownPlayed = playing || heardSong?.let { sameSong(it, song) } == true
-        leaveWords(nextSong = song)
+        val sendAfterLeaving = leaveWords()
         keepShown()
         lyricsJob?.cancel()
         stopLearning()
@@ -2862,6 +2862,7 @@ internal class MainViewModel(
         }
         if (autoReports.allowed == null && autoReports.owes(song, SongProblem.SUNG_OFF)) offerToReport(SongProblem.SUNG_OFF)
         watchNext(song)
+        if (sendAfterLeaving) sendOwed()
         // A song Crosstune just heard is still playing nearby, so it keeps listening, to stay in time with it.
         if (heardSong?.let { sameSong(it, song) } == true) listenAlong()
     }
@@ -4577,9 +4578,10 @@ internal class MainViewModel(
 
     /**
      * The words shown are left: put in time by hand, they're reported, so with the timing settled;
-     * an offer made for them goes.
+     * an offer made for them goes. Returns whether to check owed reports after the screen changes.
      */
-    private fun leaveWords(nextSong: MusicMetadata? = null) {
+    private fun leaveWords(): Boolean {
+        val sendAfterLeaving = !timedByHand && autoReports.allowed == true && uiState.lyricsFor != null
         // An offer for words being closed would vanish unseen, using up this session's one offer.
         reportFarIfStillMoved()
         if (autoReports.allowed == null && SongProblem.SUNG_OFF in uiState.reportOfferFor &&
@@ -4588,11 +4590,10 @@ internal class MainViewModel(
         closeReport()
         if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) {
             uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
-        } else if (!timedByHand && autoReports.allowed == true) {
-            uiState.lyricsFor?.takeUnless { it == nextSong }?.let { sendOwed(leaving = it, opening = nextSong) }
         }
         timedByHand = false
         uiState = uiState.copy(reportOfferFor = emptySet())
+        return sendAfterLeaving
     }
 
     /** A whole while found the words far off: with no correction saved, it's a problem if they're left moved. */
@@ -4633,13 +4634,15 @@ internal class MainViewModel(
      * didn't get there waits for the next time, and a problem found past the day's share for a later day.
      * Words still in front of the user are left out: they may be put in time some more, and go once they're left.
      */
-    private fun sendOwed(leaving: MusicMetadata? = null, opening: MusicMetadata? = null) {
+    private fun sendOwed() {
         val sender = reports ?: return
         if (autoReports.allowed != true) return
         viewModelScope.launch {
             autoReports.sending.withLock {
-                val inFront = (uiState.lyricsFor?.takeUnless { it == leaving } ?: opening)?.let(autoReports::owedKeys).orEmpty()
-                for (owed in autoReports.owed().filter { it.key !in inFront }) {
+                for (owed in autoReports.owed()) {
+                    // Lyrics can open or reopen while another report is sent or paced.
+                    val inFront = uiState.lyricsFor?.let(autoReports::owedKeys).orEmpty()
+                    if (owed.key in inFront) continue
                     // Past the day's share, or gone another way meanwhile, as the words it's for were left: it's skipped.
                     val delivery = deliver(sender, owed) ?: continue
                     // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
@@ -4840,7 +4843,7 @@ internal class MainViewModel(
         // Words held for a listen are closed with the rest: nothing shows them, or looks them up, once they're gone.
         heldJob?.cancel()
         unsung = null
-        leaveWords()
+        val sendAfterLeaving = leaveWords()
         keepShown()
         previewHeardLyrics()
         lyricsJob?.cancel()
@@ -4856,6 +4859,7 @@ internal class MainViewModel(
             lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsTimedByEar = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
             learning = uiState.learning.fresh(), chords = uiState.chords.fresh()
         )
+        if (sendAfterLeaving) sendOwed()
     }
 
     /** Give the player its preview once the user returns from lyrics and a listen confirmed the singing. */
