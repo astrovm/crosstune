@@ -2,6 +2,11 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.content.Context
+import android.media.MediaMetadata
+import android.media.session.MediaController
+import android.media.session.MediaSession
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -32,6 +37,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -493,6 +499,42 @@ class MainViewModelTest {
 
     /** A file with no title, as a player may name one: nothing a tap could take for a song, so a tap opens what was heard, or the player. */
     private val untitled = Unnamed("com.example.untitled", "Untitled Player", null, said = false)
+
+    @Test
+    fun radioGardenDoesNotCheckAQueueClaimThatExpiredBeforeTheBarWasShown() {
+        val playback = FakePlayback()
+        val ears = EarsOnThePhone(Heard.Nothing)
+        val model = radioModel(ears, playback)
+        val radio = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE",
+            queueSong = MusicMetadata("A PLACE TO GO", "The Kid LAROI"))
+        playback.unnamed.value = radio
+        idle()
+        assertEquals(PlayingUnnamed(radio), model.uiState.playingUnnamed)
+        assertTrue(ears.asked.isEmpty())
+        pass(91_000)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(listOf(true), ears.asked)
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com/search?" in it })
+        assertEquals(PlayingUnnamed(radio), model.uiState.playingUnnamed)
+    }
+
+    @Test
+    fun radioGardenQueueUsesTheExactListenAndExpiryBoundaries() {
+        val check = MainViewModel.QueueCheck("1LIVE", 1, MusicMetadata("Song", "Band"), firstSeen = 10_000L)
+        check.confirm(180_000L)
+        val due = 200_000L
+        val expiry = 370_000L
+        assertFalse(check.isDueAt(due - 1))
+        assertTrue(check.isDueAt(due))
+        assertEquals(1L, check.waitForListen(due - 1, microphone = true))
+        assertEquals(0L, check.waitForListen(due, microphone = true))
+        assertEquals(1_000L, check.waitForListen(due, microphone = false))
+        assertEquals(1L, check.waitForListen(expiry - 1, microphone = false))
+        assertTrue(check.isConfirmedAt(expiry - 1))
+        assertFalse(check.isConfirmedAt(expiry))
+        assertEquals(0L, check.waitForListen(expiry, microphone = false))
+    }
 
     @Test
     fun aStationWithoutPlaybackStateIsNamedByEarAndATapOpensTheSongHeard() {
@@ -4322,11 +4364,12 @@ class MainViewModelTest {
     }
 
     private val ytMusic = MusicService.YOUTUBE_MUSIC.packageName
+    private val morpheMusic = "app.morphe.android.apps.youtube.music"
     private val ytLink = "https://music.youtube.com/watch?v=sPmul8b17AU"
 
     /** A model with YouTube Music on the phone and set as where songs go, and [ytLink] looked up, shown as the result. */
-    private fun ytMusicModel(playback: PlaybackSource, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null): MainViewModel {
-        shadowOf(app.packageManager).installPackage(installedApp(ytMusic, "YouTube Music"))
+    private fun ytMusicModel(playback: PlaybackSource, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null, packageName: String = ytMusic): MainViewModel {
+        shadowOf(app.packageManager).installPackage(installedApp(packageName, "YouTube Music"))
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
         val model = model(playback = playback, phone = phone, oneTap = oneTap)
@@ -4338,8 +4381,8 @@ class MainViewModelTest {
         return model
     }
 
-    private fun appPlays(playback: FakePlayback, playing: Boolean = true) {
-        playback.playing.value = Following(PlaybackClock(0, android.os.SystemClock.elapsedRealtime(), playing = playing), "Music", canSeek = true, appPackage = ytMusic)
+    private fun appPlays(playback: FakePlayback, playing: Boolean = true, packageName: String = ytMusic) {
+        playback.playing.value = Following(PlaybackClock(0, android.os.SystemClock.elapsedRealtime(), playing = playing), "Music", canSeek = true, appPackage = packageName)
     }
 
     /** Holds the app's answer while an open is waiting to see if the song is already playing. */
@@ -4349,7 +4392,7 @@ class MainViewModelTest {
         val source = object : PlaybackSource by playback {
             override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = answers
         }
-        val model = ytMusicModel(source)
+        val model = ytMusicModel(source, packageName = morpheMusic)
         val effects = mutableListOf<Effect>()
         model.viewModelScope.launch { model.effects.collect { effects += it } }
         model.openResult()
@@ -4371,8 +4414,9 @@ class MainViewModelTest {
     fun playingCancelsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, playback ->
         model.playResult()
         idle()
-        // The player and the play request now follow the app; the old open no longer does.
-        assertEquals(2, answers.subscriptionCount.value)
+        // The Play request checks the session before opening the player. The previous Open was canceled.
+        assertEquals(1, answers.subscriptionCount.value)
+        assertNull(model.uiState.player)
         assertTrue(answers.tryEmit(null))
         until("the app asked to play") { playback.songsAsked.isNotEmpty() }
         assertEquals(1, playback.songsAsked.size)
@@ -4396,22 +4440,21 @@ class MainViewModelTest {
     @Test
     fun aSongAskedOfItsAppPlaysInThePlayerAndOnlyOpensTheAppWhenItWouldNot() {
         val playback = FakePlayback().apply { access = true }
-        val model = ytMusicModel(playback)
+        val model = ytMusicModel(playback, packageName = morpheMusic)
         val effects = mutableListOf<Effect>()
         model.viewModelScope.launch { model.effects.collect { effects += it } }
-        assertTrue(model.uiState.canPlayResult)
         // Asked, and seen playing: Crosstune stays, in its player.
         model.playResult()
         idle()
         assertEquals(ytLink, playback.linksAsked.single())
         assertEquals("Dakare Ni Kita Onna", model.uiState.player?.song?.title)
         assertTrue(model.uiState.playingResult)
-        appPlays(playback)
+        appPlays(playback, packageName = morpheMusic)
         until("done playing it") { !model.uiState.playingResult }
         assertTrue(effects.isEmpty())
         // Already in its app, paused: it carries on, not asked again.
         model.closePlayer()
-        appPlays(playback, playing = false)
+        appPlays(playback, playing = false, packageName = morpheMusic)
         model.playResult()
         until("carried on") { playback.plays.isNotEmpty() }
         assertEquals(listOf(true), playback.plays.toList())
@@ -4423,7 +4466,7 @@ class MainViewModelTest {
         idle()
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         until("opened there") { playback.opened.isNotEmpty() }
-        assertEquals(ytMusic to ytLink, playback.opened.single())
+        assertEquals(morpheMusic to ytLink, playback.opened.single())
         // And it waits again for the app to play it there, before leaving it.
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         until("came back") { playback.cameBack == 1 }
@@ -4440,7 +4483,7 @@ class MainViewModelTest {
     @Test
     fun aSongItsAppCantBeAskedForIsOpenedThereAndWithNoAccessIsTakenAsPlayed() {
         val playback = FakePlayback().apply { access = false; canPlaySongs = false }
-        val model = ytMusicModel(playback)
+        val model = ytMusicModel(playback, packageName = morpheMusic)
         val effects = mutableListOf<Effect>()
         model.viewModelScope.launch { model.effects.collect { effects += it } }
         model.playResult()
@@ -4454,6 +4497,192 @@ class MainViewModelTest {
         until("done") { !model.uiState.playingResult }
         assertEquals(1, effects.size)
         assertEquals("Dakare Ni Kita Onna", model.uiState.player?.song?.title)
+    }
+
+    @Test
+    fun aPlayTapOpensTheOfficialAppIfItNoLongerHasTheSong() {
+        val playback = FakePlayback().apply { access = true }
+        val model = ytMusicModel(playback)
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        model.playResult()
+        until("the song opens in the official app") { effects.isNotEmpty() }
+        val opened = effects.single() as Effect.Open
+        assertEquals(ytMusic, opened.packageName)
+        assertEquals(ytLink, opened.url)
+        assertTrue(playback.songsAsked.isEmpty())
+        assertNull(model.uiState.player)
+    }
+
+    @Test
+    fun anAbsentOfficialDestinationResumesThePausedBuildThatStandsInForIt() {
+        val playback = FakePlayback().apply { access = true }
+        val sessionNumber = 23
+        val source = object : PlaybackSource by playback {
+            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> {
+                val wanted = if (session == sessionNumber) morpheMusic else app
+                return playback.follow(song, wanted, session).map { it?.takeIf { wanted == null || it.appPackage == wanted } }
+            }
+        }
+        val model = ytMusicModel(source, packageName = morpheMusic)
+        val official = Destination.Service(MusicService.YOUTUBE_MUSIC)
+        model.selectResultDestination(official)
+        assertEquals(official, model.uiState.resultDestination)
+        val morphe = MutableStateFlow<Following?>(null)
+        playback.appPlaying[morpheMusic] = morphe
+        // The exact-package follow must find the paused build even when another app plays the song.
+        appPlays(playback, packageName = MusicService.SPOTIFY.packageName)
+        val watching = model.viewModelScope.launch { model.watchPlayingNow() }
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        try {
+            idle()
+            assertFalse(model.uiState.canPlayResult)
+            morphe.value = Following(PlaybackClock(60_000, 0, playing = false), "YT Music Morphe", canSeek = true,
+                appPackage = morpheMusic, session = sessionNumber)
+            until("the build's paused song can play") { model.uiState.canPlayResult }
+            model.playResult()
+            until("the same session resumes") { playback.plays.isNotEmpty() }
+            assertEquals(listOf(morpheMusic), playback.playedApps.toList())
+            assertEquals(listOf(sessionNumber), playback.playedSessions.toList())
+            until("the player follows that session") { model.uiState.player?.following?.appPackage == morpheMusic }
+            assertTrue(effects.isEmpty())
+            assertTrue(playback.songsAsked.isEmpty())
+        } finally {
+            watching.cancel()
+        }
+    }
+
+    @Test
+    fun thePlayerFollowsTheRequestedSongAcrossAppsAfterItsSessionIsReleased() {
+        val sessions = shadowOf(app.getSystemService(MediaSessionManager::class.java))
+        val media = MediaSessionPlayback(app)
+        val receivers = mutableListOf<MediaSession>()
+        val requested = MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada")
+        fun publish(packageName: String, state: Int, position: Long, song: MusicMetadata = requested): MediaSession {
+            val receiver = MediaSession(app, packageName).also { receivers += it }
+            val controller = MediaController(app, receiver.sessionToken)
+            shadowOf(controller).apply {
+                setPackageName(packageName)
+                setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, song.title)
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, song.artist).build())
+                setPlaybackState(PlaybackState.Builder().setState(state, position, 1f).build())
+            }
+            sessions.addController(controller)
+            return receiver
+        }
+        val old = publish(ytMusic, PlaybackState.STATE_PAUSED, 15_000)
+        val resumes = mutableListOf<Int?>()
+        val fakePlayback = FakePlayback().apply { access = true }
+        val playback = object : PlaybackSource by fakePlayback {
+            override fun follow(song: MusicMetadata, app: String?, session: Int?) = media.follow(song, app, session)
+
+            override suspend fun resume(song: MusicMetadata, app: String?, session: Int?): Boolean {
+                resumes += session
+                sessions.clearControllers()
+                old.release()
+                receivers.remove(old)
+                return media.resume(song, app, session)
+            }
+
+            override suspend fun bringToFront(song: MusicMetadata, app: String?, session: Int?) = media.bringToFront(song, app, session)
+        }
+        val model = ytMusicModel(playback)
+        val watching = model.viewModelScope.launch { model.watchPlayingNow() }
+        try {
+            until("the paused session is offered") { model.uiState.canPlayResult }
+            val oldNumber = media.matching(checkNotNull(model.uiState.result)).single().session
+            model.playResult()
+            until("Play reached the released session") { resumes.isNotEmpty() }
+            assertEquals(listOf(oldNumber), resumes)
+            assertEquals(oldNumber, model.uiState.player?.session)
+            assertTrue(media.matching(checkNotNull(model.uiState.result)).isEmpty())
+
+            val spotify = MusicService.SPOTIFY.packageName
+            val next = MusicMetadata("Next Song", "Next Artist")
+            publish(spotify, PlaybackState.STATE_PAUSED, 30_000)
+            publish(ytMusic, PlaybackState.STATE_PLAYING, 0, next)
+            fakePlayback.onThePhone = Heard.Song(next, null, app = ytMusic)
+            idle()
+            assertEquals(requested.title, model.uiState.player?.song?.title)
+            assertEquals(spotify, model.uiState.player?.following?.appPackage)
+            assertEquals(30_000L, model.uiState.player?.following?.clock?.positionMs)
+
+            fakePlayback.onThePhone = null
+            idle()
+            sessions.clearControllers()
+            publish(ytMusic, PlaybackState.STATE_PLAYING, 45_000)
+            idle()
+            val followed = checkNotNull(model.uiState.player?.following)
+            assertEquals(ytMusic, followed.appPackage)
+            assertTrue(followed.session != oldNumber)
+            assertEquals(45_000L, followed.clock.positionMs)
+        } finally {
+            watching.cancel()
+            model.closePlayer()
+            sessions.clearControllers()
+            receivers.forEach(MediaSession::release)
+        }
+    }
+
+    @Test
+    fun aPausedSongWithZeroDurationCanResumeFromTheCard() = resumesWithUnknownDuration(0)
+
+    @Test
+    fun aPausedSongWithNegativeDurationCanResumeFromTheCard() = resumesWithUnknownDuration(-1)
+
+    private fun resumesWithUnknownDuration(durationMs: Long) {
+        val playback = FakePlayback().apply { access = true }
+        val model = ytMusicModel(playback)
+        val watching = model.viewModelScope.launch { model.watchPlayingNow() }
+        try {
+            playback.playing.value = Following(PlaybackClock(0, 0, playing = false), "YouTube Music", canSeek = true,
+                appPackage = ytMusic, durationMs = durationMs)
+            idle()
+            assertTrue(model.uiState.canPlayResult)
+            model.playResult()
+            until("the paused session resumes") { playback.plays.isNotEmpty() }
+            assertEquals(listOf(true), playback.plays)
+            assertEquals(listOf(ytMusic), playback.playedApps)
+        } finally {
+            watching.cancel()
+        }
+    }
+
+    @Test
+    fun aPlayingSongInItsFinalSecondStaysEligibleWhileAPausedSongOpensItsLink() {
+        val playback = FakePlayback().apply { access = true }
+        val model = ytMusicModel(playback)
+        val watching = model.viewModelScope.launch { model.watchPlayingNow() }
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        try {
+            val beforeEnd = Following(PlaybackClock(198_999, 0, playing = false), "YouTube Music", canSeek = true,
+                appPackage = ytMusic, durationMs = 200_000)
+            playback.playing.value = beforeEnd
+            until("a song that can still resume") { model.uiState.canPlayResult }
+
+            val atEnd = beforeEnd.copy(clock = beforeEnd.clock.copy(positionMs = 199_000))
+            playback.playing.value = atEnd.copy(clock = atEnd.clock.copy(playing = true))
+            idle()
+            assertTrue(model.uiState.canPlayResult)
+            playback.playing.value = atEnd
+            idle()
+            assertFalse(model.uiState.canPlayResult)
+            model.playResult()
+            until("the asked recording opens") { effects.isNotEmpty() }
+            val opened = effects.single() as Effect.Open
+            assertEquals(ytMusic, opened.packageName)
+            assertEquals(ytLink, opened.url)
+            assertTrue(playback.plays.isEmpty())
+            assertNull(model.uiState.player)
+            effects.clear()
+            model.openResult()
+            until("Open also starts from the asked link") { effects.isNotEmpty() }
+            assertEquals(ytLink, (effects.single() as Effect.Open).url)
+        } finally {
+            watching.cancel()
+        }
     }
 
     @Test

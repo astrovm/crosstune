@@ -1399,11 +1399,15 @@ private fun SyncSource(state: UiState, actions: ScreenActions) {
     if (start != null) {
         AppSource(
             stringResource(R.string.play_in_background, start.label()),
-            start.service.packageName,
+            start.packageName,
             playing = false,
             enabled = !state.playingResult,
             onClick = actions.onPlayResult
         )
+    } else if (state.canOpenFromLyrics) {
+        IconButton(onClick = actions.onOpen) {
+            AppIcon(R.drawable.ic_open_in_new, contentDescription = state.resultDestination.openLabel())
+        }
     }
 }
 

@@ -84,9 +84,8 @@ internal enum class MusicService(
     val opensTappedLinks: Boolean get() = this in LinkInterception.HOSTS
 
     /**
-     * Whether its app plays a song asked for by name while Crosstune stays open. Spotify ignores
-     * apps it doesn't know, Amazon Music's free plan plays the artist's radio instead, and Bandcamp's
-     * comes to the front on a search and plays nothing, so a song is searched for there.
+     * Whether its app can start a requested song through a media session. Spotify ignores apps it
+     * doesn't know, Amazon Music's free plan plays the artist's radio, and Bandcamp opens a search.
      */
     val playsAskedSongs: Boolean get() = this != SPOTIFY && this != AMAZON_MUSIC && this != BANDCAMP
 

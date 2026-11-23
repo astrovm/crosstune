@@ -103,6 +103,10 @@
       "Aby rozpoznać utwór z linku, Crosstune czyta jego publiczną stronę lub publiczne API w serwisie, z którego pochodzi: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam lub Google, i pobiera okładkę. Aby otworzyć go w innej aplikacji, tytuł i wykonawca trafiają do wyszukiwarki tej aplikacji. Gdy to wyszukiwanie nie jest pewne, trafiają też do wyszukiwarek utworów Apple i Deezer. Dla Spotify trafiają do ListenBrainz, a nazwa wykonawcy do MusicBrainz, i czytane są publiczne strony Spotify. Odtwórz wszystko i Losowo robią to dla każdego utworu, a YouTube tworzy playlistę ze znalezionych filmów. Wpisana przez Ciebie nazwa utworu trafia do wyszukiwarek Deezer i Apple. Własne miejsce docelowe dostaje szukane słowa w adresie, który ustawisz."
     ],
     [
+      "p",
+      "Jeśli wyszukiwanie w regionalnym sklepie Apple się nie powiedzie lub nie da wyniku, Crosstune może wysłać tytuł utworu i nazwę wykonawcy do amerykańskiego sklepu Apple."
+    ],
+    [
       "h2",
       "Teksty, akordy i tłumaczenia"
     ],
@@ -116,7 +120,7 @@
     ],
     [
       "p",
-      "Z dostępem do powiadomień Crosstune widzi, jaki utwór grają Twoje aplikacje muzyczne i w którym miejscu, więc tekst podąża za nim, a odtwarzacz Crosstune może wstrzymać, pominąć lub polubić utwór w Twojej aplikacji. Dla Simple Radio sprawdza też, czy widać multimedialne powiadomienie radia, bez czytania jego tekstu. To zostaje na Twoim telefonie. Fiszka odtwarza swój wiersz w aplikacji, która ma już otwarty ten utwór, albo w małym odtwarzaczu YouTube na fiszce, który znajduje film utworu tak jak link. Nie jesteś tam zalogowany w YouTube."
+      "Z dostępem do powiadomień Crosstune widzi, jaki utwór grają Twoje aplikacje muzyczne i w którym miejscu, więc tekst podąża za nim, a odtwarzacz Crosstune może wstrzymać, pominąć lub polubić utwór w Twojej aplikacji. Dla Simple Radio sprawdza też, czy widać multimedialne powiadomienie radia, bez czytania jego tekstu. To zostaje na Twoim telefonie. Fiszka odtwarza swój wiersz w aplikacji, która ma już otwarty ten utwór, albo w małym odtwarzaczu YouTube na fiszce, który znajduje film utworu tak jak link. Nie jesteś tam zalogowany w YouTube. W przypadku Radio Garden Crosstune dzieli tekst stacji o tym, co teraz gra, na tytuł i nazwę wykonawcy, a potem wysyła te części do Apple Music. Ten tekst zwykle opisuje utwór. Stacja może podać w tych polach inny tekst."
     ],
     [
       "h2",

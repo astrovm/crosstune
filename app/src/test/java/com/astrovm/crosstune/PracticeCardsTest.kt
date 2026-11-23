@@ -1232,6 +1232,23 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun backToBeforeAsksAppleMusicToRestoreThePreviousSong() {
+        keep(line())
+        val app = MusicService.APPLE_MUSIC.packageName
+        val previous = MusicMetadata("Before", "Band")
+        val cards = cards()
+        cards.start(null, before = Before(previous, 4_000, app))
+        cards.backToBefore()
+        waitFor("Apple Music is asked for the previous song") { playback.songsAsked.isNotEmpty() }
+        assertEquals(listOf(previous to app), playback.songsAsked.toList())
+        assertTrue(playback.opened.isEmpty())
+
+        playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis()), "Apple Music", canSeek = true, appPackage = app)
+        waitFor("Apple Music goes back to the saved position") { playback.seeks == listOf(4_000L) && true in playback.plays }
+        assertEquals(listOf(app), playback.seekedApps.toList())
+    }
+
+    @Test
     fun backToBeforeWithNothingToGoBackToLeavesPracticeAlone() {
         keep(line())
         val cards = cards()
