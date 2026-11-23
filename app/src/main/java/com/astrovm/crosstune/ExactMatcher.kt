@@ -1577,9 +1577,12 @@ internal class ExactMatcher(
         return (watchUrl + row.id).takeIf { off <= if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS }
     }
 
-    private fun safePickedVideo(row: Row, names: Names): Boolean = !isAnotherVideoVersion(row.name, names) &&
-        (videoTitleMatches(row.name, names) || namedInAnotherScript(SongNames.bareTitle(row.name)) &&
-            names.titles.none { namedInAnotherScript(SongNames.bareTitle(it)) })
+    private fun safePickedVideo(row: Row, names: Names): Boolean {
+        val explicitlyNamed = names.titles.any { it.contains("(${row.name})", ignoreCase = true) || it.contains("（${row.name}）", ignoreCase = true) }
+        return explicitlyNamed || !isAnotherVideoVersion(row.name, names) &&
+            (videoTitleMatches(row.name, names) || namedInAnotherScript(SongNames.bareTitle(row.name)) &&
+                names.titles.none { namedInAnotherScript(SongNames.bareTitle(it)) })
+    }
 
     private fun namesThePickedPart(part: NumberedPart, row: Row, video: Boolean): Boolean {
         val names = if (video) SongNames.titleNames(row.name) else listOf(row.name)
