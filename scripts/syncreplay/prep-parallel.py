@@ -43,7 +43,10 @@ def main():
     threads = int(os.environ.get('SYNCREPLAY_HEARD_THREADS', '1'))
     if threads < 1:
         parser.error('SYNCREPLAY_HEARD_THREADS must be positive')
-    environment = os.environ | {'SYNCREPLAY_TRUTH_THREADS': '2', 'SYNCREPLAY_HEARING_SLOTS': str(max(1, 9 // threads)), 'OMP_NUM_THREADS': '1'}
+    slots = os.environ.get('SYNCREPLAY_HEARING_SLOTS', str(max(1, 9 // threads)))
+    if not slots.isdigit() or int(slots) < 1:
+        parser.error('SYNCREPLAY_HEARING_SLOTS must be positive')
+    environment = os.environ | {'SYNCREPLAY_TRUTH_THREADS': '2', 'SYNCREPLAY_HEARING_SLOTS': slots, 'OMP_NUM_THREADS': '1'}
     replay = Path(__file__).with_name('syncreplay.py')
     started = time.monotonic()
 
