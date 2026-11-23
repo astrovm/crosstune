@@ -221,12 +221,12 @@ jobs:
       - uses: ./.github/actions/jdk
         id: jdk
 
-      # A fresh Gradle home measures whether the test-only mirror can fill the Robolectric cache.
-      - name: Verify a cold mirror download
+      # A fresh Gradle home exercises the mirror and a real Robolectric test with no restored cache.
+      - name: Test with a cold mirror cache
         if: github.event_name == 'pull_request'
         env:
           GRADLE_USER_HOME: ${{ runner.temp }}/cold-mirror-gradle
-        run: ./gradlew :app:robolectricDeps --info --no-build-cache
+        run: ./gradlew :app:testDebugUnitTest --tests com.astrovm.crosstune.ChordSheetsTest --info --no-build-cache
 
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
