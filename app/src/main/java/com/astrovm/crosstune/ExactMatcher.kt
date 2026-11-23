@@ -7,9 +7,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -921,22 +923,35 @@ internal class ExactMatcher(
                 !SongNames.saysAnotherVersion(row.name, metadata.title, metadata.artist) && keepsRequestedRecording(recording, row)
         }.take(5)
         return coroutineScope {
-            val answers = candidates.map { candidate -> async {
+            val answers = Channel<Pair<Row?, Boolean>>(Channel.UNLIMITED)
+            val searches = candidates.map { candidate -> launch {
                 val artist = candidate.details.firstOrNull().orEmpty()
                 val wanted = MusicMetadata(candidate.name, artist, lengthMs = candidate.lengthMs)
-                val store = SongNames.homeStore(candidate.name + artist) ?: return@async null to false
+                val store = SongNames.homeStore(candidate.name + artist)
+                if (store == null) {
+                    answers.send(null to false)
+                    return@launch
+                }
                 val asked = Asked()
                 val answer = appleSong(wanted, store, asked, mutableMapOf())
-                candidate.takeIf {
+                val proved = candidate.takeIf {
                     answer?.editions.orEmpty().any { edition ->
                         edition.optLong("trackId") in names.appleIds &&
                             matches(wanted, edition.optString("trackName"), edition.optString("artistName")) &&
                             sameRecordingLength(candidate.lengthMs, edition.optLong("trackTimeMillis"))
                     }
-                } to asked.failed
-            } }.awaitAll()
-            if (answers.any { it.second }) names.complete = false
-            answers.firstNotNullOfOrNull { it.first }
+                }
+                answers.send(proved to asked.failed)
+            } }
+            repeat(searches.size) {
+                val (proved, failed) = answers.receive()
+                if (failed) names.complete = false
+                if (proved != null) {
+                    searches.forEach { it.cancel() }
+                    return@coroutineScope proved
+                }
+            }
+            null
         }
     }
 
