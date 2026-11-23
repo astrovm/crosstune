@@ -960,6 +960,19 @@ class SingingTest {
     }
 
     @Test
+    fun decliningADeferredFarReportDeletesIt() {
+        chorusHeardFarFromWhereItsSung()
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        composeRule.runOnIdle { model().allowAutoReports(false) }
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        composeRule.waitForIdle()
+        assertFalse(offerShown())
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        assertFalse(AutoReports(prefs()).owes(checkNotNull(model().uiState.lyricsFor), SongProblem.SUNG_OFF))
+    }
+
+    @Test
     fun pickedUpPartwayLinesMovedByOneWrongWhileGoBackByOneRightOne() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         val times = chorusHeardFarFromWhereItsSung()
