@@ -1039,6 +1039,43 @@ class SingingTest {
     }
 
     @Test
+    fun twoRecordedJapaneseHearingsConfirmTheSameShiftAfterReopening() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        val times = listOf(30490, 39910, 47620, 57100, 67930, 77360, 85200, 94520, 105320, 114750, 123720, 133360, 139560, 159210, 168690, 177550, 187480, 194590, 204250, 212140, 221540, 232040, 241540, 250980, 260140, 269710, 278970)
+        val nearby = mapOf(
+            1 to "恋のプログラムを 狂わせないでね", 2 to "出逢いと別れ 上手に打ち込んで", 3 to "時間がくれば終わる don't hurry", 4 to "愛に傷ついた あの日からずっと",
+            14 to "彼に似てるわなぜか 思い出と重なり合う", 15 to "グラスを落として急に 涙ぐんでもわけは", 16 to "尋ねないでね", 17 to "夜更けの高速で 眠りにつくころ"
+        )
+        lines = times.indices.map { nearby[it] ?: "filler$it" }
+        val synced = lines.zip(times) { line, at -> "[%02d:%02d.%02d] %s".format(at / 60_000, at / 1000 % 60, at % 1000 / 10, line) }.joinToString("\n")
+        fake.handler = { request ->
+            FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":309,"syncedLyrics":"$synced"}]""" else """{"title":"Demo","author_name":"Band"}""")
+        }
+        singing.answer = {
+            val heard = if (singing.hears == 1) {
+                listOf(1120L to "僕は背ないでね", 4360L to "目会いとは", 6240L to "ファレッツ", 8000L to "衝突にく", 10780L to "自動で", 13660L to "時間が来るレッファ", 16500L to "オーブーの光り")
+            } else {
+                listOf(0L to "目に入れるわ", 2980L to "正解", 4520L to "もう似てると", 6400L to "優しい青くラスをとして", 12160L to "切るに何かでも分けは", 18200L to "数ね")
+            }
+            Sung(startedAt, heard.map { (at, text) -> HeardWord(text, at + if (singing.hears == 1) 495 else 0) })
+        }
+        openLyrics()
+        plays(positionMs = 53_505)
+        passes(2_500)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertFalse(prefs().contains("lyrics_sync"))
+        plays(positionMs = 53_505, playing = false)
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        plays(positionMs = 180_000)
+        passes(3_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.lyricsSynced)
+    }
+
+    @Test
     fun recordedFarHearingWaitsForConfirmationAfterClosing() {
         // The saved 39 s hearing of Bizarre Love Triangle, with unrelated lines replaced by filler.
         val times = listOf(0, 10, 13, 17, 19, 21, 26, 29, 33, 35, 37, 42, 58, 61, 66, 69, 74, 91, 94, 98, 100, 102, 106, 110, 114, 116, 118, 123, 139, 142, 147, 151, 155, 159, 163, 167)
