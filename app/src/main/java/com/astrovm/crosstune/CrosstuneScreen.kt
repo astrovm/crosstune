@@ -871,9 +871,23 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         }
         // The song on screen isn't listed again right below it.
         val history = state.history.filterNot { state.result != null && it.link.url == state.link?.url }
+        // So the Recent row the remote opened a song from goes, and Android would put the remote anywhere,
+        // as on the top bar's buttons: it goes to the song's main button, or Open while Play can't be pressed,
+        // once the card's there.
+        var toCard by remember { mutableStateOf(false) }
+        val screenFocus = LocalScreenFocus.current
+        LaunchedEffect(toCard, state.result, state.isMatching, state.isLoading) {
+            if (!toCard) return@LaunchedEffect
+            if (state.result == null && !state.isLoading) toCard = false
+            else if (listOf(MAIN_FOCUS, OPEN_FOCUS).any { screenFocus?.run { goBackTo(it); restore() } == true }) toCard = false
+        }
+        val recent = if (state.phone != Phone.TV) actions else actions.copy(
+            onHistoryEntryClick = { toCard = true; actions.onHistoryEntryClick(it) },
+            onHistoryOpen = { toCard = true; actions.onHistoryOpen(it) }
+        )
         // Keyed on whether there's any, so clearing it fades the last list out rather than an empty one.
         AnimatedContent(targetState = history, contentKey = { it.isEmpty() }, transitionSpec = { fade() }, label = "history") { shown ->
-            if (shown.isNotEmpty()) Column { HistorySection(shown, state, actions) }
+            if (shown.isNotEmpty()) Column { HistorySection(shown, state, recent) }
         }
     }
 }

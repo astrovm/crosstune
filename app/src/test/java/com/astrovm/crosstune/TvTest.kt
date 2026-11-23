@@ -751,6 +751,21 @@ class TvTest {
     }
 
     @Test
+    fun onATvASongOpenedFromRecentHandsTheRemoteToItsMainButton() {
+        for (n in 1..3) {
+            val url = "https://open.spotify.com/track/song$n"
+            HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band")))
+        }
+        launch()
+        // The middle one, so rows stay above and below where it was, for Android to move the remote to.
+        composeRule.onNode(hasText("Song 2") and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 2" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        focused().assert(hasAnyAncestor(hasTestTag(RESULT_TAG)) and hasClickAction())
+    }
+
+    @Test
     fun onATvBackFromTheStepsASettingOpensLandsOnThatSetting() {
         settingsByRemote()
         val follow = composeRule.onNode(hasText(string(R.string.setting_lyrics_follow)))
