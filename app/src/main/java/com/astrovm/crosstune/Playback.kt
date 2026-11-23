@@ -51,7 +51,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Where in a song it is: [positionMs] at [atMs] on the clock that counts since the phone started,
@@ -403,7 +402,7 @@ internal class MediaSessionPlayback(
         return songsRead.of(Triple(title, artist, musicVideo))
     }
 
-    /** Each session's number, by its token; see [sessionNumbersOf]. */
+    /** Each session's number, by its token; see [SessionNumbers]. */
     private val sessionNumbers = sessionNumbersOf(context)
 
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
@@ -1231,9 +1230,6 @@ internal class KeptReads<K, V>(private val kept: Int, private val read: (K) -> V
     /** What a key read as, even null. */
     private class Read<V>(val value: V)
 
-    /** Observe a retained value without reading a new key or making this one more recent. */
-    fun peek(key: K): V? = synchronized(values) { values.entries.firstOrNull { it.key == key }?.value?.value }
-
     fun of(key: K): V {
         synchronized(values) { values[key] }?.let { return it.value }
         val value = read(key)
@@ -1252,18 +1248,34 @@ private const val SONGS_READ_KEPT = 32
 private const val SESSIONS_KEPT = 32
 
 /** Each app's session numbers, by its application; see [sessionNumbersOf]. */
-private val sessionNumbersByApp = WeakHashMap<Context, KeptReads<MediaSession.Token, Int>>()
+private val sessionNumbersByApp = WeakHashMap<Context, SessionNumbers>()
 
 /**
- * Each session's number, by its token, the same in every follow of it; see [Following.session]. One numbering
- * for all of [context]'s app, not one for each [MediaSessionPlayback]: the player hands its number on to the
- * sleep timer, which follows with one of its own, and a number from another numbering named no app there, so
- * the timer paused at once.
+ * The session numbers of all of [context]'s app, not one numbering for each [MediaSessionPlayback]: the player
+ * hands its number on to the sleep timer, which follows with one of its own, and a number from another
+ * numbering named no app there, so the timer paused at once.
  */
-private fun sessionNumbersOf(context: Context): KeptReads<MediaSession.Token, Int> = synchronized(sessionNumbersByApp) {
-    sessionNumbersByApp.getOrPut(context.applicationContext) {
-        val numbered = AtomicInteger()
-        KeptReads(SESSIONS_KEPT) { numbered.getAndIncrement() }
+private fun sessionNumbersOf(context: Context): SessionNumbers = synchronized(sessionNumbersByApp) {
+    sessionNumbersByApp.getOrPut(context.applicationContext) { SessionNumbers(SESSIONS_KEPT) }
+}
+
+/**
+ * Each session's number, by its token, the same in every follow of it; see [Following.session]. Only the [kept]
+ * numbered or asked of last keep theirs. Numbering is locked, unlike [KeptReads], as a session numbered twice at
+ * once would get two numbers, and whoever was handed the other one would find no app by it.
+ */
+internal class SessionNumbers(private val kept: Int) {
+    /** Each session's number, the one asked of least lately first. */
+    private val numbers = LinkedHashMap<MediaSession.Token, Int>(kept, LOAD_FACTOR, true)
+    private var numbered = 0
+
+    /** A session's number, without numbering it or making it the one asked of last. */
+    @Synchronized
+    fun peek(token: MediaSession.Token): Int? = numbers.entries.firstOrNull { it.key == token }?.value
+
+    @Synchronized
+    fun of(token: MediaSession.Token): Int = numbers.getOrPut(token) { numbered++ }.also {
+        if (numbers.size > kept) numbers.remove(numbers.keys.first())
     }
 }
 

@@ -42,6 +42,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import java.io.File
@@ -215,17 +217,31 @@ class PlaybackTest {
     }
 
     @Test
-    fun observingACachedValueNeitherReadsNorMakesItMoreRecent() {
-        var reads = 0
-        val cache = KeptReads<String, Int>(2) { ++reads }
-        assertNull(cache.peek("unread"))
-        assertEquals(0, reads)
-        assertEquals(1, cache.of("first"))
-        assertEquals(2, cache.of("second"))
-        assertEquals(1, cache.peek("first"))
-        assertEquals(3, cache.of("third"))
-        assertNull(cache.peek("first"))
-        assertEquals(4, cache.of("first"))
+    fun peekingAtASessionsNumberNeitherNumbersItNorKeepsItLonger() {
+        val numbers = SessionNumbers(2)
+        val (first, second, third) = List(3) { MediaSession(app, "session$it").sessionToken }
+        assertNull(numbers.peek(first))
+        assertEquals(0, numbers.of(first))
+        assertEquals(1, numbers.of(second))
+        assertEquals(0, numbers.peek(first))
+        assertEquals(2, numbers.of(third))
+        assertNull(numbers.peek(first))
+        assertEquals(3, numbers.of(first))
+    }
+
+    @Test
+    fun aSessionNumberedFromManyThreadsAtOnceGetsOneNumber() {
+        val numbers = SessionNumbers(32)
+        val token = MediaSession(app, "shared").sessionToken
+        val start = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(8)
+        try {
+            val got = List(8) { pool.submit<Int> { start.await(); numbers.of(token) } }
+            start.countDown()
+            assertEquals(setOf(0), got.map { it.get() }.toSet())
+        } finally {
+            pool.shutdown()
+        }
     }
 
     @Test
@@ -2978,7 +2994,7 @@ class PlaybackTest {
         val directory = File(app.cacheDir, ARTWORK_DIR)
         directory.deleteRecursively()
         directory.writeText("not a directory")
-        val failed = java.util.concurrent.CountDownLatch(1)
+        val failed = CountDownLatch(1)
         CoverBitmap.before = Runnable { failed.countDown() }
         try {
             assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
@@ -3181,8 +3197,8 @@ class PlaybackTest {
     @Config(shadows = [CoverBitmap::class])
     fun aSlowOldCoverCannotBeShownForTheNextSong() {
         val first = aBitmapCover()
-        val entered = java.util.concurrent.CountDownLatch(1)
-        val finish = java.util.concurrent.CountDownLatch(1)
+        val entered = CountDownLatch(1)
+        val finish = CountDownLatch(1)
         CoverBitmap.before = Runnable { entered.countDown(); finish.await() }
         val seen = offered()
         try {
