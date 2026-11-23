@@ -20,6 +20,9 @@ internal object RecordingKey {
             instrumentalAlbumKey(song)?.let { "\u0000$it" }.orEmpty()
     }
 
+    /** Whether the player or link identifies a recording, rather than only naming the song. */
+    fun identifiesRecording(song: MusicMetadata): Boolean = !song.recordingId.isNullOrBlank() || track(song.url) != null
+
     /** Words from another take can only be borrowed offline within the same instrumental album, or with none known for either. */
     fun sameInstrumentalAlbum(key: String, song: MusicMetadata): Boolean =
         key.substringAfterLast('\u0000').takeIf { it.startsWith(INSTRUMENTAL_ALBUM_PREFIX) } == instrumentalAlbumKey(song)

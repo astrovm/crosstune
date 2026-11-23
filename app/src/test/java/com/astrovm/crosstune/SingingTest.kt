@@ -940,22 +940,69 @@ class SingingTest {
     }
 
     @Test
-    fun pickedUpLateOneCorrectFarWhileIsKeptForTheNextPlay() {
-        val times = listOf(60, 63, 66, 90, 93, 96)
+    fun aFarHearingIsConfirmedByAnotherPartAfterReopening() {
+        lines = lines + listOf("Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 130, 133, 136)
         lyricsTimedFor(null, times)
         singing.answer = { sungAt(times, times.map { -27_400L }) }
         openLyrics()
         plays(positionMs = 61_000)
         waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
         composeRule.runOnIdle { model().dismissLyrics() }
-        assertTrue(prefs().contains("lyrics_sync"))
+        assertFalse(prefs().contains("lyrics_sync"))
         composeRule.runOnIdle { model().showLyrics() }
         waitUntil { model().uiState.lyricLines.size == lines.size }
-        assertEquals(62_600L, model().uiState.lyricLines[3].timeMs)
+        assertEquals(90_000L, model().uiState.lyricLines[3].timeMs)
+        plays(positionMs = 101_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
+        assertTrue(prefs().contains("lyrics_sync"))
+        assertEquals(102_600L, model().uiState.lyricLines[6].timeMs)
     }
 
     @Test
-    fun recordedJapaneseHearingMovesItsEarlySheet() {
+    fun hearingTheSameFarWindowAfterReopeningDoesNotConfirmIt() {
+        val times = listOf(60, 63, 66, 90, 93, 96)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        openLyrics()
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun aLaterNearHearingDiscardsUnconfirmedFarEvidence() {
+        lines = lines + listOf("Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 130, 133, 136)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        openLyrics()
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        singing.answer = { sungAt(times, times.map { 0L }) }
+        plays(positionMs = 130_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        plays(positionMs = 101_000)
+        waitUntil { singing.hears >= 3 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun recordedJapaneseHearingWaitsForConfirmation() {
         // Plastic Love, heard from 53.505 s: the phone model's saved 54 s window and the sheet
         // selected with the recording's length. Unrelated lines keep their times but use filler words.
         val times = listOf(30490, 39910, 47620, 57100, 67930, 77360, 85200, 94520, 105320, 114750, 123720, 133360, 139560, 159210, 168690, 177550, 187480, 194590, 204250, 212140, 221540, 232040, 241540, 250980, 260140, 269710, 278970)
@@ -974,12 +1021,12 @@ class SingingTest {
         passes(2_500)
         waitUntil { singing.hears == 1 }
         composeRule.waitForIdle()
-        val placed = model().uiState.lyricLines[2].timeMs
-        assertTrue("Expected the recorded line near 58 s, got $placed ms", placed in 57_500L..58_500L)
+        assertEquals(47_620L, model().uiState.lyricLines[2].timeMs)
+        assertFalse(prefs().contains("lyrics_sync"))
     }
 
     @Test
-    fun recordedFarHearingIsKeptAfterClosing() {
+    fun recordedFarHearingWaitsForConfirmationAfterClosing() {
         // The saved 39 s hearing of Bizarre Love Triangle, with unrelated lines replaced by filler.
         val times = listOf(0, 10, 13, 17, 19, 21, 26, 29, 33, 35, 37, 42, 58, 61, 66, 69, 74, 91, 94, 98, 100, 102, 106, 110, 114, 116, 118, 123, 139, 142, 147, 151, 155, 159, 163, 167)
         val nearby = mapOf(1 to "Every time I think of you", 2 to "I feel shot right through with a bolt of blue", 3 to "It's no problem of mine", 4 to "But it's a problem I find", 5 to "Living a life that I can't leave behind", 6 to "But there's no sense in telling me", 7 to "The wisdom of the fool won't set you free", 8 to "But that's the way that it goes")
@@ -997,10 +1044,10 @@ class SingingTest {
         composeRule.waitForIdle()
         assertTrue("Expected the far hearing to move the line, got ${model().uiState.lyricLines[3].timeMs} ms", model().uiState.lyricLines[3].timeMs > 30_000L)
         composeRule.runOnIdle { model().dismissLyrics() }
-        assertTrue(prefs().contains("lyrics_sync"))
+        assertFalse(prefs().contains("lyrics_sync"))
         composeRule.runOnIdle { model().showLyrics() }
         waitUntil { model().uiState.lyricLines.size == lines.size }
-        assertTrue(model().uiState.lyricLines[3].timeMs > 30_000L)
+        assertEquals(17_000L, model().uiState.lyricLines[3].timeMs)
     }
 
     @Test

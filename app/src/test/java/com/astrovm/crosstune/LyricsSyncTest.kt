@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.json.JSONArray
 import org.json.JSONObject
@@ -208,6 +209,61 @@ class LyricsSyncTest {
         store.save(song, lines, emptyList())
         assertEquals(emptyList<SyncPoint>(), store.load(song, lines))
         assertEquals("{}", prefs.getString("lyrics_sync", null))
+    }
+
+    @Test
+    fun anUnconfirmedHearingIsKeptApartFromConfirmedTiming() {
+        val store = LyricsSyncStore(prefs)
+        val song = song.copy(recordingId = "player:one")
+        assertNull(store.pending(song, lines))
+        store.rememberPending(song, lines, PendingShift(22_000, 40_000))
+        assertEquals(PendingShift(22_000, 40_000), LyricsSyncStore(prefs).pending(song, lines))
+        assertNull(store.pending(song, lines.dropLast(1)))
+        assertNull(store.pending(song, lines.map { it.copy(timeMs = it.timeMs + 1) }))
+        assertNull(store.pending(song.copy(recordingId = "player:another"), lines))
+        assertNull(store.pending(song.copy(recordingId = null), lines))
+        assertEquals(emptyList<SyncPoint>(), store.load(song, lines))
+        store.rememberPending(song, lines, PendingShift(23_000, 80_000))
+        assertEquals(PendingShift(23_000, 80_000), store.pending(song, lines))
+        store.clearPending(song)
+        assertNull(store.pending(song, lines))
+        store.clearPending(song)
+        prefs.edit().putString("lyrics_sync_pending", "not json").commit()
+        assertNull(store.pending(song, lines))
+    }
+
+    @Test
+    fun malformedPendingEvidenceCannotConfirmTiming() {
+        val store = LyricsSyncStore(prefs)
+        val song = song.copy(recordingId = "player:one")
+        store.rememberPending(song, lines, PendingShift(22_000, 40_000))
+        val all = JSONObject(prefs.getString("lyrics_sync_pending", "{}"))
+        val saved = all.getJSONObject(RecordingKey.of(song))
+        saved.put("offset", "invalid")
+        prefs.edit().putString("lyrics_sync_pending", all.toString()).commit()
+        assertNull(store.pending(song, lines))
+        saved.put("offset", 22_000).remove("from")
+        prefs.edit().putString("lyrics_sync_pending", all.toString()).commit()
+        assertNull(store.pending(song, lines))
+    }
+
+    @Test
+    fun oldestPendingEvidenceGoesFirst() {
+        val store = LyricsSyncStore(prefs)
+        repeat(201) { store.rememberPending(MusicMetadata("Song $it", "Artist", recordingId = "player:$it"), lines, PendingShift(22_000, 40_000)) }
+        assertNull(store.pending(MusicMetadata("Song 0", "Artist", recordingId = "player:0"), lines))
+        assertEquals(PendingShift(22_000, 40_000), store.pending(MusicMetadata("Song 200", "Artist", recordingId = "player:200"), lines))
+    }
+
+    @Test
+    fun unnamedRecordingsCannotSharePendingEvidence() {
+        val store = LyricsSyncStore(prefs)
+        store.rememberPending(song, lines, PendingShift(22_000, 40_000))
+        assertNull(store.pending(song, lines))
+        assertFalse(prefs.contains("lyrics_sync_pending"))
+        val linked = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
+        store.rememberPending(linked, lines, PendingShift(22_000, 40_000))
+        assertEquals(PendingShift(22_000, 40_000), store.pending(linked, lines))
     }
 
     @Test
