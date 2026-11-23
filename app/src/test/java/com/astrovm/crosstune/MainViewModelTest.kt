@@ -4409,8 +4409,9 @@ class MainViewModelTest {
     fun playingCancelsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, playback ->
         model.playResult()
         idle()
-        // The player and the play request now follow the app; the old open no longer does.
-        assertEquals(2, answers.subscriptionCount.value)
+        // The Play request checks the session before opening the player. The previous Open was canceled.
+        assertEquals(1, answers.subscriptionCount.value)
+        assertNull(model.uiState.player)
         assertTrue(answers.tryEmit(null))
         until("the app asked to play") { playback.songsAsked.isNotEmpty() }
         assertEquals(1, playback.songsAsked.size)
@@ -4548,6 +4549,25 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aPausedSongWithoutAPositiveDurationCanResumeFromTheCard() {
+        val playback = FakePlayback().apply { access = true }
+        val model = ytMusicModel(playback)
+        val watching = model.viewModelScope.launch { model.watchPlayingNow() }
+        try {
+            playback.playing.value = Following(PlaybackClock(0, 0, playing = false), "YouTube Music", canSeek = true,
+                appPackage = ytMusic, durationMs = 0)
+            idle()
+            assertTrue(model.uiState.canPlayResult)
+            model.playResult()
+            until("the paused session resumes") { playback.plays.isNotEmpty() }
+            assertEquals(listOf(true), playback.plays)
+            assertEquals(listOf(ytMusic), playback.playedApps)
+        } finally {
+            watching.cancel()
+        }
+    }
+
+    @Test
     fun aSongPausedAtItsEndOpensOnItsLink() {
         val playback = FakePlayback().apply { access = true }
         val model = ytMusicModel(playback)
@@ -4560,7 +4580,11 @@ class MainViewModelTest {
             playback.playing.value = beforeEnd
             until("a song that can still resume") { model.uiState.canPlayResult }
 
-            playback.playing.value = beforeEnd.copy(clock = beforeEnd.clock.copy(positionMs = 199_000))
+            val atEnd = beforeEnd.copy(clock = beforeEnd.clock.copy(positionMs = 199_000))
+            playback.playing.value = atEnd.copy(clock = atEnd.clock.copy(playing = true))
+            idle()
+            assertTrue(model.uiState.canPlayResult)
+            playback.playing.value = atEnd
             idle()
             assertFalse(model.uiState.canPlayResult)
             model.playResult()

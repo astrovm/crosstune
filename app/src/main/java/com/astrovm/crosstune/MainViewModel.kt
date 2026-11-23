@@ -1192,7 +1192,7 @@ internal class MainViewModel(
     /** A song paused in its final second can be opened again from its link. */
     private fun Following.canContinueIn(app: String?): Boolean =
         sameApp(app, appPackage, interception::isInstalled) &&
-            (clock.playing || durationMs?.let { clock.positionMs < it - RESUME_END_MARGIN_MS } != false)
+            (clock.playing || durationMs?.let { it <= 0 || clock.positionMs < it - RESUME_END_MARGIN_MS } != false)
 
     /**
      * Follows the last thing an app played with no song named in that app, for the bar's buttons and where it is,
@@ -2143,17 +2143,18 @@ internal class MainViewModel(
     private suspend fun playPreparedSong(song: MusicMetadata, destination: Destination.Service, link: String) {
         val source = playback
         val app = destination.packageName
-        val opensToStart = destination.opensAppToStartSong(uiState.phone)
-        if (!opensToStart) openPlayer(song, app, link)
         // Already in that app, playing or paused, it carries on from where it is.
         val there = source?.takeIf { it.hasAccess() }?.let { followResultSession(it, song, app).first() }
         if (there != null) {
-            if (opensToStart) openPlayer(song, there.appPackage, link, session = there.session)
+            openPlayer(song, there.appPackage, link, session = there.session)
             if (!there.clock.playing) source.playPause(song, true, there.appPackage, there.session)
             return
         }
         // The session can change between showing Play and the tap.
-        if (opensToStart) return open(destination, finishAfterOpen = false, tapped = true, preparedUrl = link)
+        if (destination.opensAppToStartSong(uiState.phone)) {
+            return open(destination, finishAfterOpen = false, tapped = true, preparedUrl = link)
+        }
+        openPlayer(song, app, link)
         // Other apps can be asked by name. YouTube Music needs its own exact link.
         val exact = uiState.destinationUrls[destination]?.exact != false
         val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link, mustStart = true) == true

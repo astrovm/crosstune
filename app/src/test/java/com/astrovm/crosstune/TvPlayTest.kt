@@ -844,6 +844,40 @@ class TvPlayTest {
     }
 
     @Test
+    fun onATvThePlayerFollowsTheYouTubeSessionItResumed() {
+        val tv = MusicService.YOUTUBE_TV
+        val session = 23
+        val paused = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false),
+            "YouTube", canSeek = true, appPackage = tv, session = session)
+        playback.playing.value = paused
+        playback.onPlay = { _, playing -> playback.playing.value = paused.copy(clock = paused.clock.copy(playing = playing)) }
+        launch()
+        val official = Destination.Service(MusicService.YOUTUBE_MUSIC)
+        composeRule.runOnIdle {
+            assertFalse(app.hasApp(youTubeMusic))
+            assertEquals(official, model().uiState.resultDestination)
+        }
+        click(play)
+        waitUntil { playback.plays.isNotEmpty() && onPlayer() }
+        assertEquals(listOf(true), playback.plays)
+        assertEquals(listOf(tv), playback.playedApps)
+        assertEquals(listOf(session), playback.playedSessions)
+        val pause = string(R.string.lyrics_pause)
+        waitUntil { shown(pause) }
+        composeRule.runOnIdle {
+            val player = checkNotNull(model().uiState.player)
+            assertEquals(tv, player.app)
+            assertEquals(session, player.session)
+            assertEquals(true, player.following?.clock?.playing)
+        }
+        assertTrue(session in playback.followedSessions)
+        click(pause)
+        assertEquals(listOf(true, false), playback.plays)
+        assertEquals(listOf(session, session), playback.playedSessions)
+        assertTrue(playback.opened.isEmpty())
+    }
+
+    @Test
     fun onATvTheRemoteStartsOnTheWordsBarAndRightFromALineGoesBackThere() {
         launch()
         click(string(R.string.lyrics_button))
