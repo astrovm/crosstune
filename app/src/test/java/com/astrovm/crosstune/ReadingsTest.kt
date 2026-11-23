@@ -919,7 +919,16 @@ class ReadingsTest {
         val tokenizer = SmallKanaTokenizer { Readings.oldKana }
         val line = "あぁゃ"
         assertNull(tokenizer.searched(line, 0))
-        assertEquals(line, tokenizer.tokenize(line).joinToString("") { it.surface })
+        fun signature(tokens: List<com.atilika.kuromoji.ipadic.Token>) = tokens.map { Triple(it.surface, it.reading, it.position) }
+        val plain = com.atilika.kuromoji.ipadic.Tokenizer.Builder().build().tokenize(line)
+        assertEquals(signature(plain), signature(tokenizer.tokenize(line)))
+        fun checkReading() {
+            val reading = Readings.of(listOf(line), Script.JAPANESE).single()
+            assertEquals("あぁゃ", reading.reading)
+            assertEquals("a aya", reading.romanized)
+        }
+        checkReading()
+        TestUniDic.reading { checkReading() }
     }
 
     @Test
