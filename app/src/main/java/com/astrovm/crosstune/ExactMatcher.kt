@@ -858,7 +858,7 @@ internal class ExactMatcher(
                 keepsRequestedRecording(recording, row, video = true)
             val first = videoRows.firstOrNull(::eligibleVideo)
             videoRows.firstOrNull {
-                eligibleVideo(it) && isOwnVideo(it, names) &&
+                (!names.everyStore || !appleNamedArtist(metadata, names)) && eligibleVideo(it) && isOwnVideo(it, names) &&
                     (it === first || first != null && sameVideoRecording(first, it, metadata, names))
             }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         }
@@ -871,7 +871,10 @@ internal class ExactMatcher(
     }
 
     private fun sameVideoRecording(first: Row, candidate: Row, metadata: MusicMetadata, names: Names): Boolean {
-        if (videoRecordingTitle(first.name, names) != videoRecordingTitle(candidate.name, names)) return false
+        val firstTitle = videoRecordingTitle(first.name, names)
+        val candidateTitle = videoRecordingTitle(candidate.name, names)
+        val knownTitles = names.titles.map(SongNames::normalize).toSet()
+        if (firstTitle != candidateTitle && (firstTitle !in knownTitles || candidateTitle !in knownTitles)) return false
         if (candidate.lengthMs == null) return true
         if (first.lengthMs?.let { !sameRecordingLength(candidate.lengthMs, it) } == true) return false
         val wanted = metadata.lengthMs?.takeIf { it > 0 }?.let(::listOf) ?: names.lengthsMs
