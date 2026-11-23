@@ -11,6 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The songs scripts/matchcheck/collect.py kept, looked for on YouTube Music through the real [ExactMatcher], with
@@ -22,12 +23,15 @@ class MatchReplayTest {
 
     private val fake = FakeSpotify()
     private lateinit var dir: File
+    private var proofs = JSONObject()
+    private val missingProofs = ConcurrentHashMap.newKeySet<String>()
 
     @Test
     fun replay() {
         val given = System.getenv("MATCHCHECK_DIR")?.let(::File)
         assumeTrue(given != null && File(given, "replay.json").isFile)
         dir = requireNotNull(given)
+        proofs = File(dir, "candidate-proofs.json").takeIf(File::isFile)?.let { JSONObject(it.readText()) } ?: JSONObject()
         val songs = JSONArray(File(dir, "replay.json").readText()).let { all -> (0 until all.length()).map(all::getJSONObject) }
         val wrongQueries = songs.filter { song ->
             val query = song.optString("query")
@@ -47,6 +51,8 @@ class MatchReplayTest {
         for (appleDown in if (both) listOf(false, true) else listOf(down)) {
             replay(songs, kept, appleDown, both)
         }
+        File(dir, "missing-proofs.json").writeText(JSONArray(missingProofs.sorted()).toString())
+        if (System.getenv("MATCHCHECK_REQUIRE_PROOFS") == "1") assertTrue("Missing candidate Apple searches: $missingProofs", missingProofs.isEmpty())
     }
 
     private fun replay(songs: List<JSONObject>, kept: List<Map<String, String?>>, appleDown: Boolean, both: Boolean) {
@@ -94,8 +100,17 @@ class MatchReplayTest {
         val url = request.url
         if (url.host == "itunes.apple.com" && appleDown) throw IOException("Apple is down")
         return when {
-            url.host == "itunes.apple.com" && url.encodedPath == "/search" ->
-                FakeSpotify.html(request, JSONObject().put("results", if (url.queryParameter("country") == "US") song.getJSONArray("us") else JSONArray()).toString())
+            url.host == "itunes.apple.com" && url.encodedPath == "/search" -> {
+                val term = url.queryParameter("term").orEmpty()
+                val store = url.queryParameter("country").orEmpty()
+                val results = if (term == song.optString("query")) {
+                    if (store == "US") song.getJSONArray("us") else JSONArray()
+                } else {
+                    val key = "$store|$term"
+                    proofs.optJSONArray(key) ?: throw IOException("not captured: $key").also { missingProofs += key }
+                }
+                FakeSpotify.html(request, JSONObject().put("results", results).toString())
+            }
             // A lookup in the US store names the song as its search did; the other stores, with their own names, when served.
             // Each by the song's id: one the store doesn't have is none.
             url.host == "itunes.apple.com" -> url.queryParameter("country").orEmpty().let { store ->

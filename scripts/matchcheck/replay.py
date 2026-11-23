@@ -3,6 +3,7 @@
 
     python3 scripts/matchcheck/replay.py prepare OUT --require-answers  # fail if a search wasn't captured
     python3 scripts/matchcheck/replay.py run OUT LABEL [--apple-down | --both]  # --both writes LABEL-up and LABEL-down
+    python3 scripts/matchcheck/replay.py capture-proofs OUT  # capture candidate searches recorded by a probe run
     python3 scripts/matchcheck/replay.py table OUT LABEL [--against OTHER] [-v]
 
 Each song is looked for on YouTube Music as a link from another service would ask for it: by its
@@ -29,6 +30,7 @@ import re
 import subprocess
 import sys
 import unicodedata
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import analyze
@@ -151,13 +153,32 @@ def prepare(out, require_answers=False):
     print(f"{len(replay)} songs, {sum(1 for s in replay if s['right'])} with a right result", file=sys.stderr)
 
 
-def run(out, label, apple_down=False, both=False):
+def run(out, label, apple_down=False, both=False, require_proofs=False):
     """MatchReplayTest in the checkout this is run in, which may be another, e.g. origin/main's, with the same test file
     and gradle-box.sh; run again each time, as Gradle doesn't see that what it's served changed."""
     root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
-    env = dict(os.environ, MATCHCHECK_DIR=os.path.abspath(out), MATCHCHECK_LABEL=label, MATCHCHECK_APPLE_DOWN="1" if apple_down else "0", MATCHCHECK_BOTH="1" if both else "0", GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
+    env = dict(os.environ, MATCHCHECK_DIR=os.path.abspath(out), MATCHCHECK_LABEL=label, MATCHCHECK_APPLE_DOWN="1" if apple_down else "0", MATCHCHECK_BOTH="1" if both else "0", MATCHCHECK_REQUIRE_PROOFS="1" if require_proofs else "0", GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
     subprocess.run(["nice", "-n", "10", os.path.join(root, "scripts/gradle-box/gradle-box.sh"), "--max-workers=2",
                     ":app:testDebugUnitTest", "--tests", "*MatchReplayTest", "--rerun"], cwd=root, env=env, check=True)
+
+
+def capture_proofs(out):
+    """Capture the exact additional Apple searches the probe replay needed."""
+    missing = read_json(os.path.join(out, "missing-proofs.json"))
+    path = os.path.join(out, "candidate-proofs.json")
+    proofs = read_json(path) if os.path.exists(path) else {}
+    for key in missing:
+        store, term = key.split("|", 1)
+        if key in proofs:
+            continue
+        query = urllib.parse.urlencode({"term": term, "entity": "song", "limit": 10, "country": store})
+        answer = collect.fetch(out, "https://itunes.apple.com/search?" + query, pause=0.3)
+        if answer is None or not isinstance(answer.get("results"), list):
+            raise ValueError(f"Apple did not answer candidate search {key}")
+        proofs[key] = answer["results"]
+        with open(path, "w", encoding="utf-8") as kept:
+            json.dump(proofs, kept, ensure_ascii=False)
+    print(f"{len(missing)} candidate searches, {len(proofs)} answers kept", file=sys.stderr)
 
 
 MODES = ("names, alone", "names, asked", "latin, alone", "latin, asked")
@@ -206,19 +227,22 @@ def table(out, label, against=None, verbose=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("prepare", "run", "table"))
+    parser.add_argument("action", choices=("prepare", "run", "capture-proofs", "table"))
     parser.add_argument("out")
     parser.add_argument("label", nargs="?", default="head")
     parser.add_argument("--against")
     parser.add_argument("--apple-down", action="store_true", help="make Apple requests fail")
     parser.add_argument("--both", action="store_true", help="write LABEL-up and LABEL-down in one run")
     parser.add_argument("--require-answers", action="store_true", help="fail preparation if a YouTube Music answer is missing")
+    parser.add_argument("--require-proofs", action="store_true", help="fail the replay if a candidate Apple search is missing")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     if args.action == "prepare":
         prepare(args.out, args.require_answers)
     elif args.action == "run":
-        run(args.out, args.label, args.apple_down, args.both)
+        run(args.out, args.label, args.apple_down, args.both, args.require_proofs)
+    elif args.action == "capture-proofs":
+        capture_proofs(args.out)
     else:
         table(args.out, args.label, args.against, args.verbose)
 

@@ -268,7 +268,7 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
     def test_a_chosen_matcher_replay_folder_is_mounted_and_named_with_its_label(self):
         kept = self.dir / "matchcheck"
         kept.mkdir()
-        box = self.start("matchcheck", ":app:testDebugUnitTest", MATCHCHECK_DIR=str(kept), MATCHCHECK_LABEL="main", MATCHCHECK_APPLE_DOWN="1", MATCHCHECK_BOTH="1")
+        box = self.start("matchcheck", ":app:testDebugUnitTest", MATCHCHECK_DIR=str(kept), MATCHCHECK_LABEL="main", MATCHCHECK_APPLE_DOWN="1", MATCHCHECK_BOTH="1", MATCHCHECK_REQUIRE_PROOFS="1")
         output, _ = box.communicate(timeout=20)
         self.assertEqual(box.returncode, 0, output)
         self.assertIn(f"-v {kept}:{kept}", self.asked()[0])
@@ -276,6 +276,7 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         self.assertIn("-e MATCHCHECK_LABEL=main", self.asked()[0])
         self.assertIn("-e MATCHCHECK_APPLE_DOWN=1", self.asked()[0])
         self.assertIn("-e MATCHCHECK_BOTH=1", self.asked()[0])
+        self.assertIn("-e MATCHCHECK_REQUIRE_PROOFS=1", self.asked()[0])
 
     def test_a_matcher_replay_with_no_label_is_head(self):
         kept = self.dir / "matchcheck"

@@ -118,10 +118,35 @@ class RunTest(unittest.TestCase):
     @patch("replay.subprocess.run")
     def test_both_apple_states_are_requested_in_one_build(self, run):
         run.return_value.stdout = "/checkout\n"
-        replay.run("/corpus", "head", both=True)
+        replay.run("/corpus", "head", both=True, require_proofs=True)
         env = run.call_args_list[1].kwargs["env"]
         self.assertEqual("1", env["MATCHCHECK_BOTH"])
         self.assertEqual("head", env["MATCHCHECK_LABEL"])
+        self.assertEqual("1", env["MATCHCHECK_REQUIRE_PROOFS"])
+
+    @patch("replay.collect.fetch")
+    def test_candidate_searches_are_captured_by_store_and_term(self, fetch):
+        fetch.return_value = {"results": [{"trackId": 17}]}
+        with tempfile.TemporaryDirectory() as out:
+            with open(os.path.join(out, "missing-proofs.json"), "w", encoding="utf-8") as missing:
+                json.dump(["JP|ジェラス 八神純子"], missing)
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.capture_proofs(out)
+            with open(os.path.join(out, "candidate-proofs.json"), encoding="utf-8") as kept:
+                self.assertEqual({"JP|ジェラス 八神純子": [{"trackId": 17}]}, json.load(kept))
+            self.assertIn("country=JP", fetch.call_args.args[1])
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.capture_proofs(out)
+            self.assertEqual(1, fetch.call_count)
+
+    @patch("replay.collect.fetch", return_value=None)
+    def test_a_failed_candidate_search_is_not_saved_as_empty(self, fetch):
+        with tempfile.TemporaryDirectory() as out:
+            with open(os.path.join(out, "missing-proofs.json"), "w", encoding="utf-8") as missing:
+                json.dump(["JP|song artist"], missing)
+            with self.assertRaisesRegex(ValueError, "Apple did not answer"):
+                replay.capture_proofs(out)
+            self.assertFalse(os.path.exists(os.path.join(out, "candidate-proofs.json")))
 
 
 if __name__ == "__main__":
