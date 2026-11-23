@@ -901,7 +901,7 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
 @Composable
 @NonRestartableComposable
 private fun UnnamedBar(now: PlayingUnnamed, actions: ScreenActions) {
-    val song = now.heard?.metadata
+    val song = now.confirmedQueueSong ?: now.heard?.metadata
     // The app's name as following it has it too, as both are from its package.
     val app = now.playing.label
     val name = song?.title ?: now.playing.name ?: app.orEmpty()

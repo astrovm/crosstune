@@ -103,6 +103,10 @@
       "Pour nommer le morceau d'un lien, Crosstune lit sa page publique ou son API sur le service d'où il vient : Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam ou Google, et charge sa pochette. Pour l'ouvrir dans une autre appli, le titre et l'artiste vont à la recherche de cette appli. Quand cette recherche n'est pas sûre, ils vont aussi aux recherches de chansons d'Apple et de Deezer. Pour Spotify, ils vont à ListenBrainz et le nom de l'artiste à MusicBrainz, et les pages publiques de Spotify sont lues. Tout lire et Aléatoire font cela pour chaque morceau, et YouTube crée la playlist à partir des vidéos trouvées. Le nom d'un morceau que vous saisissez va aux recherches de Deezer et d'Apple. Une destination personnalisée reçoit les mots de recherche dans l'adresse que vous configurez."
     ],
     [
+      "p",
+      "Si la recherche dans la boutique régionale d’Apple échoue ou ne trouve aucun résultat, Crosstune peut envoyer le titre et l’artiste à la boutique américaine d’Apple."
+    ],
+    [
       "h2",
       "Paroles, accords et traductions"
     ],
@@ -116,7 +120,7 @@
     ],
     [
       "p",
-      "Avec l'accès aux notifications, Crosstune voit quel morceau jouent vos applis de musique et où elles en sont, pour que les paroles suivent et que son lecteur puisse mettre en pause, passer ou aimer le morceau dans votre appli. Pour Simple Radio, il vérifie aussi que la notification multimédia de la radio s'affiche, sans lire son texte. Cela reste sur votre téléphone. Une carte d'entraînement joue sa ligne dans une appli qui a déjà le morceau ouvert, ou dans un petit lecteur YouTube sur la carte, qui trouve la vidéo du morceau comme le fait un lien. Vous n'y êtes pas connecté à YouTube."
+      "Avec l'accès aux notifications, Crosstune voit quel morceau jouent vos applis de musique et où elles en sont, pour que les paroles suivent et que son lecteur puisse mettre en pause, passer ou aimer le morceau dans votre appli. Pour Simple Radio, il vérifie aussi que la notification multimédia de la radio s'affiche, sans lire son texte. Cela reste sur votre téléphone. Une carte d'entraînement joue sa ligne dans une appli qui a déjà le morceau ouvert, ou dans un petit lecteur YouTube sur la carte, qui trouve la vidéo du morceau comme le fait un lien. Vous n'y êtes pas connecté à YouTube. Pour Radio Garden, Crosstune sépare le texte de la station sur ce qui passe à l’antenne en un titre et un nom d’artiste, puis envoie ces éléments à Apple Music. Ce texte décrit le plus souvent un morceau. La station peut fournir un autre texte dans ces champs."
     ],
     [
       "h2",

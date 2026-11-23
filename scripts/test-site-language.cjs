@@ -16,6 +16,14 @@ const documents = codes.flatMap(code => ['', 'privacy/'].map(section => {
 }));
 const route = (code, section) => (code === 'en' ? '/' : `/${code}/`) + section;
 
+test('the privacy policy discloses the Apple US search if the regional search fails', () => {
+  const disclosure = "When Apple's regional search finds no match or fails, Crosstune can send the title and artist to Apple's US store.";
+  const readme = fs.readFileSync(path.join(__dirname, '../README.md'), 'utf8');
+  const privacy = documents.find(document => document.code === 'en' && document.section === 'privacy/');
+  assert.ok(readme.includes(disclosure), 'README privacy section describes the fallback');
+  assert.ok(privacy.html.includes(disclosure), 'published privacy page describes the fallback');
+});
+
 function page(document, { saved = null, browser = ['en'], blockedStorage = false } = {}) {
   const assigned = [], replaced = [], writes = [];
   const context = {

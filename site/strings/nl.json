@@ -103,6 +103,10 @@
       "Om het nummer van een link te benoemen, leest Crosstune de openbare pagina of API van de service waar het vandaan komt: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam of Google, en laadt de hoes. Om het in een andere app te openen, gaan de titel en artiest naar de zoekfunctie van die app. Als die zoekopdracht niet zeker is, gaan ze ook naar de nummerzoekfuncties van Apple en Deezer. Voor Spotify gaan ze naar ListenBrainz en de naam van de artiest naar MusicBrainz, en worden de openbare pagina's van Spotify gelezen. Alles afspelen en Shuffle doen dit voor elk nummer, en YouTube maakt de playlist van de gevonden video's. Een nummernaam die je typt, gaat naar de zoekopdrachten van Deezer en Apple. Een eigen bestemming krijgt de zoekwoorden in het adres dat je instelt."
     ],
     [
+      "p",
+      "Als de zoekopdracht in de regionale Apple Store mislukt of geen overeenkomst oplevert, kan Crosstune de titel en artiest naar de Amerikaanse Apple Store sturen."
+    ],
+    [
       "h2",
       "Songteksten, akkoorden en vertalingen"
     ],
@@ -116,7 +120,7 @@
     ],
     [
       "p",
-      "Met toegang tot meldingen ziet Crosstune welk nummer je muziekapps afspelen en hoe ver ze zijn, zodat de tekst meeloopt en de speler het nummer in je app kan pauzeren, overslaan of liken. Voor Simple Radio controleert het ook of de mediamelding van de radio zichtbaar is, zonder de tekst ervan te lezen. Dit blijft op je telefoon. Een oefenkaart speelt zijn regel af in een app waar het nummer al open is, of in een kleine YouTube-speler op de kaart, die de video van het nummer vindt zoals een link dat doet. Je bent daar niet ingelogd bij YouTube."
+      "Met toegang tot meldingen ziet Crosstune welk nummer je muziekapps afspelen en hoe ver ze zijn, zodat de tekst meeloopt en de speler het nummer in je app kan pauzeren, overslaan of liken. Voor Simple Radio controleert het ook of de mediamelding van de radio zichtbaar is, zonder de tekst ervan te lezen. Dit blijft op je telefoon. Een oefenkaart speelt zijn regel af in een app waar het nummer al open is, of in een kleine YouTube-speler op de kaart, die de video van het nummer vindt zoals een link dat doet. Je bent daar niet ingelogd bij YouTube. Voor Radio Garden splitst Crosstune de tekst van het station over wat er nu speelt in een titel en een artiestennaam. Die delen stuurt het naar Apple Music. Meestal beschrijft de tekst een nummer. Het station kan in die velden ook andere tekst zetten."
     ],
     [
       "h2",

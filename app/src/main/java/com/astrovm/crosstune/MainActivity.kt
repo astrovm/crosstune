@@ -184,7 +184,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Set while the words float over other apps in a window of their own, which keeps listening along. */
-    private var floatingOverApps = false
+    private var floatingOverApps by mutableStateOf(false)
 
     /** Set when the words floated as this screen came back in sight, till it's touched: a link it only hands on floats them again. */
     private var floatedWhenBack = false
@@ -625,11 +625,12 @@ class MainActivity : ComponentActivity() {
         }
 
         val shortcuts = AppShortcuts(applicationContext, viewModel.artwork::load)
-        // What plays is watched while the screen is in sight: in front, or covering the app a song plays in, as
-        // on a TV, where it's the cover's window and this activity is stopped behind that app (Issue #1105).
+        // What plays is watched while the screen is in sight, including when words cover another app.
+        // Floating radio words also need fresh queue text, even while this activity is stopped.
         lifecycleScope.launch {
-            combine(lifecycle.currentStateFlow, snapshotFlow { viewModel.uiState.coveringApp }) { state, covering ->
-                covering || state.isAtLeast(Lifecycle.State.RESUMED)
+            val lyricsInSight = snapshotFlow { viewModel.uiState.coveringApp || (floatingOverApps && viewModel.followingRadioLyrics) }
+            combine(lifecycle.currentStateFlow, lyricsInSight) { state, inSight ->
+                inSight || state.isAtLeast(Lifecycle.State.RESUMED)
             }.distinctUntilChanged().collectLatest { inSight -> if (inSight) viewModel.watchPlayingNow() }
         }
         lifecycleScope.launch {
