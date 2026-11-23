@@ -4,8 +4,8 @@
 # and gives the new from: to set once the block is translated again.
 
 JMdict
-from: e24ab7fdbdb1
-note: Crosstune이 JMdict로 만든 단어 목록은 바뀌었어요. 읽기: JMdict가 한 가지로만 읽는 두 글자 이상의 한자 단어 중에서 Crosstune이 다르게 읽는 것만. 가나 단어: 첫 가나 뒤에 い나 う가 오는 흔한 단어만, 각각 찾는 방법과 함께, 그리고 그 자리에 ひ나 ふ가 있는 단어. 이것들도 CC BY-SA 4.0이에요. 아래에 Group의 라이선스(https://www.edrdg.org/edrdg/licence.html), CC BY-SA 4.0 라이선스, JMdict 문서가 있어요.
+from: 93aaea2be9a2
+note: Crosstune이 JMdict로 만든 단어 목록은 바뀌었어요. 읽기: JMdict가 한 가지로만 읽고 Crosstune이 다르게 읽는 단어만. 가나 단어: 옛 표기를 알아보는 단어와 검색에 쓰는 작은 가나가 든 흔한 단어. 이것들도 CC BY-SA 4.0이에요. 아래에 Group의 라이선스(https://www.edrdg.org/edrdg/licence.html), CC BY-SA 4.0 라이선스, JMdict 문서가 있어요.
 
 Kuromoji
 from: 962013f376a7

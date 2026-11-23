@@ -134,6 +134,18 @@ class SavedLinesRereadTest {
     }
 
     @Test
+    fun anUnmarkedOldReadingThatMayBeAUsersCorrectionIsKept() {
+        val line = SavedLine(
+            "都会の夜", reading = "まちのよ", title = "Demo", artist = "Band",
+            ruby = listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よ")), readByHand = true
+        )
+        assertEquals(
+            listOf(Ruby("都会", "まち", Reader.USER), Ruby("の"), Ruby("夜", "よ", Reader.USER)),
+            line.marked(Script.JAPANESE)
+        )
+    }
+
+    @Test
     fun ofTheSameWordTwiceOnlyTheOneTheUserPutRightCarriesTheirReading() {
         val was = kept("夜と夜", Ruby("夜", "よる"), Ruby("と"), Ruby("夜", "よ", Reader.USER)).copy(readByHand = true)
         val carried = SavedLine("青い夜と夜", reading = null, title = "Demo", artist = "Band").carrying(was, Script.JAPANESE)
@@ -295,6 +307,14 @@ class SavedLinesRereadTest {
         assertEquals("さんぼんのはな", again.reading)
         assertEquals(line.copy(reading = again.reading, romanized = again.romanized, ruby = again.ruby, typed = again.typed, readWith = Readings.VERSION), again)
         assertEquals(again, store.load().single())
+    }
+
+    @Test
+    fun aLineReadWithVersion15IsReadAgain() {
+        val line = SavedLine("三本", reading = "さんほん", title = "Demo", artist = "Band", ruby = listOf(Ruby("三本", "さんほん")), readWith = 15)
+        val again = checkNotNull(readAgain(listOf(line)))
+        assertEquals("さんぼん", again.single().reading)
+        assertEquals(16, again.single().readWith)
     }
 
     @Test

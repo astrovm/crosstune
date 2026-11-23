@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import com.atilika.kuromoji.ipadic.Tokenizer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -743,6 +744,289 @@ class ReadingsTest {
     }
 
     @Test
+    fun kanaWordsMissingFromOldKanaKeepTheirDictionaryLookups() {
+        val cases = mapOf(
+            "でんしゃでまち" to listOf("でんしゃ" to "電車", "で" to "で", "まち" to "まち"),
+            "きょねんのゆめ" to listOf("きょねん" to "去年", "の" to "の", "ゆめ" to "ゆめ"),
+            "しゅみはうた" to listOf("しゅみ" to "趣味", "は" to "は", "うた" to "うた"),
+            "にっきをかく" to listOf("にっき" to "日記", "を" to "を", "かく" to "かく")
+        )
+        fun words() = cases.keys.map { line -> Readings.words(line, Script.JAPANESE).map { it.text to it.lookup } }
+        val expected = cases.values.toList()
+        assertEquals(listOf(expected, expected), listOf(words(), TestUniDic.reading { words() }))
+    }
+
+    @Test
+    fun repeatedKanaWordsKeepTheirLookupsAcrossSearchWindows() {
+        fun check() {
+            val words = Readings.words("でんしゃででんしゃ", Script.JAPANESE)
+            assertEquals(listOf("でんしゃ" to "電車", "で" to "で", "でんしゃ" to "電車"), words.map { it.text to it.lookup })
+            val bridged = Readings.words("りゅうっっさくら りゅうっっさくら", Script.JAPANESE)
+            assertEquals(listOf("りゅうっっ", "さくら", "りゅうっっ", "さくら"), bridged.map { it.text })
+            assertEquals(listOf("りゅう", "さくら", "りゅう", "さくら"), bridged.map { it.lookup })
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun searchVocabularyFindsTheLongestWordAndKeepsOldKanaPrecedence() {
+        val empty = Readings.OldKana(emptyMap(), setOf("あ"))
+        assertEquals(0, empty.longestSearch)
+        val single = Readings.OldKana(mapOf("あ" to "亜"), setOf("あ"))
+        assertEquals(1, single.longestSearch)
+        val words = Readings.OldKana(mapOf("あい" to "愛"), setOf("あ"), mapOf("あいうえ" to "上", "あい" to "藍"))
+        assertEquals(4, words.longestSearch)
+        assertEquals("愛", words.search["あい"])
+    }
+
+    @Test
+    fun aKanaWordMayStartAtTheBeginningOfAnInflectedDictionaryToken() {
+        fun words() = Readings.words("そのきっさき", Script.JAPANESE).map { it.text }
+        assertEquals(listOf("その", "きっさき"), words())
+        assertEquals(listOf("その", "きっさき"), TestUniDic.reading { words() })
+    }
+
+    @Test
+    fun aSingleKnownKanjiWordKeepsItsDictionaryReading() {
+        val previous = Readings.listed
+        try {
+            Readings.listed = mapOf("東京" to "みやこ")
+            assertEquals("とうきょう", Readings.of(listOf("東京"), Script.JAPANESE).single().reading)
+            assertEquals("とうきょう", TestUniDic.reading { Readings.of(listOf("東京"), Script.JAPANESE).single().reading })
+        } finally {
+            Readings.listed = previous
+        }
+    }
+
+    @Test
+    fun aListedSuffixKeepsTheWordBeforeIt() {
+        val previous = Readings.listed
+        try {
+            // A fake listing makes the two dictionary pieces 夢 and 的 one suffix.
+            Readings.listed = mapOf("夢的" to "むてき")
+            val words = Readings.words("人生夢的", Script.JAPANESE)
+            assertEquals(listOf("人生夢的"), words.map { it.text })
+            assertEquals(listOf(Reader.IPADIC, Reader.JMDICT), words.single().by)
+        } finally {
+            Readings.listed = previous
+        }
+    }
+
+    @Test
+    fun kanaWordsStayWholeBeforeIpadicsSmallTsuWords() {
+        val cases = mapOf(
+            "いえはいっしょ" to listOf("いえ", "は", "いっしょ"),
+            "いえはずっと" to listOf("いえ", "は", "ずっと"),
+            "きみってだれ" to listOf("きみ", "って", "だれ")
+        )
+        fun words() = cases.keys.map { line -> Readings.words(line, Script.JAPANESE).map { it.text } }
+        val expected = cases.values.toList()
+        assertEquals(listOf(expected, expected), listOf(words(), TestUniDic.reading { words() }))
+    }
+
+    @Test
+    fun aSmallTsuWordCannotCutACommonWordDuringSearch() {
+        val tokenizer = SmallKanaTokenizer { Readings.oldKana }
+        val split = tokenizer.searched("はずっと", 0)
+        assertEquals(listOf("は", "ずっと"), split?.map { it.surface })
+        val particle = tokenizer.searched("きみってだれ", 0)
+        assertEquals(listOf("きみ", "って", "だれ"), particle?.map { it.surface })
+    }
+
+    @Test
+    fun knownSmallTsuParticlesStayWholeWhenAListedWordCrossesThem() {
+        val vocabulary = Readings.OldKana(emptyMap(), setOf("あ"), mapOf("あ" to "亜", "れって" to "列島", "ずっ" to "ずっ", "ずっと" to "ずっと"))
+        val tokenizer = SmallKanaTokenizer { vocabulary }
+        val plain = com.atilika.kuromoji.ipadic.Tokenizer.Builder().build()
+        val particle = "それってこと"
+        val particleTokens = plain.tokenize(particle)
+        assertEquals(listOf("それ", "って", "こと"), particleTokens.map { it.surface })
+        assertNull(tokenizer.crossingFor(particle, particleTokens, 1))
+        val word = "いえはずっと"
+        val wordTokens = plain.tokenize(word)
+        assertEquals(3..5, tokenizer.crossingFor(word, wordTokens, 2))
+    }
+
+    @Test
+    fun crossingWordsReachTheStartAndEndOfTheirKanaRun() {
+        val vocabulary = Readings.OldKana(emptyMap(), setOf("あ"), mapOf("いゃ" to "いゃ", "あいっえお" to "あいっえお"))
+        val tokenizer = SmallKanaTokenizer { vocabulary }
+        val plain = com.atilika.kuromoji.ipadic.Tokenizer.Builder().build()
+        fun crossing(text: String, at: Int): IntRange? {
+            val tokens = plain.tokenize(text)
+            val index = tokens.indexOfFirst { it.position == at }
+            assertTrue("$text has no token at $at", index >= 0)
+            return tokenizer.crossingFor(text, tokens, index)
+        }
+        assertEquals(0..1, crossing("いゃ", 1))
+        assertEquals(0..4, crossing("あいっえお", 1))
+        assertEquals(0..4, crossing("あいっえお", 4))
+        assertEquals(1..5, crossing("漢あいっえお", 2))
+        assertNull(crossing("あいっえあか", 3))
+    }
+
+    @Test
+    fun searchWindowCoversExactlyTheTokensACrossingWordNeeds() {
+        val text = "いえはずっと"
+        val tokens = com.atilika.kuromoji.ipadic.Tokenizer.Builder().build().tokenize(text)
+        assertEquals(listOf("いえ", "はず", "っと"), tokens.map { it.surface })
+        val tokenizer = SmallKanaTokenizer { Readings.oldKana }
+        // A crossing ending in the next token needs it, but one ending at the boundary does not.
+        assertEquals(0 to 2, tokenizer.searchWindow(text, tokens, 1, 0, 1..4))
+        assertEquals(0 to 1, tokenizer.searchWindow(text, tokens, 1, 0, 1..3))
+        // A word beginning inside the preceding token needs it; one beginning at its boundary does not.
+        assertEquals(0 to 2, tokenizer.searchWindow(text, tokens, 2, 0, 0..4))
+        assertEquals(1 to 2, tokenizer.searchWindow(text, tokens, 2, 0, 2..4))
+        assertEquals(1 to 2, tokenizer.searchWindow(text, tokens, 2, 0, null))
+    }
+
+    @Test
+    fun consecutiveKanaSearchWindowsKeepTheirText() {
+        val line = "もっともっともっと"
+        fun check() = assertEquals(List(3) { "もっと" to "もっと" }, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun retryDoesNotLeakBetweenSearchesOrAcrossOneLine() {
+        val tokenizer = SmallKanaTokenizer { Readings.oldKana }
+        fun signature(tokens: List<com.atilika.kuromoji.ipadic.Token>?) =
+            tokens?.map { listOf(it.surface, it.reading, it.baseForm, it.position.toString(), it.allFeatures) }
+        val first = "りゅうっっさくら"
+        val second = "きゅうッりい"
+        val retry = checkNotNull(tokenizer.searched(first, 0))
+        assertEquals(listOf("りゅうっっ", "さくら"), retry.map { it.surface })
+        assertEquals(listOf(0, 5), retry.map { it.position })
+        assertEquals(signature(SmallKanaTokenizer { Readings.oldKana }.searched(second, 0)), signature(tokenizer.searched(second, 0)))
+        for (text in listOf(first, second, "にっき", "あ りょこう", "あ りゅうっっさくら")) {
+            val atZero = checkNotNull(tokenizer.searched(text, 0))
+            val atEleven = checkNotNull(tokenizer.searched(text, 11))
+            assertEquals(text, atZero.map { it.position + 11 }, atEleven.map { it.position })
+            assertEquals(text, atZero.map { it.surface to it.allFeatures }, atEleven.map { it.surface to it.allFeatures })
+        }
+        val offered = checkNotNull(tokenizer.searched("あ りょこう", 0)).filterIsInstance<SmallKanaTokenizer.JmdictToken>().single()
+        assertEquals(2, offered.position)
+        assertEquals(Tokenizer().tokenize("旅行").single().allFeatures, offered.allFeatures)
+        assertTrue(checkNotNull(tokenizer.searched("あ りゅうっっさくら", 0)).any { it is SmallKanaTokenizer.BridgedToken && it.position > 0 })
+        val line = "$first $second"
+        assertEquals(signature(SmallKanaTokenizer { Readings.oldKana }.tokenize(line)), signature(tokenizer.tokenize(line)))
+        fun checkWords() = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        val expected = listOf("りゅうっっ" to "りゅう", "さくら" to "さくら", "きゅうッり" to "きゅう", "い" to "い")
+        assertEquals(expected, checkWords())
+        assertEquals(expected, TestUniDic.reading { checkWords() })
+    }
+
+    @Test
+    fun anUnreachableSearchKeepsTheOriginalTokens() {
+        val tokenizer = SmallKanaTokenizer { Readings.oldKana }
+        val line = "あぁゃ"
+        assertNull(tokenizer.searched(line, 0))
+        fun signature(tokens: List<com.atilika.kuromoji.ipadic.Token>) = tokens.map { Triple(it.surface, it.reading, it.position) }
+        val plain = com.atilika.kuromoji.ipadic.Tokenizer.Builder().build().tokenize(line)
+        assertEquals(signature(plain), signature(tokenizer.tokenize(line)))
+        fun checkReading() {
+            val reading = Readings.of(listOf(line), Script.JAPANESE).single()
+            assertEquals("あぁゃ", reading.reading)
+            assertEquals("a aya", reading.romanized)
+        }
+        checkReading()
+        TestUniDic.reading { checkReading() }
+    }
+
+    @Test
+    fun aKanaCandidateWithTheWrongWrittenReadingIsNotOffered() {
+        val vocabulary = Readings.OldKana(emptyMap(), setOf("あ"), mapOf("りょこう" to "東京", "にっき" to "東京"))
+        val tokenizer = SmallKanaTokenizer { vocabulary }
+        for (text in listOf("りょこう", "にっき", "あ りょこう", "あ にっき")) {
+            val actual = checkNotNull(tokenizer.searched(text, 0))
+            assertTrue(text, actual.none { it is SmallKanaTokenizer.JmdictToken })
+        }
+    }
+
+    @Test
+    fun aRetrySelectsTheDictionaryPathFromTheStartOfTheLine() {
+        val tokens = checkNotNull(SmallKanaTokenizer { Readings.oldKana }.searched("きょうっっさくら", 0))
+        assertEquals(listOf("きょうっっ", "さくら"), tokens.map { it.surface })
+        assertEquals(listOf(0, 5), tokens.map { it.position })
+        assertEquals("副詞可能", tokens.first().partOfSpeechLevel2)
+    }
+
+    @Test
+    fun aCommonKanaWordDoesNotSplitAnInflectedVerb() {
+        fun check() = assertEquals("shimatchaeba", Readings.of(listOf("しまっちゃえば"), Script.JAPANESE).single().romanized)
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun dictionaryWordsKeepTheirReadingsAlone() {
+        val cases = mapOf(
+            "薄化粧" to "うすげしょう", "丸印" to "まるじるし", "一口" to "ひとくち", "丸印の" to "まるじるしの"
+        )
+        fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.reading }
+        val expected = cases.values.toList()
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+    }
+
+    @Test
+    fun ambiguousDictionaryWordsStillReadWrongInTheAuditedLyricLines() {
+        fun check(hitokuchi: String) {
+            assertEquals("ひのまるしるしのにりんしゃころがし", Readings.of(listOf("日の丸印の二輪車転がし"), Script.JAPANESE).single().reading)
+            assertEquals(hitokuchi, Readings.words("一口だけで fall in love", Script.JAPANESE).first().reading)
+        }
+        check("いっくち")
+        TestUniDic.reading { check("ひとくち") }
+    }
+
+    @Test
+    fun thinMakeupKeepsItsReadingInAShortSentence() {
+        fun check() = assertEquals("うすげしょうをして", Readings.of(listOf("薄化粧をして"), Script.JAPANESE).single().reading)
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun unreadSingleKanjiVerbsUseTheirUnambiguousDictionaryReading() {
+        val cases = mapOf("奔る" to "はしる", "溢るる" to "あふるる")
+        fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.reading }
+        val expected = cases.values.toList()
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+        fun lookups() = cases.keys.map { line -> Readings.words(line, Script.JAPANESE).map { it.lookup } }
+        val expectedLookups = cases.keys.map { listOf(it) }
+        assertEquals(listOf(expectedLookups, expectedLookups), listOf(lookups(), TestUniDic.reading { lookups() }))
+        assertEquals(listOf(Reader.JMDICT), Readings.words("奔る", Script.JAPANESE).single().by)
+        fun afterNoun() = Readings.words("奴隷奔る", Script.JAPANESE).map { it.text to it.lookup }
+        val separate = listOf("奴隷" to "奴隷", "奔る" to "奔る")
+        assertEquals(separate, afterNoun())
+        assertEquals(separate, TestUniDic.reading { afterNoun() })
+        val inContext = mapOf("奔る奴隷" to "はしるどれい", "溢るる涙" to "あふるるなみだ")
+        fun contextualReadings() = Readings.of(inContext.keys.toList(), Script.JAPANESE).map { it.reading }
+        val contextualExpected = inContext.values.toList()
+        assertEquals(listOf(contextualExpected, contextualExpected), listOf(contextualReadings(), TestUniDic.reading { contextualReadings() }))
+    }
+
+    @Test
+    fun aKnownSingleKanjiVerbKeepsThePhoneDictionaryReading() {
+        val previous = Readings.listed
+        try {
+            Readings.listed = mapOf("走る" to "にげる")
+            assertEquals("はしる", Readings.of(listOf("走る"), Script.JAPANESE).single().reading)
+            assertEquals("はしる", TestUniDic.reading { Readings.of(listOf("走る"), Script.JAPANESE).single().reading })
+        } finally {
+            Readings.listed = previous
+        }
+    }
+
+    @Test
+    fun anUnreadRuFormDoesNotJoinAFollowingVerb() {
+        fun reading() = Readings.of(listOf("溺れ死にそう"), Script.JAPANESE).single().reading
+        assertEquals("おぼれしにそう", reading())
+        assertEquals("おぼれしにそう", TestUniDic.reading { reading() })
+    }
+
+    @Test
     fun noWordOfALineInKanaStartsOnASmallKana() {
         // IPADIC alone splits each of these before a small kana: じ and ゅぎょう, し and ゅくだい, に and っ and き.
         val lines = mapOf(
@@ -750,7 +1034,7 @@ class ReadingsTest {
             "しゅくだいをともだち" to listOf("しゅくだい" to "宿題", "を" to "を", "ともだち" to "ともだち"),
             "きょうしつのせんせい" to listOf("きょうしつ" to "教室", "の" to "の", "せんせい" to "せんせい"),
             "いしゃのけいひ" to listOf("いしゃ" to "いしゃ", "の" to "の", "けいひ" to "経費"),
-            "にっきをかく" to listOf("にっき" to "にっき", "を" to "を", "かく" to "かく"),
+            "にっきをかく" to listOf("にっき" to "日記", "を" to "を", "かく" to "かく"),
         )
         for ((line, expected) in lines) assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
         // A word JMdict has in kanji is read so, as IPADIC reads the kanji.
@@ -968,9 +1252,145 @@ class ReadingsTest {
     }
 
     @Test
-    fun aLineWithNoWayToSayItsSmallKanaStaysAsKuromojiSplitIt() {
-        // りゅう leaves っ after it, which no word may start on, and no word the search knows holds both: Issue #1139.
-        assertEquals(listOf("り", "ゅうっなも"), Readings.words("りゅうっなも", Script.JAPANESE).map { it.text })
+    fun aWordBeforeSmallTsuLeavesAWayThrough() = checkWordBeforeSmallTsu()
+
+    @Test
+    fun aWordBeforeSmallTsuLeavesAWayThroughWithUniDic() = TestUniDic.reading { checkWordBeforeSmallTsu() }
+
+    @Test
+    fun consecutiveSmallTsuAndKatakanaSmallTsuKeepTheirWords() = checkConsecutiveSmallTsu()
+
+    @Test
+    fun consecutiveSmallTsuAndKatakanaSmallTsuKeepTheirWordsWithUniDic() = TestUniDic.reading { checkConsecutiveSmallTsu() }
+
+    @Test
+    fun smallTsuBridgeAndLongVowelsReadTogether() {
+        val line = "りゅうっっさくら ぱーてぃー"
+        fun check() {
+            val reading = Readings.of(listOf(line), Script.JAPANESE).single()
+            assertEquals(line, "ryuussakura paatii", reading.romanized)
+            assertEquals(line, "りゅうっっさくら ぱーてぃー", reading.reading)
+            val bridges = SmallKanaTokenizer { Readings.oldKana }.tokenize(line).filterIsInstance<SmallKanaTokenizer.BridgedToken>()
+            assertEquals(line, listOf("りゅうっっ"), bridges.map { it.surface })
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    private fun checkConsecutiveSmallTsu() {
+        for (line in listOf("りゅうっっさくら", "りゅうっッさくら", "りゅうッっッさくら")) {
+            assertEquals(line, "ryuussakura", Readings.of(listOf(line), Script.JAPANESE).single().romanized)
+            assertEquals(line, listOf("りゅう", "さくら"), Readings.words(line, Script.JAPANESE).map { it.lookup })
+        }
+    }
+
+    private fun assertSmallTsuReading(line: String, expected: String) {
+        fun check() = assertEquals(line, expected, Readings.of(listOf(line), Script.JAPANESE).single().reading)
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    private fun assertSmallTsuWords(line: String, expected: List<String>) {
+        fun check() = assertEquals(line, expected, Readings.words(line, Script.JAPANESE).map { it.text })
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test fun smallTsuRunReading() = assertSmallTsuReading("りゅうっっさくら", "りゅうっっさくら")
+    @Test fun smallTsuRunWords() = assertSmallTsuWords("りゅうっっさくら", listOf("りゅうっっ", "さくら"))
+    @Test fun mixedSmallTsuRunReading() = assertSmallTsuReading("りゅうっッさくら", "りゅうっっさくら")
+    @Test fun mixedSmallTsuRunWords() = assertSmallTsuWords("りゅうっッさくら", listOf("りゅうっッ", "さくら"))
+    @Test fun smallTsuRunAtStartReading() = assertSmallTsuReading("っっさくら", "っっさくら")
+    @Test fun smallTsuRunAtStartWords() = assertSmallTsuWords("っっさくら", listOf("っっさ", "くら"))
+    @Test fun smallTsuRunAtEndReading() = assertSmallTsuReading("りゅうっっ", "りゅうっっ")
+    @Test fun smallTsuRunAtEndWords() = assertSmallTsuWords("りゅうっっ", listOf("りゅうっっ"))
+    @Test fun smallTsuRunBeforeKanjiReading() = assertSmallTsuReading("りゅうっっ桜", "りゅうっっさくら")
+    @Test fun smallTsuRunBeforeKanjiWords() = assertSmallTsuWords("りゅうっっ桜", listOf("りゅうっっ", "桜"))
+
+    @Test
+    fun terminalSmallTsuKeepsTheKnownWord() = checkTerminalSmallTsu()
+
+    @Test
+    fun terminalSmallTsuKeepsTheKnownWordWithUniDic() = TestUniDic.reading { checkTerminalSmallTsu() }
+
+    private fun checkTerminalSmallTsu() {
+        for ((line, expected) in mapOf(
+            "りゅうっっ" to listOf("りゅうっっ" to "りゅう"),
+            "りゅうっっ桜" to listOf("りゅうっっ" to "りゅう", "桜" to "桜"),
+            "りゅうっ桜" to listOf("りゅうっ" to "りゅう", "桜" to "桜"),
+        )) {
+            val words = Readings.words(line, Script.JAPANESE)
+            assertEquals(line, expected, words.map { it.text to it.lookup })
+            assertTrue(line, words.none { it.text.first() in "ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ" })
+            assertEquals(line, line.replace("桜", "さくら"), Readings.of(listOf(line), Script.JAPANESE).single().reading)
+        }
+    }
+
+    @Test
+    fun smallTsuRunBeforePunctuationKeepsItsWord() {
+        fun check() {
+            val line = "りゅうっっ！"
+            assertEquals(listOf("りゅうっっ" to "りゅう"), Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
+            assertEquals(line, Readings.of(listOf(line), Script.JAPANESE).single().reading)
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun smallTsuRunBeforeSpaceKeepsItsWord() {
+        fun check() {
+            val line = "りゅうっっ 桜"
+            assertEquals(listOf("りゅうっっ" to "りゅう", "桜" to "桜"), Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
+            assertEquals("りゅうっっ さくら", Readings.of(listOf(line), Script.JAPANESE).single().reading)
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun anIpadicBridgeKeepsItsModernLookup() {
+        fun check() {
+            val tokenizer = SmallKanaTokenizer { Readings.oldKana }
+            for ((line, lookup) in mapOf("思ふっっ" to "思う", "思ひっっ" to "思い")) {
+                val bridge = tokenizer.tokenize(line).filterIsInstance<SmallKanaTokenizer.BridgedToken>().single()
+                val word = Readings.words(line, Script.JAPANESE).single()
+                assertEquals(line, line, word.text)
+                assertEquals(line, lookup, word.lookup)
+                assertEquals(line, false, bridge.jmdict)
+                assertEquals(line, line, bridge.surface)
+            }
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun katakanaSmallTsuKeepsItsWord() {
+        fun check() {
+            val line = "きゅうッりい"
+            assertEquals("kyuurri i", Readings.of(listOf(line), Script.JAPANESE).single().romanized)
+            assertEquals("きゅう", Readings.words(line, Script.JAPANESE).first().lookup)
+            assertEquals("きゅうッり", Readings.words(line, Script.JAPANESE).first().text)
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    private fun checkWordBeforeSmallTsu() {
+        val actual = Readings.words("りゅうっなも", Script.JAPANESE).map { it.text to it.lookup }
+        assertEquals(listOf("りゅうっな" to "りゅう", "も" to "も"), actual)
+        val line = Readings.of(listOf("りゅうっなも"), Script.JAPANESE).single()
+        assertEquals("ryuunna mo", line.romanized)
+        assertEquals("ryuunna mo", line.typed)
+        assertEquals(listOf("ちいさ", "なゃ"), Readings.words("ちいさなゃ", Script.JAPANESE).map { it.text })
+        val after = Readings.words("りゅうっさくら", Script.JAPANESE)
+        assertEquals("さくら", after.last().text)
+        assertEquals("さくら", after.last().lookup)
+        val travel = Readings.words("りょこうっなも", Script.JAPANESE).first()
+        assertEquals("りょこうっな", travel.text)
+        assertEquals("旅行", travel.lookup)
+        assertTrue("$travel", Reader.JMDICT in travel.by)
     }
 
     @Test

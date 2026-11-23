@@ -4,8 +4,8 @@
 # and gives the new from: to set once the block is translated again.
 
 JMdict
-from: e24ab7fdbdb1
-note: Crosstune 用 JMdict 做的词表经过了修改。读音：只有 JMdict 只给一种读法、而 Crosstune 读法不同的两个及以上汉字的词。假名词：只有第一个假名后面是 い 或 う 的常用词，每个都附上查找方式，以及那里是 ひ 或 ふ 的词。它们同样采用 CC BY-SA 4.0。下面是 Group 的许可证 (https://www.edrdg.org/edrdg/licence.html)、CC BY-SA 4.0 许可证和 JMdict 的文档。
+from: 93aaea2be9a2
+note: Crosstune 用 JMdict 做的词表经过了修改。读音：只有 JMdict 只给一种读法而 Crosstune 读法不同的词。假名词：用于识别旧拼写的词，以及用于搜索的含小假名的常用词。它们同样采用 CC BY-SA 4.0。下面是 Group 的许可证 (https://www.edrdg.org/edrdg/licence.html)、CC BY-SA 4.0 许可证和 JMdict 的文档。
 
 Kuromoji
 from: 962013f376a7

@@ -26,6 +26,15 @@ def entry(kanji, kana):
 
 class ListedCandidates(unittest.TestCase):
 
+    def test_includes_unambiguous_single_kanji_ru_forms(self):
+        words = [
+            entry([("奔る", [])], [("はしる", [], ["*"])]),
+            entry([("溢るる", [])], [("あふるる", [], ["*"])]),
+            entry([("云う", [])], [("いう", [], ["*"]), ("ゆう", [], ["*"])]),
+            entry([("行く", [])], [("いく", [], ["*"])]),
+        ]
+        self.assertEqual({"奔る": "はしる", "溢るる": "あふるる"}, readingsaudit.listed_candidates(words))
+
     def test_keeps_words_of_two_kanji_read_one_way_only(self):
         words = [
             entry([("星空", [])], [("ほしぞら", [], ["*"])]),
@@ -91,6 +100,24 @@ def word(kanji, kana, senses):
 
 class OldKana(unittest.TestCase):
 
+    def test_lists_common_small_kana_words_for_search_without_changing_old_kana(self):
+        words = [
+            word([("電車", [], True)], [("でんしゃ", [], True, ["*"])], [(["n"], [])]),
+            word([("日記", [], True)], [("にっき", [], True, ["*"])], [(["n"], [])]),
+            word([("趣味", [], True)], [("しゅみ", [], True, ["*"])], [(["n"], [])]),
+            word([("古い", [], True)], [("ふるい", [], True, ["*"])], [(["adj-i"], [])]),
+            word([("妙", [], False)], [("みょう", [], False, ["*"])], [(["n"], [])]),
+        ]
+        self.assertEqual({"でんしゃ": "電車", "にっき": "日記", "しゅみ": "趣味"}, readingsaudit.small_kana(words))
+        self.assertEqual(({}, []), readingsaudit.old_kana(words))
+
+    def test_an_ambiguous_small_kana_word_keeps_its_kana_lookup(self):
+        words = [
+            word([("今日", [], True)], [("きょう", [], True, ["*"])], [(["n"], [])]),
+            word([("京", [], True)], [("きょう", [], True, ["*"])], [(["n"], [])]),
+        ]
+        self.assertEqual({"きょう": "きょう"}, readingsaudit.small_kana(words))
+
     def test_names_each_common_word_with_i_or_u_by_its_usual_form(self):
         words = [
             word([("思い出", [], True), ("想い出", [], False)], [("おもいで", [], True, ["*"])], [(["n"], [])]),
@@ -143,7 +170,8 @@ class OldKana(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
             words = [word([("思い出", [], True)], [("おもいで", [], True, ["*"])], [(["n"], [])]),
-                     word([("工夫", [], True)], [("くふう", [], True, ["*"])], [(["n"], [])])]
+                     word([("工夫", [], True)], [("くふう", [], True, ["*"])], [(["n"], [])]),
+                     word([("電車", [], True)], [("でんしゃ", [], True, ["*"])], [(["n"], [])])]
             (folder / "jmdict.json").write_text(json.dumps({"version": "9.9.9", "dictDate": "2000-01-01", "words": words}, ensure_ascii=False))
             out = folder / "old-kana.txt"
             # No file yet, so no date to keep to.
@@ -156,7 +184,7 @@ class OldKana(unittest.TestCase):
             for part in ("jmdict-simplified 9.9.9", "CC BY-SA 4.0", "Changed:", readingsaudit.JMDICT_URL,
                          "https://creativecommons.org/licenses/by-sa/4.0/", "https://www.edrdg.org/edrdg/licence.html"):
                 self.assertIn(part, header)
-            self.assertEqual(["おもいで\t思い出", "くふう\t工夫", "くふう"], [line for line in lines if not line.startswith("#")])
+            self.assertEqual(["おもいで\t思い出", "くふう\t工夫", "くふう", "+でんしゃ\t電車"], [line for line in lines if not line.startswith("#")])
             self.assertIn("2 words today and 1 modern words", said.call_args.args[0])
 
     def test_the_committed_table_has_the_header_a_remake_writes(self):
