@@ -1172,6 +1172,7 @@ class SingingTest {
     @Test
     fun recordedFarHearingWaitsForConfirmationAfterClosing() {
         // The saved 39 s hearing of Bizarre Love Triangle, with unrelated lines replaced by filler.
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
         val times = listOf(0, 10, 13, 17, 19, 21, 26, 29, 33, 35, 37, 42, 58, 61, 66, 69, 74, 91, 94, 98, 100, 102, 106, 110, 114, 116, 118, 123, 139, 142, 147, 151, 155, 159, 163, 167)
         val nearby = mapOf(1 to "Every time I think of you", 2 to "I feel shot right through with a bolt of blue", 3 to "It's no problem of mine", 4 to "But it's a problem I find", 5 to "Living a life that I can't leave behind", 6 to "But there's no sense in telling me", 7 to "The wisdom of the fool won't set you free", 8 to "But that's the way that it goes")
         lines = times.indices.map { nearby[it] ?: "filler$it" }
@@ -1187,11 +1188,13 @@ class SingingTest {
         waitUntil { singing.hears >= 1 }
         composeRule.waitForIdle()
         assertTrue("Expected the far hearing to move the line, got ${model().uiState.lyricLines[3].timeMs} ms", model().uiState.lyricLines[3].timeMs > 30_000L)
+        assertTrue("The recorded far hearing must be retained", prefs().contains("lyrics_sync_pending"))
         composeRule.runOnIdle { model().dismissLyrics() }
         assertFalse(prefs().contains("lyrics_sync"))
         composeRule.runOnIdle { model().showLyrics() }
         waitUntil { model().uiState.lyricLines.size == lines.size }
         assertEquals(17_000L, model().uiState.lyricLines[3].timeMs)
+        assertTrue(LyricsSyncStore(prefs()).pending(checkNotNull(model().uiState.lyricsFor), model().uiState.lyricLines) != null)
     }
 
     @Test
