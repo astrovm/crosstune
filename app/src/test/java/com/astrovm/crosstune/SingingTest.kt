@@ -338,6 +338,37 @@ class SingingTest {
     }
 
     @Test
+    fun confirmedFarHearingKeepsItsReportUntilTheLyricsReopen() {
+        TimingLog.clear()
+        heardFarOffTwice(FAR_MS)
+        waitUntil { model().uiState.lyricsSynced && model().uiState.reportOffer }
+        assertTrue(TimingLog.lastMinute(), TimingLog.lastMinute().contains("clock sure false"))
+        val song = checkNotNull(model().uiState.lyricsFor)
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+    }
+
+    @Test
+    fun farHearingWithASureClockKeepsItsReportUntilTheLyricsReopen() {
+        TimingLog.clear()
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 0)
+        passes(500)
+        waitUntil { model().uiState.lyricsSynced && model().uiState.reportOffer }
+        assertTrue(TimingLog.lastMinute(), TimingLog.lastMinute().contains("clock sure true"))
+        val song = checkNotNull(model().uiState.lyricsFor)
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+    }
+
+    @Test
     fun pickedUpPartwayWordsHeardFarOffAreKeptForNextTime() {
         // Timed for another take, the words are seconds off: far more than the app's clock can be behind.
         heardFarOffTwice(FAR_MS)

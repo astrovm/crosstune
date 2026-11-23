@@ -1195,6 +1195,52 @@ class LyricsReportTest {
     }
 
     @Test
+    fun timingReportedBeforeTheUpdateIsNotSentAgainForAnIdentifiedRecording() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        prefs().edit().putBoolean("auto_reports", true)
+            .putString("auto_reports_sent", org.json.JSONArray().put("timed_by_hand\u0000demo\u0000band").toString()).commit()
+        openLyrics()
+        assertTrue(RecordingKey.of(checkNotNull(model().uiState.lyricsFor)).split('\u0000').size > 2)
+        composeRule.runOnIdle { model().nudgeSync(500); model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        assertEquals(0, owed())
+    }
+
+    @Test
+    fun legacyTimingReportGoesAfterTheUnchangedWordsAreClosed() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        openLyrics()
+        owe(checkNotNull(model().uiState.lyricsFor), SongProblem.TIMED_BY_HAND, JSONObject().put("problem", "timed_by_hand"))
+        val saved = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]"))
+        saved.getJSONObject(0).put("key", "timed_by_hand\u0000demo\u0000band")
+        prefs().edit().putString("auto_reports_owed", saved.toString()).commit()
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { problems() == listOf("timed_by_hand") }
+        waitUntil { owed() == 0 }
+    }
+
+    @Test
+    fun legacyTimingReportWaitsWhileItsWordsAreOpenAndGoesAwayWhenPutBack() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        openLyrics()
+        owe(checkNotNull(model().uiState.lyricsFor), SongProblem.TIMED_BY_HAND, JSONObject().put("problem", "timed_by_hand"))
+        val saved = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]"))
+        saved.getJSONObject(0).put("key", "timed_by_hand\u0000demo\u0000band")
+        prefs().edit().putString("auto_reports_owed", saved.toString()).commit()
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        assertEquals(1, owed())
+        composeRule.runOnIdle { model().nudgeSync(500); model().resetSync() }
+        assertEquals(0, owed())
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
     fun noTimingReportIsOwedForWordsPutBackAsTheyWere() {
         openLyrics()
         composeRule.runOnIdle { model().nudgeSync(500) }

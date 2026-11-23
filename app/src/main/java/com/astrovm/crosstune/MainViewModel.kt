@@ -2802,7 +2802,7 @@ internal class MainViewModel(
         if (uiState.lyricsFor == song && (uiState.lyrics.isNotEmpty() || uiState.isLoadingLyrics)) return
         // A song just heard, or playing as it's shown, is followed on to the next one; one picked to read stays.
         shownPlayed = playing || heardSong?.let { sameSong(it, song) } == true
-        leaveWords()
+        leaveWords(nextSong = song)
         keepShown()
         lyricsJob?.cancel()
         stopLearning()
@@ -4519,7 +4519,10 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         when (autoReports.allowed) {
             true -> reportProblem(song, problem)
-            null -> offerToReport(problem)
+            null -> {
+                if (problem == SongProblem.SUNG_OFF && !autoReports.reported(song, problem)) keepFarReport(song)
+                offerToReport(problem)
+            }
             false -> Unit
         }
     }
@@ -4576,19 +4579,17 @@ internal class MainViewModel(
      * The words shown are left: put in time by hand, they're reported, so with the timing settled;
      * an offer made for them goes.
      */
-    private fun leaveWords() {
+    private fun leaveWords(nextSong: MusicMetadata? = null) {
         // An offer for words being closed would vanish unseen, using up this session's one offer.
-        if (autoReports.allowed == true) reportFarIfStillMoved()
-        else if (autoReports.allowed == null && farReportIsDue()) {
-            keepFarReport()
-            farReportPending = false
-        }
+        reportFarIfStillMoved()
         if (autoReports.allowed == null && SongProblem.SUNG_OFF in uiState.reportOfferFor &&
             uiState.lyricsFor?.let { autoReports.owes(it, SongProblem.SUNG_OFF) } == true
         ) autoReports.offerInterrupted()
         closeReport()
         if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) {
             uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
+        } else if (!timedByHand && autoReports.allowed == true) {
+            uiState.lyricsFor?.takeUnless { it == nextSong }?.let { sendOwed(leaving = it, opening = nextSong) }
         }
         timedByHand = false
         uiState = uiState.copy(reportOfferFor = emptySet())
@@ -4601,16 +4602,12 @@ internal class MainViewModel(
 
     /** No more of this play will be heard: a lone far match is reported only if nothing put the words back. */
     private fun reportFarIfStillMoved() {
-        if (farReportIsDue()) {
-            if (autoReports.allowed == null) keepFarReport()
-            problemFound(SongProblem.SUNG_OFF)
-        }
+        if (farReportIsDue()) problemFound(SongProblem.SUNG_OFF)
         farReportPending = false
     }
 
     /** Keep the original report until consent is decided, even if the screen later closes. */
-    private fun keepFarReport() {
-        val song = uiState.lyricsFor ?: return
+    private fun keepFarReport(song: MusicMetadata) {
         val sender = reports ?: return
         val report = reportOn(sender, song, problem = SongProblem.SUNG_OFF).copy(id = autoReports.idFor(song, SongProblem.SUNG_OFF))
         autoReports.owe(song, SongProblem.SUNG_OFF, report.json())
@@ -4636,13 +4633,13 @@ internal class MainViewModel(
      * didn't get there waits for the next time, and a problem found past the day's share for a later day.
      * Words still in front of the user are left out: they may be put in time some more, and go once they're left.
      */
-    private fun sendOwed() {
+    private fun sendOwed(leaving: MusicMetadata? = null, opening: MusicMetadata? = null) {
         val sender = reports ?: return
         if (autoReports.allowed != true) return
         viewModelScope.launch {
             autoReports.sending.withLock {
-                val inFront = uiState.lyricsFor?.takeIf { timedByHand }?.let(autoReports::owedKey)
-                for (owed in autoReports.owed().filter { it.key != inFront }) {
+                val inFront = (uiState.lyricsFor?.takeUnless { it == leaving } ?: opening)?.let(autoReports::owedKeys).orEmpty()
+                for (owed in autoReports.owed().filter { it.key !in inFront }) {
                     // Past the day's share, or gone another way meanwhile, as the words it's for were left: it's skipped.
                     val delivery = deliver(sender, owed) ?: continue
                     // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.

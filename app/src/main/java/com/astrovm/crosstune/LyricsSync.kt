@@ -194,7 +194,7 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
     private fun keyOf(song: MusicMetadata) = RecordingKey.of(song)
 
     /** Pending evidence can use a link when a player supplies only a blank ID. */
-    private fun pendingKey(song: MusicMetadata) = RecordingKey.of(song.copy(recordingId = song.recordingId?.takeIf { it.isNotBlank() }))
+    private fun pendingKey(song: MusicMetadata) = RecordingKey.withLinkWhenIdBlank(song)
 
     /** Which words these are, timings and all, in a few characters. */
     private fun fingerprint(lines: List<LyricLine>) = lines.joinToString("\n") { "${it.timeMs} ${it.text}" }.hashCode().toString(16)

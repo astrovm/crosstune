@@ -64,8 +64,48 @@ class AutoReportsTest {
         preferences.edit().putString("auto_reports_owed", JSONArray().put(old).toString()).commit()
         assertEquals(listOf("old"), reports.owed().names())
         assertTrue(reports.owes(song("Demo"), SongProblem.SUNG_OFF))
-        assertFalse(reports.owes(song("Demo").copy(recordingId = "player:other"), SongProblem.SUNG_OFF))
+        assertTrue(reports.owes(song("Demo").copy(recordingId = "player:other"), SongProblem.SUNG_OFF))
         paid(reports.owed().single())
+        assertTrue(reports.owed().isEmpty())
+    }
+
+    @Test
+    fun blankPlayerIdsKeepReportsForDifferentLinksSeparate() {
+        val first = song("Demo").copy(recordingId = "", url = "https://music.youtube.com/watch?v=abcdefghijk")
+        val second = first.copy(url = "https://music.youtube.com/watch?v=lmnopqrstuv")
+        reports.owe(first, SongProblem.SUNG_OFF, json("first"))
+        assertFalse(reports.owes(second, SongProblem.SUNG_OFF))
+        reports.owe(second, SongProblem.SUNG_OFF, json("second"))
+        assertEquals(listOf("first", "second"), reports.owed().names())
+        paid(reports.owed().first())
+        assertFalse(reports.reported(second, SongProblem.SUNG_OFF))
+        assertEquals(listOf("second"), reports.owed().names())
+    }
+
+    @Test
+    fun aLegacySentProblemStillCountsForAnIdentifiedRecording() {
+        preferences.edit().putString("auto_reports_sent", JSONArray().put("sung_off\u0000demo\u0000band").toString()).commit()
+        assertTrue(reports.reported(song("Demo").copy(recordingId = "player:one"), SongProblem.SUNG_OFF))
+    }
+
+    @Test
+    fun replacingALegacyReportKeepsItsLegacyScopeAndDoesNotDuplicateIt() {
+        reports.owe(song("Demo").copy(recordingId = "player:one"), SongProblem.SUNG_OFF, json("existing"))
+        val saved = JSONArray(preferences.getString("auto_reports_owed", "[]"))
+        val oldJson = JSONObject().put("name", "old").put(AutoReports.ID, "legacy-id").toString()
+        val old = JSONObject().put("key", "sung_off\u0000demo\u0000band").put("json", oldJson)
+        preferences.edit().putString("auto_reports_owed", saved.put(old).toString()).commit()
+        assertEquals("legacy-id", reports.idFor(song("Demo").copy(recordingId = "player:one"), SongProblem.SUNG_OFF))
+        reports.owe(song("Demo").copy(recordingId = "player:one"), SongProblem.SUNG_OFF, json("new"))
+        assertEquals(listOf("new"), reports.owed().names())
+        assertTrue(reports.owes(song("Demo").copy(recordingId = "player:two"), SongProblem.SUNG_OFF))
+    }
+
+    @Test
+    fun puttingTimingBackRemovesTheLegacyReportForAnyRecording() {
+        val old = JSONObject().put("key", "timed_by_hand\u0000demo\u0000band").put("json", json("old"))
+        preferences.edit().putString("auto_reports_owed", JSONArray().put(old).toString()).commit()
+        reports.owedNothing(song("Demo").copy(recordingId = "player:one"))
         assertTrue(reports.owed().isEmpty())
     }
 
