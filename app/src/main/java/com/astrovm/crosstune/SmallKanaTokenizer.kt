@@ -46,8 +46,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         for (wrong in tokens.indices) {
             if (wrong < next) continue
             val token = tokens[wrong]
-            val crossing = if (token.isKnown && token.surface in KEPT_TSU_WORDS) null else crossingWord(text, token.position)
-                ?.takeUnless { startsInsideInflected(it, tokens.getOrNull(wrong - 1)) }
+            val crossing = crossingFor(text, tokens, wrong)
             if (!wrongStart(text, token) && crossing == null) continue
             val (first, last) = searchWindow(text, tokens, wrong, next, crossing)
             out += tokens.subList(next, first)
@@ -60,12 +59,21 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         return out
     }
 
+    /** A known って, っぽい or っす remains a word even if another kana word crosses its start. */
+    @VisibleForTesting
+    internal fun crossingFor(text: String, tokens: List<Token>, at: Int): IntRange? {
+        val token = tokens[at]
+        if (token.isKnown && token.surface in KEPT_TSU_WORDS) return null
+        return crossingWord(text, token.position)?.takeUnless { startsInsideInflected(it, tokens.getOrNull(at - 1)) }
+    }
+
     /** A kana noun such as まっちゃ must not split the inflected verb しまっ. */
     private fun startsInsideInflected(range: IntRange, token: Token?): Boolean =
         token != null && token.partOfSpeechLevel1 in setOf("動詞", "形容詞") && range.first > token.position
 
     /** Search the pieces a crossing word spans, or the pieces needed to say the small kana together. */
-    private fun searchWindow(text: String, tokens: List<Token>, wrong: Int, next: Int, crossing: IntRange?): Pair<Int, Int> {
+    @VisibleForTesting
+    internal fun searchWindow(text: String, tokens: List<Token>, wrong: Int, next: Int, crossing: IntRange?): Pair<Int, Int> {
         var first = maxOf(next, wrong - 1)
         while (first > next && includeBefore(text, tokens, first, crossing)) first--
         var last = wrong

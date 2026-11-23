@@ -1208,7 +1208,6 @@ internal object Readings {
      * 溺れ死にそう, not into a noun JMdict lists, 溺れ死に おぼれじに.
      */
     private fun listedAs(word: List<Piece>, table: Map<String, String>): Piece? {
-        if (word.size == 1 && !word[0].unknown) return null
         val last = word.last()
         val runsOn = word.dropLast(1).none { it.kind in GRAMMAR || it.kind in INFLECTED }
         if (!isHan(word[0].surface[0]) || !runsOn) return null
