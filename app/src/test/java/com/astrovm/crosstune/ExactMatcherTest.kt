@@ -2480,16 +2480,16 @@ class ExactMatcherTest {
 
     @Test
     fun aFailedDeezerLengthLookupDoesNotConfirmAFanUpload() = runBlocking {
-        val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS", lengthMs = 184_000)
-        val fan = youTubeMusicRow("THE BLUE HEARTS - Owaranai Uta", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val song = MusicMetadata("終わらない歌", "THE BLUE HEARTS", lengthMs = 184_000)
+        val fan = youTubeMusicRow("THE BLUE HEARTS - 終わらない歌", "Fan • 1K views • 3:04", videoId = "fan00000000")
         val apple = mapOf("AR" to appleSong(song.title, song.artist, lengthMs = 0))
         var clock = 0L
         val finder = ExactMatcher(fake.client(), "AR", now = { clock })
-        namesAndTabs(videos = listOf(fan), apple = apple, deezerDown = true)
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"), deezerDown = true)
         assertEquals(ExactMatcher.Match.Failed, finder.lookFor(MusicService.YOUTUBE_MUSIC, song))
-        namesAndTabs(videos = listOf(fan), apple = apple, deezer = """[{"title":"Owaranai Uta","artist":{"name":"THE BLUE HEARTS"},"duration":184}]""")
+        namesAndTabs(videos = listOf(fan), apple = apple, failing = setOf("JP"), deezer = """[{"title":"終わらない歌","artist":{"name":"THE BLUE HEARTS"},"duration":184}]""")
         clock += ExactMatcher.UNSURE_FOR_MS
-        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), finder.lookFor(MusicService.YOUTUBE_MUSIC, song))
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), finder.lookFor(MusicService.YOUTUBE_MUSIC, song))
     }
 
     @Test
