@@ -196,7 +196,7 @@ def capture_proofs(out):
     proofs = read_json(path) if os.path.exists(path) else {}
     for key in missing:
         store, term = key.split("|", 1)
-        if key in proofs:
+        if isinstance(proofs.get(key), list):
             continue
         query = urllib.parse.urlencode({"term": term, "entity": "song", "limit": 10, "country": store})
         answer = collect.fetch(out, "https://itunes.apple.com/search?" + query, pause=0.3)

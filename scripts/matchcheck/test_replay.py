@@ -152,6 +152,11 @@ class RunTest(unittest.TestCase):
             with contextlib.redirect_stderr(io.StringIO()):
                 replay.capture_proofs(out)
             self.assertEqual(1, fetch.call_count)
+            with open(os.path.join(out, "candidate-proofs.json"), "w", encoding="utf-8") as kept:
+                json.dump({"JP|ジェラス 八神純子": {}}, kept)
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.capture_proofs(out)
+            self.assertEqual(2, fetch.call_count)
 
     @patch("replay.collect.fetch", return_value=None)
     def test_a_failed_candidate_search_is_not_saved_as_empty(self, fetch):
