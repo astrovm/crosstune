@@ -80,11 +80,10 @@ internal object SungTiming {
                 Placed(line, ms, score - PRIOR * maxOf(0.0, abs(ms - expected) / lengthMs - TOLERANCE), alike, heardMs, pieces.first().written, owned)
             }
         }.filter { it.support >= MIN_SUPPORT }
-        if (candidates.isEmpty()) return emptyMap()
         val firstLetters = byLine.mapValues { (_, its) -> its.first().letters }
         val durations = byLine.mapValues { (_, pieces) -> pieces.sumOf { SpokenWords.sungLetters(it.text) } * LETTER_MS }
         // Before the end, an unplaced copy may simply not have been sung yet. A guessed length can't say the song ended.
-        val oneCompletePlay = knownLength && heardOnePlay(heard, lengthMs)
+        val oneCompletePlay = knownLength && heard.isNotEmpty() && heardOnePlay(heard, lengthMs)
         val chain = backed(sure(candidates, byLine.keys.max() + 2, durations, if (oneCompletePlay) lines else emptyList()), firstLetters)
         val placed = chain + filled(chain, firstLetters, stretches, byLine)
         return placed.filter { placed -> stretches.any { placed.ms in it.fromMs - EDGE_MS..it.toMs } }.associate { it.line to it.ms }
