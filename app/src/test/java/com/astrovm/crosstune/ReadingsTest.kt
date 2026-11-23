@@ -798,6 +798,40 @@ class ReadingsTest {
     }
 
     @Test
+    fun unreadSingleKanjiVerbsUseTheirUnambiguousDictionaryReading() {
+        val cases = mapOf("奔る" to "はしる", "溢るる" to "あふるる")
+        fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.reading }
+        val expected = cases.values.toList()
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+        fun lookups() = cases.keys.map { line -> Readings.words(line, Script.JAPANESE).map { it.lookup } }
+        val expectedLookups = cases.keys.map { listOf(it) }
+        assertEquals(listOf(expectedLookups, expectedLookups), listOf(lookups(), TestUniDic.reading { lookups() }))
+        val inContext = mapOf("奔る奴隷" to "はしるどれい", "溢るる涙" to "あふるるなみだ")
+        fun contextualReadings() = Readings.of(inContext.keys.toList(), Script.JAPANESE).map { it.reading }
+        val contextualExpected = inContext.values.toList()
+        assertEquals(listOf(contextualExpected, contextualExpected), listOf(contextualReadings(), TestUniDic.reading { contextualReadings() }))
+    }
+
+    @Test
+    fun aKnownSingleKanjiVerbKeepsThePhoneDictionaryReading() {
+        val previous = Readings.listed
+        try {
+            Readings.listed = mapOf("走る" to "にげる")
+            assertEquals("はしる", Readings.of(listOf("走る"), Script.JAPANESE).single().reading)
+            assertEquals("はしる", TestUniDic.reading { Readings.of(listOf("走る"), Script.JAPANESE).single().reading })
+        } finally {
+            Readings.listed = previous
+        }
+    }
+
+    @Test
+    fun anUnreadRuFormDoesNotJoinAFollowingVerb() {
+        fun reading() = Readings.of(listOf("溺れ死にそう"), Script.JAPANESE).single().reading
+        assertEquals("おぼれしにそう", reading())
+        assertEquals("おぼれしにそう", TestUniDic.reading { reading() })
+    }
+
+    @Test
     fun noWordOfALineInKanaStartsOnASmallKana() {
         // IPADIC alone splits each of these before a small kana: じ and ゅぎょう, し and ゅくだい, に and っ and き.
         val lines = mapOf(

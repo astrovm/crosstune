@@ -5,7 +5,7 @@
 
 JMdict
 from: e24ab7fdbdb1
-note: Crosstune'un JMdict'ten yaptığı kelime listeleri değiştirilmiştir. Okunuşlar: yalnızca JMdict'in tek bir şekilde okuduğu, Crosstune'un ise başka okuduğu iki veya daha çok kanjili kelimeler. Kana ile yazılan kelimeler: eski yazımları tanımak için kelimeler ve arama için küçük kana içeren yaygın kelimeler. Bunlar da CC BY-SA 4.0 altındadır. Aşağıda Group'un lisansı (https://www.edrdg.org/edrdg/licence.html), CC BY-SA 4.0 lisansı ve JMdict'in belgeleri var.
+note: Crosstune'un JMdict'ten yaptığı kelime listeleri değiştirilmiştir. Okunuşlar: yalnızca JMdict’in tek şekilde, Crosstune’un ise başka okuduğu kelimeler. Kana ile yazılan kelimeler: eski yazımları tanımak için kelimeler ve arama için küçük kana içeren yaygın kelimeler. Bunlar da CC BY-SA 4.0 altındadır. Aşağıda Group'un lisansı (https://www.edrdg.org/edrdg/licence.html), CC BY-SA 4.0 lisansı ve JMdict'in belgeleri var.
 
 Kuromoji
 from: 962013f376a7

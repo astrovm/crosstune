@@ -30,7 +30,7 @@ by: Electronic Dictionary Research and Development Group
 license: CC BY-SA 4.0
 text: edrdg-licence.txt cc-by-sa-4.0.txt jmdict-documentation.txt
 url: https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project
-note: Crosstune's word lists made from JMdict are changed. The readings: only words of two kanji or more that JMdict reads one way only, where Crosstune reads them otherwise. The words in kana: words used to recognize old spellings, and common words with small kana for word searches. They are under CC BY-SA 4.0 too. Below are the Group's licence (https://www.edrdg.org/edrdg/licence.html), the CC BY-SA 4.0 licence, and JMdict's documentation.
+note: Crosstune's word lists made from JMdict are changed. The readings: only words JMdict reads one way where Crosstune reads them otherwise. The words in kana: words used to recognize old spellings, and common words with small kana for word searches. They are under CC BY-SA 4.0 too. Below are the Group's licence (https://www.edrdg.org/edrdg/licence.html), the CC BY-SA 4.0 licence, and JMdict's documentation.
 translate: note
 covers: file app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt
 covers: file app/src/main/resources/com/astrovm/crosstune/old-kana.txt

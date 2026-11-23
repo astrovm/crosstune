@@ -5,7 +5,7 @@
 
 JMdict
 from: e24ab7fdbdb1
-note: As listas de palavras que o Crosstune fez com o JMdict foram alteradas. As leituras: só palavras de dois kanji ou mais que o JMdict lê de um único jeito, onde o Crosstune as lê de outro. As palavras em kana: palavras para reconhecer grafias antigas e palavras comuns com kana pequenos para as buscas. Também estão sob a CC BY-SA 4.0. Abaixo estão a licença do Group (https://www.edrdg.org/edrdg/licence.html), a licença CC BY-SA 4.0 e a documentação do JMdict.
+note: As listas de palavras que o Crosstune fez com o JMdict foram alteradas. As leituras: só palavras que o JMdict lê de um jeito e o Crosstune de outro. As palavras em kana: palavras para reconhecer grafias antigas e palavras comuns com kana pequenos para as buscas. Também estão sob a CC BY-SA 4.0. Abaixo estão a licença do Group (https://www.edrdg.org/edrdg/licence.html), a licença CC BY-SA 4.0 e a documentação do JMdict.
 
 Kuromoji
 from: 962013f376a7

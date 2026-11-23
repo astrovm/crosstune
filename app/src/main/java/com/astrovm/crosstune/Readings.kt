@@ -16,7 +16,7 @@ internal enum class Script(val glyph: String) {
 
 /**
  * What gave a word its reading, as a report on a wrong one names it by [key]: for Japanese, the
- * dictionaries on the phone, IPADIC and UniDic, JMdict's words of more than one kanji, Crosstune's own rules (二人 as ふたり, 側 as そば),
+ * dictionaries on the phone, IPADIC and UniDic, JMdict's words, Crosstune's own rules (二人 as ふたり, 側 as そば),
  * the lyrics' own reading in brackets, UtaTen's sung readings, ChatGPT's, or the user's own on a
  * kept line; for Chinese, Android's pinyin; for Korean, Crosstune's romaja; for the rest, Android's
  * Latin letters.
@@ -1138,7 +1138,7 @@ internal object Readings {
     }
 
     /**
-     * Words of two kanji or more that JMdict reads one way only, and the dictionaries on the phone read
+     * Words of two kanji or more, and single-kanji る forms, that JMdict reads one way only and the phone reads
      * another, 体中 からだじゅう for からだちゅう, kept in [LISTED]: made by `scripts/readingsaudit`, see
      * CONTRIBUTING.md. Read once, when a line first needs them, whatever threads ask at once; null to read them
      * again, empty to read without them.
@@ -1158,8 +1158,9 @@ internal object Readings {
      * make one: 体 and 中 are 体中, からだじゅう, and 一番 and 星 are 一番星, いちばんぼし. A verb is
      * looked up as the dictionary writes it, 肉付く for 肉付いた. Only whole pieces, so 一人舞 is not taken
      * out of 一人舞う; never starting or ending in a particle, so 今日は stays きょうは; and never one piece
-     * alone, as the dictionary read it as a word it knows, 上野 うえの, which JMdict has only as こうずけ; nor
-     * a number that starts a longer word, 一重 of 一重項: see [numberGoesOn].
+     * alone when the dictionary knows it, as 上野 うえの, which JMdict has only as こうずけ. An unread kanji followed by
+     * る or るる can use its one JMdict reading. Never take a number that starts a longer word, 一重 of 一重項;
+     * see [numberGoesOn].
      */
     private fun listedWords(pieces: List<Piece>): List<Piece> {
         val table = listed.orEmpty()
@@ -1167,7 +1168,7 @@ internal object Readings {
         val out = mutableListOf<Piece>()
         var at = 0
         while (at < pieces.size) {
-            val found = (minOf(LISTED_PIECES, pieces.size - at) downTo 2).firstNotNullOfOrNull { count ->
+            val found = (minOf(LISTED_PIECES, pieces.size - at) downTo 1).firstNotNullOfOrNull { count ->
                 listedAs(pieces.subList(at, at + count), table)?.takeUnless { numberGoesOn(pieces, at, count) }?.let { count to it }
             }
             if (found == null) out += pieces[at++] else {
@@ -1194,11 +1195,13 @@ internal object Readings {
      * 溺れ死にそう, not into a noun JMdict lists, 溺れ死に おぼれじに.
      */
     private fun listedAs(word: List<Piece>, table: Map<String, String>): Piece? {
+        if (word.size == 1 && !word[0].unknown) return null
         val last = word.last()
         val runsOn = word.dropLast(1).none { it.kind in GRAMMAR || it.kind in INFLECTED }
         if (!isHan(word[0].surface[0]) || last.kind in GRAMMAR || !runsOn) return null
         val surface = word.joinToString("") { it.surface }
-        if (surface.count(::isHan) < 2) return null
+        val unreadRu = word.any { it.unknown } && surface.drop(1) in setOf("る", "るる")
+        if ((word.size == 1 || surface.count(::isHan) < 2) && !unreadRu) return null
         val kana = table[surface] ?: conjugated(word, table) ?: return null
         if (kana == word.joinToString("") { it.kana }) return null
         return Piece(surface, kana, last.kind, last.subkind, reader = Reader.JMDICT)

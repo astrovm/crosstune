@@ -131,7 +131,7 @@ ODD_KANA = {"ik", "ok", "rk", "sk"}
 
 
 def listed_candidates(words):
-    """{form: kana} for each JMdict form of two kanji or more, starting with one, that it reads one way only."""
+    """Unambiguous JMdict forms with two or more kanji, or one kanji followed by る or るる."""
     readings = defaultdict(set)
     for entry in words:
         for kanji in entry["kanji"]:
@@ -141,7 +141,7 @@ def listed_candidates(words):
             readings[form] |= {hiragana(k["text"]) for k in entry["kana"]
                                if ("*" in k["appliesToKanji"] or form in k["appliesToKanji"]) and not set(k["tags"]) & ODD_KANA}
     return {form: next(iter(kana)) for form, kana in sorted(readings.items())
-            if len(kana) == 1 and is_han(form[0]) and sum(map(is_han, form)) >= 2
+            if len(kana) == 1 and is_han(form[0]) and (sum(map(is_han, form)) >= 2 or form[1:] in ("る", "るる"))
             and all(is_han(c) or "ぁ" <= c <= "ゖ" or "ァ" <= c <= "ヶ" or c == "ー" for c in form)}
 
 
@@ -155,7 +155,8 @@ def table_header(date, version):
     return [f"# JMdict {date}, by the Electronic Dictionary Research and Development Group, {JMDICT_URL}",
             f"# through jmdict-simplified {version}. Licensed under CC BY-SA 4.0, {CC_BY_SA_URL}",
             f"# as the Group's licence asks, {EDRDG_LICENCE_URL}",
-            "# Changed: only words of two kanji or more it reads one way only, kept where Crosstune reads them otherwise.",
+            "# Changed: words it reads one way, with two or more kanji or one kanji followed by る or るる,",
+            "# kept where Crosstune reads them otherwise.",
             "# Made by scripts/readingsaudit/readingsaudit.py table."]
 
 

@@ -5,7 +5,7 @@
 
 JMdict
 from: e24ab7fdbdb1
-note: Crosstune が JMdict から作った単語リストは変更されています。読み：JMdict が一通りにしか読まない二字以上の漢字の語のうち、Crosstune が別の読み方をするものだけ。かなの語：旧仮名遣いを見分けるための語と、検索に使う小さい仮名を含むよく使う語。これらも CC BY-SA 4.0 です。下に Group のライセンス (https://www.edrdg.org/edrdg/licence.html)、CC BY-SA 4.0 ライセンス、JMdict のドキュメントがあります。
+note: Crosstune が JMdict から作った単語リストは変更されています。読み：JMdict が一通りにしか読まず、Crosstune が別の読み方をする語だけ。かなの語：旧仮名遣いを見分けるための語と、検索に使う小さい仮名を含むよく使う語。これらも CC BY-SA 4.0 です。下に Group のライセンス (https://www.edrdg.org/edrdg/licence.html)、CC BY-SA 4.0 ライセンス、JMdict のドキュメントがあります。
 
 Kuromoji
 from: 962013f376a7

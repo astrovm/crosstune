@@ -26,6 +26,15 @@ def entry(kanji, kana):
 
 class ListedCandidates(unittest.TestCase):
 
+    def test_includes_unambiguous_single_kanji_ru_forms(self):
+        words = [
+            entry([("奔る", [])], [("はしる", [], ["*"])]),
+            entry([("溢るる", [])], [("あふるる", [], ["*"])]),
+            entry([("云う", [])], [("いう", [], ["*"]), ("ゆう", [], ["*"])]),
+            entry([("行く", [])], [("いく", [], ["*"])]),
+        ]
+        self.assertEqual({"奔る": "はしる", "溢るる": "あふるる"}, readingsaudit.listed_candidates(words))
+
     def test_keeps_words_of_two_kanji_read_one_way_only(self):
         words = [
             entry([("星空", [])], [("ほしぞら", [], ["*"])]),
