@@ -103,6 +103,10 @@
       "Aby rozpoznać utwór z linku, Crosstune czyta jego publiczną stronę lub publiczne API w serwisie, z którego pochodzi: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam lub Google, i pobiera okładkę. Aby otworzyć go w innej aplikacji, tytuł i wykonawca trafiają do wyszukiwarki tej aplikacji. Gdy to wyszukiwanie nie jest pewne, trafiają też do wyszukiwarek utworów Apple i Deezer. Dla Spotify trafiają do ListenBrainz, a nazwa wykonawcy do MusicBrainz, i czytane są publiczne strony Spotify. Odtwórz wszystko i Losowo robią to dla każdego utworu, a YouTube tworzy playlistę ze znalezionych filmów. Wpisana przez Ciebie nazwa utworu trafia do wyszukiwarek Deezer i Apple. Własne miejsce docelowe dostaje szukane słowa w adresie, który ustawisz."
     ],
     [
+      "p",
+      "Jeśli wyszukiwanie w regionalnym sklepie Apple się nie powiedzie lub nie da wyniku, Crosstune może wysłać tytuł utworu i nazwę wykonawcy do amerykańskiego sklepu Apple."
+    ],
+    [
       "h2",
       "Teksty, akordy i tłumaczenia"
     ],

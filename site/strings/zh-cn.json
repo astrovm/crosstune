@@ -103,6 +103,10 @@
       "为了识别链接里的歌曲，Crosstune 会读取该链接所属服务的公开页面或 API：Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack、Shazam 或 Google，并加载它的封面。为了在其他应用中打开，标题和艺人会发送到该应用的搜索。当这个搜索拿不准时，它们还会发送到 Apple 和 Deezer 的歌曲搜索。对于 Spotify，它们会发送到 ListenBrainz，艺人的名字发送到 MusicBrainz，并读取 Spotify 的公开页面。“全部播放”和“随机播放”会对每首歌这样做，YouTube 用找到的视频生成播放列表。你输入的歌名会发送到 Deezer 和 Apple 的搜索。自定义目标会在你设置的网址中收到搜索词。"
     ],
     [
+      "p",
+      "如果在 Apple 的地区商店搜索失败或找不到匹配的歌曲，Crosstune 可能会将歌名和艺人姓名发送给 Apple 的美国商店。"
+    ],
+    [
       "h2",
       "歌词、和弦和翻译"
     ],
