@@ -345,6 +345,28 @@ class SingingTest {
         assertFalse(prefs().contains("sung_heard"))
     }
 
+    @Test
+    fun twoDifferentOffsetsInOnePlayDoNotUseCrossPlayTolerance() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        val times = listOf(10, 13, 16, 38, 41, 44)
+        lyricsTimedFor(null, times)
+        singing.answer = {
+            when (singing.hears) {
+                1 -> sungAt(times, times.map { -3_540L })
+                2 -> sungAt(times, times.map { -2_170L })
+                else -> awaitCancellation()
+            }
+        }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 }
+        passes(35_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
     /** Lines at [times] seconds, each heard sung [offMs] later, from where the song is as it's heard, for as long as it is, or its first [seconds]. */
     private fun sungAt(times: List<Int>, offMs: List<Long>, seconds: Int = SingingListener.SECONDS) = SystemClock.elapsedRealtime().let { now ->
         val at = now - startedAt + startedFromMs
