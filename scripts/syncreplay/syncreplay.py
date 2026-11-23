@@ -62,7 +62,8 @@ every replay plays over those given to prep, word by word when they're timed so:
 For ROCm Demucs only, set DEMUCS_PYTHON to a ROCm Python and DEMUCS_DEVICE=cuda;
 without these it uses the current Python on CPU. Set WHISPER_PYTHON to a ROCm Python with openai-whisper for
 truth on the GPU: it hears each song twice and keeps the lines both time alike, in about the time the CPU takes
-to hear it once (measurements.md). Hearing stays on CPU, as it stands for the phone's.
+to hear it once (measurements.md). Hearing stays on CPU, as it stands for the phone's. Set
+SYNCREPLAY_HEARING_SLOTS to the number of one-thread hearings to allow across songs and processes (default 4).
 `set --cached` resumes the existing set without another live search. Prep keeps truth for unchanged lyrics
 and checkpoints every heard window atomically, so an interrupted song resumes too. Prep hears only every 20 s,
 and a replay hears the rest it asks for, keeping it, so a change to the app's timing hears only what's new.
@@ -106,8 +107,8 @@ HEARD_BUILT = threading.Lock()
 # The app's speech model; others can be tried with `hear --model` and `run --model`.
 APP_MODEL = "tiny-q5_1"
 # Each while is heard on its own, on one thread, so how many at once only changes how long it takes.
-# However many songs are being heard: at 10 for each of 4 songs, a machine someone's using is left with nothing.
-HEARD_AT_ONCE = 4
+# The limit is shared across songs and processes, so it does not multiply by songs heard at once.
+HEARD_AT_ONCE = max(1, int(os.environ.get('SYNCREPLAY_HEARING_SLOTS', '4')))
 HEARING = threading.BoundedSemaphore(HEARD_AT_ONCE)
 
 
@@ -244,7 +245,7 @@ def windows(song, wav, length, model=APP_MODEL, clean=False, wanted=None):
     def hear(start):
         seg = a[start * 16:(start + length) * 16]
         # A model that can't run hears nothing, so it fails here rather than passing for silence.
-        with HEARING, shared_slot('hearing', int(os.environ.get('SYNCREPLAY_HEARING_SLOTS', str(HEARD_AT_ONCE)))):
+        with HEARING, shared_slot('hearing', HEARD_AT_ONCE):
             text = subprocess.run([str(binary), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True,
                                   env={**os.environ, "HEARD_THREADS": os.environ.get('SYNCREPLAY_HEARD_THREADS', '1')}).stdout.decode("utf-8", "replace")
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]

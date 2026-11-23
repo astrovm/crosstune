@@ -57,6 +57,14 @@ class ReplayContainerTest(unittest.TestCase):
 
 
 class SharedSlotTest(unittest.TestCase):
+    def test_the_hearing_limit_also_applies_within_one_replay(self):
+        code = 'import runpy,sys; print(runpy.run_path(sys.argv[1])["HEARD_AT_ONCE"])'
+        for configured, expected in [('9', '9'), ('0', '1')]:
+            env = os.environ | {'SYNCREPLAY_HEARING_SLOTS': configured}
+            result = subprocess.run([sys.executable, '-c', code, str(Path(__file__).with_name('syncreplay.py'))],
+                                    capture_output=True, text=True, check=True, env=env)
+            self.assertEqual(expected, result.stdout.strip())
+
     def test_a_slot_is_also_exclusive_across_processes(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
             lock = Path(directory) / 'locks' / 'gpu-0.lock'
@@ -439,8 +447,12 @@ class HearingLoadTest(unittest.TestCase):
         self.assertLessEqual(peak[0], r.HEARD_AT_ONCE)
         self.assertGreater(peak[0], 1)
 
-    def test_hearing_leaves_most_of_the_machine_for_who_is_using_it(self):
-        self.assertLessEqual(r.HEARD_AT_ONCE, 4)
+    def test_default_hearing_leaves_most_of_the_machine_for_who_is_using_it(self):
+        code = 'import runpy,sys; print(runpy.run_path(sys.argv[1])["HEARD_AT_ONCE"])'
+        env = {key: value for key, value in os.environ.items() if key != 'SYNCREPLAY_HEARING_SLOTS'}
+        result = subprocess.run([sys.executable, '-c', code, str(Path(__file__).with_name('syncreplay.py'))],
+                                capture_output=True, text=True, check=True, env=env)
+        self.assertEqual('4', result.stdout.strip())
 
 
 class CheckpointTest(unittest.TestCase):
