@@ -851,6 +851,15 @@ class SingingTest {
     }
 
     @Test
+    fun closingAfterOneWrongChorusDoesNotKeepItsMove() {
+        val times = chorusHeardFarFromWhereItsSung()
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
     fun pickedUpLateOneWhileHeardFarEarlierIsReportedWithoutKeepingIt() {
         val times = listOf(60, 63, 66, 90, 93, 96)
         lyricsTimedFor(null, times)
