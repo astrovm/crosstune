@@ -1130,7 +1130,7 @@ class SingingTest {
             val heard = if (singing.hears == 1) {
                 listOf(1120L to "僕は背ないでね", 4360L to "目会いとは", 6240L to "ファレッツ", 8000L to "衝突にく", 10780L to "自動で", 13660L to "時間が来るレッファ", 16500L to "オーブーの光り")
             } else {
-                listOf(0L to "目に入れるわ", 2980L to "正解", 4520L to "もう似てると", 6400L to "優しい青くラスをとして", 12160L to "切るに何かでも分けは", 18200L to "数ね")
+                listOf(1540L to "ドラスを教えて", 5220L to "切るに", 6680L to "何だっても", 9780L to "貯けは", 12040L to "数えないでね")
             }
             Sung(startedAt, heard.map { (at, text) -> HeardWord(text, at + if (singing.hears == 1) 495 else 0) })
         }
@@ -1145,7 +1145,10 @@ class SingingTest {
         composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
         waitUntil { model().uiState.lyricLines.size == lines.size }
         plays(positionMs = 180_000)
-        passes(3_000)
+        passes(1_000)
+        assertEquals(1, singing.hears)
+        plays(positionMs = 187_000)
+        passes(1_000)
         waitUntil { singing.hears >= 2 }
         composeRule.waitForIdle()
         assertTrue(model().uiState.lyricsSynced)
