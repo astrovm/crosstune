@@ -42,6 +42,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import java.io.File
@@ -215,17 +218,34 @@ class PlaybackTest {
     }
 
     @Test
-    fun observingACachedValueNeitherReadsNorMakesItMoreRecent() {
-        var reads = 0
-        val cache = KeptReads<String, Int>(2) { ++reads }
-        assertNull(cache.peek("unread"))
-        assertEquals(0, reads)
-        assertEquals(1, cache.of("first"))
-        assertEquals(2, cache.of("second"))
-        assertEquals(1, cache.peek("first"))
-        assertEquals(3, cache.of("third"))
-        assertNull(cache.peek("first"))
-        assertEquals(4, cache.of("first"))
+    fun peekingAtASessionsNumberNeitherNumbersItNorKeepsItLonger() {
+        val numbers = SessionNumbers(2)
+        val (first, second, third) = List(3) { MediaSession(app, "session$it").sessionToken }
+        assertNull(numbers.peek(first))
+        assertEquals(0, numbers.of(first))
+        assertEquals(1, numbers.of(second))
+        assertEquals(0, numbers.peek(first))
+        assertEquals(2, numbers.of(third))
+        assertNull(numbers.peek(first))
+        assertEquals(3, numbers.of(first))
+    }
+
+    @Test
+    fun aSessionNumberedFromManyThreadsAtOnceGetsOneNumber() {
+        val tokens = List(200) { MediaSession(app, "shared$it").sessionToken }
+        val numbers = SessionNumbers(tokens.size)
+        val threads = 8
+        // Each thread waits for all the others before each new session, so they number it together.
+        val together = CyclicBarrier(threads)
+        val pool = Executors.newFixedThreadPool(threads)
+        try {
+            val got = List(threads) { pool.submit<List<Int>> { tokens.map { together.await(5, TimeUnit.SECONDS); numbers.of(it) } } }
+            val seen = got.map { it.get(30, TimeUnit.SECONDS) }
+            assertTrue(seen.all { it == seen.first() })
+            assertEquals(tokens.size, seen.first().toSet().size)
+        } finally {
+            pool.shutdownNow()
+        }
     }
 
     @Test
@@ -250,6 +270,22 @@ class PlaybackTest {
         shadowOf(sessions).addController(player("com.example.next", "Next", next.title, next.artist))
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(1, playback.matching(next).single().session)
+    }
+
+    @Test
+    fun anotherPlaybackFollowsASessionByTheNumberThisOneGaveIt() {
+        allow()
+        val other = MusicMetadata("Other Track", "Other Artist")
+        shadowOf(sessions).addController(player("com.example.other", "Other", other.title, other.artist))
+        shadowOf(sessions).addController(player("com.example.music", "Music", song.title, song.artist))
+        // The sleep timer's own playback, which numbered another app's session first, then is handed the player's number.
+        val timers = MediaSessionPlayback(app, now = { NOW }, modes = modes, queueOf = { queues[it.packageName] }, clockLog = PracticeClockLog(true), radioNotices = radioNotices)
+        timers.matching(other)
+        val session = playback.matching(song).single().session
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { timers.follow(song, "com.example.music", session).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("com.example.music"), seen.map { it?.appPackage })
     }
 
     @Test
