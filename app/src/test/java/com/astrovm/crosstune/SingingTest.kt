@@ -948,6 +948,7 @@ class SingingTest {
         openLyrics()
         plays(positionMs = 61_000)
         waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        plays(positionMs = 61_000, playing = false)
         composeRule.runOnIdle { model().dismissLyrics() }
         assertFalse(prefs().contains("lyrics_sync"))
         composeRule.runOnIdle { model().showLyrics() }
@@ -967,6 +968,7 @@ class SingingTest {
         openLyrics()
         plays(positionMs = 61_000)
         waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        plays(positionMs = 61_000, playing = false)
         composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
         waitUntil { model().uiState.lyricLines.size == lines.size }
         plays(positionMs = 61_000)
@@ -985,12 +987,14 @@ class SingingTest {
         openLyrics()
         plays(positionMs = 61_000)
         waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        plays(positionMs = 61_000, playing = false)
         composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
         waitUntil { model().uiState.lyricLines.size == lines.size }
         singing.answer = { sungAt(times, times.map { 0L }) }
         plays(positionMs = 130_000)
         waitUntil { singing.hears >= 2 }
         composeRule.waitForIdle()
+        plays(positionMs = 130_000, playing = false)
         composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
         waitUntil { model().uiState.lyricLines.size == lines.size }
         singing.answer = { sungAt(times, times.map { -27_400L }) }
