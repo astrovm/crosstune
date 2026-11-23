@@ -1011,6 +1011,34 @@ class SingingTest {
     }
 
     @Test
+    fun overlappingHearingsAtDoubleSpeedDoNotConfirm() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
+        lyricsTimedFor(null, times)
+        openLyrics()
+        val song = checkNotNull(model().uiState.lyricsFor)
+        LyricsSyncStore(prefs()).rememberPending(song, model().uiState.lyricLines, PendingShift(-27_400, 61_000))
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        singing.answer = {
+            val words = (9..11).flatMap { index ->
+                lines[index].split(' ').mapIndexed { word, text ->
+                    val at = (times[index] * 1_000L - 27_400 - 91_000) / 2 + SungAlignment.HEARD_LATE_MS / 2 + word * 150L
+                    HeardWord(text, at)
+                }
+            }
+            Sung(startedAt, words)
+        }
+        plays(positionMs = 91_000, speed = 2f)
+        passes(1_000)
+        waitUntil { singing.hears >= 1 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
     fun farHearingsThatDifferByMoreThanTheirUncertaintyDoNotConfirm() {
         playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
         lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
