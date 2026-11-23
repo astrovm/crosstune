@@ -347,6 +347,7 @@ class SingingTest {
 
     @Test
     fun twoDifferentOffsetsInOnePlayDoNotUseCrossPlayTolerance() {
+        TimingLog.clear()
         playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
         lines = lines + listOf("A distant star is shining", "The morning comes again", "We walk into the daylight")
         val times = listOf(4, 7, 10, 32, 35, 38, 41, 44, 47)
@@ -1146,7 +1147,8 @@ class SingingTest {
             } else {
                 listOf(1540L to "ドラスを教えて", 5220L to "切るに", 6680L to "何だっても", 9780L to "貯けは", 12040L to "数えないでね")
             }
-            Sung(startedAt, heard.map { (at, text) -> HeardWord(text, at + if (singing.hears == 1) 495 else 0) })
+            val heardAt = if (singing.hears == 1) startedAt else startedAt + 7_000
+            Sung(heardAt, heard.map { (at, text) -> HeardWord(text, at + if (singing.hears == 1) 495 else 0) })
         }
         openLyrics()
         plays(positionMs = 53_505)
@@ -1161,8 +1163,7 @@ class SingingTest {
         plays(positionMs = 180_000)
         passes(1_000)
         assertEquals(1, singing.hears)
-        plays(positionMs = 187_000)
-        passes(1_000)
+        passes(7_000)
         waitUntil { singing.hears >= 2 }
         composeRule.waitForIdle()
         assertTrue(model().uiState.lyricsSynced)
