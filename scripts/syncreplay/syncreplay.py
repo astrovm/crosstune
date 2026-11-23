@@ -549,7 +549,7 @@ def compare(phone_lit, shown):
 
 def score(args):
     shown = json.loads((own() / f"{args.id}.from{args.start}.shown.json").read_text())
-    sung = {line: at for line, at in sung_lines(args.id, shown["lines"]).items() if at >= args.start / 1000}
+    sung = sung_after(args.id, shown["lines"], args.start)
     # The app's line to the n-th line with words.
     nth = {}
     for i, text in enumerate(shown["lines"]):
@@ -626,6 +626,11 @@ def sung_lines(song, lines):
         if truth["line"] in same:
             sung[same[truth["line"]]] = truth["start"]
     return sung
+
+
+def sung_after(song, lines, start):
+    """Only score lines whose singing starts while the replay is playing."""
+    return {line: at for line, at in sung_lines(song, lines).items() if at >= start / 1000}
 
 
 def found_words(song, kept):
@@ -1109,14 +1114,19 @@ def run_all(args):
         with ThreadPoolExecutor(SONGS_HEARD_AT_ONCE) as pool:
             if not sum(pool.map(lambda song: hear_asked(song, [f"{song}.from{args.start}.shown.json"]), songs)):
                 break
+    score_all(songs, args.start)
+
+
+def score_all(songs, start):
+    """Score saved replays again without repeating the app runs."""
     titles = {song.get("id"): song["title"] for song in json.loads((OUT / "set.json").read_text())} if (OUT / "set.json").exists() else {}
     totals = dict(lines=0, close=0, on=0, dark=0, early=0)
     all_lags = []
     lyric_lines = 0
     print(f"{'song':12} {'lines':>5} {'0.3 s':>6} {'0.5 s':>6} {'dark':>5} {'early':>5} {'worst':>6}  title")
     for song in songs:
-        shown = json.loads((own() / f"{song}.from{args.start}.shown.json").read_text())
-        sung = sung_lines(song, shown["lines"])
+        shown = json.loads((own() / f"{song}.from{start}.shown.json").read_text())
+        sung = sung_after(song, shown["lines"], start)
         first = lit_first(shown)
         lags = [first[k] - sung[k] for k in sung if k in first]
         all_lags.extend(lags)
@@ -1131,7 +1141,8 @@ def run_all(args):
     worst = f"{max(all_lags, key=abs):+.1f}" if all_lags else "-"
     print(f"{'all':12} {t['lines']:5} {t['close']:6} {t['on']:6} {t['dark']:5} {t['early']:5} {worst:>6}  "
           f"{100 * t['close'] / max(t['lines'], 1):.0f}% within 0.3 s, {100 * t['on'] / max(t['lines'], 1):.0f}% within {ON_TIME_S} s, {t['dark']} dark")
-    print(f"Reference coverage: {t['lines']}/{lyric_lines} nonempty lyric lines. Unmatched lines have no truth and are not scored.")
+    print(f"Reference coverage: {t['lines']}/{lyric_lines} nonempty lyric lines. Unmatched lines have no truth and are not scored."
+          + (" Lines sung before the replay start are excluded." if start else ""))
 
 
 def lit_first(shown):

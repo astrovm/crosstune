@@ -774,6 +774,16 @@ class ReplayAllTest(unittest.TestCase):
         heard.assert_called_once_with('fake', ['fake.from14000.shown.json'])
         self.assertRegex(table.getvalue(), r'all +1 +1 +1 +0 +0')
 
+    def test_a_line_sung_before_the_replay_start_is_not_dark(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
+            (r.OUT / 'fake.from14000.shown.json').write_text(json.dumps(dict(lines=['One', 'Two'], shown=[dict(line=1, at=15000)])))
+            (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[0, 'One'], [0, 'Two']]))
+            (r.OUT / 'fake.truth.jsonl').write_text(''.join(json.dumps(dict(line=n, start=at)) + '\n' for n, at in [(0, 1.0), (1, 15.0)]))
+            with patch('sys.stdout', io.StringIO()) as table:
+                r.run_all(argparse.Namespace(gradle='fake-gradle', start=14000, work=4500, behind=0, songs=None, heard='.cached'))
+        self.assertRegex(table.getvalue(), r'all +1 +1 +1 +0 +0')
+
 
 class WordsHeardTest(unittest.TestCase):
     def test_a_gpu_python_hears_the_words_with_the_same_model(self):
