@@ -208,7 +208,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    # Main also warms lint, release builds and PIT on a shared-cache miss.
+    timeout-minutes: 30
     steps:
       # A shallow clone keeps the Git-derived version constant, so task outputs are reused across commits.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
