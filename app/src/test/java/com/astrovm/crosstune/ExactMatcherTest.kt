@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -12,7 +13,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -1860,9 +1860,9 @@ class ExactMatcherTest {
             ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), ExactMatcher.Retry()
         )
         disk.pause()
-        val first = async { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
+        val first = async(Dispatchers.Default) { finder.lookup(MusicService.YOUTUBE_MUSIC, song) }
         val second = try {
-            withTimeout(10_000) { disk.writing.await() }
+            disk.awaitWrite()
             fake.requestedUrls.clear()
             val retry = async(start = CoroutineStart.UNDISPATCHED) {
                 finder.lookup(MusicService.YOUTUBE_MUSIC, song).also {
@@ -1897,13 +1897,13 @@ class ExactMatcherTest {
         namesAndTabs(videos = listOf(fan, own), apple = apple, elsewhere = japan)
         val ownUrl = "https://music.youtube.com/watch?v=own00000000"
         disk.pause()
-        val confirmed = async {
+        val confirmed = async(Dispatchers.Default) {
             finder.lookFor(MusicService.YOUTUBE_MUSIC, song).also {
                 assertEquals(ownUrl, LookupCache(file, Dispatchers.Unconfined).entries().single().second)
             }
         }
         try {
-            withTimeout(10_000) { disk.writing.await() }
+            disk.awaitWrite()
             assertTrue("The upgrade waits for the confirmed link to be written", !confirmed.isCompleted)
             assertEquals(provisional, LookupCache(file, Dispatchers.Unconfined).entries())
         } finally {
@@ -1925,7 +1925,7 @@ class ExactMatcherTest {
 
         disk.pause()
         try {
-            val found = withTimeoutOrNull(5_000) { finder.lookFor(MusicService.DEEZER, song) }
+            val found = lookUpWhileDiskWaits { finder.lookFor(MusicService.DEEZER, song) }
             assertEquals(ExactMatcher.Match.Found(url), found)
             assertEquals(url, cache.entries().single().second)
             assertTrue(!file.exists())
@@ -1950,10 +1950,10 @@ class ExactMatcherTest {
             deezer = """[{"title":"Different Song","link":"https://www.deezer.com/track/1","artist":{"name":"Different Artist"}}]"""
         )
         disk.pause()
-        val upload = async { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) }
+        val upload = async(Dispatchers.Default) { finder.lookFor(MusicService.YOUTUBE_MUSIC, song) }
         try {
-            withTimeout(10_000) { disk.writing.await() }
-            val known = withTimeoutOrNull(10_000) { finder.lookFor(MusicService.DEEZER, other) }
+            disk.awaitWrite()
+            val known = lookUpWhileDiskWaits { finder.lookFor(MusicService.DEEZER, other) }
             assertEquals(ExactMatcher.Match.Found("https://www.deezer.com/track/1"), known)
         } finally {
             disk.resume()
@@ -1961,25 +1961,40 @@ class ExactMatcherTest {
         assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), upload.await())
     }
 
+    private suspend fun CoroutineScope.lookUpWhileDiskWaits(lookUp: suspend () -> ExactMatcher.Match): ExactMatcher.Match {
+        val finished = CountDownLatch(1)
+        val answer = async(Dispatchers.Default) { lookUp() }
+        answer.invokeOnCompletion { finished.countDown() }
+        assertTrue("The lookup should return before disk writes resume", finished.await(5, SECONDS))
+        return answer.await()
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private class PausedCacheDisk : CoroutineDispatcher() {
         private val disk = StandardTestDispatcher()
-        private val paused = AtomicBoolean()
-        val writing = CompletableDeferred<Unit>()
+        private val pauseLock = Any()
+        private val writing = CountDownLatch(1)
+        private var paused = false
 
         override fun dispatch(context: CoroutineContext, block: Runnable) {
-            if (paused.get()) {
-                disk.dispatch(context, block)
-                writing.complete(Unit)
-            } else {
-                Dispatchers.Default.dispatch(context, block)
+            synchronized(pauseLock) {
+                if (paused) {
+                    disk.dispatch(context, block)
+                    writing.countDown()
+                    return
+                }
             }
+            Dispatchers.Default.dispatch(context, block)
         }
 
-        fun pause() { paused.set(true) }
+        fun pause() = synchronized(pauseLock) { paused = true }
+
+        fun awaitWrite() {
+            assertTrue("The lookup should reach the paused disk", writing.await(5, SECONDS))
+        }
 
         fun resume() {
-            paused.set(false)
+            synchronized(pauseLock) { paused = false }
             disk.scheduler.runCurrent()
         }
     }
