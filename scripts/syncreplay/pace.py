@@ -17,7 +17,7 @@ def adjacent_paces(lines):
     found = []
     for first, second in itertools.pairwise(lines):
         letters = unspaced_letters(first['text'])
-        elapsed = (second['start'] - first['start']) * 1000
+        elapsed = round(second['start'] * 1000) - round(first['start'] * 1000)
         if second['line'] == first['line'] + 1 and letters and elapsed > 0:
             found.append((first['line'], elapsed / letters))
     return found

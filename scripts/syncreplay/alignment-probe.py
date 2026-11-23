@@ -58,7 +58,7 @@ def main():
         key = replay['kotlin_cache_key'](sources)
 
         def build(classes):
-            subprocess.run(['nice', '-n', '10', 'java', '--enable-native-access=ALL-UNNAMED', '-Xmx2g', '-cp', ':'.join(map(str, jars)),
+            subprocess.run(['nice', '-n', '10', 'java', '--enable-native-access=ALL-UNNAMED', '-XX:ActiveProcessorCount=2', '-Xmx2g', '-cp', ':'.join(map(str, jars)),
                             'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler', '-no-stdlib', '-no-reflect', '-cp', str(stdlib),
                             '-d', str(classes), *map(str, sources)], check=True)
 

@@ -24,6 +24,10 @@ class PaceTest(unittest.TestCase):
         ]
         self.assertEqual([], adjacent_paces(lines))
 
+    def test_exact_200_ms_is_not_lost_to_float_rounding(self):
+        lines = [{'line': 0, 'text': 'あいう', 'start': 1.0}, {'line': 1, 'text': 'えお', 'start': 1.6}]
+        self.assertEqual([(0, 200.0)], adjacent_paces(lines))
+
 
 if __name__ == '__main__':
     unittest.main()
