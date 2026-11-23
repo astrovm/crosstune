@@ -47,8 +47,11 @@ internal class SongSearcher(
             // Each service's own repeated name is one song. A karaoke, a cover, a music box
             // or a piano version goes after the artist's own song. Deezer lists those first
             // when the artist is written in their own script, and Apple already has the song.
+            // Then the songs by an artist named in the search: "Yoru ni Kakeru YOASOBI" is
+            // YOASOBI's 夜に駆ける before a cover whose title spells out more of what was typed.
+            val typed = SongNames.words(words)
             songs.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
-                .sortedBy { anotherRecording(it) }
+                .sortedWith(compareBy<MusicMetadata> { anotherRecording(it) }.thenBy { !byArtistTyped(it, typed) })
         }
     }
 
@@ -63,6 +66,10 @@ internal class SongSearcher(
         if (changedKey(song.title)) return true
         return remakeOfAnotherSong(song.title)
     }
+
+    /** Whether [song]'s artist is named in full among the [typed] words, "The" or not. */
+    private fun byArtistTyped(song: MusicMetadata, typed: Set<String>): Boolean =
+        SongNames.words(SongNames.withoutArticle(song.artist)).let { named -> named.isNotEmpty() && typed.containsAll(named) }
 
     /** "Originally Performed by" names the singer and not the people on the row. */
     private fun creditsTheOriginal(title: String): Boolean =

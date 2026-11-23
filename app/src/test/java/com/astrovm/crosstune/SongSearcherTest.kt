@@ -292,6 +292,39 @@ class SongSearcherTest {
         assertLeads("Song", "Song" to "Artist", "Song +3Key" to "Band")
         assertLeads("Song", "Song" to "Artist", "Song Key-1" to "Band")
         assertLeads("チェリー", "チェリー" to "スピッツ", "チェリー REMAKE" to "Yuzu")
+        assertLeads("Song", "Song" to "Artist", "Song [2 pianos version]" to "Pianist")
+        assertLeads("Song", "Song" to "Artist", "Song (Two Guitars)" to "Duo")
+    }
+
+    @Test
+    fun theArtistTypedLeadsACoverThatSpellsOutMoreOfIt() {
+        // As Deezer answered on the phone: the song's own title is in Japanese, so the covers
+        // spelling it out in Latin letters had more of what was typed.
+        assertEquals(
+            listOf(
+                "夜に駆ける" to "YOASOBI",
+                "Idol" to "YOASOBI",
+                "Racing into the Night [Yoru Ni Kaeru]" to "Vangakuz",
+                "YOASOBI - Racing Into The Night - 夜に駆ける - Yoru Ni Kakeru [2 pianos version]" to "KayThePianist"
+            ),
+            foundTitles(
+                "Yoru ni Kakeru YOASOBI",
+                "YOASOBI - Racing Into The Night - 夜に駆ける - Yoru Ni Kakeru [2 pianos version]" to "KayThePianist",
+                "Racing into the Night [Yoru Ni Kaeru]" to "Vangakuz",
+                "夜に駆ける" to "YOASOBI",
+                "Idol" to "YOASOBI"
+            )
+        )
+        // "The" needn't be typed.
+        assertEquals(
+            listOf("Roxanne" to "The Police", "Roxanne Police Tribute" to "Sting Tribute Band"),
+            foundTitles("Roxanne Police", "Roxanne Police Tribute" to "Sting Tribute Band", "Roxanne" to "The Police")
+        )
+        // An artist written with no letters isn't named by any search.
+        assertEquals(
+            listOf("Song" to "Someone", "Song" to "…"),
+            foundTitles("Song", "Song" to "Someone", "Song" to "…")
+        )
     }
 
     @Test
