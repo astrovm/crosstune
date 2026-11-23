@@ -27,6 +27,8 @@ class RightIdsTest(unittest.TestCase):
         long = {"id": "long", "name": "After 5 Crash / Tokyo Tower / 初恋 / I'll Do My Best - After 5 Crash / Tokyo Tower / Hatsukoi / I'll Do My Best",
                 "details": ["Toshiki Kadomatsu", "Inherit The Life II", "10:06"]}
         self.assertEqual(["short"], replay.right_ids(song, [short, long], []))
+        long_song = dict(song, title="After 5 Crash / Tokyo Tower / Hatsukoi / I'll Do My Best")
+        self.assertEqual(["long"], replay.right_ids(long_song, [short, long], []))
 
     def test_the_checked_fairuz_alias_names_only_her_rows(self):
         song = {"title": "Kifak Inta", "artist": "Fairouz", "native": []}

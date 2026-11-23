@@ -89,7 +89,8 @@ def right_ids(song, results, videos):
     wanted |= {alias for artist in wanted for alias in ARTIST_ALIASES.get(artist, set())}
 
     def by_eye(row):
-        return (song["artist"], row["name"]) in analyze.RIGHT_BY_EYE
+        return (song["artist"], row["name"]) in analyze.RIGHT_BY_EYE or (
+            song["artist"] == "Toshiki Kadomatsu" and (song["title"], row["name"]) in analyze.RIGHT_MEDLEYS)
 
     def named(row):
         parts = analyze.title_names(row["name"]) + [p for p in QUOTED.split(row["name"]) if p.strip()]
