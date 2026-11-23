@@ -684,7 +684,7 @@ internal class ExactMatcher(
                     (it === first || first != null && sameVideoRecording(first, it, metadata, names))
             }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         }
-        addDeezerNames(metadata, names, rows.any { it.id != null })
+        addDeezerNames(metadata, names, rows.any { it.id != null && it.lengthMs != null })
         val song = songRow(metadata, rows, videoRows, names, recording)
         song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         // Someone else's video, e.g. a fan's lyrics video, only where every store answered: one that failed may have named the
