@@ -46,17 +46,18 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         for (wrong in tokens.indices) {
             if (wrong < next) continue
             val crossing = crossingWord(text, tokens[wrong])
-            if (!wrongStart(text, tokens[wrong]) && crossing == null) continue
+            if (!wrongStart(text, tokens[wrong]) && !crossing) continue
             // A word that starts wrong is searched again with the word before it, as the kana it starts on is said
             // with that word's last, and with the one before that while that one starts on a small kana too, っし in
             // ないっしゅん, so the search knows what kana it comes after.
             var first = wrong - 1
-            while (first > next && (smallAfterKana(text, tokens[first].position) || (crossing != null && tokens[first].position > crossing.first))) first--
+            while (first > next && (smallAfterKana(text, tokens[first].position) ||
+                    (crossing && tokens[first - 1].surface.all(Readings::isKana)))) first--
             // Words that start wrong one after another are searched again together, and a small っ at the end doubles
             // the kana after it, so that word is searched again with it, にっ and き.
             var last = wrong
             while (last + 1 < tokens.size && (tokens[last].surface.last() in "っッ" || wrongStart(text, tokens[last + 1]) ||
-                    (crossing != null && tokens[last].position + tokens[last].surface.length <= crossing.last))) last++
+                    (crossing && tokens[last + 1].surface.all(Readings::isKana)))) last++
             out += tokens.subList(next, first)
             val from = tokens[first].position
             val to = tokens[last].position + tokens[last].surface.length
@@ -224,19 +225,16 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     private fun wrongStart(text: String, token: Token) = wrongStart(text, token.position, token.isKnown, token.surface)
 
     /** Search again if a common word with small kana crosses an IPADIC split, including IPADIC's own っ words. */
-    private fun crossingWord(text: String, token: Token): IntRange? {
+    private fun crossingWord(text: String, token: Token): Boolean {
         val at = token.position
-        if (at == 0 || !Readings.isKana(text[at - 1]) || !Readings.isKana(text[at])) return null
+        if (at == 0 || !Readings.isKana(text[at - 1]) || !Readings.isKana(text[at])) return false
         val known = words()
-        var longest: IntRange? = null
         for (start in maxOf(0, at - known.longestSearch + 1) until at) {
             for (end in at + 1..minOf(text.length, start + known.longestSearch)) {
-                if (end - start > (longest?.let { it.last - it.first + 1 } ?: 0) && text.substring(start, end) in known.small) {
-                    longest = start until end
-                }
+                if (text.substring(start, end) in known.small) return true
             }
         }
-        return longest
+        return false
     }
 
     /**
