@@ -348,7 +348,8 @@ class SingingTest {
     @Test
     fun twoDifferentOffsetsInOnePlayDoNotUseCrossPlayTolerance() {
         playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
-        val times = listOf(4, 7, 10, 32, 35, 38)
+        lines = lines + listOf("A distant star is shining", "The morning comes again", "We walk into the daylight")
+        val times = listOf(4, 7, 10, 32, 35, 38, 41, 44, 47)
         lyricsTimedFor(null, times)
         singing.answer = {
             when (singing.hears) {

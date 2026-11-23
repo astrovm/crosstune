@@ -2474,6 +2474,8 @@ internal class MainViewModel(
     private var heardThisTime = false
     /** How far off the words as found a whole while heard last said they are, far enough off to say they're off themselves, with the app's clock unsure: they're kept so once another while agrees. */
     private var farOffMs: Long? = null
+    /** A hearing kept before this listening session, not another hearing in this session. */
+    private var pendingBeforePlay: PendingShift? = null
     /** Whether the lines shown were moved this time by a while found further off than near lines are looked at, and nothing agreed yet. */
     private var movedFar = false
     /** A whole while moved the words far this time; report only once later whiles can no longer put them back. */
@@ -3381,8 +3383,9 @@ internal class MainViewModel(
     private suspend fun hearOn(hearing: SingingHearing, song: MusicMetadata, lines: List<LyricLine>) {
         // Where in the song the singing was heard up to, so the next while heard is further on.
         var heardTo: Long? = null
-        // A pending far hearing already says the written times may be wrong; listen where the song is.
-        var straightOn = syncStore.pending(song, lines) != null
+        pendingBeforePlay = syncStore.pending(song, lines)
+        // A near match needs the current audio while it is still within the near matcher's range.
+        var straightOn = pendingBeforePlay?.let { abs(it.offsetMs) <= SungAlignment.MAX_SHIFT_MS } == true
         // Whether any singing was found where the words are, while hearing on.
         var found = false
         while (true) {
@@ -3520,7 +3523,7 @@ internal class MainViewModel(
         if (keptShift != null && abs(keptShift) < WORDS_OFF_MS) {
             if (whole) {
                 movedFar = false
-                syncStore.clearPending(song)
+                clearPending(song)
             }
             farReportPending = false
             farOffMs = null
@@ -3533,7 +3536,7 @@ internal class MainViewModel(
         val offMs = shift + shown[line].timeMs - foundLines[line].timeMs
         val fromMs = clock.positionAt(sung.startedAtMs)
         val agrees = farOffMs?.let { abs(it - offMs) < agreeingMs(offMs) } == true ||
-            pendingAgrees(song, PendingShift(offMs, fromMs), whole)
+            pendingAgrees(PendingShift(offMs, fromMs), whole)
         when {
             keeps(shift, agrees) -> return keepFarOff(song, heard)
             abs(shift) >= WORDS_OFF_MS -> {
@@ -3558,14 +3561,14 @@ internal class MainViewModel(
     private fun mayKeepPending() = syncPoints.isEmpty() && !keptByHand && !timedByHand
 
     private fun heardNear(song: MusicMetadata, offMs: Long) {
-        if (!movedFar) syncStore.clearPending(song)
+        if (!movedFar) clearPending(song)
         farOffMs = offMs.takeIf { movedFar }
         if (movedFar) reportFarIfLeftMoved()
     }
 
-    private fun pendingAgrees(song: MusicMetadata, current: PendingShift, whole: Boolean): Boolean {
+    private fun pendingAgrees(current: PendingShift, whole: Boolean): Boolean {
         if (!whole || !mayKeepPending()) return false
-        val previous = syncStore.pending(song, foundLines) ?: return false
+        val previous = pendingBeforePlay ?: return false
         // Allow a second's uncertainty for each hearing when comparing two independent estimates.
         val tolerance = maxOf(2 * SUNG_OFF_MS, agreeingMs(current.offsetMs))
         return abs(previous.fromMs - current.fromMs) >= SingingListener.SECONDS * 1000L &&
@@ -3573,7 +3576,15 @@ internal class MainViewModel(
     }
 
     private fun rememberPending(song: MusicMetadata, pending: PendingShift) {
-        if (mayKeepPending()) syncStore.rememberPending(song, foundLines, pending)
+        if (mayKeepPending()) {
+            pendingBeforePlay = null
+            syncStore.rememberPending(song, foundLines, pending)
+        }
+    }
+
+    private fun clearPending(song: MusicMetadata) {
+        pendingBeforePlay = null
+        syncStore.clearPending(song)
     }
 
     /** The first line heard in [sung], [shift] off from the [lines] shown, and the points it puts them at, over [points]. Lines heard but none told where, the first is [shift] off. */
@@ -4459,7 +4470,7 @@ internal class MainViewModel(
     }
 
     private fun setSync(song: MusicMetadata, points: List<SyncPoint>) {
-        syncStore.clearPending(song)
+        clearPending(song)
         syncPoints = points
         TimingLog.note("lines in time ${points.takeLast(MAX_NOTED_POINTS).joinToString(" ") { "${it.lineMs}>${it.songMs}" }}")
         if (timedByHand) timingAtCorrection = playedIn to currentPlayerTiming()
