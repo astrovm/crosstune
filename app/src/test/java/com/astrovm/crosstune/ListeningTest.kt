@@ -677,6 +677,39 @@ class ListeningTest {
         }
     }
 
+    @Test
+    fun radioGardenConfirmsTheQueueAgainWhenThePlaybackWatcherRestarts() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        val activity = requireNotNull(controller)
+        val main = shadowOf(Looper.getMainLooper())
+        activity.pause().stop()
+        main.idle()
+        radio.unnamed.value = null
+        main.idle()
+        radio.unnamed.value = station
+        main.idle()
+
+        val answering = CountDownLatch(1)
+        fake.handler = { request ->
+            answering.await(30, TimeUnit.SECONDS)
+            FakeSpotify.html(request, gardenTrack("First Song", "Band", 180_000L))
+        }
+        try {
+            val follows = radio.followed.size
+            activity.restart().resume()
+            waitUntil(TIMEOUT_MS) {
+                radio.followed.size > follows && controllerModel().uiState.playingUnnamed?.playing == station
+            }
+            assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+            assertTrue(shown("1LIVE"))
+            waitUntil(TIMEOUT_MS) { fake.requestedUrls.count { "itunes.apple.com/search?" in it } == 2 }
+            answering.countDown()
+            waitForText("First Song")
+        } finally {
+            answering.countDown()
+        }
+    }
+
     private fun radioGardenSessionWithConfirmedTitle(): Pair<FakePlayback, Unnamed> {
         val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1,
             queueSong = MusicMetadata("First Song", "Band"))
