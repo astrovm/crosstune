@@ -6,7 +6,7 @@ import org.junit.Test
 
 /** Recorded words heard over one play, including repeated choruses. */
 class SungChorusTest {
-    private fun replay(name: String, knownLength: Boolean = true, startAgain: Boolean = false, startLate: Boolean = false, skipMiddle: Boolean = false): Map<Int, Long> {
+    private fun replay(name: String, knownLength: Boolean = true, startAgain: Boolean = false, startLate: Boolean = false, skipAt: Int = -1): Map<Int, Long> {
         val lines = mutableListOf<String>()
         val stretches = mutableListOf<HeardStretch>()
         var lengthMs = 0L
@@ -24,7 +24,7 @@ class SungChorusTest {
         val heard = when {
             startAgain -> stretches + stretches.first()
             startLate -> stretches.drop(1)
-            skipMiddle -> stretches.filterIndexed { index, _ -> index != 4 }
+            skipAt >= 0 -> stretches.filterIndexed { index, _ -> index != skipAt }
             else -> stretches
         }
         return SungTiming.linesMs(lines, heard, lengthMs, knownLength)
@@ -64,6 +64,8 @@ class SungChorusTest {
 
     @Test
     fun skippingPartOfTheSongIsNotACompleteFirstPlay() {
-        assertEquals(replay("wrong-chorus", knownLength = false, skipMiddle = true), replay("wrong-chorus", skipMiddle = true))
+        for (at in 1..10) {
+            assertEquals("skipped hearing $at", replay("wrong-chorus", knownLength = false, skipAt = at), replay("wrong-chorus", skipAt = at))
+        }
     }
 }
