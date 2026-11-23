@@ -711,6 +711,21 @@ class HeardWhenAskedTest(unittest.TestCase):
             r.run(self.run_args(behind_again=500, skew=None, shazam_ahead=0, words_length=None, video=False))
         heard.assert_called_once_with('fake', ['fake.from0.first.shown.json', 'fake.from0.shown.json'])
 
+    def test_reopening_needs_a_second_play_and_is_sent_to_the_app(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None):
+            with self.assertRaisesRegex(ValueError, 'needs --behind-again'):
+                r.run(self.run_args(reopen_again=True))
+
+            def replay(*_, **__):
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertTrue(asked['reopenAgain'])
+                self.assertEqual(0, asked['behindAgain'])
+                return argparse.Namespace(returncode=0)
+
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(reopen_again=True, behind_again=0))
+
 
 class ReplayAllTest(unittest.TestCase):
     def test_it_replays_the_set_of_what_was_heard_it_is_asked_for(self):

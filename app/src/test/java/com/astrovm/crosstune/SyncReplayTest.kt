@@ -170,7 +170,13 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         // The lookup over, not lines found: words without timing have none, and words timed past the recording's end aren't taken.
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } && lyricsLookupFinished() }
         behind.forEachIndexed { time, behindMs ->
-            if (time > 0) composeRule.runOnIdle { model().resumeFollowingNext() }
+            if (time > 0) {
+                if (asked.optBoolean("reopenAgain")) {
+                    composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+                    composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } && lyricsLookupFinished() }
+                }
+                composeRule.runOnIdle { model().resumeFollowingNext() }
+            }
             val played = play(fromMs, lengthMs, behindMs)
             File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())
             // Stopped at the end, then played again a while later.

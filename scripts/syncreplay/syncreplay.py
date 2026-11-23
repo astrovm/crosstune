@@ -466,6 +466,10 @@ def run(args):
         replay.update(works=args.works, whiles=args.whiles)
     if args.behind_again is not None:
         replay["behindAgain"] = args.behind_again
+    if getattr(args, 'reopen_again', False):
+        if args.behind_again is None:
+            raise ValueError('--reopen-again needs --behind-again')
+        replay['reopenAgain'] = True
     if args.skew is not None:
         replay["skew"] = args.skew
         replay["shazamAhead"] = args.shazam_ahead
@@ -1450,6 +1454,7 @@ def main():
             p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
             p.add_argument("--model", default=APP_MODEL, help="whose hearing to play, made first with `hear --model`")
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
+            p.add_argument('--reopen-again', action='store_true', help='close and reopen the lyrics between plays; requires --behind-again')
             # ZnrSNEah_20 as on the phone: --video --skew 0.0349 --shazam-ahead 45467 --words-length 0, as Shazam
             # heard it (app/src/test/resources/shazam/faster.jsonl), with words that don't say how long they're timed for.
             p.add_argument("--player-speed", type=float, default=1.0, help="player rate; replay cached words at that rate and include it in Shazam answers")
