@@ -19,7 +19,7 @@ done
 cd "$root"
 python3 scripts/matchcheck/replay.py prepare "$out" --require-answers --also-latin
 # The probe only records missing searches. Its match results are not used in the comparison.
-python3 scripts/matchcheck/replay.py run "$out" probe --both
+python3 scripts/matchcheck/replay.py run "$out" probe --both --probe
 python3 scripts/matchcheck/replay.py capture-proofs "$out"
 (cd "$base" && python3 scripts/matchcheck/replay.py run "$out" main --both --require-proofs)
 python3 scripts/matchcheck/replay.py run "$out" head --both --require-proofs

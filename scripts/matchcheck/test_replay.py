@@ -132,11 +132,12 @@ class RunTest(unittest.TestCase):
     @patch("replay.subprocess.run")
     def test_both_apple_states_are_requested_in_one_build(self, run):
         run.return_value.stdout = "/checkout\n"
-        replay.run("/corpus", "head", both=True, require_proofs=True)
+        replay.run("/corpus", "head", both=True, require_proofs=True, probe=True)
         env = run.call_args_list[1].kwargs["env"]
         self.assertEqual("1", env["MATCHCHECK_BOTH"])
         self.assertEqual("head", env["MATCHCHECK_LABEL"])
         self.assertEqual("1", env["MATCHCHECK_REQUIRE_PROOFS"])
+        self.assertEqual("1", env["MATCHCHECK_PROBE"])
 
     @patch("replay.collect.fetch")
     def test_candidate_searches_are_captured_by_store_and_term(self, fetch):

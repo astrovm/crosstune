@@ -180,11 +180,11 @@ def prepare(out, require_answers=False, also_latin=False):
     print(f"{len(replay)} songs, {sum(1 for s in replay if s['right'])} with a right result", file=sys.stderr)
 
 
-def run(out, label, apple_down=False, both=False, require_proofs=False):
+def run(out, label, apple_down=False, both=False, require_proofs=False, probe=False):
     """MatchReplayTest in the checkout this is run in, which may be another, e.g. origin/main's, with the same test file
     and gradle-box.sh; run again each time, as Gradle doesn't see that what it's served changed."""
     root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
-    env = dict(os.environ, MATCHCHECK_DIR=os.path.abspath(out), MATCHCHECK_LABEL=label, MATCHCHECK_APPLE_DOWN="1" if apple_down else "0", MATCHCHECK_BOTH="1" if both else "0", MATCHCHECK_REQUIRE_PROOFS="1" if require_proofs else "0", GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
+    env = dict(os.environ, MATCHCHECK_DIR=os.path.abspath(out), MATCHCHECK_LABEL=label, MATCHCHECK_APPLE_DOWN="1" if apple_down else "0", MATCHCHECK_BOTH="1" if both else "0", MATCHCHECK_REQUIRE_PROOFS="1" if require_proofs else "0", MATCHCHECK_PROBE="1" if probe else "0", GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
     subprocess.run(["nice", "-n", "10", os.path.join(root, "scripts/gradle-box/gradle-box.sh"), "--max-workers=2",
                     ":app:testDebugUnitTest", "--tests", "*MatchReplayTest", "--rerun"], cwd=root, env=env, check=True)
 
@@ -262,13 +262,14 @@ def main():
     parser.add_argument("--both", action="store_true", help="write LABEL-up and LABEL-down in one run")
     parser.add_argument("--require-answers", action="store_true", help="fail preparation if a YouTube Music answer is missing")
     parser.add_argument("--require-proofs", action="store_true", help="fail the replay if a candidate Apple search is missing")
+    parser.add_argument("--probe", action="store_true", help="record all candidate searches without using saved proofs")
     parser.add_argument("--also-latin", action="store_true", help="add captured Latin-artist queries for the same songs")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     if args.action == "prepare":
         prepare(args.out, args.require_answers, args.also_latin)
     elif args.action == "run":
-        run(args.out, args.label, args.apple_down, args.both, args.require_proofs)
+        run(args.out, args.label, args.apple_down, args.both, args.require_proofs, args.probe)
     elif args.action == "capture-proofs":
         capture_proofs(args.out)
     else:

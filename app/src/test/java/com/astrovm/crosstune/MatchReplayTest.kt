@@ -44,7 +44,9 @@ class MatchReplayTest {
         val given = System.getenv("MATCHCHECK_DIR")?.let(::File)
         assumeTrue(given != null && File(given, "replay.json").isFile)
         dir = requireNotNull(given)
-        proofs = File(dir, "candidate-proofs.json").takeIf(File::isFile)?.let { JSONObject(it.readText()) } ?: JSONObject()
+        proofs = if (System.getenv("MATCHCHECK_PROBE") == "1") JSONObject() else {
+            File(dir, "candidate-proofs.json").takeIf(File::isFile)?.let { JSONObject(it.readText()) } ?: JSONObject()
+        }
         val songs = JSONArray(File(dir, "replay.json").readText()).let { all -> (0 until all.length()).map(all::getJSONObject) }
         val wrongQueries = songs.filter { song ->
             val query = song.optString("query")
