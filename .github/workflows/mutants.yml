@@ -28,6 +28,8 @@ jobs:
   mutants:
     runs-on: ubuntu-26.04
     timeout-minutes: 120
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     permissions:
       contents: read
       pull-requests: write

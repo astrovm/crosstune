@@ -343,6 +343,20 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         box.communicate(timeout=20)
         self.assertIn(f"-v {key}:/root/.android/debug.keystore:ro", self.asked()[1])
 
+    def test_debug_key_can_be_replaced_or_left_out(self):
+        default_key = self.home / ".android" / "debug.keystore"
+        default_key.parent.mkdir()
+        default_key.touch()
+        key = self.dir / "separate debug.keystore"
+        key.touch()
+        box = self.start("a", "help", GRADLE_BOX_KEYSTORE=str(key))
+        box.communicate(timeout=20)
+        self.assertIn(f"-v {key}:/root/.android/debug.keystore:ro", self.asked()[0])
+        self.assertNotIn(str(default_key), self.asked()[0])
+        box = self.start("a", "help", GRADLE_BOX_KEYSTORE="")
+        box.communicate(timeout=20)
+        self.assertNotIn("debug.keystore", self.asked()[1])
+
     def test_gives_back_gradles_exit_code(self):
         box = self.start("a", "help", FAKE_EXIT="3")
         box.communicate(timeout=20)

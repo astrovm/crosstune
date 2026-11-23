@@ -4,8 +4,10 @@ fastlane supply on its own commits with Play's default, which cancels a review i
 review_guard.rb first. .github/play/test/play_test.rb tests play.sh itself.
 """
 import hashlib
+import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -15,6 +17,59 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github/workflows"
 # The repository secret. Each Play job hands it to play.sh as PLAY_KEY_JSON.
 PLAY_KEY = "secrets.PLAY_SERVICE_ACCOUNT_JSON"
+
+
+def workflow_yaml(text):
+    """Read workflow YAML with an installed safe parser, without requiring a Python package."""
+    try:
+        import yaml
+    except ModuleNotFoundError:
+        ruby = shutil.which("ruby")
+        if not ruby:
+            raise RuntimeError("Workflow tests need PyYAML or Ruby's standard YAML library.") from None
+        parsed = subprocess.run(
+            [ruby, "-ryaml", "-rjson", "-e", "puts JSON.generate(YAML.safe_load(STDIN.read))"],
+            input=text, capture_output=True, text=True, check=True,
+        )
+        return json.loads(parsed.stdout)
+    return yaml.safe_load(text)
+
+
+def release_cache_problems(workflow, required_modes):
+    """Check every step, including disabled steps, against the release cache boundary."""
+    problems = []
+
+    def check_env(env, where):
+        if "CROSSTUNE_MAVEN_MIRROR" in json.dumps(env or {}):
+            problems.append(f"{where}: mirror variable in env")
+
+    check_env(workflow.get("env"), "workflow")
+    for job_name, job in workflow["jobs"].items():
+        check_env(job.get("env"), job_name)
+        active_jdk = False
+        for step in job.get("steps", []):
+            check_env(step.get("env"), job_name)
+            uses = step.get("uses", "").lower().rstrip("/")
+            options = step.get("with") or {}
+            if uses == "./.github/actions/jdk":
+                mode = options.get("gradle")
+                allowed = required_modes.get(job_name, "none")
+                if mode != allowed:
+                    problems.append(f"{job_name}: JDK gradle must be {allowed}, got {mode!r}")
+                condition = str(step.get("if", "")).replace(" ", "").lower()
+                if condition not in ("false", "${{false}}"):
+                    active_jdk = True
+            if uses.split("@", 1)[0] == "gradle/actions/setup-gradle":
+                problems.append(f"{job_name}: setup-gradle bypasses the JDK action")
+            if (uses.startswith("actions/cache@") or uses.startswith("actions/cache/")) and any(
+                prefix in json.dumps(options) for prefix in ("gradle-mirror-dependencies-", "gradle-shared-dependencies-")
+            ):
+                problems.append(f"{job_name}: mirror cache used directly")
+        if job_name in required_modes and not active_jdk:
+            problems.append(f"{job_name}: no active JDK step")
+    for job_name in required_modes.keys() - workflow["jobs"].keys():
+        problems.append(f"{job_name}: missing job")
+    return problems
 
 
 def jobs(text):
@@ -32,6 +87,52 @@ def play_jobs():
 
 
 class PlayWorkflowsTest(unittest.TestCase):
+    def test_release_builds_do_not_use_the_ci_mirror_or_its_cache(self):
+        for filename, modes in (("release.yml", {"build": "central", "rebuild": "disabled"}),
+                                ("jmdict.yml", {"remake": "central"})):
+            with self.subTest(workflow=filename):
+                workflow = workflow_yaml((WORKFLOWS / filename).read_text(encoding="utf-8"))
+                self.assertEqual([], release_cache_problems(workflow, modes))
+        action = workflow_yaml((ROOT / ".github/actions/jdk/action.yml").read_text(encoding="utf-8"))
+        steps = action["runs"]["steps"]
+        for step in steps:
+            self.assertNotIn("CROSSTUNE_MAVEN_MIRROR", json.dumps(step.get("env") or {}))
+        setup = [step for step in steps if step.get("uses", "").split("@", 1)[0] == "gradle/actions/setup-gradle"]
+        self.assertEqual({"inputs.gradle == 'central'", "inputs.gradle == 'read-write'",
+                          "inputs.gradle == 'read-only'", "inputs.gradle == 'disabled'"}, {step.get("if") for step in setup})
+        self.assertEqual(4, len(setup))
+        central = next(step for step in setup if step.get("if") == "inputs.gradle == 'central'")
+        self.assertEqual("external", central["with"]["cache-provider"])
+        self.assertTrue(any('${CROSSTUNE_MAVEN_MIRROR:-}' in step.get("run", "") for step in steps))
+
+    def test_release_cache_guard_rejects_a_disabled_step_and_a_second_default_step(self):
+        workflow = workflow_yaml("""\
+jobs:
+  build:
+    steps:
+      - uses: ./.github/actions/jdk
+        if: false
+        with: {gradle: central}
+      - uses: ./.github/actions/jdk
+""")
+        self.assertIn("build: JDK gradle must be central, got None", release_cache_problems(workflow, {"build": "central"}))
+
+    def test_release_cache_guard_rejects_the_default_jdk_input(self):
+        workflow = workflow_yaml("jobs:\n  rebuild:\n    steps:\n      - uses: ./.github/actions/jdk\n")
+        self.assertIn("rebuild: JDK gradle must be disabled, got None", release_cache_problems(workflow, {"rebuild": "disabled"}))
+
+    def test_release_cache_guard_checks_env_and_direct_actions(self):
+        cases = (
+            ("env: {CROSSTUNE_MAVEN_MIRROR: 'true'}\njobs: {}", "workflow: mirror variable in env"),
+            ("jobs:\n  sign:\n    env: {CROSSTUNE_MAVEN_MIRROR: 'true'}\n    steps: []", "sign: mirror variable in env"),
+            ("jobs:\n  sign:\n    steps:\n      - run: echo hi\n        env: {CROSSTUNE_MAVEN_MIRROR: 'true'}", "sign: mirror variable in env"),
+            ("jobs:\n  sign:\n    steps:\n      - uses: gradle/actions/setup-gradle@v6", "sign: setup-gradle bypasses the JDK action"),
+            ("jobs:\n  sign:\n    steps:\n      - uses: actions/cache/restore@v6\n        with: {key: gradle-mirror-dependencies-v3-Linux}", "sign: mirror cache used directly"),
+        )
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertIn(expected, release_cache_problems(workflow_yaml(text), {}))
+
     def test_release_keeps_the_supported_signature_and_uses_checked_verifier_wheels(self):
         release = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
         self.assertIn("--alignment-preserved", release["sign"])
@@ -48,7 +149,7 @@ class PlayWorkflowsTest(unittest.TestCase):
         rebuild = release["rebuild"]
         self.assertNotIn("needs:", rebuild)
         self.assertIn("permissions: {}", rebuild)
-        # The shared JDK action sets setup-gradle's cache-disabled for this.
+        # It downloads its own dependencies and cannot reuse another build's outputs.
         self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: disabled", rebuild)
         self.assertIn("./gradlew :app:assembleRelease --no-build-cache", rebuild)
         self.assertIn("name: rebuilt\n          path: app/build/outputs/apk/release/app-release-unsigned.apk", rebuild)
