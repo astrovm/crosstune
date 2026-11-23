@@ -675,6 +675,35 @@ class ListeningTest {
     }
 
     @Test
+    fun radioGardenOpensTheHeardSongFromTheBarUsingItsOwnClock() {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1)
+        val stream = Following(PlaybackClock(250_000, SystemClock.elapsedRealtime()), "Radio Garden", canSeek = false,
+            appPackage = station.app, session = station.session)
+        val radio = FakePlayback().apply { access = true; unnamed.value = station; playing.value = stream }
+        val hearing = FakeHearing()
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.following == stream && hearing.listens > 0 }
+        val song = MusicMetadata("DtMF", "Bad Bunny", lengthMs = 180_000)
+        val heard = Heard.Song(song, appleMusicId = null, offsetMs = 8_000, startedAtMs = SystemClock.elapsedRealtime())
+        hearing.next.trySend(heard)
+        waitForText(song.title)
+
+        composeRule.onNode(hasTestTag(NOW_PLAYING_TAG) and hasText(song.title)).performClick()
+        waitUntil(TIMEOUT_MS) {
+            val state = controllerModel().uiState
+            state.result != null || state.player?.songless == true
+        }
+
+        val state = controllerModel().uiState
+        assertEquals(song.title, state.result?.title)
+        assertFalse(state.player?.songless == true)
+        assertSame(heard, state.playingUnnamed?.heard)
+    }
+
+    @Test
     fun radioGardenDropsTheConfirmedTitleWhenTheStationChanges() {
         val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", queueSong = MusicMetadata("First Song", "Band"))
         val radio = FakePlayback().apply { access = true; unnamed.value = station }
