@@ -1281,8 +1281,8 @@ internal class ExactMatcher(
         val appleIds: Set<Long>,
         /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
         val takeOnAlbum: Boolean,
-        /** A failed Apple or Deezer search could have supplied a length. */
-        var searchFailed: Boolean,
+        /** A failed Apple search could have supplied a length. */
+        val searchFailed: Boolean,
         /**
          * No store that could prove a row failed to answer: when one did, a name or a length that would have proved
          * the artist's own row may be missing. See [namesOf].
@@ -1413,7 +1413,6 @@ internal class ExactMatcher(
         names.deezerNames = deezerNames(metadata, tracks, knownLengths, artists.firstOrNull())
         if (foundLengths.isEmpty()) foundLengths.addAll(names.deezerNames.map { it.lengthMs })
         names.lengthsMs = foundLengths
-        if (needsLength && trackSearch.failed) names.searchFailed = true
         if (trackSearch.failed || artistSearch.failed) names.complete = false
     }
 
