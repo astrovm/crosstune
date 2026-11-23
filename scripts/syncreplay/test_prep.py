@@ -751,6 +751,22 @@ class HeardWhenAskedTest(unittest.TestCase):
             with patch.object(r.subprocess, 'run', side_effect=replay):
                 r.run(self.run_args(reopen_again=True, behind_again=0))
 
+    def test_a_first_play_can_end_after_one_hearing(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None):
+            with self.assertRaisesRegex(ValueError, 'needs --behind-again'):
+                r.run(self.run_args(first_until=64000))
+            with self.assertRaisesRegex(ValueError, 'after --from'):
+                r.run(self.run_args(start=64000, first_until=64000, behind_again=0))
+
+            def replay(*_, **__):
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertEqual(64000, asked['firstUntil'])
+                return argparse.Namespace(returncode=0)
+
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(first_until=64000, behind_again=0))
+
 
 class ReplayAllTest(unittest.TestCase):
     def test_it_replays_the_set_of_what_was_heard_it_is_asked_for(self):

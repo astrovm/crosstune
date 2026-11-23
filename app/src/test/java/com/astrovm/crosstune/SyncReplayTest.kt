@@ -177,7 +177,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
                 }
                 composeRule.runOnIdle { model().resumeFollowingNext() }
             }
-            val played = play(fromMs, lengthMs, behindMs)
+            val until = if (time == 0 && behind.size > 1) asked.optLong("firstUntil", lengthMs).coerceAtMost(lengthMs) else lengthMs
+            val played = play(fromMs, lengthMs, behindMs, until)
             File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())
             // Stopped at the end, then played again a while later.
             playback.playing.value = Following(PlaybackClock(lengthMs, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
@@ -229,7 +230,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
      * The song played from [fromMs] to [lengthMs], the app's clock [behindMs] behind what it plays:
      * each line shown, where the lines were put, and when they were known, all where the song really is.
      */
-    private fun play(fromMs: Long, lengthMs: Long, behindMs: Long): JSONObject {
+    private fun play(fromMs: Long, lengthMs: Long, behindMs: Long, untilMs: Long): JSONObject {
         this.behindMs = behindMs
         heardLog = JSONArray()
         val startedAt = fingerprintStartedAt ?: composeRule.runOnIdle {
@@ -253,7 +254,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val noted = HashSet<String>()
         var last = -1
         var atMs = fromMs
-        while (atMs < lengthMs) {
+        while (atMs < untilMs) {
             shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(STEP_MS))
             atMs = fromMs + ((SystemClock.elapsedRealtime() - startedAt) * playerSpeed).toLong()
             for (note in TimingLog.lastMinute().lines()) {
