@@ -85,6 +85,7 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.flow.MutableStateFlow
 import okhttp3.Request
 import java.io.File
 import org.json.JSONObject
@@ -4036,6 +4037,43 @@ class MainActivityTest {
         waitForDescription(string(R.string.retry_button))
         // Asked once more on the retry, since a busy service is worth asking again.
         assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.count { it.startsWith("https://lrclib.net") } >= 5)
+    }
+
+    @Test
+    fun theSongCardResumesAppleMusicWhenItAlreadyHasTheSongPaused() {
+        val service = MusicService.APPLE_MUSIC
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        val playback = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { playback }
+        val paused = MutableStateFlow<Following?>(null)
+        playback.appPlaying[service.packageName] = paused
+        shadowOf(app.packageManager).installPackage(installedApp(service.packageName, "Apple Music"))
+        linksShowHere()
+        prefs().edit().putString("default_target", service.name).commit()
+        HistoryStore(prefs()).add(
+            HistoryEntry(
+                MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, "https://open.spotify.com/track/$TRACK_ID"),
+                song,
+                mapOf(service.name to PreparedLink("https://music.apple.com/us/song/fixture/123", exact = true, matchingEnabled = true)),
+            )
+        )
+        launch()
+        click(string(R.string.history_open, song.title))
+        waitForDestinationReady()
+        val play = string(R.string.play_in_background, "Apple Music")
+        composeRule.onNodeWithContentDescription(play).assertDoesNotExist()
+
+        composeRule.runOnIdle {
+            paused.value = Following(PlaybackClock(60_000, SystemClock.elapsedRealtime(), playing = false), "Apple Music",
+                canSeek = true, appPackage = service.packageName)
+        }
+        waitForDescription(play)
+        click(play)
+        waitForDescription(string(R.string.player_playing_in, "Apple Music"))
+        assertEquals(listOf(true), playback.plays.toList())
+        assertEquals(listOf(service.packageName), playback.playedApps.toList())
+        assertTrue(playback.songsAsked.isEmpty())
+        assertNull(nextStartedActivity())
     }
 
     @Test
