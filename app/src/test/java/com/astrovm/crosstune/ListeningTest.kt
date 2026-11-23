@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.performSemanticsAction
 
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.core.app.NotificationManagerCompat
 
 import androidx.lifecycle.ViewModelProvider
 
@@ -52,6 +53,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.Manifest
 import org.robolectric.shadows.ShadowLog
+import org.robolectric.shadows.ShadowMediaSessionManager
 import org.robolectric.shadows.ShadowSettings
 import org.robolectric.shadows.ShadowWindowManagerImpl
 import org.robolectric.shadow.api.Shadow
@@ -73,6 +75,15 @@ import android.net.Uri
 import android.os.SystemClock
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
+import android.media.AudioManager
+import android.media.MediaDescription
+import android.media.MediaMetadata
+import android.media.session.MediaController
+import android.media.session.MediaSession
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.provider.Settings
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -92,6 +103,8 @@ import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performFirstLinkClick
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
@@ -233,6 +246,7 @@ class ListeningTest {
     private val fake = FakeSpotify()
     private var microphone = FakeMicrophone()
     private var controller: ActivityController<MainActivity>? = null
+    private var releaseRadioGarden: (() -> Unit)? = null
 
     /** Put back after, so other tests still tell the phone as the app does. */
     private val realPhone = MainActivity.phoneFactory
@@ -264,7 +278,11 @@ class ListeningTest {
 
     @After
     fun tearDown() {
-        controller?.destroyAndSettle()
+        try {
+            controller?.destroyAndSettle()
+        } finally {
+            releaseRadioGarden?.invoke()
+        }
         // Anything still listening hears the end.
         microphone.end()
         MainActivity.httpClientFactory = ::httpClient
@@ -515,6 +533,1003 @@ class ListeningTest {
         composeRule.onNodeWithTag(RESULT_TAG).assertExists()
         assertEquals(2, microphone.opened)
         assertEquals(listOf("Iris"), HistoryStore(prefs()).load().map { it.metadata.title })
+    }
+
+    @Test
+    fun radioGardenChecksItsQueueBeforeListeningAndOpensTheConfirmedSong() {
+        radioGarden("Groove Salad", "Transient - Innercalm")
+        radioGardenCatalog(title = "Innercalm", artist = "Transient")
+        var listens = 0
+        MainActivity.hearingFactory = { SongHearing { listens++; kotlinx.coroutines.awaitCancellation() } }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { listens > 0 || shown("Innercalm") }
+        assertEquals("Radio Garden already supplied a song", 0, listens)
+        assertTrue(shown("Transient · Radio Garden"))
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.result?.title == "Innercalm" }
+        assertEquals(listOf("Innercalm"), HistoryStore(prefs()).load().map { it.metadata.title })
+    }
+
+    @Test
+    fun radioGardenKeepsTheConfirmedTitleAcrossMissingAndUnusableQueueText() {
+        val song = "The Kid LAROI - A PLACE TO GO"
+        val queueSubtitle = radioGarden("1LIVE", song)
+        radioGardenCatalog(lengthMs = 180_000L)
+        ShadowLog.setLoggable(TIMING_LOG, android.util.Log.DEBUG)
+        launch()
+        waitForText("A PLACE TO GO")
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(60))
+
+        for (text in listOf(null, song, "Die junge Nacht der ARD", "the kid laroi - a place to go")) {
+            composeRule.runOnIdle { queueSubtitle(text) }
+            composeRule.waitForIdle()
+            assertEquals("A PLACE TO GO", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+            assertTrue(shown("A PLACE TO GO"))
+        }
+        assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
+        main.idleFor(java.time.Duration.ofSeconds(301))
+        waitForText("1LIVE")
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        composeRule.runOnIdle { queueSubtitle(song) }
+        composeRule.waitForIdle()
+        assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
+        assertFalse(shown("A PLACE TO GO"))
+        val logs = ShadowLog.getLogsForTag(TIMING_LOG).map { it.msg }
+        for (status in listOf("new", "confirmed", "kept", "forgotten")) {
+            assertTrue(logs.any { "radio queue check=$status station=1LIVE" in it })
+        }
+        assertTrue(logs.any { "radio queue source station=1LIVE" in it && "Die junge Nacht der ARD" in it })
+        assertFalse("radio queue" in TimingLog.lastMinute())
+    }
+
+    @Test
+    fun radioGardenKeepsTheConfirmedTitleUntilADifferentQueueSongIsVerified() {
+        val queueSubtitle = radioGarden("1LIVE", "Band - First Song")
+        fake.handler = { request ->
+            val body = when (request.url.queryParameter("term")) {
+                "First Song Band" -> gardenTrack("First Song", "Band")
+                "Second Song Band" -> gardenTrack("Second Song", "Band")
+                else -> "{}"
+            }
+            FakeSpotify.html(request, body)
+        }
+        launch()
+        waitForText("First Song")
+
+        composeRule.runOnIdle { queueSubtitle("ARD - Die junge Nacht der ARD") }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "junge%20Nacht" in it } }
+        assertEquals("First Song", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+        assertTrue(shown("First Song"))
+        composeRule.runOnIdle { queueSubtitle("Band - Second Song") }
+        waitForText("Second Song")
+        assertFalse(shown("First Song"))
+    }
+
+    @Test
+    fun radioGardenKeepsTheHeardTitleWhileTheQueuePolls() {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1)
+        val radio = FakePlayback().apply { access = true; unnamed.value = station }
+        val hearing = FakeHearing()
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        hearing.song("Love Sober", 8.0, artist = "KAMRAD")
+        waitForText("Love Sober")
+
+        val polls = listOf(null, "Die junge Nacht der ARD", "Bad Bunny - DtMF", "Bad Bunny - DtMF")
+        for ((index, subtitle) in polls.withIndex()) {
+            val item = MediaSession.QueueItem(MediaDescription.Builder().setTitle("1LIVE").setSubtitle(subtitle).build(), 0)
+            val claim = RadioGarden.queueSong("1LIVE", if (subtitle != null) listOf(item) else emptyList())
+            val update = station.copy(artworkUrl = "https://example.test/station-$index.png", queueSong = claim)
+            composeRule.runOnIdle { radio.unnamed.value = update }
+            waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing == update }
+            assertEquals("Love Sober", controllerModel().uiState.playingUnnamed?.heard?.metadata?.title)
+            assertTrue(shown("Love Sober"))
+            assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+            assertEquals(1, hearing.listens)
+        }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "DtMF" in it } }
+
+        radioGardenCatalog("Down", "Jay Sean", lengthMs = 10_000L)
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(queueSong = MusicMetadata("Down", "Jay Sean")) }
+        waitForText("Down")
+        assertNull(controllerModel().uiState.playingUnnamed?.heard)
+        assertFalse(shown("Love Sober"))
+    }
+
+    @Test
+    fun movingRadioGardenToAnotherOutputClearsTheSongHeardOnThePhone() {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1)
+        val radio = FakePlayback().apply { access = true; unnamed.value = station }
+        val hearing = FakeHearing()
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        hearing.song("Love Sober", 8.0, artist = "KAMRAD")
+        waitForText("Love Sober")
+
+        val cast = station.copy(where = Place.CAST)
+        composeRule.runOnIdle { radio.unnamed.value = cast }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing == cast }
+        assertNull(controllerModel().uiState.playingUnnamed?.heard)
+        assertFalse(shown("Love Sober"))
+        assertTrue(shown("1LIVE"))
+    }
+
+    @Test
+    fun radioGardenUsesTheHearingClockUntilPlaybackPausesOrChangesSession() {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1)
+        val following = Following(PlaybackClock(30_000, SystemClock.elapsedRealtime()), "Radio Garden", canSeek = false,
+            appPackage = station.app, session = 1)
+        val radio = FakePlayback().apply { access = true; unnamed.value = station; playing.value = following }
+        MainActivity.playbackFactory = { radio }
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.following == following && hearing.listens > 0 }
+        hearing.song("DtMF", 8.0, artist = "Bad Bunny")
+        waitForText("DtMF")
+
+        val refreshed = following.copy(clock = PlaybackClock(0, SystemClock.elapsedRealtime()))
+        composeRule.runOnIdle { radio.playing.value = refreshed }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.following == refreshed }
+        assertEquals("DtMF", controllerModel().uiState.playingUnnamed?.heard?.metadata?.title)
+        assertTrue(shown("DtMF"))
+
+        composeRule.runOnIdle { radio.playing.value = refreshed.copy(clock = refreshed.clock.copy(playing = false)) }
+        waitForText("1LIVE")
+        assertFalse(shown("DtMF"))
+        val listens = hearing.listens
+        composeRule.runOnIdle { radio.playing.value = refreshed }
+        waitUntil(TIMEOUT_MS) { hearing.listens > listens }
+        hearing.song("Love Sober", 8.0, artist = "KAMRAD")
+        waitForText("Love Sober")
+
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(session = 2) }
+        waitForText("1LIVE")
+        assertFalse(shown("Love Sober"))
+    }
+
+    @Test
+    fun radioGardenOpensTheHeardSongFromTheBarUsingItsOwnClock() {
+        val session = 1
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = session)
+        val stream = Following(PlaybackClock(250_000, SystemClock.elapsedRealtime()), "Radio Garden", canSeek = false,
+            appPackage = station.app, session = session)
+        val radio = FakePlayback().apply { access = true; unnamed.value = station; playing.value = stream }
+        val hearing = FakeHearing()
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.following == stream && hearing.listens > 0 }
+        val song = MusicMetadata("DtMF", "Bad Bunny", lengthMs = 180_000)
+        val heard = Heard.Song(song, appleMusicId = null, offsetMs = 8_000, startedAtMs = SystemClock.elapsedRealtime())
+        hearing.next.trySend(heard)
+        waitForText(song.title)
+
+        composeRule.onNode(hasTestTag(NOW_PLAYING_TAG) and hasText(song.title)).performClick()
+        waitUntil(TIMEOUT_MS) {
+            val state = controllerModel().uiState
+            state.result != null || state.player?.songless == true
+        }
+
+        val state = controllerModel().uiState
+        assertEquals(song.title, state.result?.title)
+        assertFalse(state.player?.songless == true)
+        assertSame(heard, state.playingUnnamed?.heard)
+    }
+
+    @Test
+    fun radioGardenDropsTheConfirmedTitleWhenTheStationChanges() {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", queueSong = MusicMetadata("First Song", "Band"))
+        val radio = FakePlayback().apply { access = true; unnamed.value = station }
+        MainActivity.playbackFactory = { radio }
+        radioGardenCatalog("First Song", "Band")
+        launch()
+        waitForText("First Song")
+
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(name = "Groove Salad", queueSong = null) }
+        waitForText("Groove Salad")
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        assertFalse(shown("First Song"))
+    }
+
+    @Test
+    fun radioGardenDoesNotCarryAStoppedSessionsTitleToTheSameStationInANewSession() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        radioGardenPlaybackWentAway(radio)
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(session = 2, queueSong = null) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing?.session == 2 }
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        assertTrue(shown("1LIVE"))
+    }
+
+    @Test
+    fun radioGardenDoesNotCarryAConfirmedTitleAcrossAnImmediateSessionChange() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(session = 2, queueSong = null) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing?.session == 2 }
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        assertTrue(shown("1LIVE"))
+    }
+
+    @Test
+    fun radioGardenShowsTheStationAfterPauseUntilTheNewSongIsConfirmed() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        radioGardenPlaybackWentAway(radio)
+        val show = MusicMetadata("Die junge Nacht der ARD", "ARD")
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(queueSong = show) }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "junge%20Nacht" in it } }
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        assertTrue(shown("1LIVE"))
+
+        radioGardenCatalog("Second Song", "Band")
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(queueSong = MusicMetadata("Second Song", "Band")) }
+        waitForText("Second Song")
+        assertFalse(shown("First Song"))
+    }
+
+    @Test
+    fun radioGardenConfirmsTheSameQueueSongAgainAfterPause() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        radioGardenPlaybackWentAway(radio)
+        val answering = CountDownLatch(1)
+        fake.handler = { request ->
+            answering.await(30, TimeUnit.SECONDS)
+            FakeSpotify.html(request, gardenTrack("First Song", "Band", 180_000L))
+        }
+        try {
+            composeRule.runOnIdle { radio.unnamed.value = station }
+            waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing == station }
+            assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+            assertTrue(shown("1LIVE"))
+            waitUntil(TIMEOUT_MS) { fake.requestedUrls.count { "itunes.apple.com/search?" in it } == 2 }
+            answering.countDown()
+            waitForText("First Song")
+        } finally {
+            answering.countDown()
+        }
+    }
+
+    @Test
+    fun radioGardenKeepsTheConfirmedTitleWhenTheVisibleBarFollowsTheStationAgain() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        val stream = Following(PlaybackClock(30_000, SystemClock.elapsedRealtime()), "Radio Garden", canSeek = false,
+            appPackage = station.app, session = 1)
+        composeRule.runOnIdle { radio.playing.value = stream }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.following == stream }
+        val follows = radio.followed.size
+        val withNewLogo = station.copy(artworkUrl = "https://example.test/1live.png")
+        val transportReady = kotlinx.coroutines.CompletableDeferred<Unit>()
+        try {
+            composeRule.runOnIdle {
+                radio.said = transportReady
+                radio.unnamed.value = withNewLogo
+            }
+            waitUntil(TIMEOUT_MS) {
+                radio.followed.size > follows && controllerModel().uiState.playingUnnamed?.playing == withNewLogo
+            }
+            assertNull(controllerModel().uiState.playingUnnamed?.following)
+            assertEquals("First Song", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+            composeRule.onNode(hasTestTag(NOW_PLAYING_TAG) and hasText("First Song")).assertIsDisplayed()
+            assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
+
+            transportReady.complete(Unit)
+            waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.following == stream }
+            composeRule.onNode(hasTestTag(NOW_PLAYING_TAG) and hasText("First Song")).assertIsDisplayed()
+        } finally {
+            transportReady.complete(Unit)
+        }
+    }
+
+    @Test
+    fun restartingTheWatcherClearsTheRadioTitleBeforeTheFirstNewPlaybackUpdate() {
+        radioGardenSessionWithConfirmedTitle()
+        val model = controllerModel()
+        requireNotNull(controller).pause().stop()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("First Song", model.uiState.playingUnnamed?.confirmedQueueSong?.title)
+
+        val watcher = CoroutineScope(Dispatchers.Main).launch(start = CoroutineStart.UNDISPATCHED) { model.watchPlayingNow() }
+        try {
+            // The restarted watcher has registered its collectors, and the main looper has not delivered their updates.
+            val bar = requireNotNull(model.uiState.playingUnnamed)
+            assertEquals("1LIVE", bar.playing.name)
+            assertNull(bar.confirmedQueueSong)
+        } finally {
+            watcher.cancel()
+        }
+    }
+
+    @Test
+    fun radioGardenConfirmsTheQueueAgainWhenThePlaybackWatcherRestarts() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        val activity = requireNotNull(controller)
+        val main = shadowOf(Looper.getMainLooper())
+        activity.pause().stop()
+        main.idle()
+        radio.unnamed.value = null
+        main.idle()
+        radio.unnamed.value = station
+        main.idle()
+
+        val answering = CountDownLatch(1)
+        fake.handler = { request ->
+            answering.await(30, TimeUnit.SECONDS)
+            FakeSpotify.html(request, gardenTrack("First Song", "Band", 180_000L))
+        }
+        try {
+            val follows = radio.followed.size
+            activity.restart().resume()
+            waitUntil(TIMEOUT_MS) {
+                radio.followed.size > follows && controllerModel().uiState.playingUnnamed?.playing == station
+            }
+            assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+            assertTrue(shown("1LIVE"))
+            waitUntil(TIMEOUT_MS) { fake.requestedUrls.count { "itunes.apple.com/search?" in it } == 2 }
+            answering.countDown()
+            waitForText("First Song")
+        } finally {
+            answering.countDown()
+        }
+    }
+
+    private fun radioGardenSessionWithConfirmedTitle(): Pair<FakePlayback, Unnamed> {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1,
+            queueSong = MusicMetadata("First Song", "Band"))
+        val radio = FakePlayback().apply { access = true; unnamed.value = station }
+        MainActivity.playbackFactory = { radio }
+        radioGardenCatalog("First Song", "Band", lengthMs = 180_000L)
+        launch()
+        waitForText("First Song")
+        return radio to station
+    }
+
+    private fun radioGardenPlaybackWentAway(radio: FakePlayback) {
+        composeRule.runOnIdle { radio.unnamed.value = null }
+        waitUntil(TIMEOUT_MS) { !barShown() }
+    }
+
+    @Test
+    fun radioGardenDoesNotCarryAConfirmationOrItsTimerAcrossSessions() {
+        ShadowLog.setLoggable(TIMING_LOG, android.util.Log.DEBUG)
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        val refreshed = station.copy(artworkUrl = "https://example.test/1live.png")
+        composeRule.runOnIdle { radio.unnamed.value = refreshed }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing == refreshed }
+        val newSession = station.copy(session = 2, queueSong = null)
+        composeRule.runOnIdle { radio.unnamed.value = newSession }
+        waitForText("1LIVE")
+        val back = station.copy(queueSong = null)
+        composeRule.runOnIdle { radio.unnamed.value = back }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing == back }
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        assertTrue(shown("1LIVE"))
+
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(361))
+        val decisions = ShadowLog.getLogsForTag(TIMING_LOG).map { it.msg }.filter {
+            "station=1LIVE session=1 title=First Song artist=Band" in it
+        }
+        assertEquals(listOf("new", "confirmed", "kept", "forgotten"), decisions.map { it.substringAfter("check=").substringBefore(' ') })
+    }
+
+    @Test
+    fun radioGardenKeepsTheOriginalDeadlineForAnUnverifiedTitleAcrossAQueueGap() {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1,
+            queueSong = MusicMetadata("First Song", "Band"))
+        val radio = FakePlayback().apply { access = true; unnamed.value = station }
+        val hearing = FakeHearing()
+        MainActivity.playbackFactory = { radio }
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val gap = station.copy(queueSong = null)
+        composeRule.runOnIdle { radio.unnamed.value = gap }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing == gap }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(91))
+        composeRule.runOnIdle { radio.unnamed.value = station }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing == station && hearing.listens >= 3 }
+        assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
+        assertTrue(shown("1LIVE"))
+    }
+
+    @Test
+    fun radioGardenChecksAShorterSongAtItsOwnDeadlineWhenTheCatalogAnswersLate() {
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        val second = station.copy(queueSong = MusicMetadata("Second Song", "Band"))
+        val answering = CountDownLatch(1)
+        fake.handler = { request ->
+            answering.await(30, TimeUnit.SECONDS)
+            FakeSpotify.html(request, gardenTrack("Second Song", "Band", 20_000))
+        }
+        try {
+            composeRule.runOnIdle { radio.unnamed.value = second }
+            waitUntil(TIMEOUT_MS) {
+                controllerModel().uiState.playingUnnamed?.playing == second &&
+                    fake.requestedUrls.count { "itunes.apple.com/search?" in it } == 2
+            }
+            val main = shadowOf(Looper.getMainLooper())
+            main.idleFor(java.time.Duration.ofSeconds(2))
+            assertTrue(shown("First Song"))
+            answering.countDown()
+            waitForText("Second Song")
+            main.idleFor(java.time.Duration.ofSeconds(27))
+            assertEquals(0, hearing.listens)
+            main.idleFor(java.time.Duration.ofSeconds(2))
+            assertEquals(1, hearing.listens)
+            assertTrue(shown("Second Song"))
+        } finally {
+            answering.countDown()
+        }
+    }
+
+    @Test
+    fun radioGardenListensWhenItsQueueNamesOnlyTheCity() {
+        val queueSubtitle = radioGarden("1LIVE", "Cologne, Germany")
+        radioGardenCatalog()
+        var listens = 0
+        var stopped = 0
+        MainActivity.hearingFactory = {
+            SongHearing {
+                listens++
+                try {
+                    kotlinx.coroutines.awaitCancellation()
+                } finally {
+                    stopped++
+                }
+            }
+        }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        assertTrue(shown("1LIVE"))
+        assertTrue(fake.requestedUrls.none { "/search?" in it })
+        assertTrue(HistoryStore(prefs()).load().isEmpty())
+        composeRule.runOnIdle { queueSubtitle("The Kid LAROI - A PLACE TO GO") }
+        waitForText("A PLACE TO GO")
+        assertEquals(1 to 1, listens to stopped)
+        composeRule.runOnIdle { queueSubtitle("Cologne, Germany") }
+        assertTrue(shown("A PLACE TO GO"))
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(181))
+        waitUntil(TIMEOUT_MS) { listens == 2 && shown("1LIVE") }
+        assertFalse(shown("A PLACE TO GO"))
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        assertTrue(HistoryStore(prefs()).load().isEmpty())
+    }
+
+    @Test
+    fun radioGardenListensWhenItsQueueLooksLikeASongTheCatalogDoesNotKnow() {
+        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
+        radioGardenCatalog(artist = "Someone else")
+        var listens = 0
+        MainActivity.hearingFactory = { SongHearing { listens++; kotlinx.coroutines.awaitCancellation() } }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { listens == 1 }
+        assertTrue(fake.requestedUrls.any { it.startsWith("https://itunes.apple.com/search?") })
+        assertTrue(shown("1LIVE"))
+        assertFalse(shown("A PLACE TO GO"))
+    }
+
+    @Test
+    fun radioGardenListensWhenAppleMusicReturnsADifferentKanaTitle() {
+        radioGarden("1LIVE", "Band - ガラス")
+        radioGardenCatalog(title = "カラス", artist = "Band")
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens > 0 || shown("ガラス") }
+        assertEquals(1, hearing.listens)
+        assertTrue(shown("1LIVE"))
+        assertFalse(shown("ガラス"))
+    }
+
+    @Test
+    fun radioGardenUsesTheActiveItemInAMultiItemQueue() {
+        radioGarden("1LIVE", "Previous - Old song", activeId = 1, otherSubtitle = "The Kid LAROI - A PLACE TO GO")
+        radioGardenCatalog()
+        allowMicrophone()
+        launch()
+        waitForText("A PLACE TO GO")
+        assertTrue(fake.requestedUrls.any { "A%20PLACE%20TO%20GO" in it })
+        assertFalse(fake.requestedUrls.any { "Old%20song" in it })
+    }
+
+    @Test
+    fun radioGardenIgnoresASingleItemThatIsNotActive() {
+        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO", activeId = 1)
+        radioGardenCatalog()
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens > 0 || shown("A PLACE TO GO") }
+        assertEquals(1, hearing.listens)
+        assertTrue(shown("1LIVE"))
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com/search?" in it })
+    }
+
+    @Test
+    fun radioGardenUsesASingleItemWhenThereIsNoActiveId() {
+        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO", activeId = MediaSession.QueueItem.UNKNOWN_ID.toLong())
+        radioGardenCatalog()
+        launch()
+        waitForText("A PLACE TO GO")
+    }
+
+    @Test
+    fun radioGardenKeepsAThreeMinuteSongUntilTheDeadlineListenHearsSilence() {
+        val queueSubtitle = radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
+        radioGardenCatalog(lengthMs = 180_000L)
+        prefs().edit().putBoolean("playing_bar", false).commit()
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        val main = shadowOf(Looper.getMainLooper())
+        waitUntil(TIMEOUT_MS) { field(controllerModel(), "queueCheck") != null }
+        main.idleFor(java.time.Duration.ofSeconds(30))
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com/search?" in it })
+        composeRule.runOnIdle { controllerModel().setPlayingBar(true) }
+        waitForText("A PLACE TO GO")
+        main.idleFor(java.time.Duration.ofSeconds(120))
+        composeRule.runOnIdle { queueSubtitle("The Kid LAROI - A PLACE TO GO") }
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(35))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(6))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(shown("A PLACE TO GO"))
+        hearing.next.trySend(Heard.Nothing)
+        waitForText("1LIVE")
+        assertFalse(shown("A PLACE TO GO"))
+        composeRule.runOnIdle { queueSubtitle("The Kid LAROI - A PLACE TO GO") }
+        assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.songless == true }
+        assertTrue(HistoryStore(prefs()).load().isEmpty())
+    }
+
+    @Test
+    fun radioGardenKeepsALongBroadcastAfterHearingTheSameSong() {
+        val hearing = startRadioGardenWithKnownLength()
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(191))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(shown("A PLACE TO GO"))
+        hearing.song("A PLACE TO GO", 190.0, artist = "The Kid LAROI")
+        composeRule.waitForIdle()
+        assertNull(controllerModel().uiState.playingUnnamed?.heard)
+        main.idleFor(java.time.Duration.ofSeconds(169))
+        assertEquals(1, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        assertNotNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+    }
+
+    @Test
+    fun radioGardenKeepsTheRepeatedSongAndChecksAgainAfterItsLength() {
+        val hearing = startRadioGardenWithKnownLength()
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(191))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        hearing.song("A PLACE TO GO", 11.0, artist = "The Kid LAROI")
+        composeRule.waitForIdle()
+        main.idleFor(java.time.Duration.ofSeconds(179))
+        assertEquals(1, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(2))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        assertNotNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+    }
+
+    @Test
+    fun radioGardenClearsTheConfirmedSongWhenARecheckHearsADifferentSong() {
+        ShadowLog.setLoggable(TIMING_LOG, android.util.Log.DEBUG)
+        val hearing = startRadioGardenWithKnownLength()
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(191))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(shown("A PLACE TO GO"))
+        hearing.song("Next song", 8.0)
+        waitForText("Next song")
+        assertFalse(shown("A PLACE TO GO"))
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        main.idleFor(java.time.Duration.ofSeconds(170))
+        assertEquals(1, ShadowLog.getLogsForTag(TIMING_LOG).count { "radio queue check=forgotten station=1LIVE" in it.msg })
+    }
+
+    @Test
+    fun radioGardenUsesTheHeardSongWhenTheQueueExpiresDuringAListen() {
+        val hearing = startRadioGardenWithKnownLength()
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(191))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        main.idleFor(java.time.Duration.ofSeconds(170))
+        waitForText("1LIVE")
+
+        hearing.song("Next song", 8.0)
+        composeRule.waitForIdle()
+        assertEquals("Next song", controllerModel().uiState.playingUnnamed?.heard?.metadata?.title)
+        assertTrue(shown("Next song"))
+    }
+
+    @Test
+    fun radioGardenKeepsAConfirmedSongForTwiceItsLengthWithoutTheMicrophone() {
+        val hearing = startRadioGardenWithKnownLength(byMicrophone = false)
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(191))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(168))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(2))
+        waitForText("1LIVE")
+        assertFalse(shown("A PLACE TO GO"))
+    }
+
+    @Test
+    fun radioGardenExpiresTheTitleOffScreenAfterMicrophoneAccessIsRevoked() {
+        val hearing = startRadioGardenWithKnownLength()
+        val main = shadowOf(Looper.getMainLooper())
+        composeRule.runOnIdle { controllerModel().setPlayingBar(false) }
+        waitUntil(TIMEOUT_MS) { !barShown() }
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+
+        main.idleFor(java.time.Duration.ofSeconds(359))
+        assertEquals("A PLACE TO GO", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+        main.idleFor(java.time.Duration.ofSeconds(2))
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        assertEquals(0, hearing.listens)
+
+        composeRule.runOnIdle { controllerModel().setPlayingBar(true) }
+        waitForText("1LIVE")
+        assertFalse(shown("A PLACE TO GO"))
+    }
+
+    @Test
+    fun radioGardenExpiresTheTitleOnReturnFromDeepSleep() {
+        startRadioGardenWithKnownLength(byMicrophone = false)
+        val activity = requireNotNull(controller)
+        val model = controllerModel()
+        activity.pause().stop()
+        shadowOf(Looper.getMainLooper()).idle()
+        val uptime = SystemClock.uptimeMillis()
+        org.robolectric.shadows.ShadowSystemClock.simulateDeepSleep(java.time.Duration.ofSeconds(361))
+        assertEquals(uptime, SystemClock.uptimeMillis())
+        assertEquals("A PLACE TO GO", model.uiState.playingUnnamed?.confirmedQueueSong?.title)
+
+        // Run the activity's resume refresh without a new station update or an uptime tick.
+        model.refreshSystemState()
+        assertNull(model.uiState.playingUnnamed?.confirmedQueueSong)
+        activity.restart().resume()
+        waitForText("1LIVE")
+        assertFalse(shown("A PLACE TO GO"))
+    }
+
+    @Test
+    fun radioGardenUsesOnlyTheRemainingTimeWhenWakingBeforeExpiry() {
+        ShadowLog.setLoggable(TIMING_LOG, android.util.Log.DEBUG)
+        startRadioGardenWithKnownLength(byMicrophone = false)
+        val model = controllerModel()
+        composeRule.runOnIdle { model.setPlayingBar(false) }
+        waitUntil(TIMEOUT_MS) { !barShown() }
+        org.robolectric.shadows.ShadowSystemClock.simulateDeepSleep(java.time.Duration.ofSeconds(355))
+
+        model.refreshSystemState()
+        assertEquals("A PLACE TO GO", model.uiState.playingUnnamed?.confirmedQueueSong?.title)
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(6))
+        assertNull(model.uiState.playingUnnamed?.confirmedQueueSong)
+        main.idleFor(java.time.Duration.ofSeconds(355))
+        assertEquals(1, ShadowLog.getLogsForTag(TIMING_LOG).count { "radio queue check=forgotten station=1LIVE" in it.msg })
+    }
+
+    @Test
+    fun radioGardenChecksAtTheTrackDeadlineIfMicrophoneAccessIsGrantedWhileWaiting() {
+        val hearing = startRadioGardenWithKnownLength(byMicrophone = false)
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(60))
+        allowMicrophone()
+
+        main.idleFor(java.time.Duration.ofSeconds(125))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(6))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(shown("A PLACE TO GO"))
+    }
+
+    @Test
+    fun radioGardenChecksSoonAfterMicrophoneAccessIsGrantedPastTheTrackDeadline() {
+        val hearing = startRadioGardenWithKnownLength(byMicrophone = false)
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(200))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+
+        allowMicrophone()
+        main.idleFor(java.time.Duration.ofSeconds(2))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(shown("A PLACE TO GO"))
+    }
+
+    private fun startRadioGardenWithKnownLength(byMicrophone: Boolean = true): FakeHearing {
+        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
+        radioGardenCatalog(lengthMs = 180_000L)
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        if (byMicrophone) allowMicrophone()
+        launch()
+        waitForText("A PLACE TO GO")
+        return hearing
+    }
+
+    @Test
+    fun radioGardenRenewsTheTitleByEarWhenAppleMusicGivesNoLength() {
+        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
+        radioGardenCatalog()
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitForText("A PLACE TO GO")
+        val main = shadowOf(Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(85))
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(6))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        hearing.song("A PLACE TO GO", 91.0, artist = "The Kid LAROI")
+        composeRule.waitForIdle()
+        assertEquals("A PLACE TO GO", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+        main.idleFor(java.time.Duration.ofSeconds(89))
+        assertEquals(1, hearing.listens)
+        assertTrue(shown("A PLACE TO GO"))
+        main.idleFor(java.time.Duration.ofSeconds(2))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        assertEquals("A PLACE TO GO", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+    }
+
+    @Test
+    fun radioGardenConfirmsALongVowelSpelledWithAWaveDash() {
+        radioGarden("1LIVE", "Band - スーパースター")
+        radioGardenCatalog(title = "スーパ～スタ〜", artist = "Band")
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens > 0 || shown("スーパースター") }
+        assertEquals(0, hearing.listens)
+        assertTrue(shown("スーパースター"))
+    }
+
+    @Test
+    fun radioGardenDoesNotSendANewsLabelOrContactDetailsToAppleMusic() {
+        val queueSubtitle = radioGarden("1LIVE", "Radio Desk - Noticias")
+        radioGardenCatalog(lengthMs = 180_000L)
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com/search?" in it })
+        composeRule.runOnIdle { queueSubtitle("The Kid LAROI - A PLACE TO GO") }
+        waitForText("A PLACE TO GO")
+        composeRule.runOnIdle { queueSubtitle("Visit example.com - Call 555 1234") }
+        assertTrue(shown("A PLACE TO GO"))
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(191))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        hearing.next.trySend(Heard.Nothing)
+        waitForText("1LIVE")
+        assertFalse(shown("A PLACE TO GO"))
+        assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search?" in it })
+    }
+
+    @Test
+    fun radioGardenListensWhenAppleMusicCannotBeReached() {
+        radioGarden("1LIVE", "The Kid LAROI - A PLACE TO GO")
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com") throw IOException("Apple Music unreachable")
+            FakeSpotify.html(request, "{}")
+        }
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        allowMicrophone()
+        launch()
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        assertTrue(fake.requestedUrls.any { "itunes.apple.com/search?" in it })
+        assertTrue(shown("1LIVE"))
+        assertFalse(shown("A PLACE TO GO"))
+    }
+
+    @Test
+    fun radioGardenDropsTheAppleMusicAnswerForAPreviousQueueItem() {
+        val queueSubtitle = radioGarden("1LIVE", "Band - First Song")
+        val answering = CountDownLatch(1)
+        val first = CountDownLatch(1)
+        val second = CountDownLatch(1)
+        val releaseSecond = CountDownLatch(1)
+        fake.handler = { request ->
+            val body = when (request.url.queryParameter("term")) {
+                "First Song Band" -> {
+                    first.await(30, TimeUnit.SECONDS)
+                    answering.countDown()
+                    gardenTrack("First Song", "Band")
+                }
+                "Second Song Band" -> {
+                    second.countDown()
+                    releaseSecond.await(30, TimeUnit.SECONDS)
+                    gardenTrack("Second Song", "Band")
+                }
+                else -> "{}"
+            }
+            FakeSpotify.html(request, body)
+        }
+        try {
+            launch()
+            waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "First%20Song" in it } }
+            composeRule.runOnIdle { queueSubtitle("Band - Second Song") }
+            waitUntil(TIMEOUT_MS) { second.count == 0L }
+            assertEquals("The old response is still held", 1L, answering.count)
+            first.countDown()
+            waitUntil(TIMEOUT_MS) { answering.count == 0L }
+            assertTrue(shown("1LIVE"))
+            assertFalse(shown("First Song"))
+            releaseSecond.countDown()
+            waitForText("Second Song")
+            assertFalse(shown("First Song"))
+        } finally {
+            first.countDown()
+            releaseSecond.countDown()
+        }
+    }
+
+    @Test
+    fun radioGardenListensForTheClockAndFollowsTheNextQueueSongsWords() {
+        val (queueSubtitle, hearing) = radioGardenWithWords()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.result?.title == "First Song" }
+        hearing.song("First Song", 12.0)
+        waitUntil(TIMEOUT_MS) { (controllerModel().uiState.following?.clock?.positionMs ?: 0) >= 12_000 }
+        composeRule.runOnIdle { queueSubtitle("Band - Second Song") }
+        waitForText("The chorus of Second Song")
+        assertFalse(shown("The chorus of First Song"))
+        assertNull(controllerModel().uiState.following)
+        assertNull(field(controllerModel(), "heardClock"))
+        assertTrue(HistoryStore(prefs()).load().any { it.metadata.title == "Second Song" })
+        hearing.song("Second Song", 3.0)
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.following?.clock?.positionMs == 3_000L }
+    }
+
+    @Test
+    fun radioGardenKeepsFreshQueueLyricsWhenTheMicrophoneHearsAnotherSong() {
+        val (_, hearing) = radioGardenWithWords()
+        hearing.song("First Song", 12.0)
+        waitUntil(TIMEOUT_MS) { (controllerModel().uiState.following?.clock?.positionMs ?: 0) >= 12_000 }
+        hearing.song("Unrelated Song", 2.0)
+        waitUntil(TIMEOUT_MS) { hearing.listens >= 3 }
+        assertTrue(HistoryStore(prefs()).load().none { it.metadata.title == "Unrelated Song" })
+        assertTrue(shown("The chorus of First Song"))
+    }
+
+    @Test
+    fun radioGardenUsesTheExistingLyricsListenToCheckTheQueueAtTheDeadline() {
+        val (_, hearing) = radioGardenWithWords(lengthMs = 180_000L)
+        hearing.song("First Song", 12.0)
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.following?.clock?.positionMs == 12_000L }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(191))
+        assertEquals("First Song", controllerModel().uiState.playingUnnamed?.confirmedQueueSong?.title)
+        hearing.song("Second Song", 10.0)
+        waitForText("The chorus of Second Song")
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+    }
+
+    @Test
+    fun radioGardenFollowsTheNextQueueSongWhileItsWordsFloat() {
+        val (queueSubtitle) = radioGardenWithWords()
+        val floating = floatNow()
+        try {
+            composeRule.runOnIdle { queueSubtitle("Band - Second Song") }
+            waitUntil(TIMEOUT_MS) {
+                controllerModel().uiState.lyricsFor?.title == "Second Song" &&
+                    "The chorus of Second Song" in controllerModel().uiState.lyrics
+            }
+        } finally {
+            floating.destroy()
+        }
+    }
+
+    private fun radioGardenWithWords(lengthMs: Long? = null): Pair<(String) -> Unit, FakeHearing> {
+        val queueSubtitle = radioGarden("1LIVE", "Band - First Song")
+        val hearing = FakeHearing()
+        MainActivity.hearingFactory = { hearing }
+        MainActivity.listenAlongPauseMs = 0
+        fake.handler = { request ->
+            val title = if ("Second" in request.url.toString()) "Second Song" else "First Song"
+            val body = when (request.url.host) {
+                "itunes.apple.com" -> gardenTrack(title, "Band", lengthMs)
+                "lrclib.net" -> """[{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:00.00] The start of $title\n[00:10.00] The chorus of $title"}]"""
+                else -> "{}"
+            }
+            FakeSpotify.html(request, body)
+        }
+        allowMicrophone()
+        launch()
+        waitForText("First Song")
+        click(string(R.string.tile_lyrics_label))
+        waitForText("The chorus of First Song")
+        return queueSubtitle to hearing
+    }
+
+    private fun radioGardenCatalog(title: String = "A PLACE TO GO", artist: String = "The Kid LAROI", lengthMs: Long? = null) {
+        fake.handler = { request ->
+            val body = if (request.url.host == "itunes.apple.com" && request.url.encodedPath == "/search") {
+                gardenTrack(title, artist, lengthMs)
+            } else "{}"
+            FakeSpotify.html(request, body)
+        }
+    }
+
+    private fun gardenTrack(title: String, artist: String, lengthMs: Long? = null): String {
+        val length = lengthMs?.let { ""","trackTimeMillis":$it""" }.orEmpty()
+        return """{"results":[{"trackName":"$title","artistName":"$artist",
+            "trackViewUrl":"https://music.apple.com/us/album/fixture/123?i=456"$length}]}"""
+    }
+
+    /** Radio Garden's Android session announces a station and puts the stream text in a single queue item. */
+    private fun radioGarden(station: String, subtitle: String, activeId: Long = 0, otherSubtitle: String? = null): (String?) -> Unit {
+        val garden = RadioGarden.PACKAGE
+        val listenerSetting = "enabled_notification_listeners"
+        val previous = Settings.Secure.getString(app.contentResolver, listenerSetting)
+        val audio = app.getSystemService(AudioManager::class.java)
+        val sounding = audio.isMusicActive
+        val session = MediaSession(app, "KotlinAudioPlayer")
+        releaseRadioGarden = {
+            session.release()
+            ShadowMediaSessionManager.reset()
+            shadowOf(audio).setIsMusicActive(sounding)
+            // AndroidX keeps the old packages when the setting is null, even after Robolectric resets it.
+            Settings.Secure.putString(app.contentResolver, listenerSetting, previous.orEmpty())
+            NotificationManagerCompat.getEnabledListenerPackages(app)
+        }
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply {
+            packageName = garden
+            applicationInfo = ApplicationInfo().apply { packageName = garden; nonLocalizedLabel = "Radio Garden" }
+        })
+        Settings.Secure.putString(app.contentResolver, listenerSetting,
+            ComponentName(app, NowPlayingListener::class.java).flattenToString())
+        shadowOf(audio).setIsMusicActive(true)
+        val controller = MediaController(app, session.sessionToken)
+        shadowOf(controller).setPackageName(garden)
+        shadowOf(controller).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, station).build())
+        shadowOf(controller).setPlaybackState(PlaybackState.Builder()
+            .setState(PlaybackState.STATE_PLAYING, 0, 1f, SystemClock.elapsedRealtime()).setActiveQueueItemId(activeId).build())
+        shadowOf(app.getSystemService(MediaSessionManager::class.java)).addController(controller)
+        fun item(text: String, id: Long) =
+            MediaSession.QueueItem(MediaDescription.Builder().setTitle(station).setSubtitle(text).build(), id)
+        fun queue(text: String?) = listOfNotNull(text?.let { item(it, 0) }, otherSubtitle?.let { item(it, 1) }).toMutableList()
+        var items = queue(subtitle)
+        MainActivity.playbackFactory = { MediaSessionPlayback(it, queueOf = { items }) }
+        return { text ->
+            items = queue(text)
+            shadowOf(controller).callbacks.forEach { it.onQueueChanged(items) }
+        }
     }
 
     @Test

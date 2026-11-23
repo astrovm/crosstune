@@ -231,7 +231,8 @@ internal interface PlaybackSource {
 
     /**
      * Where [song] is in the app playing it, as that changes; null while no app plays it. Only [app], by package, when
-     * one is named. Asked of [app], what plays with no song named is [song] by just what it calls it, as
+     * one is named. A named song with both [app] and [session] can follow the same song in any app if that session goes away.
+     * Asked of [app], what plays with no song named is [song] by just what it calls it, as
      * [Unnamed.played], even nothing; see [playingUnnamed]. So is it for each control asked of [app] below.
      */
     fun follow(song: MusicMetadata, app: String? = null, session: Int? = null): Flow<Following?>
@@ -494,7 +495,7 @@ internal class MediaSessionPlayback(
             }
         }
         fun pick(controllers: List<MediaController>) {
-            val playing = appFor(song, controllers, app, token, session)
+            val playing = controllerToFollow(song, controllers, app, token, session)
             if (playing?.sessionToken != followed?.sessionToken) {
                 followed?.unregisterCallback(callback)
                 modesWatched()
@@ -552,6 +553,15 @@ internal class MediaSessionPlayback(
         }
     }.distinctUntilChanged()
 
+    private fun controllerToFollow(
+        song: MusicMetadata, controllers: List<MediaController>, app: String?, token: MediaSession.Token?, session: Int?
+    ): MediaController? {
+        val released = session?.let { number ->
+            app != null && token == null && !song.unnamed && controllers.none { sessionNumbers.peek(it.sessionToken) == number }
+        } == true
+        return if (released) appFor(song, controllers) else appFor(song, controllers, app, token, session)
+    }
+
     /** [app]'s clock kept steady; see [SteadyClock]. With no app, there's nothing to keep. */
     private fun steadyClock(app: String?) = SteadyClock(app?.let(late::get), notedClocks.getOrPut(app.orEmpty(), ::NotedClock)) { if (app != null) late[app] = it }
 
@@ -573,7 +583,8 @@ internal class MediaSessionPlayback(
      */
     private fun MediaController.has(song: MusicMetadata, app: String?): Boolean {
         if (!song.unnamed) return plays(song)
-        val (title, artist) = calls()
+        val metadata = metadata
+        val (title, artist) = metadata.calls(said(this, snapshot = metadata))
         val said = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         return app != null && title == song.title && (artist == song.artist || !Songless.namesNoSong(said, artist, songName(said, artist)))
     }
@@ -582,18 +593,23 @@ internal class MediaSessionPlayback(
      * What it calls what it plays, as what names no song is shown and asked for by: its title, read as Crosstune
      * once read a song's, "Fake Song" from "Fake Song.mp3", "" with none; and its artist, as the app has it.
      */
-    private fun MediaController.calls(): Pair<String, String> {
-        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }.orEmpty()
-        val read = said(this)?.takeIf { it.artist.isBlank() }?.title?.takeIf { it.isNotBlank() }
-        return (read ?: title) to metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+    private fun MediaMetadata?.calls(named: MusicMetadata?): Pair<String, String> {
+        val title = this?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }.orEmpty()
+        val read = named?.takeIf { it.artist.isBlank() }?.title?.takeIf { it.isNotBlank() }
+        return (read ?: title) to this?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
     }
 
     /** What it plays, as what names no song is shown. */
     private fun MediaController.unnamed(): Unnamed {
-        val (title, artist) = calls()
-        val named = said(this)
+        val metadata = metadata
+        val named = said(this, snapshot = metadata)
+        val (title, artist) = metadata.calls(named)
+        val garden = packageName == RadioGarden.PACKAGE
+        val state = playbackState
+        val queueSong = if (garden) RadioGarden.queueSong(title, queueOf(this), state?.activeQueueItemId) else null
         return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let { coverOf(it, sessionToken) }, artist,
-            where = place(), said = named != null, caption = named?.unnamed == true, reportsState = playbackState != null, session = sessionNumbers.of(sessionToken))
+            where = place(), said = named != null, caption = garden || named?.unnamed == true, reportsState = state != null,
+            session = sessionNumbers.of(sessionToken), queueSong = queueSong)
     }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?, session: Int?) = seekIn(song, positionMs, app, null, session)
@@ -999,6 +1015,7 @@ internal class MediaSessionPlayback(
 
     /** What [controller] plays, as a song, unless it names none; [asked] is how long the song asked for is, when known. */
     private fun playing(controller: MediaController, asked: Long? = null, forRecognition: Boolean = false): Heard.Song? {
+        if (controller.packageName == RadioGarden.PACKAGE) return null
         val metadata = controller.metadata ?: return null
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
@@ -1169,6 +1186,7 @@ internal class MediaSessionPlayback(
     }
 
     private fun MediaController.plays(song: MusicMetadata): Boolean {
+        if (packageName == RadioGarden.PACKAGE) return false
         val playing = metadata ?: return false
         if (anotherRecording(playing, song)) return false
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
