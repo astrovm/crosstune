@@ -1200,7 +1200,7 @@ class ExactMatcherTest {
         }
         var clock = 0L
         val matcher = ExactMatcher(fake.client(), "US", now = { clock })
-        assertEquals(ExactMatcher.Match.Failed, matcher.lookFor(MusicService.YOUTUBE_MUSIC, song))
+        assertEquals(ExactMatcher.Match.WaitingForNames, matcher.lookFor(MusicService.YOUTUBE_MUSIC, song))
         offline = false
         clock += ExactMatcher.UNSURE_FOR_MS
         assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=original000"), matcher.lookFor(MusicService.YOUTUBE_MUSIC, song))
@@ -1880,7 +1880,9 @@ class ExactMatcherTest {
         clock = 0L
         val retry = ExactMatcher(fake.client(), "AR", now = { clock })
         namesAndTabs(videos = listOf(fan, untimed), apple = apple, elsewhere = us, failing = setOf("US"))
-        assertEquals(ExactMatcher.Match.WaitingForNames, runBlocking { retry.lookFor(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), runBlocking {
+            retry.lookFor(MusicService.YOUTUBE_MUSIC, song)
+        })
         namesAndTabs(videos = listOf(fan, untimed), apple = apple, elsewhere = us)
         clock += ExactMatcher.UNSURE_FOR_MS
         assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), runBlocking {
