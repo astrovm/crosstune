@@ -135,10 +135,10 @@ class UntimedSingingTest {
     }
 
     /** The music app plays the song from [positionMs], or pauses there; each call is news to Crosstune. */
-    private fun plays(positionMs: Long = 0, playing: Boolean = true, durationMs: Long? = SONG_MS, video: Boolean = false) {
+    private fun plays(positionMs: Long = 0, playing: Boolean = true, durationMs: Long? = SONG_MS, video: Boolean = false, speed: Float = 1f) {
         startedAt = SystemClock.elapsedRealtime()
         startedFromMs = positionMs
-        playback.playing.value = Following(PlaybackClock(positionMs, startedAt, 1f, playing), "YouTube Music", canSeek = true, video = video, durationMs = durationMs)
+        playback.playing.value = Following(PlaybackClock(positionMs, startedAt, speed, playing), "YouTube Music", canSeek = true, video = video, durationMs = durationMs)
         composeRule.waitForIdle()
     }
 
@@ -405,6 +405,21 @@ class UntimedSingingTest {
         plays(durationMs = FIFTEEN_MINUTES_MS)
         composeRule.waitForIdle()
         assertEquals(90, singing.hears)
+    }
+
+    @Test
+    fun doubleSpeedHearingsCoverTheirFullSongTime() {
+        singing.answer = {
+            val at = SystemClock.elapsedRealtime()
+            ShadowSystemClock.advanceBy(Duration.ofSeconds(SingingListener.SECONDS.toLong()))
+            Sung(at, listOf(HeardWord("Sing", 1_000)))
+        }
+        openLyrics()
+        plays(durationMs = 40_000, speed = 2f)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        // Two 20-second hearings cover 80 seconds of song at double speed, or two plays.
+        assertEquals(2, singing.hears)
     }
 
     @Test
