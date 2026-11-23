@@ -1439,7 +1439,7 @@ internal class ExactMatcher(
 
     /** Only the asked title and artist were searched, so an empty name cannot identify an alternate artist. */
     private fun deezerNames(metadata: MusicMetadata, results: List<JSONObject>, lengths: List<Long>, first: JSONObject?): List<DeezerName> {
-        if (metadata.title.isBlank() || metadata.artist.isBlank()) return emptyList()
+        if (metadata.title.isBlank()) return emptyList()
         val artistId = deezerArtistId(first) ?: return emptyList()
         return results.mapNotNull { result -> deezerName(metadata, result, lengths, artistId) }
     }
