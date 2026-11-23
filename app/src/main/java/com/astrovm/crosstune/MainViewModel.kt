@@ -1692,7 +1692,8 @@ internal class MainViewModel(
     /** The links saved with [entry] that are still good: found with exact matching as it's set now. */
     private fun savedDestinations(entry: HistoryEntry): Map<Destination, PreparedLink> =
         uiState.destinations.mapNotNull { destination ->
-            entry.destinationLinks[destination.key]?.takeIf { it.canUseFor(uiState.exactMatch) }?.let { destination to it }
+            val saved = entry.destinationLinks[destination.key] ?: return@mapNotNull null
+            if (saved.canUseFor(uiState.exactMatch)) destination to saved else null
         }.toMap()
 
     /** A destination or exact-match preference change prepares the current result again. */
