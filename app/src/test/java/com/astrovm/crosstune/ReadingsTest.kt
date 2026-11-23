@@ -788,7 +788,10 @@ class ReadingsTest {
 
     @Test
     fun dictionaryWordsKeepTheirReadingsInContext() {
-        val cases = mapOf("身体中" to "からだじゅう", "薄化粧" to "うすげしょう", "丸印" to "まるじるし", "一口" to "ひとくち")
+        val cases = mapOf(
+            "身体中" to "からだじゅう", "薄化粧" to "うすげしょう", "丸印" to "まるじるし", "一口" to "ひとくち",
+            "身体中を" to "からだじゅうを", "丸印の" to "まるじるしの", "一口だけで" to "ひとくちだけで"
+        )
         fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.reading }
         val expected = cases.values.toList()
         assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
