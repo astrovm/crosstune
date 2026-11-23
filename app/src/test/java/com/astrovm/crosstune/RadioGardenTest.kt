@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import android.media.MediaDescription
 import android.media.session.MediaSession
+import android.util.Log
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
@@ -9,6 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowLog
 
 @RunWith(RobolectricTestRunner::class)
 class RadioGardenTest {
@@ -22,6 +25,18 @@ class RadioGardenTest {
             RadioGarden.queueSong("1LIVE", listOf(item("1LIVE", "The Kid LAROI - A PLACE TO GO"))))
         assertEquals(MusicMetadata("Song - Live", "Artist"),
             RadioGarden.queueSong("1LIVE", listOf(item("1LIVE", "Artist – Song - Live"))))
+    }
+
+    @Test
+    fun keepsTheFullQueueSongButLogsOnly240SubtitleCharacters() {
+        val title = "A".repeat(240) + " hidden tail"
+        val text = "Artist - $title"
+        ShadowLog.setLoggable(TIMING_LOG, Log.DEBUG)
+
+        assertEquals(MusicMetadata(title, "Artist"), RadioGarden.queueSong("1LIVE", listOf(item("1LIVE", text))))
+
+        val logged = ShadowLog.getLogsForTag(TIMING_LOG).single { it.msg.startsWith("radio queue source ") }
+        assertEquals(JSONObject.quote(text.take(240)), logged.msg.substringAfter(" subtitle="))
     }
 
     @Test

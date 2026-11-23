@@ -621,6 +621,79 @@ class ListeningTest {
     }
 
     @Test
+    fun radioGardenDoesNotCarryAStoppedSessionsTitleToTheSameStationInANewSession() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        radioGardenPlaybackWentAway(radio)
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(session = 2, queueSong = null) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing?.session == 2 }
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        assertTrue(shown("1LIVE"))
+    }
+
+    @Test
+    fun radioGardenDoesNotCarryAConfirmedTitleAcrossAnImmediateSessionChange() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(session = 2, queueSong = null) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing?.session == 2 }
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        assertTrue(shown("1LIVE"))
+    }
+
+    @Test
+    fun radioGardenShowsTheStationAfterPauseUntilTheNewSongIsConfirmed() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        radioGardenPlaybackWentAway(radio)
+        val show = MusicMetadata("Die junge Nacht der ARD", "ARD")
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(queueSong = show) }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "junge%20Nacht" in it } }
+        assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+        assertTrue(shown("1LIVE"))
+
+        radioGardenCatalog("Second Song", "Band")
+        composeRule.runOnIdle { radio.unnamed.value = station.copy(queueSong = MusicMetadata("Second Song", "Band")) }
+        waitForText("Second Song")
+        assertFalse(shown("First Song"))
+    }
+
+    @Test
+    fun radioGardenConfirmsTheSameQueueSongAgainAfterPause() {
+        val (radio, station) = radioGardenSessionWithConfirmedTitle()
+        radioGardenPlaybackWentAway(radio)
+        val answering = CountDownLatch(1)
+        fake.handler = { request ->
+            answering.await(30, TimeUnit.SECONDS)
+            FakeSpotify.html(request, gardenTrack("First Song", "Band", 180_000L))
+        }
+        try {
+            composeRule.runOnIdle { radio.unnamed.value = station }
+            waitUntil(TIMEOUT_MS) { controllerModel().uiState.playingUnnamed?.playing == station }
+            assertNull(controllerModel().uiState.playingUnnamed?.confirmedQueueSong)
+            assertTrue(shown("1LIVE"))
+            waitUntil(TIMEOUT_MS) { fake.requestedUrls.count { "itunes.apple.com/search?" in it } == 2 }
+            answering.countDown()
+            waitForText("First Song")
+        } finally {
+            answering.countDown()
+        }
+    }
+
+    private fun radioGardenSessionWithConfirmedTitle(): Pair<FakePlayback, Unnamed> {
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1,
+            queueSong = MusicMetadata("First Song", "Band"))
+        val radio = FakePlayback().apply { access = true; unnamed.value = station }
+        MainActivity.playbackFactory = { radio }
+        radioGardenCatalog("First Song", "Band", lengthMs = 180_000L)
+        launch()
+        waitForText("First Song")
+        return radio to station
+    }
+
+    private fun radioGardenPlaybackWentAway(radio: FakePlayback) {
+        composeRule.runOnIdle { radio.unnamed.value = null }
+        waitUntil(TIMEOUT_MS) { !barShown() }
+    }
+
+    @Test
     fun radioGardenListensWhenItsQueueNamesOnlyTheCity() {
         val queueSubtitle = radioGarden("1LIVE", "Cologne, Germany")
         radioGardenCatalog()
