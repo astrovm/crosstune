@@ -1419,7 +1419,7 @@ internal class MainViewModel(
         logRadioQueue(action, unnamed.name, unnamed.queueSong, unnamed.session)
     }
 
-    private fun logRadioQueue(action: String, station: String?, song: MusicMetadata?, session: Int? = null) {
+    private fun logRadioQueue(action: String, station: String?, song: MusicMetadata?, session: Int?) {
         if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) {
             Log.d(TIMING_LOG, "radio queue check=$action station=$station session=$session title=${song?.title} artist=${song?.artist}")
         }
