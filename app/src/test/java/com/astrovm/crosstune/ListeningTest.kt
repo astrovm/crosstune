@@ -676,9 +676,10 @@ class ListeningTest {
 
     @Test
     fun radioGardenOpensTheHeardSongFromTheBarUsingItsOwnClock() {
-        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = 1)
+        val session = 1
+        val station = Unnamed(RadioGarden.PACKAGE, "Radio Garden", "1LIVE", session = session)
         val stream = Following(PlaybackClock(250_000, SystemClock.elapsedRealtime()), "Radio Garden", canSeek = false,
-            appPackage = station.app, session = station.session)
+            appPackage = station.app, session = session)
         val radio = FakePlayback().apply { access = true; unnamed.value = station; playing.value = stream }
         val hearing = FakeHearing()
         MainActivity.playbackFactory = { radio }
