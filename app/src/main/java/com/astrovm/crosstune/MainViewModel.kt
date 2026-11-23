@@ -3381,8 +3381,8 @@ internal class MainViewModel(
     private suspend fun hearOn(hearing: SingingHearing, song: MusicMetadata, lines: List<LyricLine>) {
         // Where in the song the singing was heard up to, so the next while heard is further on.
         var heardTo: Long? = null
-        // Heard nothing to match, the words may be timed far off, so where they're timed says nothing.
-        var straightOn = false
+        // A pending far hearing already says the written times may be wrong; listen where the song is.
+        var straightOn = syncStore.pending(song, lines) != null
         // Whether any singing was found where the words are, while hearing on.
         var found = false
         while (true) {

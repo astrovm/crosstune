@@ -1068,10 +1068,8 @@ class SingingTest {
             1 to "恋のプログラムを 狂わせないでね", 2 to "出逢いと別れ 上手に打ち込んで", 3 to "時間がくれば終わる don't hurry", 4 to "愛に傷ついた あの日からずっと",
             14 to "彼に似てるわなぜか 思い出と重なり合う", 15 to "グラスを落として急に 涙ぐんでもわけは", 16 to "尋ねないでね", 17 to "夜更けの高速で 眠りにつくころ"
         )
-        val sheet = (times.mapIndexed { index, at -> at to (nearby[index] ?: "filler$index") } +
-            listOf(180_000 to "filler27", 183_000 to "filler28", 186_000 to "filler29")).sortedBy { it.first }
-        lines = sheet.map { it.second }
-        val synced = sheet.joinToString("\n") { (at, line) -> "[%02d:%02d.%02d] %s".format(at / 60_000, at / 1000 % 60, at % 1000 / 10, line) }
+        lines = times.indices.map { nearby[it] ?: "filler$it" }
+        val synced = lines.zip(times) { line, at -> "[%02d:%02d.%02d] %s".format(at / 60_000, at / 1000 % 60, at % 1000 / 10, line) }.joinToString("\n")
         fake.handler = { request ->
             FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":309,"syncedLyrics":"$synced"}]""" else """{"title":"Demo","author_name":"Band"}""")
         }
