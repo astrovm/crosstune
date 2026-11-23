@@ -47,17 +47,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
             if (wrong < next) continue
             val crossing = crossingWord(text, tokens[wrong])
             if (!wrongStart(text, tokens[wrong]) && !crossing) continue
-            // A word that starts wrong is searched again with the word before it, as the kana it starts on is said
-            // with that word's last, and with the one before that while that one starts on a small kana too, っし in
-            // ないっしゅん, so the search knows what kana it comes after.
-            var first = wrong - 1
-            while (first > next && (smallAfterKana(text, tokens[first].position) ||
-                    (crossing && tokens[first - 1].surface.all(Readings::isKana)))) first--
-            // Words that start wrong one after another are searched again together, and a small っ at the end doubles
-            // the kana after it, so that word is searched again with it, にっ and き.
-            var last = wrong
-            while (last + 1 < tokens.size && (tokens[last].surface.last() in "っッ" || wrongStart(text, tokens[last + 1]) ||
-                    (crossing && tokens[last + 1].surface.all(Readings::isKana)))) last++
+            val (first, last) = searchWindow(text, tokens, wrong, next, crossing)
             out += tokens.subList(next, first)
             val from = tokens[first].position
             val to = tokens[last].position + tokens[last].surface.length
@@ -66,6 +56,23 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         }
         out += tokens.subList(next, tokens.size)
         return out
+    }
+
+    /** Search a whole kana run around a crossing word; otherwise keep the kana needed to say the small kana together. */
+    private fun searchWindow(text: String, tokens: List<Token>, wrong: Int, next: Int, crossing: Boolean): Pair<Int, Int> {
+        var first = wrong - 1
+        while (first > next && includeBefore(text, tokens, first, crossing)) first--
+        var last = wrong
+        while (last + 1 < tokens.size && includeAfter(text, tokens, last, crossing)) last++
+        return first to last
+    }
+
+    private fun includeBefore(text: String, tokens: List<Token>, at: Int, crossing: Boolean) =
+        smallAfterKana(text, tokens[at].position) || (crossing && tokens[at - 1].surface.all(Readings::isKana))
+
+    private fun includeAfter(text: String, tokens: List<Token>, at: Int, crossing: Boolean): Boolean {
+        if (tokens[at].surface.last() in "っッ") return true
+        return wrongStart(text, tokens[at + 1]) || (crossing && tokens[at + 1].surface.all(Readings::isKana))
     }
 
     /** The word IPADIC knows for [text], when it keeps it whole. */
@@ -229,12 +236,9 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         val at = token.position
         if (at == 0 || !Readings.isKana(text[at - 1]) || !Readings.isKana(text[at])) return false
         val known = words()
-        for (start in maxOf(0, at - known.longestSearch + 1) until at) {
-            for (end in at + 1..minOf(text.length, start + known.longestSearch)) {
-                if (text.substring(start, end) in known.small) return true
-            }
+        return (maxOf(0, at - known.longestSearch + 1) until at).any { start ->
+            (at + 1..minOf(text.length, start + known.longestSearch)).any { end -> text.substring(start, end) in known.small }
         }
-        return false
     }
 
     /**
