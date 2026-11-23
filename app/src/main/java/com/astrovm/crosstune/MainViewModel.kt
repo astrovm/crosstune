@@ -1122,7 +1122,7 @@ internal class MainViewModel(
         followedUnnamed = null
         // The station may have paused out of sight. Keep expired text tied to its old deadline.
         if (lastConfirmedQueue?.isConfirmedAt(now()) == true) forgetRadioPlayback()
-        if (shownUnnamed?.playing?.app == RadioGarden.PACKAGE) {
+        if (shownUnnamed != null && shownUnnamed.playing.app == RadioGarden.PACKAGE) {
             uiState = uiState.copy(playingUnnamed = shownUnnamed.copy(heard = null, confirmedQueueSong = null))
         }
         val source = playback?.takeIf { it.hasAccess() }
