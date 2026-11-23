@@ -1039,6 +1039,20 @@ class SingingTest {
     }
 
     @Test
+    fun consecutiveHearingsAtDoubleSpeedDoNotOverlap() {
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here")
+        lyricsTimedFor(null, listOf(4, 7, 10, 32, 35, 38, 52, 55, 58))
+        singing.answer = { Sung(SystemClock.elapsedRealtime(), emptyList()) }
+        openLyrics()
+        plays(positionMs = 3_000, speed = 2f)
+        waitUntil { singing.hears == 1 }
+        passes(11_000)
+        assertEquals(1, singing.hears)
+        passes(10_000)
+        waitUntil { singing.hears >= 2 }
+    }
+
+    @Test
     fun farHearingsThatDifferByMoreThanTheirUncertaintyDoNotConfirm() {
         playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
         lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
