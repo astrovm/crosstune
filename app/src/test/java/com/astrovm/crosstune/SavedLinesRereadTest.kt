@@ -134,6 +134,18 @@ class SavedLinesRereadTest {
     }
 
     @Test
+    fun anOldDictionaryReadingIsNotMistakenForAUsersCorrection() {
+        val line = SavedLine(
+            "都会の夜", reading = "まちのよ", title = "Demo", artist = "Band",
+            ruby = listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よ")), readByHand = true
+        )
+        assertEquals(
+            listOf(Ruby("都会", "まち", Reader.USER), Ruby("の"), Ruby("夜", "よ")),
+            line.marked(Script.JAPANESE)
+        )
+    }
+
+    @Test
     fun ofTheSameWordTwiceOnlyTheOneTheUserPutRightCarriesTheirReading() {
         val was = kept("夜と夜", Ruby("夜", "よる"), Ruby("と"), Ruby("夜", "よ", Reader.USER)).copy(readByHand = true)
         val carried = SavedLine("青い夜と夜", reading = null, title = "Demo", artist = "Band").carrying(was, Script.JAPANESE)
