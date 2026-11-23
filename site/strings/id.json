@@ -103,6 +103,10 @@
       "Untuk mengenali lagu dari sebuah link, Crosstune membaca halaman publik atau API publik di layanan asalnya: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam, atau Google, dan memuat sampulnya. Untuk membukanya di aplikasi lain, judul dan artis dikirim ke pencarian aplikasi itu. Kalau pencarian itu tidak yakin, judul dan artis juga dikirim ke pencarian Apple dan Deezer. Deezer juga dapat menerima nama artis saja untuk mengenalinya. Untuk Spotify, keduanya dikirim ke ListenBrainz, nama artis ke MusicBrainz, dan halaman publik Spotify dibaca. Putar semua dan Acak melakukan ini untuk setiap lagu, dan YouTube membuat playlist dari video yang ditemukan. Nama lagu yang kamu ketik dikirim ke pencarian Deezer dan Apple. Tujuan khusus menerima kata pencarian di alamat yang kamu atur. Apple juga dapat menerima judul dan artis hasil pencarian untuk memeriksa apakah rekamannya sama. MusicBrainz dapat menerima nama artis untuk memeriksa nama lainnya."
     ],
     [
+      "p",
+      "Jika pencarian di toko regional Apple gagal atau tidak menemukan lagu yang cocok, Crosstune dapat mengirim judul dan nama artis ke toko Apple di AS."
+    ],
+    [
       "h2",
       "Lirik, chord, dan terjemahan"
     ],
@@ -116,7 +120,7 @@
     ],
     [
       "p",
-      "Dengan akses notifikasi, Crosstune melihat lagu apa yang diputar aplikasi musikmu dan sampai mana, jadi lirik mengikuti dan pemutarnya bisa menjeda, melewati, atau menyukai lagu di aplikasimu. Untuk Simple Radio, Crosstune juga memeriksa apakah notifikasi media radio itu tampil, tanpa membaca teksnya. Ini tetap di ponselmu. Kartu latihan memutar barisnya di aplikasi yang sudah membuka lagu itu, atau di pemutar YouTube kecil di kartu, yang mencari video lagu seperti yang dilakukan sebuah link. Kamu tidak masuk ke YouTube di sana."
+      "Dengan akses notifikasi, Crosstune melihat lagu apa yang diputar aplikasi musikmu dan sampai mana, jadi lirik mengikuti dan pemutarnya bisa menjeda, melewati, atau menyukai lagu di aplikasimu. Untuk Simple Radio, Crosstune juga memeriksa apakah notifikasi media radio itu tampil, tanpa membaca teksnya. Ini tetap di ponselmu. Kartu latihan memutar barisnya di aplikasi yang sudah membuka lagu itu, atau di pemutar YouTube kecil di kartu, yang mencari video lagu seperti yang dilakukan sebuah link. Kamu tidak masuk ke YouTube di sana. Untuk Radio Garden, Crosstune membagi teks stasiun tentang yang sedang diputar menjadi judul dan nama artis, lalu mengirim kedua bagian itu ke Apple Music. Teks ini biasanya menjelaskan sebuah lagu. Stasiun dapat mengisi kolom tersebut dengan teks lain."
     ],
     [
       "h2",

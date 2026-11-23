@@ -103,6 +103,10 @@
       "To name a link's song, Crosstune reads its public page or API on the service it's from: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam or Google, and loads its cover. To open it in another app, the title and artist go to that app's search. When that search isn't sure, they also go to Apple's and Deezer's searches. Deezer may also receive the artist's name alone to identify the artist. For Spotify, they go to ListenBrainz, and the artist's name to MusicBrainz, and Spotify's public pages are read. Play all and Shuffle do this for each song, and YouTube makes the playlist from the videos found. A song name you type goes to Deezer's and Apple's searches. A custom destination gets the search words in the address you set. Apple may also receive a search result’s title and artist to check whether it is the same recording. MusicBrainz may receive the artist’s name to check the artist’s other names."
     ],
     [
+      "p",
+      "When Apple's regional search finds no match or fails, Crosstune can send the title and artist to Apple's US store."
+    ],
+    [
       "h2",
       "Lyrics, chords and translations"
     ],
@@ -116,7 +120,7 @@
     ],
     [
       "p",
-      "With notification access, Crosstune sees which song your music apps play and how far in, so the lyrics follow along and its player can pause, skip or like the song in your app. For Simple Radio, it also checks that the radio's media notification is showing, without reading its text. This stays on your phone. A practice card plays its line in an app that already has the song open, or in a small YouTube player on the card, which finds the song's video as a link does. You aren't signed in to YouTube there."
+      "With notification access, Crosstune sees which song your music apps play and how far in, so the lyrics follow along and its player can pause, skip or like the song in your app. For Simple Radio, it also checks that the radio's media notification is showing, without reading its text. This stays on your phone. A practice card plays its line in an app that already has the song open, or in a small YouTube player on the card, which finds the song's video as a link does. You aren't signed in to YouTube there. For Radio Garden, Crosstune splits the station's now-playing text into a title and an artist and sends those parts to Apple Music. The text usually describes a song. The station can supply other text in those fields."
     ],
     [
       "h2",

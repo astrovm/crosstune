@@ -12,6 +12,8 @@ internal data class UiState(
     /** Set while the microphone is listening for a song playing nearby. */
     val listening: Boolean = false,
     val result: MusicMetadata? = null,
+    /** The card's song and package once the selected app reports a session for it. */
+    private val resultInApp: Pair<MusicMetadata, String>? = null,
     /** Set when [result] lists songs like the one it's named after, as ChatGPT found them. */
     val songsLike: Boolean = false,
     /** Prepared direct links or search fallbacks, reused by Open, Copy and Share for this result. */
@@ -271,13 +273,28 @@ internal data class UiState(
     val playsRightAway: Boolean
         get() = linksInCrosstune && playRightAway && hasDefault
 
-    /** Whether the song's app, installed and with the song, or maybe with it, can be asked to play it while Crosstune stays open. */
+    private val songApp: Destination.Service?
+        get() = (resultDestination as? Destination.Service)?.takeIf {
+            result?.type == ItemType.TRACK && it.service in installed
+        }
+
+    /** When a new song would open the app, watch for an existing session that can play it here. */
+    val resultSessionToWatch: Pair<MusicMetadata, String>?
+        get() = songApp?.takeIf { it.opensAppToStartSong(phone) }?.let { app -> result?.let { it to app.packageName } }
+
+    /** Whether the installed app can be asked to play this song while Crosstune stays open. */
     val canPlayResult: Boolean
-        get() = result?.type == ItemType.TRACK && resultDestination.let { it is Destination.Service && it.service in installed && it.service.playsAskedSongs } && !resultMissing
+        get() = resultSessionToWatch?.let { it == resultInApp } ?: (songApp?.service?.playsAskedSongs == true && !resultMissing)
 
     /** Whether the words open are the result's, found and not followed in an app yet, so they can start it there. */
     val canPlayFromLyrics: Boolean
-        get() = canPlayResult && following?.app == null && !isLoadingLyrics &&
+        get() = canPlayResult && canUseAppFromLyrics
+
+    val canOpenFromLyrics: Boolean
+        get() = canUseAppFromLyrics && !resultMissing && resultSessionToWatch?.let { it != resultInApp } == true
+
+    private val canUseAppFromLyrics: Boolean
+        get() = following?.app == null && !isLoadingLyrics &&
             lyricsFor?.let { it.title == result?.title && it.artist == result.artist } == true
 
     /** Whether the share sheet's top row offers Crosstune's entries; Android shows them for any shared text. */
@@ -392,10 +409,15 @@ internal data class NowPlaying(val song: MusicMetadata, val following: Following
 
 /**
  * An app that plays with no song named, as [playing] has it, and the song [heard] in it once one is,
- * by its sound or the microphone. The app's own name for a song always comes before it. [following]
- * it in the app, for its buttons and where it is, as for a song.
+ * by its sound or the microphone, or [confirmedQueueSong] from the station's queue after a catalog check.
+ * [following] it in the app, for its buttons and where it is, as for a song.
  */
-internal data class PlayingUnnamed(val playing: Unnamed, val heard: Heard.Song? = null, val following: Following? = null) {
+internal data class PlayingUnnamed(
+    val playing: Unnamed,
+    val heard: Heard.Song? = null,
+    val following: Following? = null,
+    val confirmedQueueSong: MusicMetadata? = null
+) {
     val canControl: Boolean get() = playing.reportsState
 }
 

@@ -103,6 +103,10 @@
       "Para nombrar la canción de un link, Crosstune lee su página pública o su API en el servicio de donde viene: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam o Google, y carga su portada. Para abrirla en otra app, el título y el artista van a la búsqueda de esa app. Cuando esa búsqueda no está segura, también van a las búsquedas de Apple y de Deezer. Deezer también puede recibir el nombre del artista solo para identificarlo. Con Spotify, van a ListenBrainz y el nombre del artista a MusicBrainz, y se leen las páginas públicas de Spotify. Reproducir todo y Aleatorio hacen esto con cada canción, y YouTube arma la playlist con los videos encontrados. El nombre de una canción que escribís va a las búsquedas de Deezer y de Apple. Un destino personalizado recibe las palabras de búsqueda en la dirección que configurás. Apple también puede recibir el título y el artista de un resultado para comprobar si es la misma grabación. MusicBrainz puede recibir el nombre del artista para comprobar sus otros nombres."
     ],
     [
+      "p",
+      "Si la búsqueda en la tienda regional de Apple falla o no encuentra la canción, Crosstune puede enviar el título y el artista a la tienda de Apple de EE. UU."
+    ],
+    [
       "h2",
       "Letras, acordes y traducciones"
     ],
@@ -116,7 +120,7 @@
     ],
     [
       "p",
-      "Con acceso a notificaciones, Crosstune ve qué canción reproducen tus apps de música y en qué parte van, así la letra la sigue y su reproductor puede pausar, saltar o darle me gusta a la canción en tu app. Con Simple Radio, también revisa que se esté mostrando la notificación multimedia de la radio, sin leer su texto. Esto se queda en tu teléfono. Una tarjeta de práctica reproduce su línea en una app que ya tiene la canción abierta, o en un pequeño reproductor de YouTube en la tarjeta, que busca el video de la canción como lo hace un link. Ahí no tenés la sesión iniciada en YouTube."
+      "Con acceso a notificaciones, Crosstune ve qué canción reproducen tus apps de música y en qué parte van, así la letra la sigue y su reproductor puede pausar, saltar o darle me gusta a la canción en tu app. Con Simple Radio, también revisa que se esté mostrando la notificación multimedia de la radio, sin leer su texto. Esto se queda en tu teléfono. Una tarjeta de práctica reproduce su línea en una app que ya tiene la canción abierta, o en un pequeño reproductor de YouTube en la tarjeta, que busca el video de la canción como lo hace un link. Ahí no tenés la sesión iniciada en YouTube. Para Radio Garden, Crosstune separa en título y artista el texto que muestra la emisora sobre lo que está sonando y le envía esas partes a Apple Music. Ese texto suele describir una canción. La emisora puede poner otro texto en esos campos."
     ],
     [
       "h2",
