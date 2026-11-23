@@ -2053,6 +2053,41 @@ class PlaybackTest {
     }
 
     @Test
+    fun pausedRadioGardenDoesNotUseAnotherAppsSound() {
+        allow()
+        sounding()
+        val station = "1LIVE"
+        val radio = player(RadioGarden.PACKAGE, "Radio Garden", station, null, at = NOW)
+        val morphe = player("app.morphe.android.apps.youtube.music", "YT Music Morphe", song.title, song.artist,
+            state = PlaybackState.STATE_PAUSED, album = "After Hours")
+        shadowOf(sessions).addController(radio)
+        shadowOf(sessions).addController(morphe)
+        val stations = mutableListOf<String?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.unnamedUpdates().collect { stations += it?.name } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(station, stations.last())
+
+        fun switchTo(playing: MediaController, paused: MediaController) {
+            val started = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build()
+            val stopped = PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 0, 0f, NOW).build()
+            shadowOf(playing).setPlaybackState(started)
+            shadowOf(paused).setPlaybackState(stopped)
+            shadowOf(paused).executeOnPlaybackStateChanged(stopped)
+            shadowOf(playing).executeOnPlaybackStateChanged(started)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+
+        // The phone stays audible while focus moves between the apps. Radio Garden keeps its station metadata.
+        switchTo(morphe, radio)
+        assertNull(stations.last())
+        assertEquals(morphe.packageName, playback.nowPlaying()?.app)
+
+        switchTo(radio, morphe)
+        assertEquals(station, stations.last())
+        assertNull(playback.nowPlaying())
+    }
+
+    @Test
     fun radioGardenStationMetadataCannotBeOpenedOrMatchedAsASong() {
         allow()
         sounding()
