@@ -1428,6 +1428,15 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anUnclosedArtistVideoTitleDoesNotReplaceTheFan() = runBlocking {
+        val song = MusicMetadata("Song", "Artist", lengthMs = 240_000)
+        val fan = youTubeMusicRow("Artist - Song", "Fan • 1M views • 4:00", videoId = "fan00000000")
+        val own = youTubeMusicRow("Artist「Song", "Artist • 1M views • 4:00", videoId = "original000")
+        namesAndTabs(videos = listOf(fan, own), apple = mapOf("US" to appleSong("Song", "Artist", 240_000)))
+        assertEquals("https://music.youtube.com/watch?v=fan00000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
     fun aClosingBracketInTheArtistsNameDoesNotEndTheSong() = runBlocking {
         val song = MusicMetadata("Song", "Artist」", lengthMs = 240_000)
         val fan = youTubeMusicRow("Artist」「Song」MV", "Fan • 1M views • 4:00", videoId = "fan00000000")
