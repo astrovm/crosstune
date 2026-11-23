@@ -979,6 +979,31 @@ class SingingTest {
     }
 
     @Test
+    fun recordedFarHearingIsKeptAfterClosing() {
+        // The saved 39 s hearing of Bizarre Love Triangle, with unrelated lines replaced by filler.
+        val times = listOf(0, 10, 13, 17, 19, 21, 26, 29, 33, 35, 37, 42, 58, 61, 66, 69, 74, 91, 94, 98, 100, 102, 106, 110, 114, 116, 118, 123, 139, 142, 147, 151, 155, 159, 163, 167)
+        val nearby = mapOf(1 to "Every time I think of you", 2 to "I feel shot right through with a bolt of blue", 3 to "It's no problem of mine", 4 to "But it's a problem I find", 5 to "Living a life that I can't leave behind", 6 to "But there's no sense in telling me", 7 to "The wisdom of the fool won't set you free", 8 to "But that's the way that it goes")
+        lines = times.indices.map { nearby[it] ?: "filler$it" }
+        lyricsTimedFor(null, times)
+        singing.answer = {
+            if (singing.hears > 1) awaitCancellation()
+            val heard = listOf(1580L to "It's", 2220L to "no", 2660L to "problem,", 3300L to "it's", 3760L to "no", 3760L to "problem,", 3780L to "it's", 4160L to "a", 4540L to "problem,", 5080L to "it's", 5780L to "fine", 6360L to "Live", 6600L to "in", 6820L to "a", 7240L to "life", 7600L to "that", 7900L to "I", 8280L to "can't", 8720L to "leave", 9020L to "you", 10220L to "head", 10780L to "There's", 11080L to "no", 11660L to "steps", 12240L to "in", 12980L to "standing", 14060L to "There's", 14600L to "no")
+            Sung(startedAt, heard.map { (at, text) -> HeardWord(text, at + 485) })
+        }
+        openLyrics()
+        plays(positionMs = 38_515)
+        passes(20_000)
+        waitUntil { singing.hears >= 1 }
+        composeRule.waitForIdle()
+        assertTrue("Expected the far hearing to move the line, got ${model().uiState.lyricLines[3].timeMs} ms", model().uiState.lyricLines[3].timeMs > 30_000L)
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertTrue(prefs().contains("lyrics_sync"))
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        assertTrue(model().uiState.lyricLines[3].timeMs > 30_000L)
+    }
+
+    @Test
     fun aLoneFarWhileIsReportedOnLeavingOnlyOnceItsWholeAnswerIsIn() {
         val times = listOf(2, 4, 6, 30, 32, 34)
         lyricsTimedFor(null, times)
