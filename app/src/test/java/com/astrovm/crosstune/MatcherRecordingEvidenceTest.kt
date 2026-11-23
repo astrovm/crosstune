@@ -14,12 +14,13 @@ import java.util.zip.GZIPInputStream
 @RunWith(RobolectricTestRunner::class)
 class MatcherRecordingEvidenceTest {
     private val fake = FakeSpotify()
+    private var lastMatch: ExactMatcher.Match? = null
     private val captured by lazy {
         val stream = requireNotNull(javaClass.getResourceAsStream("/matcher/recording-evidence.json.gz"))
         JSONArray(GZIPInputStream(stream).bufferedReader().use { it.readText() })
     }
 
-    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false): String? {
+    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false, reverseDown: Boolean = false): String? {
         val song = captured.getJSONObject(index)
         val metadata = MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = song.getLong("lengthMs"))
         val us = JSONArray().also { results ->
@@ -35,6 +36,7 @@ class MatcherRecordingEvidenceTest {
                     val store = url.queryParameter("country").orEmpty()
                     val term = url.queryParameter("term").orEmpty()
                     val results = if (url.encodedPath == "/search" && term == song.optString("reverseTerm") && store == "JP") {
+                        if (reverseDown) throw IOException("candidate search is down")
                         val recorded = song.getJSONObject("reverse").getJSONArray("results")
                         if (!differentRecording) recorded else JSONArray(recorded.toString()).also { answers ->
                             for (i in 0 until answers.length()) if (answers.getJSONObject(i).optLong("trackId") == song.getLong("id")) {
@@ -56,7 +58,8 @@ class MatcherRecordingEvidenceTest {
             }
             FakeSpotify.html(request, response.toString())
         }
-        return runBlocking { ExactMatcher(fake.client(), "US", timeoutMs = 60_000).find(MusicService.YOUTUBE_MUSIC, metadata) }
+        lastMatch = runBlocking { ExactMatcher(fake.client(), "US", timeoutMs = 60_000).lookFor(MusicService.YOUTUBE_MUSIC, metadata) }
+        return (lastMatch as? ExactMatcher.Match.Found)?.url
     }
 
     @Test fun peaceSignPrefersTheArtistsVideo() = assertEquals(WATCH + "9aJVr5tTTWk", find(0, true))
@@ -68,6 +71,11 @@ class MatcherRecordingEvidenceTest {
     @Test fun jealousOpensTheJapaneseSongWithoutAppleNativeNames() = assertEquals(WATCH + "8eQdsCZWrLg", find(3, false))
 
     @Test fun aDifferentAppleRecordingDoesNotProveTheJapaneseSong() = assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, differentRecording = true))
+
+    @Test fun aFailedCandidateSearchDoesNotMakeTheFanUploadLasting() {
+        assertEquals(WATCH + "tTN1GZbKU3w", find(2, false, reverseDown = true))
+        assertEquals(ExactMatcher.Match.Found(WATCH + "tTN1GZbKU3w", lasting = false), lastMatch)
+    }
 
     private companion object {
         const val WATCH = "https://music.youtube.com/watch?v="

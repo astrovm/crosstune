@@ -853,7 +853,7 @@ internal class ExactMatcher(
         val rows = items.map(::row)
         val videoRows = videos.map(::row)
         if (names.appleFound) {
-            songRow(metadata, rows, videoRows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+            appleSongRow(rows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
             fun eligibleVideo(row: Row) = isTheSongsVideo(row, names) && (names.complete || isOwnVideo(row, names)) &&
                 keepsRequestedRecording(recording, row, video = true)
             val first = videoRows.firstOrNull(::eligibleVideo)
@@ -915,7 +915,8 @@ internal class ExactMatcher(
         val candidates = rows.filter { row ->
             row.id != null && row.lengthMs != null && names.lengthsMs.any { sameRecordingLength(row.lengthMs, it) } &&
                 metadata.lengthMs?.let { sameRecordingLength(row.lengthMs, it) } != false &&
-                namedInAnotherScript(row.name) && !isAnotherTake(row, names) && keepsRequestedRecording(recording, row)
+                namedInAnotherScript(row.name) && !isAnotherTake(row, names) &&
+                !SongNames.saysAnotherVersion(row.name, metadata.title, metadata.artist) && keepsRequestedRecording(recording, row)
         }.take(5)
         return coroutineScope {
             val answers = candidates.map { candidate -> async {
