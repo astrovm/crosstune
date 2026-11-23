@@ -40,13 +40,16 @@ class UiStateTest {
             )
             assertFalse(service.name, state.canPlayResult)
             assertFalse(service.name, state.canPlayFromLyrics)
+            assertTrue(service.name, state.canOpenFromLyrics)
+            assertFalse(state.copy(following = Following(PlaybackClock(0, 0), "Player", canSeek = false)).canOpenFromLyrics)
         }
     }
 
     @Test
     fun aSongIsOfferedToPlayOnlyWhereItsAppPlaysOneAskedFor() {
         val youTubeMusic = UiState(result = song, selectedDestination = Destination.Service(MusicService.YOUTUBE_MUSIC), installed = setOf(MusicService.YOUTUBE_MUSIC))
-        assertTrue(youTubeMusic.canPlayResult)
+        assertTrue(youTubeMusic.copy(phone = Phone.TV).canPlayResult)
+        assertTrue(youTubeMusic.copy(selectedDestination = Destination.Service(MusicService.YOUTUBE_MUSIC, "app.morphe.android.apps.youtube.music")).canPlayResult)
         // Bandcamp's app takes only a search, so asked to play it comes to the front on one and plays nothing.
         assertFalse(youTubeMusic.copy(selectedDestination = Destination.Service(MusicService.BANDCAMP), installed = setOf(MusicService.BANDCAMP)).canPlayResult)
     }
@@ -55,7 +58,7 @@ class UiStateTest {
     fun theWordsCanStartTheSongOnlyOnceTheyAreItsAndNotFollowedInAnAppYet() {
         val ready = UiState(
             result = song, lyricsFor = song,
-            selectedDestination = Destination.Service(MusicService.YOUTUBE_MUSIC), installed = setOf(MusicService.YOUTUBE_MUSIC)
+            selectedDestination = Destination.Service(MusicService.TIDAL), installed = setOf(MusicService.TIDAL)
         )
         assertTrue(ready.canPlayFromLyrics)
         assertFalse(ready.copy(lyricsFor = null).canPlayFromLyrics)

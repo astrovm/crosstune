@@ -271,13 +271,24 @@ internal data class UiState(
     val playsRightAway: Boolean
         get() = linksInCrosstune && playRightAway && hasDefault
 
-    /** Whether the song's app, installed and with the song, or maybe with it, can be asked to play it while Crosstune stays open. */
+    private val songApp: Destination.Service?
+        get() = (resultDestination as? Destination.Service)?.takeIf {
+            result?.type == ItemType.TRACK && it.service in installed && !resultMissing
+        }
+
+    /** Whether the installed app can be asked to play this song while Crosstune stays open. */
     val canPlayResult: Boolean
-        get() = result?.type == ItemType.TRACK && resultDestination.let { it is Destination.Service && it.service in installed && it.service.playsAskedSongs } && !resultMissing
+        get() = songApp?.let { it.service.playsAskedSongs && !it.opensFromSong(phone) } == true
 
     /** Whether the words open are the result's, found and not followed in an app yet, so they can start it there. */
     val canPlayFromLyrics: Boolean
-        get() = canPlayResult && following?.app == null && !isLoadingLyrics &&
+        get() = canPlayResult && canUseAppFromLyrics
+
+    val canOpenFromLyrics: Boolean
+        get() = canUseAppFromLyrics && songApp?.opensFromSong(phone) == true
+
+    private val canUseAppFromLyrics: Boolean
+        get() = following?.app == null && !isLoadingLyrics &&
             lyricsFor?.let { it.title == result?.title && it.artist == result.artist } == true
 
     /** Whether the share sheet's top row offers Crosstune's entries; Android shows them for any shared text. */

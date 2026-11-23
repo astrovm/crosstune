@@ -123,6 +123,7 @@ class MainActivityTest {
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()
+    private val morpheMusic = "app.morphe.android.apps.youtube.music"
     private var controller: ActivityController<MainActivity>? = null
 
     @Before
@@ -786,10 +787,10 @@ class MainActivityTest {
 
     @Test
     fun aLinkOpenedInCrosstunePlaysRightAwayInTheAppPickedOnceItsThere() {
-        val deezer = MusicService.DEEZER.packageName
+        val tidal = MusicService.TIDAL.packageName
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("links_in_crosstune", true).putBoolean("play_right_away", true).commit()
+        prefs().edit().putString("default_target", "TIDAL").putBoolean("links_in_crosstune", true).putBoolean("play_right_away", true).commit()
         respondWithTrack("Right Away", "Artist · Song")
         // Without the app, there's nothing to play it in, so the card has the choices.
         launch(trackLink())
@@ -798,10 +799,10 @@ class MainActivityTest {
         assertNull(nextStartedActivity())
         checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
-        shadowOf(app.packageManager).installPackage(installedApp(deezer, "Deezer"))
+        shadowOf(app.packageManager).installPackage(installedApp(tidal, "TIDAL"))
         val activity = launch(trackLink())
         waitUntil { phone.songsAsked.isNotEmpty() }
-        assertEquals(MusicMetadata("Right Away", "Artist") to deezer, phone.songsAsked.single())
+        assertEquals(MusicMetadata("Right Away", "Artist") to tidal, phone.songsAsked.single())
         // Crosstune stays, in its player.
         assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.dismiss_button))).fetchSemanticsNodes().isNotEmpty())
         assertFalse(activity.isFinishing)
@@ -818,20 +819,20 @@ class MainActivityTest {
 
     @Test
     fun recentsPlayGoesWhereALinkTappedDoes() {
-        val deezer = MusicService.DEEZER.packageName
+        val tidal = MusicService.TIDAL.packageName
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
-        shadowOf(app.packageManager).installPackage(installedApp(deezer, "Deezer"))
+        shadowOf(app.packageManager).installPackage(installedApp(tidal, "TIDAL"))
         val url = "https://open.spotify.com/track/$TRACK_ID"
         HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, url), MusicMetadata("Remember", "Artist")))
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("links_in_crosstune", true).putBoolean("play_right_away", true).commit()
+        prefs().edit().putString("default_target", "TIDAL").putBoolean("links_in_crosstune", true).putBoolean("play_right_away", true).commit()
         respondWithTrack("Remember", "Artist · Song")
         // Shown in Crosstune first, it plays from its card here, and Crosstune stays.
         val activity = launch()
         val model = ViewModelProvider(activity)[MainViewModel::class.java]
         click(string(R.string.history_open, "Remember"))
         waitUntil { phone.songsAsked.isNotEmpty() }
-        assertEquals(MusicMetadata("Remember", "Artist") to deezer, phone.songsAsked.single())
+        assertEquals(MusicMetadata("Remember", "Artist") to tidal, phone.songsAsked.single())
         assertEquals("Remember", model.uiState.result?.title)
         assertNull(nextStartedActivity())
         assertFalse(activity.isFinishing)
@@ -4038,8 +4039,40 @@ class MainActivityTest {
     }
 
     @Test
+    fun officialYouTubeMusicOpensFromTheSongAndItsWordsWithoutOfferingPlay() {
+        val service = MusicService.YOUTUBE_MUSIC
+        val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
+        val playback = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { playback }
+        shadowOf(app.packageManager).installPackage(installedApp(service.packageName, "YouTube Music"))
+        prefs().edit().putString("default_target", service.name).commit()
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") FakeSpotify.html(
+                request, """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"One\nTwo"}]"""
+            ) else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+        }
+        launch()
+        resolveTyped(link)
+        waitForDestinationReady()
+        val open = string(service.openLabelRes)
+        val play = string(R.string.play_in_background, string(service.labelRes))
+        composeRule.onNodeWithContentDescription(open).assertExists()
+        composeRule.onNodeWithContentDescription(play).assertDoesNotExist()
+
+        click(string(R.string.lyrics_button))
+        waitForText("Two")
+        composeRule.onNodeWithContentDescription(play).assertDoesNotExist()
+        click(open)
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = checkNotNull(nextStartedActivity())
+        assertEquals(service.packageName, opened.`package`)
+        assertEquals(link, opened.dataString)
+        assertTrue(playback.songsAsked.isEmpty())
+    }
+
+    @Test
     fun playAndOpenStackWhenTheWordsAreTooBigToShareTheWidth() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
         shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
@@ -4092,7 +4125,7 @@ class MainActivityTest {
 
     @Test
     fun aSongPlaysInItsAppWithoutLeavingCrosstuneOrOpensThereWhenItCant() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
@@ -4156,9 +4189,9 @@ class MainActivityTest {
 
     @Test
     fun aSongItsAppWontPlayInTheBackgroundIsOpenedThereAtOnce() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
-        // As YouTube Music without Premium, which asked says it can't, or never starts.
+        // The playback source says this app cannot play in the background.
         val phone = FakePlayback().apply { access = true; startsInBackground = false }
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
@@ -4204,21 +4237,23 @@ class MainActivityTest {
         click(string(R.string.open_in_custom, "YT Music Morphe"))
         assertEquals(morphe, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
 
-        // The plain choice is still the official app, one tap away on the card: with Morphe paused on the
-        // song, it's the official app that's asked, rather than Morphe played on.
+        // The plain choice opens the official app, even with Morphe paused on this song.
         composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YT Music Morphe", canSeek = true, appPackage = morphe) }
         chooseDefault(string(R.string.target_youtube_music))
         val playOfficial = string(R.string.play_in_background, string(R.string.target_youtube_music))
-        waitUntil { composeRule.onAllNodes(hasContentDescription(playOfficial) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
-        click(playOfficial)
-        waitUntil { phone.songsAsked.size == 2 }
-        assertEquals(official, phone.songsAsked.last().second)
+        val openOfficial = string(R.string.open_in_youtube_music)
+        waitForDescription(openOfficial)
+        composeRule.onNodeWithContentDescription(playOfficial).assertDoesNotExist()
+        click(openOfficial)
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(official, nextStartedActivity()?.`package`)
+        assertEquals(1, phone.songsAsked.size)
         assertEquals(emptyList<Boolean>(), phone.plays)
     }
 
     @Test
     fun aSongAlreadyInItsAppIsNotStartedAgainOnPlay() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
@@ -4258,7 +4293,7 @@ class MainActivityTest {
 
     @Test
     fun aSongPlayingInAnotherAppIsntTakenForItPlayingWhereItWasAsked() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
@@ -4281,7 +4316,7 @@ class MainActivityTest {
 
     @Test
     fun thePlayersPlayDoesntAskAgainWhileTheSongIsStillBeingAskedFor() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
@@ -4360,7 +4395,7 @@ class MainActivityTest {
 
     @Test
     fun thePlayerKeepsTheSongsLinkToolsInAMenuItsAppIconOpensItsAppAndSwipesMoveBetweenLayers() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
@@ -4426,7 +4461,7 @@ class MainActivityTest {
     @Test
     fun thePlayersTimesAreNotCutOffAtTheLargestFont() {
         RuntimeEnvironment.setFontScale(2f)
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
@@ -4448,7 +4483,7 @@ class MainActivityTest {
 
     @Test
     fun aPlayedSongShowsInCrosstunesPlayerWhichPlaysPausesSkipsAndSeeksIt() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
@@ -4547,7 +4582,7 @@ class MainActivityTest {
 
     @Test
     fun thePlayerStopsWaitingOnceTheAskedAppPlaysAnotherNameForTheSong() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
@@ -4609,35 +4644,33 @@ class MainActivityTest {
     }
 
     @Test
-    fun aBuildPatchedFromYouTubeMusicIsntTakenForItWhenYouTubeMusicIsThere() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
-        val morphe = "app.morphe.android.apps.youtube.music"
+    fun officialYouTubeMusicPlaybackIsNotTakenForThePatchedBuildsPlayback() {
+        val official = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
-        shadowOf(app.packageManager).installPackage(installedApp(morphe, "YT Music Morphe"))
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        shadowOf(app.packageManager).installPackage(installedApp(official, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YT Music Morphe"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC@$morpheMusic").commit()
         launch()
         resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
-        val play = string(R.string.play_in_background, "YouTube Music")
-        val waiting = string(R.string.player_waiting, "YouTube Music")
+        val play = string(R.string.play_in_background, "YT Music Morphe")
+        val waiting = string(R.string.player_waiting, "YT Music Morphe")
         waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
-        // The patched build is an app of its own: what it plays, before or after, is nothing to YouTube Music.
-        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = morphe)
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = official)
         click(play)
         waitForText(waiting)
-        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = morphe)
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = official)
         composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodes(hasText(waiting)).fetchSemanticsNodes().isNotEmpty())
-        // So a song YouTube Music goes on to is the one asked, even named as the one the patched build played.
-        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        // The player only switches once the requested build plays.
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = morpheMusic)
         waitForText("Old Song")
     }
 
     @Test
     fun aSongAskedForAgainWhileTheAppStillPlaysItUnderItsOwnNameIsntWaitedFor() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
@@ -4672,7 +4705,7 @@ class MainActivityTest {
 
     @Test
     fun whatAnAppPlaysWhenAskedFromNothingIsntRememberedForTheSong() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
@@ -4696,7 +4729,7 @@ class MainActivityTest {
 
     @Test
     fun aSongAnotherAppPlaysIsntTakenForTheOneAskedWhateverItsName() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
@@ -4721,7 +4754,7 @@ class MainActivityTest {
     @Test
     @OptIn(ExperimentalTestApi::class)
     fun thePlayersSongRepeatsIsLikedPlaysWhatsNextSleepsAndOpensItsCard() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         MainActivity.lookAheadLyrics = true
@@ -4823,7 +4856,7 @@ class MainActivityTest {
 
     @Test
     fun withoutAccessThePlayerSaysHowToAllowItAndPlayAsksTheAppAgain() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         val phone = FakePlayback()
         MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
@@ -4852,8 +4885,8 @@ class MainActivityTest {
     fun youTubeMusicWithOnlyASearchForTheSongIsOpenedOnItRatherThanAsked() {
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
-        shadowOf(app.packageManager).installPackage(installedApp(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music"))
-        shadowOf(app.packageManager).installPackage(installedApp(MusicService.DEEZER.packageName, "Deezer"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.TIDAL.packageName, "TIDAL"))
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
         launch()
@@ -4861,12 +4894,12 @@ class MainActivityTest {
         // YouTube Music plays only its own link, so a search there is opened instead.
         click(string(R.string.play_in_background, "YouTube Music"))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals(MusicService.YOUTUBE_MUSIC.packageName, nextStartedActivity()?.`package`)
+        assertEquals(morpheMusic, nextStartedActivity()?.`package`)
         assertTrue(phone.songsAsked.isEmpty() && phone.opened.isEmpty())
         // Another app finds it asked by name.
-        chooseDefaultHere("Deezer")
-        click(string(R.string.play_in_background, "Deezer"))
-        assertEquals(MusicService.DEEZER.packageName, phone.songsAsked.single().second)
+        chooseDefaultHere("TIDAL")
+        click(string(R.string.play_in_background, "TIDAL"))
+        assertEquals(MusicService.TIDAL.packageName, phone.songsAsked.single().second)
     }
 
     /** A song whose words come timed, at 1, 20 and 40 seconds in, from a music app the test plays, the [microphone] allowed. */
@@ -4971,7 +5004,7 @@ class MainActivityTest {
 
     @Test
     fun wordsOfASongNotPlayingYetStartItInItsAppThenFollowIt() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val youTubeMusic = morpheMusic
         shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         val playback = FakePlayback().apply { access = true }

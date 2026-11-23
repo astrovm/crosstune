@@ -35,6 +35,13 @@ internal sealed class Destination {
         override fun searchUrl(query: String) = service.searchUrl(query)
         override val matchService: MusicService get() = service
         override val packageName: String get() = build ?: service.packageName
+
+        /** The official YouTube phone apps take over the screen. A TV can show the words over its player. */
+        fun opensFromSong(phone: Phone): Boolean = when (service) {
+            MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.AUDIOMACK -> true
+            MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE -> build == null && phone != Phone.TV
+            else -> false
+        }
     }
 
     /** [instance] is the site a web frontend opens on, e.g. "https://yewtu.be"; null for apps. */

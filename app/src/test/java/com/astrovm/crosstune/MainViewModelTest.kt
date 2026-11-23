@@ -4435,7 +4435,6 @@ class MainViewModelTest {
         val model = ytMusicModel(playback)
         val effects = mutableListOf<Effect>()
         model.viewModelScope.launch { model.effects.collect { effects += it } }
-        assertTrue(model.uiState.canPlayResult)
         // Asked, and seen playing: Crosstune stays, in its player.
         model.playResult()
         idle()
