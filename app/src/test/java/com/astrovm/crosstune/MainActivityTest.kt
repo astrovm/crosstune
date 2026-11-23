@@ -1952,6 +1952,36 @@ class MainActivityTest {
     }
 
     @Test
+    fun anIncomingLinkRefreshesItsSavedAlbumAndKeepsItsNameHold() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
+        val source = "https://www.deezer.com/track/123"
+        val retry = ExactMatcher.Retry(System.currentTimeMillis())
+        val search = PreparedLink("https://music.youtube.com/search?q=Remember%20Artist", exact = false, matchingEnabled = true, retry = retry)
+        val recent = HistoryStore(prefs())
+        val entry = HistoryEntry(
+            checkNotNull(MusicLinks.linkFor(source)), MusicMetadata("Remember", "Artist"), mapOf("YOUTUBE_MUSIC" to search), albumChecked = false
+        )
+        recent.add(entry)
+        assertFalse(recent.load().single().albumChecked)
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com" && request.url.encodedPath == "/track/123") {
+                FakeSpotify.html(request, """{"title":"Remember","artist":{"name":"Artist"},"album":{"title":"The Album"}}""")
+            } else {
+                FakeSpotify.html(request, "{}", code = 503)
+            }
+        }
+
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse(source)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertTrue(nextStartedActivity()?.dataString.orEmpty().startsWith("https://music.youtube.com/search"))
+        val saved = recent.load().single()
+        assertTrue(saved.albumChecked)
+        assertEquals("The Album", saved.metadata.album)
+        assertEquals(retry, saved.destinationLinks["YOUTUBE_MUSIC"]?.retry)
+        assertTrue(fake.requestedUrls.none { "music.youtube.com" in it })
+    }
+
+    @Test
     fun recentLooksAgainAfterOpeningAFanUploadDuringAnOutage() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
         val source = "https://open.spotify.com/track/$TRACK_ID"

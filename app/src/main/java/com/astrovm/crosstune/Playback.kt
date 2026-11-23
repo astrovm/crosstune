@@ -1039,7 +1039,7 @@ internal class MediaSessionPlayback(
         return when {
             !controller.isVideo() -> MusicMetadata(
                 title, artist, lengthMs = controller.lengthOf(metadata, asked),
-                instrumentalAlbum = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)?.takeIf(SongNames::albumOfInstrumentals)
+                album = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)?.ifBlank { null }
             )
             MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist)
             // A computer's video, as KDE Connect shows one, is only a song when it says so plainly: a

@@ -149,6 +149,25 @@ class LeadTimingTest {
         assertEquals(10_000L, heard(120_000))
     }
 
+    @Test fun aVideoLeadCanBeConfirmedAcrossTheStartOfTheLyricRecording() {
+        fun confirmed(lastPosition: Long, middleLead: Long): Long? {
+            val timing = LeadTiming()
+            fun heard(position: Long, lead: Long): Long? {
+                val at = 20_000L + position
+                return timing.heard(PlaybackClock(position + lead, at), PlaybackClock(position, at))
+            }
+
+            // A fingerprint corrected for a different intro can be before the lyric clock reaches zero.
+            assertNull(heard(-4_000, 5_000))
+            assertNull(heard(0, middleLead))
+            return heard(lastPosition, 5_000)
+        }
+
+        assertEquals(5_000L, confirmed(4_000, 6_500))
+        assertNull(confirmed(3_999, 6_500))
+        assertNull(confirmed(4_000, 6_501))
+    }
+
     @Test fun aKeptIntroPastFiveMinutesEitherWayIsNotTrusted() {
         val store = LeadStore(prefs)
         prefs.edit().putString("video_timing", JSONObject().put(RecordingKey.of(song), 300_001L).toString()).commit()

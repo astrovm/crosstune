@@ -575,8 +575,8 @@ internal class LyricsFinder(
     suspend fun lyricsOf(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): Lyrics =
         firstLook(metadata, timeoutMs).let { first -> if (first.final) first.lyrics else retimed(metadata, first.lyrics, timeoutMs) }
 
-    /** What [firstLook] found: words kept from before, which are [final], or else ones still to be [retimed]. */
-    data class FirstLook(val lyrics: Lyrics, val final: Boolean)
+    /** What [firstLook] found, whether it still needs timing, and whether it came from the offline fallback. */
+    data class FirstLook(val lyrics: Lyrics, val final: Boolean, val fallback: Boolean = false)
 
     /**
      * [lyricsOf] in two steps, so the words can show as soon as they're found: first what's kept, or
@@ -595,7 +595,7 @@ internal class LyricsFinder(
         val lookup = Answers()
         val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { withContext(lookup + matching) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs).orNamedInTitle(metadata, timeoutMs) } } ?: Best(Lyrics.Unavailable)
         val found = (best as? Lyrics.Found)?.let { cleaned(it, metadata, lookup.copies.toList()) } ?: best
-        if (found == Lyrics.Unavailable) keptUnderName(metadata)?.let { return FirstLook(asKept(it, metadata), final = true) }
+        if (found == Lyrics.Unavailable) keptUnderName(metadata)?.let { return FirstLook(asKept(it, metadata), final = true, fallback = true) }
         // Once this recording is confirmed instrumental, its old lyrics must not return offline.
         if (checkCredit && found == Lyrics.Instrumental) cache.discard(previousKey, previousText)
         return settled(metadata, found, own, lookup)
@@ -651,7 +651,7 @@ internal class LyricsFinder(
 
     /** The sheets on the phone for [song]. The reading cache keys use the whole sheet as shown, timed or plain. */
     suspend fun cachedLineSets(song: MusicMetadata): List<List<String>> {
-        val names = cachedNames(song, FIRST_SUNG_LYRICS_CACHE..CACHE_VERSION)
+        val names = cachedNames(song, FIRST_SUNG_LYRICS_CACHE..INSTRUMENTAL_ALBUM_CACHE_VERSION)
         return cache?.entries().orEmpty().flatMap { (key, json) ->
             if (!key.isCachedUnder(names)) return@flatMap emptyList()
             val found = fromCache(json)?.first ?: return@flatMap emptyList()
@@ -668,7 +668,10 @@ internal class LyricsFinder(
         return wanted == null || kept == null || abs(kept - wanted) <= SAME_RECORDING_LENGTH_MS
     }
 
-    private fun cachedNames(metadata: MusicMetadata, versions: Iterable<Int> = listOf(CACHE_VERSION, BEFORE_NETEASE_ARTIST_CHECK, 16, 15)): List<String> {
+    private fun cachedNames(
+        metadata: MusicMetadata,
+        versions: Iterable<Int> = listOf(INSTRUMENTAL_ALBUM_CACHE_VERSION, CACHE_VERSION, BEFORE_NETEASE_ARTIST_CHECK, 16, 15)
+    ): List<String> {
         val name = "${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
         return versions.map { version -> "$version\u0000$name" }
     }
@@ -735,7 +738,7 @@ internal class LyricsFinder(
      * The song, whatever the case or spacing of its name. Words kept by versions that didn't ask
      * YouTube Music or check timings may be worse than what's there now, so they're asked for again.
      */
-    private fun cacheKey(metadata: MusicMetadata, version: Int = CACHE_VERSION) = "$version\u0000${RecordingKey.of(metadata)}"
+    private fun cacheKey(metadata: MusicMetadata, version: Int = cacheVersion(metadata)) = "$version\u0000${RecordingKey.of(metadata)}"
 
     /**
      * [found] timed as a well-timed copy of the song on LRCLIB times the same words, which may be
@@ -1723,18 +1726,42 @@ internal class LyricsFinder(
         /**
          * The very recording, name for name but for a guest or remaster tag, so not "Song (Inst.)" for "Song (feat.
          * Guest)"; by its artist, not one whose name holds theirs, "Band Piano Tribute"; and as long, when both say.
-         * An album of instrumentals names its tracks as the sung ones, so only the same album counts.
+         * An album of instrumentals names its tracks as the sung ones. On that same album a copy may add
+         * an instrumental tag to the title, as LRCLIB does for "Accordian".
          */
         fun isRecording(metadata: MusicMetadata): Boolean {
-            if (!SongNames.same(title, metadata.title) || SongNames.artists(artist).none { it in SongNames.artists(metadata.artist) }) return false
+            if (SongNames.artists(artist).none { it in SongNames.artists(metadata.artist) }) return false
             val playedAlbum = metadata.instrumentalAlbum
             val copyAlbum = json.optString("albumName")
+            val sameInstrumentalAlbum = playedAlbum != null && RecordingKey.sameAlbum(playedAlbum, copyAlbum)
             // A copy with no album says nothing against the played one: it goes by its length and title, as it always did.
             val albumsMatter = playedAlbum != null || SongNames.albumOfInstrumentals(copyAlbum)
-            if (copyAlbum.isNotBlank() && albumsMatter && !RecordingKey.sameAlbum(playedAlbum.orEmpty(), copyAlbum)) return false
+            if (copyAlbum.isNotBlank() && albumsMatter && !sameInstrumentalAlbum) return false
+            val sameTitle = SongNames.same(title, metadata.title)
+            if (!sameTitle && !(sameInstrumentalAlbum && addsInstrumentalTagTo(metadata.title))) return false
             val copyMs = lengthMs() ?: return true
             val playingMs = metadata.lengthMs ?: return true
             return abs(copyMs - playingMs) <= SAME_LENGTH_MS
+        }
+
+        /** LRCLIB may add its instrumental tag after the title the album uses. */
+        private fun addsInstrumentalTagTo(played: String): Boolean {
+            val name = Normalizer.normalize(SongNames.withoutEditionTag(title), Normalizer.Form.NFKC).trim()
+            val bracket = bracketTags(name, TitleDelimiters.normalizedOpens, TitleDelimiters.normalizedCloses).lastOrNull()?.takeIf { it.last == name.lastIndex }
+            val start = bracket?.first
+                ?: name.indices.lastOrNull { name[it] in TitleDelimiters.tagDashes && isBetweenSpaces(name, it) }
+                ?: return false
+            val prefix = name.substring(0, start)
+            if (!SongNames.same(prefix, played)) return false
+            val tag = name.substring(start + 1, bracket?.last ?: name.length).trim()
+            // The tag may name the version as instrumental. A tag like "Instrumental Remix" also names a different mix.
+            val words = instrumentalTagWord.matchesIn(SongNames.unaccented(tag)).map(MatchResult::value)
+                .filterNot { it in INSTRUMENTAL_VERSION_WORDS }.toList()
+            if (words.size != 1 && words != listOf("off", "vocal")) return false
+            // Check the original title: stripping edition tags can remove a singer credited after this tag.
+            // LRCLIB joins "Off-Vocal" with a hyphen, which the title reader would treat as a second dash.
+            val credited = Normalizer.normalize(title, Normalizer.Form.NFKC).replace("off-vocal", "off vocal", ignoreCase = true)
+            return SongNames.saysInstrumental(credited, artist)
         }
 
         /**
@@ -1935,6 +1962,10 @@ internal class LyricsFinder(
          * 17 for a song's words kept for an instrumental recording of it; 18 to check alternate NetEase artist credits again.
          */
         const val CACHE_VERSION = 18
+        // Look again for albums of instrumentals whose saved words predate the title tag check.
+        private const val INSTRUMENTAL_ALBUM_CACHE_VERSION = 19
+        fun cacheVersion(song: MusicMetadata) = if (song.instrumentalAlbum == null) CACHE_VERSION else INSTRUMENTAL_ALBUM_CACHE_VERSION
+
         private const val BEFORE_NETEASE_ARTIST_CHECK = 17
         /** The lyrics cache when the app first kept sung readings. Older sheets can't have a matching answer. */
         private const val FIRST_SUNG_LYRICS_CACHE = 6
@@ -2004,6 +2035,9 @@ internal class LyricsFinder(
 
         /** How far apart two copies of the same take of a song may be in length. */
         const val SAME_LENGTH_MS = 3_000L
+
+        private val instrumentalTagWord = phoneRegex("""[\p{L}\p{N}]+""")
+        private val INSTRUMENTAL_VERSION_WORDS = setOf("ver", "version", "versao")
 
         /** Fewer LRCLIB copies marked instrumental than this may be a copy someone sent with no words. */
         const val MIN_MARKED = 2

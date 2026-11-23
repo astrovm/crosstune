@@ -30,11 +30,14 @@ class OfflineSongsTest {
 
     @Test
     fun anInstrumentalAlbumAndTheSungRecordingStaySeparateAcrossRestart() = runBlocking {
-        val instrumental = song.copy(instrumentalAlbum = "Album (Instrumentals)")
+        val sung = song.copy(album = "Album")
+        val instrumental = song.copy(album = "Album (Instrumentals)")
         val kept = songs()
-        assertTrue(kept.keep(song).id != kept.keep(instrumental).id)
+        assertTrue(kept.keep(sung).id != kept.keep(instrumental).id)
+        // The instrumental was also readable under the field name an older version wrote.
+        file.writeText(file.readText().replace("\"album\":\"Album (Instrumentals)\"", "\"instrumentalAlbum\":\"Album (Instrumentals)\""))
         val reopened = songs()
-        assertEquals(listOf(song), reopened.has(song)?.songs)
+        assertEquals(listOf(sung), reopened.has(sung)?.songs)
         assertEquals(listOf(instrumental), reopened.has(instrumental)?.songs)
     }
 
