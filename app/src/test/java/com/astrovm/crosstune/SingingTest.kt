@@ -970,6 +970,23 @@ class SingingTest {
     }
 
     @Test
+    fun changingTheSheetWithoutListeningDiscardsItsOldPendingHearing() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        openLyrics()
+        plays(playing = false)
+        val song = checkNotNull(model().uiState.lyricsFor)
+        val sheet = model().uiState.lyricLines
+        val oldSheet = sheet.dropLast(1)
+        val store = LyricsSyncStore(prefs())
+        store.rememberPending(song, oldSheet, PendingShift(22_000, 40_000, 60_000))
+        assertTrue(store.pending(song, oldSheet) != null)
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == sheet.size }
+        assertNull(store.pending(song, oldSheet))
+    }
+
+    @Test
     fun aFarHearingIsConfirmedByAnotherPartAfterReopening() {
         playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
         lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")

@@ -2893,6 +2893,7 @@ internal class MainViewModel(
     private fun useFoundTiming(song: MusicMetadata, answer: LyricsFinder.Lyrics.Found) {
         foundLines = answer.lines
         found = answer
+        syncStore.pending(song, foundLines)
         syncPoints = syncStore.load(song, foundLines)
         wordsPace = syncStore.pace(song, foundLines)
         keptByHand = syncStore.byHand(song, foundLines)
@@ -2956,6 +2957,7 @@ internal class MainViewModel(
         } ?: return false
         found = kept.found
         foundLines = kept.foundLines
+        syncStore.pending(song, foundLines)
         lyricsCanPreview = kept.canPreview
         restored = kept.japanese
         syncPoints = kept.syncPoints
