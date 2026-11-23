@@ -4,6 +4,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableStateOf
 import androidx.activity.compose.setContent
 import android.Manifest
 import android.app.Application
@@ -989,6 +990,9 @@ class SingingTest {
         val original = model().uiState.lyricLines
         val song = checkNotNull(model().uiState.lyricsFor)
         assertEquals(-27_400L, LyricsSyncStore(prefs()).pending(song, original)?.offsetMs)
+        val pending = checkNotNull(LyricsSyncStore(prefs()).pending(song, original))
+        assertTrue("A hearing starts at or after the player position", pending.fromMs >= 61_000L)
+        assertEquals(SingingListener.SECONDS * 1_000L, pending.toMs - pending.fromMs)
         plays(positionMs = 101_000)
         passes(1_000)
         waitUntil { singing.hears >= 2 }
@@ -1866,6 +1870,17 @@ class SingingTest {
         composeRule.runOnIdle { checkNotNull(controller).get().setContent { Text(rememberSungLine(lines, following, byEar = true).toString()) } }
         composeRule.onNodeWithText("0").assertExists()
         waitUntil { composeRule.onAllNodesWithText("-1").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun aLineMovedExactlyTwoSecondsAheadReturnsToThePreviousLine() {
+        openLyrics()
+        val following = Following(PlaybackClock(6_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true)
+        val lines = mutableStateOf(listOf(LyricLine(2_000, "First"), LyricLine(5_000, "Second")))
+        composeRule.runOnIdle { checkNotNull(controller).get().setContent { Text(rememberSungLine(lines.value, following, byEar = false).toString()) } }
+        composeRule.onNodeWithText("1").assertExists()
+        composeRule.runOnIdle { lines.value = listOf(LyricLine(2_000, "First"), LyricLine(8_000, "Second")) }
+        composeRule.onNodeWithText("0").assertExists()
     }
 
     @Test
