@@ -864,6 +864,8 @@ internal class ExactMatcher(
         }
         addDeezerNames(metadata, names, rows.any { it.id != null && it.lengthMs != null })
         val song = songRow(metadata, rows, videoRows, names, recording)
+        if (song != null && (isTheSong(song, names) || isDeezerSong(song, names))) return Answer(watchUrl + song.id, lasting = names.everyStore)
+        appleProvedCandidate(metadata, rows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         matchingVideo(metadata, rows, videoRows, names, recording, watchUrl)?.let { return it }
         // Last, the songs, then the videos, are picked from, each asked about apart.
@@ -905,6 +907,34 @@ internal class ExactMatcher(
         val named = rows.firstOrNull { isTheSong(it, names) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) } ?: return null
         val abroad = rows.filter { isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
         return linkedEditionInAnotherScript(named, abroad, names.linkedEdition) ?: named
+    }
+
+    /** A store can connect a row's own name to the song by the same recording ID. */
+    private suspend fun appleProvedCandidate(metadata: MusicMetadata, rows: List<Row>, names: Names, recording: RequestedRecording): Row? {
+        if (names.appleIds.isEmpty()) return null
+        val candidates = rows.filter { row ->
+            row.id != null && row.lengthMs != null && names.lengthsMs.any { sameRecordingLength(row.lengthMs, it) } &&
+                metadata.lengthMs?.let { sameRecordingLength(row.lengthMs, it) } != false &&
+                namedInAnotherScript(row.name) && !isAnotherTake(row, names) && keepsRequestedRecording(recording, row)
+        }.take(5)
+        return coroutineScope {
+            val answers = candidates.map { candidate -> async {
+                val artist = candidate.details.firstOrNull().orEmpty()
+                val wanted = MusicMetadata(candidate.name, artist, lengthMs = candidate.lengthMs)
+                val store = SongNames.homeStore(candidate.name + artist) ?: return@async null to false
+                val asked = Asked()
+                val answer = appleSong(wanted, store, asked, mutableMapOf())
+                candidate.takeIf {
+                    answer?.editions.orEmpty().any { edition ->
+                        edition.optLong("trackId") in names.appleIds &&
+                            matches(wanted, edition.optString("trackName"), edition.optString("artistName")) &&
+                            sameRecordingLength(candidate.lengthMs, edition.optLong("trackTimeMillis"))
+                    }
+                } to asked.failed
+            } }.awaitAll()
+            if (answers.any { it.second }) names.complete = false
+            answers.firstNotNullOfOrNull { it.first }
+        }
     }
 
     private fun songRow(metadata: MusicMetadata, rows: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording): Row? {
@@ -1247,6 +1277,7 @@ internal class ExactMatcher(
     private class Names(
         val titles: Set<String>, val artists: Set<String>, var lengthsMs: List<Long>, japaneseTitle: String?,
         val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?, var deezerNames: List<DeezerName>, val appleFound: Boolean,
+        val appleIds: Set<Long>,
         /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
         val takeOnAlbum: Boolean,
         /** A failed Apple or Deezer search could have supplied a length. */
@@ -1324,7 +1355,10 @@ internal class ExactMatcher(
         val complete = !searchFailed && unanswered.none { it == "US" || it in homes }
         return Names(
             titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album,
-            emptyList(), found != null, takeOnAlbum, searchFailed, complete, unanswered
+            emptyList(), found != null, found?.editions.orEmpty().filter {
+                val length = metadata.lengthMs ?: found?.song?.optLong("trackTimeMillis")
+                length != null && sameRecordingLength(it.optLong("trackTimeMillis"), length)
+            }.map { it.optLong("trackId") }.filter { it > 0 }.toSet(), takeOnAlbum, searchFailed, complete, unanswered
         )
     }
 
