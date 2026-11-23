@@ -99,6 +99,14 @@ class SharedSlotTest(unittest.TestCase):
 
 
 class ParallelOrderTest(unittest.TestCase):
+    def test_replay_can_hold_the_same_song_set_across_builds(self):
+        self.assertEqual(['b', 'a'], r.replay_songs(['a', 'b', 'c'], ['b', 'a']))
+        self.assertEqual(['a', 'b', 'c'], r.replay_songs(['a', 'b', 'c'], None))
+        with self.assertRaisesRegex(ValueError, 'not prepared: d'):
+            r.replay_songs(['a', 'b'], ['a', 'd'])
+        with self.assertRaisesRegex(ValueError, 'more than once'):
+            r.replay_songs(['a', 'b'], ['a', 'a'])
+
     def test_guard_set_has_fixed_distinct_recordings(self):
         rows = [line.split('\t') for line in Path(__file__).with_name('guard.tsv').read_text().splitlines()
                 if line and not line.startswith('#')]
@@ -329,7 +337,7 @@ class SharedFolderTest(unittest.TestCase):
             (kept / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
             with patch.object(r, 'OUT', kept), patch.object(r, 'own', return_value=mine), patch.object(r, 'prepped', return_value=['fake']), \
                     patch.object(r.subprocess, 'run', side_effect=gradle), patch('sys.stdout', io.StringIO()) as table:
-                r.run_all(argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, heard='.other'))
+                r.run_all(argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, songs=None, heard='.other'))
             self.assertEqual(seen, [(['replay.json', 'replay.songs'], False)])
             self.assertRegex(table.getvalue(), r'all +1 +1 +1 +0 +0')
             self.assertFalse((kept / 'fake.from0.shown.json').exists())
@@ -561,7 +569,7 @@ class TableTest(unittest.TestCase):
                                                        for n, start in enumerate([10.2, 20, 30])))
             output = io.StringIO()
             with redirect_stdout(output):
-                r.run_all(argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, heard=''))
+                r.run_all(argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, songs=None, heard=''))
             rows = output.getvalue().splitlines()
             self.assertEqual(['all', '3', '1', '1', '1', '1', '-9.0'], rows[2].split()[:7])
             self.assertIn('Reference coverage: 3/4', rows[3])
@@ -616,11 +624,11 @@ class HeardWhenAskedTest(unittest.TestCase):
         return gradle.call_count, heard.call_count
 
     def test_all_replays_until_nothing_new_is_asked(self):
-        args = argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, heard='')
+        args = argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, songs=None, heard='')
         self.assertEqual(self.replays(r.run_all, args, [2, 1, 0]), (3, 3))
 
     def test_all_hears_nothing_for_another_set(self):
-        args = argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, heard='.other')
+        args = argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, songs=None, heard='.other')
         self.assertEqual(self.replays(r.run_all, args, []), (1, 0))
 
     def run_args(self, **changed):
@@ -746,7 +754,7 @@ class ReplayAllTest(unittest.TestCase):
             (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[0, 'One']]))
             (r.OUT / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
             with patch('sys.stdout'):
-                r.run_all(argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, heard='.thin5'))
+                r.run_all(argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, songs=None, heard='.thin5'))
         self.assertEqual(asked[0]['songs'][0]['heard'], '.thin5')
 
     def test_it_replays_each_song_picked_up_partway(self):
@@ -761,7 +769,7 @@ class ReplayAllTest(unittest.TestCase):
             (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[0, 'One']]))
             (r.OUT / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=15.0)) + '\n')
             with patch('sys.stdout', io.StringIO()) as table:
-                r.run_all(argparse.Namespace(gradle='fake-gradle', start=14000, work=4500, behind=0, heard=''))
+                r.run_all(argparse.Namespace(gradle='fake-gradle', start=14000, work=4500, behind=0, songs=None, heard=''))
         self.assertEqual(asked[0]['songs'][0]['from'], 14000)
         heard.assert_called_once_with('fake', ['fake.from14000.shown.json'])
         self.assertRegex(table.getvalue(), r'all +1 +1 +1 +0 +0')
@@ -921,6 +929,13 @@ class WordsShownTest(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()) as said:
             self.assertEqual({}, r.score(argparse.Namespace(id='song', start=0, placed=False)))
         self.assertIn('never shown 4', said.getvalue())
+
+    def test_lines_sung_before_a_late_start_are_not_counted_as_dark(self):
+        (r.OUT / 'song.from3000.shown.json').write_text(json.dumps(dict(lines=[], shown=[], placed=[dict(at=3000, times=[])], known=[], heard=[])))
+        with contextlib.redirect_stdout(io.StringIO()) as said:
+            r.score(argparse.Namespace(id='song', start=3000, placed=False))
+        self.assertIn('never shown 3', said.getvalue())
+        self.assertNotIn('sung    1.0', said.getvalue())
 
     def test_words_kept_are_this_songs_though_the_next_songs_came_after(self):
         kept = r.OUT / 'kept'

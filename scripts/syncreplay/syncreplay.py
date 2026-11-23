@@ -549,7 +549,7 @@ def compare(phone_lit, shown):
 
 def score(args):
     shown = json.loads((own() / f"{args.id}.from{args.start}.shown.json").read_text())
-    sung = sung_lines(args.id, shown["lines"])
+    sung = {line: at for line, at in sung_lines(args.id, shown["lines"]).items() if at >= args.start / 1000}
     # The app's line to the n-th line with words.
     nth = {}
     for i, text in enumerate(shown["lines"]):
@@ -1071,9 +1071,24 @@ def prepped():
                   if complete(f.name.removesuffix(".truth.jsonl")))
 
 
+def replay_songs(available, requested):
+    """Keep a comparison on the same recordings even as other preparations finish."""
+    if requested is None:
+        return available
+    if len(set(requested)) != len(requested):
+        raise ValueError('A recording was requested more than once')
+    missing = [song for song in requested if song not in available]
+    if missing:
+        raise ValueError(f"Recordings not prepared: {', '.join(missing)}")
+    return requested
+
+
 def run_all(args):
     """Every prepped song replayed from the start, or from --from, in one go, and how its lines came out against when they're sung."""
-    songs = prepped()
+    try:
+        songs = replay_songs(prepped(), args.songs)
+    except ValueError as error:
+        sys.exit(str(error))
     asked = own() / "replay.json"
     asked.write_text(json.dumps({"songs": [{"song": song, "from": args.start, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]}))
     # Their names too, one a line, as SyncReplayTest reads them before it can read JSON.
@@ -1483,6 +1498,7 @@ def main():
     p.add_argument("--work", type=int, default=4500, help="ms the phone takes to work out what it heard")
     p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
     p.add_argument("--heard", default="", help="replay another set of what was heard: .thin5 reads ID.heard20.thin5.json")
+    p.add_argument('--songs', nargs='+', help='use exactly these prepared recording IDs')
     p.set_defaults(go=run_all)
     p = steps.add_parser("hear")
     p.add_argument("id")
