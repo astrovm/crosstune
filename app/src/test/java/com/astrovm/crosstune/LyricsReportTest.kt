@@ -1224,6 +1224,36 @@ class LyricsReportTest {
     }
 
     @Test
+    fun timingReportGoesWhenLyricsFollowThePlayerToAnotherSong() {
+        val otherRequests = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net" && request.url.queryParameter("track_name") == "Other") {
+                FakeSpotify.html(request, """[{"trackName":"Other","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] Other one\n[00:10.00] Other two"}]""")
+            } else otherRequests(request)
+        }
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, 2_000, SystemClock.elapsedRealtime())
+        openLyrics()
+        composeRule.runOnIdle { playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true) }
+        waitUntil { model().uiState.following?.clock?.playing == true }
+        owe(checkNotNull(model().uiState.lyricsFor), SongProblem.TIMED_BY_HAND, JSONObject().put("fake", "Demo"))
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        composeRule.waitForIdle()
+        assertEquals(1, owed())
+        assertEquals(emptyList<String>(), sentFakes())
+
+        composeRule.runOnIdle {
+            playback.playing.value = null
+            playback.onThePhone = Heard.Song(MusicMetadata("Other", "Band"), null, 0, SystemClock.elapsedRealtime())
+        }
+        waitUntil { model().uiState.lyricsFor?.title == "Other" }
+        waitUntil { sentFakes().size == 1 }
+        assertEquals(listOf("Demo"), sentFakes().map { JSONObject(it).getString("fake") })
+        assertEquals(0, owed())
+        composeRule.waitForIdle()
+        assertEquals(1, sentFakes().size)
+    }
+
+    @Test
     fun legacyTimingReportWaitsWhileItsWordsAreOpenAndGoesAwayWhenPutBack() {
         playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
         openLyrics()
