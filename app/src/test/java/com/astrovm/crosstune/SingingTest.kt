@@ -868,6 +868,21 @@ class SingingTest {
     }
 
     @Test
+    fun pickedUpLateOneCorrectFarWhileIsKeptForTheNextPlay() {
+        val times = listOf(60, 63, 66, 90, 93, 96)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        openLyrics()
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertTrue(prefs().contains("lyrics_sync"))
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        assertEquals(62_600L, model().uiState.lyricLines[3].timeMs)
+    }
+
+    @Test
     fun aLoneFarWhileIsReportedOnLeavingOnlyOnceItsWholeAnswerIsIn() {
         val times = listOf(2, 4, 6, 30, 32, 34)
         lyricsTimedFor(null, times)
