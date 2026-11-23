@@ -22,6 +22,8 @@ import okhttp3.Request
 import okhttp3.ResponseBody.Companion.asResponseBody
 import okio.ForwardingSource
 import okio.buffer
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -1641,14 +1643,220 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun theSourceAlbumDistinguishesSameNamedSongRows() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val first = youTubeMusicRow("別名", "アーティスト • Another Album • 4:00", videoId = "first000000")
+        val second = youTubeMusicRow("別名", "アーティスト • Studio • 4:00", videoId = "second00000")
+        namesAndTabs(songs = listOf(first, second), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000, album = "Studio")),
+            elsewhere = mapOf("JP" to appleSong("別名", "アーティスト", 240_000, album = "Studio")))
+        assertEquals("https://music.youtube.com/watch?v=second00000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun theSourceAlbumDoesNotProveAnUnrelatedSong() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val first = youTubeMusicRow("別曲", "アーティスト • Studio • 4:00", videoId = "first000000")
+        val second = youTubeMusicRow("別曲", "アーティスト • Other • 4:00", videoId = "second00000")
+        namesAndTabs(songs = listOf(first, second), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000, album = "Studio")))
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun aLiveAlbumCannotMakeTheOnlyStudioCandidateAmbiguous() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val studio = youTubeMusicRow("別名", "アーティスト • Best • 4:00", videoId = "first000000")
+        val live = youTubeMusicRow("別名", "アーティスト • Live at Budokan • 4:00", videoId = "second00000")
+        namesAndTabs(songs = listOf(studio, live), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000, album = "Studio")),
+            elsewhere = mapOf("JP" to appleSong("別名", "アーティスト", 240_000, album = "Studio")))
+        assertEquals("https://music.youtube.com/watch?v=first000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun anExplicitlyRequestedLiveRecordingChoosesTheLiveAlbum() = runBlocking {
+        val song = MusicMetadata("Song (Live)", "アーティスト", lengthMs = 240_000)
+        val studio = youTubeMusicRow("別名", "アーティスト • Best • 4:00", videoId = "first000000")
+        val live = youTubeMusicRow("別名", "アーティスト • Live at Budokan • 4:00", videoId = "second00000")
+        namesAndTabs(songs = listOf(studio, live), apple = mapOf("US" to appleSong("Song (Live)", "アーティスト", 240_000, album = "Studio")),
+            elsewhere = mapOf("JP" to appleSong("別名", "アーティスト", 240_000, album = "Studio")))
+        assertEquals("https://music.youtube.com/watch?v=second00000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun identicalDisplayedSongRowsOpenTheFirst() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val first = youTubeMusicRow("別名", "アーティスト • Studio • 4:00", videoId = "first000000")
+        val second = youTubeMusicRow("別名", "アーティスト • Studio • 4:00", videoId = "second00000")
+        namesAndTabs(songs = listOf(first, second), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
+        assertEquals("https://music.youtube.com/watch?v=first000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun anExplicitBadgeMakesOtherwiseIdenticalRowsDifferent() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val first = youTubeMusicRow("別名", "アーティスト • Studio • 4:00", videoId = "first000000")
+        val second = JSONObject(youTubeMusicRow("別名", "アーティスト • Studio • 4:00", videoId = "second00000"))
+        second.getJSONObject("musicResponsiveListItemRenderer").put("badges", JSONArray().put(JSONObject().put("musicInlineBadgeRenderer",
+            JSONObject().put("icon", JSONObject().put("iconType", "MUSIC_EXPLICIT_BADGE")))))
+        namesAndTabs(songs = listOf(first, second.toString()), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000, album = "Studio")))
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun unrelatedAmbiguousSongsDoNotHideTheArtistsVideo() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val first = youTubeMusicRow("別曲", "アーティスト • Studio • 4:00", videoId = "first000000")
+        val second = youTubeMusicRow("別曲", "アーティスト • Live at Budokan • 4:00", videoId = "second00000")
+        val video = youTubeMusicRow("アーティスト - Song", "アーティスト • 1M views • 4:00", videoId = "video000000")
+        namesAndTabs(songs = listOf(first, second), videos = listOf(video), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
+        assertEquals("https://music.youtube.com/watch?v=video000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun unrelatedAmbiguousSongsDoNotHideTheDeezerSong() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val first = youTubeMusicRow("別曲", "アーティスト • Studio • 4:00", videoId = "first000000")
+        val second = youTubeMusicRow("別曲", "アーティスト • Live at Budokan • 4:00", videoId = "second00000")
+        val right = youTubeMusicRow("Song", "Artist • Album • 4:00", videoId = "original000")
+        val deezer = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"duration":240}]"""
+        namesAndTabs(songs = listOf(first, second, right), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)),
+            deezer = deezer, deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        val finder = ExactMatcher(fake.client(), "US", artistAliases = { setOf("アーティスト", "Artist") })
+        assertEquals("https://music.youtube.com/watch?v=original000", finder.find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun aUniqueDeezerAlbumDistinguishesSameNamedRows() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val first = youTubeMusicRow("別名 - Song", "Artist • Studio • 4:00", videoId = "original000")
+        val second = youTubeMusicRow("別名 - Song", "Artist • Another Album • 4:00", videoId = "other000000")
+        val track = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"album":{"title":"Studio"},"duration":240}]"""
+        namesAndTabs(songs = listOf(first, second), deezer = track, deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        val finder = ExactMatcher(fake.client(), "US", artistAliases = { setOf("アーティスト", "Artist") })
+        assertEquals("https://music.youtube.com/watch?v=original000", finder.find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun deezerCannotUseTheLatinHalfOfAnAlbumMixToNameTheStudioSong() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val mix = youTubeMusicRow("別名 (Album Mix) - Song", "Artist • Diamond • 4:00", videoId = "mix00000000")
+        val studio = youTubeMusicRow("別名 - Song", "Artist • Dear • 4:00", videoId = "original000")
+        val track = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"album":{"title":"Diamond"},"duration":240},{"title":"Song","artist":{"id":1,"name":"Artist"},"album":{"title":"Dear"},"duration":240}]"""
+        namesAndTabs(songs = listOf(mix, studio), deezer = track, deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        val finder = ExactMatcher(fake.client(), "US", artistAliases = { setOf("アーティスト", "Artist") })
+        assertEquals("https://music.youtube.com/watch?v=original000", finder.find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun aBilingualTitleDoesNotProveARowFromAnotherAlbum() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val other = youTubeMusicRow("別名 - Song", "Artist • Another Album • 4:00", videoId = "other000000")
+        val track = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"album":{"title":"Studio"},"duration":240}]"""
+        namesAndTabs(songs = listOf(other), deezer = track, deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        val finder = ExactMatcher(fake.client(), "US", artistAliases = { setOf("アーティスト", "Artist") })
+        assertNull(finder.find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun anotherAppleEditionDoesNotRejectTheUnprovenSong() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val row = youTubeMusicRow("別名", "アーティスト • Single • 4:00", videoId = "original000")
+        namesAndTabs(songs = listOf(row), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000, id = 7, album = "Studio")))
+        val answer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.queryParameter("term") == "別名 アーティスト") {
+                FakeSpotify.html(request, """{"results":[${appleSong("別名", "アーティスト", 240_000, id = 8, album = "Single")}]}""")
+            } else answer(request)
+        }
+        assertEquals("https://music.youtube.com/watch?v=original000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun aSourceSearchEditionCanProveTheCandidateByItsOwnId() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val other = youTubeMusicRow("別曲", "アーティスト • Other • 4:00", videoId = "other000000")
+        val row = youTubeMusicRow("別名", "アーティスト • Single • 4:00", videoId = "original000")
+        val fan = youTubeMusicRow("アーティスト - Song", "Fan • 1M views • 4:00", videoId = "fan00000000")
+        val source = appleSong("Song", "アーティスト", 240_000, id = 7, album = "Studio") + "," +
+            appleSong("Song", "アーティスト", 240_000, id = 8, album = "Single")
+        namesAndTabs(songs = listOf(other, row), videos = listOf(fan), apple = mapOf("US" to source))
+        val answer = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.queryParameter("term") == "別名 アーティスト") {
+                FakeSpotify.html(request, """{"results":[${appleSong("別名", "アーティスト", 240_000, id = 8, album = "Single")}]}""")
+            } else answer(request)
+        }
+        assertEquals("https://music.youtube.com/watch?v=original000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun appleCandidateProofSearchesAtMostTwoRows() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val rows = listOf("別曲一", "別曲二", "別曲三", "別曲四").mapIndexed { i, title ->
+            youTubeMusicRow(title, "アーティスト • Album • 4:00", videoId = "candidate0$i")
+        }
+        namesAndTabs(songs = rows, apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
+        fake.requestedUrls.clear()
+        matcher("US").find(MusicService.YOUTUBE_MUSIC, song)
+        val candidates = fake.requestedUrls.map { it.toHttpUrl() }.filter { it.host == "itunes.apple.com" && it.queryParameter("term")?.startsWith("別曲") == true }
+        assertEquals("Candidate searches", 2, candidates.size)
+    }
+
+    @Test
+    fun aKnownSongDoesNotSearchAppleForAnotherCandidate() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val known = youTubeMusicRow("別名", "アーティスト • Album • 4:00", videoId = "known000000")
+        val candidate = youTubeMusicRow("別曲", "アーティスト • Album • 4:00", videoId = "other000000")
+        namesAndTabs(songs = listOf(known, candidate), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)),
+            elsewhere = mapOf("JP" to appleSong("別名", "アーティスト", 240_000)))
+        fake.requestedUrls.clear()
+        assertEquals("https://music.youtube.com/watch?v=known000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().queryParameter("term") == "別曲 アーティスト" })
+    }
+
+    @Test
     fun aDifferentLengthDoesNotMakeTheMatchingAwakeningAmbiguous() = runBlocking {
         val song = MusicMetadata("Awakening", "佐藤 博", lengthMs = 152_907)
         val short = youTubeMusicRow("AWAKENING（覚醒） - Awakening (Kakusei)", "Hiroshi Sato • Awakening • 2:29", videoId = "ZgKbojgTD6g")
         val right = youTubeMusicRow("AWAKENING（覚醒） - Awakening (Kakusei)", "Hiroshi Sato • Awakening (Special Edition) • 2:33", videoId = "xooyZmoKSas")
         val fan = youTubeMusicRow("佐藤博　Awakening", "domon@guitar • 915 views • 2:30", videoId = "buP2EkPGA3g")
-        namesAndTabs(songs = listOf(short, right), videos = listOf(fan),
-            apple = mapOf("US" to appleSong("Awakening", "Hiroshi Sato", 152_907, id = 1507070073)))
+        val editions = listOf(148_453L, 152_907L, 217_840L, 221_773L).joinToString(",") {
+            appleSong("Awakening", "Hiroshi Sato", it, id = 1507070073, album = "Awakening (Special Edition)")
+        }
+        val native = appleSong("AWAKENING(覚醒)", "佐藤 博", 152_907, id = 1507070073, album = "アウェイクニング スペシャル・エディション")
+        namesAndTabs(songs = listOf(short, right), videos = listOf(fan), apple = mapOf("US" to editions), elsewhere = mapOf("JP" to native))
         assertEquals("https://music.youtube.com/watch?v=xooyZmoKSas", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun anUntimedSongCannotBeRuledOutByTheSourceLength() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val timed = youTubeMusicRow("Song", "アーティスト • First • 4:00", videoId = "first000000")
+        val untimed = youTubeMusicRow("Song", "アーティスト • Second", videoId = "second00000")
+        namesAndTabs(songs = listOf(timed, untimed), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun directlyNamedRowsNeedIdenticalFieldsOrEvidenceToChoose() = runBlocking {
+        val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
+        val first = youTubeMusicRow("Song", "アーティスト • First • 4:00", videoId = "first000000")
+        val identical = youTubeMusicRow("Song", "アーティスト • First • 4:00", videoId = "second00000")
+        val otherAlbum = youTubeMusicRow("Song", "アーティスト • Second • 4:00", videoId = "second00000")
+        namesAndTabs(songs = listOf(first, identical), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
+        assertEquals("https://music.youtube.com/watch?v=first000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        namesAndTabs(songs = listOf(first, otherAlbum), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun aKnownBilingualTitleAndAlbumDistinguishTheStudioRecording() = runBlocking {
+        val song = MusicMetadata("Totsuzen No Okurimono", "大貫妙子", lengthMs = 304_293)
+        val live = youTubeMusicRow("突然の贈りもの - Totsuzen no Okurimono", "Taeko Onuki • Taeko Onuki Meets Akira Senju Symphonic Concert 2016 • 5:02", videoId = "PF1R6oerEeY")
+        val studio = youTubeMusicRow("突然の贈りもの - Totsuzen No Okurimono", "Taeko Onuki • Mignonne (Mastered by Bernie Grundman) • 5:05", videoId = "VK84ufw2zI8")
+        val american = appleSong("Totsuzen No Okurimono", "Taeko Onuki", 304_293, id = 1597423773, album = "Mignonne (Mastered by Bernie Grundman)")
+        val japanese = appleSong("突然の贈りもの", "大貫妙子", 304_293, id = 1597423773, album = "MIGNONNE (Mastered by Bernie Grundman)")
+        namesAndTabs(songs = listOf(live, studio), apple = mapOf("US" to american), elsewhere = mapOf("JP" to japanese))
+        assertEquals("https://music.youtube.com/watch?v=VK84ufw2zI8", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
     }
 
     @Test

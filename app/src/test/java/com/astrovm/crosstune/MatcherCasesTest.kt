@@ -540,15 +540,15 @@ class MatcherCasesTest {
 
     @Test
     fun thePickerCannotChooseALiveRecordingWhenSameNamedRowsAreAmbiguous() {
-        val case = Case("ambiguous studio and live", null,
+        val case = Case("ambiguous studio and live", null, album = "",
             songs = listOf(row("偽の歌"), row("偽の歌", "Live at Budokan")), picked = 1)
         assertEquals(null, find(case))
     }
 
     @Test
     fun anAmbiguousSongCannotFallThroughToAShortTeaser() {
-        val case = Case("ambiguous songs and teaser", null,
-            songs = listOf(row("偽の歌"), row("偽の歌")), videos = listOf(video("Fake Song (Teaser)", "0:30")))
+        val case = Case("ambiguous songs and teaser", null, album = "",
+            songs = listOf(row("偽の歌"), row("偽の歌", "Another Album")), videos = listOf(video("Fake Song (Teaser)", "0:30")))
         assertEquals(null, find(case))
     }
 
@@ -559,6 +559,21 @@ class MatcherCasesTest {
             videos = listOf(video("Chijimu (Official Video)", "1:34", "偽バンド"), video("Kokoro", "1:32", "偽バンド")),
             chooses = { rows -> rows.indexOfFirst { it.startsWith("Kokoro |") }.takeIf { it >= 0 } })
         assertEquals("video1", find(case))
+    }
+
+    @Test
+    fun aNamedVideoIsOfferedBeforeAnUnrelatedVideo() {
+        val case = Case("known video before picker", null, title = "Kokoro",
+            songs = listOf(row("Tokyo", "Karaoke Picks", length = "3:00"), row("Tokyo", length = "0:30")),
+            videos = listOf(video("Chijimu (Official Video)", "1:34", "偽バンド"), video("Kokoro", "1:32", "偽バンド")), picked = 0)
+        assertEquals("video1", find(case))
+    }
+
+    @Test
+    fun aKnownPartAndSourceAlbumDistinguishRows() {
+        val case = Case("part and album", null, title = "Fake Song Pt.2", japan = japanese("偽の歌 Pt.2"),
+            songs = listOf(row("偽の歌 Part 2"), row("偽の歌 Part 2", "Live Best")))
+        assertEquals("song0", find(case))
     }
 
     @Test
@@ -820,8 +835,12 @@ class MatcherCasesTest {
         assumeFalse("Not in a mutation run", mutationRun)
         val opened = mutableListOf<String>()
         val main = if (onMain) emptyMap() else stored(MATRIX)
+        // Each listed loss has differently displayed rows and no evidence to choose between them.
+        val acceptedLosses = requireNotNull(javaClass.getResourceAsStream("/matcher-accepted-right-losses.tsv"))
+            .bufferedReader().use { it.readLines().filter(String::isNotBlank).toSet() }
         val worse = mutableListOf<String>()
         val counts = sortedMapOf<String, Int>()
+        val rightLosses = mutableListOf<String>()
         var cells = 0
         val drawn = songsOfTheMatrix.flatMap { song ->
             val kinds = rowsOf(song)
@@ -859,24 +878,33 @@ class MatcherCasesTest {
             val was = requireNotNull(main[key]) { key }.map { it.takeIf { id -> id != "-" } }
             val indistinguishable = first != null && second != null &&
                 SongNames.normalize(first.name) == SongNames.normalize(second.name)
-            // A same-named pair may hide two recordings. Withholding a row is safe; opening a different one is not.
-            val expected = if (indistinguishable) results.zip(was).map { (now, before) ->
-                if (now.id == null && !now.asked) null else before
-            } else was
-            worse += broken(key, results, expected)
             fun verdict(id: String?) = when {
                 id == null -> NOTHING
                 isIt(if (id.startsWith("video")) requireNotNull(video) else rows[id.removePrefix("song").toInt()], song) -> RIGHT
                 else -> WRONG
             }
+            // A same-named pair may hide two recordings, but a right result on main must stay right.
+            val expected = results.zip(was).mapIndexed { mode, (now, before) ->
+                when {
+                    verdict(now.id) == RIGHT && verdict(before) != NOTHING -> now.id
+                    now.id == null && !now.asked && "$key\t${MODES[mode]}\t$before" in acceptedLosses -> null
+                    indistinguishable && now.id == null && !now.asked && verdict(before) == WRONG -> null
+                    else -> before
+                }
+            }
+            worse += broken(key, results, expected)
             results.zip(was).forEachIndexed { mode, (now, then) ->
                 val (before, after) = verdict(then) to verdict(now.id)
-                if (before == RIGHT && after != RIGHT && mode == 0) println("Right result changed: $key, $then -> ${now.id}")
+                if (before == RIGHT && after == NOTHING) rightLosses += "$key\t${MODES[mode]}\t$then"
+                if (before == RIGHT && after != RIGHT) println("Right result changed: $key, ${MODES[mode]}, $then -> ${now.id}")
                 counts.merge("${MODES[mode]}: $before -> $after", 1, Int::plus)
             }
         }
         written(MATRIX, opened)
+        written("matcher-right-losses", rightLosses)
         println("Main -> now, cells:\n" + counts.entries.joinToString("\n"))
+        val drawnKeys = opened.map { it.substringBefore('\t') }.toSet()
+        if (!onMain) assertEquals("Accepted losses in the selected cells", acceptedLosses.filter { it.substringBefore('\t') in drawnKeys }.toSet(), rightLosses.toSet())
         assertEquals("${worse.size} worse: " + worse.take(WORSE_SHOWN).joinToString("\n"), 0, worse.size)
     }
 
@@ -904,6 +932,10 @@ class MatcherCasesTest {
                 // Isuzu: the Topic upload names the same song and is two seconds longer than main's video.
                 assertEquals(listOf("video0", "video0", "video0", "video0", "video0", "video0", "video1"), was)
                 List(was.size) { "video1" }
+            } else if (index == 3242) {
+                // The picker asked for the first row: main opened Tokyo, but the named video is Kokoro.
+                assertEquals("song0", was[2])
+                was.mapIndexed { mode, id -> if (mode == 2) "video1" else id }
             } else was
             broken += broken(key, found, expected)
             found.zip(was).forEachIndexed { mode, (now, then) ->
@@ -1131,6 +1163,9 @@ class MatcherCasesTest {
          * of the song is no longer taken for it (Issues #945, #983 and #992).
          */
         val CHANGED: Map<String, String?> = mapOf(
+            // The displayed live titles differ, and no evidence chooses their recordings.
+            "3 Fake Song: Live latin" to null,
+            "3 Fake Song «Live» latin" to null,
             "9 budokan" to "song1",
             "9 budokan picked" to "song1",
             "9 op size" to "song1",

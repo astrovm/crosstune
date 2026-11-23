@@ -29,6 +29,7 @@ class MatchReplayTest {
     private val missingProofs = ConcurrentHashMap.newKeySet<String>()
     private var aliases = JSONObject()
     private val missingAliases = ConcurrentHashMap.newKeySet<String>()
+    private val aliasRequests = java.util.concurrent.atomic.AtomicInteger()
 
     @Test
     fun candidateSearchesNeedTheirOwnCapturedAnswers() {
@@ -80,21 +81,28 @@ class MatchReplayTest {
     private fun replay(songs: List<JSONObject>, kept: List<Map<String, String?>>, appleDown: Boolean, both: Boolean) {
         val found = JSONObject()
         val shown = JSONObject()
+        val requests = JSONObject()
         for (names in listOf(true, false)) {
             for (asked in listOf(false, true)) {
                 val urls = JSONArray()
                 val asks = JSONArray()
+                val counts = JSONArray()
                 songs.zip(kept).forEach { (song, answers) ->
                     val seen = JSONArray()
+                    fake.requestedUrls.clear()
+                    aliasRequests.set(0)
                     urls.put(find(song, answers, names, asked, seen, appleDown) ?: JSONObject.NULL)
                     asks.put(seen)
+                    counts.put(fake.requestedUrls.size + aliasRequests.get())
                 }
                 val mode = "${if (names) "names" else "latin"}, ${if (asked) "asked" else "alone"}"
                 found.put(mode, urls)
                 shown.put(mode, asks)
+                requests.put(mode, counts)
             }
         }
         found.put("shown", shown)
+        found.put("requests", requests)
         val label = System.getenv("MATCHCHECK_LABEL") ?: "head"
         val suffix = if (both) if (appleDown) "-down" else "-up" else ""
         File(dir, "replay-$label$suffix.json").writeText(found.toString())
@@ -115,7 +123,7 @@ class MatchReplayTest {
         }
         // Long whiles, as a busy machine is no answer from a service here: each answer is kept.
         val matcher = ExactMatcher(fake.client(), "US", pick = if (asked) pick else { _, _, _ -> null }, timeoutMs = WHILE_MS, pickTimeoutMs = WHILE_MS,
-            artistAliases = { name -> aliases.optJSONArray(name)?.strings()?.toSet() ?: run { missingAliases += name; null } }, // MATCHCHECK_ARTIST_ALIASES
+            artistAliases = { name -> aliasRequests.incrementAndGet(); aliases.optJSONArray(name)?.strings()?.toSet() ?: run { missingAliases += name; null } }, // MATCHCHECK_ARTIST_ALIASES
         )
         return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = song.optLong("lengthMs").takeIf { it > 0 })) }
     }
