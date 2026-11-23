@@ -2498,7 +2498,7 @@ class ExactMatcherTest {
         val fan = youTubeMusicRow("Artist - Song", "Fan • 1K views • 4:00", videoId = "fan00000000")
         val row = youTubeMusicRow("Other", "Other • Album • 4:00", videoId = "other000000")
         namesAndTabs(songs = listOf(row), videos = listOf(fan), apple = mapOf("US" to appleSong("Song", "Artist", 240_000)), deezerDown = true)
-        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), matcher("US").lookFor(MusicService.YOUTUBE_MUSIC, song))
+        assertEquals(ExactMatcher.Match.WaitingForNames, matcher("US").lookFor(MusicService.YOUTUBE_MUSIC, song))
     }
 
     @Test
