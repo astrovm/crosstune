@@ -33,7 +33,7 @@ internal class LeadTiming {
         if (lead !in possible || abs(lead) > LONGEST_LEAD_MS) return null
         points += SyncPoint(song.positionMs, song.positionMs + lead)
         if (points.size > 7) points.removeAt(0)
-        return AudioTiming.confirmed(points).singleOrNull()?.let { it.songMs - it.lineMs }
+        return AudioTiming.confirmedShift(points)
     }
 
     companion object {

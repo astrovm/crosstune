@@ -1,0 +1,27 @@
+[
+  {
+    "id": 38645248,
+    "trackName": "Accordian",
+    "artistName": "Madlib, Madvillain",
+    "albumName": "Madvillainy Instrumentals",
+    "duration": 114,
+    "instrumental": true
+  },
+  {
+    "id": 2523046,
+    "trackName": "Accordian (Instrumental)",
+    "artistName": "Madvillain & Madlib",
+    "albumName": "Madvillainy Instrumentals",
+    "duration": 114,
+    "instrumental": true
+  },
+  {
+    "id": 2288911,
+    "trackName": "Accordian",
+    "artistName": "Madvillain, Madlib & MF Doom",
+    "albumName": "Madvillainy",
+    "duration": 117,
+    "instrumental": false,
+    "syncedLyrics": "[00:01.00] Hold the light\n[00:10.00] Out in the rain"
+  }
+]
