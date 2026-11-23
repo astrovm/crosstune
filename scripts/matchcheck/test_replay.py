@@ -74,6 +74,20 @@ class RightIdsTest(unittest.TestCase):
 
 
 class PrepareTest(unittest.TestCase):
+    @patch("replay.cached_deezer")
+    @patch("replay.ytm_path")
+    def test_latin_query_requires_the_captured_answers(self, ytm, deezer):
+        song = dict(LEMON, askedArtist="米津玄師", query="Lemon 米津玄師")
+        ytm.return_value = "kept.json"
+        deezer.side_effect = [[{"title": "Lemon"}], [{"id": 1}]]
+        [extra] = replay.latin_queries("/corpus", [song])
+        self.assertEqual("Lemon Kenshi Yonezu", extra["query"])
+        self.assertEqual("Kenshi Yonezu", extra["askedArtist"])
+        self.assertEqual([{"title": "Lemon"}], extra["deezer"])
+        self.assertEqual("米津玄師", song["askedArtist"])
+        ytm.return_value = None
+        self.assertEqual([], replay.latin_queries("/corpus", [song]))
+
     def test_the_answers_kept_are_named_where_in_the_folder_so_a_copy_of_it_finds_them(self):
         with tempfile.TemporaryDirectory() as out:
             song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon 米津玄師", askedArtist="米津玄師", ytmSongs=True, ytmVideos=True, deezerAnswered=True, deezerArtistsAnswered=True)

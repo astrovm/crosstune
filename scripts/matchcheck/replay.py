@@ -123,9 +123,36 @@ def read_json(path):
         return json.load(kept)
 
 
-def prepare(out, require_answers=False):
+def cached_deezer(out, path, query):
+    params = urllib.parse.urlencode({"q": query, "limit": 10})
+    kept = raw_path(out, f"https://api.deezer.com/{path}?{params}", None)
+    answer = read_json(kept) if kept else None
+    return answer.get("data") if isinstance(answer, dict) and "error" not in answer else None
+
+
+def latin_queries(out, songs):
+    """Add Latin-artist searches only when both services' actual answers were captured."""
+    found = []
+    for song in songs:
+        if song.get("askedArtist", song["artist"]) == song["artist"]:
+            continue
+        query = f"{song['title']} {song['artist']}"
+        if not ytm_path(out, query, collect.YTM_SONGS) or not ytm_path(out, query, collect.YTM_VIDEOS):
+            continue
+        tracks = cached_deezer(out, "search/track", query)
+        artists = cached_deezer(out, "search/artist", song["artist"])
+        if not isinstance(tracks, list) or not isinstance(artists, list):
+            continue
+        found.append(dict(song, askedArtist=song["artist"], query=query, deezer=tracks, deezerArtists=artists,
+                          ytmSongs=True, ytmVideos=True, deezerAnswered=True, deezerArtistsAnswered=True))
+    return found
+
+
+def prepare(out, require_answers=False, also_latin=False):
     with open(os.path.join(out, "songs.json"), encoding="utf-8") as kept:
         songs = json.load(kept)
+    if also_latin:
+        songs += latin_queries(out, songs)
     replay = []
     for song in songs:
         query = song["query"]
@@ -235,10 +262,11 @@ def main():
     parser.add_argument("--both", action="store_true", help="write LABEL-up and LABEL-down in one run")
     parser.add_argument("--require-answers", action="store_true", help="fail preparation if a YouTube Music answer is missing")
     parser.add_argument("--require-proofs", action="store_true", help="fail the replay if a candidate Apple search is missing")
+    parser.add_argument("--also-latin", action="store_true", help="add captured Latin-artist queries for the same songs")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     if args.action == "prepare":
-        prepare(args.out, args.require_answers)
+        prepare(args.out, args.require_answers, args.also_latin)
     elif args.action == "run":
         run(args.out, args.label, args.apple_down, args.both, args.require_proofs)
     elif args.action == "capture-proofs":
