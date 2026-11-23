@@ -2479,6 +2479,39 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aFailedDeezerLengthLookupDoesNotConfirmAFanUpload() = runBlocking {
+        val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS", lengthMs = 184_000)
+        val fan = youTubeMusicRow("THE BLUE HEARTS - Owaranai Uta", "Fan • 1K views • 3:04", videoId = "fan00000000")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, lengthMs = 0))
+        var clock = 0L
+        val finder = ExactMatcher(fake.client(), "AR", now = { clock })
+        namesAndTabs(videos = listOf(fan), apple = apple, deezerDown = true)
+        assertEquals(ExactMatcher.Match.Failed, finder.lookFor(MusicService.YOUTUBE_MUSIC, song))
+        namesAndTabs(videos = listOf(fan), apple = apple, deezer = """[{"title":"Owaranai Uta","artist":{"name":"THE BLUE HEARTS"},"duration":184}]""")
+        clock += ExactMatcher.UNSURE_FOR_MS
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000"), finder.lookFor(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun aFailedDeezerTrackLookupDoesNotLoseAnAppleLength() = runBlocking {
+        val song = MusicMetadata("Song", "Artist")
+        val fan = youTubeMusicRow("Artist - Song", "Fan • 1K views • 4:00", videoId = "fan00000000")
+        val row = youTubeMusicRow("Other", "Other • Album • 4:00", videoId = "other000000")
+        namesAndTabs(songs = listOf(row), videos = listOf(fan), apple = mapOf("US" to appleSong("Song", "Artist", 240_000)), deezerDown = true)
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=fan00000000", lasting = false), matcher("US").lookFor(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun anAppleProvedOwnVideoDoesNotWaitForDeezerAfterAnUnrelatedFanVideo() = runBlocking {
+        val song = MusicMetadata("Song", "Artist")
+        val fan = youTubeMusicRow("Artist - Song", "Fan • 1K views • 4:00", videoId = "fan00000000")
+        val own = youTubeMusicRow("Song", "Artist • 1M views • 4:30", videoId = "own00000000")
+        namesAndTabs(videos = listOf(fan, own), apple = mapOf("AR" to appleSong("Song", "Artist", 240_000)), failing = setOf("JP"))
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=own00000000", lasting = false), matcher().lookFor(MusicService.YOUTUBE_MUSIC, song))
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().host == "api.deezer.com" })
+    }
+
+    @Test
     fun aWordForAnotherVersionInTheSongsOwnNameDoesntCountAgainstIt() {
         val song = MusicMetadata("ギターと孤独と蒼い惑星", "Kessoku Band")
         // Its name elsewhere doesn't have the word, but this one does, so it counts.
