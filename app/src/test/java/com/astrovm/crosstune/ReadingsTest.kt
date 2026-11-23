@@ -979,6 +979,20 @@ class ReadingsTest {
     @Test
     fun consecutiveSmallTsuAndKatakanaSmallTsuKeepTheirWordsWithUniDic() = TestUniDic.reading { checkConsecutiveSmallTsu() }
 
+    @Test
+    fun smallTsuBridgeAndLongVowelsReadTogether() {
+        val line = "りゅうっっさくら ぱーてぃー"
+        fun check() {
+            val reading = Readings.of(listOf(line), Script.JAPANESE).single()
+            assertEquals(line, "ryuussakura paatii", reading.romanized)
+            assertEquals(line, "りゅうっっさくら ぱーてぃー", reading.reading)
+            val bridges = SmallKanaTokenizer { Readings.oldKana }.tokenize(line).filterIsInstance<SmallKanaTokenizer.BridgedToken>()
+            assertEquals(line, listOf("りゅうっっ"), bridges.map { it.surface })
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
     private fun checkConsecutiveSmallTsu() {
         for (line in listOf("りゅうっっさくら", "りゅうっッさくら", "りゅうッっッさくら")) {
             assertEquals(line, "ryuussakura", Readings.of(listOf(line), Script.JAPANESE).single().romanized)
