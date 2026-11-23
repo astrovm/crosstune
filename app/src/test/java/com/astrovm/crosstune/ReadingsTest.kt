@@ -806,6 +806,7 @@ class ReadingsTest {
         fun lookups() = cases.keys.map { line -> Readings.words(line, Script.JAPANESE).map { it.lookup } }
         val expectedLookups = cases.keys.map { listOf(it) }
         assertEquals(listOf(expectedLookups, expectedLookups), listOf(lookups(), TestUniDic.reading { lookups() }))
+        assertEquals(listOf(Reader.JMDICT), Readings.words("奔る", Script.JAPANESE).single().by)
         val inContext = mapOf("奔る奴隷" to "はしるどれい", "溢るる涙" to "あふるるなみだ")
         fun contextualReadings() = Readings.of(inContext.keys.toList(), Script.JAPANESE).map { it.reading }
         val contextualExpected = inContext.values.toList()
