@@ -41,7 +41,7 @@ class PlayWorkflowsTest(unittest.TestCase):
         self.assertRegex(action, r"(?s)if: inputs\.gradle == 'central'\n\s+uses: gradle/actions/setup-gradle@[^\n]+\n\s+with:\n\s+cache-provider: external")
         release = jobs(release_text)
         self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: central", release["build"])
-        self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: central", release["rebuild"])
+        self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: disabled", release["rebuild"])
         jmdict = (WORKFLOWS / "jmdict.yml").read_text(encoding="utf-8")
         self.assertNotIn("CROSSTUNE_MAVEN_MIRROR", jmdict)
         self.assertIn("gradle: central", jobs(jmdict)["remake"])
@@ -62,8 +62,8 @@ class PlayWorkflowsTest(unittest.TestCase):
         rebuild = release["rebuild"]
         self.assertNotIn("needs:", rebuild)
         self.assertIn("permissions: {}", rebuild)
-        # Dependencies come from Central's cache; Gradle cannot reuse another build's outputs.
-        self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: central", rebuild)
+        # It downloads its own dependencies and cannot reuse another build's outputs.
+        self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: disabled", rebuild)
         self.assertIn("./gradlew :app:assembleRelease --no-build-cache", rebuild)
         self.assertIn("name: rebuilt\n          path: app/build/outputs/apk/release/app-release-unsigned.apk", rebuild)
         # The comparison takes the APK sign made and the one rebuild made, and runs none of the build's code.

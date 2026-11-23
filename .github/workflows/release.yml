@@ -219,8 +219,8 @@ jobs:
           path: Crosstune-${{ env.TAG }}.aab
           if-no-files-found: error
 
-  # Rebuilds the commit with no Gradle build cache, as F-Droid does before shipping our APK. Its dependencies
-  # come from the Central-only cache. It runs independently; verify then compares the signed APK with it.
+  # Rebuilds independently with no Gradle cache: it downloads its own dependencies from Central, so verify
+  # compares the signed APK with a build that did not share its dependency files or build outputs.
   rebuild:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
@@ -233,7 +233,7 @@ jobs:
 
       - uses: ./.github/actions/jdk
         with:
-          gradle: central
+          gradle: disabled
 
       - name: Build unsigned APK
         run: ./gradlew :app:assembleRelease --no-build-cache
