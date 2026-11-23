@@ -1,0 +1,6 @@
+Crosstune follows the right music app and song, and Play picks up where a paused song stopped.
+The sleep timer's End of song waits for the song to end.
+Lyrics keep a better timing once the singing is heard twice, and lines you timed by hand stay as they are.
+Naming a song by ear works through any speaker or headphones.
+Japanese readings get small kana and long vowels right.
+On TV, the remote lands back where you were.

@@ -2719,6 +2719,8 @@ internal class MainViewModel(
     private var heardThisTime = false
     /** How far off the words as found a whole while heard last said they are, far enough off to say they're off themselves, with the app's clock unsure: they're kept so once another while agrees. */
     private var farOffMs: Long? = null
+    /** A hearing kept before this listening session, not another hearing in this session. */
+    private var pendingBeforePlay: PendingShift? = null
     /** Whether the lines shown were moved this time by a while found further off than near lines are looked at, and nothing agreed yet. */
     private var movedFar = false
     /** A whole while moved the words far this time; report only once later whiles can no longer put them back. */
@@ -2800,7 +2802,7 @@ internal class MainViewModel(
         if (uiState.lyricsFor == song && (uiState.lyrics.isNotEmpty() || uiState.isLoadingLyrics)) return
         // A song just heard, or playing as it's shown, is followed on to the next one; one picked to read stays.
         shownPlayed = playing || heardSong?.let { sameSong(it, song) } == true
-        leaveWords()
+        val sendAfterLeaving = leaveWords()
         keepShown()
         lyricsJob?.cancel()
         stopLearning()
@@ -2858,7 +2860,9 @@ internal class MainViewModel(
                 reportUntimed()
             }
         }
+        if (autoReports.allowed == null && autoReports.owes(song, SongProblem.SUNG_OFF)) offerToReport(SongProblem.SUNG_OFF)
         watchNext(song)
+        if (sendAfterLeaving) sendOwed()
         // A song Crosstune just heard is still playing nearby, so it keeps listening, to stay in time with it.
         if (heardSong?.let { sameSong(it, song) } == true) listenAlong()
     }
@@ -2890,6 +2894,7 @@ internal class MainViewModel(
     private fun useFoundTiming(song: MusicMetadata, answer: LyricsFinder.Lyrics.Found) {
         foundLines = answer.lines
         found = answer
+        syncStore.pending(song, foundLines)
         syncPoints = syncStore.load(song, foundLines)
         wordsPace = syncStore.pace(song, foundLines)
         keptByHand = syncStore.byHand(song, foundLines)
@@ -2953,6 +2958,7 @@ internal class MainViewModel(
         } ?: return false
         found = kept.found
         foundLines = kept.foundLines
+        syncStore.pending(song, foundLines)
         lyricsCanPreview = kept.canPreview
         restored = kept.japanese
         syncPoints = kept.syncPoints
@@ -3420,8 +3426,9 @@ internal class MainViewModel(
         if (!same || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return null
         if (sung.words.isNotEmpty()) singingTries = 0
         val from = clock.positionAt(sung.startedAtMs)
+        val to = clock.positionAt(sung.startedAtMs + SingingListener.SECONDS * 1000L)
         val heard = sung.words.filter { it.atMs >= 0 }.map { it.text to clock.positionAt(sung.startedAtMs + it.atMs) }
-        return HeardStretch(from, from + SingingListener.SECONDS * 1000L, heard)
+        return HeardStretch(from, to, heard)
     }
 
     /**
@@ -3436,15 +3443,18 @@ internal class MainViewModel(
     }
 
     /** How long [song] is, where the app plays it, as the singing heard is timed by its clock: as the app says, or else the song or its words. */
-    private fun untimedLengthMs(song: MusicMetadata) = appFollowing?.durationMs ?: song.lengthMs ?: found?.lengthMs
+    private fun untimedLengthMs(song: MusicMetadata) = appFollowing?.durationMs?.takeIf { it > 0 } ?: song.lengthMs ?: found?.lengthMs
 
     /** [song]'s words, found with no timing, timed by the singing heard in [heardStretches], once any line's been heard. */
     private suspend fun timeByEar(song: MusicMetadata) {
         val heard = heardStretches
         val words = uiState.lyrics
-        val length = untimedLengthMs(song) ?: heard.maxOfOrNull { it.toMs } ?: return
+        val knownLength = untimedLengthMs(song)
+        val length = knownLength ?: heard.map { it.toMs }.maxOrNull() ?: return
+        // A lyric source or a different recording can give the wrong length; only the player says this one ended.
+        val playerLengthKnown = appFollowing?.durationMs?.let { it > 0 } == true
         // A long song heard through twice takes a while to line up, so it's done away from the screen.
-        val lines = withContext(systemDispatcher) { SungTiming.timed(words.lines(), heard, length) }
+        val lines = withContext(systemDispatcher) { SungTiming.timed(words.lines(), heard, length, playerLengthKnown) }
         // Timed words found meanwhile, or these written otherwise, as in their own script: this is out of date.
         // Left, or heard again, the job doing this is stopped, so it never gets here.
         if (foundLines.isNotEmpty() || uiState.lyrics != words) return
@@ -3647,6 +3657,7 @@ internal class MainViewModel(
     private suspend fun hearOn(hearing: SingingHearing, song: MusicMetadata, lines: List<LyricLine>) {
         // Where in the song the singing was heard up to, so the next while heard is further on.
         var heardTo: Long? = null
+        pendingBeforePlay = syncStore.pending(song, lines)
         // Heard nothing to match, the words may be timed far off, so where they're timed says nothing.
         var straightOn = false
         // Whether any singing was found where the words are, while hearing on.
@@ -3668,7 +3679,7 @@ internal class MainViewModel(
             straightOn = shift == null
             found = foundSinging(found, sung, clock, shown, shift, voiced)
             val first = heardTo == null
-            heardTo = clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L
+            heardTo = clock.positionAt(sung.startedAtMs + SingingListener.SECONDS * 1000L)
             if (shift == null) {
                 TimingLog.note("sung nothing to place, clock sure $clockSure")
                 if (singingTries >= SINGING_TRIES) return
@@ -3784,7 +3795,10 @@ internal class MainViewModel(
         // again, as it's placed against the lines shown before its first seconds put them back.
         val keptShift = if (movedFar) SungAlignment.shiftMs(sung, clock::positionAt, kept) else null
         if (keptShift != null && abs(keptShift) < WORDS_OFF_MS) {
-            if (whole) movedFar = false
+            if (whole) {
+                movedFar = false
+                clearPending(song)
+            }
             farReportPending = false
             farOffMs = null
             heardPoints = heardAt(sung, clock, kept, keptShift, syncPoints).second
@@ -3794,26 +3808,57 @@ internal class MainViewModel(
         val (line, heard) = heardAt(sung, clock, shown, shift, shownPoints)
         // How far off the words as found are, by this while: the lines shown may be moved already.
         val offMs = shift + shown[line].timeMs - foundLines[line].timeMs
-        val agrees = farOffMs?.let { abs(it - offMs) < agreeingMs(offMs) } == true
+        val fromMs = clock.positionAt(sung.startedAtMs)
+        val toMs = clock.positionAt(sung.startedAtMs + SingingListener.SECONDS * 1000L)
+        val current = PendingShift(offMs, minOf(fromMs, toMs), maxOf(fromMs, toMs))
+        val agrees = farOffMs?.let { abs(it - offMs) < agreeingMs(offMs) } == true ||
+            pendingAgrees(current, whole)
         when {
             keeps(shift, agrees) -> return keepFarOff(song, heard)
             abs(shift) >= WORDS_OFF_MS -> {
                 // Remembered for the next while to agree with. Found by the far matcher alone, where by far the
                 // most words heard agree, they're shown there this time; otherwise they stay where they are.
-                if (whole) farOffMs = offMs
+                if (whole) {
+                    farOffMs = offMs
+                    rememberPending(song, current)
+                }
                 if (abs(shift) <= SungAlignment.MAX_SHIFT_MS) return
                 movedFar = true
                 if (whole) reportFarIfLeftMoved()
             }
             // Near where they're shown, moved there this time by a while found far off: this one says so too,
             // even after its first seconds put them back for now, so the problem waits to be found again.
-            whole -> {
-                farOffMs = offMs.takeIf { movedFar }
-                if (movedFar) reportFarIfLeftMoved()
-            }
+            whole -> heardNear(song, offMs)
         }
         heardPoints = heard
         showPoints()
+    }
+
+    private fun mayKeepPending() = syncPoints.isEmpty() && !keptByHand && !timedByHand
+
+    private fun heardNear(song: MusicMetadata, offMs: Long) {
+        if (!movedFar) clearPending(song)
+        farOffMs = offMs.takeIf { movedFar }
+        if (movedFar) reportFarIfLeftMoved()
+    }
+
+    private fun pendingAgrees(current: PendingShift, whole: Boolean): Boolean {
+        if (!whole || !mayKeepPending()) return false
+        val previous = pendingBeforePlay ?: return false
+        return current.toMs > current.fromMs && previous.separateFrom(current) &&
+            abs(previous.offsetMs - current.offsetMs) < agreeingMs(current.offsetMs)
+    }
+
+    private fun rememberPending(song: MusicMetadata, pending: PendingShift) {
+        if (mayKeepPending()) {
+            pendingBeforePlay = null
+            syncStore.rememberPending(song, foundLines, pending)
+        }
+    }
+
+    private fun clearPending(song: MusicMetadata) {
+        pendingBeforePlay = null
+        syncStore.clearPending(song)
     }
 
     /** The first line heard in [sung], [shift] off from the [lines] shown, and the points it puts them at, over [points]. Lines heard but none told where, the first is [shift] off. */
@@ -4475,7 +4520,10 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         when (autoReports.allowed) {
             true -> reportProblem(song, problem)
-            null -> offerToReport(problem)
+            null -> {
+                if (problem == SongProblem.SUNG_OFF && !autoReports.reported(song, problem)) keepFarReport(song)
+                offerToReport(problem)
+            }
             false -> Unit
         }
     }
@@ -4530,17 +4578,22 @@ internal class MainViewModel(
 
     /**
      * The words shown are left: put in time by hand, they're reported, so with the timing settled;
-     * an offer made for them goes.
+     * an offer made for them goes. Returns whether to check owed reports after the screen changes.
      */
-    private fun leaveWords() {
+    private fun leaveWords(): Boolean {
+        val sendAfterLeaving = !timedByHand && autoReports.allowed == true && uiState.lyricsFor != null
         // An offer for words being closed would vanish unseen, using up this session's one offer.
-        if (autoReports.allowed == true) reportFarIfStillMoved()
+        reportFarIfStillMoved()
+        if (autoReports.allowed == null && SongProblem.SUNG_OFF in uiState.reportOfferFor &&
+            uiState.lyricsFor?.let { autoReports.owes(it, SongProblem.SUNG_OFF) } == true
+        ) autoReports.offerInterrupted()
         closeReport()
         if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) {
             uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
         }
         timedByHand = false
         uiState = uiState.copy(reportOfferFor = emptySet())
+        return sendAfterLeaving
     }
 
     /** A whole while found the words far off: with no correction saved, it's a problem if they're left moved. */
@@ -4550,9 +4603,18 @@ internal class MainViewModel(
 
     /** No more of this play will be heard: a lone far match is reported only if nothing put the words back. */
     private fun reportFarIfStillMoved() {
-        if (farReportPending && movedFar && syncPoints.isEmpty()) problemFound(SongProblem.SUNG_OFF)
+        if (farReportIsDue()) problemFound(SongProblem.SUNG_OFF)
         farReportPending = false
     }
+
+    /** Keep the original report until consent is decided, even if the screen later closes. */
+    private fun keepFarReport(song: MusicMetadata) {
+        val sender = reports ?: return
+        val report = reportOn(sender, song, problem = SongProblem.SUNG_OFF).copy(id = autoReports.idFor(song, SongProblem.SUNG_OFF))
+        autoReports.owe(song, SongProblem.SUNG_OFF, report.json())
+    }
+
+    private fun farReportIsDue() = farReportPending && movedFar && syncPoints.isEmpty()
 
     /**
      * Words put in time by hand are reported once they're left, so a report on them is kept owed, whatever the
@@ -4577,8 +4639,10 @@ internal class MainViewModel(
         if (autoReports.allowed != true) return
         viewModelScope.launch {
             autoReports.sending.withLock {
-                val inFront = uiState.lyricsFor?.takeIf { timedByHand }?.let(autoReports::owedKey)
-                for (owed in autoReports.owed().filter { it.key != inFront }) {
+                for (owed in autoReports.owed()) {
+                    // Lyrics can open or reopen while another report is sent or paced.
+                    val inFront = uiState.lyricsFor?.let(autoReports::owedKeys).orEmpty()
+                    if (owed.key in inFront) continue
                     // Past the day's share, or gone another way meanwhile, as the words it's for were left: it's skipped.
                     val delivery = deliver(sender, owed) ?: continue
                     // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
@@ -4617,7 +4681,9 @@ internal class MainViewModel(
         uiState = uiState.copy(autoReports = allowed, reportOfferFor = emptySet())
         if (!allowed) return
         // The words put in time by hand go once they're left; those of other songs, put in time before, go now.
-        (offered - SongProblem.TIMED_BY_HAND).forEach(::problemFound)
+        (offered - SongProblem.TIMED_BY_HAND).filterNot { problem ->
+            uiState.lyricsFor?.let { autoReports.owes(it, problem) } == true
+        }.forEach(::problemFound)
         sendOwed()
     }
 
@@ -4700,6 +4766,7 @@ internal class MainViewModel(
     }
 
     private fun setSync(song: MusicMetadata, points: List<SyncPoint>) {
+        clearPending(song)
         syncPoints = points
         TimingLog.note("lines in time ${points.takeLast(MAX_NOTED_POINTS).joinToString(" ") { "${it.lineMs}>${it.songMs}" }}")
         if (timedByHand) timingAtCorrection = playedIn to currentPlayerTiming()
@@ -4776,7 +4843,7 @@ internal class MainViewModel(
         // Words held for a listen are closed with the rest: nothing shows them, or looks them up, once they're gone.
         heldJob?.cancel()
         unsung = null
-        leaveWords()
+        val sendAfterLeaving = leaveWords()
         keepShown()
         previewHeardLyrics()
         lyricsJob?.cancel()
@@ -4792,6 +4859,7 @@ internal class MainViewModel(
             lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsTimedByEar = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
             learning = uiState.learning.fresh(), chords = uiState.chords.fresh()
         )
+        if (sendAfterLeaving) sendOwed()
     }
 
     /** Give the player its preview once the user returns from lyrics and a listen confirmed the singing. */

@@ -20,6 +20,14 @@ internal object RecordingKey {
             instrumentalAlbumKey(song)?.let { "\u0000$it" }.orEmpty()
     }
 
+    /** A blank player ID cannot distinguish tracks, so use the link when it names one. */
+    fun withLinkWhenIdBlank(song: MusicMetadata): String = of(song.copy(recordingId = song.recordingId?.takeIf { it.isNotBlank() }))
+
+    /** Whether the player or link identifies a recording, rather than only naming the song. */
+    fun identifiesRecording(song: MusicMetadata): Boolean = song.recordingId?.takeIf { it.isNotBlank() }?.let {
+        !it.substringAfter(':').startsWith("duration:")
+    } ?: (track(song.url) != null)
+
     /** Words from another take can only be borrowed offline within the same instrumental album, or with none known for either. */
     fun sameInstrumentalAlbum(key: String, song: MusicMetadata): Boolean =
         key.substringAfterLast('\u0000').takeIf { it.startsWith(INSTRUMENTAL_ALBUM_PREFIX) } == instrumentalAlbumKey(song)

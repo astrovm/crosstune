@@ -1688,17 +1688,23 @@ internal fun rememberSungLine(lines: List<LyricLine>, following: Following?, byE
         // back and forth: the line lit stays lit till its new time comes, as it's that close. Moved by
         // the player, as a line tapped, it's lit at once.
         val lit = value
-        val moved = followed[0] == following
+        val sameClock = followed[0] == following
         followed[0] = following
-        value = sung().takeUnless { moved && it == lit - 1 && lines.getOrNull(lit).let { line -> line != null && position()?.let { line.timeMs - it < MainViewModel.WORDS_OFF_MS } == true } } ?: lit
+        value = keepCloseLine(lines, lit, sung(), position(), sameClock)
         val changes = SyncedLyrics.changes(lines, byEar)
         while (following?.timingKnown == true) {
             delay(following.clock.untilMs(SystemClock.elapsedRealtime()) { SyncedLyrics.nextAfter(changes, it) } ?: break)
-            value = sung()
+            // A delay can wake before the playback clock reaches its next line.
+            value = keepCloseLine(lines, value, sung(), position(), sameClock = true)
         }
     }
     return active
 }
+
+private fun keepCloseLine(lines: List<LyricLine>, lit: Int, next: Int, position: Long?, sameClock: Boolean): Int =
+    next.takeUnless {
+        sameClock && it >= 0 && it == lit - 1 && lines.getOrNull(lit).let { line -> line != null && position?.let { at -> line.timeMs - at < MainViewModel.WORDS_OFF_MS } == true }
+    } ?: lit
 
 /**
  * Timed words, one line at a time. While the song is followed the line being sung is lit, those

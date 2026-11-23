@@ -43,6 +43,27 @@ class LyricsFinderTest {
     private fun words(song: MusicMetadata) = (found(song) as? Lyrics.Found)?.words
 
     @Test
+    fun lyricsSavedForABlankPlayerIdOnMainAreFoundWithOrWithoutALink() {
+        val file = File.createTempFile("lyrics-blank-id", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        for (id in listOf("", "  ")) {
+            val mainKey = "${LyricsFinder.CACHE_VERSION}\u0000song\u0000band\u0000$id"
+            runBlocking { cache.put(mainKey, """{"words":"Saved sheet","lines":[],"provisional":false}""") }
+        }
+        runBlocking { cache.save() }
+        val finder = LyricsFinder(fake.client(), "test", cache = LookupCache(file, Dispatchers.Unconfined), busyPauseMs = 0)
+        for (id in listOf("", "  ")) {
+            for (url in listOf(null, "https://music.youtube.com/watch?v=abcdefghijk")) {
+                val result = runBlocking { finder.firstLook(MusicMetadata("Song", "Band", recordingId = id, url = url)) }
+                assertEquals("Saved sheet", (result.lyrics as Lyrics.Found).words)
+                assertTrue(result.final)
+                assertFalse(result.fallback)
+            }
+        }
+        file.delete()
+    }
+
+    @Test
     fun duplicatedCopiesCannotOutvoteTheCurrentTimings() {
         val copy = lasting(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji), 309.0)
         remixTimedEarly(copy, copy, copy, storeSeconds = 318.483)

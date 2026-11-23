@@ -10,6 +10,11 @@ import kotlin.math.abs
 /** A line put in time by hand: the words had it at [lineMs], and the user heard it at [songMs]. */
 internal data class SyncPoint(val lineMs: Long, val songMs: Long)
 
+/** A far hearing that still needs a separate hearing before it can change saved timing. */
+internal data class PendingShift(val offsetMs: Long, val fromMs: Long, val toMs: Long) {
+    fun separateFrom(other: PendingShift) = toMs <= other.fromMs || other.toMs <= fromMs
+}
+
 /**
  * Timed words put right by hand. Words timed for another take of the song, or timed badly, drift
  * from it; a line tapped as it's heard sets where it really is. Between two such lines the others
@@ -117,6 +122,39 @@ internal object LyricsSync {
  */
 internal class LyricsSyncStore(private val preferences: SharedPreferences) {
 
+    fun pending(song: MusicMetadata, lines: List<LyricLine>): PendingShift? {
+        if (!RecordingKey.identifiesRecording(song)) return null
+        val saved = pendingAll().optJSONObject(pendingKey(song)) ?: return null
+        if (saved.optString("words") != fingerprint(lines)) {
+            clearPending(song)
+            return null
+        }
+        val offset = saved.opt("offset") as? Number ?: return null
+        val from = saved.opt("from") as? Number ?: return null
+        val to = saved.opt("to") as? Number ?: return null
+        if (to.toLong() <= from.toLong()) return null
+        return PendingShift(offset.toLong(), from.toLong(), to.toLong())
+    }
+
+    fun rememberPending(song: MusicMetadata, lines: List<LyricLine>, pending: PendingShift) {
+        if (!RecordingKey.identifiesRecording(song)) return
+        val all = pendingAll()
+        val key = pendingKey(song)
+        all.remove(key)
+        all.put(key, JSONObject().put("words", fingerprint(lines)).put("offset", pending.offsetMs).put("from", pending.fromMs).put("to", pending.toMs))
+        while (all.length() > MAX_SONGS) all.remove(all.keys().next())
+        preferences.edit { putString(KEY_PENDING, all.toString()) }
+    }
+
+    fun clearPending(song: MusicMetadata) {
+        val all = pendingAll()
+        if (all.remove(pendingKey(song)) != null) preferences.edit { putString(KEY_PENDING, all.toString()) }
+    }
+
+    private fun pendingAll(): JSONObject = preferences.getString(KEY_PENDING, null)?.let {
+        try { JSONObject(it) } catch (_: JSONException) { null }
+    } ?: JSONObject()
+
     fun load(song: MusicMetadata, lines: List<LyricLine>): List<SyncPoint> {
         val array = saved(song, lines)?.optJSONArray("points") ?: JSONArray()
         return LyricsSync.withoutSlips((0 until array.length()).mapNotNull { index ->
@@ -155,11 +193,15 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
 
     private fun keyOf(song: MusicMetadata) = RecordingKey.of(song)
 
+    /** Pending evidence can use a link when a player supplies only a blank ID. */
+    private fun pendingKey(song: MusicMetadata) = RecordingKey.withLinkWhenIdBlank(song)
+
     /** Which words these are, timings and all, in a few characters. */
     private fun fingerprint(lines: List<LyricLine>) = lines.joinToString("\n") { "${it.timeMs} ${it.text}" }.hashCode().toString(16)
 
     private companion object {
         const val KEY = "lyrics_sync"
+        const val KEY_PENDING = "lyrics_sync_pending"
         const val MAX_SONGS = 200
     }
 }

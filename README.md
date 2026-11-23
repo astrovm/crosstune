@@ -93,7 +93,7 @@ In **Settings** → **Practice**, use **Allow exact time**. Without it, Android 
 - A song's title and artist go to the music services that find and open it, and to lyrics, chords and translation sites. When Apple's regional search finds no match or fails, Crosstune can send the title and artist to Apple's US store. For Radio Garden, Crosstune splits the station's now-playing text into a title and an artist and sends those parts to Apple Music. The text usually describes a song. The station can supply other text in those fields.
 - Signed in with ChatGPT, the AI features send OpenAI the song, its lyrics and what you ask.
 - The [browser extension](extension) sends the developer nothing. It sends a link's title and artist where the app does, and, while its lyrics panel is open, to LRCLIB, YouTube Music, NetEase Cloud Music, Letras and Genius for the words.
-- Crosstune's only server gets the problem reports you send, or turn on. It keeps no IP address, and deletes each report after 180 days.
+- Crosstune's only server gets the problem reports you send, or turn on. Until you decide about automatic reports, a report for singing heard far from the lyrics waits on your phone; only the latest 20 problems found are kept, and older ones are deleted. It keeps no IP address, and deletes each report after 180 days.
 
 The full [privacy policy](https://crosstune.cc/privacy/) names every service and what each report carries.
 

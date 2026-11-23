@@ -1195,6 +1195,82 @@ class LyricsReportTest {
     }
 
     @Test
+    fun timingReportedBeforeTheUpdateIsNotSentAgainForAnIdentifiedRecording() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        prefs().edit().putBoolean("auto_reports", true)
+            .putString("auto_reports_sent", org.json.JSONArray().put("timed_by_hand\u0000demo\u0000band").toString()).commit()
+        openLyrics()
+        assertTrue(RecordingKey.of(checkNotNull(model().uiState.lyricsFor)).split('\u0000').size > 2)
+        composeRule.runOnIdle { model().nudgeSync(500); model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        assertEquals(0, owed())
+    }
+
+    @Test
+    fun legacyTimingReportGoesAfterTheUnchangedWordsAreClosed() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        openLyrics()
+        owe(checkNotNull(model().uiState.lyricsFor), SongProblem.TIMED_BY_HAND, JSONObject().put("problem", "timed_by_hand"))
+        val saved = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]"))
+        saved.getJSONObject(0).put("key", "timed_by_hand\u0000demo\u0000band")
+        prefs().edit().putString("auto_reports_owed", saved.toString()).commit()
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { problems() == listOf("timed_by_hand") }
+        waitUntil { owed() == 0 }
+    }
+
+    @Test
+    fun timingReportGoesWhenLyricsFollowThePlayerToAnotherSong() {
+        val otherRequests = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net" && request.url.queryParameter("track_name") == "Other") {
+                FakeSpotify.html(request, """[{"trackName":"Other","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] Other one\n[00:10.00] Other two"}]""")
+            } else otherRequests(request)
+        }
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, 2_000, SystemClock.elapsedRealtime())
+        openLyrics()
+        composeRule.runOnIdle { playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true) }
+        waitUntil { model().uiState.following?.clock?.playing == true }
+        owe(checkNotNull(model().uiState.lyricsFor), SongProblem.TIMED_BY_HAND, JSONObject().put("fake", "Demo"))
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        composeRule.waitForIdle()
+        assertEquals(1, owed())
+        assertEquals(emptyList<String>(), sentFakes())
+
+        composeRule.runOnIdle {
+            playback.playing.value = null
+            playback.onThePhone = Heard.Song(MusicMetadata("Other", "Band"), null, 0, SystemClock.elapsedRealtime())
+        }
+        waitUntil { model().uiState.lyricsFor?.title == "Other" }
+        waitUntil { sentFakes().size == 1 }
+        assertEquals(listOf("Demo"), sentFakes().map { JSONObject(it).getString("fake") })
+        assertEquals(0, owed())
+        composeRule.waitForIdle()
+        assertEquals(1, sentFakes().size)
+    }
+
+    @Test
+    fun legacyTimingReportWaitsWhileItsWordsAreOpenAndGoesAwayWhenPutBack() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        openLyrics()
+        owe(checkNotNull(model().uiState.lyricsFor), SongProblem.TIMED_BY_HAND, JSONObject().put("problem", "timed_by_hand"))
+        val saved = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]"))
+        saved.getJSONObject(0).put("key", "timed_by_hand\u0000demo\u0000band")
+        prefs().edit().putString("auto_reports_owed", saved.toString()).commit()
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        assertEquals(1, owed())
+        composeRule.runOnIdle { model().nudgeSync(500); model().resetSync() }
+        assertEquals(0, owed())
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
     fun noTimingReportIsOwedForWordsPutBackAsTheyWere() {
         openLyrics()
         composeRule.runOnIdle { model().nudgeSync(500) }
@@ -1505,6 +1581,46 @@ class LyricsReportTest {
         assertEquals(201, titles.size)
         // The one turned away went again; every other went once.
         assertEquals(200, titles.toSet().size)
+    }
+
+    @Test
+    fun timingReportWaitsIfItsLyricsOpenDuringThePacingDelay() {
+        timingReportWaitsForLyricsDuringPacing(legacy = false, reopen = false)
+    }
+
+    @Test
+    fun legacyTimingReportWaitsIfItsLyricsCloseAndReopenDuringThePacingDelay() {
+        timingReportWaitsForLyricsDuringPacing(legacy = true, reopen = true)
+    }
+
+    private fun timingReportWaitsForLyricsDuringPacing(legacy: Boolean, reopen: Boolean) {
+        MainActivity.reportPaceMs = MainViewModel.REPORT_PACE_MS
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        openLyrics()
+        val song = checkNotNull(model().uiState.lyricsFor)
+        assertTrue(RecordingKey.of(song).split('\u0000').size > 2)
+        owedFor("Old one")
+        owe(song, SongProblem.TIMED_BY_HAND, JSONObject().put("fake", "Demo"))
+        if (legacy) {
+            val saved = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]"))
+            saved.getJSONObject(1).put("key", "timed_by_hand\u0000demo\u0000band")
+            prefs().edit().putString("auto_reports_owed", saved.toString()).commit()
+        }
+        composeRule.runOnIdle { model().dismissLyrics(); model().allowAutoReports(true) }
+        waitUntil { sentFakes().size == 1 }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricsFor != null && shown("Demo one") }
+        if (reopen) {
+            composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+            waitUntil { model().uiState.lyricsFor != null && shown("Demo one") }
+        }
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.REPORT_PACE_MS))
+        composeRule.waitForIdle()
+        assertEquals(listOf("Old one"), sentFakes().map { JSONObject(it).getString("fake") })
+        assertEquals(1, owed())
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { sentFakes().size == 2 }
+        assertEquals(listOf("Old one", "Demo"), sentFakes().map { JSONObject(it).getString("fake") })
     }
 
     @Test
