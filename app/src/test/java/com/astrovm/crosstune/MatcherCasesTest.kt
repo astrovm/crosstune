@@ -611,6 +611,13 @@ class MatcherCasesTest {
     }
 
     @Test
+    fun aSourceTitleInAnUnknownTagDoesNotProveAnotherSong() {
+        val case = Case("unproved tag", null, title = "I Want To Know", lengthMs = 211_888, linkMs = 211_888,
+            songs = listOf(row("다른 노래(I want to know)", "Another Album", length = "3:30")))
+        assertEquals(null, find(case))
+    }
+
+    @Test
     fun aKnownPartAndSourceAlbumDistinguishRows() {
         val case = Case("part and album", null, title = "Fake Song Pt.2", japan = japanese("偽の歌 Pt.2"),
             songs = listOf(row("偽の歌 Part 2"), row("偽の歌 Part 2", "Live Best")))
