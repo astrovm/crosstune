@@ -889,12 +889,11 @@ internal class ExactMatcher(
 
     /** Strip only a whole known artist's prefix; keep recording and language labels in the title. */
     private fun videoRecordingTitle(title: String, names: Names): String {
-        val known = names.artists.map(SongNames::normalize).toSet()
-        fun artistBefore(at: Int) = at > 0 && SongNames.normalize(title.substring(0, at)) in known
-        val open = title.indexOfFirst { it == '「' || it == '『' }
-        if (open > 0 && artistBefore(open)) {
+        val known = names.artists.map(SongNames::normalize).filter(String::isNotEmpty).toSet()
+        fun artistBefore(at: Int) = SongNames.normalize(title.substring(0, at)) in known
+        title.indexOfFirst { it == '「' || it == '『' }.takeIf { it != -1 }?.takeIf(::artistBefore)?.let { open ->
             val close = title.indexOf(if (title[open] == '「') '」' else '』', open + 1)
-            if (close > open) {
+            if (close != -1) {
                 val after = title.substring(close + 1)
                 val suffix = after.takeUnless { SongNames.normalize(it) == "mv" }.orEmpty()
                 return SongNames.normalize(title.substring(open + 1, close) + suffix)
@@ -902,8 +901,9 @@ internal class ExactMatcher(
         }
         val dash = title.indices.firstOrNull { title[it] in "-–—" && artistBefore(it) }
         if (dash != null) return SongNames.normalize(title.substring(dash + 1))
-        val mv = title.indexOf(" MV ", ignoreCase = true)
-        if (mv > 0 && artistBefore(mv)) return SongNames.normalize(title.substring(mv + 4))
+        title.indexOf(" MV ", ignoreCase = true).takeIf { it != -1 }?.takeIf(::artistBefore)?.let { mv ->
+            return SongNames.normalize(title.substring(mv + 4))
+        }
         return SongNames.normalize(title)
     }
 
@@ -1424,7 +1424,7 @@ internal class ExactMatcher(
         addDeezerLength(metadata, tracks, foundLengths)
         // Without another length, deezerNames keeps only lengths belonging to the identified artist and title.
         val knownLengths = (lengths + foundLengths).ifEmpty {
-            tracks.mapNotNull { it.optLong("duration").takeIf { seconds -> seconds > 0 }?.times(1000) }
+            tracks.map { it.optLong("duration") * 1000 }
         }
         names.deezerNames = deezerNames(metadata, tracks, knownLengths, artists.firstOrNull())
         if (foundLengths.isEmpty()) foundLengths.addAll(names.deezerNames.map { it.lengthMs })

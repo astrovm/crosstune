@@ -1186,6 +1186,15 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aBlankTitleCannotLinkADeezerArtistToAnUntitledRow() = runBlocking {
+        val song = MusicMetadata("", "アーティスト", lengthMs = 240_000)
+        val row = youTubeMusicRow("", "Artist • Album • 4:00", videoId = "wrong000000")
+        val track = """[{"title":"","artist":{"id":1,"name":"Artist"},"duration":240}]"""
+        namesAndTabs(songs = listOf(row), deezer = track, deezerArtists = """[{"id":1,"name":"Artist"}]""")
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
     fun anAppleLengthGuessDoesNotProveAnotherArtistsRecordingId() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val other = youTubeMusicRow("別の歌", "別の人 • Album • 4:00", videoId = "other000000")
