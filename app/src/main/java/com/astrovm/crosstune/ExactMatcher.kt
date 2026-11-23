@@ -854,13 +854,16 @@ internal class ExactMatcher(
         val videoRows = videos.map(::row)
         if (names.appleFound) {
             appleSongRow(rows, names, recording)?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
-            fun eligibleVideo(row: Row) = isTheSongsVideo(row, names) && (names.complete || isOwnVideo(row, names)) &&
-                keepsRequestedRecording(recording, row, video = true)
-            val first = videoRows.firstOrNull(::eligibleVideo)
-            videoRows.firstOrNull {
-                (!names.everyStore || !appleNamedArtist(metadata, names)) && eligibleVideo(it) && isOwnVideo(it, names) &&
-                    (it === first || first != null && sameVideoRecording(first, it, metadata, names))
-            }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+            val initialSong = songRow(metadata, rows, videoRows, names, recording)
+            if (initialSong == null) {
+                fun eligibleVideo(row: Row) = isTheSongsVideo(row, names) && (names.complete || isOwnVideo(row, names)) &&
+                    keepsRequestedRecording(recording, row, video = true)
+                val first = videoRows.firstOrNull(::eligibleVideo)
+                videoRows.firstOrNull {
+                    (!names.everyStore || !appleNamedArtist(metadata, names)) && eligibleVideo(it) && isOwnVideo(it, names) &&
+                        (it === first || first != null && sameVideoRecording(first, it, metadata, names))
+                }?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+            }
         }
         addDeezerNames(metadata, names, rows.any { it.id != null && it.lengthMs != null })
         val song = songRow(metadata, rows, videoRows, names, recording)
