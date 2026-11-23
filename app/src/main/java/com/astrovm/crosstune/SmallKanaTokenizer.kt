@@ -42,26 +42,53 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     fun tokenize(text: String): List<Token> {
         val tokens = plain.tokenize(text)
         val out = ArrayList<Token>(tokens.size)
+        val hasSmallKana = text.any { it in SMALL_KANA }
+        val lookups = HashMap<String, Lookup>()
         var next = 0
-        for (wrong in tokens.indices.filter { wrongStart(text, tokens[it]) }) {
+        for (wrong in tokens.indices) {
             if (wrong < next) continue
-            // A word that starts wrong is searched again with the word before it, as the kana it starts on is said
-            // with that word's last, and with the one before that while that one starts on a small kana too, っし in
-            // ないっしゅん, so the search knows what kana it comes after.
-            var first = wrong - 1
-            while (first > next && smallAfterKana(text, tokens[first].position)) first--
-            // Words that start wrong one after another are searched again together, and a small っ at the end doubles
-            // the kana after it, so that word is searched again with it, にっ and き.
-            var last = wrong
-            while (last + 1 < tokens.size && (tokens[last].surface.last() in "っッ" || wrongStart(text, tokens[last + 1]))) last++
+            val token = tokens[wrong]
+            val crossing = if (hasSmallKana) crossingFor(text, tokens, wrong) else null
+            if (!wrongStart(text, token) && crossing == null) continue
+            val (first, last) = searchWindow(text, tokens, wrong, next, crossing)
             out += tokens.subList(next, first)
             val from = tokens[first].position
             val to = tokens[last].position + tokens[last].surface.length
-            out += searched(text.substring(from, to), from) ?: tokens.subList(first, last + 1)
+            out += searched(text.substring(from, to), from, lookups) ?: tokens.subList(first, last + 1)
             next = last + 1
         }
         out += tokens.subList(next, tokens.size)
         return out
+    }
+
+    /** A known って, っぽい or っす remains a word even if another kana word crosses its start. */
+    @VisibleForTesting
+    internal fun crossingFor(text: String, tokens: List<Token>, at: Int): IntRange? {
+        val token = tokens[at]
+        if (token.isKnown && token.surface in KEPT_TSU_WORDS) return null
+        return crossingWord(text, token.position)?.takeUnless { startsInsideInflected(it, tokens.getOrNull(at - 1)) }
+    }
+
+    /** A kana noun such as まっちゃ must not split the inflected verb しまっ. */
+    private fun startsInsideInflected(range: IntRange, token: Token?): Boolean =
+        token != null && token.partOfSpeechLevel1 in setOf("動詞", "形容詞") && range.first > token.position
+
+    /** Search the pieces a crossing word spans, or the pieces needed to say the small kana together. */
+    @VisibleForTesting
+    internal fun searchWindow(text: String, tokens: List<Token>, wrong: Int, next: Int, crossing: IntRange?): Pair<Int, Int> {
+        var first = maxOf(next, wrong - 1)
+        while (first > next && includeBefore(text, tokens, first, crossing)) first--
+        var last = wrong
+        while (last + 1 < tokens.size && includeAfter(text, tokens, last, crossing)) last++
+        return first to last
+    }
+
+    private fun includeBefore(text: String, tokens: List<Token>, at: Int, crossing: IntRange?) =
+        smallAfterKana(text, tokens[at].position) || (crossing != null && tokens[at].position > crossing.first)
+
+    private fun includeAfter(text: String, tokens: List<Token>, at: Int, crossing: IntRange?): Boolean {
+        if (tokens[at].surface.last() in "っッ") return true
+        return wrongStart(text, tokens[at + 1]) || (crossing != null && tokens[at].position + tokens[at].surface.length <= crossing.last)
     }
 
     /** The word IPADIC knows for [text], when it keeps it whole. */
@@ -77,16 +104,29 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
      * when no way through it is left.
      */
     @VisibleForTesting
-    internal fun searched(text: String, offset: Int): List<Token>? {
+    internal fun searched(text: String, offset: Int): List<Token>? = searched(text, offset, HashMap())
+
+    private fun searched(text: String, offset: Int, lookups: MutableMap<String, Lookup>): List<Token>? {
+        val work = SearchWork()
+        return search(text, offset, false, lookups, work) ?: search(text, offset, true, lookups, work)
+    }
+
+    private class Lookup(val wordId: Int?)
+
+    private class SearchWork {
+        val offered = HashSet<ViterbiNode>()
+        val bridged = HashMap<ViterbiNode, Pair<Boolean, String>>()
+        val starts = HashMap<Pair<Int, Boolean>, List<ViterbiNode>>()
+        val offers = HashMap<Int, List<ViterbiNode>>()
+    }
+
+    private fun search(text: String, offset: Int, bridge: Boolean, lookups: MutableMap<String, Lookup>, work: SearchWork): List<Token>? {
         val lattice = ViterbiLattice(text.length + 2).apply { addBos() }
         val reached = BooleanArray(text.length + 1).also { it[0] = true }
-        val offered = HashSet<ViterbiNode>()
         var unknownEnd = -1
         for (at in text.indices) {
             if (!reached[at]) continue
-            val kept = (startingAt(text, at, at >= unknownEnd) + offer(text, at).also(offered::addAll))
-                .filterNot { wrongStart(text, at, it.type == ViterbiNode.Type.KNOWN, it.surface) }
-            for (node in kept + spanning(text, at, kept)) {
+            for (node in candidates(text, at, at >= unknownEnd, bridge, lookups, work)) {
                 lattice.place(node, at)
                 reached[at + node.surface.length] = true
                 if (node.type == ViterbiNode.Type.UNKNOWN) unknownEnd = at + node.surface.length
@@ -96,9 +136,44 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         lattice.addEos()
         return searcher.search(lattice).filterNot { it.type == ViterbiNode.Type.KNOWN && it.wordId == -1 }.map { node ->
             val dictionary = if (node.type == ViterbiNode.Type.UNKNOWN) unknownDictionary else tokenInfoDictionary
-            if (node in offered) JmdictToken(node.wordId, node.surface, offset + node.startIndex, tokenInfoDictionary)
+            if (node in work.bridged) {
+                val (jmdict, ending) = work.bridged.getValue(node)
+                BridgedToken(node.wordId, node.surface, offset + node.startIndex, tokenInfoDictionary, jmdict, ending)
+            }
+            else if (node in work.offered) JmdictToken(node.wordId, node.surface, offset + node.startIndex, tokenInfoDictionary)
             else Token(node.wordId, node.surface, node.type, offset + node.startIndex, dictionary)
         }
+    }
+
+    private fun candidates(
+        text: String, at: Int, unknown: Boolean, bridge: Boolean, lookups: MutableMap<String, Lookup>, work: SearchWork
+    ): List<ViterbiNode> {
+        val crossedTsu = text[at] in "っッ" && crossingWord(text, at) != null
+        val starts = work.starts.getOrPut(at to unknown) { startingAt(text, at, unknown) }
+        val offers = work.offers.getOrPut(at) { offer(text, at, lookups).also(work.offered::addAll) }
+        val kept = (starts + offers)
+            .filterNot { blockedNode(text, at, it, crossedTsu) }
+        val extended = if (bridge) bridge(text, at, kept, work.offered, work.bridged) else emptyList()
+        return kept + spanning(text, at, kept) + extended
+    }
+
+    /** A known っ word cannot cut a common word in two, but って still works when no common word crosses it. */
+    private fun blockedNode(text: String, at: Int, node: ViterbiNode, crossedTsu: Boolean): Boolean {
+        val known = node.type == ViterbiNode.Type.KNOWN
+        if (crossedTsu && known && node.surface !in KEPT_TSU_WORDS) return true
+        return wrongStart(text, at, known, node.surface)
+    }
+
+    /** Carry stranded small っ on the known word before them, without taking the following word's lookup. */
+    private fun bridge(
+        text: String, at: Int, nodes: List<ViterbiNode>, offered: Set<ViterbiNode>, bridged: MutableMap<ViterbiNode, Pair<Boolean, String>>
+    ): List<ViterbiNode> = nodes.mapNotNull { node ->
+        val end = at + node.surface.length
+        if (node.type != ViterbiNode.Type.KNOWN || !Readings.isKana(node.surface.last())) return@mapNotNull null
+        if (text.getOrNull(end) !in listOf('っ', 'ッ')) return@mapNotNull null
+        val ending = text.substring(end).takeWhile { it in "っッ" }
+        ViterbiNode(node.wordId, node.surface + ending, tokenInfoDictionary, at, ViterbiNode.Type.KNOWN)
+            .also { bridged[it] = (node in offered) to ending }
     }
 
     /**
@@ -127,19 +202,25 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     }
 
     /** JMdict's words in kana at [at] in [text], each as IPADIC's word for how JMdict writes it, when that reads so. */
-    private fun offer(text: String, at: Int): List<ViterbiNode> {
+    private fun offer(text: String, at: Int, lookups: MutableMap<String, Lookup>): List<ViterbiNode> {
         val words = words()
-        return (at + 2..minOf(text.length, at + words.longestToday)).mapNotNull { end ->
+        return (at + 2..minOf(text.length, at + words.longestSearch)).mapNotNull { end ->
             // A word may go on in a small vowel after it: ちょうだぃ is ちょうだい, not 長打 drawn out.
             if (drawsOut(text, end)) return@mapNotNull null
             val kana = text.substring(at, end)
-            val written = words.today[kana]?.takeIf { it != kana } ?: return@mapNotNull null
-            val word = plain.tokenize(written).singleOrNull()?.takeIf { it.isKnown && Readings.hiragana(it.reading) == kana }
-                ?: return@mapNotNull null
-            startingAt(written, 0, unknown = false)
-                .firstOrNull { it.surface == written && tokenInfoDictionary.getAllFeatures(it.wordId) == word.allFeatures }
-                ?.let { ViterbiNode(it.wordId, kana, tokenInfoDictionary, at, ViterbiNode.Type.KNOWN) }
+            val written = words.search[kana]?.takeIf { it != kana } ?: return@mapNotNull null
+            val wordId = lookups.getOrPut(kana) { Lookup(offeredWord(kana, written, words)) }.wordId
+            wordId?.let { ViterbiNode(it, kana, tokenInfoDictionary, at, ViterbiNode.Type.KNOWN) }
         }
+    }
+
+    /** Resolve a kana candidate once per line, including a negative lookup. */
+    private fun offeredWord(kana: String, written: String, words: Readings.OldKana): Int? {
+        // Newly offered words keep IPADIC's own lookup when it already knows them in kana.
+        if (kana !in words.today && knownWord(kana)?.reading?.let(Readings::hiragana) == kana) return null
+        val word = plain.tokenize(written).singleOrNull()?.takeIf { it.isKnown && Readings.hiragana(it.reading) == kana } ?: return null
+        return startingAt(written, 0, unknown = false)
+            .firstOrNull { it.surface == written && tokenInfoDictionary.getAllFeatures(it.wordId) == word.allFeatures }?.wordId
     }
 
     /**
@@ -200,6 +281,26 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
 
     private fun wrongStart(text: String, token: Token) = wrongStart(text, token.position, token.isKnown, token.surface)
 
+    /** Search again for a newly offered word crossing a split, or a word cut by IPADIC's own っ words. */
+    private fun crossingWord(text: String, at: Int): IntRange? {
+        if (at == 0 || !Readings.isKana(text[at - 1]) || !Readings.isKana(text[at])) return null
+        val known = words()
+        val limit = maxOf(0, at - known.longestSearch + 1)
+        var first = at - 1
+        while (first > limit && Readings.isKana(text[first - 1])) first--
+        for (start in first until at) {
+            val prefix = (text[start].code shl 16) or text[start + 1].code
+            for (candidate in known.smallByPrefix[prefix].orEmpty()) {
+                if (crossingCandidate(text, start, at, candidate, known)) return start until start + candidate.length
+            }
+        }
+        return null
+    }
+
+    private fun crossingCandidate(text: String, start: Int, at: Int, candidate: String, known: Readings.OldKana): Boolean =
+        start + candidate.length > at && start + candidate.length <= text.length &&
+            text.regionMatches(start, candidate, 0, candidate.length) && (candidate !in known.today || text[at] in "っッ")
+
     /**
      * A word at [at] that starts on a small kana after another kana. Not small vowels alone that draw out the word
      * before, as they go with it, nor a word IPADIC has that starts there, as only its words that start with っ do:
@@ -216,9 +317,14 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     internal class JmdictToken(wordId: Int, surface: String, position: Int, dictionary: TokenInfoDictionary) :
         Token(wordId, surface, ViterbiNode.Type.KNOWN, position, dictionary)
 
+    /** A known word followed by a small っ that otherwise leaves the search with no way through. */
+    internal class BridgedToken(wordId: Int, surface: String, position: Int, dictionary: TokenInfoDictionary, val jmdict: Boolean, val ending: String) :
+        Token(wordId, surface, ViterbiNode.Type.KNOWN, position, dictionary)
+
     internal companion object {
         private const val SMALL_KANA = "ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ"
         private const val SMALL_VOWELS = "ぁぃぅぇぉァィゥェォ"
+        private val KEPT_TSU_WORDS = setOf("って", "っぽい", "っす")
 
         /**
          * A kana and a small vowel that make a sound of their own, as in words from other languages: ファ, ウィ, ティ,

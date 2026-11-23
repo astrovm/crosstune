@@ -345,6 +345,44 @@ jobs:
           # The pull request merged into main, and main before it, to see what it adds to detekt's baseline.
           fetch-depth: 2
 
+      # Tangled new code is split up, never listed in detekt's baseline to pass.
+      - name: Detekt's baseline only shrinks
+        if: github.event_name == 'pull_request'
+        run: |
+          # The diff is taken first, so a git diff that fails stops the step instead of reading as no change.
+          # --text, so a .gitattributes that calls the file binary can't hide what it adds.
+          diff=$(git diff --text HEAD^1 HEAD -- config/detekt/baseline.xml)
+          # Only grep's "no match" (exit 1) means nothing was added. Any other failure stops the step.
+          added=$(grep '^+.*<ID>' <<< "$diff") || [ $? = 1 ]
+          if [ -n "$added" ]; then
+            echo "::error file=config/detekt/baseline.xml::This adds to detekt's baseline. Split the code it flags up instead."
+            echo "$added"
+            exit 1
+          fi
+
+      # The workflows, with shellcheck on their scripts. actionlint's own release, checked against the
+      # SHA-256 its checksums file gives for that version.
+      - name: Lint workflows
+        env:
+          VERSION: 1.7.12
+          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          # actionlint skips the scripts without a word when shellcheck is missing.
+          if ! command -v shellcheck > /dev/null; then
+            echo "::error::shellcheck isn't on this runner, so actionlint wouldn't check the workflows' scripts"
+            exit 1
+          fi
+          tarball="actionlint_${VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$tarball" "https://github.com/rhysd/actionlint/releases/download/v$VERSION/$tarball"
+          echo "$SHA256  $RUNNER_TEMP/$tarball" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
+
+      - uses: ./.github/actions/jdk
+
+      - name: Lint
+        run: ./gradlew :app:lintDebug :app:detekt --build-cache --configuration-cache
+
       # The pull request keeps every locked reading, and a readings change changes the golden file.
       # Its marks are lines of its body, read as the body is now: after an edit, run this job again.
       # The step runs the checker main has, copied out of main's commit, and imports no file of the pull request:
@@ -390,44 +428,6 @@ jobs:
             done
           fi
           python3 -E -s "$checker" --repo "$GITHUB_WORKSPACE" --base HEAD^1 --head HEAD --body-file "$RUNNER_TEMP/pr-body.md"
-
-      # Tangled new code is split up, never listed in detekt's baseline to pass.
-      - name: Detekt's baseline only shrinks
-        if: github.event_name == 'pull_request'
-        run: |
-          # The diff is taken first, so a git diff that fails stops the step instead of reading as no change.
-          # --text, so a .gitattributes that calls the file binary can't hide what it adds.
-          diff=$(git diff --text HEAD^1 HEAD -- config/detekt/baseline.xml)
-          # Only grep's "no match" (exit 1) means nothing was added. Any other failure stops the step.
-          added=$(grep '^+.*<ID>' <<< "$diff") || [ $? = 1 ]
-          if [ -n "$added" ]; then
-            echo "::error file=config/detekt/baseline.xml::This adds to detekt's baseline. Split the code it flags up instead."
-            echo "$added"
-            exit 1
-          fi
-
-      # The workflows, with shellcheck on their scripts. actionlint's own release, checked against the
-      # SHA-256 its checksums file gives for that version.
-      - name: Lint workflows
-        env:
-          VERSION: 1.7.12
-          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
-        run: |
-          # actionlint skips the scripts without a word when shellcheck is missing.
-          if ! command -v shellcheck > /dev/null; then
-            echo "::error::shellcheck isn't on this runner, so actionlint wouldn't check the workflows' scripts"
-            exit 1
-          fi
-          tarball="actionlint_${VERSION}_linux_amd64.tar.gz"
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$tarball" "https://github.com/rhysd/actionlint/releases/download/v$VERSION/$tarball"
-          echo "$SHA256  $RUNNER_TEMP/$tarball" | sha256sum --check --strict
-          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" actionlint
-          "$RUNNER_TEMP/actionlint"
-
-      - uses: ./.github/actions/jdk
-
-      - name: Lint
-        run: ./gradlew :app:lintDebug :app:detekt --build-cache --configuration-cache
 
       - name: Upload lint report
         if: always()
