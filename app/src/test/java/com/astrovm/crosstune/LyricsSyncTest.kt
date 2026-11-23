@@ -237,7 +237,7 @@ class LyricsSyncTest {
         val store = LyricsSyncStore(prefs)
         val song = song.copy(recordingId = "player:one")
         store.rememberPending(song, lines, PendingShift(22_000, 40_000))
-        val all = JSONObject(prefs.getString("lyrics_sync_pending", "{}"))
+        val all = JSONObject(checkNotNull(prefs.getString("lyrics_sync_pending", "{}")))
         val saved = all.getJSONObject(RecordingKey.of(song))
         saved.put("offset", "invalid")
         prefs.edit().putString("lyrics_sync_pending", all.toString()).commit()
