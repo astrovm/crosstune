@@ -3384,8 +3384,8 @@ internal class MainViewModel(
         // Where in the song the singing was heard up to, so the next while heard is further on.
         var heardTo: Long? = null
         pendingBeforePlay = syncStore.pending(song, lines)
-        // A near match needs the current audio while it is still within the near matcher's range.
-        var straightOn = pendingBeforePlay?.let { abs(it.offsetMs) <= SungAlignment.MAX_SHIFT_MS } == true
+        // Heard nothing to match, the words may be timed far off, so where they're timed says nothing.
+        var straightOn = false
         // Whether any singing was found where the words are, while hearing on.
         var found = false
         while (true) {
@@ -3405,7 +3405,7 @@ internal class MainViewModel(
             straightOn = shift == null
             found = foundSinging(found, sung, clock, shown, shift, voiced)
             val first = heardTo == null
-            heardTo = clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L
+            heardTo = clock.positionAt(sung.startedAtMs + SingingListener.SECONDS * 1000L)
             if (shift == null) {
                 TimingLog.note("sung nothing to place, clock sure $clockSure")
                 if (singingTries >= SINGING_TRIES) return
@@ -3571,10 +3571,8 @@ internal class MainViewModel(
     private fun pendingAgrees(current: PendingShift, whole: Boolean): Boolean {
         if (!whole || !mayKeepPending()) return false
         val previous = pendingBeforePlay ?: return false
-        // Allow a second's uncertainty for each hearing when comparing two independent estimates.
-        val tolerance = maxOf(2 * SUNG_OFF_MS, agreeingMs(current.offsetMs))
         return current.toMs > current.fromMs && previous.separateFrom(current) &&
-            abs(previous.offsetMs - current.offsetMs) < tolerance
+            abs(previous.offsetMs - current.offsetMs) < agreeingMs(current.offsetMs)
     }
 
     private fun rememberPending(song: MusicMetadata, pending: PendingShift) {
