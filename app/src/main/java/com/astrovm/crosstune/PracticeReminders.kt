@@ -347,9 +347,13 @@ internal class PracticeReminders(
 }
 
 /** The day's alarm, and whatever makes Android forget it or its hour: a reboot, an update, a new time zone or clock. */
-class PracticeReminderReceiver : BroadcastReceiver() {
+class PracticeReminderReceiver internal constructor(
+    private val makeReminders: (Context) -> PracticeReminders
+) : BroadcastReceiver() {
+    constructor() : this({ PracticeReminders(it) })
+
     override fun onReceive(context: Context, intent: Intent) {
-        val reminders = PracticeReminders(context)
+        val reminders = makeReminders(context)
         val alarm = intent.action == PracticeReminders.ACTION_REMIND || intent.action == PracticeReminders.ACTION_REMIND_KEEP
         if (alarm) reminders.remind(intent) else reminders.arm()
     }
