@@ -573,7 +573,8 @@ internal class MediaSessionPlayback(
      */
     private fun MediaController.has(song: MusicMetadata, app: String?): Boolean {
         if (!song.unnamed) return plays(song)
-        val (title, artist) = calls()
+        val metadata = metadata
+        val (title, artist) = metadata.calls(said(this, snapshot = metadata))
         val said = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         return app != null && title == song.title && (artist == song.artist || !Songless.namesNoSong(said, artist, songName(said, artist)))
     }
@@ -582,16 +583,17 @@ internal class MediaSessionPlayback(
      * What it calls what it plays, as what names no song is shown and asked for by: its title, read as Crosstune
      * once read a song's, "Fake Song" from "Fake Song.mp3", "" with none; and its artist, as the app has it.
      */
-    private fun MediaController.calls(): Pair<String, String> {
-        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }.orEmpty()
-        val read = said(this)?.takeIf { it.artist.isBlank() }?.title?.takeIf { it.isNotBlank() }
-        return (read ?: title) to metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+    private fun MediaMetadata?.calls(named: MusicMetadata?): Pair<String, String> {
+        val title = this?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }.orEmpty()
+        val read = named?.takeIf { it.artist.isBlank() }?.title?.takeIf { it.isNotBlank() }
+        return (read ?: title) to this?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
     }
 
     /** What it plays, as what names no song is shown. */
     private fun MediaController.unnamed(): Unnamed {
-        val (title, artist) = calls()
-        val named = said(this)
+        val metadata = metadata
+        val named = said(this, snapshot = metadata)
+        val (title, artist) = metadata.calls(named)
         val garden = packageName == RadioGarden.PACKAGE
         val state = playbackState
         val queueSong = if (garden) RadioGarden.queueSong(title, queueOf(this), state?.activeQueueItemId) else null

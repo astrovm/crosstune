@@ -1251,8 +1251,8 @@ internal class MainViewModel(
 
     /** The queue and logo can change while the same Radio Garden station plays on. */
     private fun Unnamed.sameRadioPlayback(other: Unnamed?): Boolean {
-        if (app != RadioGarden.PACKAGE || other?.app != RadioGarden.PACKAGE) return false
-        return name == other.name && session == other.session && where == other.where
+        if (app != RadioGarden.PACKAGE || other?.isRadioSession(name, session) != true) return false
+        return where == other.where
     }
 
     /** Radio Garden's clock measures the stream. A song heard in it has its own clock. */
@@ -1362,8 +1362,7 @@ internal class MainViewModel(
             until = 0L
         }
 
-        fun isForStation(unnamed: Unnamed): Boolean =
-            unnamed.app == RadioGarden.PACKAGE && station == unnamed.name && session == unnamed.session
+        fun isForStation(unnamed: Unnamed): Boolean = unnamed.isRadioSession(station, session)
 
         fun isForSong(unnamed: Unnamed): Boolean =
             isForStation(unnamed) && unnamed.queueSong?.let { RadioGarden.sameSong(song, it) } == true

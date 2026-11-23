@@ -33,6 +33,10 @@ internal data class Unnamed(
     /** Whether it plays on another device, cast to a speaker or a TV, or shown from a computer, which the phone doesn't hear. */
     val away: Boolean get() = where != Place.PHONE
 
+    /** The same live Radio Garden station in the same Android media session. */
+    fun isRadioSession(station: String?, id: Int?): Boolean =
+        app == RadioGarden.PACKAGE && name == station && session == id
+
     /**
      * The song Crosstune once took it for, by its name alone, e.g. "Fake Song" from "Fake Song.mp3", or a
      * station's name: opened as that when a tap asks for it and it can't be named by ear. Null when it says
