@@ -757,10 +757,16 @@ class ReadingsTest {
     }
 
     @Test
-    fun smallKanaSearchWordsDoNotChangeOldKanaVocabulary() {
-        val words = Readings.oldKana
-        assertEquals("電車", words.search["でんしゃ"])
-        assertFalse(words.today.containsKey("でんしゃ"))
+    fun repeatedKanaWordsKeepTheirLookupsAcrossSearchWindows() {
+        fun check() {
+            val words = Readings.words("でんしゃででんしゃ", Script.JAPANESE)
+            assertEquals(listOf("でんしゃ" to "電車", "で" to "で", "でんしゃ" to "電車"), words.map { it.text to it.lookup })
+            val bridged = Readings.words("りゅうっっさくら りゅうっっさくら", Script.JAPANESE)
+            assertEquals(listOf("りゅうっっ", "さくら", "りゅうっっ", "さくら"), bridged.map { it.text })
+            assertEquals(listOf("りゅう", "さくら", "りゅう", "さくら"), bridged.map { it.lookup })
+        }
+        check()
+        TestUniDic.reading { check() }
     }
 
     @Test
@@ -830,7 +836,7 @@ class ReadingsTest {
 
     @Test
     fun knownSmallTsuParticlesStayWholeWhenAListedWordCrossesThem() {
-        val vocabulary = Readings.OldKana(emptyMap(), setOf("あ"), mapOf("れって" to "列島", "ずっと" to "ずっと"))
+        val vocabulary = Readings.OldKana(emptyMap(), setOf("あ"), mapOf("あ" to "亜", "れって" to "列島", "ずっ" to "ずっ", "ずっと" to "ずっと"))
         val tokenizer = SmallKanaTokenizer { vocabulary }
         val plain = com.atilika.kuromoji.ipadic.Tokenizer.Builder().build()
         val particle = "それってこと"
@@ -860,7 +866,7 @@ class ReadingsTest {
     @Test
     fun consecutiveKanaSearchWindowsKeepTheirText() {
         val line = "もっともっともっと"
-        fun check() = assertEquals(line, line, Readings.words(line, Script.JAPANESE).joinToString("") { it.text })
+        fun check() = assertEquals(List(3) { "もっと" to "もっと" }, Readings.words(line, Script.JAPANESE).map { it.text to it.lookup })
         check()
         TestUniDic.reading { check() }
     }
@@ -873,13 +879,30 @@ class ReadingsTest {
     }
 
     @Test
-    fun dictionaryWordsKeepTheirReadingsInContext() {
+    fun dictionaryWordsKeepTheirReadingsAlone() {
         val cases = mapOf(
             "薄化粧" to "うすげしょう", "丸印" to "まるじるし", "一口" to "ひとくち", "丸印の" to "まるじるしの"
         )
         fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.reading }
         val expected = cases.values.toList()
         assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+    }
+
+    @Test
+    fun ambiguousDictionaryWordsStillReadWrongInTheAuditedLyricLines() {
+        fun check(hitokuchi: String) {
+            assertEquals("ひのまるしるしのにりんしゃころがし", Readings.of(listOf("日の丸印の二輪車転がし"), Script.JAPANESE).single().reading)
+            assertEquals(hitokuchi, Readings.words("一口だけで fall in love", Script.JAPANESE).first().reading)
+        }
+        check("いっくち")
+        TestUniDic.reading { check("ひとくち") }
+    }
+
+    @Test
+    fun thinMakeupKeepsItsReadingInAShortSentence() {
+        fun check() = assertEquals("うすげしょうをして", Readings.of(listOf("薄化粧をして"), Script.JAPANESE).single().reading)
+        check()
+        TestUniDic.reading { check() }
     }
 
     @Test
@@ -1270,20 +1293,6 @@ class ReadingsTest {
         }
         check()
         TestUniDic.reading { check() }
-    }
-
-    @Test
-    fun measureRepeatedSmallTsu() {
-        val line = "りゅうっっさくら".repeat(20) + "あ".repeat(40)
-        fun measure(): Double {
-            repeat(5) { Readings.of(listOf(line), Script.JAPANESE) }
-            return List(15) {
-                val start = System.nanoTime()
-                Readings.of(listOf(line), Script.JAPANESE)
-                (System.nanoTime() - start) / 1_000_000.0
-            }.sorted()[7]
-        }
-        println("small tsu benchmark: ${line.length} chars, ${line.count { it == 'っ' }} tsu, ipadic ${measure()} ms, unidic ${TestUniDic.reading { measure() }} ms")
     }
 
     private fun checkWordBeforeSmallTsu() {

@@ -595,6 +595,8 @@ internal object Readings {
         val longestToday = today.keys.maxOfOrNull { it.length } ?: 0
         val search = small + today
         val longestSearch = search.keys.maxOfOrNull { it.length } ?: 0
+        val smallByPrefix = small.keys.filter { it.length >= 2 }.groupBy { (it[0].code shl 16) or it[1].code }
+            .mapValues { (_, words) -> words.sortedByDescending { it.length } }
     }
 
     /**
