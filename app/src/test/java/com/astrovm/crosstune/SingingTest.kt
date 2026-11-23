@@ -897,6 +897,32 @@ class SingingTest {
     }
 
     @Test
+    fun twoDistinctPhrasesOfARepeatedChorusDoNotMoveTheSheet() {
+        lines = listOf(
+            "scarlet rivers carry lanterns under starlight", "silver mountains gather thunder beyond morning",
+            "quiet meadows shelter sparrows beside water", "distant clocks turn endlessly around noon",
+            "broken windows shine across empty streets", "golden leaves drift silently over hills"
+        )
+        val times = listOf(2, 5, 8, 11, 14, 17)
+        lyricsTimedFor(null, times)
+        singing.answer = {
+            Sung(startedAt, lines.take(2).flatMapIndexed { line, text ->
+                listOf(HeardWord("noise", 1_000L + line * 3_000L + SungAlignment.HEARD_LATE_MS)) +
+                    text.split(' ').drop(1).mapIndexed { word, piece ->
+                        HeardWord(piece, 1_300L + line * 3_000L + SungAlignment.HEARD_LATE_MS + word * 300L)
+                    }
+            })
+        }
+        openLyrics()
+        plays(positionMs = 10_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
     fun pickedUpLateOneWhileHeardFarEarlierIsReportedWithoutKeepingIt() {
         val times = listOf(60, 63, 66, 90, 93, 96)
         lyricsTimedFor(null, times)
