@@ -48,6 +48,8 @@
 # SDK and its default NDK and CMake paths; Android Studio still reads the checkout's own local.properties.
 # Emulated, the box runs several times slower, a full :app:ci for hours, so the growth tests (Growth.kt)
 # measure how much slower the JVM runs and give the threads beside a reading that much more processor time.
+# GRADLE_BOX_KEYSTORE names a debug key to mount instead of ~/.android/debug.keystore. Set it empty to
+# leave the host key alone and let the box make its own.
 #
 # Idle slot homes are evicted oldest first above 40 GiB (GRADLE_BOX_CACHE_BYTES overrides it): a home
 # is about 6, and a build in a new one starts cold.
@@ -102,7 +104,7 @@ asked_sdk=${GRADLE_BOX_ANDROID_HOME:-${ANDROID_HOME:-}}
 sdk=${asked_sdk:-$HOME/Android/Sdk}
 # Where Android Studio puts it on a Mac.
 [[ -d $sdk || -n $asked_sdk || ! -d $HOME/Library/Android/sdk ]] || sdk=$HOME/Library/Android/sdk
-key=$HOME/.android/debug.keystore
+key=${GRADLE_BOX_KEYSTORE-$HOME/.android/debug.keystore}
 
 if [[ ! -d $sdk ]]; then
     echo "gradle-box: no Android SDK at $sdk. Check GRADLE_BOX_ANDROID_HOME or ANDROID_HOME." >&2
@@ -350,7 +352,7 @@ if [[ $host == Darwin || -n ${GRADLE_BOX_ANDROID_HOME:-} ]]; then
     done
 fi
 # The same key as builds outside the box, so its APKs install over theirs.
-[[ -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
+[[ -n $key && -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
 
 if [[ -d $seed/modules-2 ]]; then
     touch "$seed"
