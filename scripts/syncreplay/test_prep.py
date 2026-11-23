@@ -25,6 +25,17 @@ spec = importlib.util.spec_from_file_location('replay', Path(__file__).with_name
 r = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(r)
 
+
+class ReplayTiersTest(unittest.TestCase):
+    def test_fixed_issue_and_guard_recordings_are_in_the_song_set(self):
+        folder = Path(__file__).parent
+        def rows(name):
+            return [row.split('\t') for row in (folder / name).read_text().splitlines() if row and not row.startswith('#')]
+        songs = {row[3] for row in rows('songs.tsv') if len(row) > 3}
+        wanted = {row[0] for row in rows('issue-songs.tsv')} | {row[3] for row in rows('guard.tsv')}
+        self.assertEqual(set(), wanted - songs)
+
+
 class ReplayContainerTest(unittest.TestCase):
     def test_replay_containers_have_cpu_and_memory_limits_and_no_host_access(self):
         command = r.replay_container((Path('/repo'), Path('/repo'), 'ro'))
