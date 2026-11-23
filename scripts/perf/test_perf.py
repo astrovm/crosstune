@@ -151,10 +151,18 @@ class PerfTest(unittest.TestCase):
         self.assertLess(asked.index("shell am force-stop com.astrovm.crosstune.dev"), reset)
         self.assertLess(reset, asked.index("shell input swipe 360 1158 360 514 150"))
 
-    def test_jank_without_numbers_says_none(self):
-        (self.home_path / "gfxinfo").write_text("No process found\n")
-        run = self.run_perf("jank", "--runs", "1")[0]
+    def test_gfxinfo_without_numbers_says_none(self):
+        run = perf.gfxinfo("No process found\n")
         self.assertEqual((0, 0, 0.0, 0), (run["frames"], run["janky"], run["janky_pct"], run["p90_ms"]))
+
+    def test_jank_on_a_screen_that_did_not_scroll_stops_rather_than_read_it_as_all_janky(self):
+        (self.home_path / "gfxinfo").write_text(GFXINFO.replace("Total frames rendered: 1000", "Total frames rendered: 15"))
+        with self.assertRaisesRegex(SystemExit, "Only 15 frames were drawn over 16 flings"):
+            self.run_perf("jank", "--runs", "1")
+
+    def test_jank_with_a_frame_for_each_fling_counts(self):
+        (self.home_path / "gfxinfo").write_text(GFXINFO.replace("Total frames rendered: 1000", "Total frames rendered: 16"))
+        self.assertEqual(16, self.run_perf("jank", "--runs", "1")[0]["frames"])
 
     def test_builds_take_turns_and_one_not_debuggable_is_compiled_from_its_profile(self):
         lines = self.run_perf("start", "--runs", "2", "--build", "old=a.apk", "--build", "new=b.apk")
