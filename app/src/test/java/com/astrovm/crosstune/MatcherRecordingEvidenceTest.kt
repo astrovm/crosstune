@@ -1,6 +1,9 @@
 package com.astrovm.crosstune
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -25,7 +28,7 @@ class MatcherRecordingEvidenceTest {
         JSONArray(GZIPInputStream(stream).bufferedReader().use { it.readText() })
     }
 
-    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false, reverseDown: Boolean = false, deezerHeld: Boolean = false, inputLength: Long? = null): String? {
+    private fun find(index: Int, nativeNames: Boolean, differentRecording: Boolean = false, reverseDown: Boolean = false, deezerHeld: Boolean = false, inputLength: Long? = null, held: Pair<CountDownLatch, CountDownLatch>? = null): String? {
         val song = captured.getJSONObject(index)
         val metadata = MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = inputLength ?: song.getLong("lengthMs"))
         val us = JSONArray().also { results ->
@@ -40,7 +43,12 @@ class MatcherRecordingEvidenceTest {
                 "itunes.apple.com" -> {
                     val store = url.queryParameter("country").orEmpty()
                     val term = url.queryParameter("term").orEmpty()
+                    if (held != null && term.startsWith("夜空のイヤリング")) {
+                        held.first.countDown()
+                        held.second.await(10, TimeUnit.SECONDS)
+                    }
                     val results = if (url.encodedPath == "/search" && term == song.optString("reverseTerm") && store == "JP") {
+                        if (held != null) assertTrue(held.first.await(3, TimeUnit.SECONDS))
                         if (reverseDown) throw IOException("candidate search is down")
                         val recorded = song.getJSONObject("reverse").getJSONArray("results")
                         if (!differentRecording) recorded else JSONArray(recorded.toString()).also { answers ->
@@ -88,6 +96,17 @@ class MatcherRecordingEvidenceTest {
     @Test fun anAppleProvedCandidateDoesNotWaitForDeezer() {
         assertEquals(WATCH + "8eQdsCZWrLg", find(3, false, deezerHeld = true))
         assertTrue(fake.requestedUrls.none { it.contains("api.deezer.com") })
+    }
+
+    @Test fun anAppleProvedCandidateDoesNotWaitForAnotherCandidate() = runBlocking {
+        val held = CountDownLatch(1) to CountDownLatch(1)
+        try {
+            val result = async(Dispatchers.Default) { find(3, false, held = held) }
+            assertTrue(held.first.await(3, TimeUnit.SECONDS))
+            assertEquals(WATCH + "8eQdsCZWrLg", withTimeout(2_000) { result.await() })
+        } finally {
+            held.second.countDown()
+        }
     }
 
     @Test fun aFailedCandidateSearchHoldsTheFanUploadForRetry() {
