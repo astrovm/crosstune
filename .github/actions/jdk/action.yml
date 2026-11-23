@@ -17,6 +17,9 @@ outputs:
   dependencies-key:
     description: The key for the shared Gradle dependency cache.
     value: ${{ steps.dependencies.outputs.cache-primary-key }}
+  dependencies-hit:
+    description: Whether the shared dependency cache matched the key exactly.
+    value: ${{ steps.dependencies.outputs.cache-hit }}
 
 runs:
   using: composite

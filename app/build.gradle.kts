@@ -380,6 +380,12 @@ val robolectricDeps = tasks.register("robolectricDeps") {
     }
 }
 
+// The cache writer fetches PIT's own runtime without running mutations.
+tasks.register("cachePitestDependencies") {
+    inputs.files(configurations.named("pitest"))
+    doLast { logger.lifecycle("PIT dependencies are ready") }
+}
+
 // What the release APK is built from, for the notices task: a line per library, "maven group:module",
 // with "maven group:module!path" for each licence or notice file it carries, and "file path" for each
 // file the app depends on outside Maven. The notices task fails when one has no notice in Settings →
