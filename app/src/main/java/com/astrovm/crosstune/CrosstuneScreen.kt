@@ -16,6 +16,7 @@ import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalWindowInfo
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.animation.AnimatedVisibility
@@ -140,6 +141,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.input.ImeAction
@@ -871,9 +873,27 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         }
         // The song on screen isn't listed again right below it.
         val history = state.history.filterNot { state.result != null && it.link.url == state.link?.url }
+        // So the Recent row the remote opened a song from goes, and Android would put the remote anywhere,
+        // as on the top bar's buttons: it goes to that song's main button, or Open while Play can't be pressed.
+        // Only for the song it opened: a ▶ that goes straight to the user's app leaves the remote on it.
+        var toCard by remember { mutableStateOf<String?>(null) }
+        val screenFocus = LocalScreenFocus.current
+        val focusCard = { listOf(MAIN_FOCUS, OPEN_FOCUS).any { screenFocus?.run { goBackTo(it); restore() } == true } }
+        LaunchedEffect(toCard, state.result, state.isMatching, state.isLoading) {
+            val url = toCard ?: return@LaunchedEffect
+            if (!state.isLoading && (state.result == null || state.link?.url != url)) toCard = null
+            // The card's buttons may be placed only on the next frame, so it tries once more then.
+            else if (!state.isLoading && (focusCard() || run { withFrameNanos {}; focusCard() })) toCard = null
+        }
+        val recent = remember(actions, state.phone) {
+            if (state.phone != Phone.TV) actions else actions.copy(
+                onHistoryEntryClick = { toCard = it.link.url; actions.onHistoryEntryClick(it) },
+                onHistoryOpen = { toCard = it.link.url; actions.onHistoryOpen(it) }
+            )
+        }
         // Keyed on whether there's any, so clearing it fades the last list out rather than an empty one.
         AnimatedContent(targetState = history, contentKey = { it.isEmpty() }, transitionSpec = { fade() }, label = "history") { shown ->
-            if (shown.isNotEmpty()) Column { HistorySection(shown, state, actions) }
+            if (shown.isNotEmpty()) Column { HistorySection(shown, state, recent) }
         }
     }
 }
@@ -1901,10 +1921,26 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
         backgroundContent = { if (swipe.dismissDirection != SwipeToDismissBoxValue.Settled) RemoveBackground(swipe.dismissDirection) },
         modifier = modifier.clip(MaterialTheme.shapes.medium)
     ) {
+        // Its ▶ is inside it, where looking right of the row never finds it, nor looking left of the ▶ the row,
+        // so a remote or keyboard is sent between them here.
+        val rowFocus = remember { FocusRequester() }
+        val playFocus = remember { FocusRequester() }
+        var onPlay by remember { mutableStateOf(false) }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
+                .onKeyEvent { event ->
+                    val to = when {
+                        event.type != KeyEventType.KeyDown -> null
+                        event.key == Key.DirectionRight && !onPlay -> playFocus
+                        event.key == Key.DirectionLeft && onPlay -> rowFocus
+                        else -> null
+                    }
+                    to?.requestFocus()
+                    to != null
+                }
+                .focusRequester(rowFocus)
                 .clickable { actions.onHistoryEntryClick(entry) }
                 // Swiping isn't something TalkBack can do, so removing is an action of its own there.
                 .semantics { customActions = listOf(CustomAccessibilityAction(remove) { actions.onRemoveHistory(entry); true }) }
@@ -1939,7 +1975,10 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
             IconButton(
                 onClick = { actions.onHistoryOpen(entry) },
                 interactionSource = press.source,
-                modifier = press.modifier.semantics { contentDescription = openLabel }
+                modifier = press.modifier
+                    .focusRequester(playFocus)
+                    .onFocusChanged { onPlay = it.isFocused }
+                    .semantics { contentDescription = openLabel }
             ) {
                 if (elsewhere != null) {
                     DestinationIcon(elsewhere, installed, size = 24.dp)
