@@ -304,7 +304,7 @@ def sung_language(song):
         words = " ".join(text for _, text in json.loads((OUT / f"{song}.lyrics.json").read_text()))
         fits = (name for name, _ in likely if name not in WRITING or re.search(WRITING[name], words))
         atomic_text(kept, next(fits, language))
-    return kept.read_text()
+    return kept.read_text().strip()
 
 
 def words_heard(vocals, language):

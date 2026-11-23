@@ -111,6 +111,11 @@ class ParallelOrderTest(unittest.TestCase):
 
 
 class ResumeTest(unittest.TestCase):
+    def test_language_file_can_end_in_a_newline(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            (r.OUT / 'fake.language').write_text('ja\n')
+            self.assertEqual('ja', r.sung_language('fake'))
+
     def test_truth_without_hearing_is_resumed(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
             (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', lines=1, title='Song', artist='Artist')]))
