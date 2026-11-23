@@ -135,15 +135,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         val service = if (source == "RECOGNIZED_SONG") null else MusicService.fromName(source) ?: return null
         val url = optString("url").ifEmpty { "https://open.spotify.com/${type.name.lowercase()}/$id" }
         val link = MusicLink(service, type, id, url, optString("region").ifEmpty { null })
-        val destinations = optJSONObject("destinations") ?: JSONObject()
-        val prepared = destinations.keys().asSequence().mapNotNull { key ->
-            val value = destinations.optJSONObject(key) ?: return@mapNotNull null
-            val destinationUrl = value.optString("url").ifBlank { return@mapNotNull null }
-            // Found the way songs were matched before, it's found again; a search for it is the same either way.
-            if (value.optBoolean("exact") && value.optInt("matcher", 1) != MATCH_VERSION) return@mapNotNull null
-            val retry = value.optJSONObject("retry")?.let { ExactMatcher.Retry.fromJson(it) }
-            key to PreparedLink(destinationUrl, value.optBoolean("exact"), value.optBoolean("matchingEnabled"), retry)
-        }.toMap()
+        val prepared = optJSONObject("destinations")?.toDestinations().orEmpty()
         val tracks = optJSONArray("tracks")?.let { list ->
             (0 until list.length()).mapNotNull { index ->
                 val song = list.optJSONArray(index) ?: return@mapNotNull null
@@ -165,6 +157,16 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         val missingAlbum = if (type == ItemType.TRACK) album == null else tracks.any { it.album == null }
         return HistoryEntry(link, metadata, prepared, albumChecked = !link.hasCatalogAlbum || has("album") || !missingAlbum)
     }
+
+    private fun JSONObject.toDestinations(): Map<String, PreparedLink> = keys().asSequence().mapNotNull { key ->
+        val value = optJSONObject(key) ?: return@mapNotNull null
+        val url = value.optString("url").ifBlank { return@mapNotNull null }
+        val exact = value.optBoolean("exact")
+        // Found the way songs were matched before, it's found again; a search for it is the same either way.
+        if (exact && value.optInt("matcher", 1) != MATCH_VERSION) return@mapNotNull null
+        val retry = value.optJSONObject("retry")?.let { ExactMatcher.Retry.fromJson(it) }
+        key to PreparedLink(url, exact, value.optBoolean("matchingEnabled"), retry)
+    }.toMap()
 
     companion object {
         const val KEY_HISTORY = "history"
