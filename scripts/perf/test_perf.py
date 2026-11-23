@@ -57,7 +57,10 @@ FAKE_AAPT2 = r"""#!/bin/sh
 case "$*" in
   "dump packagename "*production.apk) echo com.astrovm.crosstune ;;
   "dump packagename "*unknown.apk) exit 1 ;;
-  "dump packagename "*) cat "$3" ;;
+  "dump packagename "*) sed -n 1p "$3" ;;
+  "dump badging "*)
+    code=$(sed -n 2p "$3"); echo "package: name='$(sed -n 1p "$3")' versionCode='${code:-1}'"
+    if grep -qx debuggable "$3"; then echo application-debuggable; fi ;;
   *) exit 2 ;;
 esac
 """
@@ -178,6 +181,26 @@ class PerfTest(unittest.TestCase):
             with self.subTest(apk=apk), self.assertRaisesRegex(SystemExit, apk):
                 self.run_perf("start", "--runs", "1", "--build", "dev=a.apk", "--build", f"other={apk}")
         self.assertEqual([], self.asked())
+
+    def test_release_like_builds_of_two_version_codes_stop_before_any_install(self):
+        (self.home_path / "old.apk").write_text("com.astrovm.crosstune.dev\n2270100\n")
+        (self.home_path / "new.apk").write_text("com.astrovm.crosstune.dev\n2280000\n")
+        with self.assertRaisesRegex(SystemExit, "old 2270100, new 2280000"):
+            self.run_perf("start", "--runs", "1", "--build", "old=old.apk", "--build", "new=new.apk")
+        self.assertEqual([], self.asked())
+
+    def test_a_newer_build_that_is_not_debuggable_stops_an_older_debuggable_one(self):
+        (self.home_path / "old.apk").write_text("com.astrovm.crosstune.dev\n2270100\ndebuggable\n")
+        (self.home_path / "new.apk").write_text("com.astrovm.crosstune.dev\n2280000\n")
+        with self.assertRaisesRegex(SystemExit, "Build them with the same versionCode"):
+            self.run_perf("start", "--runs", "1", "--build", "old=old.apk", "--build", "new=new.apk")
+        self.assertEqual([], self.asked())
+
+    def test_debuggable_builds_of_two_version_codes_take_turns(self):
+        (self.home_path / "old.apk").write_text("com.astrovm.crosstune.dev\n2270100\ndebuggable\n")
+        (self.home_path / "new.apk").write_text("com.astrovm.crosstune.dev\n2280000\ndebuggable\n")
+        lines = self.run_perf("start", "--runs", "1", "--build", "old=old.apk", "--build", "new=new.apk")
+        self.assertEqual(["old", "new"], [line["label"] for line in lines[:2]])
 
     def test_each_install_reads_the_validated_copy_after_the_source_changes(self):
         apk = self.home_path / "a.apk"
