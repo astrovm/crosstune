@@ -898,6 +898,12 @@ internal class MainViewModel(
     }
 
     fun resolveIncoming(text: String?, destination: Destination? = null, show: Boolean = false, after: AfterLookup = AfterLookup.OPEN, keepWords: Boolean = false) {
+        lookUpIncoming(text, destination, show, after, keepWords)
+        // Once the lookup's begun, as beginning it forgets where the last song came from.
+        uiState = uiState.copy(fromAnotherApp = true)
+    }
+
+    private fun lookUpIncoming(text: String?, destination: Destination?, show: Boolean, after: AfterLookup, keepWords: Boolean) {
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
         val here = showsHere(destination, show, after)
         // The words stay only for a link handed on: one shown here is what's shown.
@@ -977,7 +983,10 @@ internal class MainViewModel(
 
     fun retry() {
         val (input, openWhenReady, destination, here) = lastRequest ?: return
+        val fromAnotherApp = uiState.fromAnotherApp
         resolve(input, openWhenReady, destination, here = here)
+        // Tried again, a link from another app still goes back there with Back.
+        uiState = uiState.copy(fromAnotherApp = fromAnotherApp)
     }
 
     /** Whether the link last looked up couldn't be for being offline, so it's looked up once back online. */
@@ -5824,7 +5833,12 @@ internal class MainViewModel(
     fun openRecent(url: String?) {
         val entry = uiState.history.firstOrNull { it.link.url == url } ?: return resolveIncoming(url)
         uiState = uiState.copy(leaveSettings = true)
-        if (uiState.linksInCrosstune) return openHistoryEntry(entry)
+        if (uiState.linksInCrosstune) {
+            openHistoryEntry(entry)
+            // Shown from the home screen, Back goes back there, as for a link from another app.
+            uiState = uiState.copy(fromAnotherApp = true)
+            return
+        }
         uiState = uiState.copy(handlingIncomingLink = true, handingOff = true)
         openSaved(entry, finishAfterOpen = true)
     }
@@ -5972,7 +5986,7 @@ internal class MainViewModel(
         cancelTrackWork()
         coverJob?.cancel()
         coverJob = null
-        uiState = uiState.copy(isLoading = false, isMatching = false, listening = false, canRetry = false)
+        uiState = uiState.copy(isLoading = false, isMatching = false, listening = false, canRetry = false, fromAnotherApp = false)
     }
 
     private fun cancelTrackWork() {

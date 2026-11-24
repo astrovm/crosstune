@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +16,7 @@ import androidx.compose.animation.core.ExperimentalTransitionApi
 import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -164,6 +166,14 @@ internal val LocalMainFocus = staticCompositionLocalOf<ScreenFocus?> { null }
 
 /** Where the remote comes back to the card's Open, when Play is its main button. */
 private const val OPEN_FOCUS = "open"
+
+/** How many frames a Recent row has to be placed in, Recent coming back, before the remote is left where it is. */
+private const val FOCUS_FRAMES = 5
+
+/** The song Back just put away on a TV, by its link, whose Recent row takes the remote; [focused] once it has. */
+private class ClosedSong(val url: String, val focused: () -> Unit)
+
+private val LocalClosedSong = compositionLocalOf<ClosedSong?> { null }
 
 /** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
 internal const val CARD_TOOLS_TAG = "card_tools"
@@ -505,6 +515,16 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         Screen.LYRICS, Screen.PLAYER -> layers.down?.to
         else -> null
     }
+    // A song opened here goes with Back, back to Recent, and on a TV the remote to its row. One from another app
+    // leaves Back to Android, which goes back to that app. First, so whatever is over the card goes before it.
+    var closedSong by remember { mutableStateOf<String?>(null) }
+    BackHandler(enabled = screen == Screen.MAIN && !state.idle && !state.fromAnotherApp) {
+        // Only one Recent lists, as no row would take the remote and clear it otherwise.
+        closedSong = state.link?.url?.takeIf { url -> state.phone == Phone.TV && state.history.any { it.link.url == url } }
+        actions.onClear()
+    }
+    // Another song shown, the one put away no longer wants the remote, even if its row was hidden by a search.
+    LaunchedEffect(state.idle) { if (!state.idle) closedSong = null }
     // Back from settings' own list; its pages go back to it first.
     CompositionLocalProvider(LocalLayerSwipe provides layers) { SwipedBack(enabled = showSettings) { showSettings = false } }
     val density = LocalDensity.current
@@ -601,7 +621,9 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             } else if (shown == Screen.PRACTICE_LIST) {
                 PracticeList(state, actions, onBack = { showPracticeList = false })
             } else {
-                MainScreen(state, actions, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true })
+                CompositionLocalProvider(LocalClosedSong provides closedSong?.let { url -> ClosedSong(url) { closedSong = null } }) {
+                    MainScreen(state, actions, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true })
+                }
             }
         }
         }
@@ -1827,6 +1849,7 @@ private fun ToolAction(
 
 @Composable
 private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions: ScreenActions) {
+    val closed = LocalClosedSong.current
     var query by rememberSaveable { mutableStateOf("") }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -1898,7 +1921,10 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
                 // Only a row going somewhere other than the default app says where.
                 // Two versions of a song, as a single and an album take, say how long each is, to tell them apart.
                 val length = entry.metadata.lengthMs?.takeIf { history.any { other -> other !== entry && other.metadata.isNamedAs(entry.metadata) } }
-                HistoryRow(entry, state.ruleFor(entry.link)?.takeIf { it != state.defaultDestination }, state.installed, actions, Modifier.enterIn(index), length)
+                HistoryRow(
+                    entry, state.ruleFor(entry.link)?.takeIf { it != state.defaultDestination }, state.installed, actions, Modifier.enterIn(index), length,
+                    closed?.takeIf { it.url == entry.link.url }?.focused
+                )
             }
         }
     }
@@ -1910,7 +1936,15 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
  * either way removes it.
  */
 @Composable
-private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: Set<MusicService>, actions: ScreenActions, modifier: Modifier = Modifier, lengthMs: Long? = null) {
+private fun HistoryRow(
+    entry: HistoryEntry,
+    elsewhere: Destination?,
+    installed: Set<MusicService>,
+    actions: ScreenActions,
+    modifier: Modifier = Modifier,
+    lengthMs: Long? = null,
+    takeFocus: (() -> Unit)? = null
+) {
     val swipe = rememberSwipeToDismissBoxState()
     val remove = stringResource(R.string.remove_button)
     SwipeToDismissBox(
@@ -1921,6 +1955,15 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
         modifier = modifier.clip(MaterialTheme.shapes.medium)
     ) {
         val focus = rememberRowButtonFocus()
+        // Its song put away with Back, the remote comes back to it, once it's placed: a frame or a few later, as
+        // Recent comes back.
+        if (takeFocus != null) {
+            LaunchedEffect(Unit) {
+                var frames = 0
+                while (!focus.focusRow() && frames++ < FOCUS_FRAMES) withFrameNanos {}
+                takeFocus()
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
