@@ -11,7 +11,8 @@ with ANDROID_SERIAL. It needs adb, which scripts/lib/adbtool.py finds: $ADB, the
 
 `jank` cold starts the app before each run, so the main screen shows only its Recent list, then
 swipes the same way each run: up the list and back down, a fling each, from the screen's own size.
-The phone's history is the content, so compare builds on one phone.
+The phone's history is the content, so compare builds on one phone. A list that doesn't scroll
+draws next to nothing, so a run with fewer frames than flings stops there.
 
 With --build, each run installs the builds in turn, keeping the app's data, so they take turns on
 a phone that warms up and cools down, rather than one build getting the cooler phone. The SDK's
@@ -216,7 +217,15 @@ def jank(args: argparse.Namespace) -> dict:
         for _ in range(args.swipes):
             shell("input", "swipe", x, start, x, end, "150")
             time.sleep(0.9)
-    return gfxinfo(shell("dumpsys", "gfxinfo", PACKAGE))
+    result = gfxinfo(shell("dumpsys", "gfxinfo", PACKAGE))
+    # A list that scrolls draws dozens of frames a fling. Fewer than one each means nothing moved, and
+    # the few frames there are would read as all janky.
+    if result["frames"] < args.swipes * 2:
+        sys.exit(
+            f"Only {result['frames']} frames were drawn over {args.swipes * 2} flings: the main screen didn't scroll."
+            " Open enough songs in Crosstune Dev for Recent to fill more than a screen."
+        )
+    return result
 
 
 def cpu(args: argparse.Namespace) -> dict:

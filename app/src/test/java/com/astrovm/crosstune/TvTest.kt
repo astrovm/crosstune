@@ -751,6 +751,57 @@ class TvTest {
     }
 
     @Test
+    fun onATvASongOpenedFromRecentHandsTheRemoteToItsMainButton() {
+        for (n in 1..3) {
+            val url = "https://open.spotify.com/track/song$n"
+            HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band")))
+        }
+        launch()
+        // The middle one, so rows stay above and below where it was, for Android to move the remote to.
+        composeRule.onNode(hasText("Song 2") and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 2" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        focused().assert(hasAnyAncestor(hasTestTag(RESULT_TAG)) and hasClickAction())
+    }
+
+    @Test
+    fun onATvARecentPlayThatGoesStraightToTheAppLeavesTheRemoteOnIt() {
+        for (n in 1..3) {
+            val url = "https://open.spotify.com/track/song$n"
+            HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band")))
+        }
+        launch()
+        composeRule.onNode(hasText("Song 2") and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 2" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        // With links not shown in Crosstune, ▶ opens the song in the user's app, and Song 2's card stays.
+        val play = composeRule.onNode(hasContentDescription(string(R.string.history_open, "Song 1")) and hasClickAction())
+        play.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        assertEquals("Song 2", model().uiState.result?.title)
+        play.assertIsFocused()
+    }
+
+    @Test
+    fun onATvRightAndLeftGoBetweenARecentRowAndItsPlay() {
+        val url = "https://open.spotify.com/track/song1"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song1", url), MusicMetadata("Song 1", "Band")))
+        launch()
+        val row = composeRule.onNode(hasText("Song 1") and hasClickAction())
+        val play = composeRule.onNode(hasContentDescription(string(R.string.history_open, "Song 1")) and hasClickAction())
+        row.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionRight)
+        play.assertIsFocused()
+        pressOnFocused(Key.DirectionLeft)
+        row.assertIsFocused()
+        // Any other key is left to the screen: with nothing past the row's start, the remote stays on it.
+        pressOnFocused(Key.DirectionLeft)
+        row.assertIsFocused()
+    }
+
+    @Test
     fun onATvBackFromTheStepsASettingOpensLandsOnThatSetting() {
         settingsByRemote()
         val follow = composeRule.onNode(hasText(string(R.string.setting_lyrics_follow)))
