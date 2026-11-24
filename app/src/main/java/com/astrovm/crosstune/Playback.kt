@@ -402,6 +402,17 @@ internal class MediaSessionPlayback(
         readSong(title, artist, musicVideo)
     }
 
+    /**
+     * The title and artist [metadata] gives, as other services write them: Presto Music's "Davis, M: So What" by
+     * "Cannonball Adderley (alto saxophone), Miles Davis (trumpet)" is "So What" by "Miles Davis", see [Presto.song].
+     */
+    private fun MediaController.names(metadata: MediaMetadata): Pair<String, String> {
+        val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        if (MusicService.ofPackage(packageName) != MusicService.PRESTO_MUSIC) return title to artist
+        return Presto.song(title, Presto.musicians(artist)).let { it.title to it.artist }
+    }
+
     private fun MediaController.songName(title: String, artist: String): MusicMetadata? {
         val musicVideo = MusicService.ofPackage(packageName) == MusicService.YOUTUBE_MUSIC
         return songsRead.of(Triple(title, artist, musicVideo))
@@ -1060,7 +1071,8 @@ internal class MediaSessionPlayback(
      */
     private fun said(controller: MediaController, asked: Long? = null, snapshot: MediaMetadata? = controller.metadata): MusicMetadata? {
         val metadata = snapshot ?: return null
-        val named = controller.songName(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
+        val (said, by) = controller.names(metadata)
+        val named = controller.songName(said, by) ?: return null
         if (named.unnamed) return named.takeUnless { controller.isVideo() }
         val (title, artist) = named
         // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
@@ -1204,8 +1216,7 @@ internal class MediaSessionPlayback(
         if (packageName == RadioGarden.PACKAGE) return false
         val playing = metadata ?: return false
         if (anotherRecording(playing, song)) return false
-        val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
-        val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        val (title, artist) = names(playing)
         if (MetadataParsers.noArtist(artist)) return playsWithNoArtist(title, artist, song)
         return SongNames.names(title, artist, song)
     }

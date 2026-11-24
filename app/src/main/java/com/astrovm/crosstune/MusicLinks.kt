@@ -198,6 +198,7 @@ internal object MusicLinks {
         host.isOn("soundcloud.com") -> MusicService.SOUNDCLOUD
         host.endsWith(".bandcamp.com") -> MusicService.BANDCAMP
         host.isOn("audiomack.com") -> MusicService.AUDIOMACK
+        host.isOn("prestomusic.com") -> MusicService.PRESTO_MUSIC
         else -> null
     }
 
@@ -232,6 +233,7 @@ internal object MusicLinks {
                 soundCloud(segments)
             host.endsWith(".bandcamp.com") && host != "daily.bandcamp.com" -> bandcamp(host, segments)
             host == "audiomack.com" || host == "www.audiomack.com" -> audiomack(segments)
+            host == "streaming.prestomusic.com" || host == "prestomusic.com" || host == "www.prestomusic.com" -> presto(segments)
             host == "shazam.com" || host == "www.shazam.com" -> shazamSong(segments)
             // Invidious and Piped, on any of their many sites, use YouTube's own watch links; the
             // popular sites' other video paths are recognised too.
@@ -296,6 +298,19 @@ internal object MusicLinks {
         if (segments.size != 3) return null
         val type = mapOf("song" to ItemType.TRACK, "album" to ItemType.ALBUM, "playlist" to ItemType.PLAYLIST)[segments[1]] ?: return null
         return MusicLink(MusicService.AUDIOMACK, type, "${segments[0]}/${segments[2]}", "https://audiomack.com/${segments.joinToString("/")}")
+    }
+
+    /**
+     * A Presto Music album, as its app shares it, streaming.prestomusic.com/album/{code}, or as its shop links it,
+     * www.prestomusic.com/{genre}/products/{code}--{name}. Either opens as the app's, which the app opens.
+     */
+    private fun presto(segments: List<String>): MusicLink? {
+        val code = when {
+            segments.size == 2 && segments[0] == "album" -> segments[1]
+            segments.size == 3 && segments[1] == "products" -> segments[2].substringBefore("--")
+            else -> null
+        }?.takeIf { numericIdRegex.matches(it) } ?: return null
+        return MusicLink(MusicService.PRESTO_MUSIC, ItemType.ALBUM, code, "https://streaming.prestomusic.com/album/$code")
     }
 
     /** music.apple.com/{region}/{song|album|artist|playlist}/{slug}/{id}, where album?i= is a song. */

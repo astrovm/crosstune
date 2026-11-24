@@ -406,6 +406,24 @@ class MusicLinksTest {
     }
 
     @Test
+    fun prestoAlbumsAsItsAppSharesThemAndItsShopLinksThem() {
+        val album = "https://streaming.prestomusic.com/album/8269533"
+        assertLink(album, MusicService.PRESTO_MUSIC, ItemType.ALBUM, "8269533", album)
+        assertLink("Presto Music Streaming $album", MusicService.PRESTO_MUSIC, ItemType.ALBUM, "8269533", album)
+        assertLink("https://www.prestomusic.com/jazz/products/8269533--kind-of-blue", MusicService.PRESTO_MUSIC, ItemType.ALBUM, "8269533", album)
+        assertLink("https://prestomusic.com/classical/products/8269533", MusicService.PRESTO_MUSIC, ItemType.ALBUM, "8269533", album)
+        assertLink("streaming.prestomusic.com/album/8269533", MusicService.PRESTO_MUSIC, ItemType.ALBUM, "8269533", album)
+        // A work, an artist, a search, a code that's no number, or another host of theirs.
+        assertNull(link("https://streaming.prestomusic.com/work/176093"))
+        assertNull(link("https://streaming.prestomusic.com/artist/5276/albums"))
+        assertNull(link("https://streaming.prestomusic.com/explore/results/albums?search=So%20What"))
+        assertNull(link("https://streaming.prestomusic.com/album/kind-of-blue"))
+        assertNull(link("https://www.prestomusic.com/jazz/products/"))
+        assertNull(link("https://embed.prestomusic.com/album/8269533/track/1"))
+        assertEquals(MusicService.PRESTO_MUSIC, MusicLinks.serviceFor("https://streaming.prestomusic.com/work/176093"))
+    }
+
+    @Test
     fun audiomackSongsAlbumsAndPlaylists() {
         assertLink("https://audiomack.com/burna-boy/song/last-last", MusicService.AUDIOMACK, ItemType.TRACK, "burna-boy/last-last", "https://audiomack.com/burna-boy/song/last-last")
         assertLink("https://www.audiomack.com/burna-boy/album/love-damini", MusicService.AUDIOMACK, ItemType.ALBUM, "burna-boy/love-damini", "https://audiomack.com/burna-boy/album/love-damini")

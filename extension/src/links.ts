@@ -1,5 +1,5 @@
 // What a link points at. Ported from the app's MusicLinks.kt: the same shapes of address, one
-// service at a time. Left out: Bandcamp, Audiomack, Shazam, Google's shared results and the
+// service at a time. Left out: Bandcamp, Audiomack, Presto Music, Shazam, Google's shared results and the
 // Invidious and Piped sites, which the extension doesn't open.
 
 import { isOn, type ItemType, type Service } from "./services.ts";

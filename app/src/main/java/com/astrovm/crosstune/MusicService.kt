@@ -19,8 +19,7 @@ internal enum class ItemType(@StringRes val labelRes: Int) {
 
 /**
  * A music service Crosstune can open things in and, when [canBeSource], read links from.
- * Amazon Music and Qobuz links render with JavaScript and expose no metadata, so they are destination-only. So is
- * Presto Music, whose site asks a browser to prove it's one before it shows a page.
+ * Amazon Music and Qobuz links render with JavaScript and expose no metadata, so they are destination-only.
  */
 internal enum class MusicService(
     @StringRes val labelRes: Int,
@@ -76,7 +75,7 @@ internal enum class MusicService(
     ),
     /** Classical and jazz. Its search finds albums only, by what's on them too, so a song's title and artist find the albums it's on. */
     PRESTO_MUSIC(
-        R.string.service_presto_music, R.string.open_in_presto_music, R.drawable.ic_service_prestomusic, "com.prestomusic.app", false,
+        R.string.service_presto_music, R.string.open_in_presto_music, R.drawable.ic_service_prestomusic, "com.prestomusic.app", true,
         querySearchUrl("https://streaming.prestomusic.com/explore/results/albums", "search")
     );
 

@@ -188,4 +188,17 @@ class ServiceApisTest {
         fake.handler = { request -> FakeSpotify.html(request, """{"errorcode":1003}""") }
         assertEquals(emptyList<MusicMetadata>(), runBlocking { apis().audiomackTracks(ItemType.PLAYLIST, "dj/mix") })
     }
+
+    @Test
+    fun prestoSongsAreAskedOfTheApiBehindItsApp() {
+        fake.handler = { request -> FakeSpotify.html(request, """{"payload":{"works":[{"artistData":[{"artistName":"Miles Davis"}],"tracks":[{"trackTitle":"Davis, M: So What","duration":"9:07"}]}]}}""") }
+        assertEquals(
+            listOf(MusicMetadata("So What", "Miles Davis", artworkUrl = "https://img/m.jpg", lengthMs = 547_000)),
+            runBlocking { apis().prestoTracks("8269533", MusicMetadata("Kind Of Blue", "Miles Davis", ItemType.ALBUM, "https://img/m.jpg")) }
+        )
+        assertEquals("${Presto.API}/tracks/8269533", fake.requestedUrls.single())
+        // Something else than an album's answer.
+        fake.handler = { request -> FakeSpotify.html(request, "[]") }
+        assertTrue(runCatching { runBlocking { apis().prestoTracks("8269533", MusicMetadata("Kind Of Blue", "Miles Davis", ItemType.ALBUM)) } }.exceptionOrNull() is org.json.JSONException)
+    }
 }

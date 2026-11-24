@@ -1034,6 +1034,20 @@ class PlaybackTest {
     }
 
     @Test
+    fun prestoMusicsSongIsNamedAsOtherServicesNameItAndFollowed() {
+        allow()
+        sounding()
+        // As Presto names it on a phone: who wrote it first, and every musician with what they play.
+        val seen = followed(MusicMetadata("So What", "Miles Davis"))
+        shadowOf(sessions).addController(
+            player("com.prestomusic.app", "Presto Music", "Davis, M: So What", "Cannonball Adderley (alto saxophone), Bill Evans (piano), Miles Davis (trumpet)")
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Presto Music", seen.last()?.app)
+        assertEquals(MusicMetadata("So What", "Miles Davis"), playback.nowPlaying()?.metadata?.let { MusicMetadata(it.title, it.artist) })
+    }
+
+    @Test
     fun aJapaneseVideoIsFollowedAndNamedAsTheSongInItsBrackets() {
         allow()
         sounding()
