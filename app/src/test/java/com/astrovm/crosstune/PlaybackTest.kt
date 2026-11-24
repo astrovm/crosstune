@@ -3592,7 +3592,7 @@ class PlaybackTest {
 
     @Test
     @Config(shadows = [AppAsked::class])
-    fun anAppThatPlaysOnForAMomentOnlyHasntPlayedOn() = runBlocking {
+    fun anAppStoppedASecondAfterItSaysItPlaysHasntPlayedOn() = runBlocking {
         val youTube = MusicService.YOUTUBE.packageName
         allow()
         val stopped = player(youTube, "YouTube", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_STOPPED)
@@ -3621,6 +3621,13 @@ class PlaybackTest {
         says(PlaybackState.STATE_ERROR)
         assertFalse(quick.await())
         assertTrue(fresh.playsOnlyInFront(youTube))
+        // Failing before it ever says it plays, it isn't held to the second.
+        val other = MediaSessionPlayback(app, now = { NOW }, startMs = 200, playsOnMs = 200, modes = modes)
+        shadowOf(stopped).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_STOPPED, 0, 1f, PLAYED_AT).build())
+        val failsAtOnce = resumes(other)
+        says(PlaybackState.STATE_ERROR)
+        assertTrue(failsAtOnce.isCompleted)
+        assertFalse(failsAtOnce.await())
     }
 
     @Test

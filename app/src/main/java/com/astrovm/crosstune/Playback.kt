@@ -754,7 +754,7 @@ internal class MediaSessionPlayback(
      * Runs [ask]; false if it throws. If [mustStart], also waits for [asked] to say it plays: an app that
      * can't play in the background says so with an error, or says nothing, and plays nothing either way.
      * One already playing, e.g. another song, is taken to go on with this one. One known to play only in front isn't asked unless it plays, in front.
-     * Said to play, it also has to be neither stopped nor failed [holdMs] later: one that is only plays in front.
+     * Said to play, it also has to be neither stopped nor failed [holdMs] ms later, or it only plays in front.
      */
     private suspend fun watchStart(asked: MediaController, mustStart: Boolean, holdMs: Long = 0, ask: () -> Unit): Boolean {
         // Known to play only in front, it isn't asked from behind again: YouTube Music, stopped, opens itself on the song from the start.
@@ -773,15 +773,20 @@ internal class MediaSessionPlayback(
             val said = states.receiveAsFlow()
             val started = asked.playbackState?.state == PlaybackState.STATE_PLAYING ||
                 withTimeoutOrNull(startMs) { said.first { it == PlaybackState.STATE_PLAYING || it == PlaybackState.STATE_ERROR } } == PlaybackState.STATE_PLAYING
-            // Stopped soon after it said it plays, as YouTube without Premium does from behind, it didn't play on. Stopped
-            // for a moment and playing again, it did.
-            var last: Int? = null
-            withTimeoutOrNull(holdMs) { said.collect { last = it } }
-            val kept = started && last != PlaybackState.STATE_STOPPED && last != PlaybackState.STATE_ERROR
-            return kept.also { if (!it) onlyInFront += asked.packageName }
+            return (started && keptOn(said, holdMs)).also { if (!it) onlyInFront += asked.packageName }
         } finally {
             if (mustStart) asked.unregisterCallback(callback)
         }
+    }
+
+    /**
+     * Whether an app that [said] it plays is neither stopped nor failed [holdMs] ms later. Stopped soon after, as YouTube
+     * without Premium does from behind, it didn't play on. Stopped for a moment and playing again, it did.
+     */
+    private suspend fun keptOn(said: Flow<Int?>, holdMs: Long): Boolean {
+        var last: Int? = null
+        withTimeoutOrNull(holdMs) { said.collect { last = it } }
+        return last != PlaybackState.STATE_STOPPED && last != PlaybackState.STATE_ERROR
     }
 
     // Asked the way a voice assistant asks, which music apps answer without coming to the front.
