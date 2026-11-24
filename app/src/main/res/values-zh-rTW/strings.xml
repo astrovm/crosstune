@@ -13,6 +13,7 @@
     <string name="open_in_spotify">在 Spotify 中開啟</string>
     <string name="open_in_audiomack">在 Audiomack 中開啟</string>
     <string name="open_in_qobuz">在 Qobuz 中開啟</string>
+    <string name="open_in_presto_music">在 Presto Music 中開啟</string>
     <string name="open_in_bandcamp">在 Bandcamp 中開啟</string>
     <string name="open_in_amazon_music">在 Amazon Music 中開啟</string>
     <string name="from_service">來自 %1$s</string>

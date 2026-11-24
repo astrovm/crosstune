@@ -29,15 +29,15 @@ import devicelock
 APP = 'com.astrovm.crosstune.dev'
 SERVICES = {
     'TIDAL': 'TIDAL', 'DEEZER': 'Deezer', 'APPLE_MUSIC': 'Apple Music',
-    'AMAZON_MUSIC': 'Amazon Music', 'QOBUZ': 'Qobuz', 'AUDIOMACK': 'Audiomack',
+    'AMAZON_MUSIC': 'Amazon Music', 'QOBUZ': 'Qobuz', 'PRESTO_MUSIC': 'Presto Music', 'AUDIOMACK': 'Audiomack',
     'SPOTIFY': 'Spotify', 'BANDCAMP': 'Bandcamp', 'SOUNDCLOUD': 'SoundCloud',
     'YOUTUBE': 'YouTube',
     'YOUTUBE_MUSIC@com.google.android.apps.youtube.music': 'YouTube Music',
     'YOUTUBE_MUSIC@app.morphe.android.apps.youtube.music': 'YouTube Music',
 }
 SEARCHES = [('Crosstune Unreleased First', 'Test Band'), ('Crosstune Unreleased Second', 'Test Band')]
-PACKAGES = dict(zip(SERVICES, ['com.aspiro.tidal', 'deezer.android.app', 'com.apple.android.music', 'com.amazon.mp3', 'com.qobuz.music', 'com.audiomack', 'com.spotify.music', 'com.bandcamp.android', 'com.soundcloud.android', 'com.google.android.youtube', 'com.google.android.apps.youtube.music', 'app.morphe.android.apps.youtube.music']))
-TEST_APPS = {'com.aspiro.tidal', 'deezer.android.app', 'com.apple.android.music', 'com.amazon.mp3', 'com.qobuz.music', 'com.audiomack', 'com.spotify.music', 'com.bandcamp.android', 'com.soundcloud.android', 'com.google.android.youtube', 'com.google.android.apps.youtube.music', 'app.morphe.android.apps.youtube.music'}
+PACKAGES = dict(zip(SERVICES, ['com.aspiro.tidal', 'deezer.android.app', 'com.apple.android.music', 'com.amazon.mp3', 'com.qobuz.music', 'com.prestomusic.app', 'com.audiomack', 'com.spotify.music', 'com.bandcamp.android', 'com.soundcloud.android', 'com.google.android.youtube', 'com.google.android.apps.youtube.music', 'app.morphe.android.apps.youtube.music']))
+TEST_APPS = {'com.aspiro.tidal', 'deezer.android.app', 'com.apple.android.music', 'com.amazon.mp3', 'com.qobuz.music', 'com.prestomusic.app', 'com.audiomack', 'com.spotify.music', 'com.bandcamp.android', 'com.soundcloud.android', 'com.google.android.youtube', 'com.google.android.apps.youtube.music', 'app.morphe.android.apps.youtube.music'}
 LINKS = ['https://www.deezer.com/track/3135556', 'https://www.deezer.com/track/908604612']
 # The test emulators, by name, as emulator.py makes them and devicelock.py shares them.
 EMULATORS = json.loads((Path(__file__).resolve().parent / 'emulators.json').read_text())

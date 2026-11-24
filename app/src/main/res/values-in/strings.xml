@@ -13,6 +13,7 @@
     <string name="open_in_spotify">Buka di Spotify</string>
     <string name="open_in_audiomack">Buka di Audiomack</string>
     <string name="open_in_qobuz">Buka di Qobuz</string>
+    <string name="open_in_presto_music">Buka di Presto Music</string>
     <string name="open_in_bandcamp">Buka di Bandcamp</string>
     <string name="open_in_amazon_music">Buka di Amazon Music</string>
     <string name="from_service">dari %1$s</string>

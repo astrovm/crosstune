@@ -8254,6 +8254,13 @@ class MainActivityTest {
         click(string(R.string.history_open, "Remember"))
         assertEquals("https://music.amazon.com/search/Remember%20Artist", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
         assertNull(model.uiState.result)
+
+        // Presto Music's search lists albums, by the songs on them too; its app opens this link at the results.
+        model.selectDefault(Destination.Service(MusicService.PRESTO_MUSIC))
+        composeRule.waitForIdle()
+        click(string(R.string.history_open, "Remember"))
+        assertEquals("https://streaming.prestomusic.com/explore/results/albums?search=Remember%20Artist", checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.dataString)
+        assertNull(model.uiState.result)
     }
 
     @Test

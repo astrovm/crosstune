@@ -219,6 +219,11 @@ class DestinationStoreTest {
         }
         // Where a query is a parameter, the slash is just text.
         assertEquals("https://music.youtube.com/search?q=AC%2FDC", MusicService.YOUTUBE_MUSIC.searchUrl("AC/DC"))
+        // So are "&" and "#", which would otherwise end the search or start another parameter.
+        assertEquals(
+            "https://streaming.prestomusic.com/explore/results/albums?search=Rock%20%26%20Roll%20%231%20AC%2FDC",
+            MusicService.PRESTO_MUSIC.searchUrl("Rock & Roll #1 AC/DC")
+        )
     }
 
     @Test

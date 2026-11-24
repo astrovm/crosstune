@@ -866,6 +866,8 @@ class ExactMatcherTest {
         assertEquals(ExactMatcher.Match.Found("https://www.deezer.com/track/1"), runBlocking { matcher().lookFor(MusicService.DEEZER, song) })
         // An app that can't be searched without an account has nothing to say either way.
         assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher().lookFor(MusicService.AMAZON_MUSIC, song) })
+        // Nor one that's only searched, as a song is on many of its albums.
+        assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher().lookFor(MusicService.PRESTO_MUSIC, song) })
     }
 
     /** A Spotify song's own page, as much of it as says what the song is. */

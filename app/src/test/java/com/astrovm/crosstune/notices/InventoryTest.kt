@@ -100,6 +100,7 @@ class InventoryTest {
         "file app/src/main/res/drawable/ic_logo_note.xml",
         "file app/src/main/res/drawable/ic_chords.xml",
         "file app/src/main/res/drawable/ic_service_qobuz.xml",
+        "file app/src/main/res/drawable/ic_service_prestomusic.xml",
         "file app/src/main/res/drawable/widget_background.xml",
         "file app/src/main/res/drawable/widget_preview_row.xml",
         "source app/src/main/cpp/*"

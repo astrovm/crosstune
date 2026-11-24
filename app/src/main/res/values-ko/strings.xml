@@ -13,6 +13,7 @@
     <string name="open_in_spotify">Spotify에서 열기</string>
     <string name="open_in_audiomack">Audiomack에서 열기</string>
     <string name="open_in_qobuz">Qobuz에서 열기</string>
+    <string name="open_in_presto_music">Presto Music에서 열기</string>
     <string name="open_in_bandcamp">Bandcamp에서 열기</string>
     <string name="open_in_amazon_music">Amazon Music에서 열기</string>
     <string name="from_service">%1$s에서</string>
