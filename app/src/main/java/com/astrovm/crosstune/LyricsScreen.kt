@@ -1235,17 +1235,19 @@ internal fun ChooseLinesSheet(
             }
             // Practised, it needs a line to practise; saved, something to change.
             val left = kept.size - dropped.size + picked.size
-            Button(
-                onClick = {
-                    onSave(picked.toList(), dropped.toList())
-                    onDismiss()
-                },
-                enabled = if (practise) left > 0 else picked.isNotEmpty() || dropped.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
-            ) {
-                Text(stringResource(if (practise) R.string.saved_practice else R.string.save_button))
+            ChooseLinesButton(practise, enabled = if (practise) left > 0 else picked.isNotEmpty() || dropped.isNotEmpty()) {
+                onSave(picked.toList(), dropped.toList())
+                onDismiss()
             }
         }
+    }
+}
+
+/** What puts [ChooseLinesSheet] away with the lines chosen: practise them when [practise], else save them. */
+@Composable
+private fun ChooseLinesButton(practise: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Text(stringResource(if (practise) R.string.saved_practice else R.string.save_button))
     }
 }
 
