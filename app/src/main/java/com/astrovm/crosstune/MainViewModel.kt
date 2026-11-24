@@ -2154,10 +2154,16 @@ internal class MainViewModel(
         if (asked && (source == null || playsAsAsked(source, song, app, link, exact))) return true
         val back = source?.takeIf { exact && app != null && openWatched(it, song, app, link) } ?: return false.also { closePlayer() }
         // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does. Never
-        // playing, as Apple Music signed out, it stays in front, where it says why, and the player goes.
-        if (seenPlaying(back, song, app, link, mustPlay = true) == null) return true.also { closePlayer() }
-        // The official YouTube apps would stop, so on a phone they're left playing, in front. A TV covers them instead.
-        if (uiState.phone != Phone.TV && MusicService.ofOwnApp(app)?.stopsWhenLeft == true) return true
+        // playing, as Apple Music signed out, it stays in front, where it says why, and the player and a list to play on go.
+        if (seenPlaying(back, song, app, link, mustPlay = true) == null) {
+            // Shown again, the app comes out from under the cover, which would hide why.
+            if (uiState.coveringApp) openPlayerApp()
+            closePlayer()
+            playQueue?.stop()
+            return true
+        }
+        // The official YouTube apps would stop, so on a phone they're left playing, in front, unless covered, where the words show.
+        if (!uiState.coveringApp && uiState.phone != Phone.TV && MusicService.ofOwnApp(app)?.stopsWhenLeft == true) return true
         back.comesBack()
         watchLeft(song)
         return true
