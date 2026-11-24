@@ -4543,7 +4543,7 @@ class MainViewModelTest {
     }
 
     @Test
-    fun theOfficialYouTubeAppsOpenedOnTheSongAreLeftPlayingInFront() {
+    fun theOfficialYouTubeAppsOpenedOnTheSongAreLeftOnceTheyPlayAsAnyOtherIs() {
         val playback = FakePlayback().apply { access = true; canPlaySongs = false }
         val model = ytMusicModel(playback)
         model.playResult()
@@ -4551,8 +4551,8 @@ class MainViewModelTest {
         assertEquals(ytMusic to ytLink, playback.opened.single())
         appPlays(playback)
         until("done playing it") { !model.uiState.playingResult }
-        // Without Premium it would stop once left, so Crosstune doesn't come back over it.
-        assertEquals(0, playback.cameBack)
+        // With Premium it plays on behind Crosstune, as Morphe does; without, it's brought back in front once it stops.
+        assertEquals(1, playback.cameBack)
         assertEquals("Dakare Ni Kita Onna", model.uiState.player?.song?.title)
     }
 
@@ -4598,6 +4598,52 @@ class MainViewModelTest {
         until("done playing it") { !model.uiState.playingResult }
         assertTrue(model.uiState.coveringApp)
         assertEquals("Dakare Ni Kita Onna", model.uiState.lyricsFor?.title)
+    }
+
+    @Test
+    fun anAppPlayingAnAdFirstStaysCoveredWithThePlayerOn() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val model = ytMusicModel(playback)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        // Without Premium, an ad plays first, by the ad's name, for longer than Crosstune waits for the song.
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        assertTrue(model.uiState.coveringApp)
+        assertNotNull(model.uiState.player)
+    }
+
+    @Test
+    fun anAppStillOnAnAdIsLeftInFrontAsLeftItMightStop() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        // Left during the ad, YouTube without Premium would stop, with no song to see stop and bring it back for.
+        assertEquals(0, playback.cameBack)
+        assertNotNull(model.uiState.player)
+    }
+
+    @Test
+    fun anAppPlayingAnAdItNamesNotAtAllStaysCoveredToo() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val model = ytMusicModel(playback)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        // YouTube on a TV plays its ad with no name at all, then has nothing to say a moment before the song.
+        playback.unnamed.value = Unnamed(playback.opened.single().first, label = null, name = null)
+        pass(1_000)
+        playback.unnamed.value = null
+        pass(MainViewModel.LOAD_SONG_MS)
+        until("done playing it") { !model.uiState.playingResult }
+        assertTrue(model.uiState.coveringApp)
+        assertNotNull(model.uiState.player)
     }
 
     @Test

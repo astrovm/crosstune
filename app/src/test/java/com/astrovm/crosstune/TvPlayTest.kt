@@ -530,6 +530,36 @@ class TvPlayTest {
     }
 
     @Test
+    fun downFromTheAppChipLandsOnPlay() {
+        launch()
+        val chip = composeRule.onNode(hasTestTag(DEFAULT_MENU_TAG))
+        chip.requestFocus()
+        chip.performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasContentDescription(play))[0].assertIsFocused()
+    }
+
+    @Test
+    fun aCoverLetGoOfBeforeItCameUpNeverComesUp() {
+        launch()
+        click(play)
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        val cover = shadowOf(app).nextStartedService
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        ShadowSettings.setCanDrawOverlays(true)
+        // The app couldn't be brought in front after all, faster than Android started the cover.
+        model().uncover()
+        Snapshot.sendApplyNotifications()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        val floating = Robolectric.buildService(FloatingLyricsService::class.java, cover).create().startCommand(0, 1)
+        composeRule.waitForIdle()
+        assertFalse(FloatingLyricsService.covering)
+        assertTrue(overlays(floating.get()).isEmpty())
+        assertTrue(shadowOf(floating.get()).isStoppedBySelf)
+    }
+
+    @Test
     fun playThatCantOpenYouTubeAgainCoversNothing() {
         launch()
         val floating = playCovered()
@@ -665,9 +695,9 @@ class TvPlayTest {
         assertTrue(overlays(floating.get()).isEmpty())
         assertTrue(shadowOf(floating.get()).isStoppedBySelf)
         // Crosstune is told, so it stops watching what plays for a cover that isn't there. What's left is the
-        // player's own follow of the song it opened, three watchers.
-        assertTrue(watchersBehindTheCover > 3)
-        waitUntil { playback.nowPlayingWatchers == 3 }
+        // player's own follow of the song it opened, three watchers, and the wait for YouTube to play anything, one.
+        assertTrue(watchersBehindTheCover > 4)
+        waitUntil { playback.nowPlayingWatchers == 4 }
     }
 
     @Test
@@ -687,7 +717,7 @@ class TvPlayTest {
         composeRule.waitForIdle()
         assertTrue(shadowOf(floating.get()).isStoppedBySelf)
         // Crosstune is told, so it stops watching what plays for a cover that isn't there.
-        waitUntil { playback.nowPlayingWatchers == 3 }
+        waitUntil { playback.nowPlayingWatchers == 4 }
         floating.destroy()
         assertTrue(overlays(floating.get()).isEmpty())
     }

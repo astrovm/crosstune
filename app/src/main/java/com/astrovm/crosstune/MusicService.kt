@@ -96,12 +96,6 @@ internal enum class MusicService(
     val playsLinkedSongs: Boolean get() = this != AMAZON_MUSIC && this != BANDCAMP
 
     /**
-     * Whether its own app stops once another comes over it, as YouTube Music and YouTube do without Premium. The
-     * builds patched from them play on.
-     */
-    val stopsWhenLeft: Boolean get() = this == YOUTUBE_MUSIC || this == YOUTUBE
-
-    /**
      * Whether its app takes no list of songs, so a playlist plays there one song after another, see
      * [PlayQueue]: TIDAL, asked for each by name in the background, and Spotify, which plays none
      * asked for ([playsAskedSongs]), opened on each song's own link, coming to the front for it.

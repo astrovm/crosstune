@@ -179,7 +179,14 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 val cover = intent?.getBooleanExtra(EXTRA_COVER, false) == true
                 // Floated from the screen covering an app, the words float over it instead.
                 if (covering && !cover) uncover()
-                if (host == null) stopSelf() else if (view == null) if (cover) cover(host) else show(host)
+                when {
+                    host == null -> stopSelf()
+                    view != null -> Unit
+                    !cover -> show(host)
+                    // Let go of already, before Android got here, the app it was for comes out from under it as it is.
+                    host.state.coveringApp -> cover(host)
+                    else -> close()
+                }
             }
             ACTION_UNLOCK -> host?.let { it.update(it.state.floating.copy(locked = false)) }
             else -> close()

@@ -1181,8 +1181,7 @@ class MainActivityTest {
         assertTrue(phone.opened.isEmpty())
         assertNull(shadowOf(app).peekNextStartedActivity())
         assertTrue(composeRule.onAllNodes(hasText("First Song")).fetchSemanticsNodes().isNotEmpty())
-        // Asked to and not seen to play it, YouTube Music is opened on the list. Without Premium it would stop once
-        // left, so it's left playing it, in front.
+        // Asked to and not seen to play it, YouTube Music is opened on the list, and left once it plays, as any app is.
         composeRule.runOnIdle { phone.playing.value = null }
         composeRule.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(playAll) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
@@ -1192,7 +1191,7 @@ class MainActivityTest {
         assertEquals(listOf(music to queue), phone.opened)
         composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "YouTube Music", canSeek = true, appPackage = music) }
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty() }
-        assertEquals(0, phone.cameBack)
+        waitUntil(TIMEOUT_MS) { phone.cameBack == 1 }
         // With no app to ask or open, it opens the list there, as it did, with no player.
         composeRule.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(playAll) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }

@@ -682,7 +682,7 @@ class MainActivity : ComponentActivity() {
 
         // Out of sight too: a song's app opens over Crosstune, which then covers it, and comes out from under it once let go.
         lifecycleScope.launch {
-            snapshotFlow { viewModel.uiState.coveringApp }.collect { if (it) cover() else if (coverUp && FloatingLyricsService.covering) uncover() }
+            snapshotFlow { viewModel.uiState.coveringApp }.collect { if (it) cover() else if (coverUp) letGo() }
         }
         // Lines let go, or a kind of card turned off, may leave a reminder showing with nothing due.
         lifecycleScope.launch {
@@ -1080,18 +1080,19 @@ class MainActivity : ComponentActivity() {
         FloatingLyricsService.start(this, floatingHost, whole = true)
     }
 
-    /** The app covered comes out from under the cover, as one that plays nothing does, to say why. */
-    private fun uncover() {
+    /**
+     * The app covered comes out from under the cover, as one that plays nothing does, to say why. A cover not up yet
+     * doesn't come up, and words the service floated on rather than cover the app stay.
+     */
+    private fun letGo() {
+        if (!FloatingLyricsService.covering) return viewModel.uncover()
         FloatingLyricsService.stop(this)
         floatingHost.closed()
     }
 
     /** Opened from the screen covering another app, an app would show under it, so it goes first. */
     override fun startActivity(intent: Intent, options: Bundle?) {
-        if (viewModel.uiState.coveringApp) {
-            FloatingLyricsService.stop(this)
-            floatingHost.closed()
-        }
+        if (viewModel.uiState.coveringApp) letGo()
         super.startActivity(intent, options)
     }
 

@@ -2162,17 +2162,19 @@ internal class MainViewModel(
         val source = playback?.takeIf { it.hasAccess() }
         if (asked && (source == null || playsAsAsked(source, song, app, link, exact))) return true
         val back = source?.takeIf { exact && app != null && openWatched(it, song, app, link) } ?: return false.also { closePlayer() }
+        val (seen, busy) = seenPlayingOrBusy(back, song, app, link)
+        // Still on something else, as the ad YouTube without Premium plays first, it's left there, or covered, to get on
+        // to the song: left, it might stop, and that's no song to see stop and bring it back for.
+        if (busy) return true
         // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does. Never
         // playing, as Apple Music signed out, it stays in front, where it says why, and the player and a list to play on go.
-        if (seenPlaying(back, song, app, link, mustPlay = true) == null) {
+        if (seen == null) {
             // Out from under the cover, which would hide why.
             uncover()
             closePlayer()
             if (list) playQueue?.stop()
             return true
         }
-        // The official YouTube apps would stop, so on a phone they're left playing, in front, unless covered, where the words show.
-        if (!uiState.coveringApp && uiState.phone != Phone.TV && MusicService.ofOwnApp(app)?.stopsWhenLeft == true) return true
         back.comesBack()
         watchLeft(song)
         return true
@@ -2202,6 +2204,23 @@ internal class MainViewModel(
         // YouTube Music is asked by its own link, not by name, and its artists are often the channel's.
         if (seen.following != null || MusicService.ofPackage(app) == MusicService.YOUTUBE_MUSIC) return null
         return seen.playing?.metadata?.takeUnless { SongNames.sameArtist(it.artist, song.artist) }
+    }
+
+    /**
+     * What [app], opened on [song], is seen to do with it, see [seenPlaying], and, not seen to play it, whether it played
+     * anything else meanwhile. Playing an ad first, YouTube without Premium names it the ad's way, or nothing, and gets
+     * to the song once it's over, even with nothing to say for a moment in between.
+     */
+    private suspend fun seenPlayingOrBusy(source: PlaybackSource, song: MusicMetadata, app: String?, link: String): Pair<Seen?, Boolean> = coroutineScope {
+        val anything = async {
+            app != null && withTimeoutOrNull(LOAD_SONG_MS) {
+                combine(source.plays(app), source.unnamedUpdates()) { plays, unnamed ->
+                    plays != null || unnamed != null && sameApp(app, unnamed.app, interception::isInstalled)
+                }.first { it }
+            } != null
+        }
+        val seen = seenPlaying(source, song, app, link, mustPlay = true)
+        (seen to (seen == null && anything.await())).also { anything.cancel() }
     }
 
     /** What an app was seen doing with a song it was asked for: playing it as that song, or something it calls otherwise. */

@@ -1570,10 +1570,12 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 }
             }
         }
-        // Where it opens, picked for just this result.
-        DestinationChip(state, actions)
         // A song its app has, or may, can be asked to play, staying here; while it's asked, once is enough.
         val canPlay = state.canPlayResult
+        val playFocus = remember { FocusRequester() }
+        // Where it opens, picked for just this result. Down from it on a remote is Play, the main thing to do, not
+        // Open, which sits nearer the middle below it.
+        DestinationChip(state, actions, down = playFocus.takeIf { canPlay })
         // Side by side, until the words are too big for half the width; then one above the other.
         val stacked = canPlay && LocalDensity.current.fontScale > STACK_BUTTONS_FROM
         val press = rememberPress()
@@ -1601,7 +1603,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 onClick = actions.onPlayResult,
                 enabled = !state.playingResult && !state.isMatching,
                 interactionSource = press.source,
-                modifier = modifier.returnsFocus().heightIn(min = 56.dp).then(press.modifier)
+                modifier = modifier.focusRequester(playFocus).returnsFocus().heightIn(min = 56.dp).then(press.modifier)
             ) {
                 AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.size(ButtonDefaults.IconSpacing))
@@ -1784,10 +1786,10 @@ private fun QueueProgress(progress: Pair<Int, Int>?, modifier: Modifier = Modifi
 
 /** The app a result opens in, as a chip under the song: it lists the apps to open it in instead. */
 @Composable
-private fun DestinationChip(state: UiState, actions: ScreenActions) {
+private fun DestinationChip(state: UiState, actions: ScreenActions, down: FocusRequester?) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
+        TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG).focusProperties { down?.let { this.down = it } }) {
             DestinationIcon(state.resultDestination, state.installed, size = 20.dp)
             Spacer(Modifier.size(8.dp))
             Text(state.resultDestination.label(), style = MaterialTheme.typography.labelLarge)
