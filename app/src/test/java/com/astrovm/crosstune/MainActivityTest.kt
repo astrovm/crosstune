@@ -1181,7 +1181,7 @@ class MainActivityTest {
         assertTrue(phone.opened.isEmpty())
         assertNull(shadowOf(app).peekNextStartedActivity())
         assertTrue(composeRule.onAllNodes(hasText("First Song")).fetchSemanticsNodes().isNotEmpty())
-        // Asked to and not seen to play it, YouTube Music is opened on the list, and left again once it plays it.
+        // Asked to and not seen to play it, YouTube Music is opened on the list, and left once it plays, as any app is.
         composeRule.runOnIdle { phone.playing.value = null }
         composeRule.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(playAll) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
@@ -1190,8 +1190,8 @@ class MainActivityTest {
         waitUntil(TIMEOUT_MS) { phone.opened.isNotEmpty() }
         assertEquals(listOf(music to queue), phone.opened)
         composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "YouTube Music", canSeek = true, appPackage = music) }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty() }
         waitUntil(TIMEOUT_MS) { phone.cameBack == 1 }
-        assertTrue(composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty())
         // With no app to ask or open, it opens the list there, as it did, with no player.
         composeRule.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(playAll) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
@@ -4114,8 +4114,9 @@ class MainActivityTest {
         launch()
         click(string(R.string.history_open, song.title))
         waitForDestinationReady()
+        // Offered from the start, as for any song its app can play.
         val play = string(R.string.play_in_background, "Apple Music")
-        composeRule.onNodeWithContentDescription(play).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(play).assertExists()
 
         composeRule.runOnIdle {
             paused.value = Following(PlaybackClock(60_000, SystemClock.elapsedRealtime(), playing = false), "Apple Music",
@@ -4132,7 +4133,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun theCardOpensDeezerAudiomackAndYouTubeToStartANewSong() {
+    fun theCardPlaysANewSongInDeezerAudiomackAndYouTube() {
         val links = mapOf(
             MusicService.DEEZER to "https://www.deezer.com/track/123",
             MusicService.AUDIOMACK to "https://audiomack.com/artist/song/fixture",
@@ -4142,7 +4143,6 @@ class MainActivityTest {
         val playback = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { playback }
         linksShowHere()
-        prefs().edit().putString("default_target", MusicService.DEEZER.name).commit()
         for (service in links.keys) {
             shadowOf(app.packageManager).installPackage(installedApp(service.packageName, string(service.labelRes)))
         }
@@ -4153,20 +4153,19 @@ class MainActivityTest {
                 links.map { (service, link) -> service.name to PreparedLink(link, exact = true, matchingEnabled = true) }.toMap(),
             )
         )
-        launch()
-        click(string(R.string.history_open, song.title))
-        for ((service, link) in links) {
-            val label = string(service.labelRes)
-            chooseDefault(label)
+        for (service in links.keys) {
+            prefs().edit().putString("default_target", service.name).commit()
+            launch()
+            click(string(R.string.history_open, song.title))
             waitForDestinationReady()
-            composeRule.onNodeWithContentDescription(string(R.string.play_in_background, label)).assertDoesNotExist()
-            click(string(service.openLabelRes))
-            waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-            val opened = checkNotNull(nextStartedActivity())
-            assertEquals(service.packageName, opened.`package`)
-            assertEquals(link, opened.dataString)
+            // Each starts the song from here: asked in the background, or, Audiomack, which plays none asked for, opened on it.
+            val play = string(R.string.play_in_background, string(service.labelRes))
+            waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+            click(play)
+            if (service.playsAskedSongs) waitUntil { playback.songsAsked.any { it.second == service.packageName } }
+            else waitUntil { playback.opened.any { it == service.packageName to links.getValue(service) } }
+            checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         }
-        assertTrue(playback.songsAsked.isEmpty())
     }
 
     @Test
@@ -4195,6 +4194,7 @@ class MainActivityTest {
             useUnmergedTree = true,
         ).assertExists()
         composeRule.onNodeWithContentDescription(string(service.openLabelRes)).assertDoesNotExist()
+        // Audiomack plays no song asked for, and opened on a search it plays nothing, so there's no Play.
         composeRule.onNodeWithContentDescription(string(R.string.play_in_background, label)).assertDoesNotExist()
         click(string(R.string.search_in_destination, label))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
@@ -4205,7 +4205,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun officialYouTubeMusicOpensFromTheSongAndItsWordsWithoutOfferingPlay() {
+    fun officialYouTubeMusicPlaysFromTheSongAndItsWords() {
         val service = MusicService.YOUTUBE_MUSIC
         val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
         val playback = FakePlayback().apply { access = true }
@@ -4221,20 +4221,16 @@ class MainActivityTest {
         launch()
         resolveTyped(link)
         waitForDestinationReady()
-        val open = string(service.openLabelRes)
         val play = string(R.string.play_in_background, string(service.labelRes))
-        composeRule.onNodeWithContentDescription(open).assertExists()
-        composeRule.onNodeWithContentDescription(play).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(play).assertExists()
 
         click(string(R.string.lyrics_button))
         waitForText("Two")
-        composeRule.onNodeWithContentDescription(play).assertDoesNotExist()
-        click(open)
-        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        val opened = checkNotNull(nextStartedActivity())
-        assertEquals(service.packageName, opened.`package`)
-        assertEquals(link, opened.dataString)
-        assertTrue(playback.songsAsked.isEmpty())
+        click(play)
+        // Asked by its own link, which YouTube Music plays.
+        waitUntil { playback.songsAsked.isNotEmpty() }
+        assertEquals(service.packageName, playback.songsAsked.single().second)
+        assertEquals(link, playback.linksAsked.single())
     }
 
     @Test
@@ -4274,7 +4270,7 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "SPOTIFY").commit()
         launch()
         resolveTyped(link)
-        // Spotify ignores apps asking it to play, so there's no Play, only its search.
+        // Spotify ignores apps asking it to play, and opened on a search it plays nothing, so there's no Play.
         val search = string(R.string.search_in_destination, "Spotify")
         waitUntil { composeRule.onAllNodes(hasContentDescription(search) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.play_in_background, "Spotify"))).fetchSemanticsNodes().isEmpty())
@@ -4404,17 +4400,15 @@ class MainActivityTest {
         click(string(R.string.open_in_custom, "YT Music Morphe"))
         assertEquals(morphe, checkNotNull(nextStartedActivity()) { "Expected nextStartedActivity() to be non-null" }.`package`)
 
-        // The plain choice opens the official app, even with Morphe paused on this song.
+        // The plain choice is still the official app, one tap away on the card: with Morphe paused on the
+        // song, it's the official app that's asked, rather than Morphe played on.
         composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YT Music Morphe", canSeek = true, appPackage = morphe) }
         chooseDefault(string(R.string.target_youtube_music))
         val playOfficial = string(R.string.play_in_background, string(R.string.target_youtube_music))
-        val openOfficial = string(R.string.open_in_youtube_music)
-        waitForDescription(openOfficial)
-        composeRule.onNodeWithContentDescription(playOfficial).assertDoesNotExist()
-        click(openOfficial)
-        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals(official, nextStartedActivity()?.`package`)
-        assertEquals(1, phone.songsAsked.size)
+        waitUntil { composeRule.onAllNodes(hasContentDescription(playOfficial) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(playOfficial)
+        waitUntil { phone.songsAsked.size == 2 }
+        assertEquals(official, phone.songsAsked.last().second)
         assertEquals(emptyList<Boolean>(), phone.plays)
     }
 

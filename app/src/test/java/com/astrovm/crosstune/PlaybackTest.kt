@@ -85,7 +85,7 @@ class PlaybackTest {
     /** Each app's queue, by its package, as Robolectric shows none. */
     private val queues = mutableMapOf<String, List<MediaSession.QueueItem>>()
     private val radioNotices = MutableStateFlow<Set<MediaSession.Token>>(emptySet())
-    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes,
+    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, playsOnMs = 200, modes = modes,
         queueOf = { queues[it.packageName] }, clockLog = PracticeClockLog(true), radioNotices = radioNotices)
     private val song = MusicMetadata("Blinding Lights", "The Weeknd")
     private val collecting = mutableListOf<Job>()
@@ -436,6 +436,7 @@ class PlaybackTest {
         assertEquals(325_474L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
         assertEquals(325_474L, checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.metadata.lengthMs)
         assertNull(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.offsetMs)
+        assertTrue(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.ad)
         assertEquals("com.google.android.apps.youtube.music:duration:325474", playback.recording(raining)?.recordingId)
         assertEquals(listOf(325_474L), lengths.known("It's Raining Men", "The Weather Girls"))
         // Then the song itself starts over from 0, and plays.
@@ -447,6 +448,7 @@ class PlaybackTest {
         assertEquals(PlaybackClock(0, PLAYED_AT + 15_069), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         assertFalse(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.ad)
         assertEquals(325_474L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
+        assertFalse(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.ad)
     }
 
     @Test
@@ -3590,6 +3592,47 @@ class PlaybackTest {
 
     @Test
     @Config(shadows = [AppAsked::class])
+    fun anAppStoppedASecondAfterItSaysItPlaysHasntPlayedOn() = runBlocking {
+        val youTube = MusicService.YOUTUBE.packageName
+        allow()
+        val stopped = player(youTube, "YouTube", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_STOPPED)
+        shadowOf(sessions).addController(stopped)
+        val says = { state: Int -> shadowOf(stopped).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(state, 0, 1f, PLAYED_AT).build()); shadowOf(Looper.getMainLooper()).idle() }
+        val resumes = { by: MediaSessionPlayback -> CoroutineScope(Dispatchers.Unconfined).async { by.resume(song) } }
+        // Stopped for a moment, then playing again, it did play on.
+        val flickers = resumes(playback)
+        says(PlaybackState.STATE_PLAYING)
+        says(PlaybackState.STATE_STOPPED)
+        says(PlaybackState.STATE_PLAYING)
+        assertTrue(flickers.await())
+        assertFalse(playback.playsOnlyInFront(youTube))
+        // Asked from behind, YouTube without Premium says it plays, then stops at once: it only plays in front.
+        shadowOf(stopped).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_STOPPED, 0, 1f, PLAYED_AT).build())
+        val fails = resumes(playback)
+        says(PlaybackState.STATE_PLAYING)
+        says(PlaybackState.STATE_STOPPED)
+        assertFalse(fails.await())
+        assertEquals(listOf("play", "play"), asked())
+        assertTrue(playback.playsOnlyInFront(youTube))
+        // Saying it plays before Crosstune looks, then failing, it didn't either.
+        val fresh = MediaSessionPlayback(app, now = { NOW }, startMs = 200, playsOnMs = 200, modes = modes)
+        shadowOf(stopped).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
+        val quick = resumes(fresh)
+        says(PlaybackState.STATE_ERROR)
+        assertFalse(quick.await())
+        assertTrue(fresh.playsOnlyInFront(youTube))
+        // Failing before it ever says it plays, it isn't held to the second.
+        val other = MediaSessionPlayback(app, now = { NOW }, startMs = 200, playsOnMs = 200, modes = modes)
+        shadowOf(stopped).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_STOPPED, 0, 1f, PLAYED_AT).build())
+        val failsAtOnce = resumes(other)
+        says(PlaybackState.STATE_ERROR)
+        assertTrue(failsAtOnce.isCompleted)
+        assertFalse(failsAtOnce.await())
+        assertTrue(other.playsOnlyInFront(youTube))
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
     fun aSongPausedPlaysOnFromBehindOrInFrontWhereItWas() = runBlocking {
         val music = MusicService.YOUTUBE_MUSIC.packageName
         allow()
@@ -4147,9 +4190,13 @@ class PlaybackTest {
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band", album = "Album"))
         shadowOf(sessions).addController(youTubeMusic)
         assertEquals("Blinding Lights" to 107L, seen.last()?.let { it.song.title to it.queueId })
-        // Paused it still plays it; stopped, it plays nothing.
+        assertEquals(true, seen.last()?.playing)
+        // Paused it still plays it, though not now; stopped, it plays nothing.
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PAUSED, 108))
-        assertEquals(108L, runBlocking { playback.plays(music).first() }?.queueId)
+        assertEquals(108L to false, runBlocking { playback.plays(music).first() }?.let { it.queueId to it.playing })
+        // Loading, not yet.
+        shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_BUFFERING, 108))
+        assertEquals(false, runBlocking { playback.plays(music).first() }?.playing)
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_STOPPED, 108))
         assertNull(runBlocking { playback.plays(music).first() })
         // What's before it in the queue, by its number; none for the first, or a song not in it.
@@ -4178,7 +4225,7 @@ class PlaybackTest {
             shadowOf(atEnd).setPlaybackState(PlaybackState.Builder().setState(state, position, 1f, PLAYED_AT).build())
             runBlocking { playback.plays(youTube).first() }?.ended
         }
-        assertEquals(AppPlays(MusicMetadata("Self Control", "Laura Branigan"), null, ended = true), runBlocking { playback.plays(youTube).first() })
+        assertEquals(AppPlays(MusicMetadata("Self Control", "Laura Branigan"), null, ended = true, playing = false), runBlocking { playback.plays(youTube).first() })
         assertEquals(true, ended(PlaybackState.STATE_PAUSED, 244_000))
         // Short of it, paused it's still playing it, and stopped it plays nothing.
         assertEquals(false, ended(PlaybackState.STATE_PAUSED, 243_999))

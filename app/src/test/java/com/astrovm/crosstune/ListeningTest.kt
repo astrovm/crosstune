@@ -303,6 +303,7 @@ class ListeningTest {
         Readings.uniDic = null
         File(app.noBackupFilesDir, "unidic").deleteRecursively()
         FloatingLyricsService.host = null
+        FloatingLyricsService.covering = false
         ShadowSettings.setCanDrawOverlays(false)
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.chordWikiFactory = { ChordWikiBrowser(it) }
@@ -5934,6 +5935,7 @@ class ListeningTest {
     @Test
     fun withoutAnythingToFloatOutOfOrAllowedTheWindowStopsAtOnce() {
         FloatingLyricsService.host = null
+        FloatingLyricsService.covering = false
         val alone = Robolectric.buildService(FloatingLyricsService::class.java).create().startCommand(0, 1)
         assertTrue(shadowOf(alone.get()).isStoppedBySelf)
         // Nothing binds to it: it's only started.

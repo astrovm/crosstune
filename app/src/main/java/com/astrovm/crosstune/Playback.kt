@@ -42,12 +42,15 @@ import kotlin.math.ceil
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
@@ -213,9 +216,9 @@ internal data class Queued(val title: String, val artist: String, val id: Long? 
  * for an app that shows no queue, as YouTube doesn't. YouTube Music numbers what it's asked to play
  * one after another, then what it plays on after those; TIDAL numbers each song by what it is.
  * [ended] once the app stopped at the song's end, as YouTube does after a list's last song.
- * [previousId] is the number of the song before it in the queue.
+ * [previousId] is the number of the song before it in the queue. [playing] now, not paused, loading, or stopped at the end.
  */
-internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false, val previousId: Long? = null)
+internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false, val previousId: Long? = null, val playing: Boolean = true)
 
 /** A matching session and controls bound to its token, even when its app has other sessions. */
 internal data class PlaybackMatch(
@@ -373,6 +376,8 @@ internal class MediaSessionPlayback(
     private val waker: AppWaker = MediaBrowserWaker(context),
     /** How long an app asked to play has to start. */
     private val startMs: Long = START_MS,
+    /** How long an app asked to play on from behind has to keep playing. */
+    private val playsOnMs: Long = PLAYS_ON_MS,
     private val modes: AppModes = SessionModes(context),
     /** An app's queue; Robolectric shows a test none. */
     private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue,
@@ -662,7 +667,7 @@ internal class MediaSessionPlayback(
 
     override suspend fun resume(song: MusicMetadata, app: String?, session: Int?): Boolean {
         val controller = runCatching { appFor(song, app = app, session = session) }.getOrNull() ?: return false
-        return watchStart(controller, mustStart = true) { controller.clockCommand("play") { play() } }
+        return watchStart(controller, mustStart = true, holdMs = playsOnMs) { controller.clockCommand("play") { play() } }
     }
 
     // Opened as from its icon, which brings back the screen it was on, song and all; a link would start it over.
@@ -749,28 +754,40 @@ internal class MediaSessionPlayback(
      * Runs [ask]; false if it throws. If [mustStart], also waits for [asked] to say it plays: an app that
      * can't play in the background says so with an error, or says nothing, and plays nothing either way.
      * One already playing, e.g. another song, is taken to go on with this one. One known to play only in front isn't asked unless it plays, in front.
+     * Said to play, the last state it says within the next [holdMs] ms also has to be neither stopped nor failed, or it only plays in front.
      */
-    private suspend fun watchStart(asked: MediaController, mustStart: Boolean, ask: () -> Unit): Boolean {
+    private suspend fun watchStart(asked: MediaController, mustStart: Boolean, holdMs: Long = 0, ask: () -> Unit): Boolean {
         // Known to play only in front, it isn't asked from behind again: YouTube Music, stopped, opens itself on the song from the start.
         if (mustStart && asked.packageName in onlyInFront && asked.playbackState?.state != PlaybackState.STATE_PLAYING) return false
-        val verdict = CompletableDeferred<Boolean>()
+        val states = Channel<Int?>(Channel.UNLIMITED)
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
-                when (state?.state) {
-                    PlaybackState.STATE_PLAYING -> verdict.complete(true)
-                    PlaybackState.STATE_ERROR -> verdict.complete(false)
-                }
+                states.trySend(state?.state)
             }
         }
         // Listening before it's asked, so an answer that comes at once isn't missed.
         if (mustStart) asked.registerCallback(callback, handler)
         try {
             if (runCatching(ask).isFailure) return false
-            if (!mustStart || asked.playbackState?.state == PlaybackState.STATE_PLAYING) return true
-            return (withTimeoutOrNull(startMs) { verdict.await() } == true).also { if (!it) onlyInFront += asked.packageName }
+            if (!mustStart) return true
+            val said = states.receiveAsFlow()
+            val started = asked.playbackState?.state == PlaybackState.STATE_PLAYING ||
+                withTimeoutOrNull(startMs) { said.first { it == PlaybackState.STATE_PLAYING || it == PlaybackState.STATE_ERROR } } == PlaybackState.STATE_PLAYING
+            return (started && keptOn(said, holdMs)).also { if (!it) onlyInFront += asked.packageName }
         } finally {
             if (mustStart) asked.unregisterCallback(callback)
         }
+    }
+
+    /**
+     * Whether the last state an app says within [holdMs] ms, after it said it plays, is neither stopped nor failed. [said]
+     * has the states after that one; none at all counts as playing on. Stopped soon after, as YouTube without Premium does
+     * from behind, it didn't play on. Stopped for a moment and playing again, it did.
+     */
+    private suspend fun keptOn(said: Flow<Int?>, holdMs: Long): Boolean {
+        var last: Int? = null
+        withTimeoutOrNull(holdMs) { said.collect { last = it } }
+        return last != PlaybackState.STATE_STOPPED && last != PlaybackState.STATE_ERROR
     }
 
     // Asked the way a voice assistant asks, which music apps answer without coming to the front.
@@ -911,7 +928,7 @@ internal class MediaSessionPlayback(
                         val id = controller.playbackState?.activeQueueItemId?.takeIf { it != MediaSession.QueueItem.UNKNOWN_ID.toLong() }
                         val queue = queueOf(controller).orEmpty()
                         val previous = queue.getOrNull(queue.indexOfFirst { it.queueId == id } - 1)?.queueId
-                        AppPlays(song, id, ended, previous)
+                        AppPlays(song, id, ended, previous, playing = !ended && controller.playbackState?.state == PlaybackState.STATE_PLAYING)
                     }
             }
     }
@@ -1024,7 +1041,8 @@ internal class MediaSessionPlayback(
         val artwork = coverOf(metadata, controller.sessionToken)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         // Nor where a song waiting for an ad to end is, as it isn't playing yet.
-        val clock = following(controller, asked)?.takeIf { !it.video }?.clock?.takeIf { it.playing }
+        val follows = following(controller, asked)
+        val clock = follows?.takeIf { !it.video }?.clock?.takeIf { it.playing }
         val id = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
         val uri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
         val duration = controller.lengthOf(metadata, asked)
@@ -1032,7 +1050,7 @@ internal class MediaSessionPlayback(
             artworkUrl = artwork,
             url = uri?.takeIf(String::isNotBlank) ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
             recordingId = RecordingKey.playing(controller.packageName, id, duration)
-        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f)
+        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f, ad = follows?.ad == true)
     }
 
     /**
@@ -1217,6 +1235,9 @@ private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, Packag
 
 /** How long an app asked to play in the background has to say it does, before it's taken as not playing. */
 internal const val START_MS = 3_000L
+
+/** How long an app asked to play on from behind has to keep playing: YouTube without Premium stops 8 ms after it says it plays. */
+internal const val PLAYS_ON_MS = 1_000L
 
 
 /**

@@ -26,6 +26,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -1166,24 +1167,6 @@ internal class MainViewModel(
             }
             launch { nameUnnamed(source) }
             launch { followUnnamed(source, previousUnnamed) }
-            launch { watchResultSession(source) }
-        }
-    }
-
-    /** Whether the selected app already has the song, including when it was paused before Crosstune opened. */
-    private suspend fun watchResultSession(source: PlaybackSource) {
-        try {
-            snapshotFlow { uiState.resultSessionToWatch }.collectLatest { target ->
-                uiState = uiState.copy(resultInApp = null)
-                if (target != null) {
-                    val (song, app) = target
-                    followResultSession(source, song, app).map { it != null }.distinctUntilChanged().collect { hasSong ->
-                        uiState = uiState.copy(resultInApp = target.takeIf { hasSong })
-                    }
-                }
-            }
-        } finally {
-            uiState = uiState.copy(resultInApp = null)
         }
     }
 
@@ -2022,7 +2005,7 @@ internal class MainViewModel(
                 // Before the app's asked, so what it played until then isn't taken for the list's start.
                 playOn(all, service, destination, queue, name)
                 val asked = app != null && playback?.playList(app, queue.url, mustStart = true) == true
-                if (!playThere(first, app, queue.url, asked, exact = true)) effectChannel.send(opening(queue.url, app, finishAfterOpen = false, song = first))
+                if (!playThere(first, app, queue.url, asked, exact = true, list = true)) effectChannel.send(opening(queue.url, app, finishAfterOpen = false, song = first))
             } finally {
                 if (isActive) uiState = uiState.copy(queueProgress = null)
             }
@@ -2051,7 +2034,7 @@ internal class MainViewModel(
                 openPlayer(first, app, link)
                 // Before the app's opened, so what it played until then isn't taken for the list's start.
                 playQueue?.play(tracks, service, app, 1, listOf(first), name)
-                if (!playThere(first, app, link, asked = false, exact = true)) {
+                if (!playThere(first, app, link, asked = false, exact = true, list = true)) {
                     playQueue?.stop()
                     effectChannel.send(opening(link, app, finishAfterOpen = false, song = first))
                 }
@@ -2121,8 +2104,9 @@ internal class MainViewModel(
     }
 
     /**
-     * Has the song's app play it in the background, in Crosstune's player; opened there instead
-     * when it can't be asked, or, for YouTube Music, has only a search for it.
+     * Has the song's app play it in the background, in Crosstune's player; opened on the song and left again
+     * when it can't be asked, as Spotify. With only a search for it, an app that can be asked is opened there,
+     * and Spotify, which would play nothing from one, isn't.
      */
     fun playResult() {
         qobuzNumbers?.off()
@@ -2157,14 +2141,14 @@ internal class MainViewModel(
             if (!there.clock.playing) source.playPause(song, true, there.appPackage, there.session)
             return
         }
-        // The session can change between showing Play and the tap.
-        if (destination.opensAppToStartSong(uiState.phone)) {
-            return open(destination, finishAfterOpen = false, tapped = true, preparedUrl = link)
-        }
-        openPlayer(song, app, link)
-        // Other apps can be asked by name. YouTube Music needs its own exact link.
         val exact = uiState.destinationUrls[destination]?.exact != false
-        val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link, mustStart = true) == true
+        val service = destination.service
+        // Spotify, which plays none asked for, has only a search for it, which it would play nothing from: the card says Search.
+        if (!service.playsAskedSongs && !exact) return
+        openPlayer(song, app, link)
+        // Other apps can be asked by name. YouTube Music needs its own exact link, and Spotify is opened on it.
+        val asked = service.playsAskedSongs && (exact || service != MusicService.YOUTUBE_MUSIC) &&
+            source?.playSong(song, app, link, mustStart = true) == true
         if (!playThere(song, app, link, asked, exact)) open(destination, finishAfterOpen = false, tapped = true, preparedUrl = link)
     }
 
@@ -2172,18 +2156,40 @@ internal class MainViewModel(
      * [song] playing in [app], with the player on it, once [app] was [asked] to play it in the background: seen to play it
      * there, or with no way to see, that's that, as an app may say yes and not play it. An app that couldn't be asked is
      * opened on its [exact] [link], and, when Crosstune can see it play there, left again once it does, as practice does,
-     * unless it wouldn't play in the background, where it would stop.
-     * False, with the player closed, when it could be neither.
+     * unless it wouldn't play in the background, where it would stop. Seen not to play it there, it's left in front, with
+     * the player closed, and the rest of a [list] isn't played on. False, with the player closed, when it could be neither.
      */
-    private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean): Boolean {
+    private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean, list: Boolean = false): Boolean {
+        leftJob?.cancel()
+        adJob?.cancel()
         val source = playback?.takeIf { it.hasAccess() }
         if (asked && (source == null || playsAsAsked(source, song, app, link, exact))) return true
         val back = source?.takeIf { exact && app != null && openWatched(it, song, app, link) } ?: return false.also { closePlayer() }
-        // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does.
-        seenPlaying(back, song, app, link, mustPlay = true)
+        val (seen, busy) = seenPlayingOrBusy(back, song, app, link)
+        if (!busy) return true.also { leftOrNot(back, seen, song, list) }
+        // Still on something else, as the ads YouTube without Premium plays first, it's left there, or covered, until the
+        // song's on: left during an ad, it might stop, and that's no song to see stop and bring it back for.
+        viewModelScope.launchKept({ adJob = it }) { leftOrNot(back, seenPlaying(back, song, app, link, mustPlay = true, withinMs = ADS_MS), song, list) }
+        return true
+    }
+
+    /** Waiting for the song an app plays ads before, to come back to it then. */
+    private var adJob: Job? = null
+
+    /**
+     * Left once it plays [song], not once it shows it: YouTube Music, left before it starts, never does. Never [seen]
+     * playing, as Apple Music signed out, it stays in front, where it says why, and the player and a [list] to play on go.
+     */
+    private fun leftOrNot(back: PlaybackSource, seen: Seen?, song: MusicMetadata, list: Boolean) {
+        if (seen == null) {
+            // Out from under the cover, which would hide why.
+            uncover()
+            closePlayer()
+            if (list) playQueue?.stop()
+            return
+        }
         back.comesBack()
         watchLeft(song)
-        return true
     }
 
     /** Whether [app], asked for [song], was seen to play it. Someone else's song it stopped when there's no [exact] link to take over. */
@@ -2212,16 +2218,36 @@ internal class MainViewModel(
         return seen.playing?.metadata?.takeUnless { SongNames.sameArtist(it.artist, song.artist) }
     }
 
+    /**
+     * What [app], opened on [song], is seen to do with it, see [seenPlaying], and, not seen to play it, whether it played
+     * anything else meanwhile. Playing an ad first, YouTube without Premium names it the ad's way, or nothing, and gets
+     * to the song once it's over, even with nothing to say for a moment in between. Paused, or still on the song it was
+     * on before, it isn't getting anywhere.
+     */
+    private suspend fun seenPlayingOrBusy(source: PlaybackSource, song: MusicMetadata, app: String?, link: String): Pair<Seen?, Boolean> = coroutineScope {
+        val over = uiState.player?.over
+        val anything = async {
+            app != null && withTimeoutOrNull(LOAD_SONG_MS) {
+                combine(source.plays(app), source.unnamedUpdates()) { plays, unnamed ->
+                    plays?.takeIf { it.playing }?.song?.let { over == null || !sameSong(it, over) } == true ||
+                        unnamed != null && sameApp(app, unnamed.app, interception::isInstalled)
+                }.first { it }
+            } != null
+        }
+        val seen = seenPlaying(source, song, app, link, mustPlay = true)
+        (seen to (seen == null && anything.await())).also { anything.cancel() }
+    }
+
     /** What an app was seen doing with a song it was asked for: playing it as that song, or something it calls otherwise. */
     private data class Seen(val following: Following?, val playing: Heard.Song?)
 
     /**
-     * What [app] is seen, within [LOAD_SONG_MS], to do: to have [song], [mustPlay] it or not, or, whatever the app names it,
+     * What [app] is seen, [withinMs], to do: to have [song], [mustPlay] it or not, or, whatever the app names it,
      * to have gone on to play something other than what it played when asked. Null if neither.
      */
-    private suspend fun seenPlaying(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean): Seen? {
+    private suspend fun seenPlaying(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean, withinMs: Long = LOAD_SONG_MS): Seen? {
         val over = uiState.player?.over
-        val (following, playing) = withTimeoutOrNull(LOAD_SONG_MS) {
+        val (following, playing) = withTimeoutOrNull(withinMs) {
             combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).first { (following, playing) ->
                 following != null && (!mustPlay || following.clock.playing) && sameApp(app, following.appPackage, interception::isInstalled) ||
                     following == null && playing != null && startedAsked(playing, app, over, link)
@@ -2243,7 +2269,7 @@ internal class MainViewModel(
     private var leftJob: Job? = null
 
     /**
-     * An app that stops as soon as Crosstune comes back over it only plays in front, as YouTube Music without Premium,
+     * An app that stops, or lets go of the song, as soon as Crosstune comes back over it only plays in front, as YouTube and YouTube Music without Premium,
      * which Crosstune can't learn by asking it from behind when it isn't running: asked to play on, it's brought back
      * there, covered. Paused from Crosstune meanwhile, it's left paused.
      */
@@ -2252,7 +2278,9 @@ internal class MainViewModel(
         val source = playback ?: return
         if (uiState.coveringApp) return
         viewModelScope.launchKept({ leftJob = it }) {
-            if (withTimeoutOrNull(START_MS) { source.follow(song).first { it != null && !it.clock.playing } } != null) source.playPause(song, true)
+            // Stopped, or let go of altogether, as YouTube does, and not waiting under an ad, which YouTube Music plays on as if it were the song.
+            val stopped = withTimeoutOrNull(START_MS) { source.follow(song).dropWhile { it == null }.first { it == null || !it.clock.playing && !it.ad }; true }
+            if (stopped == true) source.playPause(song, true)
         }
     }
 
@@ -2377,10 +2405,14 @@ internal class MainViewModel(
      * still on that, what it was seen to play for the same [link] before.
      */
     private fun startedAsked(playing: Heard.Song, app: String?, over: MusicMetadata?, link: String?): Boolean =
-        app != null && sameApp(app, playing.app, interception::isInstalled) &&
+        // An ad under the song's name is no song started: free YouTube Music plays them so.
+        app != null && !playing.ad && sameApp(app, playing.app, interception::isInstalled) &&
             (over == null || !sameSong(playing.metadata, over) || link?.let { playedAs[app to it] }?.let { sameSong(playing.metadata, it) } == true)
 
     fun closePlayer() {
+        // Nor brought back to it, or Crosstune to the app, once an ad's over.
+        leftJob?.cancel()
+        adJob?.cancel()
         playerJob?.cancel()
         playerJob = null
         peekJob?.cancel()
@@ -6523,6 +6555,9 @@ internal class MainViewModel(
         private const val SEEK_SETTLE_MS = 1_000L
         /** How long the music app has to find a song asked for by name, and start it. */
         const val LOAD_SONG_MS = 12_000L
+
+        /** How long an app opened on a song may play something else first: YouTube Music was seen to play two ads in a row. */
+        const val ADS_MS = 2 * LONGEST_AD_MS
         /** YouTube makes temporary playlists of up to 50 videos. */
         const val MAX_QUEUE = 50
         /** Songs whose covers are looked up when a playlist shows: Spotify lists 100, the first 30 with covers. */

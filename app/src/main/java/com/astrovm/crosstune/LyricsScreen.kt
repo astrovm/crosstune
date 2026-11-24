@@ -1408,10 +1408,6 @@ private fun SyncSource(state: UiState, actions: ScreenActions) {
             enabled = !state.playingResult,
             onClick = actions.onPlayResult
         )
-    } else if (state.canOpenFromLyrics) {
-        IconButton(onClick = actions.onOpen) {
-            AppIcon(R.drawable.ic_open_in_new, contentDescription = state.resultDestination.openLabel())
-        }
     }
 }
 
