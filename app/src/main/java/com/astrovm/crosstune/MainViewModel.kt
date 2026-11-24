@@ -1159,24 +1159,6 @@ internal class MainViewModel(
             }
             launch { nameUnnamed(source) }
             launch { followUnnamed(source, previousUnnamed) }
-            launch { watchResultSession(source) }
-        }
-    }
-
-    /** Whether the selected app already has the song, including when it was paused before Crosstune opened. */
-    private suspend fun watchResultSession(source: PlaybackSource) {
-        try {
-            snapshotFlow { uiState.resultSessionToWatch }.collectLatest { target ->
-                uiState = uiState.copy(resultInApp = null)
-                if (target != null) {
-                    val (song, app) = target
-                    followResultSession(source, song, app).map { it != null }.distinctUntilChanged().collect { hasSong ->
-                        uiState = uiState.copy(resultInApp = target.takeIf { hasSong })
-                    }
-                }
-            }
-        } finally {
-            uiState = uiState.copy(resultInApp = null)
         }
     }
 
@@ -2114,8 +2096,8 @@ internal class MainViewModel(
     }
 
     /**
-     * Has the song's app play it in the background, in Crosstune's player; opened there instead
-     * when it can't be asked, or, for YouTube Music, has only a search for it.
+     * Has the song's app play it in the background, in Crosstune's player; opened on the song and left again
+     * when it can't be asked, as Spotify, and opened there when it has only a search for it.
      */
     fun playResult() {
         qobuzNumbers?.off()
@@ -2150,14 +2132,14 @@ internal class MainViewModel(
             if (!there.clock.playing) source.playPause(song, true, there.appPackage, there.session)
             return
         }
-        // The session can change between showing Play and the tap.
-        if (destination.opensAppToStartSong(uiState.phone)) {
-            return open(destination, finishAfterOpen = false, tapped = true, preparedUrl = link)
-        }
-        openPlayer(song, app, link)
-        // Other apps can be asked by name. YouTube Music needs its own exact link.
         val exact = uiState.destinationUrls[destination]?.exact != false
-        val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link, mustStart = true) == true
+        val service = destination.service
+        // Spotify, which plays none asked for, has only a search for it, which it would play nothing from: the card says Search.
+        if (!service.playsAskedSongs && !exact) return
+        openPlayer(song, app, link)
+        // Other apps can be asked by name. YouTube Music needs its own exact link, and Spotify is opened on it.
+        val asked = service.playsAskedSongs && (exact || service != MusicService.YOUTUBE_MUSIC) &&
+            source?.playSong(song, app, link, mustStart = true) == true
         if (!playThere(song, app, link, asked, exact)) open(destination, finishAfterOpen = false, tapped = true, preparedUrl = link)
     }
 

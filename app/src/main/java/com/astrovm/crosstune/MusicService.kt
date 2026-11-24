@@ -90,6 +90,12 @@ internal enum class MusicService(
     val playsAskedSongs: Boolean get() = this != SPOTIFY && this != AMAZON_MUSIC && this != BANDCAMP
 
     /**
+     * Whether its app plays the song it's opened on by the song's own link, as Spotify does, which plays none asked for.
+     * Amazon Music and Bandcamp have only a search.
+     */
+    val playsLinkedSongs: Boolean get() = this != AMAZON_MUSIC && this != BANDCAMP
+
+    /**
      * Whether its app takes no list of songs, so a playlist plays there one song after another, see
      * [PlayQueue]: TIDAL, asked for each by name in the background, and Spotify, which plays none
      * asked for ([playsAskedSongs]), opened on each song's own link, coming to the front for it.
