@@ -3592,6 +3592,23 @@ class PlaybackTest {
 
     @Test
     @Config(shadows = [AppAsked::class])
+    fun anAppThatPlaysOnForAMomentOnlyHasntPlayedOn() = runBlocking {
+        val youTube = MusicService.YOUTUBE.packageName
+        allow()
+        val stopped = player(youTube, "YouTube", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_STOPPED)
+        shadowOf(sessions).addController(stopped)
+        val says = { state: Int -> shadowOf(stopped).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(state, 0, 1f, PLAYED_AT).build()); shadowOf(Looper.getMainLooper()).idle() }
+        // Asked from behind, YouTube without Premium says it plays, then stops at once: it only plays in front.
+        val fails = CoroutineScope(Dispatchers.Unconfined).async { playback.resume(song) }
+        says(PlaybackState.STATE_PLAYING)
+        says(PlaybackState.STATE_STOPPED)
+        assertFalse(fails.await())
+        assertEquals(listOf("play"), asked())
+        assertTrue(playback.playsOnlyInFront(youTube))
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
     fun aSongPausedPlaysOnFromBehindOrInFrontWhereItWas() = runBlocking {
         val music = MusicService.YOUTUBE_MUSIC.packageName
         allow()

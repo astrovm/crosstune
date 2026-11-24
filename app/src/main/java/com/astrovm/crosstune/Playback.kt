@@ -42,12 +42,15 @@ import kotlin.math.ceil
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
@@ -662,7 +665,7 @@ internal class MediaSessionPlayback(
 
     override suspend fun resume(song: MusicMetadata, app: String?, session: Int?): Boolean {
         val controller = runCatching { appFor(song, app = app, session = session) }.getOrNull() ?: return false
-        return watchStart(controller, mustStart = true) { controller.clockCommand("play") { play() } }
+        return watchStart(controller, mustStart = true, holdMs = PLAYS_ON_MS) { controller.clockCommand("play") { play() } }
     }
 
     // Opened as from its icon, which brings back the screen it was on, song and all; a link would start it over.
@@ -749,17 +752,15 @@ internal class MediaSessionPlayback(
      * Runs [ask]; false if it throws. If [mustStart], also waits for [asked] to say it plays: an app that
      * can't play in the background says so with an error, or says nothing, and plays nothing either way.
      * One already playing, e.g. another song, is taken to go on with this one. One known to play only in front isn't asked unless it plays, in front.
+     * Playing, it also has to keep on [holdMs] without stopping.
      */
-    private suspend fun watchStart(asked: MediaController, mustStart: Boolean, ask: () -> Unit): Boolean {
+    private suspend fun watchStart(asked: MediaController, mustStart: Boolean, holdMs: Long = 0, ask: () -> Unit): Boolean {
         // Known to play only in front, it isn't asked from behind again: YouTube Music, stopped, opens itself on the song from the start.
         if (mustStart && asked.packageName in onlyInFront && asked.playbackState?.state != PlaybackState.STATE_PLAYING) return false
-        val verdict = CompletableDeferred<Boolean>()
+        val states = Channel<Int?>(Channel.UNLIMITED)
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
-                when (state?.state) {
-                    PlaybackState.STATE_PLAYING -> verdict.complete(true)
-                    PlaybackState.STATE_ERROR -> verdict.complete(false)
-                }
+                states.trySend(state?.state)
             }
         }
         // Listening before it's asked, so an answer that comes at once isn't missed.
@@ -767,7 +768,11 @@ internal class MediaSessionPlayback(
         try {
             if (runCatching(ask).isFailure) return false
             if (!mustStart || asked.playbackState?.state == PlaybackState.STATE_PLAYING) return true
-            return (withTimeoutOrNull(startMs) { verdict.await() } == true).also { if (!it) onlyInFront += asked.packageName }
+            val said = states.receiveAsFlow()
+            val started = withTimeoutOrNull(startMs) { said.first { it == PlaybackState.STATE_PLAYING || it == PlaybackState.STATE_ERROR } } == PlaybackState.STATE_PLAYING
+            // Playing for a moment, then stopped, as YouTube without Premium does asked to play on from behind, it didn't.
+            val kept = started && withTimeoutOrNull(holdMs) { said.first { it == PlaybackState.STATE_STOPPED || it == PlaybackState.STATE_ERROR } } == null
+            return kept.also { if (!it) onlyInFront += asked.packageName }
         } finally {
             if (mustStart) asked.unregisterCallback(callback)
         }
@@ -1218,6 +1223,9 @@ private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, Packag
 
 /** How long an app asked to play in the background has to say it does, before it's taken as not playing. */
 internal const val START_MS = 3_000L
+
+/** How long an app asked to play on from behind has to keep playing: YouTube without Premium stops 8 ms after it says it plays. */
+internal const val PLAYS_ON_MS = 1_000L
 
 
 /**
