@@ -631,6 +631,7 @@ class MainActivityTest {
 
     @Test
     fun backFromASongAnotherAppShowedLeavesForThatApp() {
+        respondWithTrack("Shared Song", "Artist · Song")
         val activity = launch(
             Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID")).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
         )
