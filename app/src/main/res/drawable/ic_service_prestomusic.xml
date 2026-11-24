@@ -1,6 +1,6 @@
-<!-- Two arrows forward on a disc, in Presto Music's navy; Simple Icons has no Presto Music logo. -->
+<!-- Two arrows forward on a disc, in black like Qobuz's, which the site draws in its text color; Simple Icons has no Presto Music logo. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="#FF1F2A5C" android:fillType="evenOdd"
+    <path android:fillColor="#FF000000" android:fillType="evenOdd"
         android:pathData="M12,2A10,10 0,1 0,12 22A10,10 0,1 0,12 2ZM6,8.2L7.8,6.4L13.4,12L7.8,17.6L6,15.8L9.8,12ZM11,8.2L12.8,6.4L18.4,12L12.8,17.6L11,15.8L14.8,12Z" />
 </vector>
