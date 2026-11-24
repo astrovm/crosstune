@@ -780,6 +780,31 @@ class TvTest {
     }
 
     @Test
+    fun onATvLettingGoOfASongsLastLineLeavesTheRemoteInPractice() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"夜の空","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1},""" +
+                """{"text":"朝の海","translation":"Morning sea","title":"Other","artist":"Group","interval":3,"due":1}]"""
+        ).commit()
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        composeRule.onNode(hasContentDescription(string(R.string.saved_practice), substring = true) and hasClickAction()).requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(hasText("Demo") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNode(hasText("Demo") and hasClickAction()).requestFocus()
+        pressOnFocused(Key.DirectionRight)
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { shown("夜の空") }
+        composeRule.onNode(hasText("夜の空")).performClick()
+        composeRule.onNode(hasText(string(R.string.save_button)) and hasClickAction()).performClick()
+        composeRule.waitUntil(5_000) { !shown("Demo") }
+        // Its pencil went with it: the remote goes to the screen, on Practice's Back, rather than nowhere.
+        assertTrue(shown("Other"))
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(isFocused()).fetchSemanticsNodes().isNotEmpty() }
+        button(R.string.back_button).assertIsFocused()
+    }
+
+    @Test
     fun onATvASongOpenedFromRecentHandsTheRemoteToItsMainButton() {
         for (n in 1..3) {
             val url = "https://open.spotify.com/track/song$n"

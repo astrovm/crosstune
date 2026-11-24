@@ -442,8 +442,8 @@ internal class RowButtonFocus {
                 event.key == Key.DirectionLeft && onButton -> row
                 else -> null
             }
-            to?.requestFocus()
-            to != null
+            // Only a move made is the key's: a row with no button, as All songs, lets it go on.
+            to?.requestFocus() == true
         }
         .focusRequester(row)
 
