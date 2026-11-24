@@ -40,8 +40,10 @@ class PrestoTest {
         // Another's initial isn't them: Bill Evans didn't write it.
         assertEquals(MusicMetadata("Evans, M: Song", "Bill Evans"), Presto.song("Evans, M: Song", listOf("Bill Evans")))
         assertEquals(MusicMetadata("B. Evans: Song", "Gil Evans"), Presto.song("B. Evans: Song", listOf("Gil Evans")))
-        // A credit left with a comma and nothing after it, or two spaces, is still its writer.
+        // A credit left with a comma and nothing after it, or two spaces, is still its writer, and a blank part between a
+        // surname and its initial keeps the initial theirs.
         assertEquals(MusicMetadata("So What", "Miles Davis"), Presto.song("Davis,: So What", listOf("Miles Davis")))
+        assertEquals(MusicMetadata("Davis, , M: Song", "Bill Davis"), Presto.song("Davis, , M: Song", listOf("Bill Davis")))
         assertEquals(MusicMetadata("Anti-Hero", "Taylor Swift"), Presto.song("Taylor  Swift: Anti-Hero", listOf("Taylor Swift")))
     }
 
