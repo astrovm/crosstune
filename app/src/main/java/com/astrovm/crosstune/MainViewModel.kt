@@ -2168,11 +2168,7 @@ internal class MainViewModel(
         if (!busy) return true.also { leftOrNot(back, seen, song, list) }
         // Still on something else, as the ads YouTube without Premium plays first, it's left there, or covered, until the
         // song's on: left during an ad, it might stop, and that's no song to see stop and bring it back for.
-        viewModelScope.launchKept({ adJob = it }) {
-            val seen = seenPlaying(back, song, app, link, mustPlay = true, withinMs = ADS_MS)
-            // Never on, it's given up on, unless the player was opened on another song meanwhile, from the bar, which stays.
-            if (seen != null || uiState.player?.link == link) leftOrNot(back, seen, song, list)
-        }
+        viewModelScope.launchKept({ adJob = it }) { leftOrNot(back, seenPlaying(back, song, app, link, mustPlay = true, withinMs = ADS_MS), song, list) }
         return true
     }
 

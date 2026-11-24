@@ -4660,27 +4660,6 @@ class MainViewModelTest {
     }
 
     @Test
-    fun aPlayerOpenedFromTheBarDuringTheAdStaysOnceTheWaitIsGivenUp() {
-        val playback = FakePlayback().apply { access = true; startsInBackground = false }
-        val model = ytMusicModel(playback)
-        model.setCanFloatOverApps(true)
-        model.playResult()
-        until("opened there") { playback.opened.isNotEmpty() }
-        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
-        pass(MainViewModel.LOAD_SONG_MS + 1_000)
-        until("done playing it") { !model.uiState.playingResult }
-        // Back in Crosstune, the song another app plays is opened from the bar.
-        playback.onThePhone = Heard.Song(song, null, app = "com.spotify")
-        model.viewModelScope.launch { model.watchPlayingNow() }
-        idle()
-        model.peekPlayingNow()
-        assertEquals(song, model.uiState.player?.song)
-        pass(MainViewModel.ADS_MS + 1_000)
-        assertEquals(song, model.uiState.player?.song)
-        assertEquals(0, playback.cameBack)
-    }
-
-    @Test
     fun aTapOnThePlayerDuringTheAdStillComesBackOnceTheSongPlays() {
         val playback = FakePlayback().apply { access = true; canPlaySongs = false }
         val model = ytMusicModel(playback)
@@ -4762,7 +4741,7 @@ class MainViewModelTest {
         playback.onThePhone = Heard.Song(asked, null, app = ytMusic, ad = true)
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         until("done playing it") { !model.uiState.playingResult }
-        // The app names the song its own way once it's on, which the player takes on, link and all.
+        // The app names the song its own way once it's on, and the player follows it by that name, with no link.
         val named = MusicMetadata("抱かれにきた女", "浜田省吾")
         playback.onThePhone = Heard.Song(named, null, app = ytMusic)
         until("back once the song's on") { playback.cameBack == 1 }
