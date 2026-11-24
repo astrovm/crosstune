@@ -859,6 +859,11 @@ class TvPlayTest {
         assertNull(shadowOf(app).peekNextStartedService())
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         waitUntil { playback.cameBack == 1 }
+        // On to an ad under the song's name, it plays on, if not the song: nothing to bring back.
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = morpheMusic, ad = true)
+        composeRule.waitForIdle()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertTrue(playback.plays.isEmpty())
         // Left, it stops, as it only plays in front: it's brought back there, covered, to play on.
         playback.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         waitUntil { playback.broughtToFront.size == 1 }

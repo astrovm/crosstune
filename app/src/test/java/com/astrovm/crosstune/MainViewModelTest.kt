@@ -4640,7 +4640,7 @@ class MainViewModelTest {
     }
 
     @Test
-    fun anAppStillOnAdsLongAfterIsLeftAsItIs() {
+    fun anAppOnSomethingElseLongerThanAnyAdsIsTakenAsNotGettingToTheSong() {
         val playback = FakePlayback().apply { access = true; startsInBackground = false }
         val model = ytMusicModel(playback)
         model.setCanFloatOverApps(true)
@@ -4649,14 +4649,14 @@ class MainViewModelTest {
         playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         until("done playing it") { !model.uiState.playingResult }
-        pass(MainViewModel.ADS_MS + 1_000)
-        // Playing ads all along, it isn't taken as never getting to the song: the player and the cover stay.
+        pass(MainViewModel.ADS_MS - 2_000)
         assertNotNull(model.uiState.player)
         assertTrue(model.uiState.coveringApp)
-        // Waited for no more, the song it gets to at last brings nothing back.
-        appPlays(playback)
-        pass(1_000)
-        assertNull(model.uiState.lyricsFor)
+        // Out from under the cover, which would hide why, as an app that plays nothing is.
+        pass(3_000)
+        until("given up on it") { model.uiState.player == null }
+        assertFalse(model.uiState.coveringApp)
+        assertEquals(0, playback.cameBack)
     }
 
     @Test
@@ -4710,6 +4710,24 @@ class MainViewModelTest {
         pass(1_000)
         assertEquals(0, playback.cameBack)
         assertNull(model.uiState.player)
+    }
+
+    @Test
+    fun anAdUnderTheSongsOwnNameIsntTakenForTheSong() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        // Free YouTube Music plays its ad as the song itself, playing, which Crosstune can follow only by what it's called.
+        val asked = MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada")
+        playback.inApp(ytMusic).value = AppPlays(asked, null)
+        playback.onThePhone = Heard.Song(asked, null, app = ytMusic, ad = true)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        // Left during it, YouTube Music would stop.
+        assertEquals(0, playback.cameBack)
+        playback.onThePhone = Heard.Song(asked, null, app = ytMusic)
+        until("back once the song's on") { playback.cameBack == 1 }
     }
 
     @Test

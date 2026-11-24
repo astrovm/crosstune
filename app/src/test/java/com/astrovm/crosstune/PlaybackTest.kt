@@ -436,6 +436,7 @@ class PlaybackTest {
         assertEquals(325_474L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
         assertEquals(325_474L, checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.metadata.lengthMs)
         assertNull(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.offsetMs)
+        assertTrue(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.ad)
         assertEquals("com.google.android.apps.youtube.music:duration:325474", playback.recording(raining)?.recordingId)
         assertEquals(listOf(325_474L), lengths.known("It's Raining Men", "The Weather Girls"))
         // Then the song itself starts over from 0, and plays.
@@ -447,6 +448,7 @@ class PlaybackTest {
         assertEquals(PlaybackClock(0, PLAYED_AT + 15_069), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         assertFalse(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.ad)
         assertEquals(325_474L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
+        assertFalse(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.ad)
     }
 
     @Test
@@ -4151,9 +4153,9 @@ class PlaybackTest {
         // Paused it still plays it, though not now; stopped, it plays nothing.
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PAUSED, 108))
         assertEquals(108L to false, runBlocking { playback.plays(music).first() }?.let { it.queueId to it.playing })
-        // Buffering, it's about to.
+        // Loading, not yet.
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_BUFFERING, 108))
-        assertEquals(true, runBlocking { playback.plays(music).first() }?.playing)
+        assertEquals(false, runBlocking { playback.plays(music).first() }?.playing)
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_STOPPED, 108))
         assertNull(runBlocking { playback.plays(music).first() })
         // What's before it in the queue, by its number; none for the first, or a song not in it.

@@ -42,7 +42,8 @@ internal sealed interface Heard {
      * matched it to, whose place [offsetMs] is: often another release than the one playing. [speed] is
      * how fast that recording goes by as the sound heard plays, faster for an upload sped up. [app] is
      * the music app playing it on the phone, by package. [inRoom] when only the microphone heard it, with
-     * nothing to tell it from another song playing in the room.
+     * nothing to tell it from another song playing in the room. [ad] while the app plays an ad under the
+     * song's name, as free YouTube Music does, so it isn't playing the song yet.
      */
     data class Song(
         val metadata: MusicMetadata,
@@ -52,7 +53,8 @@ internal sealed interface Heard {
         val matchId: String? = null,
         val app: String? = null,
         val speed: Float = 1f,
-        val inRoom: Boolean = false
+        val inRoom: Boolean = false,
+        val ad: Boolean = false
     ) : Heard {
         /** Where the song is, as heard, when both halves are known. */
         val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs, speed) else null

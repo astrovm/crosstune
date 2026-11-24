@@ -213,7 +213,7 @@ internal data class Queued(val title: String, val artist: String, val id: Long? 
  * for an app that shows no queue, as YouTube doesn't. YouTube Music numbers what it's asked to play
  * one after another, then what it plays on after those; TIDAL numbers each song by what it is.
  * [ended] once the app stopped at the song's end, as YouTube does after a list's last song.
- * [previousId] is the number of the song before it in the queue. [playing], or about to, unless it's paused, or stopped at the end.
+ * [previousId] is the number of the song before it in the queue. [playing] now, not paused, loading, or stopped at the end.
  */
 internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false, val previousId: Long? = null, val playing: Boolean = true)
 
@@ -911,7 +911,7 @@ internal class MediaSessionPlayback(
                         val id = controller.playbackState?.activeQueueItemId?.takeIf { it != MediaSession.QueueItem.UNKNOWN_ID.toLong() }
                         val queue = queueOf(controller).orEmpty()
                         val previous = queue.getOrNull(queue.indexOfFirst { it.queueId == id } - 1)?.queueId
-                        AppPlays(song, id, ended, previous, playing = !ended && controller.playbackState?.state != PlaybackState.STATE_PAUSED)
+                        AppPlays(song, id, ended, previous, playing = !ended && controller.playbackState?.state == PlaybackState.STATE_PLAYING)
                     }
             }
     }
@@ -1024,7 +1024,8 @@ internal class MediaSessionPlayback(
         val artwork = coverOf(metadata, controller.sessionToken)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         // Nor where a song waiting for an ad to end is, as it isn't playing yet.
-        val clock = following(controller, asked)?.takeIf { !it.video }?.clock?.takeIf { it.playing }
+        val follows = following(controller, asked)
+        val clock = follows?.takeIf { !it.video }?.clock?.takeIf { it.playing }
         val id = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
         val uri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
         val duration = controller.lengthOf(metadata, asked)
@@ -1032,7 +1033,7 @@ internal class MediaSessionPlayback(
             artworkUrl = artwork,
             url = uri?.takeIf(String::isNotBlank) ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
             recordingId = RecordingKey.playing(controller.packageName, id, duration)
-        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f)
+        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f, ad = follows?.ad == true)
     }
 
     /**

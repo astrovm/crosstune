@@ -2159,6 +2159,7 @@ internal class MainViewModel(
      * the player closed, and the rest of a [list] isn't played on. False, with the player closed, when it could be neither.
      */
     private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean, list: Boolean = false): Boolean {
+        leftJob?.cancel()
         adJob?.cancel()
         val source = playback?.takeIf { it.hasAccess() }
         if (asked && (source == null || playsAsAsked(source, song, app, link, exact))) return true
@@ -2166,12 +2167,8 @@ internal class MainViewModel(
         val (seen, busy) = seenPlayingOrBusy(back, song, app, link)
         if (!busy) return true.also { leftOrNot(back, seen, song, list) }
         // Still on something else, as the ads YouTube without Premium plays first, it's left there, or covered, until the
-        // song's on: left during an ad, it might stop, and that's no song to see stop and bring it back for. Still on it
-        // after that, or with the player since closed or on another song, it's left as it is.
-        viewModelScope.launchKept({ adJob = it }) {
-            val seen = seenPlaying(back, song, app, link, mustPlay = true, withinMs = ADS_MS) ?: return@launchKept
-            if (uiState.player?.song?.let { sameSong(it, song) } == true) leftOrNot(back, seen, song, list)
-        }
+        // song's on: left during an ad, it might stop, and that's no song to see stop and bring it back for.
+        viewModelScope.launchKept({ adJob = it }) { leftOrNot(back, seenPlaying(back, song, app, link, mustPlay = true, withinMs = ADS_MS), song, list) }
         return true
     }
 
@@ -2280,7 +2277,8 @@ internal class MainViewModel(
         val source = playback ?: return
         if (uiState.coveringApp) return
         viewModelScope.launchKept({ leftJob = it }) {
-            if (withTimeoutOrNull(START_MS) { source.follow(song).first { it != null && !it.clock.playing } } != null) source.playPause(song, true)
+            // Stopped, not waiting under an ad, which YouTube Music plays on as if it were the song.
+            if (withTimeoutOrNull(START_MS) { source.follow(song).first { it != null && !it.clock.playing && !it.ad } } != null) source.playPause(song, true)
         }
     }
 
@@ -2405,7 +2403,8 @@ internal class MainViewModel(
      * still on that, what it was seen to play for the same [link] before.
      */
     private fun startedAsked(playing: Heard.Song, app: String?, over: MusicMetadata?, link: String?): Boolean =
-        app != null && sameApp(app, playing.app, interception::isInstalled) &&
+        // An ad under the song's name is no song started: free YouTube Music plays them so.
+        app != null && !playing.ad && sameApp(app, playing.app, interception::isInstalled) &&
             (over == null || !sameSong(playing.metadata, over) || link?.let { playedAs[app to it] }?.let { sameSong(playing.metadata, it) } == true)
 
     fun closePlayer() {
