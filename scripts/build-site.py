@@ -39,7 +39,7 @@ SERVICES = [
     ("Spotify", "spotify"), ("YouTube Music", "youtubemusic"), ("YouTube", "youtube"),
     ("Apple Music", "applemusic"), ("Deezer", "deezer"), ("TIDAL", "tidal"),
     ("SoundCloud", "soundcloud"), ("Bandcamp", "bandcamp"), ("Audiomack", "audiomack"),
-    ("Amazon Music", "amazonmusic"), ("Qobuz", "qobuz"),
+    ("Amazon Music", "amazonmusic"), ("Qobuz", "qobuz"), ("Presto Music", "prestomusic"),
 ]
 # Web frontends with no logo of their own: their first letter on a tile, as in the app (Frontend.color).
 FRONTENDS = [("Invidious", "#2E8FE0"), ("Piped", "#E5482F")]

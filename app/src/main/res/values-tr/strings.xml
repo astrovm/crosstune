@@ -13,6 +13,7 @@
     <string name="open_in_spotify">Spotify\'da aç</string>
     <string name="open_in_audiomack">Audiomack\'da aç</string>
     <string name="open_in_qobuz">Qobuz\'da aç</string>
+    <string name="open_in_presto_music">Presto Music\'te aç</string>
     <string name="open_in_bandcamp">Bandcamp\'te aç</string>
     <string name="open_in_amazon_music">Amazon Music\'te aç</string>
     <string name="from_service">Kaynak: %1$s</string>

@@ -51,6 +51,7 @@
         <package android:name="com.amazon.mp3" />
         <package android:name="com.audiomack" />
         <package android:name="com.qobuz.music" />
+        <package android:name="com.prestomusic.app" />
         <!-- YouTube and YouTube Music patched by ReVanced, ReVanced Extended, Morphe and Vanced, as MusicService.kt lists them. -->
         <package android:name="app.revanced.android.youtube" />
         <package android:name="app.rvx.android.youtube" />

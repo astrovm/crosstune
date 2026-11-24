@@ -25,6 +25,7 @@ class UiStateTest {
         assertFalse(tidal.copy(link = MusicLink(MusicService.TIDAL, ItemType.PLAYLIST, "1", "https://tidal.com/playlist/1")).canPlayAll)
         assertTrue(tidal.copy(selectedDestination = Destination.Service(MusicService.SPOTIFY), installed = setOf(MusicService.SPOTIFY)).canPlayAll)
         assertFalse(tidal.copy(selectedDestination = Destination.Service(MusicService.AMAZON_MUSIC), installed = setOf(MusicService.AMAZON_MUSIC)).canPlayAll)
+        assertFalse(tidal.copy(selectedDestination = Destination.Service(MusicService.PRESTO_MUSIC), installed = setOf(MusicService.PRESTO_MUSIC)).canPlayAll)
     }
 
     @Test
@@ -54,6 +55,8 @@ class UiStateTest {
         assertFalse(youTubeMusic.copy(selectedDestination = Destination.Service(MusicService.BANDCAMP), installed = setOf(MusicService.BANDCAMP)).canPlayResult)
         // Amazon Music has only a search too, and plays the artist's radio when asked.
         assertFalse(youTubeMusic.copy(selectedDestination = Destination.Service(MusicService.AMAZON_MUSIC), installed = setOf(MusicService.AMAZON_MUSIC)).canPlayResult)
+        // Presto Music's app opens only on a search, with nothing played.
+        assertFalse(youTubeMusic.copy(selectedDestination = Destination.Service(MusicService.PRESTO_MUSIC), installed = setOf(MusicService.PRESTO_MUSIC)).canPlayResult)
     }
 
     @Test

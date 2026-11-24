@@ -1,0 +1,1 @@
+Open songs in Presto Music, which searches for the albums they are on.

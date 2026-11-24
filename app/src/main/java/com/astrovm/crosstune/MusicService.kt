@@ -19,7 +19,8 @@ internal enum class ItemType(@StringRes val labelRes: Int) {
 
 /**
  * A music service Crosstune can open things in and, when [canBeSource], read links from.
- * Amazon Music and Qobuz links render with JavaScript and expose no metadata, so they are destination-only.
+ * Amazon Music and Qobuz links render with JavaScript and expose no metadata, so they are destination-only. So is
+ * Presto Music, whose site asks a browser to prove it's one before it shows a page.
  */
 internal enum class MusicService(
     @StringRes val labelRes: Int,
@@ -72,6 +73,11 @@ internal enum class MusicService(
     QOBUZ(
         R.string.service_qobuz, R.string.open_in_qobuz, R.drawable.ic_service_qobuz, "com.qobuz.music", false,
         querySearchUrl("https://play.qobuz.com/search", "q")
+    ),
+    /** Classical and jazz. Its search finds albums only, by what's on them too, so a song's title and artist find the albums it's on. */
+    PRESTO_MUSIC(
+        R.string.service_presto_music, R.string.open_in_presto_music, R.drawable.ic_service_prestomusic, "com.prestomusic.app", false,
+        querySearchUrl("https://streaming.prestomusic.com/explore/results/albums", "search")
     );
 
     fun searchUrl(query: String): String = searchUrlBuilder(query)
@@ -85,15 +91,15 @@ internal enum class MusicService(
 
     /**
      * Whether its app can start a requested song through a media session. Spotify ignores apps it
-     * doesn't know, Amazon Music's free plan plays the artist's radio, and Bandcamp and Audiomack open a search.
+     * doesn't know, Amazon Music's free plan plays the artist's radio, and Bandcamp, Audiomack and Presto Music open a search.
      */
-    val playsAskedSongs: Boolean get() = this != SPOTIFY && this != AMAZON_MUSIC && this != BANDCAMP && this != AUDIOMACK
+    val playsAskedSongs: Boolean get() = this != SPOTIFY && this != AMAZON_MUSIC && this != BANDCAMP && this != AUDIOMACK && this != PRESTO_MUSIC
 
     /**
      * Whether its app plays the song it's opened on by the song's own link, as Spotify does, which plays none asked for.
-     * Amazon Music and Bandcamp have only a search.
+     * Amazon Music, Bandcamp and Presto Music have only a search.
      */
-    val playsLinkedSongs: Boolean get() = this != AMAZON_MUSIC && this != BANDCAMP
+    val playsLinkedSongs: Boolean get() = this != AMAZON_MUSIC && this != BANDCAMP && this != PRESTO_MUSIC
 
     /**
      * Whether its app takes no list of songs, so a playlist plays there one song after another, see

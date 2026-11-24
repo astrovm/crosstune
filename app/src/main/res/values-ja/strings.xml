@@ -14,6 +14,7 @@
     <string name="open_in_spotify">Spotify で開く</string>
     <string name="open_in_audiomack">Audiomack で開く</string>
     <string name="open_in_qobuz">Qobuz で開く</string>
+    <string name="open_in_presto_music">Presto Music で開く</string>
     <string name="open_in_bandcamp">Bandcamp で開く</string>
     <string name="open_in_amazon_music">Amazon Music で開く</string>
     <string name="from_service">%1$s から</string>
