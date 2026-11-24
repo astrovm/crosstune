@@ -16,6 +16,7 @@ import androidx.compose.animation.core.ExperimentalTransitionApi
 import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -168,6 +169,11 @@ private const val OPEN_FOCUS = "open"
 
 /** How many frames a Recent row has to be placed in, Recent coming back, before the remote is left where it is. */
 private const val FOCUS_FRAMES = 5
+
+/** The song Back just put away on a TV, by its link, whose Recent row takes the remote; [focused] once it has. */
+private class ClosedSong(val url: String, val focused: () -> Unit)
+
+private val LocalClosedSong = compositionLocalOf<ClosedSong?> { null }
 
 /** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
 internal const val CARD_TOOLS_TAG = "card_tools"
@@ -615,10 +621,9 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             } else if (shown == Screen.PRACTICE_LIST) {
                 PracticeList(state, actions, onBack = { showPracticeList = false })
             } else {
-                MainScreen(
-                    state, actions, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true },
-                    closedSong = closedSong, onClosedSongFocused = { closedSong = null }
-                )
+                CompositionLocalProvider(LocalClosedSong provides closedSong?.let { url -> ClosedSong(url) { closedSong = null } }) {
+                    MainScreen(state, actions, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true })
+                }
             }
         }
         }
@@ -782,14 +787,7 @@ private fun PageFrame(
 }
 
 @Composable
-private fun MainScreen(
-    state: UiState,
-    actions: ScreenActions,
-    onOpenSettings: () -> Unit,
-    onOpenPractice: () -> Unit,
-    closedSong: String?,
-    onClosedSongFocused: () -> Unit
-) {
+private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: () -> Unit, onOpenPractice: () -> Unit) {
     // The picker lists installed apps first, so it waits for Android to say which those are rather
     // than move a row from under the user's finger.
     if (state.showDestinationPicker && state.systemStateKnown) {
@@ -916,7 +914,7 @@ private fun MainScreen(
         }
         // Keyed on whether there's any, so clearing it fades the last list out rather than an empty one.
         AnimatedContent(targetState = history, contentKey = { it.isEmpty() }, transitionSpec = { fade() }, label = "history") { shown ->
-            if (shown.isNotEmpty()) Column { HistorySection(shown, state, recent, closedSong, onClosedSongFocused) }
+            if (shown.isNotEmpty()) Column { HistorySection(shown, state, recent) }
         }
     }
 }
@@ -1850,7 +1848,8 @@ private fun ToolAction(
 }
 
 @Composable
-private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions: ScreenActions, focusOn: String?, onFocused: () -> Unit) {
+private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions: ScreenActions) {
+    val closed = LocalClosedSong.current
     var query by rememberSaveable { mutableStateOf("") }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -1924,7 +1923,7 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
                 val length = entry.metadata.lengthMs?.takeIf { history.any { other -> other !== entry && other.metadata.isNamedAs(entry.metadata) } }
                 HistoryRow(
                     entry, state.ruleFor(entry.link)?.takeIf { it != state.defaultDestination }, state.installed, actions, Modifier.enterIn(index), length,
-                    onFocused.takeIf { entry.link.url == focusOn }
+                    closed?.takeIf { it.url == entry.link.url }?.focused
                 )
             }
         }
