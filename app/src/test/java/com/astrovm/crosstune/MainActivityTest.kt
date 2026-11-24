@@ -641,6 +641,20 @@ class MainActivityTest {
     }
 
     @Test
+    fun backFromASongAnotherAppShowedLeavesForThatAppAfterTryingAgain() {
+        fake.handler = { throw IOException("offline") }
+        val activity = launch(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID")).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
+        )
+        waitForText(string(R.string.error_network))
+        respondWithTrack("Shared Song", "Artist · Song")
+        click(string(R.string.retry_button))
+        assertResultShown()
+        activity.onBackPressedDispatcher.onBackPressed()
+        assertTrue(activity.isFinishing)
+    }
+
+    @Test
     fun backFromASongTheWidgetShowedLeavesForTheHomeScreen() {
         prefs().edit().putBoolean("links_in_crosstune", true).putBoolean("play_right_away", false).commit()
         val url = "https://open.spotify.com/track/$TRACK_ID"

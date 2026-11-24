@@ -166,6 +166,9 @@ internal val LocalMainFocus = staticCompositionLocalOf<ScreenFocus?> { null }
 /** Where the remote comes back to the card's Open, when Play is its main button. */
 private const val OPEN_FOCUS = "open"
 
+/** How many frames a Recent row has to be placed in, Recent coming back, before the remote is left where it is. */
+private const val FOCUS_FRAMES = 5
+
 /** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
 internal const val CARD_TOOLS_TAG = "card_tools"
 
@@ -510,9 +513,12 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     // leaves Back to Android, which goes back to that app. First, so whatever is over the card goes before it.
     var closedSong by remember { mutableStateOf<String?>(null) }
     BackHandler(enabled = screen == Screen.MAIN && !state.idle && !state.fromAnotherApp) {
-        closedSong = state.link?.url?.takeIf { state.phone == Phone.TV }
+        // Only one Recent lists, as no row would take the remote and clear it otherwise.
+        closedSong = state.link?.url?.takeIf { url -> state.phone == Phone.TV && state.history.any { it.link.url == url } }
         actions.onClear()
     }
+    // Another song shown, the one put away no longer wants the remote, even if its row was hidden by a search.
+    LaunchedEffect(state.idle) { if (!state.idle) closedSong = null }
     // Back from settings' own list; its pages go back to it first.
     CompositionLocalProvider(LocalLayerSwipe provides layers) { SwipedBack(enabled = showSettings) { showSettings = false } }
     val density = LocalDensity.current
@@ -781,8 +787,8 @@ private fun MainScreen(
     actions: ScreenActions,
     onOpenSettings: () -> Unit,
     onOpenPractice: () -> Unit,
-    closedSong: String? = null,
-    onClosedSongFocused: () -> Unit = {}
+    closedSong: String?,
+    onClosedSongFocused: () -> Unit
 ) {
     // The picker lists installed apps first, so it waits for Android to say which those are rather
     // than move a row from under the user's finger.
@@ -1950,10 +1956,12 @@ private fun HistoryRow(
         modifier = modifier.clip(MaterialTheme.shapes.medium)
     ) {
         val focus = rememberRowButtonFocus()
-        // Its song put away with Back, the remote comes back to it; placed only on the next frame, maybe.
+        // Its song put away with Back, the remote comes back to it, once it's placed: a frame or a few later, as
+        // Recent comes back.
         if (takeFocus != null) {
             LaunchedEffect(Unit) {
-                if (!focus.focusRow()) run { withFrameNanos {}; focus.focusRow() }
+                var frames = 0
+                while (!focus.focusRow() && frames++ < FOCUS_FRAMES) withFrameNanos {}
                 takeFocus()
             }
         }

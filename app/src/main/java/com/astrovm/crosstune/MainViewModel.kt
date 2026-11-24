@@ -985,7 +985,10 @@ internal class MainViewModel(
 
     fun retry() {
         val (input, openWhenReady, destination, here) = lastRequest ?: return
+        val fromAnotherApp = uiState.fromAnotherApp
         resolve(input, openWhenReady, destination, here = here)
+        // Tried again, a link from another app still goes back there with Back.
+        uiState = uiState.copy(fromAnotherApp = fromAnotherApp)
     }
 
     /** Whether the link last looked up couldn't be for being offline, so it's looked up once back online. */

@@ -841,6 +841,21 @@ class TvTest {
     }
 
     @Test
+    fun onATvBackFromTheOnlySongInRecentLandsOnItsRow() {
+        val url = "https://open.spotify.com/track/song1"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song1", url), MusicMetadata("Song 1", "Band")))
+        launch()
+        composeRule.onNode(hasText("Song 1") and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 1" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        // Recent came back whole, its one row too, and the remote waited for it.
+        composeRule.onNode(hasText("Song 1") and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
     fun onATvARecentPlayThatGoesStraightToTheAppLeavesTheRemoteOnIt() {
         for (n in 1..3) {
             val url = "https://open.spotify.com/track/song$n"
