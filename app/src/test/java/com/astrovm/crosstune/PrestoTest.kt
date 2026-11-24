@@ -58,7 +58,15 @@ class PrestoTest {
         // surname and its initial keeps the initial theirs.
         assertEquals(MusicMetadata("So What", "Miles Davis"), Presto.song("Davis,: So What", listOf("Miles Davis")))
         assertEquals(MusicMetadata("Davis, , M: Song", "Bill Davis"), Presto.song("Davis, , M: Song", listOf("Bill Davis")))
+        assertEquals(MusicMetadata("Song", "Miles Davis"), Presto.song("Davis, , M: Song", listOf("Miles Davis")))
         assertEquals(MusicMetadata("Anti-Hero", "Taylor Swift"), Presto.song("Taylor  Swift: Anti-Hero", listOf("Taylor Swift")))
+        assertEquals(MusicMetadata("Anti-Hero", "Taylor Swift"), Presto.song("Taylor\u00a0Swift: Anti-Hero", listOf("Taylor Swift")))
+        // A hyphen in a surname keeps it whole, and a name after a comma is another writer, not initials.
+        assertEquals(MusicMetadata("Song", "Alice Smith-Jones"), Presto.song("Smith-Jones: Song", listOf("Alice Smith-Jones")))
+        assertEquals(MusicMetadata("Song", "Alice Smith-Jones"), Presto.song("Alice Smith-Jones: Song", listOf("Alice Smith-Jones")))
+        assertEquals(MusicMetadata("Song", "Alice Smith-Jones"), Presto.song("Smith-Jones, A.: Song", listOf("Alice Smith-Jones")))
+        assertEquals(MusicMetadata("Song", "Brian May"), Presto.song("Lennon, May: Song", listOf("Brian May")))
+        assertEquals(MusicMetadata("Song", "John Lennon"), Presto.song("Lennon, May: Song", listOf("John Lennon")))
     }
 
     @Test
@@ -72,6 +80,10 @@ class PrestoTest {
         // Each of a composer's initials is one of their names.
         assertEquals(MusicMetadata("Prelude", "Glenn Gould"), Presto.song("Bach, J. S.: Prelude", listOf("Glenn Gould"), "Johann Sebastian Bach"))
         assertEquals(MusicMetadata("Bagatelle", "A"), Presto.song("L. v. Beethoven: Bagatelle", listOf("A"), "Ludwig van Beethoven"))
+        // A particle after the initials is the surname's, and the initial is still theirs.
+        assertEquals(MusicMetadata("Bagatelle", "A"), Presto.song("Beethoven, L. van: Bagatelle", listOf("A"), "Ludwig van Beethoven"))
+        assertEquals(MusicMetadata("Beethoven, L. van: Bagatelle", "A"), Presto.song("Beethoven, L. van: Bagatelle", listOf("A"), "Johann van Beethoven"))
+        assertEquals(MusicMetadata("Beethoven, L. van: Bagatelle", "Johann Beethoven"), Presto.song("Beethoven, L. van: Bagatelle", listOf("Johann Beethoven")))
         // Without a composer to tell, a name no one plays stays.
         assertEquals(MusicMetadata("Beethoven: Symphony No. 5", "Wiener Philharmoniker"), Presto.song("Beethoven: Symphony No. 5", orchestra))
         assertEquals(MusicMetadata("Heyward, Gershwin: Summertime", "A"), Presto.song("Heyward, Gershwin: Summertime", listOf("A"), "Someone Else"))

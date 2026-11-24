@@ -14,9 +14,6 @@ internal object Presto {
     /** Names alone, as a title starts with who wrote it: "Davis, M", "Taylor Swift, Jack Antonoff", not "Symphony No. 5". */
     private val names = phoneRegex("""^[\p{L}'’. &,-]+$""")
 
-    /** "M" or "A. B.", what "Davis, M" gives after a surname. */
-    private val initials = phoneRegex("""^(?:\p{L}\.?\s*+){1,3}$""")
-
     /**
      * The musicians in Presto's credits, "Bill Evans (piano), Wiener Philharmoniker", in its order, without what they
      * play. A long credit goes on in another line, and a guest is "with" them.
@@ -45,7 +42,7 @@ internal object Presto {
      */
     fun song(title: String, musicians: List<String>, composer: String? = null): MusicMetadata {
         val colon = title.indexOf(": ")
-        val writers = title.take(maxOf(colon, 0)).takeIf(names::matches)?.let(::writers).orEmpty()
+        val writers = title.take(maxOf(colon, 0)).replace('\u00a0', ' ').takeIf(names::matches)?.let(::writers).orEmpty()
         val player = musicians.firstOrNull { musician -> writers.any { it.isWho(musician) } }
         val wrote = player != null || composer != null && writers.any { it.isWho(composer) }
         return MusicMetadata(if (wrote) title.substring(colon + 2).trim() else title, player ?: musicians.firstOrNull().orEmpty())
@@ -53,22 +50,28 @@ internal object Presto {
 
     /**
      * Who a title's credit names, by surname and the names or initials before it: "Davis, M" is one, "Taylor Swift, Jack
-     * Antonoff" two, and "Davis, M & Evans, B" two, each with their initial.
+     * Antonoff" two, "Lennon, May" two, and "Davis, M & Evans, B" two, each with their initial.
      */
     private fun writers(credit: String): List<Writer> = credit.split('&').flatMap { group ->
         val parts = group.split(',').map(String::trim).filter(String::isNotEmpty)
-        if (parts.size == 2 && initials.matches(parts[1])) {
-            listOf(Writer(parts[0], words(parts[1])))
+        // After a surname, initials and the particles that are the surname's: "Bach, J. S.", "Beethoven, L. van".
+        val after = parts.getOrNull(1)?.let(::words).orEmpty()
+        if (parts.size == 2 && after.any { it.length == 1 } && after.all { it.length == 1 || isParticle(it) }) {
+            listOf(Writer(after.filter(::isParticle).joinToString("") + parts[0], after.filterNot(::isParticle)))
         } else {
-            parts.mapNotNull { part ->
-                val words = words(part).ifEmpty { return@mapNotNull null }
-                // "van" and "di" before it are the surname's, as in "van Halen"; "v." is an initial, as in "L. v. Beethoven".
+            parts.map { part ->
+                // The last word is the surname, hyphen and all, as in "Smith-Jones"; "van" and "di" before it are the
+                // surname's too, as in "van Halen", and the names before them, however they're joined, as in "J.-P.".
+                val words = part.split(' ', '.').filter(String::isNotBlank)
                 val before = words.dropLast(1)
-                val given = before.size - before.takeLastWhile { it.length > 1 && it[0].isLowerCase() }.size
-                Writer(words.drop(given).joinToString(""), words.take(given))
+                val given = before.dropLastWhile(::isParticle)
+                Writer(words.drop(given.size).joinToString(""), given.flatMap(::words))
             }
         }
     }
+
+    /** "van" or "di", the surname's, but not "v.", an initial as in "L. v. Beethoven". */
+    private fun isParticle(word: String) = word.length > 1 && word.all(Char::isLowerCase)
 
     /** A name's words, however they're joined: "J.S. Bach" and "Jean-Pierre Rampal" are three each. */
     private fun words(name: String): List<String> = name.split(' ', '\u00a0', '.', '-').filter(String::isNotBlank)
