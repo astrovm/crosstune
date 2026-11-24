@@ -258,7 +258,7 @@ internal object SongNames {
     /** Words a video's title has when it's another version of the song, or not the song at all. */
     private val VERSION_WORDS = setOf(
         "cover", "covers", "covered", "karaoke", "live", "unplugged", "mtv", "vivo", "directo", "session", "sessions",
-        "concert", "tour", "remix", "mix", "instrumental", "inst", "acoustic", "acustico", "piano", "guitar",
+        "concert", "tour", "remix", "mix", "instrumental", "inst", "acoustic", "acustico", "piano", "pianos", "guitar", "guitars",
         "bass", "drum", "drums", "chords", "tab", "tabs", "tutorial", "lesson", "practice", "reaction", "slowed",
         "reverb", "sped", "nightcore", "8d", "demo", "medley", "mashup", "amv", "mmd", "ver", "tribute", "ktv",
         "acapella", "acappella", "cappella", "capella", "8bit", "orgel", "musicbox"
