@@ -4490,10 +4490,12 @@ class MainViewModelTest {
         until("opened there") { playback.opened.isNotEmpty() }
         assertEquals(morpheMusic to ytLink, playback.opened.single())
         // And it waits again for the app to play it there, before leaving it.
-        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        assertEquals(0, playback.cameBack)
+        appPlays(playback, packageName = morpheMusic)
         until("came back") { playback.cameBack == 1 }
         // Its app gone, there is no player: the app is opened by the system.
         model.closePlayer()
+        playback.playing.value = null
         playback.opens = false
         model.playResult()
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
@@ -4527,6 +4529,31 @@ class MainViewModelTest {
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "Music", canSeek = true, appPackage = spotify)
         until("came back") { playback.cameBack == 1 }
         assertEquals("Never Gonna Give You Up", model.uiState.player?.song?.title)
+        // Never playing there, as an app signed out, it's left in front, where it says why, with no player.
+        model.closePlayer()
+        playback.playing.value = null
+        playback.opened.clear()
+        model.playResult()
+        until("opened there again") { playback.opened.isNotEmpty() }
+        assertNotNull(model.uiState.player)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("given up on it") { !model.uiState.playingResult }
+        assertNull(model.uiState.player)
+        assertEquals(1, playback.cameBack)
+    }
+
+    @Test
+    fun theOfficialYouTubeAppsOpenedOnTheSongAreLeftPlayingInFront() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        assertEquals(ytMusic to ytLink, playback.opened.single())
+        appPlays(playback)
+        until("done playing it") { !model.uiState.playingResult }
+        // Without Premium it would stop once left, so Crosstune doesn't come back over it.
+        assertEquals(0, playback.cameBack)
+        assertEquals("Dakare Ni Kita Onna", model.uiState.player?.song?.title)
     }
 
     @Test

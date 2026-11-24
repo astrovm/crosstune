@@ -2095,7 +2095,8 @@ internal class MainViewModel(
 
     /**
      * Has the song's app play it in the background, in Crosstune's player; opened on the song and left again
-     * when it can't be asked, as Spotify, and opened there when it has only a search for it.
+     * when it can't be asked, as Spotify. With only a search for it, an app that can be asked is opened there,
+     * and Spotify, which would play nothing from one, isn't.
      */
     fun playResult() {
         qobuzNumbers?.off()
@@ -2145,15 +2146,18 @@ internal class MainViewModel(
      * [song] playing in [app], with the player on it, once [app] was [asked] to play it in the background: seen to play it
      * there, or with no way to see, that's that, as an app may say yes and not play it. An app that couldn't be asked is
      * opened on its [exact] [link], and, when Crosstune can see it play there, left again once it does, as practice does,
-     * unless it wouldn't play in the background, where it would stop.
-     * False, with the player closed, when it could be neither.
+     * unless it wouldn't play in the background, where it would stop. Seen not to play it there, it's left in front, with
+     * the player closed. False, with the player closed, when it could be neither.
      */
     private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean): Boolean {
         val source = playback?.takeIf { it.hasAccess() }
         if (asked && (source == null || playsAsAsked(source, song, app, link, exact))) return true
         val back = source?.takeIf { exact && app != null && openWatched(it, song, app, link) } ?: return false.also { closePlayer() }
-        // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does.
-        seenPlaying(back, song, app, link, mustPlay = true)
+        // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does. Never
+        // playing, as Apple Music signed out, it stays in front, where it says why, and the player goes.
+        if (seenPlaying(back, song, app, link, mustPlay = true) == null) return true.also { closePlayer() }
+        // The official YouTube apps would stop, so on a phone they're left playing, in front. A TV covers them instead.
+        if (uiState.phone != Phone.TV && MusicService.ofOwnApp(app)?.stopsWhenLeft == true) return true
         back.comesBack()
         watchLeft(song)
         return true

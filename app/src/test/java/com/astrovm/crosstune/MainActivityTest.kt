@@ -1127,7 +1127,8 @@ class MainActivityTest {
         assertTrue(phone.opened.isEmpty())
         assertNull(shadowOf(app).peekNextStartedActivity())
         assertTrue(composeRule.onAllNodes(hasText("First Song")).fetchSemanticsNodes().isNotEmpty())
-        // Asked to and not seen to play it, YouTube Music is opened on the list, and left again once it plays it.
+        // Asked to and not seen to play it, YouTube Music is opened on the list. Without Premium it would stop once
+        // left, so it's left playing it, in front.
         composeRule.runOnIdle { phone.playing.value = null }
         composeRule.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(playAll) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
@@ -1136,8 +1137,8 @@ class MainActivityTest {
         waitUntil(TIMEOUT_MS) { phone.opened.isNotEmpty() }
         assertEquals(listOf(music to queue), phone.opened)
         composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "YouTube Music", canSeek = true, appPackage = music) }
-        waitUntil(TIMEOUT_MS) { phone.cameBack == 1 }
-        assertTrue(composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty())
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(0, phone.cameBack)
         // With no app to ask or open, it opens the list there, as it did, with no player.
         composeRule.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(playAll) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
@@ -4104,17 +4105,18 @@ class MainActivityTest {
             launch()
             click(string(R.string.history_open, song.title))
             waitForDestinationReady()
-            // Each starts the song from here, as on 2.27: asked in the background, or opened on it and left again.
+            // Each starts the song from here: asked in the background, or, Audiomack, which plays none asked for, opened on it.
             val play = string(R.string.play_in_background, string(service.labelRes))
             waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
             click(play)
-            waitUntil { playback.songsAsked.any { it.second == service.packageName } }
+            if (service.playsAskedSongs) waitUntil { playback.songsAsked.any { it.second == service.packageName } }
+            else waitUntil { playback.opened.any { it == service.packageName to links.getValue(service) } }
             checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         }
     }
 
     @Test
-    fun audiomackSearchShowsSearchNextToPlayByName() {
+    fun audiomackSearchShowsSearchWithoutOfferingPlay() {
         val service = MusicService.AUDIOMACK
         val label = string(service.labelRes)
         val song = MusicMetadata("Fixture Song", "Fixture Artist")
@@ -4139,8 +4141,8 @@ class MainActivityTest {
             useUnmergedTree = true,
         ).assertExists()
         composeRule.onNodeWithContentDescription(string(service.openLabelRes)).assertDoesNotExist()
-        // Audiomack is asked for the song by name, so Play needs no link to it.
-        composeRule.onNodeWithContentDescription(string(R.string.play_in_background, label)).assertExists()
+        // Audiomack plays no song asked for, and opened on a search it plays nothing, so there's no Play.
+        composeRule.onNodeWithContentDescription(string(R.string.play_in_background, label)).assertDoesNotExist()
         click(string(R.string.search_in_destination, label))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         val opened = checkNotNull(nextStartedActivity())
