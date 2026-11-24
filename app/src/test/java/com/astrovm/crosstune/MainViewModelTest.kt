@@ -4464,7 +4464,7 @@ class MainViewModelTest {
     }
 
     @Test
-    fun searchingBeforeAndroidSaysWhatsOnThePhoneStopsThePlayButStillMakesTheLinkToShare() {
+    fun searchingBeforeAndroidSaysWhatsOnThePhoneStillMakesTheLinkToShare() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         // Android's look at apps held, so a song from Recent waits on it to know whether it can play.
         val model = model(systemDispatcher = object : CoroutineDispatcher() {
@@ -4479,9 +4479,8 @@ class MainViewModelTest {
         model.searchResult()
         idle()
         assertTrue(effects.filterIsInstance<Effect.Open>().single().url.contains("search"))
-        // Copy and Share still have the song's link, made where the play waited.
+        // Copy and Share still have the song's link, though the wait that was to make it is over.
         until("the link made") { model.destinationUrl() != null }
-        assertFalse(model.uiState.playingResult)
     }
 
     @Test

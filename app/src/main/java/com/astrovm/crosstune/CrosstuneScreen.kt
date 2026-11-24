@@ -1648,10 +1648,10 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
             val iconsTop = if (under) button.height + 8.dp.roundToPx() else 0
             val height = if (under) iconsTop + iconsHeight else maxOf(button.height, iconsHeight)
             layout(constraints.maxWidth, height) {
-                button.place(0, if (under) 0 else (height - button.height) / 2)
+                button.placeRelative(0, if (under) 0 else (height - button.height) / 2)
                 var x = if (under) (constraints.maxWidth - iconsWidth + gap) / 2 else button.width + gap
                 iconPlaces.forEach { icon ->
-                    icon.place(x, iconsTop + if (under) 0 else (height - icon.height) / 2)
+                    icon.placeRelative(x, iconsTop + if (under) 0 else (height - icon.height) / 2)
                     x += icon.width + gap
                 }
             }
