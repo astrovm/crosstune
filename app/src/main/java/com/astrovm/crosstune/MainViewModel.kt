@@ -26,6 +26,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -2277,8 +2278,9 @@ internal class MainViewModel(
         val source = playback ?: return
         if (uiState.coveringApp) return
         viewModelScope.launchKept({ leftJob = it }) {
-            // Stopped, not waiting under an ad, which YouTube Music plays on as if it were the song.
-            if (withTimeoutOrNull(START_MS) { source.follow(song).first { it != null && !it.clock.playing && !it.ad } } != null) source.playPause(song, true)
+            // Stopped, or let go of altogether, as YouTube does, and not waiting under an ad, which YouTube Music plays on as if it were the song.
+            val stopped = withTimeoutOrNull(START_MS) { source.follow(song).dropWhile { it == null }.first { it == null || !it.clock.playing && !it.ad }.let { true } }
+            if (stopped == true) source.playPause(song, true)
         }
     }
 

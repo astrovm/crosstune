@@ -872,6 +872,24 @@ class TvPlayTest {
     }
 
     @Test
+    fun onAPhoneAnAppThatLetsGoOfTheSongOnceLeftIsBroughtBackCoveredToo() {
+        phone = Phone.OTHER
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
+        playback.running = emptySet()
+        playback.startsInBackground = false
+        launch()
+        click(play)
+        waitUntil { playback.opened.size == 1 }
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
+        waitUntil { playback.cameBack == 1 }
+        // Left, YouTube without Premium stops altogether, with nothing paused to follow.
+        playback.playing.value = null
+        waitUntil { playback.broughtToFront.size == 1 }
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        assertTrue(shadowOf(app).nextStartedService.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
+    }
+
+    @Test
     fun onAPhoneAnAppOpenedOnTheSongThatPlaysOnOnceLeftIsLeftToIt() {
         phone = Phone.OTHER
         shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
