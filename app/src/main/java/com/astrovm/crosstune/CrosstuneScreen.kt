@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyColumn
@@ -505,6 +506,13 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         Screen.LYRICS, Screen.PLAYER -> layers.down?.to
         else -> null
     }
+    // A song opened here goes with Back, back to Recent, and on a TV the remote to its row. One from another app
+    // leaves Back to Android, which goes back to that app. First, so whatever is over the card goes before it.
+    var closedSong by remember { mutableStateOf<String?>(null) }
+    BackHandler(enabled = screen == Screen.MAIN && !state.idle && !state.fromAnotherApp) {
+        closedSong = state.link?.url?.takeIf { state.phone == Phone.TV }
+        actions.onClear()
+    }
     // Back from settings' own list; its pages go back to it first.
     CompositionLocalProvider(LocalLayerSwipe provides layers) { SwipedBack(enabled = showSettings) { showSettings = false } }
     val density = LocalDensity.current
@@ -601,7 +609,10 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             } else if (shown == Screen.PRACTICE_LIST) {
                 PracticeList(state, actions, onBack = { showPracticeList = false })
             } else {
-                MainScreen(state, actions, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true })
+                MainScreen(
+                    state, actions, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true },
+                    closedSong = closedSong, onClosedSongFocused = { closedSong = null }
+                )
             }
         }
         }
@@ -765,7 +776,14 @@ private fun PageFrame(
 }
 
 @Composable
-private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: () -> Unit, onOpenPractice: () -> Unit) {
+private fun MainScreen(
+    state: UiState,
+    actions: ScreenActions,
+    onOpenSettings: () -> Unit,
+    onOpenPractice: () -> Unit,
+    closedSong: String? = null,
+    onClosedSongFocused: () -> Unit = {}
+) {
     // The picker lists installed apps first, so it waits for Android to say which those are rather
     // than move a row from under the user's finger.
     if (state.showDestinationPicker && state.systemStateKnown) {
@@ -892,7 +910,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         }
         // Keyed on whether there's any, so clearing it fades the last list out rather than an empty one.
         AnimatedContent(targetState = history, contentKey = { it.isEmpty() }, transitionSpec = { fade() }, label = "history") { shown ->
-            if (shown.isNotEmpty()) Column { HistorySection(shown, state, recent) }
+            if (shown.isNotEmpty()) Column { HistorySection(shown, state, recent, closedSong, onClosedSongFocused) }
         }
     }
 }
@@ -1826,7 +1844,7 @@ private fun ToolAction(
 }
 
 @Composable
-private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions: ScreenActions) {
+private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions: ScreenActions, focusOn: String?, onFocused: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -1898,7 +1916,10 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
                 // Only a row going somewhere other than the default app says where.
                 // Two versions of a song, as a single and an album take, say how long each is, to tell them apart.
                 val length = entry.metadata.lengthMs?.takeIf { history.any { other -> other !== entry && other.metadata.isNamedAs(entry.metadata) } }
-                HistoryRow(entry, state.ruleFor(entry.link)?.takeIf { it != state.defaultDestination }, state.installed, actions, Modifier.enterIn(index), length)
+                HistoryRow(
+                    entry, state.ruleFor(entry.link)?.takeIf { it != state.defaultDestination }, state.installed, actions, Modifier.enterIn(index), length,
+                    onFocused.takeIf { entry.link.url == focusOn }
+                )
             }
         }
     }
@@ -1910,7 +1931,15 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
  * either way removes it.
  */
 @Composable
-private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: Set<MusicService>, actions: ScreenActions, modifier: Modifier = Modifier, lengthMs: Long? = null) {
+private fun HistoryRow(
+    entry: HistoryEntry,
+    elsewhere: Destination?,
+    installed: Set<MusicService>,
+    actions: ScreenActions,
+    modifier: Modifier = Modifier,
+    lengthMs: Long? = null,
+    takeFocus: (() -> Unit)? = null
+) {
     val swipe = rememberSwipeToDismissBoxState()
     val remove = stringResource(R.string.remove_button)
     SwipeToDismissBox(
@@ -1921,6 +1950,13 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
         modifier = modifier.clip(MaterialTheme.shapes.medium)
     ) {
         val focus = rememberRowButtonFocus()
+        // Its song put away with Back, the remote comes back to it; placed only on the next frame, maybe.
+        if (takeFocus != null) {
+            LaunchedEffect(Unit) {
+                if (!focus.focusRow()) run { withFrameNanos {}; focus.focusRow() }
+                takeFocus()
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()

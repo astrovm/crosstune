@@ -612,6 +612,45 @@ class MainActivityTest {
     }
 
     @Test
+    fun backPutsAwayASongOpenedFromRecentAndAgainLeaves() {
+        val url = "https://open.spotify.com/track/$TRACK_ID"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, url), MusicMetadata("Saved", "Artist")))
+        val activity = launch()
+        composeRule.onNode(hasText("Saved") and hasClickAction()).performScrollTo().performClick()
+        waitUntil { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        activity.onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        // Opened here, the song goes, back to Recent, where it's listed again.
+        assertResultAbsent()
+        assertFalse(activity.isFinishing)
+        composeRule.onNode(hasText("Saved") and hasClickAction()).assertExists()
+        // With nothing shown, Back leaves, as it always has.
+        activity.onBackPressedDispatcher.onBackPressed()
+        assertTrue(activity.isFinishing)
+    }
+
+    @Test
+    fun backFromASongAnotherAppShowedLeavesForThatApp() {
+        val activity = launch(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID")).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
+        )
+        assertResultShown()
+        activity.onBackPressedDispatcher.onBackPressed()
+        assertTrue(activity.isFinishing)
+    }
+
+    @Test
+    fun backFromASongTheWidgetShowedLeavesForTheHomeScreen() {
+        prefs().edit().putBoolean("links_in_crosstune", true).putBoolean("play_right_away", false).commit()
+        val url = "https://open.spotify.com/track/$TRACK_ID"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, url), MusicMetadata("Saved", "Artist")))
+        val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
+        waitUntil { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        activity.onBackPressedDispatcher.onBackPressed()
+        assertTrue(activity.isFinishing)
+    }
+
+    @Test
     fun aCopiedNowPlayingShareOpensFromTheClipboard() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("song", NOW_PLAYING_SHARE))

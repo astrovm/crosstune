@@ -449,6 +449,9 @@ internal class RowButtonFocus {
 
     /** On the button inside it. */
     val buttonModifier: Modifier = Modifier.focusRequester(button).onFocusChanged { onButton = it.isFocused }
+
+    /** Gives the remote to the row, as when the song it opened is put away; false while the row isn't placed yet. */
+    fun focusRow(): Boolean = row.requestFocus()
 }
 
 @Composable
