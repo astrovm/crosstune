@@ -4147,9 +4147,13 @@ class PlaybackTest {
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band", album = "Album"))
         shadowOf(sessions).addController(youTubeMusic)
         assertEquals("Blinding Lights" to 107L, seen.last()?.let { it.song.title to it.queueId })
-        // Paused it still plays it; stopped, it plays nothing.
+        assertEquals(true, seen.last()?.playing)
+        // Paused it still plays it, though not now; stopped, it plays nothing.
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PAUSED, 108))
-        assertEquals(108L, runBlocking { playback.plays(music).first() }?.queueId)
+        assertEquals(108L to false, runBlocking { playback.plays(music).first() }?.let { it.queueId to it.playing })
+        // Buffering, it's about to.
+        shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_BUFFERING, 108))
+        assertEquals(true, runBlocking { playback.plays(music).first() }?.playing)
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_STOPPED, 108))
         assertNull(runBlocking { playback.plays(music).first() })
         // What's before it in the queue, by its number; none for the first, or a song not in it.
@@ -4178,7 +4182,7 @@ class PlaybackTest {
             shadowOf(atEnd).setPlaybackState(PlaybackState.Builder().setState(state, position, 1f, PLAYED_AT).build())
             runBlocking { playback.plays(youTube).first() }?.ended
         }
-        assertEquals(AppPlays(MusicMetadata("Self Control", "Laura Branigan"), null, ended = true), runBlocking { playback.plays(youTube).first() })
+        assertEquals(AppPlays(MusicMetadata("Self Control", "Laura Branigan"), null, ended = true, playing = false), runBlocking { playback.plays(youTube).first() })
         assertEquals(true, ended(PlaybackState.STATE_PAUSED, 244_000))
         // Short of it, paused it's still playing it, and stopped it plays nothing.
         assertEquals(false, ended(PlaybackState.STATE_PAUSED, 243_999))

@@ -2159,17 +2159,24 @@ internal class MainViewModel(
      * the player closed, and the rest of a [list] isn't played on. False, with the player closed, when it could be neither.
      */
     private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean, list: Boolean = false): Boolean {
-        leftJob?.cancel()
+        adJob?.cancel()
         val source = playback?.takeIf { it.hasAccess() }
         if (asked && (source == null || playsAsAsked(source, song, app, link, exact))) return true
         val back = source?.takeIf { exact && app != null && openWatched(it, song, app, link) } ?: return false.also { closePlayer() }
         val (seen, busy) = seenPlayingOrBusy(back, song, app, link)
         if (!busy) return true.also { leftOrNot(back, seen, song, list) }
-        // Still on something else, as the ad YouTube without Premium plays first, it's left there, or covered, until the
-        // song's on: left during the ad, it might stop, and that's no song to see stop and bring it back for.
-        viewModelScope.launchKept({ leftJob = it }) { leftOrNot(back, seenPlaying(back, song, app, link, mustPlay = true, withinMs = AD_MS), song, list) }
+        // Still on something else, as the ads YouTube without Premium plays first, it's left there, or covered, until the
+        // song's on: left during an ad, it might stop, and that's no song to see stop and bring it back for. Still on it
+        // after that, or with the player since closed or on another song, it's left as it is.
+        viewModelScope.launchKept({ adJob = it }) {
+            val seen = seenPlaying(back, song, app, link, mustPlay = true, withinMs = ADS_MS) ?: return@launchKept
+            if (uiState.player?.song?.let { sameSong(it, song) } == true) leftOrNot(back, seen, song, list)
+        }
         return true
     }
+
+    /** Waiting for the song an app plays ads before, to come back to it then. */
+    private var adJob: Job? = null
 
     /**
      * Left once it plays [song], not once it shows it: YouTube Music, left before it starts, never does. Never [seen]
@@ -2404,6 +2411,7 @@ internal class MainViewModel(
     fun closePlayer() {
         // Nor brought back to it, or Crosstune to the app, once an ad's over.
         leftJob?.cancel()
+        adJob?.cancel()
         playerJob?.cancel()
         playerJob = null
         peekJob?.cancel()
@@ -6547,8 +6555,8 @@ internal class MainViewModel(
         /** How long the music app has to find a song asked for by name, and start it. */
         const val LOAD_SONG_MS = 12_000L
 
-        /** How long an app opened on a song may play something else first, as YouTube's ads, before it's taken as not getting to it. */
-        const val AD_MS = 120_000L
+        /** How long an app opened on a song may play something else first: YouTube Music was seen to play two ads in a row. */
+        const val ADS_MS = 2 * LONGEST_AD_MS
         /** YouTube makes temporary playlists of up to 50 videos. */
         const val MAX_QUEUE = 50
         /** Songs whose covers are looked up when a playlist shows: Spotify lists 100, the first 30 with covers. */

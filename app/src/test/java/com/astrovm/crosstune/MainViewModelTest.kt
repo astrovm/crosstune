@@ -4633,14 +4633,14 @@ class MainViewModelTest {
         // Left during the ad, YouTube without Premium would stop, with no song to see stop and bring it back for.
         assertEquals(0, playback.cameBack)
         assertNotNull(model.uiState.player)
-        pass(60_000)
+        // Two ads, each as long as YouTube Music's longest.
+        pass(2 * LONGEST_AD_MS - MainViewModel.LOAD_SONG_MS - 2_000)
         appPlays(playback)
         until("back once the song's on") { playback.cameBack == 1 }
-        assertEquals("Dakare Ni Kita Onna", model.uiState.player?.song?.title)
     }
 
     @Test
-    fun anAdThatNeverEndsIsTakenAsTheAppNotGettingToTheSong() {
+    fun anAppStillOnAdsLongAfterIsLeftAsItIs() {
         val playback = FakePlayback().apply { access = true; startsInBackground = false }
         val model = ytMusicModel(playback)
         model.setCanFloatOverApps(true)
@@ -4649,11 +4649,51 @@ class MainViewModelTest {
         playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         until("done playing it") { !model.uiState.playingResult }
+        pass(MainViewModel.ADS_MS + 1_000)
+        // Playing ads all along, it isn't taken as never getting to the song: the player and the cover stay.
         assertNotNull(model.uiState.player)
-        pass(MainViewModel.AD_MS + 1_000)
-        until("given up on it") { model.uiState.player == null }
-        assertFalse(model.uiState.coveringApp)
-        assertEquals(0, playback.cameBack)
+        assertTrue(model.uiState.coveringApp)
+        // Waited for no more, the song it gets to at last brings nothing back.
+        appPlays(playback)
+        pass(1_000)
+        assertNull(model.uiState.lyricsFor)
+    }
+
+    @Test
+    fun aTapOnThePlayerDuringTheAdStillComesBackOnceTheSongPlays() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        // YouTube Music says the ad is the song, not playing yet, so the player shows it paused.
+        appPlays(playback, playing = false)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        model.playerPlayPause()
+        pass(1_000)
+        appPlays(playback)
+        until("back once the song's on") { playback.cameBack == 1 }
+    }
+
+    @Test
+    fun playAgainDuringTheAdComesBackOnceTheSongPlays() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        model.playResult()
+        until("opened there again") { playback.opened.size == 2 }
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it again") { !model.uiState.playingResult }
+        appPlays(playback)
+        until("back once the song's on") { playback.cameBack >= 1 }
+        pass(1_000)
+        // The first wait went with the second Play.
+        assertEquals(1, playback.cameBack)
     }
 
     @Test
