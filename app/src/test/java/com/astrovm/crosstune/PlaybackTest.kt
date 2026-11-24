@@ -3628,6 +3628,7 @@ class PlaybackTest {
         says(PlaybackState.STATE_ERROR)
         assertTrue(failsAtOnce.isCompleted)
         assertFalse(failsAtOnce.await())
+        assertTrue(other.playsOnlyInFront(youTube))
     }
 
     @Test
