@@ -1085,7 +1085,10 @@ class MainActivity : ComponentActivity() {
      * doesn't come up, and words the service floated on rather than cover the app stay.
      */
     private fun letGo() {
-        if (!FloatingLyricsService.covering) return viewModel.uncover()
+        if (!FloatingLyricsService.covering) {
+            coverUp = false
+            return viewModel.uncover()
+        }
         FloatingLyricsService.stop(this)
         floatingHost.closed()
     }

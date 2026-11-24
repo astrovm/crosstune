@@ -183,9 +183,10 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                     host == null -> stopSelf()
                     view != null -> Unit
                     !cover -> show(host)
-                    // Let go of already, before Android got here, the app it was for comes out from under it as it is.
                     host.state.coveringApp -> cover(host)
-                    else -> close()
+                    // Let go of already, before Android got here, the app it was for comes out from under it as it is, unless
+                    // Crosstune was left since and the words float over it instead.
+                    stopSelfResult(startId) -> host.closed()
                 }
             }
             ACTION_UNLOCK -> host?.let { it.update(it.state.floating.copy(locked = false)) }

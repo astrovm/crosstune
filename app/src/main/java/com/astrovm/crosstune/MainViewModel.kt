@@ -2159,25 +2159,32 @@ internal class MainViewModel(
      * the player closed, and the rest of a [list] isn't played on. False, with the player closed, when it could be neither.
      */
     private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean, list: Boolean = false): Boolean {
+        leftJob?.cancel()
         val source = playback?.takeIf { it.hasAccess() }
         if (asked && (source == null || playsAsAsked(source, song, app, link, exact))) return true
         val back = source?.takeIf { exact && app != null && openWatched(it, song, app, link) } ?: return false.also { closePlayer() }
         val (seen, busy) = seenPlayingOrBusy(back, song, app, link)
-        // Still on something else, as the ad YouTube without Premium plays first, it's left there, or covered, to get on
-        // to the song: left, it might stop, and that's no song to see stop and bring it back for.
-        if (busy) return true
-        // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does. Never
-        // playing, as Apple Music signed out, it stays in front, where it says why, and the player and a list to play on go.
+        if (!busy) return true.also { leftOrNot(back, seen, song, list) }
+        // Still on something else, as the ad YouTube without Premium plays first, it's left there, or covered, until the
+        // song's on: left during the ad, it might stop, and that's no song to see stop and bring it back for.
+        viewModelScope.launchKept({ leftJob = it }) { leftOrNot(back, seenPlaying(back, song, app, link, mustPlay = true, withinMs = AD_MS), song, list) }
+        return true
+    }
+
+    /**
+     * Left once it plays [song], not once it shows it: YouTube Music, left before it starts, never does. Never [seen]
+     * playing, as Apple Music signed out, it stays in front, where it says why, and the player and a [list] to play on go.
+     */
+    private fun leftOrNot(back: PlaybackSource, seen: Seen?, song: MusicMetadata, list: Boolean) {
         if (seen == null) {
             // Out from under the cover, which would hide why.
             uncover()
             closePlayer()
             if (list) playQueue?.stop()
-            return true
+            return
         }
         back.comesBack()
         watchLeft(song)
-        return true
     }
 
     /** Whether [app], asked for [song], was seen to play it. Someone else's song it stopped when there's no [exact] link to take over. */
@@ -2209,13 +2216,16 @@ internal class MainViewModel(
     /**
      * What [app], opened on [song], is seen to do with it, see [seenPlaying], and, not seen to play it, whether it played
      * anything else meanwhile. Playing an ad first, YouTube without Premium names it the ad's way, or nothing, and gets
-     * to the song once it's over, even with nothing to say for a moment in between.
+     * to the song once it's over, even with nothing to say for a moment in between. Paused, or still on the song it was
+     * on before, it isn't getting anywhere.
      */
     private suspend fun seenPlayingOrBusy(source: PlaybackSource, song: MusicMetadata, app: String?, link: String): Pair<Seen?, Boolean> = coroutineScope {
+        val over = uiState.player?.over
         val anything = async {
             app != null && withTimeoutOrNull(LOAD_SONG_MS) {
                 combine(source.plays(app), source.unnamedUpdates()) { plays, unnamed ->
-                    plays != null || unnamed != null && sameApp(app, unnamed.app, interception::isInstalled)
+                    plays?.takeIf { it.playing }?.song?.let { over == null || !sameSong(it, over) } == true ||
+                        unnamed != null && sameApp(app, unnamed.app, interception::isInstalled)
                 }.first { it }
             } != null
         }
@@ -2227,12 +2237,12 @@ internal class MainViewModel(
     private data class Seen(val following: Following?, val playing: Heard.Song?)
 
     /**
-     * What [app] is seen, within [LOAD_SONG_MS], to do: to have [song], [mustPlay] it or not, or, whatever the app names it,
+     * What [app] is seen, [withinMs], to do: to have [song], [mustPlay] it or not, or, whatever the app names it,
      * to have gone on to play something other than what it played when asked. Null if neither.
      */
-    private suspend fun seenPlaying(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean): Seen? {
+    private suspend fun seenPlaying(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean, withinMs: Long = LOAD_SONG_MS): Seen? {
         val over = uiState.player?.over
-        val (following, playing) = withTimeoutOrNull(LOAD_SONG_MS) {
+        val (following, playing) = withTimeoutOrNull(withinMs) {
             combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).first { (following, playing) ->
                 following != null && (!mustPlay || following.clock.playing) && sameApp(app, following.appPackage, interception::isInstalled) ||
                     following == null && playing != null && startedAsked(playing, app, over, link)
@@ -2392,6 +2402,8 @@ internal class MainViewModel(
             (over == null || !sameSong(playing.metadata, over) || link?.let { playedAs[app to it] }?.let { sameSong(playing.metadata, it) } == true)
 
     fun closePlayer() {
+        // Nor brought back to it, or Crosstune to the app, once an ad's over.
+        leftJob?.cancel()
         playerJob?.cancel()
         playerJob = null
         peekJob?.cancel()
@@ -6534,6 +6546,9 @@ internal class MainViewModel(
         private const val SEEK_SETTLE_MS = 1_000L
         /** How long the music app has to find a song asked for by name, and start it. */
         const val LOAD_SONG_MS = 12_000L
+
+        /** How long an app opened on a song may play something else first, as YouTube's ads, before it's taken as not getting to it. */
+        const val AD_MS = 120_000L
         /** YouTube makes temporary playlists of up to 50 videos. */
         const val MAX_QUEUE = 50
         /** Songs whose covers are looked up when a playlist shows: Spotify lists 100, the first 30 with covers. */

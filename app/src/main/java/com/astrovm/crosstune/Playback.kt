@@ -213,9 +213,9 @@ internal data class Queued(val title: String, val artist: String, val id: Long? 
  * for an app that shows no queue, as YouTube doesn't. YouTube Music numbers what it's asked to play
  * one after another, then what it plays on after those; TIDAL numbers each song by what it is.
  * [ended] once the app stopped at the song's end, as YouTube does after a list's last song.
- * [previousId] is the number of the song before it in the queue.
+ * [previousId] is the number of the song before it in the queue. [playing] unless it's paused, or stopped at the end.
  */
-internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false, val previousId: Long? = null)
+internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false, val previousId: Long? = null, val playing: Boolean = true)
 
 /** A matching session and controls bound to its token, even when its app has other sessions. */
 internal data class PlaybackMatch(
@@ -911,7 +911,7 @@ internal class MediaSessionPlayback(
                         val id = controller.playbackState?.activeQueueItemId?.takeIf { it != MediaSession.QueueItem.UNKNOWN_ID.toLong() }
                         val queue = queueOf(controller).orEmpty()
                         val previous = queue.getOrNull(queue.indexOfFirst { it.queueId == id } - 1)?.queueId
-                        AppPlays(song, id, ended, previous)
+                        AppPlays(song, id, ended, previous, playing = controller.playbackState?.state == PlaybackState.STATE_PLAYING)
                     }
             }
     }

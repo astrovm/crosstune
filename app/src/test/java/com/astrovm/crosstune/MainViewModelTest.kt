@@ -4601,9 +4601,10 @@ class MainViewModelTest {
     }
 
     @Test
-    fun anAppPlayingAnAdFirstStaysCoveredWithThePlayerOn() {
+    fun anAppPlayingAnAdFirstStaysCoveredWithThePlayerOnAndTheWordsShowOnceTheSongPlays() {
         val playback = FakePlayback().apply { access = true; startsInBackground = false }
-        val model = ytMusicModel(playback)
+        val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val model = ytMusicModel(playback, lyricsFinder = finder)
         model.setCanFloatOverApps(true)
         model.playResult()
         until("opened there") { playback.opened.isNotEmpty() }
@@ -4613,10 +4614,15 @@ class MainViewModelTest {
         until("done playing it") { !model.uiState.playingResult }
         assertTrue(model.uiState.coveringApp)
         assertNotNull(model.uiState.player)
+        assertNull(model.uiState.lyricsFor)
+        appPlays(playback)
+        until("the words over it") { model.uiState.lyricsFor != null }
+        assertEquals("Dakare Ni Kita Onna", model.uiState.lyricsFor?.title)
+        assertTrue(model.uiState.coveringApp)
     }
 
     @Test
-    fun anAppStillOnAnAdIsLeftInFrontAsLeftItMightStop() {
+    fun anAppStillOnAnAdIsLeftInFrontAsLeftItMightStopAndLeftOnceTheSongPlays() {
         val playback = FakePlayback().apply { access = true; canPlaySongs = false }
         val model = ytMusicModel(playback)
         model.playResult()
@@ -4627,6 +4633,75 @@ class MainViewModelTest {
         // Left during the ad, YouTube without Premium would stop, with no song to see stop and bring it back for.
         assertEquals(0, playback.cameBack)
         assertNotNull(model.uiState.player)
+        pass(60_000)
+        appPlays(playback)
+        until("back once the song's on") { playback.cameBack == 1 }
+        assertEquals("Dakare Ni Kita Onna", model.uiState.player?.song?.title)
+    }
+
+    @Test
+    fun anAdThatNeverEndsIsTakenAsTheAppNotGettingToTheSong() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val model = ytMusicModel(playback)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        assertNotNull(model.uiState.player)
+        pass(MainViewModel.AD_MS + 1_000)
+        until("given up on it") { model.uiState.player == null }
+        assertFalse(model.uiState.coveringApp)
+        assertEquals(0, playback.cameBack)
+    }
+
+    @Test
+    fun theSongPlayingOnceThePlayerIsClosedDuringTheAdBringsNothingBack() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        model.closePlayer()
+        appPlays(playback)
+        pass(1_000)
+        assertEquals(0, playback.cameBack)
+        assertNull(model.uiState.player)
+    }
+
+    @Test
+    fun anAppPausedOnAnotherSongIsntTakenAsGettingToIt() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val model = ytMusicModel(playback)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        // Left paused on a song before, the app says so until it plays another; this one it never does, as signed out.
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Old song", "Someone"), null, playing = false)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("given up on it") { !model.uiState.playingResult }
+        assertNull(model.uiState.player)
+        assertFalse(model.uiState.coveringApp)
+    }
+
+    @Test
+    fun anAppStillPlayingTheSongItWasOnIsntTakenAsGettingToIt() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val model = ytMusicModel(playback)
+        model.setCanFloatOverApps(true)
+        val before = MusicMetadata("Old song", "Someone")
+        playback.onThePhone = Heard.Song(before, null, app = ytMusic)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        // Asked for a link it doesn't go to, it plays on what it was on, which is no ad before the song.
+        playback.inApp(ytMusic).value = AppPlays(before, null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("given up on it") { !model.uiState.playingResult }
+        assertNull(model.uiState.player)
+        assertFalse(model.uiState.coveringApp)
     }
 
     @Test

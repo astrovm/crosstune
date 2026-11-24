@@ -1572,10 +1572,11 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
         }
         // A song its app has, or may, can be asked to play, staying here; while it's asked, once is enough.
         val canPlay = state.canPlayResult
+        val playEnabled = !state.playingResult && !state.isMatching
         val playFocus = remember { FocusRequester() }
         // Where it opens, picked for just this result. Down from it on a remote is Play, the main thing to do, not
-        // Open, which sits nearer the middle below it.
-        DestinationChip(state, actions, down = playFocus.takeIf { canPlay })
+        // Open, which sits nearer the middle below it; while Play waits, and can't take focus, it's wherever's nearest.
+        DestinationChip(state, actions, down = playFocus.takeIf { canPlay && playEnabled })
         // Side by side, until the words are too big for half the width; then one above the other.
         val stacked = canPlay && LocalDensity.current.fontScale > STACK_BUTTONS_FROM
         val press = rememberPress()
@@ -1601,7 +1602,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
         val playButton = @Composable { modifier: Modifier ->
             Button(
                 onClick = actions.onPlayResult,
-                enabled = !state.playingResult && !state.isMatching,
+                enabled = playEnabled,
                 interactionSource = press.source,
                 modifier = modifier.focusRequester(playFocus).returnsFocus().heightIn(min = 56.dp).then(press.modifier)
             ) {
