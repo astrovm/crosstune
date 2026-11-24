@@ -4746,6 +4746,9 @@ class MainViewModelTest {
         playback.onThePhone = Heard.Song(named, null, app = ytMusic)
         until("back once the song's on") { playback.cameBack == 1 }
         assertEquals(named, model.uiState.player?.song)
+        // Never seen by the name it was asked for, it isn't taken for an app that let go of the song once left.
+        pass(START_MS + 1_000)
+        assertTrue(playback.plays.isEmpty())
     }
 
     @Test

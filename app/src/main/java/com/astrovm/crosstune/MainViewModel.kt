@@ -2269,7 +2269,7 @@ internal class MainViewModel(
     private var leftJob: Job? = null
 
     /**
-     * An app that stops as soon as Crosstune comes back over it only plays in front, as YouTube Music without Premium,
+     * An app that stops, or lets go of the song, as soon as Crosstune comes back over it only plays in front, as YouTube and YouTube Music without Premium,
      * which Crosstune can't learn by asking it from behind when it isn't running: asked to play on, it's brought back
      * there, covered. Paused from Crosstune meanwhile, it's left paused.
      */
@@ -2279,7 +2279,7 @@ internal class MainViewModel(
         if (uiState.coveringApp) return
         viewModelScope.launchKept({ leftJob = it }) {
             // Stopped, or let go of altogether, as YouTube does, and not waiting under an ad, which YouTube Music plays on as if it were the song.
-            val stopped = withTimeoutOrNull(START_MS) { source.follow(song).dropWhile { it == null }.first { it == null || !it.clock.playing && !it.ad }.let { true } }
+            val stopped = withTimeoutOrNull(START_MS) { source.follow(song).dropWhile { it == null }.first { it == null || !it.clock.playing && !it.ad }; true }
             if (stopped == true) source.playPause(song, true)
         }
     }
