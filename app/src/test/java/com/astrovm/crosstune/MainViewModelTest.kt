@@ -19,8 +19,10 @@ import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.time.Duration
 import androidx.lifecycle.viewModelScope
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -110,7 +112,8 @@ class MainViewModelTest {
         reminders: PracticeReminders? = null,
         sungReadings: SungReadings? = null,
         mayCalibrate: () -> Boolean = { false },
-        mayCapture: () -> Boolean = { false }
+        mayCapture: () -> Boolean = { false },
+        systemDispatcher: CoroutineDispatcher = Dispatchers.Unconfined
     ): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -123,7 +126,7 @@ class MainViewModelTest {
             interception = LinkInterception(app),
             artwork = ArtworkLoader(client, Dispatchers.Unconfined),
             listener = listener,
-            systemDispatcher = Dispatchers.Unconfined,
+            systemDispatcher = systemDispatcher,
             chatGpt = chatGpt,
             tutor = tutor,
             oneTap = oneTap,
@@ -143,6 +146,25 @@ class MainViewModelTest {
             mayCalibrate = mayCalibrate,
             mayCapture = mayCapture
         ).also { made += it }
+    }
+
+    @Test
+    fun withNoAppPickedTheOneOfferedIsTheSameBeforeAndAfterAndroidsLookAtLinks() {
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.SPOTIFY.packageName, "Spotify"))
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music"))
+        // Android's look at apps and links held, as it is for a while on a phone.
+        val held = model(systemDispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) = Unit
+        })
+        assertFalse(held.uiState.systemStateKnown)
+        assertEquals(Destination.Service(MusicService.SPOTIFY), held.uiState.defaultDestination)
+        assertFalse(held.uiState.hasDefault)
+        val looked = model()
+        looked.refreshSystemState()
+        idle()
+        until("Android said which apps there are") { looked.uiState.systemStateKnown }
+        assertEquals(Destination.Service(MusicService.SPOTIFY), looked.uiState.defaultDestination)
+        assertFalse(looked.uiState.hasDefault)
     }
 
     @Test
