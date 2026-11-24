@@ -85,7 +85,7 @@ class PlaybackTest {
     /** Each app's queue, by its package, as Robolectric shows none. */
     private val queues = mutableMapOf<String, List<MediaSession.QueueItem>>()
     private val radioNotices = MutableStateFlow<Set<MediaSession.Token>>(emptySet())
-    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes,
+    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, playsOnMs = 200, modes = modes,
         queueOf = { queues[it.packageName] }, clockLog = PracticeClockLog(true), radioNotices = radioNotices)
     private val song = MusicMetadata("Blinding Lights", "The Weeknd")
     private val collecting = mutableListOf<Job>()
@@ -3598,13 +3598,29 @@ class PlaybackTest {
         val stopped = player(youTube, "YouTube", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_STOPPED)
         shadowOf(sessions).addController(stopped)
         val says = { state: Int -> shadowOf(stopped).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(state, 0, 1f, PLAYED_AT).build()); shadowOf(Looper.getMainLooper()).idle() }
+        val resumes = { by: MediaSessionPlayback -> CoroutineScope(Dispatchers.Unconfined).async { by.resume(song) } }
+        // Stopped for a moment, then playing again, it did play on.
+        val flickers = resumes(playback)
+        says(PlaybackState.STATE_PLAYING)
+        says(PlaybackState.STATE_STOPPED)
+        says(PlaybackState.STATE_PLAYING)
+        assertTrue(flickers.await())
+        assertFalse(playback.playsOnlyInFront(youTube))
         // Asked from behind, YouTube without Premium says it plays, then stops at once: it only plays in front.
-        val fails = CoroutineScope(Dispatchers.Unconfined).async { playback.resume(song) }
+        shadowOf(stopped).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_STOPPED, 0, 1f, PLAYED_AT).build())
+        val fails = resumes(playback)
         says(PlaybackState.STATE_PLAYING)
         says(PlaybackState.STATE_STOPPED)
         assertFalse(fails.await())
-        assertEquals(listOf("play"), asked())
+        assertEquals(listOf("play", "play"), asked())
         assertTrue(playback.playsOnlyInFront(youTube))
+        // Saying it plays before Crosstune looks, then failing, it didn't either.
+        val fresh = MediaSessionPlayback(app, now = { NOW }, startMs = 200, playsOnMs = 200, modes = modes)
+        shadowOf(stopped).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
+        val quick = resumes(fresh)
+        says(PlaybackState.STATE_ERROR)
+        assertFalse(quick.await())
+        assertTrue(fresh.playsOnlyInFront(youTube))
     }
 
     @Test

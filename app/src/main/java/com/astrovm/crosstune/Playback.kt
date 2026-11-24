@@ -376,6 +376,8 @@ internal class MediaSessionPlayback(
     private val waker: AppWaker = MediaBrowserWaker(context),
     /** How long an app asked to play has to start. */
     private val startMs: Long = START_MS,
+    /** How long an app asked to play on from behind has to keep playing. */
+    private val playsOnMs: Long = PLAYS_ON_MS,
     private val modes: AppModes = SessionModes(context),
     /** An app's queue; Robolectric shows a test none. */
     private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue,
@@ -665,7 +667,7 @@ internal class MediaSessionPlayback(
 
     override suspend fun resume(song: MusicMetadata, app: String?, session: Int?): Boolean {
         val controller = runCatching { appFor(song, app = app, session = session) }.getOrNull() ?: return false
-        return watchStart(controller, mustStart = true, holdMs = PLAYS_ON_MS) { controller.clockCommand("play") { play() } }
+        return watchStart(controller, mustStart = true, holdMs = playsOnMs) { controller.clockCommand("play") { play() } }
     }
 
     // Opened as from its icon, which brings back the screen it was on, song and all; a link would start it over.
@@ -752,7 +754,7 @@ internal class MediaSessionPlayback(
      * Runs [ask]; false if it throws. If [mustStart], also waits for [asked] to say it plays: an app that
      * can't play in the background says so with an error, or says nothing, and plays nothing either way.
      * One already playing, e.g. another song, is taken to go on with this one. One known to play only in front isn't asked unless it plays, in front.
-     * Playing, it also has to keep on [holdMs] without stopping.
+     * Said to play, it also has to be neither stopped nor failed [holdMs] later: one that is only plays in front.
      */
     private suspend fun watchStart(asked: MediaController, mustStart: Boolean, holdMs: Long = 0, ask: () -> Unit): Boolean {
         // Known to play only in front, it isn't asked from behind again: YouTube Music, stopped, opens itself on the song from the start.
@@ -767,11 +769,15 @@ internal class MediaSessionPlayback(
         if (mustStart) asked.registerCallback(callback, handler)
         try {
             if (runCatching(ask).isFailure) return false
-            if (!mustStart || asked.playbackState?.state == PlaybackState.STATE_PLAYING) return true
+            if (!mustStart) return true
             val said = states.receiveAsFlow()
-            val started = withTimeoutOrNull(startMs) { said.first { it == PlaybackState.STATE_PLAYING || it == PlaybackState.STATE_ERROR } } == PlaybackState.STATE_PLAYING
-            // Playing for a moment, then stopped, as YouTube without Premium does asked to play on from behind, it didn't.
-            val kept = started && withTimeoutOrNull(holdMs) { said.first { it == PlaybackState.STATE_STOPPED || it == PlaybackState.STATE_ERROR } } == null
+            val started = asked.playbackState?.state == PlaybackState.STATE_PLAYING ||
+                withTimeoutOrNull(startMs) { said.first { it == PlaybackState.STATE_PLAYING || it == PlaybackState.STATE_ERROR } } == PlaybackState.STATE_PLAYING
+            // Stopped soon after it said it plays, as YouTube without Premium does from behind, it didn't play on. Stopped
+            // for a moment and playing again, it did.
+            var last: Int? = null
+            withTimeoutOrNull(holdMs) { said.collect { last = it } }
+            val kept = started && last != PlaybackState.STATE_STOPPED && last != PlaybackState.STATE_ERROR
             return kept.also { if (!it) onlyInFront += asked.packageName }
         } finally {
             if (mustStart) asked.unregisterCallback(callback)
