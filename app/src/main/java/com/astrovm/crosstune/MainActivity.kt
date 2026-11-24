@@ -56,7 +56,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -186,6 +185,9 @@ class MainActivity : ComponentActivity() {
     /** Set while the words float over other apps in a window of their own, which keeps listening along. */
     private var floatingOverApps by mutableStateOf(false)
 
+    /** Whether Crosstune's whole screen covers another app, until it's closed or let go. */
+    private var coverUp = false
+
     /** Set when the words floated as this screen came back in sight, till it's touched: a link it only hands on floats them again. */
     private var floatedWhenBack = false
 
@@ -221,6 +223,7 @@ class MainActivity : ComponentActivity() {
         override fun playPause() = viewModel.playPause()
         override fun update(options: FloatingOptions, save: Boolean) = viewModel.setFloating(options, save)
         override fun closed() {
+            coverUp = false
             floatingOverApps = false
             viewModel.uncover()
             viewModel.pauseListeningAlong()
@@ -677,9 +680,9 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Out of sight too: a song's app opens over Crosstune, which then covers it.
+        // Out of sight too: a song's app opens over Crosstune, which then covers it, and comes out from under it once let go.
         lifecycleScope.launch {
-            snapshotFlow { viewModel.uiState.coveringApp }.filter { it }.collect { cover() }
+            snapshotFlow { viewModel.uiState.coveringApp }.collect { if (it) cover() else if (coverUp) uncover() }
         }
         // Lines let go, or a kind of card turned off, may leave a reminder showing with nothing due.
         lifecycleScope.launch {
@@ -1062,6 +1065,7 @@ class MainActivity : ComponentActivity() {
     private fun floatNow() {
         if (viewModel.uiState.lyricsFor == null) return
         floatedWhenBack = false
+        coverUp = false
         floatingOverApps = true
         viewModel.uncover()
         FloatingLyricsService.start(this, floatingHost)
@@ -1070,8 +1074,15 @@ class MainActivity : ComponentActivity() {
 
     /** The whole screen covers the app a song plays in, which goes on playing under it. */
     private fun cover() {
+        coverUp = true
         floatingOverApps = true
         FloatingLyricsService.start(this, floatingHost, whole = true)
+    }
+
+    /** The app covered comes out from under the cover, as one that plays nothing does, to say why. */
+    private fun uncover() {
+        FloatingLyricsService.stop(this)
+        floatingHost.closed()
     }
 
     /** Opened from the screen covering another app, an app would show under it, so it goes first. */
@@ -1096,6 +1107,7 @@ class MainActivity : ComponentActivity() {
             floatedWhenBack = true
             FloatingLyricsService.stop(this)
         }
+        coverUp = false
         floatingOverApps = false
         viewModel.uncover()
         viewModel.resumeListeningAlong()

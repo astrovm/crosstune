@@ -4390,11 +4390,11 @@ class MainViewModelTest {
     private val ytLink = "https://music.youtube.com/watch?v=sPmul8b17AU"
 
     /** A model with YouTube Music on the phone and set as where songs go, and [ytLink] looked up, shown as the result. */
-    private fun ytMusicModel(playback: PlaybackSource, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null, packageName: String = ytMusic, lyricsFinder: LyricsFinder? = null): MainViewModel {
+    private fun ytMusicModel(playback: PlaybackSource, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null, packageName: String = ytMusic, lyricsFinder: LyricsFinder? = null, playQueue: PlayQueue? = null): MainViewModel {
         shadowOf(app.packageManager).installPackage(installedApp(packageName, "YouTube Music"))
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
-        val model = model(playback = playback, phone = phone, oneTap = oneTap, lyricsFinder = lyricsFinder)
+        val model = model(playback = playback, phone = phone, oneTap = oneTap, lyricsFinder = lyricsFinder, playQueue = playQueue)
         model.refreshSystemState()
         idle()
         model.onUrlChange(ytLink)
@@ -4582,24 +4582,22 @@ class MainViewModelTest {
         val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
         val model = ytMusicModel(playback, lyricsFinder = finder)
         model.setCanFloatOverApps(true)
-        val effects = mutableListOf<Effect>()
-        model.viewModelScope.launch { model.effects.collect { effects += it } }
         model.playResult()
         until("opened there") { playback.opened.isNotEmpty() }
         assertTrue(model.uiState.coveringApp)
-        // Never playing, as signed out, it's shown again, out from under the cover, where it says why.
+        // Never playing, as signed out, it comes out from under the cover, where it says why.
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         until("given up on it") { !model.uiState.playingResult }
         assertNull(model.uiState.player)
-        assertEquals(Effect.Show(ytMusic, finishAfterOpen = false, saysWhenItFails = false), effects.single())
+        assertFalse(model.uiState.coveringApp)
         // Playing under the cover, it isn't left in front bare: the words show over it.
         playback.opened.clear()
         model.playResult()
         until("opened there again") { playback.opened.isNotEmpty() }
         appPlays(playback)
         until("done playing it") { !model.uiState.playingResult }
+        assertTrue(model.uiState.coveringApp)
         assertEquals("Dakare Ni Kita Onna", model.uiState.lyricsFor?.title)
-        assertEquals(1, effects.size)
     }
 
     @Test
@@ -4618,6 +4616,15 @@ class MainViewModelTest {
             until("given up on it") { model.uiState.player == null }
             // Nothing's kept to play on from, now or once Crosstune starts again.
             until("the list let go") { !file.exists() }
+            // A song of its own that plays nothing leaves a list playing elsewhere alone.
+            runBlocking { queue.play(listOf(song, song.copy(title = "Next")), MusicService.YOUTUBE_MUSIC, ytMusic, 1, listOf(song)) }
+            assertTrue(file.exists())
+            val single = ytMusicModel(playback, playQueue = queue)
+            single.playResult()
+            until("opened on the song") { playback.opened.size == 2 }
+            pass(MainViewModel.LOAD_SONG_MS + 1_000)
+            until("given up on it") { !single.uiState.playingResult }
+            assertTrue(file.exists())
         } finally {
             scope.cancel()
             file.delete()

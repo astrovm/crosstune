@@ -495,6 +495,18 @@ class TvPlayTest {
     }
 
     @Test
+    fun anAppThatNeverPlaysComesOutFromUnderTheCoverToSayWhy() {
+        launch()
+        playCovered()
+        // Signed out, it shows that instead of playing: Crosstune lets go of it, behind it as it is.
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.LOAD_SONG_MS + 1_000))
+        composeRule.waitForIdle()
+        assertEquals(FloatingLyricsService::class.java.name, checkNotNull(shadowOf(app).nextStoppedService.component) { "Expected a stopped service" }.className)
+        assertFalse(model().uiState.coveringApp)
+        assertNull(model().uiState.player)
+    }
+
+    @Test
     fun playThatCantOpenYouTubeAgainCoversNothing() {
         launch()
         val floating = playCovered()

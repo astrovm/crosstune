@@ -2004,7 +2004,7 @@ internal class MainViewModel(
                 // Before the app's asked, so what it played until then isn't taken for the list's start.
                 playOn(all, service, destination, queue, name)
                 val asked = app != null && playback?.playList(app, queue.url, mustStart = true) == true
-                if (!playThere(first, app, queue.url, asked, exact = true)) effectChannel.send(opening(queue.url, app, finishAfterOpen = false, song = first))
+                if (!playThere(first, app, queue.url, asked, exact = true, list = true)) effectChannel.send(opening(queue.url, app, finishAfterOpen = false, song = first))
             } finally {
                 if (isActive) uiState = uiState.copy(queueProgress = null)
             }
@@ -2033,7 +2033,7 @@ internal class MainViewModel(
                 openPlayer(first, app, link)
                 // Before the app's opened, so what it played until then isn't taken for the list's start.
                 playQueue?.play(tracks, service, app, 1, listOf(first), name)
-                if (!playThere(first, app, link, asked = false, exact = true)) {
+                if (!playThere(first, app, link, asked = false, exact = true, list = true)) {
                     playQueue?.stop()
                     effectChannel.send(opening(link, app, finishAfterOpen = false, song = first))
                 }
@@ -2156,19 +2156,19 @@ internal class MainViewModel(
      * there, or with no way to see, that's that, as an app may say yes and not play it. An app that couldn't be asked is
      * opened on its [exact] [link], and, when Crosstune can see it play there, left again once it does, as practice does,
      * unless it wouldn't play in the background, where it would stop. Seen not to play it there, it's left in front, with
-     * the player closed. False, with the player closed, when it could be neither.
+     * the player closed, and the rest of a [list] isn't played on. False, with the player closed, when it could be neither.
      */
-    private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean): Boolean {
+    private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean, list: Boolean = false): Boolean {
         val source = playback?.takeIf { it.hasAccess() }
         if (asked && (source == null || playsAsAsked(source, song, app, link, exact))) return true
         val back = source?.takeIf { exact && app != null && openWatched(it, song, app, link) } ?: return false.also { closePlayer() }
         // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does. Never
         // playing, as Apple Music signed out, it stays in front, where it says why, and the player and a list to play on go.
         if (seenPlaying(back, song, app, link, mustPlay = true) == null) {
-            // Shown again, the app comes out from under the cover, which would hide why.
-            if (uiState.coveringApp) openPlayerApp()
+            // Out from under the cover, which would hide why.
+            uncover()
             closePlayer()
-            playQueue?.stop()
+            if (list) playQueue?.stop()
             return true
         }
         // The official YouTube apps would stop, so on a phone they're left playing, in front, unless covered, where the words show.
