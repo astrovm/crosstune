@@ -1074,7 +1074,8 @@ class MainActivity : ComponentActivity() {
 
     /** The whole screen covers the app a song plays in, which goes on playing under it. */
     private fun cover() {
-        coverUp = true
+        // Floating the words already, the service keeps them rather than cover the app, so there's no cover to take down.
+        coverUp = coverUp || !floatingOverApps
         floatingOverApps = true
         FloatingLyricsService.start(this, floatingHost, whole = true)
     }
