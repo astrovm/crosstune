@@ -2603,11 +2603,15 @@ internal class MainViewModel(
         effectChannel.send(opening(url, destination.packageName, finishAfterOpen))
     }
 
-    /** Searches where the result goes, though it wasn't found there, e.g. under another name. */
-    fun searchAnyway() {
+    /**
+     * Searches for the result by its name where it goes, whether or not it was found there: for another version of it,
+     * under another name, or to pick it there without it starting.
+     */
+    fun searchResult() {
+        qobuzNumbers?.off()
         val destination = uiState.resultDestination
-        val url = uiState.destinationUrls[destination]?.url ?: return
-        effectChannel.trySend(opening(url.forSharing(), destination.packageName, finishAfterOpen = false))
+        val result = uiState.result ?: return
+        effectChannel.trySend(opening(destination.searchUrl(searchQuery(result)).forSharing(), destination.packageName, finishAfterOpen = false))
     }
 
     /**

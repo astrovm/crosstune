@@ -10,6 +10,7 @@ import android.content.ClipDescription
 import androidx.activity.BackEventCompat
 import androidx.compose.ui.unit.dp
 import androidx.core.content.IntentCompat
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assert
@@ -194,13 +195,13 @@ class MainActivityTest {
 
     private fun click(text: String) {
         val action = resultActionText(text)
-        composeRule.onNode(hasText(action) or hasContentDescription(action) or hasContentDescription(text)).performClick()
+        composeRule.onNode(hasText(action) or hasContentDescription(action)).performClick()
         composeRule.waitForIdle()
     }
 
-    /** A prepared search uses the destination-specific Search label; source buttons keep Open. */
+    /** With only a search where it opens, "Open in" a destination is its Search; source buttons keep Open. */
     private fun resultActionText(text: String): String {
-        if (composeRule.onAllNodesWithTextCount(text) > 0) return text
+        if (composeRule.onAllNodes(hasText(text) or hasContentDescription(text)).fetchSemanticsNodes().isNotEmpty()) return text
         val service = MusicService.entries.firstOrNull { string(it.openLabelRes) == text }
         val custom = DestinationStore(prefs()).customDestinations().firstOrNull { string(R.string.open_in_custom, it.name) == text }
         val label = service?.let { string(it.labelRes) } ?: custom?.name ?: return text
@@ -4133,6 +4134,67 @@ class MainActivityTest {
     }
 
     @Test
+    fun theCardOffersTheSongAndASearchForItFirstAsPlayRightAwayIsSet() {
+        val service = MusicService.APPLE_MUSIC
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        val playback = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { playback }
+        shadowOf(app.packageManager).installPackage(installedApp(service.packageName, "Apple Music"))
+        linksShowHere()
+        prefs().edit().putString("default_target", service.name).commit()
+        HistoryStore(prefs()).add(
+            HistoryEntry(
+                MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, "https://open.spotify.com/track/$TRACK_ID"),
+                song,
+                mapOf(service.name to PreparedLink("https://music.apple.com/us/song/fixture/123", exact = true, matchingEnabled = true)),
+            )
+        )
+        val play = string(R.string.play_in_background, "Apple Music")
+        val search = string(R.string.search_in_destination, "Apple Music")
+        fun left(description: String) = composeRule.onNodeWithContentDescription(description).getBoundsInRoot().left
+        launch()
+        click(string(R.string.history_open, song.title))
+        waitForDestinationReady()
+        // Both ways are there; with Play right away off, as here, the search first.
+        assertTrue(left(search) < left(play))
+        // A search for it by name, though the song itself was found.
+        click(search)
+        val searched = checkNotNull(nextStartedActivity()) { "Expected a search to open" }
+        assertEquals(service.searchUrl(searchQuery(song)), searched.dataString)
+        assertEquals(service.packageName, searched.`package`)
+        // And the song itself, opened there without playing, from the arrow by the app's name.
+        click(string(R.string.open_in_apple_music))
+        assertEquals("https://music.apple.com/us/song/fixture/123", checkNotNull(nextStartedActivity()) { "Expected the song to open" }.dataString)
+        assertTrue(playback.songsAsked.isEmpty())
+        // Playing right away, the song comes first.
+        inSettings { click(string(R.string.setting_play_right_away)) }
+        assertTrue(left(play) < left(search))
+    }
+
+    @Test
+    fun aSongOnlySearchedForHasJustTheSearchWhereItCantPlay() {
+        // Presto can't be asked to play, and opens a search for any song.
+        val service = MusicService.PRESTO_MUSIC
+        val song = MusicMetadata("Fixture Song", "Fixture Artist")
+        shadowOf(app.packageManager).installPackage(installedApp(service.packageName, string(service.labelRes)))
+        linksShowHere()
+        prefs().edit().putString("default_target", service.name).commit()
+        HistoryStore(prefs()).add(
+            HistoryEntry(
+                MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, "https://open.spotify.com/track/$TRACK_ID"),
+                song,
+                mapOf(service.name to PreparedLink(service.searchUrl(searchQuery(song)), exact = false, matchingEnabled = true)),
+            )
+        )
+        launch()
+        click(string(R.string.history_open, song.title))
+        waitForDestinationReady()
+        composeRule.onNodeWithContentDescription(string(R.string.search_in_destination, string(service.labelRes))).assertExists()
+        composeRule.onNodeWithContentDescription(string(service.openLabelRes)).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.lyrics_play)).assertDoesNotExist()
+    }
+
+    @Test
     fun theCardPlaysANewSongInDeezerAudiomackAndYouTube() {
         val links = mapOf(
             MusicService.DEEZER to "https://www.deezer.com/track/123",
@@ -4234,26 +4296,26 @@ class MainActivityTest {
     }
 
     @Test
-    fun playAndOpenStackWhenTheWordsAreTooBigToShareTheWidth() {
+    fun playAndSearchStackWhenTheWordsAreTooBigToShareTheWidth() {
         val youTubeMusic = morpheMusic
         val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
         shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
         val play = string(R.string.play_in_background, "YouTube Music")
-        val open = string(MusicService.YOUTUBE_MUSIC.openLabelRes)
+        val search = string(R.string.search_in_destination, "YouTube Music")
         val bounds = { description: String -> composeRule.onNode(hasContentDescription(description)).fetchSemanticsNode().boundsInRoot }
         launch()
         resolveTyped(link)
         // Side by side: one starts where the other ends.
-        assertTrue(bounds(open).left >= bounds(play).right)
+        assertTrue(bounds(search).left >= bounds(play).right)
         checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         RuntimeEnvironment.setFontScale(2f)
         try {
             launch()
             resolveTyped(link)
             // Bigger, one above the other, so neither word breaks.
-            assertTrue(bounds(open).top >= bounds(play).bottom)
+            assertTrue(bounds(search).top >= bounds(play).bottom)
         } finally {
             RuntimeEnvironment.setFontScale(1f)
         }

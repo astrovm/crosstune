@@ -5458,7 +5458,7 @@ class MainViewModelTest {
             assertEquals(1, opened(MusicService.QOBUZ))
             // Any other app's left alone, and a search has no number to swap.
             assertEquals(0, opened(MusicService.DEEZER))
-            assertEquals(0, opened(MusicService.DEEZER, action = { it.searchAnyway() }))
+            assertEquals(0, opened(MusicService.DEEZER, action = { it.searchResult() }))
             assertEquals(0, opened(MusicService.DEEZER, action = { it.openOriginal() }))
             assertEquals(0, opened(MusicService.DEEZER, action = {
                 it.openTrack(MusicMetadata("Next", "Artist", url = "https://www.deezer.com/track/42"))
@@ -5466,7 +5466,7 @@ class MainViewModelTest {
             // Another song, as one looked up before is opened on the number kept with it.
             found = false
             assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=aaaaaaaaaaa"))
-            assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=bbbbbbbbbbb", action = { it.searchAnyway() }))
+            assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=bbbbbbbbbbb", action = { it.searchResult() }))
         } finally {
             scope.cancel()
         }

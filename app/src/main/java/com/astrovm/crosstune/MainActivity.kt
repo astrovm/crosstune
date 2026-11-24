@@ -829,7 +829,7 @@ class MainActivity : ComponentActivity() {
         onOpenFollowAccess = { openNotificationAccess(viewModel.uiState.phone == Phone.TV) },
         onOpenAppInfo = { openAppInfo() },
         onThemeChange = ::selectTheme,
-        onSearchAnyway = viewModel::searchAnyway,
+        onSearchResult = viewModel::searchResult,
         onNotFoundActionChange = viewModel::selectNotFoundAction,
         onTakeNotFoundOffer = viewModel::takeNotFoundOffer,
         onDismissNotFoundOffer = viewModel::dismissNotFoundOffer,
