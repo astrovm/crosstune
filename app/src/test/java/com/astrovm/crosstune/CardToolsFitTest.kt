@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -62,6 +63,53 @@ class CardToolsFitTest(private val language: String, private val widthDp: Int, p
         shown = UiState(result = songs, phone = phone)
         assertTrue(shown.canPlayAll)
         check(measurer, style, shown)
+    }
+
+    @Test
+    fun theMainButtonKeepsItsWordWholeAndItsIconsInSight() {
+        RuntimeEnvironment.setQualifiers("$language-w${widthDp}dp-h${if (tv) 540 else 900}dp")
+        RuntimeEnvironment.setFontScale(fontScale)
+        val phone = if (tv) Phone.TV else Phone.OTHER
+        val playable = UiState(result = song, phone = phone, installed = setOf(MusicService.YOUTUBE_MUSIC))
+        var shown by mutableStateOf(playable)
+        lateinit var measurer: TextMeasurer
+        lateinit var style: TextStyle
+        composeRule.setContent {
+            CrosstuneTheme {
+                measurer = rememberTextMeasurer()
+                style = MaterialTheme.typography.labelLarge
+                CrosstuneScreen(shown, ScreenActions())
+            }
+        }
+        val app = string(R.string.target_youtube_music)
+        val play = string(R.string.play_in_background, app)
+        val search = string(R.string.search_in_destination, app)
+        val open = string(R.string.open_in_youtube_music)
+        // Play with a search and an open beside it, then a search first, then a song that only opens, with its search.
+        checkMain(measurer, style, string(R.string.lyrics_play) to play, listOf(search, open))
+        shown = playable.copy(playRightAway = false)
+        checkMain(measurer, style, string(R.string.search_button) to search, listOf(play, open))
+        shown = UiState(result = song, phone = phone)
+        checkMain(measurer, style, string(R.string.open_button) to open, listOf(search))
+    }
+
+    private fun checkMain(measurer: TextMeasurer, style: TextStyle, main: Pair<String, String>, icons: List<String>) {
+        composeRule.waitForIdle()
+        val width = composeRule.onRoot().getBoundsInRoot().right
+        val (word, description) = main
+        val button = composeRule.onNode(hasContentDescription(description)).performScrollTo().getBoundsInRoot()
+        // Beside the icons, the button has room for its word, its icon and its own room. Short of that, it has the whole
+        // width, the icons under it, and the word, on one line, is made to fit.
+        val needs = measurer.measure(word, style).size.width + with(composeRule.density) { (24.dp + 8.dp + 48.dp).roundToPx() }
+        val room = with(composeRule.density) { (button.right - button.left).roundToPx() }
+        val whole = with(composeRule.density) { (width - 32.dp).roundToPx() }
+        for (icon in icons) {
+            val bounds = composeRule.onNode(hasContentDescription(icon)).performScrollTo().assertIsDisplayed().getBoundsInRoot()
+            assertTrue("$icon ends at ${bounds.right} of $width", bounds.left.value >= 0f && bounds.right <= width)
+            assertTrue("$icon is ${bounds.right - bounds.left} wide", bounds.right - bounds.left >= 48.dp)
+            val beside = bounds.top < composeRule.onNode(hasContentDescription(description)).getBoundsInRoot().bottom
+            assertTrue("\"$word\" needs $needs px, its button is $room px of $whole, beside $icon: $beside", if (beside) room >= needs else room >= whole)
+        }
     }
 
     /** Each tool by what a screen reader hears, with the label it shows. */

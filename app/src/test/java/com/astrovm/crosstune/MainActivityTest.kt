@@ -4310,7 +4310,7 @@ class MainActivityTest {
         try {
             launch()
             resolveTyped(link)
-            // Play keeps its word, and the other two are icons after it, in reach and on the screen.
+            // The other two are icons after Play, in reach and on the screen; CardToolsFitTest measures that its word fits.
             val width = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.right
             assertTrue(bounds(search).left >= bounds(play).right)
             assertTrue(bounds(open).left >= bounds(search).right)

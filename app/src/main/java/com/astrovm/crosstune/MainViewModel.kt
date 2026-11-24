@@ -2094,7 +2094,9 @@ internal class MainViewModel(
         qobuzNumbers?.off()
         val chosen = destination ?: uiState.resultDestination
         adoptDefault(chosen)
+        // Opened, as asked, rather than played right away.
         pendingOpen = false
+        pendingPlay = false
         uiState = uiState.copy(
             showDestinationPicker = false, isMatching = false,
             selectedDestination = destination ?: uiState.selectedDestination
@@ -2612,6 +2614,7 @@ internal class MainViewModel(
         val result = uiState.result ?: return
         // Whatever was on its way to open or play, the search is what was asked for now.
         pendingOpen = false
+        pendingPlay = false
         job?.cancel()
         effectChannel.trySend(opening(destination.searchUrl(searchQuery(result)).forSharing(), destination.packageName, finishAfterOpen = false))
     }
