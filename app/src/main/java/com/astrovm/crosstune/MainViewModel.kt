@@ -637,11 +637,9 @@ internal class MainViewModel(
     private fun UiState.withDestinations(): UiState {
         val destinations = destinationStore.allDestinations()
         val picked = destinationStore.hasDefault(destinations)
-        // None picked yet, the first music app on the phone is offered, YouTube, mostly videos, last.
-        val installed = linkState?.serviceApps?.keys.orEmpty()
-        val offered = destinations.filterIsInstance<Destination.Service>().filter { it.service in installed }.minByOrNull { it.service == MusicService.YOUTUBE }
+        val offered = if (picked) null else destinationStore.offered(destinations)
         return copy(
-            defaultDestination = offered?.takeIf { !picked } ?: destinationStore.defaultDestination(destinations),
+            defaultDestination = offered ?: destinationStore.defaultDestination(destinations),
             destinations = destinations,
             selectedDestination = selectedDestination?.takeIf { it in destinations },
             rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source, destinations)?.let { source to it } }.toMap(),

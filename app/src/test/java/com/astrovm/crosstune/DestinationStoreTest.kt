@@ -21,6 +21,22 @@ class DestinationStoreTest {
     private val deezer = Destination.Service(MusicService.DEEZER)
 
     @Test
+    fun withNonePickedTheFirstMusicAppOnThePhoneIsOfferedAndYouTubeLast() {
+        fun offered(vararg installed: String) = DestinationStore(preferences) { it in installed }.offered()
+        val youtube = MusicService.YOUTUBE.packageName
+        assertEquals(deezer, offered(youtube, MusicService.DEEZER.packageName))
+        assertEquals(Destination.Service(MusicService.SPOTIFY), offered(MusicService.DEEZER.packageName, MusicService.SPOTIFY.packageName))
+        // YouTube, mostly videos, only when it's all there is.
+        assertEquals(Destination.Service(MusicService.YOUTUBE), offered(youtube))
+        // A patched build stands for its service without the service's own app.
+        val morphe = "app.morphe.android.apps.youtube.music"
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC, morphe), offered(youtube, morphe))
+        // On a TV, YouTube Music plays in YouTube's TV app, so it's offered for that.
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC), offered(MusicService.YOUTUBE_TV))
+        assertNull(offered())
+    }
+
+    @Test
     fun aBuildIsToldFromItsServicesAppByAWordOfItsOwn() {
         assertEquals("TV", MusicService.buildName(MusicService.YOUTUBE_TV))
         assertEquals("ReVanced", MusicService.buildName("app.revanced.android.youtube"))
