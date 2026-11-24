@@ -86,11 +86,8 @@ internal object Presto {
     /** A writer, as a title's credit names them: a surname, the particles before it, and the names or initials before those. */
     private class Writer(surname: String, particles: List<String>, given: List<String>) {
         private val surname = SongNames.normalize(surname)
-        private val particles = particles.map(SongNames::normalize)
-        // "LEE" may be a name in capitals or three initials, so each is tried, as written and split.
-        private val givens = listOf(given, given.flatMap(::initials)).map { names ->
-            names.map(SongNames::normalize).filter(String::isNotEmpty)
-        }
+        private val particles = names(particles)
+        private val givens = readings(given)
 
         /**
          * Whether [name] is theirs: its last words are the surname, whole, and the names before match the credit's, an
@@ -98,18 +95,33 @@ internal object Presto {
          * "Eddie van Halen" is "van Halen", but "Bill Evans" isn't "Evans, M", "Timothy Swift" isn't "Taylor Swift",
          * "Jacques Offenbach" isn't "Bach", and "." is no one.
          */
-        fun isWho(name: String): Boolean = listOf(words(name), words(name).flatMap(::initials)).any { written ->
-            val words = written.map(SongNames::normalize).filter(String::isNotEmpty)
+        fun isWho(name: String): Boolean = readings(words(name)).any { words ->
             // A particle is the surname's, as in "Eddie Van Halen", or else a name of its own, as in "V. Morrison".
-            givens.any { given -> isWho(words, given, particles.joinToString("") + surname) || isWho(words, given + particles, surname) }
+            givens.any { given ->
+                isWho(words, given, particles.joinToString("") { it.text } + surname) || isWho(words, given + particles, surname)
+            }
         }
 
-        private fun isWho(words: List<String>, given: List<String>, surname: String) = surname.isNotEmpty() && words.indices.any { first ->
-            words.drop(first).joinToString("") == surname && given.size <= first && given.indices.all { same(given[it], words[it]) }
+        private fun isWho(words: List<Name>, given: List<Name>, surname: String) = surname.isNotEmpty() && words.indices.any { first ->
+            words.drop(first).joinToString("") { it.text } == surname && given.size <= first && given.indices.all { given[it].isLike(words[it]) }
         }
+    }
 
-    /** The same name, or one's initial: "J" is "Johann", but "Taylor" isn't "Timothy". */
-        private fun same(one: String, other: String) = one == other || minOf(one.length, other.length) == 1 && one[0] == other[0]
+    /**
+     * A name's words as written and with short capitals split, as "LEE" may be a name or three initials. Read as a name,
+     * "JS" is whole: it isn't "J", or else "JS Bach" would be "J. C. Bach".
+     */
+    private fun readings(words: List<String>): List<List<Name>> =
+        listOf(names(words, whole = { initials(it).size > 1 }), names(words.flatMap(::initials)))
+
+    private fun names(words: List<String>, whole: (String) -> Boolean = { false }) =
+        words.map { Name(SongNames.normalize(it), whole(it)) }.filter { it.text.isNotEmpty() }
+
+    /** One of a name's words, which a single letter is the initial of, unless it's [whole]. */
+    private class Name(val text: String, val whole: Boolean) {
+        /** The same name, or one's initial: "J" is "Johann", but "Taylor" isn't "Timothy". */
+        fun isLike(other: Name) =
+            text == other.text || !whole && !other.whole && minOf(text.length, other.text.length) == 1 && text[0] == other.text[0]
     }
 
     /** An album, as Presto's API answers for it: its name, its leader, whom Presto credits first, and its cover. */

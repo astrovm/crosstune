@@ -74,11 +74,16 @@ class PrestoTest {
         assertEquals(MusicMetadata("Prelude", "Johann Sebastian Bach"), Presto.song("JS Bach: Prelude", listOf("Johann Sebastian Bach")))
         assertEquals(MusicMetadata("Eruption", "Eddie Van Halen"), Presto.song("Van Halen: Eruption", listOf("Eddie Van Halen")))
         assertEquals(MusicMetadata("Gloria", "Van Morrison"), Presto.song("Van Morrison: Gloria", listOf("Van Morrison")))
-        // A particle may be a first name too, and initials together are the same on both sides.
+        // A particle may be a first name too.
         assertEquals(MusicMetadata("Gloria", "V. Morrison"), Presto.song("Van Morrison: Gloria", listOf("V. Morrison")))
         assertEquals(MusicMetadata("Gloria", "Van Morrison"), Presto.song("Morrison, Van: Gloria", listOf("Van Morrison")))
         assertEquals(MusicMetadata("Morrison, Van: Gloria", "Bill Morrison"), Presto.song("Morrison, Van: Gloria", listOf("Bill Morrison")))
+        // Initials together are the same as apart, on either side, but never a different initial's.
         assertEquals(MusicMetadata("Song", "DJ Shadow"), Presto.song("DJ Shadow: Song", listOf("DJ Shadow")))
+        assertEquals(MusicMetadata("Prelude", "J.S. Bach"), Presto.song("JS Bach: Prelude", listOf("J.S. Bach")))
+        assertEquals(MusicMetadata("Prelude", "JS Bach"), Presto.song("J. S. Bach: Prelude", listOf("JS Bach")))
+        assertEquals(MusicMetadata("JS Bach: Prelude", "J. C. Bach"), Presto.song("JS Bach: Prelude", listOf("J. C. Bach")))
+        assertEquals(MusicMetadata("Bach, J. C.: Prelude", "JS Bach"), Presto.song("Bach, J. C.: Prelude", listOf("JS Bach")))
         // A short name in capitals is a name, as well as initials, on either side.
         assertEquals(MusicMetadata("Song", "LEE MORGAN"), Presto.song("Lee Morgan: Song", listOf("LEE MORGAN")))
         assertEquals(MusicMetadata("Song", "Lee Morgan"), Presto.song("LEE MORGAN: Song", listOf("Lee Morgan")))
