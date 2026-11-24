@@ -51,25 +51,39 @@ internal object Presto {
         return MusicMetadata(if (wrote) title.substring(colon + 2).trim() else title, player ?: musicians.firstOrNull().orEmpty())
     }
 
-    /** Who a title's credit names, by surname and any initials: "Davis, M" is one, "Taylor Swift, Jack Antonoff" two. */
-    private fun writers(credit: String): List<Writer> {
-        val parts = credit.split(',', '&').map(String::trim).filter(String::isNotEmpty)
-        if (parts.size == 2 && initials.matches(parts[1])) return listOf(Writer(parts[0], parts[1]))
-        return parts.map { part ->
-            // A part is trimmed, so its last word is never blank; a blank one between is no initial.
-            val words = part.split(' ')
-            Writer(words.last(), words.dropLast(1).filter { it.trimEnd('.').length == 1 }.joinToString(""))
+    /**
+     * Who a title's credit names, by surname and any initials: "Davis, M" is one, "Taylor Swift, Jack Antonoff" two, and
+     * "Davis, M & Evans, B" two, each with their initial.
+     */
+    private fun writers(credit: String): List<Writer> = credit.split('&').flatMap { group ->
+        val parts = group.split(',').map(String::trim).filter(String::isNotEmpty)
+        if (parts.size == 2 && initials.matches(parts[1])) {
+            listOf(Writer(parts[0], parts[1]))
+        } else {
+            parts.map { part ->
+                // Trimmed, a part's last word is never blank; a blank one between has no initial to give.
+                val words = part.split(' ')
+                Writer(words.last(), words.dropLast(1).joinToString("") { it.take(1) })
+            }
         }
     }
 
-    /** A writer, as a title's credit names them; [initials] only when it gives them. */
+    /** A writer, as a title's credit names them: a surname, and the initials of any names before it. */
     private class Writer(surname: String, initials: String) {
         private val surname = SongNames.normalize(surname)
         private val initials = SongNames.normalize(initials)
 
-        /** Whether [name] is theirs: "Al Di Meola" is "A. DiMeola", but "Bill Evans" isn't "Evans, M", and "." is no one. */
-        fun isWho(name: String): Boolean =
-            surname.isNotEmpty() && SongNames.normalize(name).let { it.endsWith(surname) && it.startsWith(initials) }
+        /**
+         * Whether [name] is theirs: its last words are the surname, whole, and the names before start with the initials.
+         * "Al Di Meola" is "A. DiMeola" and "Johann Sebastian Bach" is "Bach, J. S.", but "Bill Evans" isn't "Evans, M",
+         * "Jonathan Swift" isn't "Taylor Swift", "Jacques Offenbach" isn't "Bach", and "." is no one.
+         */
+        fun isWho(name: String): Boolean {
+            val words = name.split(' ').map(SongNames::normalize).filter(String::isNotEmpty)
+            return surname.isNotEmpty() && words.indices.any { first ->
+                words.drop(first).joinToString("") == surname && words.take(first).joinToString("") { it.take(1) }.startsWith(initials)
+            }
+        }
     }
 
     /** An album, as Presto's API answers for it: its name, its leader, whom Presto credits first, and its cover. */
