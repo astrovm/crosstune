@@ -39,6 +39,10 @@ class PrestoTest {
         assertEquals(MusicMetadata("Duet", "Lorenz Hart"), Presto.song("Rodgers & Hart: Duet", listOf("A", "Lorenz Hart")))
         // Another's initial isn't them: Bill Evans didn't write it.
         assertEquals(MusicMetadata("Evans, M: Song", "Bill Evans"), Presto.song("Evans, M: Song", listOf("Bill Evans")))
+        assertEquals(MusicMetadata("B. Evans: Song", "Gil Evans"), Presto.song("B. Evans: Song", listOf("Gil Evans")))
+        // A credit left with a comma and nothing after it, or two spaces, is still its writer.
+        assertEquals(MusicMetadata("So What", "Miles Davis"), Presto.song("Davis,: So What", listOf("Miles Davis")))
+        assertEquals(MusicMetadata("Anti-Hero", "Taylor Swift"), Presto.song("Taylor  Swift: Anti-Hero", listOf("Taylor Swift")))
     }
 
     @Test

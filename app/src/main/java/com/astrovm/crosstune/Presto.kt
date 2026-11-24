@@ -56,7 +56,8 @@ internal object Presto {
         val parts = credit.split(',', '&').map(String::trim).filter(String::isNotEmpty)
         if (parts.size == 2 && initials.matches(parts[1])) return listOf(Writer(parts[0], parts[1]))
         return parts.map { part ->
-            val words = part.split(' ').filter(String::isNotEmpty)
+            // A part is trimmed, so its last word is never blank; a blank one between is no initial.
+            val words = part.split(' ')
             Writer(words.last(), words.dropLast(1).filter { it.trimEnd('.').length == 1 }.joinToString(""))
         }
     }
