@@ -40,8 +40,18 @@ class PrestoTest {
         // Another's initial isn't them: Bill Evans didn't write it.
         assertEquals(MusicMetadata("Evans, M: Song", "Bill Evans"), Presto.song("Evans, M: Song", listOf("Bill Evans")))
         assertEquals(MusicMetadata("B. Evans: Song", "Gil Evans"), Presto.song("B. Evans: Song", listOf("Gil Evans")))
-        // A first name is theirs too, a surname is theirs whole, and each writer of two keeps their own initial.
+        // A first name is theirs too, whole, a surname is theirs whole, and each writer of two keeps their own initial.
         assertEquals(MusicMetadata("Anti-Hero", "Taylor Swift"), Presto.song("Taylor Swift: Anti-Hero", listOf("Jonathan Swift", "Taylor Swift")))
+        assertEquals(MusicMetadata("Anti-Hero", "Taylor Swift"), Presto.song("Taylor Swift: Anti-Hero", listOf("Timothy Swift", "Taylor Swift")))
+        // "van" is the surname's, initials however they're joined are names, and a name may be joined by a space Android can't break.
+        assertEquals(MusicMetadata("Eruption", "Eddie van Halen"), Presto.song("van Halen: Eruption", listOf("Eddie van Halen")))
+        assertEquals(MusicMetadata("Prelude", "J.S. Bach"), Presto.song("Bach, J. S.: Prelude", listOf("J.S. Bach")))
+        assertEquals(MusicMetadata("Prelude", "J.S. Bach"), Presto.song("Johann Sebastian Bach: Prelude", listOf("J.S. Bach")))
+        // More names than the musician has isn't them.
+        assertEquals(MusicMetadata("J. S. Bach: Prelude", "Bach"), Presto.song("J. S. Bach: Prelude", listOf("Bach")))
+        assertEquals(MusicMetadata("Sonata", "Jean-Pierre Rampal"), Presto.song("Rampal, J. P.: Sonata", listOf("Jean-Pierre Rampal")))
+        assertEquals(MusicMetadata("Sonata", "Jean-Pierre Rampal"), Presto.song("J.-P. Rampal: Sonata", listOf("Jean-Pierre Rampal")))
+        assertEquals(MusicMetadata("So What", "Miles\u00a0Davis"), Presto.song("Davis, M: So What", listOf("Miles\u00a0Davis")))
         assertEquals(MusicMetadata("Bach: Prelude", "Jacques Offenbach"), Presto.song("Bach: Prelude", listOf("Jacques Offenbach")))
         assertEquals(MusicMetadata("Song", "Miles Davis"), Presto.song("Davis, M & Evans, B: Song", listOf("Bill Davis", "Miles Davis")))
         // A credit left with a comma and nothing after it, or two spaces, is still its writer, and a blank part between a
