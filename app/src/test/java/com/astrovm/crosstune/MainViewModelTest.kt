@@ -4453,6 +4453,17 @@ class MainViewModelTest {
     }
 
     @Test
+    fun searchingCancelsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, _ ->
+        model.searchResult()
+        until("the old open stopped") { answers.subscriptionCount.value == 0 }
+        // Only the search opens: the song it was waiting to open doesn't follow it.
+        assertTrue(answers.tryEmit(null))
+        idle()
+        assertEquals(1, effects.size)
+        assertTrue(effects.filterIsInstance<Effect.Open>().single().url.contains("/search"))
+    }
+
+    @Test
     fun cancellingAHandoffStopsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, _ ->
         model.cancelHandoff()
         until("the old open stopped") { answers.subscriptionCount.value == 0 }

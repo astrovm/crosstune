@@ -1572,10 +1572,8 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
         // The song, or a search for it, as Play right away puts first; with only one way in, that's all there is.
         val buttons = cardActions(result, state, actions)
         val main = buttons.first()
-        val mainFocus = remember { FocusRequester() }
-        // Where it opens, picked for just this result. Down from it on a remote is the main button, not the one nearer
-        // the middle below it; while that waits, and can't take focus, it's wherever's nearest.
-        DestinationChip(state, actions, down = mainFocus.takeIf { main.enabled })
+        // Where it opens, picked for just this result. Down from it on a remote is the main button, wide under its middle.
+        DestinationChip(state, actions)
         // One row: the main way in, in a word, and the others beside it as icons, small enough for any font or language.
         val press = rememberPress()
         Row(
@@ -1589,7 +1587,6 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 interactionSource = press.source,
                 modifier = Modifier
                     .weight(1f)
-                    .focusRequester(mainFocus)
                     .returnsFocus()
                     .heightIn(min = 56.dp)
                     .then(press.modifier)
@@ -1791,10 +1788,10 @@ private fun QueueProgress(progress: Pair<Int, Int>?, modifier: Modifier = Modifi
 
 /** The app a result opens in, as a chip under the song: it lists the apps to open it in instead. */
 @Composable
-private fun DestinationChip(state: UiState, actions: ScreenActions, down: FocusRequester?) {
+private fun DestinationChip(state: UiState, actions: ScreenActions) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG).focusProperties { down?.let { this.down = it } }) {
+        TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
             DestinationIcon(state.resultDestination, state.installed, size = 20.dp)
             Spacer(Modifier.size(8.dp))
             Text(state.resultDestination.label(), style = MaterialTheme.typography.labelLarge)
