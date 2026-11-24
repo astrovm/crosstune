@@ -164,8 +164,10 @@ internal const val NOW_PLAYING_TAG = "now_playing"
 /** What the main screen keeps of where the remote goes back to there, for a player that closes to hand it to the bar. */
 internal val LocalMainFocus = staticCompositionLocalOf<ScreenFocus?> { null }
 
-/** Where the remote comes back to the card's Open, when Play is its main button. */
+/** Where the remote comes back to the card's second button, beside the main one. */
 private const val OPEN_FOCUS = "open"
+
+/** Where the remote comes back to the arrow that opens the song without playing it. */
 private const val ARROW_FOCUS = "arrow"
 
 /** How many frames a Recent row has to be placed in, Recent coming back, before the remote is left where it is. */
@@ -405,7 +407,7 @@ internal data class ScreenActions(
     /** Opens Crosstune's App info, where restricted settings are allowed. */
     val onOpenAppInfo: () -> Unit = {},
     val onThemeChange: (ThemeMode) -> Unit = {},
-    /** Searches where the result goes, though it wasn't found there. */
+    /** Searches for the result by its name where it goes, whether or not it was found there. */
     val onSearchResult: () -> Unit = {},
     val onNotFoundActionChange: (NotFoundAction) -> Unit = {},
     /** Takes the not-found offer's way: where the song is, or a search where it was going. */
@@ -1578,7 +1580,8 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
         // waits, and can't take focus, it's wherever's nearest.
         val down = mainFocus.takeIf { main.enabled }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            DestinationChip(state, actions, down)
+            // A long name or a big font wraps the app's name rather than squeeze the arrow out.
+            Box(Modifier.weight(1f, fill = false)) { DestinationChip(state, actions, down) }
             if (state.opensApart) {
                 IconButton(
                     onClick = actions.onOpen,
@@ -1592,6 +1595,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
         // Side by side, until the words are too big for half the width; then one above the other.
         val stacked = buttons.size > 1 && LocalDensity.current.fontScale > STACK_BUTTONS_FROM
         val press = rememberPress()
+        val pressSecond = rememberPress()
         val button = @Composable { action: MainAction, first: Boolean, modifier: Modifier ->
             // The icon and word say what it does, the chip above which app; screen readers hear the app's name too.
             val label = @Composable {
@@ -1621,7 +1625,12 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                         .onGloballyPositioned { onMainButtonShown(it.boundsInWindow().height > 0f) }
                 ) { label() }
             } else {
-                FilledTonalButton(onClick = action.onClick, enabled = action.enabled, modifier = modifier.returnsFocus(OPEN_FOCUS).heightIn(min = 56.dp)) { label() }
+                FilledTonalButton(
+                    onClick = action.onClick,
+                    enabled = action.enabled,
+                    interactionSource = pressSecond.source,
+                    modifier = modifier.returnsFocus(OPEN_FOCUS).heightIn(min = 56.dp).then(pressSecond.modifier)
+                ) { label() }
             }
         }
         if (stacked) {
@@ -1744,11 +1753,12 @@ private fun cardActions(result: MusicMetadata, state: UiState, actions: ScreenAc
     state.link?.service?.takeIf { state.resultMissing && state.notFoundAction != NotFoundAction.SEARCH }?.let { original ->
         return listOf(MainAction(stringResource(R.string.open_button), stringResource(original.openLabelRes), enabled, Destination.Service(original), onClick = actions.onOpenOriginal))
     }
-    // The chip above says which app, so one word says what each does. A search needs no match, so it waits for none.
+    // The chip above says which app, so one word says what each does. A search needs no match, but waits for it with
+    // the rest: until then, which buttons there are isn't known, and a remote coming back waits for the main one.
     val search = MainAction(
         stringResource(R.string.search_button),
         stringResource(R.string.search_in_destination, app),
-        state.queueProgress == null,
+        enabled,
         drawable = R.drawable.ic_search,
         onClick = actions.onSearchResult
     )

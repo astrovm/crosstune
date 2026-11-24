@@ -2608,9 +2608,11 @@ internal class MainViewModel(
      * under another name, or to pick it there without it starting.
      */
     fun searchResult() {
-        qobuzNumbers?.off()
         val destination = uiState.resultDestination
         val result = uiState.result ?: return
+        // Whatever was on its way to open or play, the search is what was asked for now.
+        pendingOpen = false
+        job?.cancel()
         effectChannel.trySend(opening(destination.searchUrl(searchQuery(result)).forSharing(), destination.packageName, finishAfterOpen = false))
     }
 
