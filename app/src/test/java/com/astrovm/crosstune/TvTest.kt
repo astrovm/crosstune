@@ -761,11 +761,12 @@ class TvTest {
         val song = composeRule.onNode(hasText("Demo") and hasClickAction())
         val pencil = composeRule.onNode(hasContentDescription(string(R.string.choose_lines)) and hasClickAction())
         composeRule.waitUntil(5_000) { composeRule.onAllNodes(hasText("Demo") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
-        // All songs has no pencil, so the remote stays.
+        // All songs has no pencil, so the remote stays, and Down, not the rows' to take, still goes to the song.
         all.requestFocus()
         pressOnFocused(Key.DirectionRight)
         all.assertIsFocused()
-        song.requestFocus()
+        pressOnFocused(Key.DirectionDown)
+        song.assertIsFocused()
         pressOnFocused(Key.DirectionRight)
         pencil.assertIsFocused()
         pressOnFocused(Key.DirectionLeft)
