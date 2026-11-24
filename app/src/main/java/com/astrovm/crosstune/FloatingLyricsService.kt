@@ -109,9 +109,6 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         PixelFormat.OPAQUE
     )
 
-    /** Whether it covers another app, rather than float the words over it. */
-    private var covering = false
-
     /**
      * Locked, the words let every touch through, so a small button of their own, beside them, still
      * takes one: the way out that's always there, notification or not.
@@ -523,6 +520,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         hideCloseTarget()
         view?.let(windows::removeView)
         view = null
+        covering = false
         registry.currentState = Lifecycle.State.DESTROYED
         super.onDestroy()
     }
@@ -530,6 +528,9 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     internal companion object {
         /** Set while there's a screen to float out of; the words close without one. */
         var host: FloatingHost? = null
+
+        /** Whether it covers another app, rather than float the words over it, so Crosstune lets go of a cover only. */
+        var covering = false
 
         const val ACTION_UNLOCK = "com.astrovm.crosstune.floating.UNLOCK"
         const val ACTION_CLOSE = "com.astrovm.crosstune.floating.CLOSE"

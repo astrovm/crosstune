@@ -185,7 +185,7 @@ class MainActivity : ComponentActivity() {
     /** Set while the words float over other apps in a window of their own, which keeps listening along. */
     private var floatingOverApps by mutableStateOf(false)
 
-    /** Whether Crosstune's whole screen covers another app, until it's closed or let go. */
+    /** Whether this screen asked to cover another app, until it's closed or let go. */
     private var coverUp = false
 
     /** Set when the words floated as this screen came back in sight, till it's touched: a link it only hands on floats them again. */
@@ -682,7 +682,7 @@ class MainActivity : ComponentActivity() {
 
         // Out of sight too: a song's app opens over Crosstune, which then covers it, and comes out from under it once let go.
         lifecycleScope.launch {
-            snapshotFlow { viewModel.uiState.coveringApp }.collect { if (it) cover() else if (coverUp) uncover() }
+            snapshotFlow { viewModel.uiState.coveringApp }.collect { if (it) cover() else if (coverUp && FloatingLyricsService.covering) uncover() }
         }
         // Lines let go, or a kind of card turned off, may leave a reminder showing with nothing due.
         lifecycleScope.launch {
@@ -1074,8 +1074,8 @@ class MainActivity : ComponentActivity() {
 
     /** The whole screen covers the app a song plays in, which goes on playing under it. */
     private fun cover() {
-        // Floating the words already, the service keeps them rather than cover the app, so there's no cover to take down.
-        coverUp = coverUp || !floatingOverApps
+        // Floating the words already, the service keeps them rather than cover the app: it says whether it covers.
+        coverUp = true
         floatingOverApps = true
         FloatingLyricsService.start(this, floatingHost, whole = true)
     }

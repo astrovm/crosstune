@@ -117,6 +117,7 @@ class TvPlayTest {
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.playbackFactory = ::MediaSessionPlayback
         FloatingLyricsService.host = null
+        FloatingLyricsService.covering = false
         ShadowSettings.setCanDrawOverlays(false)
     }
 
@@ -504,6 +505,28 @@ class TvPlayTest {
         assertEquals(FloatingLyricsService::class.java.name, checkNotNull(shadowOf(app).nextStoppedService.component) { "Expected a stopped service" }.className)
         assertFalse(model().uiState.coveringApp)
         assertNull(model().uiState.player)
+    }
+
+    @Test
+    fun wordsFloatingWhenACoverIsAskedForStayOnceTheAppPlaysNothing() {
+        launch()
+        click(play)
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        val cover = shadowOf(app).nextStartedService
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        ShadowSettings.setCanDrawOverlays(true)
+        // The words float already, so the service keeps them rather than cover the app.
+        val floating = Robolectric.buildService(FloatingLyricsService::class.java, Intent(app, FloatingLyricsService::class.java)).create().startCommand(0, 1)
+        floating.get().onStartCommand(cover, 0, 2)
+        composeRule.waitForIdle()
+        assertFalse(FloatingLyricsService.covering)
+        // The app plays nothing, and Crosstune lets go of it, but the words it never covered stay.
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.LOAD_SONG_MS + 1_000))
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.coveringApp)
+        assertNull(shadowOf(app).nextStoppedService)
+        assertTrue(overlays(floating.get()).isNotEmpty())
     }
 
     @Test
