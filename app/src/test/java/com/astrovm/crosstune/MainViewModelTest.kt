@@ -4464,6 +4464,27 @@ class MainViewModelTest {
     }
 
     @Test
+    fun searchingBeforeAndroidSaysWhatsOnThePhoneStopsThePlayButStillMakesTheLinkToShare() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        // Android's look at apps held, so a song from Recent waits on it to know whether it can play.
+        val model = model(systemDispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) = Unit
+        })
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        val link = MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "1", "https://open.spotify.com/track/1")
+        model.showHistoryEntry(HistoryEntry(link, MusicMetadata("Track", "Band")), play = true)
+        idle()
+        assertNull(model.destinationUrl())
+        model.searchResult()
+        idle()
+        assertTrue(effects.filterIsInstance<Effect.Open>().single().url.contains("search"))
+        // Copy and Share still have the song's link, made where the play waited.
+        until("the link made") { model.destinationUrl() != null }
+        assertFalse(model.uiState.playingResult)
+    }
+
+    @Test
     fun cancellingAHandoffStopsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, _ ->
         model.cancelHandoff()
         until("the old open stopped") { answers.subscriptionCount.value == 0 }

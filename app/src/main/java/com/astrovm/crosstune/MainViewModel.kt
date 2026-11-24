@@ -2616,6 +2616,8 @@ internal class MainViewModel(
         pendingOpen = false
         pendingPlay = false
         job?.cancel()
+        // The link Copy and Share give is still made, where it waited for Android to say whether the song can play.
+        if (destination !in uiState.destinationUrls) viewModelScope.launchKept({ job = it }) { prepareDestination(destination) }
         effectChannel.trySend(opening(destination.searchUrl(searchQuery(result)).forSharing(), destination.packageName, finishAfterOpen = false))
     }
 

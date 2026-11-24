@@ -99,7 +99,7 @@ class CardToolsFitTest(private val language: String, private val widthDp: Int, p
         val (word, description) = main
         val button = composeRule.onNode(hasContentDescription(description)).performScrollTo().getBoundsInRoot()
         // Beside the icons, the button has room for its word, its icon and its own room. Short of that, it has the whole
-        // width, the icons under it, and the word, on one line, is made to fit.
+        // width, with the icons under it.
         val needs = measurer.measure(word, style).size.width + with(composeRule.density) { (24.dp + 8.dp + 48.dp).roundToPx() }
         val room = with(composeRule.density) { (button.right - button.left).roundToPx() }
         val whole = with(composeRule.density) { (width - 32.dp).roundToPx() }

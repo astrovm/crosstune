@@ -35,7 +35,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -84,6 +83,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.Icon
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.Role
@@ -153,6 +153,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
@@ -1588,12 +1589,12 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
         // word no room beside them, the icons go under it, so the word stays whole.
         val press = rememberPress()
         val labelStyle = MaterialTheme.typography.labelLarge
-        val mainButton = @Composable { modifier: Modifier ->
+        val mainButton = @Composable {
             Button(
                 onClick = main.onClick,
                 enabled = main.enabled,
                 interactionSource = press.source,
-                modifier = modifier
+                modifier = Modifier
                     .returnsFocus()
                     .heightIn(min = 56.dp)
                     .then(press.modifier)
@@ -1634,19 +1635,24 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
             }
         }
         val measurer = rememberTextMeasurer()
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            val word = with(LocalDensity.current) { measurer.measure(main.label, labelStyle).size.width.toDp() }
+        // One layout either way, so a remote's focus stays on its button when the icons move.
+        Layout(content = { mainButton(); icons() }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { measurables, constraints ->
+            val gap = ICON_GAP.roundToPx()
+            val iconPlaces = measurables.drop(1).map { it.measure(Constraints()) }
+            val iconsWidth = iconPlaces.sumOf { it.width + gap }
             // The word, its icon and the button's own room, beside each icon and the gap before it.
-            val beside = word + 24.dp + ButtonDefaults.IconSpacing + 48.dp + (ICON_BUTTON + ICON_GAP) * (buttons.size - 1)
-            if (beside <= maxWidth) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ICON_GAP)) {
-                    mainButton(Modifier.weight(1f))
-                    icons()
-                }
-            } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    mainButton(Modifier.fillMaxWidth())
-                    Row(horizontalArrangement = Arrangement.spacedBy(ICON_GAP)) { icons() }
+            val word = measurer.measure(main.label, labelStyle).size.width + (24.dp + ButtonDefaults.IconSpacing + 48.dp).roundToPx()
+            val under = iconPlaces.isNotEmpty() && word + iconsWidth > constraints.maxWidth
+            val button = measurables.first().measure(Constraints.fixedWidth(constraints.maxWidth - if (under) 0 else iconsWidth))
+            val iconsHeight = iconPlaces.maxOfOrNull { it.height } ?: 0
+            val iconsTop = if (under) button.height + 8.dp.roundToPx() else 0
+            val height = if (under) iconsTop + iconsHeight else maxOf(button.height, iconsHeight)
+            layout(constraints.maxWidth, height) {
+                button.place(0, if (under) 0 else (height - button.height) / 2)
+                var x = if (under) (constraints.maxWidth - iconsWidth + gap) / 2 else button.width + gap
+                iconPlaces.forEach { icon ->
+                    icon.place(x, iconsTop + if (under) 0 else (height - icon.height) / 2)
+                    x += icon.width + gap
                 }
             }
         }
