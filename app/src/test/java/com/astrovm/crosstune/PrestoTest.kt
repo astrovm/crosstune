@@ -21,7 +21,8 @@ class PrestoTest {
             listOf("Martha Argerich", "Alexander Gurning", "Orchestra Della Svizzera Italiana", "Charles Dutoit"),
             Presto.musicians("Martha Argerich (piano), with Alexander Gurning (piano)\nOrchestra Della Svizzera Italiana, Charles Dutoit")
         )
-        // A bracket left open or closed once too often loses nothing after it; blank names are no one's.
+        // A bracket closed once too often loses nothing after it, one left open makes the rest what they play, and blank
+        // names are no one's.
         assertEquals(listOf("A", "B"), Presto.musicians("A (piano)), , B"))
         assertEquals(listOf("A"), Presto.musicians("A (piano, (prepared"))
         assertEquals(emptyList<String>(), Presto.musicians(""))
@@ -67,6 +68,12 @@ class PrestoTest {
         assertEquals(MusicMetadata("Song", "Alice Smith-Jones"), Presto.song("Smith-Jones, A.: Song", listOf("Alice Smith-Jones")))
         assertEquals(MusicMetadata("Song", "Brian May"), Presto.song("Lennon, May: Song", listOf("Brian May")))
         assertEquals(MusicMetadata("Song", "John Lennon"), Presto.song("Lennon, May: Song", listOf("John Lennon")))
+        // Initials written together are still each a name's, and a capitalized particle is the surname's too.
+        assertEquals(MusicMetadata("Prelude", "Johann Sebastian Bach"), Presto.song("Bach, JS: Prelude", listOf("Johann Sebastian Bach")))
+        assertEquals(MusicMetadata("Bach, JS: Prelude", "Bill Bach"), Presto.song("Bach, JS: Prelude", listOf("Bill Bach")))
+        assertEquals(MusicMetadata("Prelude", "Johann Sebastian Bach"), Presto.song("JS Bach: Prelude", listOf("Johann Sebastian Bach")))
+        assertEquals(MusicMetadata("Eruption", "Eddie Van Halen"), Presto.song("Van Halen: Eruption", listOf("Eddie Van Halen")))
+        assertEquals(MusicMetadata("Gloria", "Van Morrison"), Presto.song("Van Morrison: Gloria", listOf("Van Morrison")))
     }
 
     @Test
