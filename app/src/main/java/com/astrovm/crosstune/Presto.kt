@@ -56,7 +56,8 @@ internal object Presto {
         val parts = group.split(',').map(String::trim).filter(String::isNotEmpty)
         // After a surname, initials and the particles that are the surname's: "Bach, J. S.", "Bach, JS", "Beethoven, L. van".
         val after = parts.getOrNull(1)?.let(::words).orEmpty().flatMap(::initials)
-        if (parts.size == 2 && after.isNotEmpty() && after.all { it.length == 1 || isParticle(it) }) {
+        val initialsOnly = after.isNotEmpty() && after.all { it.length == 1 || isParticle(it) }
+        if (parts.size == 2 && initialsOnly) {
             listOf(Writer(parts[0], after.filter(::isParticle), after.filterNot(::isParticle)))
         } else {
             parts.map { part ->
