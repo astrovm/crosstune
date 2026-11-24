@@ -59,6 +59,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -818,6 +819,40 @@ class TvTest {
         composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 2" && !model().uiState.isMatching }
         composeRule.waitForIdle()
         focused().assert(hasAnyAncestor(hasTestTag(RESULT_TAG)) and hasClickAction())
+    }
+
+    @Test
+    fun onATvBackFromASongOpenedFromRecentLandsOnItsRow() {
+        for (n in 1..3) {
+            val url = "https://open.spotify.com/track/song$n"
+            HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band")))
+        }
+        launch()
+        composeRule.onNode(hasText("Song 2") and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 2" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        val activity = checkNotNull(controller).get()
+        activity.onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertEquals(null, model().uiState.result)
+        assertFalse(activity.isFinishing)
+        composeRule.onNode(hasText("Song 2") and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackFromTheOnlySongInRecentLandsOnItsRow() {
+        val url = "https://open.spotify.com/track/song1"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song1", url), MusicMetadata("Song 1", "Band")))
+        launch()
+        composeRule.onNode(hasText("Song 1") and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 1" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        // Recent came back whole, its one row too, and the remote waited for it.
+        composeRule.onNode(hasText("Song 1") and hasClickAction()).assertIsFocused()
     }
 
     @Test

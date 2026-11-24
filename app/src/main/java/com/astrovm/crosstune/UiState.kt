@@ -230,6 +230,8 @@ internal data class UiState(
     val linksTested: Set<String> = emptySet(),
     /** Set while handling a link from another app, which takes priority over setup. */
     val handlingIncomingLink: Boolean = false,
+    /** The song shown came from another app or the widget, so Back goes back there rather than to Recent. */
+    val fromAnotherApp: Boolean = false,
     /**
      * Set while a link from another app is on its way to an app, so the screen shows just that
      * instead of all of Crosstune; cleared once the user has something to do here.
