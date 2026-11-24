@@ -65,7 +65,7 @@ internal object Presto {
                 val words = part.split(' ', '.').filter(String::isNotBlank)
                 val before = words.dropLast(1)
                 val given = before.dropLastWhile(::isParticle)
-                Writer(words.lastOrNull().orEmpty(), before.drop(given.size), given.flatMap(::words).flatMap(::initials))
+                Writer(words.lastOrNull().orEmpty(), before.drop(given.size), given.flatMap(::words))
             }
         }
     }
@@ -87,7 +87,10 @@ internal object Presto {
     private class Writer(surname: String, particles: List<String>, given: List<String>) {
         private val surname = SongNames.normalize(surname)
         private val particles = particles.map(SongNames::normalize)
-        private val given = given.map(SongNames::normalize).filter(String::isNotEmpty)
+        // "LEE" may be a name in capitals or three initials, so each is tried, as written and split.
+        private val givens = listOf(given, given.flatMap(::initials)).map { names ->
+            names.map(SongNames::normalize).filter(String::isNotEmpty)
+        }
 
         /**
          * Whether [name] is theirs: its last words are the surname, whole, and the names before match the credit's, an
@@ -95,10 +98,10 @@ internal object Presto {
          * "Eddie van Halen" is "van Halen", but "Bill Evans" isn't "Evans, M", "Timothy Swift" isn't "Taylor Swift",
          * "Jacques Offenbach" isn't "Bach", and "." is no one.
          */
-        fun isWho(name: String): Boolean {
-            val words = words(name).flatMap(::initials).map(SongNames::normalize).filter(String::isNotEmpty)
+        fun isWho(name: String): Boolean = listOf(words(name), words(name).flatMap(::initials)).any { written ->
+            val words = written.map(SongNames::normalize).filter(String::isNotEmpty)
             // A particle is the surname's, as in "Eddie Van Halen", or else a name of its own, as in "V. Morrison".
-            return isWho(words, given, particles.joinToString("") + surname) || isWho(words, given + particles, surname)
+            givens.any { given -> isWho(words, given, particles.joinToString("") + surname) || isWho(words, given + particles, surname) }
         }
 
         private fun isWho(words: List<String>, given: List<String>, surname: String) = surname.isNotEmpty() && words.indices.any { first ->

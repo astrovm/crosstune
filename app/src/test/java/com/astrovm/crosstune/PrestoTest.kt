@@ -79,6 +79,9 @@ class PrestoTest {
         assertEquals(MusicMetadata("Gloria", "Van Morrison"), Presto.song("Morrison, Van: Gloria", listOf("Van Morrison")))
         assertEquals(MusicMetadata("Morrison, Van: Gloria", "Bill Morrison"), Presto.song("Morrison, Van: Gloria", listOf("Bill Morrison")))
         assertEquals(MusicMetadata("Song", "DJ Shadow"), Presto.song("DJ Shadow: Song", listOf("DJ Shadow")))
+        // A short name in capitals is a name, as well as initials, on either side.
+        assertEquals(MusicMetadata("Song", "LEE MORGAN"), Presto.song("Lee Morgan: Song", listOf("LEE MORGAN")))
+        assertEquals(MusicMetadata("Song", "Lee Morgan"), Presto.song("LEE MORGAN: Song", listOf("Lee Morgan")))
     }
 
     @Test
