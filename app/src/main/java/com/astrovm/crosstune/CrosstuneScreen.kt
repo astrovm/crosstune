@@ -141,7 +141,6 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.input.ImeAction
@@ -1921,26 +1920,12 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
         backgroundContent = { if (swipe.dismissDirection != SwipeToDismissBoxValue.Settled) RemoveBackground(swipe.dismissDirection) },
         modifier = modifier.clip(MaterialTheme.shapes.medium)
     ) {
-        // Its ▶ is inside it, where looking right of the row never finds it, nor looking left of the ▶ the row,
-        // so a remote or keyboard is sent between them here.
-        val rowFocus = remember { FocusRequester() }
-        val playFocus = remember { FocusRequester() }
-        var onPlay by remember { mutableStateOf(false) }
+        val focus = rememberRowButtonFocus()
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
-                .onKeyEvent { event ->
-                    val to = when {
-                        event.type != KeyEventType.KeyDown -> null
-                        event.key == Key.DirectionRight && !onPlay -> playFocus
-                        event.key == Key.DirectionLeft && onPlay -> rowFocus
-                        else -> null
-                    }
-                    to?.requestFocus()
-                    to != null
-                }
-                .focusRequester(rowFocus)
+                .then(focus.rowModifier)
                 .clickable { actions.onHistoryEntryClick(entry) }
                 // Swiping isn't something TalkBack can do, so removing is an action of its own there.
                 .semantics { customActions = listOf(CustomAccessibilityAction(remove) { actions.onRemoveHistory(entry); true }) }
@@ -1976,8 +1961,7 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
                 onClick = { actions.onHistoryOpen(entry) },
                 interactionSource = press.source,
                 modifier = press.modifier
-                    .focusRequester(playFocus)
-                    .onFocusChanged { onPlay = it.isFocused }
+                    .then(focus.buttonModifier)
                     .semantics { contentDescription = openLabel }
             ) {
                 if (elsewhere != null) {

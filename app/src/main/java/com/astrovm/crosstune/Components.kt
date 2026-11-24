@@ -53,7 +53,10 @@ import androidx.compose.foundation.border
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -419,3 +422,34 @@ internal fun PickedChoice(text: String, picked: Boolean, onClick: () -> Unit, ic
         onClick = onClick
     )
 }
+
+/**
+ * A row with a button inside it, as Recent's ▶ or Practice's pencil. Looking right of the row never finds the
+ * button, nor looking left of the button the row, so a remote or keyboard is sent between them here.
+ */
+internal class RowButtonFocus {
+    private val row = FocusRequester()
+    /** The button's, to give the remote back to it once what it opened is put away. */
+    val button = FocusRequester()
+    private var onButton = false
+
+    /** On the row, before what makes it clickable. */
+    val rowModifier: Modifier = Modifier
+        .onKeyEvent { event ->
+            val to = when {
+                event.type != KeyEventType.KeyDown -> null
+                event.key == Key.DirectionRight && !onButton -> button
+                event.key == Key.DirectionLeft && onButton -> row
+                else -> null
+            }
+            to?.requestFocus()
+            to != null
+        }
+        .focusRequester(row)
+
+    /** On the button inside it. */
+    val buttonModifier: Modifier = Modifier.focusRequester(button).onFocusChanged { onButton = it.isFocused }
+}
+
+@Composable
+internal fun rememberRowButtonFocus(): RowButtonFocus = remember { RowButtonFocus() }

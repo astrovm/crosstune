@@ -751,6 +751,35 @@ class TvTest {
     }
 
     @Test
+    fun onATvRightAndLeftGoBetweenAPracticeSongAndItsPencil() {
+        prefs().edit().putString("saved_lines", """[{"text":"夜の空","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        composeRule.onNode(hasContentDescription(string(R.string.saved_practice), substring = true) and hasClickAction()).requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        val all = composeRule.onNode(hasText(string(R.string.practice_all_songs)) and hasClickAction())
+        val song = composeRule.onNode(hasText("Demo") and hasClickAction())
+        val pencil = composeRule.onNode(hasContentDescription(string(R.string.choose_lines)) and hasClickAction())
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(hasText("Demo") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        // All songs has no pencil, so the remote stays.
+        all.requestFocus()
+        pressOnFocused(Key.DirectionRight)
+        all.assertIsFocused()
+        song.requestFocus()
+        pressOnFocused(Key.DirectionRight)
+        pencil.assertIsFocused()
+        pressOnFocused(Key.DirectionLeft)
+        song.assertIsFocused()
+        pressOnFocused(Key.DirectionRight)
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { shown("夜の空") }
+        // Put away, the sheet gives the remote back to the pencil that opened it, not to the screen's Back.
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { !shown("夜の空") }
+        pencil.assertIsFocused()
+    }
+
+    @Test
     fun onATvASongOpenedFromRecentHandsTheRemoteToItsMainButton() {
         for (n in 1..3) {
             val url = "https://open.spotify.com/track/song$n"

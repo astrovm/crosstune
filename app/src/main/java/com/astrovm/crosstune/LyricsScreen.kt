@@ -1173,6 +1173,7 @@ private fun ChooseLinesSheet(state: UiState, actions: ScreenActions, practise: B
  * kept that aren't among them, words or lines sung otherwise now, to let go. With none kept yet,
  * those worth it are checked to start with. Each says how many times it's sung, and whether it has
  * words worth knowing. Saved, or practised when [practise], what changed is given to [onSave].
+ * Put away, it gives the remote back to [opener], what opened it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1184,7 +1185,8 @@ internal fun ChooseLinesSheet(
     loadArtwork: suspend (String) -> ImageBitmap?,
     practise: Boolean,
     onSave: (add: List<Int>, remove: List<SavedLine>) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    opener: FocusRequester? = null
 ) {
     val lines = remember(texts, words) { songLines(texts, words) }
     val keptLines = kept.filter { it.line == null }
@@ -1193,7 +1195,7 @@ internal fun ChooseLinesSheet(
     val others = kept.filter { saved -> saved.line != null || lines.none { it.text == saved.text.trim() } }
     val picked = remember(lines) { mutableStateListOf<Int>().apply { if (kept.isEmpty()) addAll(lines.filter { !it.filler }.map { it.index }) } }
     val dropped = remember(song) { mutableStateListOf<SavedLine>() }
-    ScreenSheet(onDismiss) {
+    ScreenSheet(onDismiss, opener) {
         Column(modifier = Modifier.padding(bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                 CoverArt(song.artworkUrl, loadArtwork, size = 40.dp)
