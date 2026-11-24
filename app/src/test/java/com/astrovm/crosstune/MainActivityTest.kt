@@ -4162,7 +4162,7 @@ class MainActivityTest {
         val searched = checkNotNull(nextStartedActivity()) { "Expected a search to open" }
         assertEquals(service.searchUrl(searchQuery(song)), searched.dataString)
         assertEquals(service.packageName, searched.`package`)
-        // And the song itself, opened there without playing, from the arrow by the app's name.
+        // And the song itself, opened there without playing, from the last icon.
         click(string(R.string.open_in_apple_music))
         assertEquals("https://music.apple.com/us/song/fixture/123", checkNotNull(nextStartedActivity()) { "Expected the song to open" }.dataString)
         assertTrue(playback.songsAsked.isEmpty())
@@ -4296,7 +4296,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun playAndSearchStackWhenTheWordsAreTooBigToShareTheWidth() {
+    fun playSearchAndOpenShareOneRowAtTheBiggestFont() {
         val youTubeMusic = morpheMusic
         val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
         shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
@@ -4304,18 +4304,19 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
         val play = string(R.string.play_in_background, "YouTube Music")
         val search = string(R.string.search_in_destination, "YouTube Music")
+        val open = string(R.string.open_in_youtube_music)
         val bounds = { description: String -> composeRule.onNode(hasContentDescription(description)).fetchSemanticsNode().boundsInRoot }
-        launch()
-        resolveTyped(link)
-        // Side by side: one starts where the other ends.
-        assertTrue(bounds(search).left >= bounds(play).right)
-        checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         RuntimeEnvironment.setFontScale(2f)
         try {
             launch()
             resolveTyped(link)
-            // Bigger, one above the other, so neither word breaks.
-            assertTrue(bounds(search).top >= bounds(play).bottom)
+            // Play keeps its word, and the other two are icons after it, in reach and on the screen.
+            val width = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.right
+            assertTrue(bounds(search).left >= bounds(play).right)
+            assertTrue(bounds(open).left >= bounds(search).right)
+            assertTrue(bounds(open).right <= width)
+            assertTrue(bounds(search).top < bounds(play).bottom && bounds(open).top < bounds(play).bottom)
+            assertTrue(bounds(search).width >= 48f * app.resources.displayMetrics.density)
         } finally {
             RuntimeEnvironment.setFontScale(1f)
         }
