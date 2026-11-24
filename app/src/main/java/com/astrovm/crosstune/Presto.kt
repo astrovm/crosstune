@@ -56,35 +56,37 @@ internal object Presto {
         val parts = group.split(',').map(String::trim).filter(String::isNotEmpty)
         // After a surname, initials and the particles that are the surname's: "Bach, J. S.", "Bach, JS", "Beethoven, L. van".
         val after = parts.getOrNull(1)?.let(::words).orEmpty().flatMap(::initials)
-        if (parts.size == 2 && after.any { it.length == 1 } && after.all { it.length == 1 || isParticle(it) }) {
-            listOf(Writer(after.filter(::isParticle).joinToString("") + parts[0], after.filterNot(::isParticle)))
+        if (parts.size == 2 && after.isNotEmpty() && after.all { it.length == 1 || isParticle(it) }) {
+            listOf(Writer(parts[0], after.filter(::isParticle), after.filterNot(::isParticle)))
         } else {
             parts.map { part ->
-                // The last word is the surname, hyphen and all, as in "Smith-Jones"; "van" and "di" before it are the
+                // The last word is the surname, hyphen and all, as in "Smith-Jones"; "van" and "di" before it may be the
                 // surname's too, as in "van Halen", and the names before them, however they're joined, as in "J.-P.".
                 val words = part.split(' ', '.').filter(String::isNotBlank)
                 val before = words.dropLast(1)
                 val given = before.dropLastWhile(::isParticle)
-                Writer(words.drop(given.size).joinToString(""), given.flatMap(::words).flatMap(::initials))
+                Writer(words.lastOrNull().orEmpty(), before.drop(given.size), given.flatMap(::words).flatMap(::initials))
             }
         }
     }
 
-    /** "van", "di" or "Van", the surname's, as in "Van Halen", but not "v.", an initial as in "L. v. Beethoven". */
+    /** "van", "di" or "Van", as in "Van Halen", but not "v.", an initial as in "L. v. Beethoven". */
     private fun isParticle(word: String) = word.length > 1 && (word.all(Char::isLowerCase) || word.lowercase() in particles)
 
     /** Particles a surname starts with, capitalized as often as not. */
     private val particles = setOf("van", "von", "der", "den", "de", "di", "da", "del", "della", "du", "la", "le", "ter", "ten")
 
-    /** "JS" is two initials, as "J. S." is, but "May" is a name. */
-    private fun initials(word: String) = if (word.length in 2..3 && word.all(Char::isUpperCase)) word.map(Char::toString) else listOf(word)
+    /** "JS" is two initials, as "J. S." is, but "May" is a name and "VAN" a particle. */
+    private fun initials(word: String) =
+        if (word.length in 2..3 && word.all(Char::isUpperCase) && !isParticle(word)) word.map(Char::toString) else listOf(word)
 
     /** A name's words, however they're joined: "J.S. Bach" and "Jean-Pierre Rampal" are three each. */
     private fun words(name: String): List<String> = name.split(' ', '\u00a0', '.', '-').filter(String::isNotBlank)
 
-    /** A writer, as a title's credit names them: a surname, and the names or initials before it. */
-    private class Writer(surname: String, given: List<String>) {
+    /** A writer, as a title's credit names them: a surname, the particles before it, and the names or initials before those. */
+    private class Writer(surname: String, particles: List<String>, given: List<String>) {
         private val surname = SongNames.normalize(surname)
+        private val particles = particles.map(SongNames::normalize)
         private val given = given.map(SongNames::normalize).filter(String::isNotEmpty)
 
         /**
@@ -94,13 +96,16 @@ internal object Presto {
          * "Jacques Offenbach" isn't "Bach", and "." is no one.
          */
         fun isWho(name: String): Boolean {
-            val words = words(name).map(SongNames::normalize).filter(String::isNotEmpty)
-            return surname.isNotEmpty() && words.indices.any { first ->
-                words.drop(first).joinToString("") == surname && given.size <= first && given.indices.all { same(given[it], words[it]) }
-            }
+            val words = words(name).flatMap(::initials).map(SongNames::normalize).filter(String::isNotEmpty)
+            // A particle is the surname's, as in "Eddie Van Halen", or else a name of its own, as in "V. Morrison".
+            return isWho(words, given, particles.joinToString("") + surname) || isWho(words, given + particles, surname)
         }
 
-        /** The same name, or one's initial: "J" is "Johann", but "Taylor" isn't "Timothy". */
+        private fun isWho(words: List<String>, given: List<String>, surname: String) = surname.isNotEmpty() && words.indices.any { first ->
+            words.drop(first).joinToString("") == surname && given.size <= first && given.indices.all { same(given[it], words[it]) }
+        }
+
+    /** The same name, or one's initial: "J" is "Johann", but "Taylor" isn't "Timothy". */
         private fun same(one: String, other: String) = one == other || minOf(one.length, other.length) == 1 && one[0] == other[0]
     }
 

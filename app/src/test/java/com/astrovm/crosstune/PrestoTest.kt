@@ -74,6 +74,11 @@ class PrestoTest {
         assertEquals(MusicMetadata("Prelude", "Johann Sebastian Bach"), Presto.song("JS Bach: Prelude", listOf("Johann Sebastian Bach")))
         assertEquals(MusicMetadata("Eruption", "Eddie Van Halen"), Presto.song("Van Halen: Eruption", listOf("Eddie Van Halen")))
         assertEquals(MusicMetadata("Gloria", "Van Morrison"), Presto.song("Van Morrison: Gloria", listOf("Van Morrison")))
+        // A particle may be a first name too, and initials together are the same on both sides.
+        assertEquals(MusicMetadata("Gloria", "V. Morrison"), Presto.song("Van Morrison: Gloria", listOf("V. Morrison")))
+        assertEquals(MusicMetadata("Gloria", "Van Morrison"), Presto.song("Morrison, Van: Gloria", listOf("Van Morrison")))
+        assertEquals(MusicMetadata("Morrison, Van: Gloria", "Bill Morrison"), Presto.song("Morrison, Van: Gloria", listOf("Bill Morrison")))
+        assertEquals(MusicMetadata("Song", "DJ Shadow"), Presto.song("DJ Shadow: Song", listOf("DJ Shadow")))
     }
 
     @Test
@@ -89,6 +94,7 @@ class PrestoTest {
         assertEquals(MusicMetadata("Bagatelle", "A"), Presto.song("L. v. Beethoven: Bagatelle", listOf("A"), "Ludwig van Beethoven"))
         // A particle after the initials is the surname's, and the initial is still theirs.
         assertEquals(MusicMetadata("Bagatelle", "A"), Presto.song("Beethoven, L. van: Bagatelle", listOf("A"), "Ludwig van Beethoven"))
+        assertEquals(MusicMetadata("Bagatelle", "A"), Presto.song("Beethoven, L. VAN: Bagatelle", listOf("A"), "Ludwig van Beethoven"))
         assertEquals(MusicMetadata("Beethoven, L. van: Bagatelle", "A"), Presto.song("Beethoven, L. van: Bagatelle", listOf("A"), "Johann van Beethoven"))
         assertEquals(MusicMetadata("Beethoven, L. van: Bagatelle", "Johann Beethoven"), Presto.song("Beethoven, L. van: Bagatelle", listOf("Johann Beethoven")))
         // Without a composer to tell, a name no one plays stays.
