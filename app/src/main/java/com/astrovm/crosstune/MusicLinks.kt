@@ -198,7 +198,7 @@ internal object MusicLinks {
         host.isOn("soundcloud.com") -> MusicService.SOUNDCLOUD
         host.endsWith(".bandcamp.com") -> MusicService.BANDCAMP
         host.isOn("audiomack.com") -> MusicService.AUDIOMACK
-        host.isOn("prestomusic.com") -> MusicService.PRESTO_MUSIC
+        host.isOn("prestomusic.com") || host.isOn("prestoclassical.co.uk") -> MusicService.PRESTO_MUSIC
         else -> null
     }
 
@@ -233,7 +233,7 @@ internal object MusicLinks {
                 soundCloud(segments)
             host.endsWith(".bandcamp.com") && host != "daily.bandcamp.com" -> bandcamp(host, segments)
             host == "audiomack.com" || host == "www.audiomack.com" -> audiomack(segments)
-            host == "streaming.prestomusic.com" || host == "prestomusic.com" || host == "www.prestomusic.com" -> presto(segments)
+            host in prestoHosts -> presto(segments)
             host == "shazam.com" || host == "www.shazam.com" -> shazamSong(segments)
             // Invidious and Piped, on any of their many sites, use YouTube's own watch links; the
             // popular sites' other video paths are recognised too.
@@ -300,14 +300,22 @@ internal object MusicLinks {
         return MusicLink(MusicService.AUDIOMACK, type, "${segments[0]}/${segments[2]}", "https://audiomack.com/${segments.joinToString("/")}")
     }
 
+    /** Presto's app and shop, and the shop's old name, which still sends its links there. */
+    private val prestoHosts = setOf(
+        "streaming.prestomusic.com", "prestomusic.com", "www.prestomusic.com",
+        "prestoclassical.co.uk", "www.prestoclassical.co.uk", "secure.prestoclassical.co.uk"
+    )
+
     /**
      * A Presto Music album, as its app shares it, streaming.prestomusic.com/album/{code}, or as its shop links it,
-     * www.prestomusic.com/{genre}/products/{code}--{name}. Either opens as the app's, which the app opens.
+     * www.prestomusic.com/{genre}/products/{code}--{name}, whatever the shop puts before that. Either opens as the
+     * app's, which the app opens.
      */
     private fun presto(segments: List<String>): MusicLink? {
+        val products = segments.indexOf("products")
         val code = when {
             segments.size == 2 && segments[0] == "album" -> segments[1]
-            segments.size == 3 && segments[1] == "products" -> segments[2].substringBefore("--")
+            products > 0 && products == segments.size - 2 -> segments.last().substringBefore("--")
             else -> null
         }?.takeIf { numericIdRegex.matches(it) } ?: return null
         return MusicLink(MusicService.PRESTO_MUSIC, ItemType.ALBUM, code, "https://streaming.prestomusic.com/album/$code")

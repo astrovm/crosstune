@@ -848,7 +848,6 @@ internal object MetadataParsers {
         )
     }
 
-
     /** Audiomack oEmbed: the song, album or playlist's name, its artist and its cover. */
     fun audiomack(json: JSONObject, type: ItemType): MusicMetadata? {
         val title = json.optString("title").ifBlank { return null }

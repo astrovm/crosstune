@@ -83,8 +83,9 @@ internal enum class MusicService(
 
     /**
      * Whether Crosstune can open its links when they're tapped, not just shared or pasted. SoundCloud,
-     * Bandcamp and Audiomack can't: much of what's on them is on no other service (#372), and every
-     * host claimed is one more to tick in Android's "Open by default".
+     * Bandcamp and Audiomack can't: much of what's on them is on no other service (#372). Presto Music
+     * can't either: its links are mostly its shop's, and every host claimed is one more to tick in
+     * Android's "Open by default".
      */
     val opensTappedLinks: Boolean get() = this in LinkInterception.HOSTS
 

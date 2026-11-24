@@ -33,20 +33,29 @@ class PrestoTest {
         assertEquals(MusicMetadata("So What", "Miles Davis"), Presto.song("Davis, M: So What", band))
         assertEquals(MusicMetadata("Blue in Green", "Miles Davis"), Presto.song("Davis, M.: Blue in Green", band))
         assertEquals(MusicMetadata("Mood Indigo", "Duke Ellington"), Presto.song("Ellington: Mood Indigo", listOf("Johnny Hodges", "Duke Ellington")))
+        // Two writers, and the one who sings it; a name spelled apart or with an initial is still theirs.
+        assertEquals(MusicMetadata("Anti-Hero", "Taylor Swift"), Presto.song("Taylor Swift, Jack Antonoff: Anti-Hero", listOf("Taylor Swift")))
+        assertEquals(MusicMetadata("Majestic Dance", "Al Di Meola"), Presto.song("A. DiMeola: Majestic Dance", listOf("Lenny White", "Al Di Meola")))
+        assertEquals(MusicMetadata("Duet", "Lorenz Hart"), Presto.song("Rodgers & Hart: Duet", listOf("A", "Lorenz Hart")))
         // Another's initial isn't them: Bill Evans didn't write it.
         assertEquals(MusicMetadata("Evans, M: Song", "Bill Evans"), Presto.song("Evans, M: Song", listOf("Bill Evans")))
     }
 
     @Test
-    fun aClassicalWorkStaysWholeByItsFirstMusician() {
+    fun aWorkLosesItsComposerAndIsByItsFirstMusician() {
         val orchestra = listOf("Wiener Philharmoniker", "Carlos Kleiber")
         assertEquals(
-            MusicMetadata("Beethoven: Symphony No. 5 in C minor, Op. 67: 1. Allegro con brio", "Wiener Philharmoniker"),
-            Presto.song("Beethoven: Symphony No. 5 in C minor, Op. 67: 1. Allegro con brio", orchestra)
+            MusicMetadata("Symphony No. 5 in C minor, Op. 67: 1. Allegro con brio", "Wiener Philharmoniker"),
+            Presto.song("Beethoven: Symphony No. 5 in C minor, Op. 67: 1. Allegro con brio", orchestra, "Ludwig van Beethoven")
         )
-        // Nothing before a colon, or something no one is called, is no one's name.
+        assertEquals(MusicMetadata("Wonderful Copenhagen", "A"), Presto.song("Loesser: Wonderful Copenhagen", listOf("A"), "Frank Henry Loesser"))
+        // Without a composer to tell, a name no one plays stays.
+        assertEquals(MusicMetadata("Beethoven: Symphony No. 5", "Wiener Philharmoniker"), Presto.song("Beethoven: Symphony No. 5", orchestra))
+        assertEquals(MusicMetadata("Heyward, Gershwin: Summertime", "A"), Presto.song("Heyward, Gershwin: Summertime", listOf("A"), "Someone Else"))
+        // Nothing before a colon, numbers, or a mark alone are no one's name.
         assertEquals(MusicMetadata("Symphony No. 5: 1. Allegro", "Carlos Kleiber"), Presto.song("Symphony No. 5: 1. Allegro", listOf("Carlos Kleiber")))
         assertEquals(MusicMetadata(": Intro", "A"), Presto.song(": Intro", listOf("A")))
+        assertEquals(MusicMetadata(".: Intro", "A"), Presto.song(".: Intro", listOf("A"), "B"))
         assertEquals(MusicMetadata("Intro", ""), Presto.song("Intro", emptyList()))
     }
 
@@ -63,6 +72,9 @@ class PrestoTest {
         assertEquals("https://img/large.jpg", Presto.album(large)?.artworkUrl)
         assertNull(Presto.album(JSONObject("""{"payload":{"title":"Record","artistSummary":"A"}}"""))?.artworkUrl)
         assertEquals(MusicMetadata("Record", "", ItemType.ALBUM), Presto.album(JSONObject("""{"payload":{"title":"Record"}}""")))
+        // Android reads a null as "null", which is no one.
+        assertEquals(MusicMetadata("Record", "", ItemType.ALBUM), Presto.album(JSONObject("""{"payload":{"title":"Record","artistSummary":null}}""")))
+        assertNull(Presto.album(JSONObject("""{"payload":{"title":null}}""")))
         // No album, or no name for it.
         assertNull(Presto.album(JSONObject("""{"status":"error","code":54}""")))
         assertNull(Presto.album(JSONObject("""{"payload":{"title":" "}}""")))
@@ -76,10 +88,11 @@ class PrestoTest {
                "tracks":[{"trackTitle":"Davis, M: So What","singleFieldTrackTitle":"Davis, M: So What","duration":"9:07"},
                          {"trackTitle":"Evans, B: Blue in Green","duration":"5:37"},
                          {"trackTitle":"All Blues","duration":"11:33"}]},
-              {"artistData":[{"artistName":"Wiener Philharmoniker"}],
+              {"artistData":[{"artistName":"Wiener Philharmoniker"},{"artistName":null}],"composerName":"Ludwig van Beethoven",
                "tracks":[{"trackTitle":"1. Allegro con brio","singleFieldTrackTitle":"Beethoven: Symphony No. 5: 1. Allegro con brio","duration":"7:22"},
                          {"trackTitle":"2. Andante con moto","duration":"1:00:00"},
-                         {"singleFieldTrackTitle":"","duration":"x"}]}
+                         {"singleFieldTrackTitle":"","duration":"x"},
+                         {"trackTitle":"3. Allegro","duration":null}]}
             ]}}"""
         )
         assertEquals(
@@ -88,10 +101,14 @@ class PrestoTest {
                 // Who wrote it plays it. With no writer, it's the album's leader, though listed second.
                 MusicMetadata("Blue in Green", "Bill Evans", artworkUrl = "https://img/m.jpg", lengthMs = 337_000),
                 MusicMetadata("All Blues", "Miles Davis", artworkUrl = "https://img/m.jpg", lengthMs = 693_000),
-                MusicMetadata("Beethoven: Symphony No. 5: 1. Allegro con brio", "Wiener Philharmoniker", artworkUrl = "https://img/m.jpg", lengthMs = 442_000),
-                MusicMetadata("2. Andante con moto", "Wiener Philharmoniker", artworkUrl = "https://img/m.jpg", lengthMs = 3_600_000)
+                // Who wrote the piece comes off it.
+                MusicMetadata("Symphony No. 5: 1. Allegro con brio", "Wiener Philharmoniker", artworkUrl = "https://img/m.jpg", lengthMs = 442_000),
+                MusicMetadata("2. Andante con moto", "Wiener Philharmoniker", artworkUrl = "https://img/m.jpg", lengthMs = 3_600_000),
+                // Android reads a null as "null"; it's no length.
+                MusicMetadata("3. Allegro", "Wiener Philharmoniker", artworkUrl = "https://img/m.jpg")
             ),
-            Presto.tracks(tracks, MusicMetadata("Kind Of Blue", "Miles Davis", ItemType.ALBUM, "https://img/m.jpg"))
+            // The album may write its leader another way.
+            Presto.tracks(tracks, MusicMetadata("Kind Of Blue", "MILES DAVIS.", ItemType.ALBUM, "https://img/m.jpg"))
         )
         assertEquals(emptyList<MusicMetadata>(), Presto.tracks(JSONObject("""{"status":"error"}"""), MusicMetadata("Record", "", ItemType.ALBUM)))
     }

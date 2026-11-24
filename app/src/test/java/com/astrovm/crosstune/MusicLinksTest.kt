@@ -413,6 +413,12 @@ class MusicLinksTest {
         assertLink("https://www.prestomusic.com/jazz/products/8269533--kind-of-blue", MusicService.PRESTO_MUSIC, ItemType.ALBUM, "8269533", album)
         assertLink("https://prestomusic.com/classical/products/8269533", MusicService.PRESTO_MUSIC, ItemType.ALBUM, "8269533", album)
         assertLink("streaming.prestomusic.com/album/8269533", MusicService.PRESTO_MUSIC, ItemType.ALBUM, "8269533", album)
+        // The shop's old name, and whatever the shop puts before a product.
+        assertLink("https://www.prestoclassical.co.uk/classical/products/8269533", MusicService.PRESTO_MUSIC, ItemType.ALBUM, "8269533", album)
+        assertLink("https://secure.prestoclassical.co.uk/classical/products/8269533", MusicService.PRESTO_MUSIC, ItemType.ALBUM, "8269533", album)
+        assertLink("https://www.prestomusic.com/aff/123/jazz/products/8269533--kind-of-blue", MusicService.PRESTO_MUSIC, ItemType.ALBUM, "8269533", album)
+        assertNull(link("https://www.prestomusic.com/products/8269533"))
+        assertNull(link("https://www.prestomusic.com/jazz/products/8269533/reviews"))
         // A work, an artist, a search, a code that's no number, or another host of theirs.
         assertNull(link("https://streaming.prestomusic.com/work/176093"))
         assertNull(link("https://streaming.prestomusic.com/artist/5276/albums"))

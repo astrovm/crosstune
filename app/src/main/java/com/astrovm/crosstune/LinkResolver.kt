@@ -116,9 +116,10 @@ internal class LinkResolver(
 
     /**
      * The songs of an album or playlist whose page doesn't list them, from where its service's own
-     * website gets them: Spotify's embed pages, and the APIs behind TIDAL's, SoundCloud's and
-     * Audiomack's websites, and the one behind Presto Music's app. They're extra, so the album or playlist still shows without them when
-     * they can't be read. A Spotify playlist's own [page] has its first songs' covers.
+     * website gets them: Spotify's embed pages, the APIs behind TIDAL's, SoundCloud's and
+     * Audiomack's websites, and the one behind Presto Music's app. They're extra, so the album or
+     * playlist still shows without them when they can't be read. A Spotify playlist's own [page] has
+     * its first songs' covers.
      */
     private suspend fun withTracks(link: MusicLink, metadata: MusicMetadata, page: String): MusicMetadata {
         if (link.type != ItemType.PLAYLIST && link.type != ItemType.ALBUM) return metadata
