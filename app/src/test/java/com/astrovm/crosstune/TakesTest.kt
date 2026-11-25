@@ -9,15 +9,23 @@ import org.junit.Test
 class TakesTest {
 
     @Test
-    fun aDiscoMixIsARecordingNoteNotTheSongNameOrGenre() {
-        assertTrue(Takes.saysDiscoMix("黄昏のBay City (DISCOバージョン) (ボーナストラック)"))
-        assertTrue(Takes.saysDiscoMix("黄昏のBAY CITY(プロモーション用DISCOバージョン) Junko Yagami [HQ]"))
-        assertTrue(Takes.saysDiscoMix("Song - Disco Mix"))
-        assertTrue(Takes.saysDiscoMix("Song [Disco Version]"))
-        assertFalse(Takes.saysDiscoMix("Disco Version"))
-        assertFalse(Takes.saysDiscoMix("Song (disco)"))
-        assertFalse(Takes.saysDiscoMix("Song (non-disco version)"))
-        assertFalse(Takes.saysDiscoMix("Song (Radio Edit)"))
+    fun mixNotesUseCompatibilitySpellingWithoutTreatingSongNamesAsNotes() {
+        val notes = listOf(
+            "Song (Disco Version)", "Song - Club Remix", "Song （Ｄｉｓｃｏ　Ｍｉｘ）", "Song (DISCOバージョン)",
+            "Song (ディスコ版)", "Song (ﾃﾞｨｽｺ･ﾊﾞｰｼﾞｮﾝ)", "Song (テ\u3099ィスコ・ハ\u3099ーシ\u3099ョン)",
+            "Song (ディスコ・ヴァージョン)", "Song (プロモーション用ディスコバージョン)"
+        )
+        for (name in notes) {
+            assertTrue(name, Takes.namesMix(name))
+            assertTrue(name, Takes.albumNamesMix(name))
+        }
+        assertTrue(Takes.albumNamesMix("Disco Mix"))
+        val names = listOf("Disco", "Disco Nights", "Disco Inferno", "ディスコ・クイーン", "Song (Deluxe Edition)", "Song (Disco)")
+        for (name in names) {
+            assertFalse(name, Takes.namesMix(name))
+            assertFalse(name, Takes.albumNamesMix(name))
+        }
+        assertFalse(Takes.namesMix("Disco Version"))
     }
 
     @Test
