@@ -201,10 +201,10 @@ internal object Readings {
             val piece = pieces[at]
             val before = pieces.getOrNull(at - 1)
             val after = pieces.getOrNull(at + 1)
-            val subject = piece.surface == "何だ" && pieces.beforeAdverbs(at)?.nanDaSubject() == true
+            val subject = pieces.nanDaHasSubject(at)
             val question = subject || after?.surface in setOf("か", "よ", "ね", "?", "？") ||
                 openingNanDaContinues(before, after)
-            val repeated = piece.surface in setOf("何だ", "なん") && pieces.nextToNanDa(at)
+            val repeated = !subject && piece.surface in setOf("何だ", "なん") && pieces.nextToNanDa(at)
             val call = nanDaCall(pieces, at, repeated)
             when {
                 piece.surface == "何だ" && piece.kind == "感動詞" && question && !repeated -> {
@@ -219,6 +219,12 @@ internal object Readings {
             }
             at++
         }
+    }
+
+    private fun List<Piece>.nanDaHasSubject(at: Int) = when (get(at).surface) {
+        "何だ" -> beforeAdverbs(at)?.nanDaSubject() == true
+        "なん" -> beforeAdverbs(at)?.isNanDaTopic() == true
+        else -> false
     }
 
     private fun Piece.nanDaSubject() = kind == "名詞" || isNanDaTopic()
@@ -255,12 +261,17 @@ internal object Readings {
         return nanDaAt(at - 1) || getOrNull(at - 2)?.surface == "なん" && nanDaAt(at - 2)
     }
 
+    private fun List<Piece>.nanDaBeforeSpace(at: Int): Boolean {
+        if (getOrNull(at - 1)?.surface?.isBlank() != true) return false
+        return nanDaAt(at - 2) || getOrNull(at - 3)?.surface == "なん" && nanDaAt(at - 3)
+    }
+
     private fun nanDaCall(pieces: List<Piece>, at: Int, repeated: Boolean): Boolean {
         val before = pieces.getOrNull(at - 1)
         val after = pieces.getOrNull(at + 1)
         val next = pieces.getOrNull(at + 2)
         return pieces[at].surface == "なん" && after?.surface == "だ" && after.startsCopula &&
-            (repeated || nanDaOpening(before) && next.endsNanDaCall())
+            (repeated || pieces.nanDaBeforeSpace(at) || nanDaOpening(before) && next.endsNanDaCall())
     }
 
     /**

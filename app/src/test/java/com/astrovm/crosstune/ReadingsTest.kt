@@ -167,6 +167,20 @@ class ReadingsTest {
     ))
 
     @Test
+    fun repeatedNanDaRespectsTopicsAndSpaces() = assertJapaneseBoundaries(listOf(
+        Triple("これはなんだなんだ", "kore wa nan da nanda", listOf("これ", "は", "なん", "だ", "なんだ")),
+        Triple("これは何だ何だ", "kore wa nan da nanda", listOf("これ", "は", "何", "だ", "何だ")),
+        Triple("これはなんだ何だ", "kore wa nan da nanda", listOf("これ", "は", "なん", "だ", "何だ")),
+        Triple("これは何だなんだ", "kore wa nan da nanda", listOf("これ", "は", "何", "だ", "なんだ")),
+        Triple("なんだ なんだ", "nanda nanda", listOf("なんだ", "なんだ")),
+        Triple("なんだ　なんだ", "nanda nanda", listOf("なんだ", "なんだ")),
+        Triple("何だ なんだ", "nanda nanda", listOf("何だ", "なんだ")),
+        Triple("なんだ 何だ", "nanda nanda", listOf("なんだ", "何だ")),
+        Triple("なんだ、なんだ", "nanda、 nanda", listOf("なんだ", "なんだ")),
+        Triple("これは なんだ", "kore wa nan da", listOf("これ", "は", "なん", "だ")),
+    ))
+
+    @Test
     fun explanatoryNandaStaysWholeAndInterrogativeNanSeparates() = assertJapaneseBoundaries(listOf(
         Triple("今日はここまでなんだ", "kyoo wa koko made nanda", listOf("今日", "は", "ここ", "まで", "なんだ")),
         Triple("つらいからなんだよ", "tsurai kara nanda yo", listOf("つらい", "から", "なんだ", "よ")),
