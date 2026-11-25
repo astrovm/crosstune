@@ -18,6 +18,21 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun anApostropheBeforeKaraOpensOnlyWithoutAWord() {
+        val cases = listOf(
+            Triple("'からだ", "' karada", listOf("からだ")),
+            Triple("君'からだ", "kimi' kara da", listOf("君", "から", "だ")),
+            Triple("Don'tからだ", "Don't kara da", listOf("Don't", "から", "だ")),
+            Triple("1'からだ", "1' kara da", listOf("から", "だ")),
+            Triple("、'からだ", "、' karada", listOf("からだ"))
+        )
+        for ((line, romaji, words) in cases) {
+            fun read() = Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text }
+            assertEquals(line, listOf(romaji to words, romaji to words), listOf(read(), TestUniDic.reading { read() }))
+        }
+    }
+
+    @Test
     fun additionalOpeningMarksStartAPhrase() {
         for (mark in listOf("［", "[", "‘", "〔", "｛", "{", "〖", "〘", "〚", "｢", "«", "‹", "⟨", "〝")) {
             val line = "${mark}からだ"
