@@ -24,6 +24,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Where a song card's main button and its icons go: beside it in a row, or under it in the middle when its word has no
  * room beside them, and mirrored in a language read right to left. The screen is tall, so nothing scrolls between reads.
+ * Whether the word fits beside the icons, in every language and at the biggest fonts, is [CardToolsFitTest]'s.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -47,7 +48,13 @@ class CardButtonsLayoutTest {
         val app = string(R.string.target_youtube_music)
         fun at(description: String) = composeRule.onNode(hasContentDescription(description)).getBoundsInRoot()
         val width = qualifiers.substringAfter("-w").substringBefore("dp").toFloat().dp
-        return Card(width, at(string(R.string.play_in_background, app)), at(string(R.string.search_in_destination, app)), at(string(R.string.open_in_youtube_music)))
+        val card = Card(width, at(string(R.string.play_in_background, app)), at(string(R.string.search_in_destination, app)), at(string(R.string.open_in_youtube_music)))
+        // Each icon is a whole touch target, whichever form the card takes.
+        for (icon in listOf(card.search, card.open)) {
+            assertDp("an icon's width", 56.dp, icon.right - icon.left)
+            assertDp("an icon's height", 56.dp, icon.bottom - icon.top)
+        }
+        return card
     }
 
     private fun assertDp(what: String, expected: Dp, actual: Dp) = assertEquals(what, expected.value, actual.value, 0.5f)
