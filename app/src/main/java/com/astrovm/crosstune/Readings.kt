@@ -109,8 +109,9 @@ internal object Readings {
      * 14 for a drawn-out よ after a connective, まってよぉ, looked up as the ending particle.
      * 15 for a long mark or a small vowel that draws out a word IPADIC split.
      * 16 for a word before small っ that left the tokenizer with no way through.
+     * 17 to space the Japanese copula apart from the word it follows.
      */
-    const val VERSION = 16
+    const val VERSION = 17
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -382,7 +383,8 @@ internal object Readings {
             token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) + ending },
             end,
             unread = reading == null,
-            reader = if (token is SmallKanaTokenizer.JmdictToken || bridge?.jmdict == true) Reader.JMDICT else Reader.IPADIC
+            reader = if (token is SmallKanaTokenizer.JmdictToken || bridge?.jmdict == true) Reader.JMDICT else Reader.IPADIC,
+            startsCopula = startsCopula(token.partOfSpeechLevel1, token.conjugationType, token.surface)
         )
     }
 
@@ -703,8 +705,16 @@ internal object Readings {
             said?.let(::hiragana),
             token.position + token.surface.length,
             unread = said == null,
-            reader = Reader.UNIDIC
+            reader = Reader.UNIDIC,
+            startsCopula = startsCopula(token.partOfSpeechLevel1, token.conjugationType, token.surface)
         )
+    }
+
+    /** The head of だ, だった or だろう, or a form of です. Not voiced past だ, or the copula's な, で or じゃ. */
+    fun startsCopula(kind: String, conjugation: String, surface: String) = kind == "助動詞" && when (conjugation) {
+        "特殊・ダ", "助動詞-ダ" -> surface.first() in "だダ"
+        "特殊・デス", "助動詞-デス" -> true
+        else -> false
     }
 
     /**
@@ -938,7 +948,8 @@ internal object Readings {
         /** What read it. */
         val reader: Reader = Reader.IPADIC,
         /** How it is spelled today, when it is in old kana and [Furigana.byRule] says it. */
-        val today: String? = null
+        val today: String? = null,
+        val startsCopula: Boolean = false
     ) {
         /** Kanji the dictionary can't read. */
         val unknown get() = unread && surface.any(::isHan)
@@ -956,7 +967,8 @@ internal object Readings {
         private val isNoun get() = kind == "名詞" && surface.any(Char::isLetterOrDigit)
 
         /** It read [kana] by Crosstune's own rules, as a word of [kind] and [subkind] when that changes too. */
-        fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) = Piece(surface, kana, kind, subkind, base, null, end, reader = Reader.RULES, today = today)
+        fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) =
+            Piece(surface, kana, kind, subkind, base, null, end, reader = Reader.RULES, today = today, startsCopula = startsCopula)
 
         /**
          * It, drawn out by the small vowels of [small], said as long as they make it. Where its last kana and a small
@@ -964,11 +976,12 @@ internal object Readings {
          */
         fun drawnOutBy(small: Piece): Piece {
             val drawn = if ("${kana.last()}${small.kana.first()}" in YOUON) small.kana.map { it + 1 }.joinToString("") else small.kana
-            return Piece(surface + small.surface, kana + drawn, kind, subkind, base, spoken?.plus(drawn), small.end, unread, reader, today)
+            return Piece(surface + small.surface, kana + drawn, kind, subkind, base, spoken?.plus(drawn), small.end, unread, reader, today, startsCopula)
         }
 
         /** It read [kana], and said [said]. */
-        fun reading(kana: String, said: String) = Piece(surface, kana, kind, subkind, base, said, end, reader = reader, today = today)
+        fun reading(kana: String, said: String) =
+            Piece(surface, kana, kind, subkind, base, said, end, reader = reader, today = today, startsCopula = startsCopula)
 
         /** How it's said, for romaji, so it's sung right: sensee, not sensei; the particles は and へ are wa and e. */
         val said get() = if (kind == "助詞") particle ?: kana else spoken ?: kana
@@ -1599,6 +1612,31 @@ internal object Readings {
     private fun romanizedLine(pieces: List<Piece>, typed: Boolean) =
         romajiWords(pieces) { if (typed) it.typed else it.said }.joinToString(" ") { romaji(it, typed) }.replace(phoneRegex("""\s+"""), " ").trim()
 
+    /** Both dictionaries can take でし + て for the copula in あとでして, where it is really で + して. */
+    private fun Piece.ambiguousDeshite(after: Piece?) = kana == "でし" && after?.kana == "て" && after.subkind == "接続助詞"
+
+    /** At the start of a phrase or after a subject or topic, なん can ask 何. After まで or から it can explain. */
+    private fun Piece.beforeExplanatoryNan(): Boolean {
+        if (surface.none(Char::isLetterOrDigit)) return false
+        if (kind != "助詞") return true
+        return !when (kana) {
+            "は" -> subkind == "係助詞"
+            "が" -> subkind == "格助詞"
+            else -> false
+        }
+    }
+
+    /** Keep fixed phrases and dependent forms such as そうだ, ようだ, のだ and んだ as they were grouped. */
+    private fun Piece.keepsCopula(before: Piece?): Boolean {
+        if (kind in COPULA_PHRASE_KINDS || base in COPULA_PHRASE_STEMS) return true
+        // 様 read よう is like ようだ, but the honorific 様 read さま belongs to the preceding name.
+        if (base == "様") return subkind == "非自立" || subkind == "助動詞語幹"
+        return surface == "なん" && before?.beforeExplanatoryNan() == true
+    }
+
+    private val COPULA_PHRASE_KINDS = setOf("副詞", "感動詞", "フィラー")
+    private val COPULA_PHRASE_STEMS = setOf("そう", "よう", "みたい", "の", "ん")
+
     /** [pieces] in words, as [romajiWords] spaces them. */
     private fun grouped(pieces: List<Piece>): List<List<Piece>> {
         val words = mutableListOf<MutableList<Piece>>()
@@ -1606,15 +1644,15 @@ internal object Readings {
         var opened = false
         var orphan = false
         var straightQuotes = 0
-        for (piece in pieces) {
+        for ((at, piece) in pieces.withIndex()) {
             if (piece.surface.isBlank()) {
                 previous = null
                 orphan = false
                 continue
             }
             val opening = piece.surface in OPENING
-            val ending = (piece.kind == "助動詞" && piece.surface != "なら") ||
-                (piece.kind == "助詞" && piece.subkind == "接続助詞" && piece.surface != "から") ||
+            val ending = (piece.kind == "助動詞" && piece.kana != "なら") ||
+                (piece.kind == "助詞" && piece.subkind == "接続助詞" && piece.kana != "から") ||
                 (piece.kind == "動詞" && piece.subkind == "非自立") || piece.subkind == "接尾"
             // An ending after a particle starts a word of its own: だけだった is dake datta. English
             // the dictionary splits, "Don't" into Don, ' and t, stays as written. A mark goes with the word
@@ -1625,16 +1663,19 @@ internal object Readings {
             val withPrevious = opened || english || longMark || mark
             // A split long mark ends the word it draws out. 好き after 食べるー is a new word.
             // A から without a preceding word can start a noun: keep its ending, then split the next particle.
-            val orphanEnding = orphan && previous?.surface == "から" && piece.kind == "助動詞"
+            val orphanEnding = orphan && previous?.kana == "から" && piece.kind == "助動詞"
             val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
-            val continuesWord = ending && !afterOrphan && (previous?.kind != "助詞" || orphanEnding) && previous?.surface?.any { it != 'ー' } == true
+            val copula = piece.startsCopula && !piece.ambiguousDeshite(pieces.getOrNull(at + 1))
+            val separateCopula = copula && !orphanEnding && previous?.keepsCopula(pieces.getOrNull(at - 2)) != true
+            val continuesEnding = ending && !afterOrphan && !separateCopula
+            val continuesWord = continuesEnding && (previous?.kind != "助詞" || orphanEnding) && previous?.surface?.any { it != 'ー' } == true
             // An opening mark or clause break starts a phrase; a closing quote keeps the word before it.
             val phraseMark = previous != null && (previous.surface in OPENING || previous.surface in "、。，．,.！？!?；;：:…" ||
                 (previous.surface == "\"" && straightQuotes % 2 == 1) ||
                 (previous.surface == "'" && words.lastOrNull()?.none { it.surface.any(Char::isLetterOrDigit) } == true))
             val join = previous != null && (withPrevious || continuesWord)
             if (join) words.last() += piece else words += mutableListOf(piece)
-            orphan = if (orphanEnding && join) true else piece.surface == "から" && piece.kind == "助詞" &&
+            orphan = if (orphanEnding && join) true else piece.kana == "から" && piece.kind == "助詞" &&
                 (previous == null || previous.kind == "助詞" || phraseMark ||
                     (previous.surface == "の" && previous.kind == "名詞" && previous.subkind == "非自立"))
             opened = opening

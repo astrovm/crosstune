@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Looper
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -29,7 +30,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import java.net.URLDecoder
 
-/** The word details in lyrics keep the words and sounds of drawn-out kana. */
+/** The word details in lyrics use the words and sounds from Japanese readings. */
 @RunWith(RobolectricTestRunner::class)
 class ReadingsInLyricsTest {
     @get:Rule
@@ -106,6 +107,15 @@ class ReadingsInLyricsTest {
         waitUntil { composeRule.onAllNodes(hasText("[パーティー]")).fetchSemanticsNodes().isNotEmpty() }
     }
 
+    @Test
+    fun theCopulaIsATappableWordInLyrics() {
+        lyricsText = "無駄だから\n時代ですから"
+        openSong()
+        openWord("無駄だから", "だ", rubyPiece = "だ")
+        waitUntil { composeRule.onAllNodes(hasText("muda da kara")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { composeRule.onAllNodes(hasText("da")).fetchSemanticsNodes().isNotEmpty() }
+    }
+
     private fun openSong() {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU"))
             .setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
@@ -120,11 +130,12 @@ class ReadingsInLyricsTest {
         composeRule.onAllNodes(lyrics)[0].performScrollTo().performClick()
     }
 
-    private fun openWord(text: String, word: String) {
+    private fun openWord(text: String, word: String, rubyPiece: String? = null) {
         val line = hasText(text) and hasTestTag(LYRIC_LINE_TAG)
         waitUntil { composeRule.onAllNodes(line).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onNode(line).performScrollTo().performClick()
-        val study = hasText(text) and hasTestTag(STUDY_LINE_TAG)
+        val sheet = hasTestTag(STUDY_LINE_TAG)
+        val study = if (rubyPiece == null) hasText(text) and sheet else hasText(rubyPiece) and hasAnyAncestor(sheet)
         waitUntil {
             runCatching {
                 composeRule.onNode(study).performFirstLinkClick { (it.item as LinkAnnotation.Clickable).tag == word }
