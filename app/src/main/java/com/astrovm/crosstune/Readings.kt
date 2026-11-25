@@ -109,8 +109,9 @@ internal object Readings {
      * 14 for a drawn-out よ after a connective, まってよぉ, looked up as the ending particle.
      * 15 for a long mark or a small vowel that draws out a word IPADIC split.
      * 16 for a word before small っ that left the tokenizer with no way through.
+     * 17 to space the Japanese copula apart from the word it follows.
      */
-    const val VERSION = 16
+    const val VERSION = 17
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -382,7 +383,8 @@ internal object Readings {
             token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) + ending },
             end,
             unread = reading == null,
-            reader = if (token is SmallKanaTokenizer.JmdictToken || bridge?.jmdict == true) Reader.JMDICT else Reader.IPADIC
+            reader = if (token is SmallKanaTokenizer.JmdictToken || bridge?.jmdict == true) Reader.JMDICT else Reader.IPADIC,
+            startsCopula = startsCopula(token.partOfSpeechLevel1, token.conjugationType, token.surface)
         )
     }
 
@@ -703,8 +705,16 @@ internal object Readings {
             said?.let(::hiragana),
             token.position + token.surface.length,
             unread = said == null,
-            reader = Reader.UNIDIC
+            reader = Reader.UNIDIC,
+            startsCopula = startsCopula(token.partOfSpeechLevel1, token.conjugationType, token.surface)
         )
+    }
+
+    /** The head of だ, だった or だろう, or a form of です. Not voiced past だ, or the copula's な, で or じゃ. */
+    private fun startsCopula(kind: String, conjugation: String, surface: String) = kind == "助動詞" && when (conjugation) {
+        "特殊・ダ", "助動詞-ダ" -> surface.startsWith('だ')
+        "特殊・デス", "助動詞-デス" -> true
+        else -> false
     }
 
     /**
@@ -938,7 +948,8 @@ internal object Readings {
         /** What read it. */
         val reader: Reader = Reader.IPADIC,
         /** How it is spelled today, when it is in old kana and [Furigana.byRule] says it. */
-        val today: String? = null
+        val today: String? = null,
+        val startsCopula: Boolean = false
     ) {
         /** Kanji the dictionary can't read. */
         val unknown get() = unread && surface.any(::isHan)
@@ -956,7 +967,8 @@ internal object Readings {
         private val isNoun get() = kind == "名詞" && surface.any(Char::isLetterOrDigit)
 
         /** It read [kana] by Crosstune's own rules, as a word of [kind] and [subkind] when that changes too. */
-        fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) = Piece(surface, kana, kind, subkind, base, null, end, reader = Reader.RULES, today = today)
+        fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) =
+            Piece(surface, kana, kind, subkind, base, null, end, reader = Reader.RULES, today = today, startsCopula = startsCopula)
 
         /**
          * It, drawn out by the small vowels of [small], said as long as they make it. Where its last kana and a small
@@ -964,11 +976,12 @@ internal object Readings {
          */
         fun drawnOutBy(small: Piece): Piece {
             val drawn = if ("${kana.last()}${small.kana.first()}" in YOUON) small.kana.map { it + 1 }.joinToString("") else small.kana
-            return Piece(surface + small.surface, kana + drawn, kind, subkind, base, spoken?.plus(drawn), small.end, unread, reader, today)
+            return Piece(surface + small.surface, kana + drawn, kind, subkind, base, spoken?.plus(drawn), small.end, unread, reader, today, startsCopula)
         }
 
         /** It read [kana], and said [said]. */
-        fun reading(kana: String, said: String) = Piece(surface, kana, kind, subkind, base, said, end, reader = reader, today = today)
+        fun reading(kana: String, said: String) =
+            Piece(surface, kana, kind, subkind, base, said, end, reader = reader, today = today, startsCopula = startsCopula)
 
         /** How it's said, for romaji, so it's sung right: sensee, not sensei; the particles は and へ are wa and e. */
         val said get() = if (kind == "助詞") particle ?: kana else spoken ?: kana
@@ -1599,6 +1612,12 @@ internal object Readings {
     private fun romanizedLine(pieces: List<Piece>, typed: Boolean) =
         romajiWords(pieces) { if (typed) it.typed else it.said }.joinToString(" ") { romaji(it, typed) }.replace(phoneRegex("""\s+"""), " ").trim()
 
+    /** Keep fixed phrases and dependent forms such as そうだ, ようだ, のだ and んだ as they were grouped. */
+    private fun keepsCopula(piece: Piece?) = piece?.kind in COPULA_PHRASE_KINDS || piece?.base in COPULA_PHRASE_STEMS
+
+    private val COPULA_PHRASE_KINDS = setOf("副詞", "感動詞", "フィラー")
+    private val COPULA_PHRASE_STEMS = setOf("そう", "よう", "様", "の", "ん")
+
     /** [pieces] in words, as [romajiWords] spaces them. */
     private fun grouped(pieces: List<Piece>): List<List<Piece>> {
         val words = mutableListOf<MutableList<Piece>>()
@@ -1627,7 +1646,9 @@ internal object Readings {
             // A から without a preceding word can start a noun: keep its ending, then split the next particle.
             val orphanEnding = orphan && previous?.surface == "から" && piece.kind == "助動詞"
             val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
-            val continuesWord = ending && !afterOrphan && (previous?.kind != "助詞" || orphanEnding) && previous?.surface?.any { it != 'ー' } == true
+            val separateCopula = piece.startsCopula && !orphanEnding && !keepsCopula(previous)
+            val continuesEnding = ending && !afterOrphan && !separateCopula
+            val continuesWord = continuesEnding && (previous?.kind != "助詞" || orphanEnding) && previous?.surface?.any { it != 'ー' } == true
             // An opening mark or clause break starts a phrase; a closing quote keeps the word before it.
             val phraseMark = previous != null && (previous.surface in OPENING || previous.surface in "、。，．,.！？!?；;：:…" ||
                 (previous.surface == "\"" && straightQuotes % 2 == 1) ||

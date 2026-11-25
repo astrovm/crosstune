@@ -18,6 +18,59 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun copulasHaveTheirOwnRomajiAndPracticeWords() {
+        val lines = listOf("無駄だから", "人間だから", "時代ですから")
+        val romaji = listOf("muda da kara", "ningen da kara", "jidai desu kara")
+        val words = listOf(listOf("無駄", "だ", "から"), listOf("人間", "だ", "から"), listOf("時代", "です", "から"))
+        fun read() = Readings.of(lines, Script.JAPANESE).map { it.romanized } to lines.map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text }
+        }
+        val expected = romaji to words
+        assertEquals(listOf(expected, expected), listOf(read(), TestUniDic.reading(::read)))
+    }
+
+    @Test
+    fun theRestOfTheCopulaStaysInTheSameWord() {
+        val cases = listOf(
+            Triple("本だった", "hon datta", listOf("本", "だった")),
+            Triple("本でした", "hon deshita", listOf("本", "でした")),
+            Triple("本だろう", "hon darou", listOf("本", "だろう")),
+            Triple("本でしょう", "hon deshou", listOf("本", "でしょう")),
+            Triple("本ですか", "hon desu ka", listOf("本", "です", "か")),
+            Triple("春だったら", "haru dattara", listOf("春", "だったら")),
+            Triple("本だったり", "hon dattari", listOf("本", "だったり")),
+            Triple("『夢』だった", "『yume』 datta", listOf("夢", "だった")),
+            Triple("綺麗です", "kiree desu", listOf("綺麗", "です")),
+            Triple("高いです", "takai desu", listOf("高い", "です")),
+            Triple("高かったです", "takakatta desu", listOf("高かった", "です"))
+        )
+        fun check() {
+            val readings = Readings.of(cases.map { it.first }, Script.JAPANESE)
+            for ((at, case) in cases.withIndex()) {
+                val (line, romaji, words) = case
+                assertEquals(line, romaji, readings[at].romanized)
+                assertEquals(line, words, Readings.words(line, Script.JAPANESE).map { it.text })
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun theVoicedPastAndFixedAuxiliaryPhrasesKeepTheirRomaji() {
+        val cases = mapOf(
+            "読んだ" to "yonda", "死んだ" to "shinda", "泳いだ" to "oyoida", "読んだら" to "yondara", "読んだり" to "yon dari",
+            "読んだそうだ" to "yonda sooda", "読むそうだ" to "yomu sooda", "泳ぐようだ" to "oyogu yooda", "夢のようだ" to "yume no yooda",
+            "そうだ" to "sooda", "そうです" to "soodesu", "読むのだ" to "yomu noda", "読むんだ" to "yomu nda", "のだ" to "noda", "んだ" to "nda",
+            "本なんだ" to "honna nda", "夢なのだ" to "yumena noda", "本じゃない" to "hon ja nai", "本ではない" to "hon de wa nai",
+            "本である" to "hondearu", "綺麗な" to "kireena", "人ですら" to "hitode sura"
+        )
+        fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.romanized }
+        val expected = cases.values.toList()
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading(::readings)))
+    }
+
+    @Test
     fun anApostropheBeforeKaraOpensOnlyWithoutAWord() {
         val cases = listOf(
             Triple("'からだ", "' karada", listOf("からだ")),
@@ -454,8 +507,8 @@ class ReadingsTest {
 
     @Test
     fun longMarkKeepsTheNextWordSeparate() = assertDrawnReading(
-        "食べるー好きだよ", "taberuu sukida yo",
-        Triple("食べるー", "taberuu", "食べる"), Triple("好きだ", "sukida", "好き"), Triple("よ", "yo", "よ")
+        "食べるー好きだよ", "taberuu suki da yo",
+        Triple("食べるー", "taberuu", "食べる"), Triple("好き", "suki", "好き"), Triple("だ", "da", "だ"), Triple("よ", "yo", "よ")
     )
 
     @Test
