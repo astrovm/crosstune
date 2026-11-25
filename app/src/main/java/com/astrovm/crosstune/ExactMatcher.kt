@@ -1763,6 +1763,7 @@ internal class ExactMatcher(
     private fun repeatsBilingualTitle(title: String, names: Names): Boolean {
         val parts = title.split(',', '，', limit = 3)
         if (parts.size != 2) return false
+        if (parts.any { part -> VIDEO_CREDIT_DASHES.none(part::contains) }) return false
         val artists = names.artists.map(SongNames::normalize).toSet()
         val first = creditedVideoTitle(parts[0], artists) ?: return false
         val second = creditedVideoTitle(parts[1], artists) ?: return false
@@ -1777,7 +1778,7 @@ internal class ExactMatcher(
     }
 
     private fun creditedVideoTitle(part: String, artists: Set<String>): String? {
-        val dash = VIDEO_CREDIT_DASHES.map { part.indexOf(it) to it }.filter { it.first != -1 }.minByOrNull { it.first } ?: return null
+        val dash = VIDEO_CREDIT_DASHES.map { part.indexOf(it) to it }.filter { it.first != -1 }.minBy { it.first }
         val credit = part.substring(0, dash.first)
         val title = part.substring(dash.first + dash.second.length)
         return title.trim().takeIf { SongNames.normalize(credit) in artists }

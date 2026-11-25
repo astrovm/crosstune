@@ -2545,6 +2545,7 @@ class ExactMatcherTest {
         assertEquals(url, findsLoveVideo("愛 - Love", "Band - 愛 , Band - Love", "Band"))
         assertEquals(url, findsLoveVideo("愛 - Love", "Band - Love，Band - 愛", "Band"))
         assertEquals(url, findsLoveVideo("愛 - Love", "Band - 愛 , Band - Love", "Fan"))
+        assertNull(findsLoveVideo("愛 - Love", "愛, Band - Love - Official Video", "Band"))
     }
 
     @Test
