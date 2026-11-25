@@ -2596,6 +2596,252 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aRemasterTagDoesNotHideTheEarlierDiscoNote() = runBlocking {
+        val song = MusicMetadata("Song", "Band")
+        for (title in listOf("Song - Disco Version (2024 Remaster)", "Song (Disco Version [2024 Remaster])")) {
+            namesAndTabs(songs = listOf(youTubeMusicRow(title, "Band • Album • 7:27", videoId = "mix00000000")))
+            assertNull(title, matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        }
+    }
+
+    @Test
+    fun aDiscoPhraseInTheSourceTitleOrAlbumCountsWithoutTagPunctuation() = runBlocking {
+        val row = youTubeMusicRow("Song - Disco Version", "Band • Album • 4:41", videoId = "mix00000000")
+        val song = MusicMetadata("Song: Disco Version", "Band")
+        val url = "https://music.youtube.com/watch?v=mix00000000"
+        namesAndTabs(songs = listOf(row))
+        assertEquals(url, matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+
+        namesAndTabs(songs = listOf(youTubeMusicRow("Song", "Band • Album (Disco Version) • 4:41", videoId = "mix00000000")))
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(title = "Song")))
+        assertEquals(url, matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(title = "Song", album = "Ａｌｂｕｍ：Ｄｉｓｃｏ・Ｍｉｘ Deluxe")))
+    }
+
+    @Test
+    fun aDiscoRowThatCannotOpenStillRulesOutAnUnrelatedTitle() = runBlocking {
+        val live = youTubeMusicRow("Song - Live", "Band • Album (Disco Mix) • 4:41", videoId = "live0000000")
+        val unrelated = youTubeMusicRow("違う曲", "Band • Album • 4:41", videoId = "other000000")
+        val apple = mapOf("US" to appleSong("Song", "Band", 281_000))
+        val source = MusicMetadata("Song", "Band")
+        namesAndTabs(songs = listOf(unrelated), apple = apple)
+        assertEquals("https://music.youtube.com/watch?v=other000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, source))
+        namesAndTabs(songs = listOf(live, unrelated), apple = apple)
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, source))
+        val markedTitle = youTubeMusicRow("違う曲", "Band • Album (Disco Ver.) • 4:41", videoId = "mix00000000")
+        namesAndTabs(songs = listOf(markedTitle), apple = apple)
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, source))
+    }
+
+    @Test
+    fun aDiscoAlbumRequestDoesNotShareThePlainAlbumsCachedAnswer() = runBlocking {
+        val directory = kotlin.io.path.createTempDirectory("lookups").toFile()
+        try {
+            val cache = LookupCache(directory.resolve("lookups.json"), Dispatchers.Unconfined)
+            val matcher = ExactMatcher(fake.client(), "US", Dispatchers.Unconfined, cache)
+            val source = MusicMetadata("Song", "Band", album = "Album")
+            val disco = source.copy(album = "Album (ディスコ版)")
+            val mix = youTubeMusicRow("Song", "Band • Album (Disco Mix) • 7:27", videoId = "mix00000000")
+            val original = youTubeMusicRow("Song", "Band • Album • 4:41", videoId = "original000")
+            namesAndTabs(songs = listOf(mix, original))
+            val mixUrl = "https://music.youtube.com/watch?v=mix00000000"
+            val originalUrl = "https://music.youtube.com/watch?v=original000"
+            assertEquals(originalUrl, matcher("US").find(MusicService.YOUTUBE_MUSIC, source))
+            assertEquals(mixUrl, matcher.find(MusicService.YOUTUBE_MUSIC, disco))
+            assertEquals(originalUrl, matcher.find(MusicService.YOUTUBE_MUSIC, source))
+            // A plain song keeps the key the playlist widget reads before looking up a song again.
+            assertEquals(originalUrl, cache.get("find@$MATCH_VERSION|YOUTUBE_MUSIC|TRACK|Song|Band|"))
+            val linked = source.copy(url = "https://open.spotify.com/track/1234567890123456789012")
+            val linkedUrl = "https://music.youtube.com/watch?v=linked00000"
+            namesAndTabs(songs = listOf(youTubeMusicRow("Song", "Band • Album • 4:41", videoId = "linked00000")))
+            assertEquals(linkedUrl, matcher.find(MusicService.YOUTUBE_MUSIC, linked))
+            val otherLink = source.copy(url = "https://open.spotify.com/track/1234567890123456789013")
+            namesAndTabs(songs = listOf(original))
+            assertEquals(originalUrl, matcher.find(MusicService.YOUTUBE_MUSIC, otherLink))
+            fake.handler = { error("The answers should be in the cache") }
+            assertEquals(mixUrl, matcher.find(MusicService.YOUTUBE_MUSIC, disco.copy(album = "Album - Ｄｉｓｃｏ　Ｖｅｒ．")))
+            assertEquals(originalUrl, matcher.find(MusicService.YOUTUBE_MUSIC, source))
+            assertEquals(linkedUrl, matcher.find(MusicService.YOUTUBE_MUSIC, linked))
+            assertEquals(originalUrl, matcher.find(MusicService.YOUTUBE_MUSIC, otherLink))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun ordinaryMixLabelsInTitlesAndAlbumsKeepTheirExistingMatches() = runBlocking {
+        val song = MusicMetadata("Song", "Band")
+        val url = "https://music.youtube.com/watch?v=original000"
+        val labels = listOf("2009 Stereo Mix", "Stereo Mix", "Mono Mix", "Single Mix", "Original Mix", "Radio Mix")
+        for (label in labels) {
+            namesAndTabs(songs = listOf(youTubeMusicRow("Song ($label)", "Band • Album • 4:41", videoId = "original000")))
+            val picker = ExactMatcher(fake.client(), "US", pick = { _, _, _ -> 0 })
+            assertEquals(label, url, picker.find(MusicService.YOUTUBE_MUSIC, song))
+        }
+        val albums = (labels + listOf("Extended Mix", "2023 Mix", "Dolby Atmos Mix")).map { "Album ($it)" } +
+            listOf("Oldies (Summer Mix)", "Disco Mix")
+        for (album in albums) {
+            namesAndTabs(songs = listOf(youTubeMusicRow("Song", "Band • $album • 4:41", videoId = "original000")))
+            assertEquals(album, url, matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        }
+    }
+
+    @Test
+    fun anOrdinaryMixThatWasRequestedKeepsItsMatch() = runBlocking {
+        val url = "https://music.youtube.com/watch?v=original000"
+        namesAndTabs(songs = listOf(youTubeMusicRow("Song", "Band • Album (Album Mix) • 4:41", videoId = "original000")))
+        assertEquals(url, matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band", album = "Album Mix")))
+        val remix = MusicMetadata("Song (DJ Remix)", "Band")
+        namesAndTabs(songs = listOf(youTubeMusicRow(remix.title, "Band • Album (2023 Mix) • 4:41", videoId = "original000")))
+        assertEquals(url, matcher("US").find(MusicService.YOUTUBE_MUSIC, remix))
+    }
+
+    @Test
+    fun aMarkedBayCityVideoNeedsEvidenceFromTheLinkItself() = runBlocking {
+        val title = "tasogare no bay city"
+        val disco = "黄昏のBAY CITY (プロモーション用DISCOバージョン)"
+        val song = MusicMetadata(title, "八神純子", lengthMs = 281_200)
+        val id = "Wey2yM_dNfc"
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow(disco, "Junko Yagami • 12K views • 7:27", videoId = id)),
+            apple = mapOf("US" to appleSong(title, "JUNKO YAGAMI", 281_200, album = "Full Moon") + "," +
+                appleSong(title, "JUNKO YAGAMI", 446_973, id = 8, album = "Full Moon")),
+            elsewhere = mapOf("JP" to appleSong("黄昏のBAY CITY", "八神純子", 281_200, album = "Full Moon"))
+        )
+        val matcher = ExactMatcher(fake.client(), "US", pick = { _, _, _ -> 0 })
+        assertNull(matcher.find(MusicService.YOUTUBE_MUSIC, song))
+        assertNull(matcher.find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = null)))
+        namesAndTabs(songs = listOf(youTubeMusicRow(disco, "八神純子 • Full Moon • 7:27", videoId = id)))
+        assertEquals("https://music.youtube.com/watch?v=$id", matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(title = disco, lengthMs = null)))
+    }
+
+    @Test
+    fun aMarkedVideoCannotOpenWhenAppleIsMissingAnAlias() = runBlocking {
+        val song = MusicMetadata("終わらない歌", "ザ・ブルーハーツ")
+        val apple = mapOf("AR" to appleSong(song.title, song.artist, 184_000))
+        val title = "ザ・ブルーハーツ - 終わらない歌"
+        val fan = youTubeMusicRow(title, "Fan • 1K views • 3:04", videoId = "fan00000000")
+        for (channel in listOf("Another Fan", song.artist)) {
+            val mix = youTubeMusicRow("$title (Disco Version)", "$channel • 1K views • 3:04", videoId = "mix00000000")
+            namesAndTabs(videos = listOf(mix, fan), apple = apple, failing = setOf("JP"))
+            assertEquals(channel, "https://music.youtube.com/watch?v=fan00000000", matcher().find(MusicService.YOUTUBE_MUSIC, song))
+        }
+    }
+
+    @Test
+    fun aMarkedAlbumNeedsTheSourceNoteOrALinkLengthWithinThreeSeconds() = runBlocking {
+        val song = MusicMetadata("Song", "Band")
+        val mix = youTubeMusicRow("Song", "Band • Album (Disco Mix) • 7:27", videoId = "mix00000000")
+        val other = youTubeMusicRow("Song", "Band • Album • 7:25", videoId = "original000")
+        namesAndTabs(songs = listOf(mix, other))
+        suspend fun find(source: MusicMetadata) = matcher("US").find(MusicService.YOUTUBE_MUSIC, source)
+        assertEquals("https://music.youtube.com/watch?v=original000", find(song.copy(lengthMs = 443_999)))
+        assertEquals("https://music.youtube.com/watch?v=mix00000000", find(song.copy(lengthMs = 444_000)))
+        assertEquals("https://music.youtube.com/watch?v=mix00000000", find(song.copy(album = "Album (ディスコ版)")))
+        namesAndTabs(songs = listOf(mix))
+        assertNull(find(song))
+        assertNull(find(song.copy(lengthMs = 281_200)))
+    }
+
+    @Test
+    fun aLocalizedRowNeedsItsOwnMixCheck() {
+        val song = MusicMetadata("Lemon", "米津玄師")
+        val original = listOf(localizedRow("Kenshi Yonezu", "original000", time = "7:27"))
+        val localized = mapOf("ja" to listOf(localizedRow(song.artist, "original000", "Lemon (DISCOバージョン)", "7:27")))
+        assertEquals(ExactMatcher.Match.Failed, localizedMatch(song, original, localized))
+        assertEquals(localizedFound("original000"), localizedMatch(song.copy(lengthMs = 447_000), original, localized))
+        val markedOriginal = listOf(localizedRow("Kenshi Yonezu", "original000", "Lemon (DISCOバージョン)"))
+        val plainReply = mapOf("ja" to listOf(localizedRow(song.artist, "original000")))
+        assertEquals(ExactMatcher.Match.Failed, localizedMatch(song, markedOriginal, plainReply))
+        // The barred row still counts when the credit could identify two recordings.
+        val plain = localizedRow(song.artist, "other000000")
+        val marked = localizedRow(song.artist, "original000", "Lemon (DISCOバージョン)")
+        val originals = listOf(localizedRow("Kenshi Yonezu", "original000"), localizedRow("Kenshi Yonezu", "other000000"))
+        assertEquals(ExactMatcher.Match.Failed, localizedMatch(song, originals, mapOf("ja" to listOf(marked, plain))))
+    }
+
+    @Test
+    fun aMixThePickerCannotProveDoesNotMoveTheOtherChoices() = runBlocking {
+        val song = MusicMetadata("Song", "Band", lengthMs = 281_000)
+        val mix = youTubeMusicRow("別名", "Band • Album (Disco Version) • 7:27", videoId = "mix00000000")
+        val other = youTubeMusicRow("もう一つの名前", "Band • Album • 4:41", videoId = "other000000")
+        namesAndTabs(songs = listOf(mix, other))
+        val matcher = ExactMatcher(fake.client(), "US", pick = { _, choices, video ->
+            assertFalse(video)
+            assertEquals(listOf("", "もう一つの名前 | Band • Album • 4:41"), choices)
+            1
+        })
+        assertEquals("https://music.youtube.com/watch?v=other000000", matcher.find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun thePickerStillReadsLiveAlbumNotesOnSongRows() = runBlocking {
+        val plain = youTubeMusicRow("別の曲", "Unknown Artist • Album • 4:41", videoId = "other000000")
+        val live = youTubeMusicRow("別名", "Unknown Artist • Live at Budokan • 4:41", videoId = "original000")
+        namesAndTabs(songs = listOf(plain, live))
+        val matcher = ExactMatcher(fake.client(), "US", pick = { _, choices, videos ->
+            assertFalse(videos)
+            assertEquals(listOf("", "別名 | Unknown Artist • Live at Budokan • 4:41"), choices)
+            1
+        })
+        val song = MusicMetadata("Song: Live", "Band")
+        assertEquals("https://music.youtube.com/watch?v=original000", matcher.find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
+    fun mixNoteReadingDoesNotNormalizeTheTitleUsedToMatch() = runBlocking {
+        val titles = listOf("Suite Ⅱ" to "Suite II", "Ｓｕｉｔｅ" to "Suite", "Suﬃx" to "Suffix", "㈱ Records" to "(株) Records")
+        for ((original, normalized) in titles) {
+            val source = MusicMetadata("$original (Disco Mix)", "Band", lengthMs = 447_000)
+            val wanted = youTubeMusicRow(original, "Band • Album (Disco Mix) • 7:27", videoId = "original000")
+            val other = youTubeMusicRow("$normalized (Disco Version)", "Band • Album • 7:27", videoId = "variant0000")
+            namesAndTabs(songs = listOf(wanted, other))
+            assertEquals(original, "https://music.youtube.com/watch?v=original000", matcher("US").find(MusicService.YOUTUBE_MUSIC, source))
+        }
+    }
+
+    @Test
+    fun allowingAMixByLengthDoesNotEraseARadioEditNote() = runBlocking {
+        val row = youTubeMusicRow("Song (Radio Edit) (Disco Version)", "Band • Album • 7:27", videoId = "edit0000000")
+        namesAndTabs(songs = listOf(row))
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band", lengthMs = 447_000)))
+    }
+
+    @Test
+    fun anUnrelatedMixDoesNotMakeAnExactSongWaitForVideos() = runBlocking {
+        val song = youTubeMusicRow("Lemon", "Band • Album • 4:41", videoId = "original000")
+        val mix = youTubeMusicRow("Sunset (Disco Version)", "Other Band • Album • 7:27", videoId = "mix00000000")
+        namesAndTabs(songs = listOf(song, mix))
+        val serve = fake.handler
+        fake.handler = { request ->
+            if (FakeSpotify.bodyOf(request).contains(VIDEOS_TAB)) throw IOException("Videos are down")
+            serve(request)
+        }
+        assertEquals("https://music.youtube.com/watch?v=original000",
+            matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Lemon", "Band", lengthMs = 281_200)))
+    }
+
+    @Test
+    fun zeroIsNotMixTimingAndAnotherRowsZeroCannotVetoASong() = runBlocking {
+        val song = MusicMetadata("Song", "Band")
+        val zero = youTubeMusicRow("Song", "Band • Album (Disco Version) • 0:00", videoId = "mix00000000")
+        namesAndTabs(songs = listOf(zero))
+        for (length in listOf(0L, 1_000L)) {
+            assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = length)))
+        }
+        val short = youTubeMusicRow("Song", "Band • Album (Disco Version) • 0:02", videoId = "mix00000000")
+        namesAndTabs(songs = listOf(short))
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = 0L)))
+        val plain = youTubeMusicRow("Song", "Band • Album • 4:41", videoId = "original000")
+        val live = youTubeMusicRow("Song - Live", "Band • Live at Budokan (Disco Version) • 0:02", videoId = "mix00000000")
+        namesAndTabs(songs = listOf(plain, live))
+        assertEquals("https://music.youtube.com/watch?v=original000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = 0L)))
+        val timed = youTubeMusicRow("Song", "Band • Album (Disco Version) • 7:27", videoId = "mix00000000")
+        val video = youTubeMusicRow("Song (Disco Version)", "Band • 1K views • 0:00", videoId = "mix00000000")
+        namesAndTabs(songs = listOf(timed), videos = listOf(video))
+        assertEquals("https://music.youtube.com/watch?v=mix00000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = 447_000)))
+    }
+
+    @Test
     fun aVideoSayingMoreInAnotherScriptIsAnotherSong() {
         val song = MusicMetadata("桜", "Band")
         fun finds(name: String, channel: String = "Band - Topic"): String? {

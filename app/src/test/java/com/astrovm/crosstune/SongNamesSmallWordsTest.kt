@@ -9,6 +9,12 @@ import kotlin.random.Random
 class SongNamesSmallWordsTest {
 
     @Test
+    fun writtenWordsKeepOtherScriptsAndLeaveOutEmptyParts() {
+        assertEquals(listOf("disco", "別", "version", "2024"), SongNames.writtenWords("! Disco 別: Version, 2024!"))
+        assertEquals(emptyList<String>(), SongNames.writtenWords(" - "))
+    }
+
+    @Test
     fun aTitleWrittenWithOtherSmallWordsIsTheSame() {
         assertTrue(SongNames.sameButSmallWords("Vahos de ayer", "Vahos del Ayer"))
         assertTrue(SongNames.sameButSmallWords("Canción para el Sol", "Cancion para la sol"))

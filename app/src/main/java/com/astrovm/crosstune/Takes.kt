@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import java.text.Normalizer
 
 /**
  * The take of a song a name says it is: live, karaoke, a TV size. YouTube Music lists these beside the studio song, in any
@@ -26,6 +27,31 @@ internal object Takes {
      * "live", which a song's own name may hold, as "Live Forever" does: a live take says so in a tag, which [saysAnotherTake] reads.
      */
     fun saysAnotherVersionBesidesLive(title: String): Boolean = SongNames.saysAnotherVersion(title, "live", "")
+
+    /** Read only a disco note on a normalized copy. The matcher still needs the original title or album. */
+    fun namesDisco(name: String): Boolean =
+        tagsOf(Normalizer.normalize(name, Normalizer.Form.NFKC)).any { tag ->
+            // A dash note or an outer bracket can hold a second tag, such as a remaster note.
+            SongNames.normalize(tag.takeWhile { it !in TAG_BRACKET_OPENS }) in DISCO_LABELS
+        }
+
+    /** A link can name a disco recording without using the same note delimiters as a search result. */
+    fun requestsDisco(name: String): Boolean {
+        val written = Normalizer.normalize(name, Normalizer.Form.NFKC)
+        val words = SongNames.writtenWords(written)
+        val joined = words.any { it == "discoversion" || it == "discomix" }
+        if (joined || words.zipWithNext().any { (first, second) -> first == "disco" && second in DISCO_LATIN_ENDINGS }) return true
+        val letters = SongNames.normalize(written)
+        return DISCO_JAPANESE_LABELS.any { it in letters }
+    }
+
+    private val DISCO_LATIN_ENDINGS = setOf("version", "mix", "ver")
+    private val DISCO_JAPANESE_LABELS = listOf(
+        "DISCOバージョン", "プロモーション用DISCOバージョン",
+        "ディスコバージョン", "ディスコヴァージョン", "ディスコ版",
+        "プロモーション用ディスコバージョン", "プロモーション用ディスコヴァージョン", "プロモーション用ディスコ版"
+    ).map(SongNames::normalize).toSet()
+    private val DISCO_LABELS = DISCO_LATIN_ENDINGS.map { "disco$it" }.toSet() + DISCO_JAPANESE_LABELS
 
     /** The text of each tag in [name]: what's inside brackets, and what follows a dash set apart by spaces. */
     private fun tagsOf(name: String): List<String> {

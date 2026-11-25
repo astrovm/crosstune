@@ -213,6 +213,9 @@ internal object SongNames {
     /** The words written in letters and digits, in order, as [words] reads them. */
     fun wordList(title: String): List<String> = unaccented(title).split(wordSplit).filter { it.isNotEmpty() }
 
+    /** Keep words in other scripts too when checking which words are next to each other. */
+    fun writtenWords(title: String): List<String> = unaccented(title).split(lettersAndDigits).filter { it.isNotEmpty() }
+
     /**
      * "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself; "Song
      * (Live; 2013 Remaster)" and "Song - Stereo MC's Remix" are other recordings, so they keep their tags.
