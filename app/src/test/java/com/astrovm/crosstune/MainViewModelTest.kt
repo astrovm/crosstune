@@ -5377,14 +5377,21 @@ class MainViewModelTest {
     }
 
     @Test
-    fun aKnownShortYouTubeVideoCanStartFromTheGeneralReport() {
-        val phone = FakePlayback().apply { access = true; rememberYouTubeLength("sPmul8b17AU", 10_133) }
+    fun aKnownShortYouTubeVideoCanStartFromTheGeneralReport() =
+        aYouTubeVideoStartsFromTheGeneralReport(expected = 10_133, reported = 10_133)
+
+    @Test
+    fun aYouTubeReportAtTheAdLengthCutoffCanStartTheVideo() =
+        aYouTubeVideoStartsFromTheGeneralReport(expected = 253_000, reported = LONGEST_AD_MS)
+
+    private fun aYouTubeVideoStartsFromTheGeneralReport(expected: Long, reported: Long) {
+        val phone = FakePlayback().apply { access = true; rememberYouTubeLength("sPmul8b17AU", expected) }
         val model = ytMusicModel(phone)
         val requested = checkNotNull(model.uiState.result)
         model.playResult()
-        until("Play asks for the short video") { phone.linksAsked == listOf(ytLink) }
-        phone.onThePhone = Heard.Song(requested, null, offsetMs = 45, app = ytMusic, sessionDurationMs = 10_133)
-        until("the general report confirms the short video") { !model.uiState.playingResult }
+        until("Play asks for the exact video") { phone.linksAsked == listOf(ytLink) }
+        phone.onThePhone = Heard.Song(requested, null, offsetMs = 45, app = ytMusic, sessionDurationMs = reported)
+        until("the general report confirms the video") { !model.uiState.playingResult }
         assertEquals(ytLink, model.uiState.player?.song?.url)
         assertTrue(phone.opened.isEmpty())
     }
