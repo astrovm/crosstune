@@ -2819,6 +2819,16 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun separatorsInsideAKnownTitleAreNotSeparateCredits() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        for (separator in listOf("・", "/", "|", ",")) {
+            val name = "愛${separator}平和"
+            val title = "Band - $name, Band - Love"
+            assertEquals(title, url, findsCreditedVideo("Love", listOf(name), title))
+        }
+    }
+
+    @Test
     fun catalogWhitespaceDoesNotHideAParenthesizedAlias() {
         val url = "https://music.youtube.com/watch?v=video000000"
         assertEquals(url, findsLoveVideo("愛 (Love) ", "Band - 愛 , Band - Love", "Band"))

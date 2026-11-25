@@ -1653,7 +1653,7 @@ internal class ExactMatcher(
     }
 
     private fun creditedVideoNamesMatch(title: String, names: Names, allowAlias: Boolean): Boolean {
-        val parts = title.split(',', '，', '/', '|', '・').filter { it.isNotBlank() }
+        val parts = videoCreditParts(title)
         val artists = names.artists.map(SongNames::normalize).toSet()
         val credited = parts.map { creditedVideoTitle(it, artists) }
         val complete = credited.filterNotNull()
@@ -1663,6 +1663,23 @@ internal class ExactMatcher(
         if (videoCreditKnown(complete.joinToString(" "), names.titles, false)) return true
         if (complete.withIndex().all { (index, credit) -> videoCreditKnown(credit, names.titles, index == complete.lastIndex) }) return true
         return repeatsBilingualTitle(title, names) || allowAlias && repeatsParenthesizedTitle(title, names)
+    }
+
+    /** A separator inside a title is not a new credit unless an artist and dash follow it. */
+    private fun videoCreditParts(title: String): List<String> {
+        val parts = mutableListOf<String>()
+        var start = 0
+        title.forEachIndexed { index, char ->
+            if (char in VIDEO_CREDIT_SEPARATORS) {
+                val next = title.substring(index + 1).takeWhile { it !in VIDEO_CREDIT_SEPARATORS }
+                if (VIDEO_CREDIT_DASHES.any(next::contains)) {
+                    parts += title.substring(start, index)
+                    start = index + 1
+                }
+            }
+        }
+        parts += title.substring(start).trim().trimEnd(*VIDEO_CREDIT_SEPARATORS.toCharArray())
+        return parts.filter { it.isNotBlank() }
     }
 
     /** Compare whole credits, allowing only the same video notes as the ordinary title check. */
@@ -1897,6 +1914,7 @@ internal class ExactMatcher(
         /** What YouTube adds to an artist's own channel name. */
         private val CHANNEL_SUFFIXES = setOf("topic", "vevo", "official", "music", "tv")
         private val VIDEO_CREDIT_DASHES = listOf(" - ", " – ", " — ")
+        private const val VIDEO_CREDIT_SEPARATORS = ",，/|・"
 
         /** What a video's title says of it besides the song's name, not another recording: "Official Video", "Lyrics", "Sub Español". */
         private val VIDEO_TAGS = setOf(
