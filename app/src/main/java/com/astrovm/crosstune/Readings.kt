@@ -1022,13 +1022,16 @@ internal object Readings {
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
             when {
-                // Both dictionaries take ひとなでして for ひと + な + でし + て, but it is 一撫で + して.
+                // Both dictionaries can take 一撫で + する for ひと + な + です.
                 piece.surface == "でし" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "ひと" &&
-                    next?.surface == "て" -> {
+                    next?.surface in setOf("て", "た", "ます") -> {
                     out.removeAt(out.lastIndex)
                     out[out.lastIndex] = Piece("ひとなで", "ひとなで", "名詞", "一般", reader = Reader.RULES)
-                    out += Piece("し", "し", "動詞", "自立", reader = Reader.RULES)
+                    out += Piece("し", "し", "動詞", "自立", "する", reader = Reader.RULES)
                 }
+                // Before しよう or しない, IPADIC instead splits 一撫で into ひと + なでる.
+                piece.surface == "なで" && last?.surface == "ひと" && next?.base == "する" ->
+                    out[out.lastIndex] = Piece("ひとなで", "ひとなで", "名詞", "一般", reader = Reader.RULES)
                 inflected != null -> out[out.lastIndex] = inflected
                 word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般", reader = Reader.RULES)
                 last != null && count != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, count, "名詞", "一般", reader = Reader.RULES)
