@@ -53,6 +53,19 @@ class RightIdsTest(unittest.TestCase):
 
 
 class PrepareTest(unittest.TestCase):
+    def test_deezer_keeps_artist_names_from_raw_and_compact_captures(self):
+        with tempfile.TemporaryDirectory() as out:
+            raw = {"title": "Peace Sign", "title_short": "Peace Sign", "artist": {"id": 5289039, "name": "Kenshi Yonezu"}, "duration": 237}
+            compact = {"title": "Lemon", "artist": "Kenshi Yonezu", "duration": 256}
+            song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon Kenshi Yonezu", deezer=[raw, compact])
+            with open(os.path.join(out, "songs.json"), "w", encoding="utf-8") as kept:
+                json.dump([song], kept)
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.prepare(out)
+            with open(os.path.join(out, "replay.json"), encoding="utf-8") as kept:
+                [prepared] = json.load(kept)
+            self.assertEqual([raw, dict(compact, artist={"name": "Kenshi Yonezu"})], prepared["deezer"])
+
     def test_the_answers_kept_are_named_where_in_the_folder_so_a_copy_of_it_finds_them(self):
         with tempfile.TemporaryDirectory() as out:
             song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon Kenshi Yonezu")
@@ -61,8 +74,8 @@ class PrepareTest(unittest.TestCase):
             os.mkdir(os.path.join(out, "raw"))
             songs = replay.ytm_path(out, song["query"], replay.collect.YTM_SONGS)
             self.assertIsNone(songs)
-            for params in (replay.collect.YTM_SONGS, replay.collect.YTM_VIDEOS):
-                body = {"context": {"client": replay.collect.YTM_CLIENT}, "query": song["query"], "params": params}
+            for params, language in ((replay.collect.YTM_SONGS, "en"), (replay.collect.YTM_VIDEOS, "en"), (replay.collect.YTM_SONGS, "ja")):
+                body = {"context": {"client": replay.collect.YTM_CLIENT | {"hl": language}}, "query": song["query"], "params": params}
                 key = hashlib.sha256((replay.collect.YTM_SEARCH + json.dumps(body, sort_keys=True)).encode()).hexdigest()[:24]
                 with open(os.path.join(out, "raw", key + ".json"), "w", encoding="utf-8") as kept:
                     json.dump({}, kept)
@@ -70,7 +83,7 @@ class PrepareTest(unittest.TestCase):
                 replay.prepare(out)
             with open(os.path.join(out, "replay.json"), encoding="utf-8") as kept:
                 [prepared] = json.load(kept)
-            for name in ("songs", "videos"):
+            for name in ("songs", "videos", "songs-ja"):
                 self.assertFalse(os.path.isabs(prepared[name]))
                 self.assertTrue(prepared[name].startswith("raw" + os.sep))
                 self.assertTrue(os.path.isfile(os.path.join(out, prepared[name])))
@@ -86,6 +99,14 @@ class PrepareTest(unittest.TestCase):
                 [prepared] = json.load(kept)
             self.assertIsNone(prepared["songs"])
             self.assertIsNone(prepared["videos"])
+            self.assertFalse(prepared["appleDown"])
+            self.assertIsNone(prepared["sourceLengthMs"])
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.prepare(out, apple_down=True, source_length=True)
+            with open(os.path.join(out, "replay.json"), encoding="utf-8") as kept:
+                [prepared] = json.load(kept)
+            self.assertTrue(prepared["appleDown"])
+            self.assertEqual(255_000, prepared["sourceLengthMs"])
 
 
 if __name__ == "__main__":
