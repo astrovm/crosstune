@@ -43,6 +43,7 @@ import kotlinx.coroutines.awaitCancellation
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -649,11 +650,27 @@ class TvPlayTest {
     fun theCoverBeingClosedBeforeYouTubePlaysBringsCrosstuneBackLikeOnAPhone() {
         launch()
         val floating = playCovered()
-        backOut(floating)
+        composeRule.runOnIdle { floating.get().onStartCommand(Intent(FloatingLyricsService.ACTION_CLOSE), 0, 2) }
+        assertTrue(shadowOf(floating.get()).isStoppedBySelf)
+        assertFalse(model().uiState.coveringApp)
+        assertNotNull(model().uiState.player)
         assertEquals(0, playback.cameBack)
         // Nothing is over YouTube to show the words, so Crosstune comes in front of it.
         playing()
         waitUntil { playback.cameBack == 1 }
+    }
+
+    @Test
+    fun backingOutOfThePlayerBeforeYouTubeStartsCancelsTheReturn() {
+        launch()
+        val floating = playCovered()
+        backOut(floating)
+        assertNull(model().uiState.player)
+        waitUntil { !model().uiState.playingResult }
+
+        playing()
+        composeRule.waitForIdle()
+        assertEquals(0, playback.cameBack)
     }
 
     @Test
