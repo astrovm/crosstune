@@ -442,9 +442,7 @@ internal class MediaSessionPlayback(
     private val late = ConcurrentHashMap<String, LateClock>()
     private val notedClocks = ConcurrentHashMap<String, NotedClock>()
     /** A song's requested video can identify an ad even when the Android session gives no video ID. */
-    private val seenYouTubeAds = MutableStateFlow<Map<MediaSession.Token, SeenYouTubeAd>>(emptyMap())
-
-    private data class SeenYouTubeAd(val names: List<String?>, val adMs: Long, val songMs: Long)
+    private val seenYouTubeAds = seenYouTubeAdsOf(context)
     /** Replaced each time Crosstune moves a song, so a move a moment back isn't taken for a stale clock. */
     @Volatile
     private var moves = Any()
@@ -1049,7 +1047,7 @@ internal class MediaSessionPlayback(
         val sameVideo = playingId == null || askedId == null || playingId == askedId
         val askedLength = asked?.lengthMs?.takeIf { it > 0 && sameVideo }
         val videoLength = (playingId ?: askedId)?.let(lengths::video)
-        val seenAd = seenYouTubeAdLength(metadata, said)
+        val seenAd = seenYouTubeAdLength(metadata, said, askedId)
         // A short length for the requested video is evidence too. Don't replace it with the length of a different edit.
         if (playingId != null) return videoLength ?: askedLength
         (videoLength ?: askedLength.takeIf { askedId != null } ?: seenAd ?: askedLength)?.let { return it }
@@ -1061,14 +1059,16 @@ internal class MediaSessionPlayback(
     private fun MediaController.rememberYouTubeAd(metadata: MediaMetadata, asked: MusicMetadata?, adMs: Long, songMs: Long) {
         val video = asked?.let(RecordingKey::youTubeId) ?: return
         if (metadata.youTubeVideoId() != null || lengths.video(video) != songMs) return
-        val seen = SeenYouTubeAd(metadata.sessionNames(), adMs, songMs)
+        val seen = SeenYouTubeAd(metadata.sessionNames(), video, adMs, songMs)
         // Two link-specific followers can know different edits. The same report must not keep switching between them.
         seenYouTubeAds.update { if (sessionToken in it) it else it + (sessionToken to seen) }
     }
 
-    private fun MediaController.seenYouTubeAdLength(metadata: MediaMetadata, said: Long): Long? {
+    private fun MediaController.seenYouTubeAdLength(metadata: MediaMetadata, said: Long, askedId: String?): Long? {
         val seen = seenYouTubeAds.value[sessionToken] ?: return null
-        if (seen.adMs == said && seen.names == metadata.sessionNames()) return seen.songMs
+        if (seen.adMs == said && seen.names == metadata.sessionNames()) {
+            return seen.songMs.takeIf { askedId == null || askedId == seen.videoId }
+        }
         seenYouTubeAds.update { if (it[sessionToken] == seen) it - sessionToken else it }
         return null
     }
@@ -1405,6 +1405,15 @@ private const val SONGS_READ_KEPT = 32
 
 /** How many sessions keep their numbers: more than a phone has apps playing at once. */
 private const val SESSIONS_KEPT = 32
+
+private data class SeenYouTubeAd(val names: List<String?>, val videoId: String, val adMs: Long, val songMs: Long)
+
+private val seenYouTubeAdsByApp = WeakHashMap<Context, MutableStateFlow<Map<MediaSession.Token, SeenYouTubeAd>>>()
+
+/** The player and background controls can use different playback sources for the same Android session. */
+private fun seenYouTubeAdsOf(context: Context) = synchronized(seenYouTubeAdsByApp) {
+    seenYouTubeAdsByApp.getOrPut(context.applicationContext) { MutableStateFlow(emptyMap()) }
+}
 
 /** Each app's session numbers, by its application; see [sessionNumbersOf]. */
 private val sessionNumbersByApp = WeakHashMap<Context, SessionNumbers>()

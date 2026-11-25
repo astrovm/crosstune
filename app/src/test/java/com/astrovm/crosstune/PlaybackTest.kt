@@ -132,9 +132,9 @@ class PlaybackTest {
         return controller
     }
 
-    private fun followed(song: MusicMetadata = this.song): MutableList<Following?> {
+    private fun followed(song: MusicMetadata = this.song, source: PlaybackSource = playback): MutableList<Following?> {
         val seen = mutableListOf<Following?>()
-        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect { seen += it } }
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { source.follow(song).collect { seen += it } }
         shadowOf(Looper.getMainLooper()).idle()
         return seen
     }
@@ -521,6 +521,28 @@ class PlaybackTest {
     }
 
     @Test
+    fun anotherPlaybackSourceCanFollowTheSameConfirmedAd() {
+        allow()
+        val youtube = MusicService.YOUTUBE_MUSIC.packageName
+        val song = MusicMetadata("Bohemian Rhapsody", "Queen")
+        val controller = player(youtube, "YouTube Music", song.title, song.artist, duration = 60_046, position = 6_407)
+        shadowOf(sessions).addController(controller)
+        // The sleep timer and the player can use different playback sources for the same Android session.
+        val timerSource = MediaSessionPlayback(app, now = { NOW }, modes = modes)
+        val timer = followed(song, timerSource)
+        assertFalse(checkNotNull(timer.last()).ad)
+
+        playback.rememberYouTubeLength("fJ9rUzIMcZQ", 360_000)
+        val link = song.copy(url = "https://music.youtube.com/watch?v=fJ9rUzIMcZQ")
+        val asked = followed(link)
+        assertTrue(checkNotNull(asked.last()).ad)
+        assertTrue(checkNotNull(timer.last()).ad)
+        assertEquals(asked.last()?.clock, timer.last()?.clock)
+        assertEquals(asked.last()?.durationMs, timer.last()?.durationMs)
+        assertEquals(timer.last(), followed(link, timerSource).last())
+    }
+
+    @Test
     fun anExactShortEditStillWinsWithAnAdOfTheSameName() {
         allow()
         sounding()
@@ -532,8 +554,12 @@ class PlaybackTest {
         assertTrue(checkNotNull(followed(song.copy(url = "https://music.youtube.com/watch?v=fJ9rUzIMcZQ")).last()).ad)
         assertTrue(checkNotNull(playback.nowPlaying()).ad)
 
-        val short = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk", lengthMs = 60_000)
-        val state = checkNotNull(followed(short).last())
+        val short = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
+        // An exact but different video doesn't inherit the first link's catalogue length.
+        val unmeasured = checkNotNull(followed(short).last())
+        assertFalse(unmeasured.ad)
+        assertEquals(60_046L, unmeasured.durationMs)
+        val state = checkNotNull(followed(short.copy(lengthMs = 60_000)).last())
         assertFalse(state.ad)
         assertEquals(PlaybackClock(6_407, PLAYED_AT), state.clock)
         assertEquals(60_000L, state.durationMs)
@@ -729,6 +755,7 @@ class PlaybackTest {
         assertEquals(LONGEST_AD_MS, followed(song).last()?.durationMs)
         val exact = song.copy(url = "https://music.youtube.com/watch?v=other000000")
         assertEquals(214_000L, followed(exact.copy(lengthMs = 214_000)).last()?.durationMs)
+        assertEquals(LONGEST_AD_MS, followed(song).last()?.durationMs)
         playback.rememberYouTubeLength("other000000", 214_000)
         assertEquals(214_000L, followed(exact).last()?.durationMs)
         assertEquals(true, followed(exact).last()?.ad)
