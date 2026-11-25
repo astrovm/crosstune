@@ -1869,7 +1869,7 @@ internal class ExactMatcher(
         private val VIDEO_TAG_MARKS = listOf("歌詞付き", "歌詞付", "歌詞", "公式", "字幕", "高音質", "日本語", "中日羅", "가사").map(SongNames::normalize)
 
         private const val ALIAS_BRACKETS = "()（）[]［］{}｛｝【】〔〕「」『』〈〉《》〘〙〚〛"
-        private val ALIAS_CREDIT_WORDS = setOf("with", "x", "vs", "versus", "feat", "featuring", "ft", "and")
+        private val ALIAS_CREDIT_WORDS = setOf("with", "x", "vs", "versus", "feat", "featuring", "ft", "and", "y", "und", "et")
         private val NEUTRAL_ALIAS_WORDS = setOf("original", "remaster", "remastered", "mono", "stereo")
         private val ALIAS_TAKE_MARKS = listOf(
             "tvsize", "tvサイズ", "ディスコ", "オフボーカル", "オフヴォーカル", "インスト", "リミックス", "ショートバージョン", "ショートサイズ",

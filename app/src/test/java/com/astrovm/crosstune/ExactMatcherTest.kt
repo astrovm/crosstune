@@ -2652,7 +2652,7 @@ class ExactMatcherTest {
 
     @Test
     fun guestCreditsAreNotNativeTitleAliases() {
-        listOf("with", "x", "&", "vs", "feat.").forEach { credit ->
+        listOf("with", "x", "&", "vs", "feat.", "and", "y", "und", "et").forEach { credit ->
             val name = "愛 $credit Official"
             assertNull(credit, findsLoveVideo("$name (Love)", "Band - $name , Band - Love", "Band"))
         }
