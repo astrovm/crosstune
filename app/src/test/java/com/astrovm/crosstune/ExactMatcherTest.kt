@@ -2499,6 +2499,103 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun peaceSignOpensItsOfficialVideoWithBothTitlesAndCredits() {
+        val song = MusicMetadata("Peace Sign", "米津玄師", lengthMs = 238_525)
+        val fan = youTubeMusicRow("米津玄師 (Kenshi Yonezu)「ピースサイン」(Peace Sign)", "IRyS Singing Archive • 4 views • 3:58", videoId = "LlqIAiDzgpM")
+        val fanUrl = "https://music.youtube.com/watch?v=LlqIAiDzgpM"
+        fun finds(vararg artistVideos: String): String? {
+            namesAndTabs(
+                videos = artistVideos.toList() + fan,
+                apple = mapOf("US" to appleSong("Peace Sign", "Kenshi Yonezu", 238_525)),
+                elsewhere = mapOf("JP" to appleSong("ピースサイン - Peace Sign", "米津玄師", 238_525))
+            )
+            return runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        fun official(name: String) = youTubeMusicRow(name, "Kenshi Yonezu • 346M views • 4:25", videoId = "9aJVr5tTTWk")
+
+        assertEquals(fanUrl, finds())
+        assertEquals(fanUrl, finds(official("米津玄師 - ピースサイン別曲 , Kenshi Yonezu - Peace Sign")))
+        assertEquals(fanUrl, finds(official("米津玄師 - ピースサイン , Kenshi Yonezu - Peace Sign (Live)")))
+        assertEquals("https://music.youtube.com/watch?v=9aJVr5tTTWk", finds(official("米津玄師 - ピースサイン , Kenshi Yonezu - Peace Sign")))
+    }
+
+    @Test
+    fun aShortBilingualAliasDoesNotEraseARepeatedTitle() {
+        assertNull(findsLoveVideo("愛 - Love", "Band - 愛愛 (Love)", "Band"))
+    }
+
+    @Test
+    fun aShortBilingualAliasDoesNotEraseARepeatedTitleOnAFanUpload() {
+        assertNull(findsLoveVideo("愛 - Love", "Band - 愛愛 (Love)", "Fan"))
+    }
+
+    @Test
+    fun aRemasterSuffixDoesNotNameAnotherSong() {
+        assertNull(findsLoveVideo("Love - Remastered 2024", "Remastered 2024 - 別曲 (Love)", "Band"))
+    }
+
+    @Test
+    fun aPlainDashSuffixDoesNotNameAnotherSong() {
+        assertNull(findsLoveVideo("Love - Sunset", "Sunset - 別曲 (Love)", "Band"))
+    }
+
+    @Test
+    fun repeatingBothCreditsCanNameAWholeBilingualTitleEitherWay() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        assertEquals(url, findsLoveVideo("愛 - Love", "Band - 愛 , Band - Love", "Band"))
+        assertEquals(url, findsLoveVideo("愛 - Love", "Band - Love，Band - 愛", "Band"))
+        assertEquals(url, findsLoveVideo("愛 - Love", "Band - 愛 , Band - Love", "Fan"))
+    }
+
+    @Test
+    fun repeatingACreditNeedsExactlyTwoWholeKnownNamesAndCredits() {
+        val wrong = listOf(
+            "別人 - 愛 , Band - Love",
+            "Band - 愛 , 別人 - Love",
+            "Band - 愛 , Band Love",
+            "Band - 愛 , Band - Love , Band - Love",
+            "Band - 愛愛 , Band - Love"
+        )
+        wrong.forEach { assertNull(it, findsLoveVideo("愛 - Love", it, "Band")) }
+    }
+
+    @Test
+    fun repeatingACreditDoesNotMakeTwoNamesInTheSameScriptOrANumberBilingual() {
+        assertNull(findsLoveVideo("愛 (Love) - 別曲", "Band - 愛 (Love) , Band - 別曲", "Band"))
+        assertNull(findsLoveVideo("愛 (Love) - 1984", "Band - 愛 (Love) , Band - 1984", "Band"))
+    }
+
+    @Test
+    fun repeatingACreditDoesNotMakeAnEditionOrATakeAName() {
+        assertNull(findsLoveVideo("愛 (Love) - Remastered 2024", "Band - 愛 (Love) , Band - Remastered 2024", "Band"))
+        assertNull(findsLoveVideo("Live - 愛 (Love)", "Band - 愛 (Love) , Band - Live", "Band"))
+    }
+
+    private fun findsLoveVideo(storeTitle: String, videoTitle: String, channel: String): String? {
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow(videoTitle, "$channel • 1K views • 4:00", videoId = "video000000")),
+            apple = mapOf("US" to appleSong("Love", "Band", 240_000)),
+            elsewhere = mapOf("JP" to appleSong(storeTitle, "Band", 240_000))
+        )
+        return runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Love", "Band", lengthMs = 240_000)) }
+    }
+
+    @Test
+    fun bayCityDoesNotReplaceTheAlbumEditionWithTheShorterSingle() {
+        val title = "tasogare no bay city"
+        val metadata = MusicMetadata(title, "八神純子", lengthMs = 281_200)
+        val single = youTubeMusicRow("黄昏のBAY CITY", "八神純子 • 黄昏のBAY CITY • 4:11", videoId = "QLHMhVonF-s")
+        val fan = youTubeMusicRow("Junko Yagami - 黄昏のBay City", "Vladimir Putin (Jummkopf) • 16K views • 4:35", videoId = "HNfnjWbO4ds")
+        namesAndTabs(
+            songs = listOf(single),
+            videos = listOf(fan),
+            apple = mapOf("US" to appleSong(title, "JUNKO YAGAMI", 281_200, album = "full moon")),
+            elsewhere = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 281_200, album = "Full Moon"))
+        )
+        assertEquals("https://music.youtube.com/watch?v=HNfnjWbO4ds", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, metadata) })
+    }
+
+    @Test
     fun aVideoSayingMoreInAnotherScriptIsAnotherSong() {
         val song = MusicMetadata("桜", "Band")
         fun finds(name: String, channel: String = "Band - Topic"): String? {
