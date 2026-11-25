@@ -2548,6 +2548,26 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun repeatingCreditsCanProveAParenthesizedCatalogAlias() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        listOf("愛 (Love)", "愛（Love）", "愛 (Love (Original))").forEach {
+            assertEquals(it, url, findsLoveVideo(it, "Band - 愛 , Band - Love", "Band"))
+        }
+    }
+
+    @Test
+    fun parenthesizedNotesAndPartialNamesAreNotProvenAliases() {
+        listOf("Live", "Remix", "Disco Version", "Instrumental", "feat. Guest", "Remastered 2024", "Sunset").forEach {
+            assertNull(it, findsLoveVideo("愛 ($it)", "Band - 愛 , Band - $it", "Band"))
+        }
+        assertNull(findsLoveVideo("愛 (Love)", "Band - 愛愛 , Band - Love", "Band"))
+        assertNull(findsLoveVideo("愛 (Love)", "Band - 愛 , Other - Love", "Band"))
+        listOf("Love (Live)", "Love (Remix)", "Love (Disco Version)", "Love (Instrumental)", "Love feat. Guest", "Love (feat. Guest)")
+            .forEach { assertNull(it, findsLoveVideo("愛 ($it)", "Band - 愛 , Band - Love", "Band")) }
+        assertNull(findsLoveVideo("愛 (Love (Sunset))", "Band - 愛 , Band - Love", "Band"))
+    }
+
+    @Test
     fun repeatingACreditNeedsExactlyTwoWholeKnownNamesAndCredits() {
         val wrong = listOf(
             "別人 - 愛 , Band - Love",
