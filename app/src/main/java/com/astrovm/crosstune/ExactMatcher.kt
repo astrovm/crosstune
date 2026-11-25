@@ -49,8 +49,9 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * opens 宇多田ヒカル's own, and takes a credit of two known names together, G.E.M. 鄧紫棋, as the artist's.
  * Version 11 gives a missing store one retry before playing a fan upload and checks the upload again later.
  * Version 12 can confirm an untranslated search result by its own song ID in another YouTube Music language.
+ * Version 13 matches two whole names in a bilingual store title when the artist's video repeats its credit.
  */
-internal const val MATCH_VERSION = 12
+internal const val MATCH_VERSION = 13
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -1610,7 +1611,35 @@ internal class ExactMatcher(
         val bothWays = SongNames.titleNames(outside.trim()).drop(1).takeIf { halves -> halves.any { SongNames.normalize(it) in known } }.orEmpty()
         val written = (known + bothWays.map(SongNames::normalize) +
             names.artists.flatMap(SongNames::artistNames).map { SongNames.normalize(SongNames.withoutArticle(it)) } + VIDEO_TAG_MARKS)
-        return removeVideoNames(outside, written).none { it.code > 0x7f }
+        return removeVideoNames(outside, written).none { it.code > 0x7f } || repeatsBilingualTitle(title, names)
+    }
+
+    /** The video repeats the artist before each store name. Compare whole names, so 愛 can't explain 愛愛. */
+    private fun repeatsBilingualTitle(title: String, names: Names): Boolean {
+        val parts = title.split(',', '，', limit = 3)
+        if (parts.size != 2) return false
+        val artists = names.artists.map(SongNames::normalize).toSet()
+        val first = creditedVideoTitle(parts[0], artists) ?: return false
+        val second = creditedVideoTitle(parts[1], artists) ?: return false
+        val inAnotherScript = listOf(first, second).partition(::namedInAnotherScript)
+        val latin = inAnotherScript.second.singleOrNull()?.takeIf(String::hasLatin) ?: return false
+        val other = inAnotherScript.first.single()
+        val titles = setOf(SongNames.normalize(latin), SongNames.normalize(other))
+        return names.titles.any { name ->
+            val pair = name.split(" - ", limit = 3).map(String::trim)
+            pair.size == 2 && pair.map(SongNames::normalize).toSet() == titles && pair.none(::isVideoTitleTag)
+        }
+    }
+
+    private fun creditedVideoTitle(part: String, artists: Set<String>): String? {
+        val (credit, title) = part.split(" - ", limit = 2).takeIf { it.size == 2 } ?: return null
+        return title.trim().takeIf { SongNames.normalize(credit) in artists }
+    }
+
+    private fun isVideoTitleTag(name: String): Boolean {
+        // Read a dash half as a note before treating it as a name, even when the store put it first.
+        val asTag = "Song ($name)"
+        return SongNames.withoutEditionTag(asTag) != asTag || Takes.saysAnotherTake(asTag) != null
     }
 
     private fun isAnotherVideoVersion(name: String, names: Names): Boolean =
