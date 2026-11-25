@@ -100,7 +100,7 @@
     ],
     [
       "p",
-      "Pour nommer le morceau d'un lien, Crosstune lit sa page publique ou son API sur le service d'où il vient : Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam ou Google, et charge sa pochette. Pour l'ouvrir dans une autre appli, le titre et l'artiste vont à la recherche de cette appli. Quand cette recherche n'est pas sûre, ils vont aussi aux recherches de chansons d'Apple et de Deezer. Pour Spotify, ils vont à ListenBrainz et le nom de l'artiste à MusicBrainz, et les pages publiques de Spotify sont lues. Tout lire et Aléatoire font cela pour chaque morceau, et YouTube crée la playlist à partir des vidéos trouvées. Le nom d'un morceau que vous saisissez va aux recherches de Deezer et d'Apple. Une destination personnalisée reçoit les mots de recherche dans l'adresse que vous configurez."
+      "Pour nommer le morceau d'un lien, Crosstune lit sa page publique ou son API sur le service d'où il vient : Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Presto Music, Shazam ou Google, et charge sa pochette. Pour l'ouvrir dans une autre appli, le titre et l'artiste vont à la recherche de cette appli. Quand cette recherche n'est pas sûre, ils vont aussi aux recherches de chansons d'Apple et de Deezer. Pour Spotify, ils vont à ListenBrainz et le nom de l'artiste à MusicBrainz, et les pages publiques de Spotify sont lues. Tout lire et Aléatoire font cela pour chaque morceau, et YouTube crée la playlist à partir des vidéos trouvées. Le nom d'un morceau que vous saisissez va aux recherches de Deezer et d'Apple. Une destination personnalisée reçoit les mots de recherche dans l'adresse que vous configurez."
     ],
     [
       "p",

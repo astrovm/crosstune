@@ -23,7 +23,7 @@ Pasting or sharing a link to Crosstune works with no setup. Under the link field
 2. **Let lyrics follow your music**, so the words of what's playing show in time.
 3. Tap one to open Android's settings, with a small guide to each step. With [Shizuku](https://shizuku.rikka.app) or root on Android 12 or newer, **Fix all** does it in one tap.
 
-Links from Spotify, YouTube Music, Apple Music, Deezer and TIDAL open here from the start. Turn on YouTube in **Settings** → **Open links from**. SoundCloud, Bandcamp, Audiomack, Invidious and Piped links open here when shared or pasted.
+Links from Spotify, YouTube Music, Apple Music, Deezer and TIDAL open here from the start. Turn on YouTube in **Settings** → **Open links from**. SoundCloud, Bandcamp, Audiomack, Presto Music, Invidious and Piped links open here when shared or pasted.
 
 The first app you pick on a song is where songs play from then on. Change it in **Settings**. Anything left to allow later shows as **Things to fix** on the main screen.
 
@@ -69,7 +69,7 @@ The first app you pick on a song is where songs play from then on. Change it in 
 | Audiomack | Songs, albums, playlists | Songs, albums, verified artists |
 | Amazon Music | Can't read its links | Search |
 | Qobuz | Can't read its links | Songs, albums |
-| Presto Music | Can't read its links | Search |
+| Presto Music | Albums, shop products | Search |
 
 Songs shared from Pixel **Now Playing**, **Shazam** links and songs shared from Google's search work too. "Search" means Crosstune opens a search for the title and artist. Bandcamp's app can only search, so there it opens a search for the song, with no **Play**. Presto Music searches only albums, so its search lists the albums the song is on.
 

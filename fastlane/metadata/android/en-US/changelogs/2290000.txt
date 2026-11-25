@@ -1,1 +1,2 @@
 Open songs in Presto Music, which searches for the albums they are on.
+Share or paste a Presto Music album, and Crosstune reads its songs and follows what Presto plays.

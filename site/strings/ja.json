@@ -100,7 +100,7 @@
     ],
     [
       "p",
-      "リンクの曲を調べるため、Crosstune はリンク元のサービス (Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack、Shazam、Google) の公開ページまたは公開 API を読み取り、カバー画像を読み込みます。ほかのアプリで開くため、タイトルとアーティストをそのアプリの検索に送ります。その検索で確信が持てないときは、Apple と Deezer の曲検索にも送ります。Spotify の場合は ListenBrainz に送り、アーティスト名は MusicBrainz に送り、Spotify の公開ページを読み込みます。「すべて再生」と「シャッフル」は各曲に対して同じことを行い、YouTube は見つかった動画からプレイリストを作ります。入力した曲名は Deezer と Apple の検索に送られます。自分で追加した開き先には、設定したアドレスの中で検索語が渡されます。"
+      "リンクの曲を調べるため、Crosstune はリンク元のサービス (Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack、Presto Music、Shazam、Google) の公開ページまたは公開 API を読み取り、カバー画像を読み込みます。ほかのアプリで開くため、タイトルとアーティストをそのアプリの検索に送ります。その検索で確信が持てないときは、Apple と Deezer の曲検索にも送ります。Spotify の場合は ListenBrainz に送り、アーティスト名は MusicBrainz に送り、Spotify の公開ページを読み込みます。「すべて再生」と「シャッフル」は各曲に対して同じことを行い、YouTube は見つかった動画からプレイリストを作ります。入力した曲名は Deezer と Apple の検索に送られます。自分で追加した開き先には、設定したアドレスの中で検索語が渡されます。"
     ],
     [
       "p",
