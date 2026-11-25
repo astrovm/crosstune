@@ -1263,14 +1263,14 @@ internal class MediaSessionPlayback(
 
     /** Whether what this app has [playing] is known to be another recording than [song], whatever it's named. */
     private fun MediaController.anotherRecording(playing: MediaMetadata, song: MusicMetadata): Boolean {
+        val length = lengthOf(playing, song)
+        val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), length)
+        if (song.recordingId?.startsWith("$packageName:") == true && recording != null && song.recordingId != recording) return true
         val askedId = RecordingKey.youTubeId(song)
         if (askedId != null && MusicService.ofPackage(packageName) in YOUTUBE_PLAYERS) {
             // An exact ID beats a duration: a video can be trimmed, or briefly report the length of an ad.
             playing.youTubeVideoId()?.let { return it != askedId }
         }
-        val length = lengthOf(playing, song)
-        val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), length)
-        if (song.recordingId?.startsWith("$packageName:") == true && recording != null && song.recordingId != recording) return true
         // Far from as long as the song, it's another version of it, e.g. the album's take of a single; a video may open with more.
         return !isVideo() && length != null && song.lengthMs?.let { abs(it - length) > SAME_RECORDING_LENGTH_MS } == true
     }
