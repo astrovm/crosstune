@@ -204,10 +204,10 @@ internal object Readings {
             val subject = piece.surface == "何だ" && pieces.beforeAdverbs(at)?.nanDaSubject() == true
             val question = subject || after?.surface in setOf("か", "よ", "ね", "?", "？") ||
                 openingNanDaContinues(before, after)
-            val call = nanDaCall(pieces, at)
+            val repeated = piece.surface in setOf("何だ", "なん") && pieces.nextToNanDa(at)
+            val call = nanDaCall(pieces, at, repeated)
             when {
-                piece.surface == "何だ" && piece.kind == "感動詞" && question &&
-                    before?.surface != "何だ" && after?.surface != "何だ" -> {
+                piece.surface == "何だ" && piece.kind == "感動詞" && question && !repeated -> {
                     add(Piece("何", "なん", "名詞", "代名詞", reader = Reader.RULES))
                     add(Piece("だ", "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true))
                 }
@@ -241,12 +241,24 @@ internal object Readings {
     private fun nanDaOpening(before: Piece?) =
         before == null || before.surface in OPENING || before.surface in "、。，．,.！？!?；;：:…"
 
-    private fun nanDaCall(pieces: List<Piece>, at: Int): Boolean {
+    private fun List<Piece>.nanDaAt(at: Int): Boolean {
+        val head = getOrNull(at) ?: return false
+        val next = getOrNull(at + 1)
+        return head.surface == "何だ" && head.kind == "感動詞" ||
+            head.surface == "なん" && next?.surface == "だ" && next.startsCopula
+    }
+
+    private fun List<Piece>.nextToNanDa(at: Int): Boolean {
+        val length = if (get(at).surface == "なん") 2 else 1
+        return nanDaAt(at + length) || nanDaAt(at - 1) || getOrNull(at - 2)?.surface == "なん" && nanDaAt(at - 2)
+    }
+
+    private fun nanDaCall(pieces: List<Piece>, at: Int, repeated: Boolean): Boolean {
         val before = pieces.getOrNull(at - 1)
         val after = pieces.getOrNull(at + 1)
         val next = pieces.getOrNull(at + 2)
-        return pieces[at].surface == "なん" && nanDaOpening(before) &&
-            after?.surface == "だ" && after.startsCopula && next.endsNanDaCall()
+        return pieces[at].surface == "なん" && after?.surface == "だ" && after.startsCopula &&
+            (repeated || nanDaOpening(before) && next.endsNanDaCall())
     }
 
     /**
