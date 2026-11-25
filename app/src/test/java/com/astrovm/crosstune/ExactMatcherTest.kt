@@ -2499,6 +2499,42 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun peaceSignOpensItsOfficialVideoWithBothTitlesAndCredits() {
+        val song = MusicMetadata("Peace Sign", "米津玄師", lengthMs = 238_525)
+        val fan = youTubeMusicRow("米津玄師 (Kenshi Yonezu)「ピースサイン」(Peace Sign)", "IRyS Singing Archive • 4 views • 3:58", videoId = "LlqIAiDzgpM")
+        val fanUrl = "https://music.youtube.com/watch?v=LlqIAiDzgpM"
+        fun finds(vararg artistVideos: String): String? {
+            namesAndTabs(
+                videos = artistVideos.toList() + fan,
+                apple = mapOf("US" to appleSong("Peace Sign", "Kenshi Yonezu", 238_525)),
+                elsewhere = mapOf("JP" to appleSong("ピースサイン - Peace Sign", "米津玄師", 238_525))
+            )
+            return runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        fun official(name: String) = youTubeMusicRow(name, "Kenshi Yonezu • 346M views • 4:25", videoId = "9aJVr5tTTWk")
+
+        assertEquals(fanUrl, finds())
+        assertEquals(fanUrl, finds(official("米津玄師 - ピースサイン別曲 , Kenshi Yonezu - Peace Sign")))
+        assertEquals(fanUrl, finds(official("米津玄師 - ピースサイン , Kenshi Yonezu - Peace Sign (Live)")))
+        assertEquals("https://music.youtube.com/watch?v=9aJVr5tTTWk", finds(official("米津玄師 - ピースサイン , Kenshi Yonezu - Peace Sign")))
+    }
+
+    @Test
+    fun bayCityDoesNotReplaceTheAlbumEditionWithTheShorterSingle() {
+        val title = "tasogare no bay city"
+        val metadata = MusicMetadata(title, "八神純子", lengthMs = 281_200)
+        val single = youTubeMusicRow("黄昏のBAY CITY", "八神純子 • 黄昏のBAY CITY • 4:11", videoId = "QLHMhVonF-s")
+        val fan = youTubeMusicRow("Junko Yagami - 黄昏のBay City", "Vladimir Putin (Jummkopf) • 16K views • 4:35", videoId = "HNfnjWbO4ds")
+        namesAndTabs(
+            songs = listOf(single),
+            videos = listOf(fan),
+            apple = mapOf("US" to appleSong(title, "JUNKO YAGAMI", 281_200, album = "full moon")),
+            elsewhere = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 281_200, album = "Full Moon"))
+        )
+        assertEquals("https://music.youtube.com/watch?v=HNfnjWbO4ds", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, metadata) })
+    }
+
+    @Test
     fun aVideoSayingMoreInAnotherScriptIsAnotherSong() {
         val song = MusicMetadata("桜", "Band")
         fun finds(name: String, channel: String = "Band - Topic"): String? {

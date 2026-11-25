@@ -49,8 +49,9 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * opens 宇多田ヒカル's own, and takes a credit of two known names together, G.E.M. 鄧紫棋, as the artist's.
  * Version 11 gives a missing store one retry before playing a fan upload and checks the upload again later.
  * Version 12 can confirm an untranslated search result by its own song ID in another YouTube Music language.
+ * Version 13 recognizes both names in a bilingual store title when the artist's video repeats its credit.
  */
-internal const val MATCH_VERSION = 12
+internal const val MATCH_VERSION = 13
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -1606,7 +1607,8 @@ internal class ExactMatcher(
         if (rest.any { !YEAR.matches(it) }) return false
         // Nor anything in another script, which has no words to tell apart: "桜の雨" isn't "桜". Named
         // both ways, "プラスティック・ラブ - Plastic Love", the other way is the song's name too.
-        val known = names.titles.map { SongNames.normalize(SongNames.withoutEditionTag(it)) }
+        // Stores may join the two names, while the video repeats the artist's credit before each name.
+        val known = names.titles.flatMap(SongNames::titleNames).map { SongNames.normalize(SongNames.withoutEditionTag(it)) }
         val bothWays = SongNames.titleNames(outside.trim()).drop(1).takeIf { halves -> halves.any { SongNames.normalize(it) in known } }.orEmpty()
         val written = (known + bothWays.map(SongNames::normalize) +
             names.artists.flatMap(SongNames::artistNames).map { SongNames.normalize(SongNames.withoutArticle(it)) } + VIDEO_TAG_MARKS)
