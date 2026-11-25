@@ -44,6 +44,7 @@ internal class PracticeClockLog(private val debuggable: Boolean) {
                 put("playing", state.clock.playing)
                 put("can_seek", state.canSeek)
                 put("ad", state.ad)
+                put("item_state", state.item?.kind?.name?.lowercase())
                 put("duration_ms", state.durationMs ?: JSONObject.NULL)
                 put("reported_session", state.session)
             }

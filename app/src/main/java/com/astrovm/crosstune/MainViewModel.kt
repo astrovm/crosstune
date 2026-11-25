@@ -12,7 +12,6 @@ import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.astrovm.crosstune.ui.theme.Palette
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -1154,16 +1153,16 @@ internal class MainViewModel(
             launch {
                 source.nowPlayingUpdates()
                     .onEach { heard ->
-                        heardNow = heard?.metadata
+                        heardNow = heard?.takeUnless { it.item?.kind == ItemKind.UNKNOWN }?.metadata
                         showPlayingNow()
                     }
                     // Clock updates keep the offer current without restarting its lyrics lookup.
                     .distinctUntilChangedBy { it?.metadata }
-                    .collectLatest { heard -> heard?.let { lyricsFinder?.firstLook(it.metadata) } }
+                    .collectLatest { heard -> heard?.takeIf { it.namesSong() }?.let { lyricsFinder?.firstLook(it.metadata) } }
             }
             launch {
                 source.nowPlayingUpdates()
-                    .mapNotNull { it?.metadata }
+                    .mapNotNull { it?.takeUnless { heard -> heard.item?.kind == ItemKind.UNKNOWN }?.metadata }
                     // Paused apps don't announce a playing song; ask the last one's app whether it still has it.
                     .onStart { previous?.let { emit(it) } }
                     .distinctUntilChanged()
@@ -2182,6 +2181,8 @@ internal class MainViewModel(
         val there = followResultSession(source, song, app).first() ?: return false
         if (pausedOnly && there.playingInApp) return false
         startPlayer(song, there.appPackage, link, session = there.session)
+        source.playbackItems.started(link)
+        if (there.ad) markStartUnderAd(link)
         if (!there.playingInApp) source.playPause(song, true, there.appPackage, there.session)
         return true
     }
@@ -2283,7 +2284,9 @@ internal class MainViewModel(
     }
 
     /** What an app was seen doing with a song it was asked for: playing it as that song, or something it calls otherwise. */
-    private data class Seen(val following: Following?, val playing: Heard.Song?, val uncertain: Boolean)
+    private data class Seen(val following: Following?, val playing: Heard.Song?, val uncertain: Boolean) {
+        val item get() = following?.item ?: playing?.item
+    }
 
     /**
      * What [app] is seen, [withinMs], to do: to have [song], [mustPlay] it or not, or, whatever the app names it,
@@ -2291,29 +2294,41 @@ internal class MainViewModel(
      */
     private suspend fun seenPlaying(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean, withinMs: Long = LOAD_SONG_MS): Seen? {
         val over = uiState.player?.over
-        val wait = UnconfirmedAdWait()
         var possibleSong: Seen? = null
-        // Don't let the check exhaust the Play timeout when the short report arrives near the end.
+        // A short last report can still let Play finish at its existing deadline, if this item allows fallback.
         val seen = withTimeoutOrNull(withinMs) {
-            combine(source.follow(song).forClockLog("play_start"), source.nowPlayingUpdates(), wait.expired) { following, playing, expired ->
-                val start = when {
-                    following != null -> followerStart(following, app, mustPlay)
-                    playing != null -> askedStart(playing, app, over, link, song.lengthMs)
-                    else -> AskedStart.NO
-                }
-                val report = Seen(following, playing, uncertain = start == AskedStart.MAY_BE_AD)
+            combine(source.follow(song).forClockLog("play_start"), source.nowPlayingUpdates()) { followed, heard ->
+                val (report, ready) = readStart(followed, heard, app, over, link, mustPlay)
                 possibleSong = report.takeIf { it.uncertain }
-                // The follower already runs the wait when it has a clock.
-                report.takeIf { following?.adCheckUntilMs == null && wait.accepts(start, expired) }
+                report.takeIf { ready }
             }.filterNotNull().first()
-        } ?: possibleSong ?: return null
+        } ?: possibleSong?.takeUnless { it.item?.isCurrent() == false } ?: return null
+        keepPlayedName(seen, app, over, link)
+        source.playbackItems.started(link)
+        if (seen.uncertain || seen.following?.ad == true) markStartUnderAd(link)
+        return seen
+    }
+
+    private fun readStart(
+        followed: Following?, heard: Heard.Song?, app: String?, over: MusicMetadata?, link: String, mustPlay: Boolean
+    ): Pair<Seen, Boolean> {
+        val following = followed?.takeUnless { it.item?.isCurrent() == false }
+        val playing = heard?.takeUnless { it.item?.isCurrent() == false }
+        val start = when {
+            following != null -> followerStart(following, app, mustPlay)
+            playing != null -> askedStart(playing, app, over, link)
+            else -> AskedStart.NO
+        }
+        val report = Seen(following, playing, uncertain = start == AskedStart.MAY_BE_AD)
+        return report to (start == AskedStart.YES || report.uncertain && report.item?.canFinishPlay == true)
+    }
+
+    private fun keepPlayedName(seen: Seen, app: String?, over: MusicMetadata?, link: String) {
         // Seen to go on to it from another song, that's what the app calls the song at that link. Not from nothing, as an
         // app may show what it played last a moment first.
         val named = seen.playing?.takeIf { !seen.uncertain && seen.following == null }
         val wentOn = named?.takeIf { over != null && !sameSong(it.metadata, over) }
         if (app != null && wentOn != null) playedAs[app to link] = wentOn.metadata
-        if (seen.uncertain || seen.following?.ad == true) markStartUnderAd(link)
-        return seen
     }
 
     private fun markStartUnderAd(link: String) {
@@ -2323,8 +2338,10 @@ internal class MainViewModel(
 
     private fun followerStart(following: Following, app: String?, mustPlay: Boolean): AskedStart {
         if (!sameApp(app, following.appPackage, interception::isInstalled)) return AskedStart.NO
-        if (following.adCheckUntilMs != null) {
-            return if (!mustPlay || following.playingInApp) AskedStart.MAY_BE_AD else AskedStart.NO
+        val item = following.item
+        if (item?.kind == ItemKind.UNKNOWN) {
+            val canWait = item.checkAtMs != null || item.canFinishPlay
+            return if (canWait && (!mustPlay || following.playingInApp)) AskedStart.MAY_BE_AD else AskedStart.NO
         }
         return if (!mustPlay || following.clock.playing) AskedStart.YES else AskedStart.NO
     }
@@ -2365,6 +2382,7 @@ internal class MainViewModel(
     private fun cancelPlayerStart() {
         val starting = playerStartJob
         playerStartJob = null
+        playback?.playbackItems?.request(null, null, null)
         starting?.cancel()
         if (starting != null && starting === trackJob) uiState = uiState.copy(queueProgress = null)
         leftJob?.cancel()
@@ -2403,6 +2421,9 @@ internal class MainViewModel(
         // The app may be on another song as it's asked, which isn't the one it goes on to play.
         val over = playback?.takeIf { !played && it.hasAccess() }?.nowPlaying()?.takeIf { sameApp(app, it.app, interception::isInstalled) }?.metadata
         val stationApp = unnamed?.takeUnless { it.reportsState }?.let { it.label ?: it.app }
+        if (keepsStart && link != null && MusicService.ofPackage(app) == MusicService.YOUTUBE_MUSIC) {
+            playback?.playbackItems?.request(app, song, link)
+        }
         uiState = uiState.copy(
             player = PlayerState(song, app, link, played = played, over = over, songless = unnamed != null, stationAppLabel = stationApp, session = session),
             canFollowApps = playback?.hasAccess() == true
@@ -2459,23 +2480,21 @@ internal class MainViewModel(
         }
         val song = opened.song
         viewModelScope.launchKept({ playerJob = it }) {
-            val titleWait = NewTitleAfterAd()
-            launch { titleWait.waitWhileTitlePlays() }
-            val refresh = merge(youTubeReturnExpired, snapshotFlow { uiState.player?.startedWithAd }.map { Unit }, titleWait.expired)
+            val refresh = merge(youTubeReturnExpired, snapshotFlow { uiState.player?.startedWithAd }.map { Unit })
             combine(
                 source.follow(song, opened.followApp, opened.session).forClockLog("player"), source.nowPlayingUpdates(), source.unnamedUpdates(), refresh,
             ) { following, playing, unnamed, _ -> Triple(following, playing, unnamed) }.collect { (following, playing, unnamed) ->
-                readPlayerReport(following, playing, unnamed, titleWait)
+                readPlayerReport(following, playing, unnamed)
             }
         }
     }
 
-    private fun readPlayerReport(following: Following?, playing: Heard.Song?, unnamed: Unnamed?, titleWait: NewTitleAfterAd) {
+    private fun readPlayerReport(followed: Following?, playing: Heard.Song?, unnamed: Unnamed?) {
         val player = uiState.player ?: return
+        val following = followed?.takeUnless { it.item?.isCurrent() == false }
         val played = playedOrPlays(player, following)
-        val different = playing?.takeIf { following == null && uiState.practice == null && isNewPlayerReport(it, player) }
-        val decision = different?.let { nextPlayerReport(it, player, played) }
-        if (titleWait.accepts(different, decision) && different != null) {
+        val different = playing?.takeIf { uiState.practice == null && isNewPlayerReport(it, player) && leftPlayerItem(it, player, following) }
+        if (different != null && takesOverPlayer(different, player, played)) {
             // A localized title during startup can describe the same request. A skip cannot.
             val alias = !played && !player.startedWithAd
             return openPlayer(different.metadata, different.app ?: player.following?.appPackage ?: player.app, played = true, keepsStart = alias)
@@ -2484,49 +2503,26 @@ internal class MainViewModel(
         uiState = uiState.copy(player = player.withCurrentCover(playing, unnamed, following).copy(following = following, played = played))
     }
 
-    private class NewTitleAfterAd {
-        private data class Name(private val title: String, private val artist: String, private val duration: Long?)
-        private val pending = MutableStateFlow<Name?>(null)
-        private val waited = MutableStateFlow<Name?>(null)
-        val expired = waited.map { Unit }
-
-        suspend fun waitWhileTitlePlays() {
-            pending.collectLatest { name ->
-                waited.value = null
-                if (name != null) {
-                    delay(LONGEST_AD_MS)
-                    waited.value = name
-                }
-            }
-        }
-
-        fun accepts(report: Heard.Song?, decision: AskedStart?): Boolean {
-            val name = report?.takeIf { decision == AskedStart.MAY_BE_AD }
-                ?.let { Name(it.metadata.title, it.metadata.artist, it.sessionDurationMs) }
-            pending.value = name
-            return decision == AskedStart.YES || name != null && name == waited.value
-        }
-    }
-
     private fun isNewPlayerReport(playing: Heard.Song, player: PlayerState): Boolean =
         !sameSong(playing.metadata, player.song) || player.startedWithAd && playing.isAnotherYouTubeVideo(player.link)
 
-    /** The provisional start keeps the request, not the startup rule that rules out all other videos. */
-    private fun nextPlayerReport(playing: Heard.Song, player: PlayerState, played: Boolean): AskedStart {
-        if (played) return AskedStart.YES
-        val start = askedStart(playing, player.app, player.over, player.link, player.song.lengthMs)
-        if (!player.startedWithAd) return if (start == AskedStart.YES) start else AskedStart.NO
-        if (notANewYouTubeItem(playing, player)) return AskedStart.NO
-        if (playing.isAnotherYouTubeVideo(player.link)) return AskedStart.YES
-        // An unidentified possible ad must stay current for longer than one ad.
-        val stillUnclear = start == AskedStart.MAY_BE_AD || playing.sessionDurationMs == null
-        if (playing.youTubeVideoId() == null && stillUnclear) return AskedStart.MAY_BE_AD
-        return if (start == AskedStart.YES) start else AskedStart.NO
+    private fun leftPlayerItem(playing: Heard.Song, player: PlayerState, following: Following?): Boolean {
+        if (following == null) return true
+        if (!player.startedWithAd || following.clock.playing) return false
+        val oldItem = following.item
+        return if (oldItem == null) playing.isAnotherYouTubeVideo(player.link) else playing.item?.id?.let { it !== oldItem.id } == true
     }
 
-    private fun notANewYouTubeItem(playing: Heard.Song, player: PlayerState): Boolean =
-        playing.ad || !sameApp(player.app, playing.app, interception::isInstalled) ||
-            player.over?.let { sameSong(playing.metadata, it) } == true
+    private fun takesOverPlayer(playing: Heard.Song, player: PlayerState, played: Boolean): Boolean {
+        if (!playing.namesSong()) return false
+        if (played) return true
+        // After a start under an ad, revisiting the video that played before Play is a real skip.
+        if (player.startedWithAd) return sameApp(player.app, playing.app, interception::isInstalled)
+        return askedStart(playing, player.app, player.over, player.link) == AskedStart.YES
+    }
+
+    private fun Heard.Song.namesSong(): Boolean =
+        !ad && (item == null || item.kind == ItemKind.SONG && item.isCurrent())
 
     /** Once the named song plays again, missing metadata can mean the app really moved on. */
     private fun playedOrPlays(player: PlayerState, following: Following?): Boolean {
@@ -2578,7 +2574,7 @@ internal class MainViewModel(
      * Whether [playing] is what the [app] asked for a song has gone on to play, rather than what it played [over] before; or,
      * still on that, what it was seen to play for the same [link] before.
      */
-    private fun askedStart(playing: Heard.Song, app: String?, over: MusicMetadata?, link: String?, askedLength: Long?): AskedStart {
+    private fun askedStart(playing: Heard.Song, app: String?, over: MusicMetadata?, link: String?): AskedStart {
         // An ad under the song's name is no song started: free YouTube Music plays them so.
         if (app == null || playing.ad || !sameApp(app, playing.app, interception::isInstalled)) return AskedStart.NO
         if (playing.isAnotherYouTubeVideo(link)) return AskedStart.NO
@@ -2586,42 +2582,19 @@ internal class MainViewModel(
             val whatItPlayedLast = link?.let { playedAs[app to it] } ?: return AskedStart.NO
             if (!sameSong(playing.metadata, whatItPlayedLast)) return AskedStart.NO
         }
-        return playing.youTubeStart(link, askedLength)
+        return itemStart(playing.item)
     }
 
-    /** The general report can arrive before the follower with the requested video's length sees the ad. */
-    private fun Heard.Song.youTubeStart(link: String?, askedLength: Long?): AskedStart {
-        if (MusicService.ofPackage(app) != MusicService.YOUTUBE_MUSIC) return AskedStart.YES
-        val id = RecordingKey.youTubeIdIn(link) ?: return AskedStart.YES
-        val exactLength = playback?.knownYouTubeLength(id)
-        val expected = exactLength ?: askedLength ?: return AskedStart.YES
-        val said = sessionDurationMs ?: return AskedStart.YES
-        if (!isYouTubeAdLength(said, expected)) return AskedStart.YES
-        // A requested duration might be for a different cut. Only the exact video's own duration rules this report out.
-        return if (exactLength == null) AskedStart.MAY_BE_AD else AskedStart.NO
+    private fun itemStart(item: ItemReading?): AskedStart {
+        if (item == null) return AskedStart.YES
+        return when (item.kind) {
+            ItemKind.SONG -> AskedStart.YES
+            ItemKind.AD -> AskedStart.NO
+            ItemKind.UNKNOWN -> if (item.checkAtMs != null || item.canFinishPlay) AskedStart.MAY_BE_AD else AskedStart.NO
+        }
     }
 
     private enum class AskedStart { NO, MAY_BE_AD, YES }
-
-    /** Give the song's follower time to decide. Repeated reports don't restart the wait. */
-    private class UnconfirmedAdWait {
-        private val started = CompletableDeferred<Unit>()
-        val expired = flow {
-            emit(false)
-            started.await()
-            delay(UNCONFIRMED_AD_WAIT_MS)
-            emit(true)
-        }
-
-        fun accepts(start: AskedStart, expired: Boolean): Boolean = when (start) {
-            AskedStart.NO -> false
-            AskedStart.MAY_BE_AD -> {
-                started.complete(Unit)
-                expired
-            }
-            AskedStart.YES -> true
-        }
-    }
 
     private fun Heard.Song.isAnotherYouTubeVideo(link: String?): Boolean {
         if (MusicService.ofPackage(app) !in YOUTUBE_PLAYERS) return false
@@ -4427,7 +4400,7 @@ internal class MainViewModel(
                 if (skips != (uiState.canSkipNext to uiState.canSkipPrevious)) uiState = uiState.copy(canSkipNext = skips.first, canSkipPrevious = skips.second)
                 // An app still on the song shown, by another name, e.g. "Song - Remastered", or paused there, plays no other.
                 if (!shownPlayed || app != null) return@collect
-                showNextLyrics(song, playing, queued)
+                showNextLyrics(song, playing?.takeIf { it.namesSong() }, queued)
             }
         }
     }
@@ -6795,7 +6768,7 @@ internal class MainViewModel(
         const val LOAD_SONG_MS = 12_000L
 
         /** How long an app opened on a song may play something else first: YouTube Music was seen to play two ads in a row. */
-        const val ADS_MS = 2 * LONGEST_AD_MS
+        const val ADS_MS = 300_000L
         /** YouTube makes temporary playlists of up to 50 videos. */
         const val MAX_QUEUE = 50
         /** Songs whose covers are looked up when a playlist shows: Spotify lists 100, the first 30 with covers. */

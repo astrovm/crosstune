@@ -475,7 +475,7 @@ class PlaybackTest {
             art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to id))
         shadowOf(sessions).addController(controller)
         val heard = checkNotNull(playback.nowPlaying())
-        assertFalse("Without a position there is no classified clock", heard.ad)
+        assertTrue("The exact duration can classify an ad even without a position", heard.ad)
         assertNull(heard.clock)
         assertEquals(253_000L, heard.metadata.lengthMs)
         assertEquals("The startup guard needs the unadjusted media report", 10_133L, heard.sessionDurationMs)
@@ -673,6 +673,31 @@ class PlaybackTest {
     }
 
     @Test
+    fun anOpaqueIdFilledInAfterConfirmationDoesNotGiveTheNextIdItsAdEvidence() {
+        allow()
+        val service = MusicService.YOUTUBE_MUSIC.packageName
+        val controller = player(service, "YouTube Music", song.title, song.artist, album = "Album", duration = 42_678, position = 694)
+        val id = "ULJOyfga9Bc"
+        val raw = song.copy(lengthMs = 42_678)
+        val other = MediaSessionPlayback(app, now = { NOW }, modes = modes)
+        assertNull(other.knownYouTubeLength(id))
+        shadowOf(sessions).addController(controller)
+        playback.rememberYouTubeLength(id, 254_000)
+        val requested = raw.copy(url = "https://music.youtube.com/watch?v=$id", lengthMs = 254_000)
+        assertTrue(checkNotNull(runBlocking { playback.follow(requested).first() }).ad)
+
+        val mediaKey = MediaMetadata.METADATA_KEY_MEDIA_ID
+        val filled = MediaMetadata.Builder(controller.metadata).putString(mediaKey, "first-opaque-item").build()
+        shadowOf(controller).setMetadata(filled)
+        assertTrue(checkNotNull(runBlocking { other.follow(raw).first() }).ad)
+        shadowOf(controller).setMetadata(MediaMetadata.Builder(filled).putString(mediaKey, "second-opaque-item").build())
+        val first = checkNotNull(runBlocking { other.follow(raw).first() })
+        assertFalse(first.ad)
+        assertEquals(694L, first.clock.positionMs)
+        assertEquals(42_678L, first.durationMs)
+    }
+
+    @Test
     fun twoDifferentAlbumsDoNotShareAConfirmedAdWhenNeitherReportHasAVideoId() = runBlocking {
         allow()
         val appPackage = MusicService.YOUTUBE_MUSIC.packageName
@@ -707,7 +732,10 @@ class PlaybackTest {
         assertTrue(checkNotNull(playback.nowPlaying()).ad)
 
         val short = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
-        // An exact but different video doesn't inherit the first link's catalogue length.
+        // The currently identified item stays an ad for the first video, not a clock for a different link.
+        assertNull(followed(short).last())
+        val report = MediaMetadata.Builder(session.metadata).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "abcdefghijk").build()
+        shadowOf(session).setMetadata(report)
         val unmeasured = checkNotNull(followed(short).last())
         assertFalse(unmeasured.ad)
         assertEquals(60_046L, unmeasured.durationMs)
@@ -817,19 +845,19 @@ class PlaybackTest {
         sounding()
         val id = "longVersion"
         val lengths = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
-        lengths.of("Edit", "Band", LONGEST_AD_MS - 1_000)
+        lengths.of("Edit", "Band", AD_DURATION_HINT_MS - 1_000)
         val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Edit", "Band", album = "Album",
-            duration = LONGEST_AD_MS + 400, art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to id))
+            duration = AD_DURATION_HINT_MS + 400, art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to id))
         shadowOf(sessions).addController(music)
         // Rounding for the title must never make the exact video look shorter than the ad limit.
         val edit = MusicMetadata("Edit", "Band", url = "https://music.youtube.com/watch?v=$id")
-        assertEquals(LONGEST_AD_MS + 400, followed(edit).last()?.durationMs)
-        assertEquals(LONGEST_AD_MS + 400, playback.nowPlaying()?.metadata?.lengthMs)
-        assertEquals(LONGEST_AD_MS + 400, playback.knownYouTubeLength(id))
-        shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, LONGEST_AD_MS - 200).build())
+        assertEquals(AD_DURATION_HINT_MS + 400, followed(edit).last()?.durationMs)
+        assertEquals(AD_DURATION_HINT_MS + 400, playback.nowPlaying()?.metadata?.lengthMs)
+        assertEquals(AD_DURATION_HINT_MS + 400, playback.knownYouTubeLength(id))
+        shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, AD_DURATION_HINT_MS - 200).build())
         assertEquals(false, playback.nowPlaying()?.ad)
-        assertEquals(LONGEST_AD_MS + 400, followed(edit).last()?.durationMs)
-        assertEquals(LONGEST_AD_MS + 400, playback.nowPlaying()?.metadata?.lengthMs)
+        assertEquals(AD_DURATION_HINT_MS + 400, followed(edit).last()?.durationMs)
+        assertEquals(AD_DURATION_HINT_MS + 400, playback.nowPlaying()?.metadata?.lengthMs)
         shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 30_000).build())
         assertEquals(true, playback.nowPlaying()?.ad)
     }
@@ -848,7 +876,7 @@ class PlaybackTest {
     }
 
     @Test
-    fun aTrimmedVideoStillTooLongToBeAnAdReplacesItsOldLength() {
+    fun aPassiveReadOfATrimmedVideoCanReplaceItsOldLength() {
         allow()
         val id = "longVersion"
         val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Edit", "Band",
@@ -877,23 +905,23 @@ class PlaybackTest {
         }
         assertEquals(500L, follows(500, 0).durationMs)
         assertEquals(124_000L, follows(124_000 + SteadyLengths.SAME_MS, 124_000).durationMs)
-        assertFalse(follows(30_000, LONGEST_AD_MS - 1).ad)
-        assertFalse(follows(0, LONGEST_AD_MS).ad)
-        val runningAd = follows(1, LONGEST_AD_MS)
+        assertFalse(follows(30_000, AD_DURATION_HINT_MS - 1).ad)
+        assertFalse(follows(0, AD_DURATION_HINT_MS).ad)
+        val runningAd = follows(1, AD_DURATION_HINT_MS)
         assertTrue(runningAd.ad)
         assertTrue(runningAd.adPlaying)
         shadowOf(video).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 100, 0f, PLAYED_AT).build())
-        val pausedAd = follows(1, LONGEST_AD_MS)
+        val pausedAd = follows(1, AD_DURATION_HINT_MS)
         assertTrue(pausedAd.ad)
         assertFalse(pausedAd.adPlaying)
-        val rounded = follows(LONGEST_AD_MS - SteadyLengths.SAME_MS, LONGEST_AD_MS)
+        val rounded = follows(AD_DURATION_HINT_MS - SteadyLengths.SAME_MS, AD_DURATION_HINT_MS)
         assertFalse(rounded.ad)
-        assertEquals(LONGEST_AD_MS, rounded.durationMs)
-        assertTrue(follows(LONGEST_AD_MS - SteadyLengths.SAME_MS - 1, LONGEST_AD_MS).ad)
-        assertTrue(follows(LONGEST_AD_MS - 1, 240_000).ad)
-        assertFalse(follows(LONGEST_AD_MS, 240_000).ad)
-        assertEquals(LONGEST_AD_MS, follows(LONGEST_AD_MS + SteadyLengths.SAME_MS, null).durationMs)
-        assertEquals(LONGEST_AD_MS + SteadyLengths.SAME_MS + 1, follows(LONGEST_AD_MS + SteadyLengths.SAME_MS + 1, null).durationMs)
+        assertEquals(AD_DURATION_HINT_MS, rounded.durationMs)
+        assertTrue(follows(AD_DURATION_HINT_MS - SteadyLengths.SAME_MS - 1, AD_DURATION_HINT_MS).ad)
+        assertTrue(follows(AD_DURATION_HINT_MS - 1, 240_000).ad)
+        assertFalse(follows(AD_DURATION_HINT_MS, 240_000).ad)
+        assertEquals(AD_DURATION_HINT_MS, follows(AD_DURATION_HINT_MS + SteadyLengths.SAME_MS, null).durationMs)
+        assertEquals(AD_DURATION_HINT_MS + SteadyLengths.SAME_MS + 1, follows(AD_DURATION_HINT_MS + SteadyLengths.SAME_MS + 1, null).durationMs)
     }
 
     @Test
@@ -904,11 +932,11 @@ class PlaybackTest {
         val video = player(yt, "YouTube Music", song.title, song.artist, album = "Album", position = 100, duration = 500)
         shadowOf(sessions).addController(video)
         val lengths = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
-        lengths.of(song.title, song.artist, LONGEST_AD_MS)
-        assertEquals(LONGEST_AD_MS, followed(song).last()?.durationMs)
+        lengths.of(song.title, song.artist, AD_DURATION_HINT_MS)
+        assertEquals(AD_DURATION_HINT_MS, followed(song).last()?.durationMs)
         val exact = song.copy(url = "https://music.youtube.com/watch?v=other000000")
         assertEquals(214_000L, followed(exact.copy(lengthMs = 214_000)).last()?.durationMs)
-        assertEquals(LONGEST_AD_MS, followed(song).last()?.durationMs)
+        assertEquals(214_000L, followed(song).last()?.durationMs)
         playback.rememberYouTubeLength("other000000", 214_000)
         assertEquals(214_000L, followed(exact).last()?.durationMs)
         assertEquals(true, followed(exact).last()?.ad)
@@ -917,7 +945,7 @@ class PlaybackTest {
         // A different media report drops the confirmation. A title history still counts after that.
         val report = video.metadata
         shadowOf(video).setMetadata(MediaMetadata.Builder(report).putLong(MediaMetadata.METADATA_KEY_DURATION, 30_000).build())
-        assertEquals(LONGEST_AD_MS, playback.nowPlaying()?.metadata?.lengthMs)
+        assertEquals(AD_DURATION_HINT_MS, playback.nowPlaying()?.metadata?.lengthMs)
         // Once the session identifies its cut, the name's length can no longer tell us it is an ad.
         shadowOf(video).setMetadata(MediaMetadata.Builder(report).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "longVersion").build())
         assertEquals(false, followed(song).last()?.ad)
@@ -937,16 +965,16 @@ class PlaybackTest {
         assertEquals(PlaybackClock(1_000, PLAYED_AT), checkNotNull(followed(asked).last()) { "Expected followed(asked).last() to be non-null" }.clock)
         // As long as the longest ad, it's a version of the song, though a longer one played before.
         SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)).of("Cross My Heart", "Jody Watley", 210_674)
-        said(LONGEST_AD_MS)
-        assertEquals(LONGEST_AD_MS, playback.recording(asked.copy(lengthMs = null))?.lengthMs)
+        said(AD_DURATION_HINT_MS)
+        assertEquals(AD_DURATION_HINT_MS, playback.recording(asked.copy(lengthMs = null))?.lengthMs)
         // With no video ID there is no exact cache entry to replace the longer catalogue duration.
-        said(LONGEST_AD_MS, album = null)
+        said(AD_DURATION_HINT_MS, album = null)
         val atCutoff = checkNotNull(followed(asked).last())
         assertFalse(atCutoff.ad)
         assertEquals(PlaybackClock(1_000, PLAYED_AT), atCutoff.clock)
         // And a song as long as the longest ad is longer than any.
         said(17_066)
-        assertEquals(LONGEST_AD_MS, playback.recording(asked.copy(lengthMs = LONGEST_AD_MS))?.lengthMs)
+        assertEquals(AD_DURATION_HINT_MS, playback.recording(asked.copy(lengthMs = AD_DURATION_HINT_MS))?.lengthMs)
     }
 
     @Test
@@ -956,7 +984,7 @@ class PlaybackTest {
         sounding()
         val id = "other000000"
         val video = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", song.title, song.artist,
-            album = null, duration = LONGEST_AD_MS - 1, position = 1_000)
+            album = null, duration = AD_DURATION_HINT_MS - 1, position = 1_000)
         shadowOf(sessions).addController(video)
         playback.rememberYouTubeLength(id, 253_000)
         val asked = song.copy(url = "https://music.youtube.com/watch?v=$id", lengthMs = 253_000)
@@ -964,7 +992,7 @@ class PlaybackTest {
         assertTrue(checkNotNull(followed(asked).last()).ad)
         assertEquals(true, playback.nowPlaying()?.ad)
 
-        val atCutoff = MediaMetadata.Builder(before).putLong(MediaMetadata.METADATA_KEY_DURATION, LONGEST_AD_MS).build()
+        val atCutoff = MediaMetadata.Builder(before).putLong(MediaMetadata.METADATA_KEY_DURATION, AD_DURATION_HINT_MS).build()
         // Android can change metadata between two reads. A report outside the ad range must not
         // enter the ad lookup and clear proof for the short report that the session still has.
         val android = Shadow.extract<OneMetadataRead>(video)
@@ -977,7 +1005,7 @@ class PlaybackTest {
         val following = checkNotNull(followed(asked).last())
         assertFalse(following.ad)
         assertEquals(PlaybackClock(1_000, PLAYED_AT), following.clock)
-        assertEquals(LONGEST_AD_MS, following.durationMs)
+        assertEquals(AD_DURATION_HINT_MS, following.durationMs)
         assertEquals(253_000L, playback.knownYouTubeLength(id))
 
         // Seeing the previous short report again without the exact request can't revive the old confirmation.
@@ -1023,15 +1051,48 @@ class PlaybackTest {
         val held = rows.first { it.getInt("observer") == original.getInt("observer") && !it.getBoolean("present") }
         assertNotEquals(original.getString("item_hash"), held.getString("item_hash"))
         assertEquals(held.getString("item_hash"), rows.last().getString("item_hash"))
+        assertEquals("ad", rows.last().getString("item_state"))
         assertTrue(rows.all { !it.has("title") && !it.has("artist") && !it.has("video_id") })
     }
 
     @Implements(MediaController::class)
     class OneMetadataRead : ShadowMediaController() {
         var next: MediaMetadata? = null
+        var readingState: (() -> Unit)? = null
 
         @Implementation
         override fun getMetadata(): MediaMetadata? = next?.also { next = null } ?: super.getMetadata()
+
+        @Implementation
+        override fun getPlaybackState(): PlaybackState? {
+            val beforeRead = readingState
+            readingState = null
+            beforeRead?.invoke()
+            return super.getPlaybackState()
+        }
+    }
+
+    @Test
+    @Config(shadows = [OneMetadataRead::class])
+    fun aStateReadBetweenTwoDifferentItemsCannotPublishAMixedClock() {
+        allow()
+        val appPackage = MusicService.YOUTUBE_MUSIC.packageName
+        val previous = MusicMetadata("Blinding Lights", "The Weeknd", recordingId = "$appPackage:duration:262617")
+        val controller = player(appPackage, "YouTube Music", previous.title, previous.artist, duration = 262_617, position = 1_714)
+        shadowOf(sessions).addController(controller)
+        val seen = followed(previous)
+        assertEquals(262_617L, seen.last()?.durationMs)
+        val next = MediaMetadata.Builder(controller.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Other item")
+            .putLong(MediaMetadata.METADATA_KEY_DURATION, 42_678).build()
+        val android = Shadow.extract<OneMetadataRead>(controller)
+        android.readingState = {
+            android.setMetadata(next)
+            android.setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 18_694, 1f, PLAYED_AT).build())
+        }
+        modes.watching.single()()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+        assertTrue(seen.filterNotNull().none { it.clock.positionMs == 18_694L })
     }
 
     @Test
@@ -1047,6 +1108,7 @@ class PlaybackTest {
         val looper = shadowOf(Looper.getMainLooper())
         looper.idle()
         assertEquals(true, seen.last()?.ad)
+        assertEquals(ItemKind.UNKNOWN, seen.last()?.item?.kind)
         assertEquals(0L, seen.last()?.clock?.positionMs)
         looper.idleFor(Duration.ofMillis(1_000))
         val moved = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 2_200, 1f, SystemClock.elapsedRealtime())
@@ -1124,6 +1186,14 @@ class PlaybackTest {
         report(MediaMetadata.Builder(sameNameNewId).putString(title, "Different title with the same duration").build())
         assertNull(seen.last())
         report(sameNameNewId)
+        // A spelling change does not reset a wait when the raw ID and duration still identify the item.
+        assertEquals(false, seen.last()?.ad)
+        report(MediaMetadata.Builder(sameNameNewId).putString(MediaMetadata.METADATA_KEY_ALBUM, "Another album").build())
+        // An opaque ID is the primary identity. Without that ID the album distinguishes two reports.
+        report(shortEdition)
+        looper.idleFor(Duration.ofMillis(UNCONFIRMED_AD_WAIT_MS))
+        assertEquals(false, seen.last()?.ad)
+        report(MediaMetadata.Builder(shortEdition).putString(MediaMetadata.METADATA_KEY_ALBUM, "Album-only change").build())
         assertEquals(true, seen.last()?.ad)
     }
 

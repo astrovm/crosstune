@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
 
 /**
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.onStart
  * what it plays, and where it was moved to.
  */
 internal class FakePlayback : PlaybackSource {
+    override val playbackItems = PlaybackItems()
     var access = false
     var restricted = false
     val playing = MutableStateFlow<Following?>(null)
@@ -189,7 +191,22 @@ internal class FakePlayback : PlaybackSource {
     /** Whether what's on the phone is yet to be said, as by a session slow to answer: [nowPlayingUpdates] says nothing till it's false. */
     val nowPlayingLate = MutableStateFlow(false)
 
-    override fun nowPlayingUpdates(): Flow<Heard.Song?> = changes { (ranked(onThePhone) as? WhatPlays.Named)?.song }.onStart { nowPlayingLate.first { !it } }
+    override fun nowPlayingUpdates(): Flow<Heard.Song?> = merge(
+        changes { (ranked(onThePhone) as? WhatPlays.Named)?.song }.map { Unit },
+        playbackItems.refreshes(android.os.SystemClock::elapsedRealtime)
+    ).map { (ranked(onThePhone) as? WhatPlays.Named)?.song?.let(::readItem) }
+        .distinctUntilChanged().onStart { nowPlayingLate.first { !it } }
+
+    private fun readItem(heard: Heard.Song): Heard.Song {
+        val app = heard.app ?: return heard
+        if (MusicService.ofPackage(app) != MusicService.YOUTUBE_MUSIC) return heard
+        val metadata = heard.metadata
+        val id = metadata.recordingId?.removePrefix("$app:")?.takeUnless { it.startsWith("duration:") }
+        val item = mediaItem(id, metadata.url, metadata.title, metadata.artist, metadata.album, heard.sessionDurationMs)
+        return heard.copy(item = playbackItems.observe(app, ItemObservation(
+            item, android.os.SystemClock.elapsedRealtime(), heard.offsetMs, reportedAd = heard.ad, app = app
+        ), ::knownYouTubeLength))
+    }
 
     /** How many are listening for what's on the phone. */
     val nowPlayingWatchers get() = songs.subscriptionCount.value
