@@ -182,9 +182,6 @@ private const val OPEN_FOCUS = "open"
 /** Where the remote comes back to the card's second icon, which opens the song without playing it. */
 private const val ARROW_FOCUS = "arrow"
 
-/** How many frames a Recent row has to be placed in, Recent coming back, before the remote is left where it is. */
-private const val FOCUS_FRAMES = 5
-
 /** The song Back just put away on a TV, by its link, whose Recent row takes the remote; [focused] once it has. */
 private class ClosedSong(val url: String, val focused: () -> Unit)
 
@@ -2003,8 +2000,7 @@ private fun HistoryRow(
         // Recent comes back.
         if (takeFocus != null) {
             LaunchedEffect(Unit) {
-                var frames = 0
-                while (!focus.focusRow() && frames++ < FOCUS_FRAMES) withFrameNanos {}
+                focus.focusOncePlaced()
                 takeFocus()
             }
         }

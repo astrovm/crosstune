@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
@@ -451,8 +452,16 @@ internal class RowButtonFocus {
     val buttonModifier: Modifier = Modifier.focusRequester(button).onFocusChanged { onButton = it.isFocused }
 
     /** Gives the remote to the row, as when the song it opened is put away; false while the row isn't placed yet. */
-    fun focusRow(): Boolean = row.requestFocus()
+    private fun focusRow(): Boolean = row.requestFocus()
+
+    /** Recent can come back a few frames before its row is ready to take the remote. */
+    suspend fun focusOncePlaced() {
+        var frames = 0
+        while (!focusRow() && frames++ < FOCUS_FRAMES) withFrameNanos {}
+    }
 }
+
+private const val FOCUS_FRAMES = 5
 
 @Composable
 internal fun rememberRowButtonFocus(): RowButtonFocus = remember { RowButtonFocus() }
