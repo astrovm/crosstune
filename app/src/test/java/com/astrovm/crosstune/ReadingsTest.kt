@@ -223,6 +223,26 @@ class ReadingsTest {
     }
 
     @Test
+    fun repeatedNanDaAfterAdverbs() {
+        val spellings = listOf("なんだ", "何だ")
+        val adverbs = listOf("一体" to "ittai", "いったい" to "ittai", "本当に" to "hontooni")
+        val cases = buildList {
+            for (count in 2..3) for (mask in 0 until (1 shl count)) for ((adverb, reading) in adverbs) {
+                for (topic in listOf(false, true)) {
+                    val words = (0 until count).map { spellings[(mask shr it) and 1] }
+                    val line = (if (topic) "これは" else "") + adverb + words.joinToString("")
+                    val romaji = (if (topic) "kore wa " else "") + reading + " " +
+                        words.mapIndexed { at, _ -> if (topic && at == 0) "nan da" else "nanda" }.joinToString(" ")
+                    val first = if (topic) listOf(if (words.first() == "何だ") "何" else "なん", "だ") else listOf(words.first())
+                    val sheet = (if (topic) listOf("これ", "は") else emptyList()) + listOf(adverb) + first + words.drop(1)
+                    add(Triple(line, romaji, sheet))
+                }
+            }
+        }
+        assertJapaneseBoundaries(cases)
+    }
+
+    @Test
     fun explanatoryNandaStaysWholeAndInterrogativeNanSeparates() = assertJapaneseBoundaries(listOf(
         Triple("今日はここまでなんだ", "kyoo wa koko made nanda", listOf("今日", "は", "ここ", "まで", "なんだ")),
         Triple("つらいからなんだよ", "tsurai kara nanda yo", listOf("つらい", "から", "なんだ", "よ")),

@@ -273,7 +273,7 @@ internal object Readings {
     }
 
     private fun List<Piece>.beforeAdverbs(at: Int): Piece? =
-        (at - 1 downTo 0).asSequence().map(::get).dropWhile { it.kind == "副詞" }.firstOrNull()
+        (at - 1 downTo 0).asSequence().map(::get).dropWhile { it.kind == "副詞" || it.surface == "一体" }.firstOrNull()
 
     private fun Piece?.endsNanDaCall() = this == null || surface.isBlank() ||
         surface.firstOrNull()?.let { it in "、，,。．.!！；;：:」』）)】〉》］]｝}”’｣»›⟩〟" } == true
