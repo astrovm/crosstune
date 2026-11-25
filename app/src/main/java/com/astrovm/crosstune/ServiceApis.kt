@@ -214,6 +214,12 @@ internal class ServiceApis(
         return list.optJSONArray("tracks").objects().take(MAX_TRACKS).mapNotNull { audiomackTrack(it, uploader, cover) }
     }
 
+    // Presto Music
+
+    /** The songs of the Presto Music [album] with this [code], by its leader where they play, with its cover. */
+    suspend fun prestoTracks(code: String, album: MusicMetadata): List<MusicMetadata> =
+        Presto.tracks(getObject("${Presto.API}/tracks/$code".toHttpUrl()), album).take(MAX_TRACKS)
+
     companion object {
         const val TIDAL_API = "https://api.tidal.com/v1"
         const val LISTENBRAINZ_SPOTIFY_IDS = "https://labs.api.listenbrainz.org/spotify-id-from-metadata/json"

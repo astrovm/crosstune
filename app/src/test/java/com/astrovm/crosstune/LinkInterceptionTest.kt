@@ -77,12 +77,14 @@ class LinkInterceptionTest {
     }
 
     @Test
-    fun soundCloudBandcampAndAudiomackLinksAreOnlySharedOrPasted() {
-        // Much of what's on them is on no other service (#372), so tapped, their links stay in their own apps.
+    fun soundCloudBandcampAudiomackAndPrestoLinksAreOnlySharedOrPasted() {
+        // Much of what's on them is on no other service (#372), and Presto's are mostly its shop's, so tapped,
+        // their links stay in their own apps.
         val links = mapOf(
             MusicService.SOUNDCLOUD to "https://soundcloud.com/theweeknd/blinding-lights",
             MusicService.BANDCAMP to "https://artist.bandcamp.com/album/record",
-            MusicService.AUDIOMACK to "https://audiomack.com/artist/song/title"
+            MusicService.AUDIOMACK to "https://audiomack.com/artist/song/title",
+            MusicService.PRESTO_MUSIC to "https://streaming.prestomusic.com/album/8269533"
         )
         MusicService.entries.filter { it.opensTappedLinks }.forEach { interception.setEnabled(it, true) }
         for ((service, link) in links) {

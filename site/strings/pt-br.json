@@ -100,7 +100,7 @@
     ],
     [
       "p",
-      "Para reconhecer a música de um link, o Crosstune lê a página pública ou a API pública do serviço de origem: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Shazam ou Google, e carrega a capa. Para abri-la em outro app, o título e o artista vão para a busca desse app. Quando essa busca não tem certeza, eles vão também para as buscas de músicas da Apple e do Deezer. Para o Spotify, eles vão para o ListenBrainz, o nome do artista vai para o MusicBrainz e as páginas públicas do Spotify são lidas. Tocar tudo e Aleatório fazem isso para cada música, e o YouTube monta a playlist com os vídeos encontrados. O nome de música que você digita vai para as buscas do Deezer e da Apple. Um destino personalizado recebe os termos de busca no endereço que você definir."
+      "Para reconhecer a música de um link, o Crosstune lê a página pública ou a API pública do serviço de origem: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Presto Music, Shazam ou Google, e carrega a capa. Para abri-la em outro app, o título e o artista vão para a busca desse app. Quando essa busca não tem certeza, eles vão também para as buscas de músicas da Apple e do Deezer. Para o Spotify, eles vão para o ListenBrainz, o nome do artista vai para o MusicBrainz e as páginas públicas do Spotify são lidas. Tocar tudo e Aleatório fazem isso para cada música, e o YouTube monta a playlist com os vídeos encontrados. O nome de música que você digita vai para as buscas do Deezer e da Apple. Um destino personalizado recebe os termos de busca no endereço que você definir."
     ],
     [
       "p",

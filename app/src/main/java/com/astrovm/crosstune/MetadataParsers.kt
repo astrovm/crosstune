@@ -282,10 +282,13 @@ internal object MetadataParsers {
         val artwork = thumbnails?.optJSONObject(thumbnails.length() - 1)?.let { it.optString("url").ifBlank { null } }
         val song = type == "ATV"
         val named = (if (song || type == "OMV") youtubeVideo(title, "$channel - Topic") else youtubeVideo(title, channel)) ?: return null
-        val lengthMs = text("lengthText").takeIf { song }?.split(":")?.mapNotNull(String::toLongOrNull)?.takeIf { it.size in 2..3 }
-            ?.fold(0L) { total, part -> total * 60 + part }?.times(1000)
+        val lengthMs = text("lengthText").takeIf { song }?.let(::clockMs)
         return named.copy(artworkUrl = artwork, lengthMs = lengthMs)
     }
+
+    /** How long "3:45" or "1:02:03" is, as a clock shows a song's length; null for anything else. */
+    fun clockMs(text: String): Long? = text.split(":").takeIf { it.size in 2..3 }?.map { it.toLongOrNull() ?: return null }
+        ?.fold(0L) { total, part -> total * 60 + part }?.times(1000)
 
     /**
      * An album's or an artist's page on YouTube Music, by its header: an album's title, its artist
@@ -844,8 +847,6 @@ internal object MetadataParsers {
             album = album?.nonBlankString("title") ?: albumName
         )
     }
-
-    private fun JSONObject.nonBlankString(key: String) = (opt(key) as? String)?.takeIf(String::isNotBlank)
 
     /** Audiomack oEmbed: the song, album or playlist's name, its artist and its cover. */
     fun audiomack(json: JSONObject, type: ItemType): MusicMetadata? {
