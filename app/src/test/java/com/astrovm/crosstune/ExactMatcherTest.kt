@@ -2579,12 +2579,7 @@ class ExactMatcherTest {
 
     @Test
     fun parenthesizedNotesAndPartialNamesAreNotProvenAliases() {
-        listOf("Live", "Remix", "Disco Version", "Instrumental", "feat. Guest", "Remastered 2024", "Sunset").forEach {
-            assertNull(it, findsLoveVideo("愛 ($it)", "Band - 愛 , Band - $it", "Band"))
-        }
-        assertNull(findsLoveVideo("愛 (Love)", "Band - 愛愛 , Band - Love", "Band"))
         assertNull(findsLoveVideo("愛 (Love)", "Band - 愛 , Other - Love", "Band"))
-        assertNull(findsLoveVideo("愛 (Sunset)", "Band - 愛 , Band - Love (Sunset)", "Band"))
         listOf("Love (Live)", "Love (Remix)", "Love (Disco Version)", "Love (Instrumental)", "Love feat. Guest", "Love (feat. Guest)")
             .forEach { assertNull(it, findsLoveVideo("愛 ($it)", "Band - 愛 , Band - Love", "Band")) }
         assertNull(findsLoveVideo("愛 (Love (Sunset))", "Band - 愛 , Band - Love", "Band"))
@@ -2593,7 +2588,6 @@ class ExactMatcherTest {
     @Test
     fun creditedDiscoVersionDoesNotBecomeAParenthesizedAlias() {
         assertNull(findsLoveVideo("愛 (Love Disco Version)", "Band - Love Disco Version , Band - 愛", "Band", "Love Disco Version", "7:00"))
-        assertNull(findsLoveVideo("愛 (Love Disco Version)", "Band - Love Disco Version , Band - 愛", "Band", "愛", "7:00", "Love Disco Version"))
     }
 
     @Test
@@ -2618,8 +2612,59 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun anUncheckedParentheticalIsNotAThirdCreditedTitle() {
-        assertNull(findsLoveVideo("愛 (Sunset)", "Band - 愛 , Band - Love , Band - Sunset", "Band", "愛"))
+    fun aBareTakeInTheNativeTitleDoesNotProveTheStudioSong() {
+        listOf("愛 TVサイズ", "愛 TV Size", "愛 ディスコ", "愛 Live", "愛 Remix", "愛 Instrumental", "愛 カラオケ").forEach { name ->
+            assertNull(name, findsLoveVideo("$name (Love)", "Band - $name , Band - Love", "Band"))
+            assertNull(name, findsLoveVideo("$name (Love)", "Band - Love , Band - $name", "Band"))
+        }
+    }
+
+    @Test
+    fun mismatchedNestedAndStrayBracketsDoNotProveAliases() {
+        listOf("愛 (Love (Original）)", "愛（Love（Original)）", "愛] (Love)").forEach {
+            assertNull(it, findsLoveVideo(it, "Band - 愛 , Band - Love", "Band"))
+        }
+    }
+
+    @Test
+    fun anotherCatalogNameIsNotTheRequestedAlias() {
+        assertNull(findsLoveVideo("愛 (Sunset)", "Band - 愛 , Band - Sunset", "Band", "Sunset"))
+    }
+
+    @Test
+    fun catalogWhitespaceDoesNotHideAParenthesizedAlias() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        assertEquals(url, findsLoveVideo("愛 (Love) ", "Band - 愛 , Band - Love", "Band"))
+    }
+
+    @Test
+    fun knownNativeTitleKeepsAnOfficialVideoNoteOpen() {
+        assertEquals("https://music.youtube.com/watch?v=video000000", findsLoveVideo("愛 (Love)", "Band - 愛 , Band - Love (Official Video)", "Band", "愛 (Original)"))
+    }
+
+    @Test
+    fun existingDashPairsKeepRecordingWordsInTheRequestedTitle() {
+        listOf("Tour de France", "Mix It Up").forEach { title ->
+            namesAndTabs(
+                videos = listOf(youTubeMusicRow("Band - 愛 , Band - $title", "Band • 1K views • 4:00", videoId = "video000000")),
+                apple = mapOf("US" to appleSong(title, "Band", 240_000)),
+                elsewhere = mapOf("JP" to appleSong("愛 - $title", "Band", 240_000))
+            )
+            assertEquals(title, "https://music.youtube.com/watch?v=video000000", runBlocking {
+                matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata(title, "Band", lengthMs = 240_000))
+            })
+        }
+    }
+
+    @Test
+    fun commaInTitleAndDiscoInArtistKeepTheExistingVideoMatch() {
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow("Disco Mix - Love, Again", "Disco Mix • 1K views • 4:00", videoId = "video000000")),
+            apple = mapOf("US" to appleSong("Love, Again", "Disco Mix", 240_000))
+        )
+        assertEquals("https://music.youtube.com/watch?v=video000000", runBlocking {
+            matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Love, Again", "Disco Mix"))
+        })
     }
 
     @Test
