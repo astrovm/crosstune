@@ -2520,6 +2520,67 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aShortBilingualAliasDoesNotEraseARepeatedTitle() {
+        assertNull(findsLoveVideo("愛 - Love", "Band - 愛愛 (Love)", "Band"))
+    }
+
+    @Test
+    fun aShortBilingualAliasDoesNotEraseARepeatedTitleOnAFanUpload() {
+        assertNull(findsLoveVideo("愛 - Love", "Band - 愛愛 (Love)", "Fan"))
+    }
+
+    @Test
+    fun aRemasterSuffixDoesNotNameAnotherSong() {
+        assertNull(findsLoveVideo("Love - Remastered 2024", "Remastered 2024 - 別曲 (Love)", "Band"))
+    }
+
+    @Test
+    fun aPlainDashSuffixDoesNotNameAnotherSong() {
+        assertNull(findsLoveVideo("Love - Sunset", "Sunset - 別曲 (Love)", "Band"))
+    }
+
+    @Test
+    fun repeatingBothCreditsCanNameAWholeBilingualTitleEitherWay() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        assertEquals(url, findsLoveVideo("愛 - Love", "Band - 愛 , Band - Love", "Band"))
+        assertEquals(url, findsLoveVideo("愛 - Love", "Band - Love，Band - 愛", "Band"))
+        assertEquals(url, findsLoveVideo("愛 - Love", "Band - 愛 , Band - Love", "Fan"))
+    }
+
+    @Test
+    fun repeatingACreditNeedsExactlyTwoWholeKnownNamesAndCredits() {
+        val wrong = listOf(
+            "別人 - 愛 , Band - Love",
+            "Band - 愛 , 別人 - Love",
+            "Band - 愛 , Band Love",
+            "Band - 愛 , Band - Love , Band - Love",
+            "Band - 愛愛 , Band - Love"
+        )
+        wrong.forEach { assertNull(it, findsLoveVideo("愛 - Love", it, "Band")) }
+    }
+
+    @Test
+    fun repeatingACreditDoesNotMakeTwoNamesInTheSameScriptOrANumberBilingual() {
+        assertNull(findsLoveVideo("愛 (Love) - 別曲", "Band - 愛 (Love) , Band - 別曲", "Band"))
+        assertNull(findsLoveVideo("愛 (Love) - 1984", "Band - 愛 (Love) , Band - 1984", "Band"))
+    }
+
+    @Test
+    fun repeatingACreditDoesNotMakeAnEditionOrATakeAName() {
+        assertNull(findsLoveVideo("愛 (Love) - Remastered 2024", "Band - 愛 (Love) , Band - Remastered 2024", "Band"))
+        assertNull(findsLoveVideo("Live - 愛 (Love)", "Band - 愛 (Love) , Band - Live", "Band"))
+    }
+
+    private fun findsLoveVideo(storeTitle: String, videoTitle: String, channel: String): String? {
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow(videoTitle, "$channel • 1K views • 4:00", videoId = "video000000")),
+            apple = mapOf("US" to appleSong("Love", "Band", 240_000)),
+            elsewhere = mapOf("JP" to appleSong(storeTitle, "Band", 240_000))
+        )
+        return runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Love", "Band", lengthMs = 240_000)) }
+    }
+
+    @Test
     fun bayCityDoesNotReplaceTheAlbumEditionWithTheShorterSingle() {
         val title = "tasogare no bay city"
         val metadata = MusicMetadata(title, "八神純子", lengthMs = 281_200)
