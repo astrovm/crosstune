@@ -1025,7 +1025,7 @@ class TvPlayTest {
     }
 
     @Test
-    fun onATvThePlayerPausesThePlayingAdInItsOwnSession() {
+    fun onATvThePlayerKeepsRemoteFocusAsTheAdPausesAndResumesInItsOwnSession() {
         shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
         playback.running = setOf(youTubeMusic)
         playback.rememberYouTubeLength("sPmul8b17AU", 214_000)
@@ -1034,13 +1034,22 @@ class TvPlayTest {
         waitUntil { playback.linksAsked == listOf(link) }
         val ad = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music",
             canSeek = true, appPackage = youTubeMusic, durationMs = 214_000, ad = true, adPlaying = true, session = 23)
+        playback.onPlay = { _, playing -> playback.playing.value = ad.copy(adPlaying = playing) }
         playback.playing.value = ad
         waitUntil { onPlayer() && model().uiState.player?.following?.ad == true }
-        val pause = string(R.string.lyrics_pause)
-        composeRule.onNode(hasContentDescription(pause) and hasClickAction()).assertExists()
-        click(pause)
+        val pause = composeRule.onNode(hasContentDescription(string(R.string.lyrics_pause)) and hasClickAction())
+        val resume = composeRule.onNode(hasContentDescription(string(R.string.lyrics_play)) and hasClickAction())
+        pause.requestFocus()
+        pause.assertIsFocused()
+        pause.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { model().uiState.player?.following?.adPlaying == false }
+        resume.assertIsFocused()
         assertEquals(listOf(false), playback.plays)
-        assertEquals(listOf(23), playback.playedSessions)
+        resume.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { model().uiState.player?.following?.adPlaying == true }
+        pause.assertIsFocused()
+        assertEquals(listOf(false, true), playback.plays)
+        assertEquals(listOf(23, 23), playback.playedSessions)
         assertEquals(ad.clock, model().uiState.player?.following?.clock)
         assertTrue(playback.opened.isEmpty())
     }

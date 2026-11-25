@@ -622,7 +622,7 @@ internal class PracticeCards(
     ): Boolean = coroutineScope {
         var latest: Following? = null
         val following = launch {
-            source.follow(song, app).collect { latest = it }
+            source.follow(song, app).forClockLog("practice").collect { latest = it }
         }
         try {
             val ready: suspend () -> Unit = { while (latest?.canSeek != true) delay(SOUND_CHECK_MS) }

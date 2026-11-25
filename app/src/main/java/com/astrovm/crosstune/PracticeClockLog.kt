@@ -4,7 +4,20 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.util.Log
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import org.json.JSONObject
+
+/** Names a follower in debug logs without recording the song's metadata. */
+internal fun Flow<Following?>.forClockLog(reason: String): Flow<Following?> = flowOn(FollowLogReason(reason))
+
+internal val CoroutineContext.followLogReason: String get() = this[FollowLogReason]?.reason ?: "unspecified"
+
+private class FollowLogReason(val reason: String) : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<FollowLogReason>
+}
 
 /** Opt-in dev evidence. These records are not kept in TimingLog or included in reports. */
 internal class PracticeClockLog(private val debuggable: Boolean) {

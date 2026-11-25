@@ -42,7 +42,7 @@ internal class SleepTimer(
      * no song, e.g. a file with no tags, as it's followed and paused there; see [PlaybackSource.follow].
      */
     fun afterSong(song: MusicMetadata, app: String? = null, session: Int? = null) = start(Sleep()) {
-        playback.follow(song, app, session).collectLatest { following ->
+        playback.follow(song, app, session).forClockLog("sleep_timer").collectLatest { following ->
             if (following == null) {
                 pauseWhatPlays()
                 return@collectLatest off()

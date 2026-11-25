@@ -66,7 +66,7 @@ internal class QueueOrder(
             }
             on = id
             val next = order.value.firstOrNull()?.id ?: return@collectLatest off()
-            playback.follow(plays.song).collectLatest following@{ following ->
+            playback.follow(plays.song).forClockLog("queue_order").collectLatest following@{ following ->
                 // Repeating the one song, the app plays it again rather than another; where it goes on to the
                 // order's next song by itself, it needn't be asked.
                 if (following == null || following.repeat == Repeat.ONE || following.upNext.firstOrNull()?.id == next) return@following

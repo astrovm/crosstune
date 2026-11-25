@@ -28,6 +28,7 @@ import android.media.session.PlaybackState
 import android.os.Build
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationManagerCompat
@@ -134,9 +135,12 @@ class PlaybackTest {
         return controller
     }
 
-    private fun followed(song: MusicMetadata = this.song, source: PlaybackSource = playback): MutableList<Following?> {
+    private fun followed(song: MusicMetadata = this.song, source: PlaybackSource = playback, reason: String? = null): MutableList<Following?> {
         val seen = mutableListOf<Following?>()
-        collecting += CoroutineScope(Dispatchers.Unconfined).launch { source.follow(song).collect { seen += it } }
+        val updates = source.follow(song)
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch {
+            (reason?.let(updates::forClockLog) ?: updates).collect { seen += it }
+        }
         shadowOf(Looper.getMainLooper()).idle()
         return seen
     }
@@ -199,8 +203,8 @@ class PlaybackTest {
         val fixture = MusicMetadata("Fixture Track", "Fixture Artist")
         val controller = player("com.example.fixture", "Fixture", fixture.title, fixture.artist)
         shadowOf(sessions).addController(controller)
-        followed(fixture)
-        followed(fixture)
+        followed(fixture, reason = "now_playing")
+        followed(fixture, reason = "player")
         val report = PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 29_952, 1f, 200).build()
         repeat(2) { shadowOf(controller).executeOnPlaybackStateChanged(report) }
         shadowOf(Looper.getMainLooper()).idle()
@@ -208,8 +212,10 @@ class PlaybackTest {
         assertEquals(4, raw.size)
         val streams = raw.groupBy { it.getInt("observer") }
         assertEquals(2, streams.size)
-        val began = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }
-            .filter { it.getString("event") == "follow_begin" }.map { it.getInt("observer") }.toSet()
+        val starts = ShadowLog.getLogsForTag("CrosstuneClock").map { JSONObject(it.msg) }
+            .filter { it.getString("event") == "follow_begin" }
+        assertEquals(listOf("now_playing", "player"), starts.map { it.getString("reason") })
+        val began = starts.map { it.getInt("observer") }.toSet()
         assertEquals(streams.keys, began)
         collecting.forEach(Job::cancel)
         shadowOf(Looper.getMainLooper()).idle()
@@ -584,6 +590,60 @@ class PlaybackTest {
     }
 
     @Test
+    fun aNewFollowerKeepsTheConfirmedAdWhenAndroidFillsInItsVideoId() {
+        allow()
+        val id = "ULJOyfga9Bc"
+        val named = MusicMetadata("City Of Blinding Lights (Radio Edit)", "U2", lengthMs = 33_204)
+        val video = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", named.title, named.artist,
+            duration = 33_204, position = 694)
+        val other = MediaSessionPlayback(app, now = { NOW }, modes = modes)
+        assertNull(other.knownYouTubeLength(id))
+        shadowOf(sessions).addController(video)
+        playback.rememberYouTubeLength(id, 254_000)
+        val requested = named.copy(url = "https://music.youtube.com/watch?v=$id", lengthMs = 254_000)
+        assertTrue(checkNotNull(followed(requested).first()).ad)
+
+        val withAlbum = MediaMetadata.Builder(video.metadata).putString(MediaMetadata.METADATA_KEY_ALBUM, "Single").build()
+        shadowOf(video).setMetadata(withAlbum)
+        assertTrue(checkNotNull(followed(named, other).first()).ad)
+        val report = MediaMetadata.Builder(withAlbum).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, id).build()
+        shadowOf(video).setMetadata(report)
+        val fromBar = named.copy(recordingId = "${MusicService.YOUTUBE_MUSIC.packageName}:duration:33204")
+        val first = checkNotNull(followed(fromBar, other).first())
+        assertTrue(first.ad)
+        assertTrue(first.adPlaying)
+        assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), first.clock)
+        assertEquals(254_000L, first.durationMs)
+    }
+
+    @Test
+    fun aNewFollowerInheritsAnAdFirstConfirmedWithItsVideoIdButNotAnotherVideo() {
+        allow()
+        val id = "ULJOyfga9Bc"
+        val named = MusicMetadata("City Of Blinding Lights (Radio Edit)", "U2", lengthMs = 33_204)
+        val video = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", named.title, named.artist,
+            album = "Single", duration = 33_204, position = 694, art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to id))
+        val other = MediaSessionPlayback(app, now = { NOW }, modes = modes)
+        assertNull(other.knownYouTubeLength(id))
+        shadowOf(sessions).addController(video)
+        playback.rememberYouTubeLength(id, 254_000)
+        // This first reader learns the length from the session's ID, not from what a Play requested.
+        assertTrue(checkNotNull(followed(named.copy(lengthMs = null)).first()).ad)
+        val first = checkNotNull(followed(named, other).first())
+        assertTrue(first.ad)
+        assertEquals(0L, first.clock.positionMs)
+        assertEquals(254_000L, first.durationMs)
+
+        val anotherVideo = MediaMetadata.Builder(video.metadata)
+            .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "abcdefghijk").build()
+        shadowOf(video).setMetadata(anotherVideo)
+        val another = checkNotNull(followed(named, other).first())
+        assertFalse(another.ad)
+        assertEquals(694L, another.clock.positionMs)
+        assertEquals(33_204L, another.durationMs)
+    }
+
+    @Test
     fun anExactShortEditStillWinsWithAnAdOfTheSameName() {
         allow()
         sounding()
@@ -881,6 +941,48 @@ class PlaybackTest {
 
         @Implementation
         override fun getMetadata(): MediaMetadata? = next?.also { next = null } ?: super.getMetadata()
+    }
+
+    @Test
+    fun aShorterEditionWithAMovingPositionIsOnlyHeldForThreeSecondsWithoutAnExactLength() {
+        allow()
+        val media = MediaSessionPlayback(app)
+        val exact = song.copy(url = "https://music.youtube.com/watch?v=other000000", lengthMs = 253_000)
+        val video = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", song.title, song.artist,
+            album = "Album", duration = 90_000, position = 1_200, at = SystemClock.elapsedRealtime())
+        shadowOf(sessions).addController(video)
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Main.immediate).launch { media.follow(exact).collect { seen += it } }
+        val looper = shadowOf(Looper.getMainLooper())
+        looper.idle()
+        assertEquals(true, seen.last()?.ad)
+        assertEquals(0L, seen.last()?.clock?.positionMs)
+        looper.idleFor(Duration.ofMillis(1_000))
+        val moved = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 2_200, 1f, SystemClock.elapsedRealtime())
+            .setActions(PlaybackState.ACTION_SEEK_TO).build()
+        shadowOf(video).setPlaybackState(moved)
+        shadowOf(video).executeOnPlaybackStateChanged(moved)
+        looper.idle()
+        looper.idleFor(Duration.ofMillis(START_MS - 1_001))
+        assertEquals(true, seen.last()?.ad)
+        looper.idleFor(Duration.ofMillis(1))
+        val shorter = checkNotNull(seen.last())
+        assertFalse(shorter.ad)
+        assertTrue(shorter.clock.playing)
+        assertEquals(2_200L, shorter.clock.positionMs)
+        assertEquals(90_000L, shorter.durationMs)
+        assertNull(media.knownYouTubeLength("other000000"))
+        assertFalse(checkNotNull(followed(exact, media).last()).ad)
+        // Exact evidence can still arrive after the deadline.
+        media.rememberYouTubeLength("other000000", 253_000)
+        shadowOf(video).executeOnPlaybackStateChanged(moved)
+        looper.idle()
+        val confirmed = checkNotNull(seen.last())
+        assertTrue(confirmed.ad)
+        assertEquals(0L, confirmed.clock.positionMs)
+        assertEquals(253_000L, confirmed.durationMs)
+        looper.idleFor(Duration.ofMillis(START_MS))
+        assertEquals(true, seen.last()?.ad)
     }
 
     @Test

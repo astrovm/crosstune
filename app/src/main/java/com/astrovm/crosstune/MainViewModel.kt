@@ -1168,7 +1168,7 @@ internal class MainViewModel(
                     .onStart { previous?.let { emit(it) } }
                     .distinctUntilChanged()
                     .collectLatest { song ->
-                        source.follow(song).collect { following ->
+                        source.follow(song).forClockLog("now_playing").collect { following ->
                             followedNow = following?.let { song to it }
                             showPlayingNow()
                             likeKeptOffline(song, following)
@@ -1184,7 +1184,7 @@ internal class MainViewModel(
         val installed = interception::isInstalled
         val packages = MusicService.ofOwnApp(app)?.appPackages.orEmpty()
             .filter { installed(it) && sameApp(app, it, installed) }.ifEmpty { listOf(app) }
-        return combine(packages.map { source.follow(song, it) }) { sessions ->
+        return combine(packages.map { source.follow(song, it).forClockLog("play_resume_probe") }) { sessions ->
             sessions.filterNotNull().filter { it.canContinueIn(app) }.maxByOrNull { it.playingInApp }
         }
     }
@@ -1210,7 +1210,7 @@ internal class MainViewModel(
                 showUnnamed()
                 // The notification identifies the station, but there is no clock or transport to follow by name.
                 if (unnamed?.reportsState != true) return@collectLatest
-                source.follow(unnamed.played, unnamed.app, unnamed.session).collect { following ->
+                source.follow(unnamed.played, unnamed.app, unnamed.session).forClockLog("now_playing_unnamed").collect { following ->
                     followedUnnamed = following?.let { unnamed to it }
                     if (unnamed.app != RadioGarden.PACKAGE) checkHeard(following)
                     showUnnamed()
@@ -2283,7 +2283,7 @@ internal class MainViewModel(
     }
 
     /** What an app was seen doing with a song it was asked for: playing it as that song, or something it calls otherwise. */
-    private data class Seen(val following: Following?, val playing: Heard.Song?)
+    private data class Seen(val following: Following?, val playing: Heard.Song?, val uncertain: Boolean)
 
     /**
      * What [app] is seen, [withinMs], to do: to have [song], [mustPlay] it or not, or, whatever the app names it,
@@ -2295,24 +2295,32 @@ internal class MainViewModel(
         var possibleSong: Seen? = null
         // Don't let the check exhaust the Play timeout when the short report arrives near the end.
         val seen = withTimeoutOrNull(withinMs) {
-            combine(source.follow(song), source.nowPlayingUpdates(), wait.expired) { following, playing, expired ->
+            combine(source.follow(song).forClockLog("play_start"), source.nowPlayingUpdates(), wait.expired) { following, playing, expired ->
                 val start = when {
-                    following != null -> if ((!mustPlay || following.clock.playing) &&
-                        sameApp(app, following.appPackage, interception::isInstalled)
-                    ) AskedStart.YES else AskedStart.NO
+                    following != null -> followerStart(following, app, mustPlay)
                     playing != null -> askedStart(playing, app, over, link, song.lengthMs)
                     else -> AskedStart.NO
                 }
-                val report = Seen(following, playing)
-                possibleSong = report.takeIf { start == AskedStart.MAY_BE_AD }
-                report.takeIf { wait.accepts(start, expired) }
+                val report = Seen(following, playing, uncertain = start == AskedStart.MAY_BE_AD)
+                possibleSong = report.takeIf { it.uncertain }
+                // The follower already runs the wait when it has a clock.
+                report.takeIf { following?.adCheckUntilMs == null && wait.accepts(start, expired) }
             }.filterNotNull().first()
         } ?: possibleSong ?: return null
         // Seen to go on to it from another song, that's what the app calls the song at that link. Not from nothing, as an
         // app may show what it played last a moment first.
-        val wentOn = seen.playing?.takeIf { seen.following == null && over != null && !sameSong(it.metadata, over) }
+        val named = seen.playing?.takeIf { !seen.uncertain && seen.following == null }
+        val wentOn = named?.takeIf { over != null && !sameSong(it.metadata, over) }
         if (app != null && wentOn != null) playedAs[app to link] = wentOn.metadata
         return seen
+    }
+
+    private fun followerStart(following: Following, app: String?, mustPlay: Boolean): AskedStart {
+        if (!sameApp(app, following.appPackage, interception::isInstalled)) return AskedStart.NO
+        if (following.adCheckUntilMs != null) {
+            return if (!mustPlay || following.playingInApp) AskedStart.MAY_BE_AD else AskedStart.NO
+        }
+        return if (!mustPlay || following.clock.playing) AskedStart.YES else AskedStart.NO
     }
 
     /**
@@ -2334,7 +2342,7 @@ internal class MainViewModel(
         if (uiState.coveringApp) return
         viewModelScope.launchKept({ leftJob = it }) {
             // Stopped, or let go of altogether, as YouTube does, and not waiting under an ad, which YouTube Music plays on as if it were the song.
-            val stopped = withTimeoutOrNull(START_MS) { source.follow(song).dropWhile { it == null }.first { it == null || !it.clock.playing && !it.ad }; true }
+            val stopped = withTimeoutOrNull(START_MS) { source.follow(song).forClockLog("play_return").dropWhile { it == null }.first { it == null || !it.clock.playing && !it.ad }; true }
             if (stopped == true) source.playPause(song, true)
         }
     }
@@ -2425,19 +2433,18 @@ internal class MainViewModel(
         }
         val song = opened.song
         viewModelScope.launchKept({ playerJob = it }) {
-            val wait = UnconfirmedAdWait()
             combine(
-                source.follow(song, opened.followApp, opened.session), source.nowPlayingUpdates(), source.unnamedUpdates(),
-                youTubeReturnExpired.onStart { emit(Unit) }, wait.expired,
-            ) { following, playing, unnamed, _, expired -> Triple(following, playing, unnamed) to expired }.collect { (report, expired) ->
-                val (following, playing, unnamed) = report
+                source.follow(song, opened.followApp, opened.session).forClockLog("player"), source.nowPlayingUpdates(), source.unnamedUpdates(),
+                youTubeReturnExpired.onStart { emit(Unit) },
+            ) { following, playing, unnamed, _ -> Triple(following, playing, unnamed) }.collect { (following, playing, unnamed) ->
                 val player = uiState.player ?: return@collect
                 val played = playedOrPlays(player, following)
                 // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
                 // Not yet played, the asked app going on to a song is the one asked for, whatever its name there, e.g.
                 // in another script or with the artist's name written otherwise, which the app's session can't be matched by.
                 val differentName = playing?.takeIf { following == null && uiState.practice == null && !sameSong(it.metadata, song) }
-                val next = differentName?.takeIf { played || wait.accepts(askedStart(it, player.app, player.over, player.link, song.lengthMs), expired) }
+                // Play can finish waiting on a short report without taking its title or losing the requested video.
+                val next = differentName?.takeIf { played || askedStart(it, player.app, player.over, player.link, song.lengthMs) == AskedStart.YES }
                 // In the app that plays it, which may not be the one the song before played in.
                 if (next != null) return@collect openPlayer(next.metadata, next.app ?: player.following?.appPackage ?: player.app, played = true)
                 if (tookUpUnnamed(unnamed, playing, following, played, song)) return@collect
@@ -3695,7 +3702,7 @@ internal class MainViewModel(
      */
     private suspend fun appPlays(song: MusicMetadata): Boolean {
         val source = playback?.takeIf { it.hasAccess() } ?: return false
-        val following = withTimeoutOrNull(APP_ASKED_MS) { source.follow(song).first() }
+        val following = withTimeoutOrNull(APP_ASKED_MS) { source.follow(song).forClockLog("lyrics_play_probe").first() }
         return following?.let { it.app != null && it.clock.playing } == true
     }
 
@@ -4278,7 +4285,7 @@ internal class MainViewModel(
         uiState = uiState.copy(following = heardFollowing(song))
         val source = playback?.takeIf { it.hasAccess() } ?: return
         viewModelScope.launchKept({ followJob = it }) {
-            source.follow(song).collect { playing ->
+            source.follow(song).forClockLog("lyrics").collect { playing ->
                 if (playing?.clock?.playing == true && appFollowing?.clock?.playing != true) appPlaysAgain.tryEmit(Unit)
                 // The app stopped it, was closed or went on to another song: the words stop where it left
                 // them, rather than run on from where the song was heard before, until it's heard again.
@@ -4330,7 +4337,7 @@ internal class MainViewModel(
         val source = playback?.takeIf { it.hasAccess() && !nextPaused } ?: return
         val queue = if (followingRadioLyrics) snapshotFlow { uiState.playingUnnamed?.confirmedQueueSong } else flowOf(null)
         viewModelScope.launchKept({ nextJob = it }) {
-            combine(source.follow(song), source.nowPlayingUpdates(), queue, ::Triple).collect { (app, playing, queued) ->
+            combine(source.follow(song).forClockLog("lyrics_next"), source.nowPlayingUpdates(), queue, ::Triple).collect { (app, playing, queued) ->
                 if (app?.clock?.playing == true) shownPlayed = true
                 // Practice moves the music app from song to song, which the words stay out of.
                 if (uiState.practice != null) return@collect
@@ -6704,9 +6711,6 @@ internal class MainViewModel(
         private const val SEEK_SETTLE_MS = 1_000L
         /** How long the music app has to find a song asked for by name, and start it. */
         const val LOAD_SONG_MS = 12_000L
-
-        /** Give the follower the usual app start allowance when a general report might be an ad. */
-        const val UNCONFIRMED_AD_WAIT_MS = START_MS
 
         /** How long an app opened on a song may play something else first: YouTube Music was seen to play two ads in a row. */
         const val ADS_MS = 2 * LONGEST_AD_MS
