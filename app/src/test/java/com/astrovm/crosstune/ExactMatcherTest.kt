@@ -2593,6 +2593,7 @@ class ExactMatcherTest {
     @Test
     fun creditedDiscoVersionDoesNotBecomeAParenthesizedAlias() {
         assertNull(findsLoveVideo("愛 (Love Disco Version)", "Band - Love Disco Version , Band - 愛", "Band", "Love Disco Version", "7:00"))
+        assertNull(findsLoveVideo("愛 (Love Disco Version)", "Band - Love Disco Version , Band - 愛", "Band", "愛", "7:00", "Love Disco Version"))
     }
 
     @Test
@@ -2645,11 +2646,15 @@ class ExactMatcherTest {
         assertNull(findsLoveVideo("Live - 愛 (Love)", "Band - 愛 (Love) , Band - Live", "Band"))
     }
 
-    private fun findsLoveVideo(storeTitle: String, videoTitle: String, channel: String, extraTitle: String? = null, length: String = "4:00"): String? {
+    private fun findsLoveVideo(
+        storeTitle: String, videoTitle: String, channel: String, extraTitle: String? = null, length: String = "4:00", thirdTitle: String? = null
+    ): String? {
         namesAndTabs(
             videos = listOf(youTubeMusicRow(videoTitle, "$channel • 1K views • $length", videoId = "video000000")),
             apple = mapOf("US" to appleSong("Love", "Band", 240_000)),
-            elsewhere = mapOf("JP" to appleSong(storeTitle, "Band", 240_000)) + listOfNotNull(extraTitle?.let { "KR" to appleSong(it, "Band", 240_000) })
+            elsewhere = mapOf("JP" to appleSong(storeTitle, "Band", 240_000)) + listOfNotNull(
+                extraTitle?.let { "KR" to appleSong(it, "Band", 240_000) }, thirdTitle?.let { "TW" to appleSong(it, "Band", 240_000) }
+            )
         )
         return runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Love", "Band", lengthMs = 240_000)) }
     }

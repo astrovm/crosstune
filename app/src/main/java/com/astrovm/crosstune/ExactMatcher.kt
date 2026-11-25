@@ -1087,7 +1087,9 @@ internal class ExactMatcher(
         fun allows(row: Row, video: Boolean = false): Boolean {
             if (named) return true
             val album = if (video) "" else row.details.getOrNull(1).orEmpty()
-            if (!Takes.namesDisco(row.name) && !Takes.namesDisco(album)) return true
+            val parts = if (video) row.name.split(',', '，') else emptyList()
+            val creditedDisco = parts.size > 1 && parts.any(Takes::requestsDisco)
+            if (!creditedDisco && !Takes.namesDisco(row.name) && !Takes.namesDisco(album)) return true
             val wanted = length ?: return false
             return sameRecordingLength(row.lengthMs?.takeIf { it > 0 }, wanted)
         }
