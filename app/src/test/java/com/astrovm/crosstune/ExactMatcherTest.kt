@@ -23,6 +23,7 @@ import okio.buffer
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -205,6 +206,20 @@ class ExactMatcherTest {
             """{"title":"1989","artists":null,"prestoCode":2}"""
         ))
         assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+
+        // Beside a row that can't be read, one that matches may not be the only release.
+        respond(prestoPage(
+            """{"title":"1989","artists":"Taylor Swift","prestoCode":7}""",
+            """{"title":null,"artists":"Taylor Swift","prestoCode":8}"""
+        ))
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+        respond(prestoPage(
+            """{"title":"1989","artists":"Taylor Swift","prestoCode":7}""",
+            """{"title":"1989","artists":null,"prestoCode":8}"""
+        ))
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+        respond(prestoPage("""{"title":"1989","artists":"Taylor Swift","prestoCode":7}"""))
+        assertNotEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
     }
 
     @Test

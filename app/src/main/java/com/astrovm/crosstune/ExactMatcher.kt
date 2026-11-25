@@ -491,6 +491,8 @@ internal class ExactMatcher(
         val artists = Presto.albumArtists(metadata.artist) ?: return null
         if (title.isEmpty()) return null
         val results = apis.prestoAlbums(searchQuery(metadata)) ?: return null
+        // A row without its title or credits can't be ruled out as another release of the same album.
+        if (results.any { it.nonBlankString("title") == null || it.nonBlankString("artists") == null }) return null
         val matches = results.filter { result ->
             SongNames.normalize(result.nonBlankString("title").orEmpty()) == title &&
                 Presto.matchesAlbumArtists(artists, result.nonBlankString("artists").orEmpty())
