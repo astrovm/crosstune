@@ -1596,7 +1596,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 interactionSource = press.source,
                 modifier = Modifier
                     .returnsFocus()
-                    .heightIn(min = 56.dp)
+                    .heightIn(min = ICON_BUTTON)
                     .then(press.modifier)
                     // Once it scrolls away, a floating copy of it takes over.
                     .onGloballyPositioned { onMainButtonShown(it.boundsInWindow().height > 0f) }
@@ -1644,14 +1644,14 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
             val word = measurer.measure(main.label, labelStyle).size.width + (24.dp + ButtonDefaults.IconSpacing + 48.dp).roundToPx()
             val under = iconPlaces.isNotEmpty() && word + iconsWidth > constraints.maxWidth
             val button = measurables.first().measure(Constraints.fixedWidth(constraints.maxWidth - if (under) 0 else iconsWidth))
-            val iconsHeight = iconPlaces.maxOfOrNull { it.height } ?: 0
-            val iconsTop = if (under) button.height + 8.dp.roundToPx() else 0
-            val height = if (under) iconsTop + iconsHeight else maxOf(button.height, iconsHeight)
+            // The button is never shorter than an icon, so beside it the icons sit on its middle, and under it in theirs.
+            val iconsTop = button.height + 8.dp.roundToPx()
+            val height = if (under) iconsTop + iconPlaces.maxOf { it.height } else button.height
             layout(constraints.maxWidth, height) {
-                button.placeRelative(0, if (under) 0 else (height - button.height) / 2)
+                button.placeRelative(0, 0)
                 var x = if (under) (constraints.maxWidth - iconsWidth + gap) / 2 else button.width + gap
                 iconPlaces.forEach { icon ->
-                    icon.placeRelative(x, iconsTop + if (under) 0 else (height - icon.height) / 2)
+                    icon.placeRelative(x, if (under) iconsTop else (button.height - icon.height) / 2)
                     x += icon.width + gap
                 }
             }
