@@ -2566,6 +2566,18 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun repeatingAPlainKnownNameStillOpensTheVideo() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        assertEquals(url, findsLoveVideo("愛 (Love)", "Band - Love , Band - Love", "Band"))
+    }
+
+    @Test
+    fun aNameStartingWithAParenthesisHasNoBaseBeforeIt() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        assertEquals(url, findsLoveVideo("(Love)", "Band -  , Band - Love", "Band"))
+    }
+
+    @Test
     fun parenthesizedNotesAndPartialNamesAreNotProvenAliases() {
         listOf("Live", "Remix", "Disco Version", "Instrumental", "feat. Guest", "Remastered 2024", "Sunset").forEach {
             assertNull(it, findsLoveVideo("愛 ($it)", "Band - 愛 , Band - $it", "Band"))
@@ -2576,6 +2588,37 @@ class ExactMatcherTest {
         listOf("Love (Live)", "Love (Remix)", "Love (Disco Version)", "Love (Instrumental)", "Love feat. Guest", "Love (feat. Guest)")
             .forEach { assertNull(it, findsLoveVideo("愛 ($it)", "Band - 愛 , Band - Love", "Band")) }
         assertNull(findsLoveVideo("愛 (Love (Sunset))", "Band - 愛 , Band - Love", "Band"))
+    }
+
+    @Test
+    fun creditedDiscoVersionDoesNotBecomeAParenthesizedAlias() {
+        assertNull(findsLoveVideo("愛 (Love Disco Version)", "Band - Love Disco Version , Band - 愛", "Band", "Love Disco Version", "7:00"))
+    }
+
+    @Test
+    fun officialVideoNoteDoesNotHideAnExistingWholeTitleMatch() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        assertEquals(url, findsLoveVideo("愛 (Love)", "Band - 愛 , Band - Love (Official Video)", "Band", "愛"))
+    }
+
+    @Test
+    fun recordingLabelsInsideNestedRemastersAreNotNeutral() {
+        listOf("TV Size Remastered", "Disco Version Remastered").forEach {
+            assertNull(it, findsLoveVideo("愛 (Love ($it))", "Band - 愛 , Band - Love", "Band"))
+        }
+    }
+
+    @Test
+    fun parenthesizedAliasesNeedBalancedMatchingBrackets() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        assertNull(findsLoveVideo("愛 (Love (Original] )", "Band - 愛 , Band - Love", "Band"))
+        assertNull(findsLoveVideo("愛 (Love）", "Band - 愛 , Band - Love", "Band"))
+        assertEquals(url, findsLoveVideo("愛（Love（Original））", "Band - 愛 , Band - Love", "Band"))
+    }
+
+    @Test
+    fun anUncheckedParentheticalIsNotAThirdCreditedTitle() {
+        assertNull(findsLoveVideo("愛 (Sunset)", "Band - 愛 , Band - Love , Band - Sunset", "Band", "愛"))
     }
 
     @Test
@@ -2602,11 +2645,11 @@ class ExactMatcherTest {
         assertNull(findsLoveVideo("Live - 愛 (Love)", "Band - 愛 (Love) , Band - Live", "Band"))
     }
 
-    private fun findsLoveVideo(storeTitle: String, videoTitle: String, channel: String): String? {
+    private fun findsLoveVideo(storeTitle: String, videoTitle: String, channel: String, extraTitle: String? = null, length: String = "4:00"): String? {
         namesAndTabs(
-            videos = listOf(youTubeMusicRow(videoTitle, "$channel • 1K views • 4:00", videoId = "video000000")),
+            videos = listOf(youTubeMusicRow(videoTitle, "$channel • 1K views • $length", videoId = "video000000")),
             apple = mapOf("US" to appleSong("Love", "Band", 240_000)),
-            elsewhere = mapOf("JP" to appleSong(storeTitle, "Band", 240_000))
+            elsewhere = mapOf("JP" to appleSong(storeTitle, "Band", 240_000)) + listOfNotNull(extraTitle?.let { "KR" to appleSong(it, "Band", 240_000) })
         )
         return runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Love", "Band", lengthMs = 240_000)) }
     }

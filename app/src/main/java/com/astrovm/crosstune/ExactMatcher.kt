@@ -1643,7 +1643,7 @@ internal class ExactMatcher(
         val written = (known + bothWays.map(SongNames::normalize) +
             names.artists.flatMap(SongNames::artistNames).map { SongNames.normalize(SongNames.withoutArticle(it)) } + VIDEO_TAG_MARKS)
         if (repeatsBilingualTitle(title, names)) return true
-        if (repeatsParenthesizedBase(title, names)) return false
+        if (repeatsParenthesizedBase(title, names) || creditsUnprovenNote(title, names)) return false
         return removeVideoNames(outside, written).none { it.code > 0x7f }
     }
 
@@ -1654,7 +1654,21 @@ internal class ExactMatcher(
         val credited = parts.map { creditedVideoTitle(it, artists) ?: return false }.map(SongNames::normalize)
         return names.titles.any { name ->
             val open = name.indexOfFirst { it == '(' || it == '（' }
-            open > 0 && SongNames.normalize(name.substring(0, open)) in credited
+            val base = if (open > 0) SongNames.normalize(name.substring(0, open)) else ""
+            base.isNotEmpty() && base in credited && names.titles.none { SongNames.normalize(it) == base }
+        }
+    }
+
+    private fun creditsUnprovenNote(title: String, names: Names): Boolean {
+        val parts = title.split(',', '，')
+        if (parts.size < 3) return false
+        val artists = names.artists.map(SongNames::normalize).toSet()
+        val credited = parts.map { creditedVideoTitle(it, artists) ?: return false }.map(SongNames::normalize)
+        val known = names.titles.map(SongNames::normalize).toSet()
+        return names.titles.any { name ->
+            val open = name.indexOfFirst { it == '(' || it == '（' }
+            val note = if (open > 0 && name.lastOrNull() in listOf(')', '）')) SongNames.normalize(name.substring(open + 1, name.lastIndex)) else ""
+            note.isNotEmpty() && note in credited && note !in known
         }
     }
 
@@ -1665,6 +1679,7 @@ internal class ExactMatcher(
         val artists = names.artists.map(SongNames::normalize).toSet()
         val first = creditedVideoTitle(parts[0], artists) ?: return false
         val second = creditedVideoTitle(parts[1], artists) ?: return false
+        if (listOf(first, second).any { Takes.requestsDisco(it) || Takes.saysAnotherTake(it) != null || Takes.saysAnotherVersionBesidesLive(it) }) return false
         val inAnotherScript = listOf(first, second).partition(::namedInAnotherScript)
         val latin = inAnotherScript.second.singleOrNull()?.takeIf(String::hasLatin) ?: return false
         val other = inAnotherScript.first.single()
@@ -1683,12 +1698,22 @@ internal class ExactMatcher(
         val close = if (name[open] == '(') ')' else '）'
         if (!name.endsWith(close)) return null
         val first = name.substring(0, open).trim()
-        val alias = name.substring(open + 1, name.lastIndex).trim()
+        val alias = name.substring(open + 1, name.lastIndex).trim().replace('（', '(').replace('）', ')')
         if (SongNames.withoutFeaturing(alias) != alias || isVideoTitleTag(alias)) return null
+        if (!hasNeutralAliasNote(alias)) return null
         val second = SongNames.withoutEditionTag(alias).trim()
         if (second.any { it in "()（）" } || isVideoTitleTag(first) || isVideoTitleTag(second)) return null
         if (known.none { SongNames.normalize(it) == SongNames.normalize(second) }) return null
         return listOf(first, second)
+    }
+
+    private fun hasNeutralAliasNote(alias: String): Boolean {
+        val nested = alias.indexOf('(')
+        if (nested < 0) return alias.none { it in ")[]［］" }
+        if (!alias.endsWith(')')) return false
+        val note = alias.substring(nested + 1, alias.lastIndex)
+        if (note.any { it in "()[]［］" } || SongNames.writtenWords(note).any { it !in NEUTRAL_ALIAS_WORDS && !it.all(Char::isDigit) }) return false
+        return isVideoTitleTag(note)
     }
 
     private fun creditedVideoTitle(part: String, artists: Set<String>): String? {
@@ -1834,6 +1859,8 @@ internal class ExactMatcher(
             "remaster", "sub", "subs", "subtitles", "subtitulado", "subtitulada", "legendado", "letra", "traduccion",
             "traducida", "translation", "espanol", "english", "eng", "romaji", "kanji"
         )
+
+        private val NEUTRAL_ALIAS_WORDS = setOf("original", "remaster", "remastered", "edition", "version", "mono", "stereo")
 
         /** The same, as other scripts write them: "歌詞付き", "公式". */
         private val VIDEO_TAG_MARKS = listOf("歌詞付き", "歌詞付", "歌詞", "公式", "字幕", "高音質", "日本語", "中日羅", "가사").map(SongNames::normalize)
