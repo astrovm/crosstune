@@ -19,7 +19,8 @@ import com.atilika.kuromoji.viterbi.ViterbiSearcher
  * into かいし and ゃのけいひ, though ゃ is said with the し before it (Issue #924). Where it does, the two words
  * at that place are searched again as Kuromoji searches them, with no word that starts on a small kana after
  * another kana, and with the words in kana JMdict writes in kanji offered in kana too, as かいしゃ for 会社 and
- * けいひ for 経費, as IPADIC knows few words in kana. The rest of the line stays as Kuromoji split it.
+ * けいひ for 経費, as IPADIC knows few words in kana. Kana adjectives before な are searched too, using their
+ * written forms from JMdict when IPADIC knows them. The rest of the line stays as Kuromoji split it.
  *
  * Small vowels that draw a word out, ありがとぉ, can still be a word of their own: Readings puts them with the
  * word before, which keeps its reading. A small vowel that makes a sound with the kana before, でぃ, is said with it.

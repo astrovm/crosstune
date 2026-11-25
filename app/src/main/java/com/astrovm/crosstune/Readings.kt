@@ -588,7 +588,7 @@ internal object Readings {
     /** Held while [listed] or [oldKana] is read from its file, so two threads that ask at once read it once. */
     private val tables = Any()
 
-    /** JMdict words for old-kana readings, modern spellings that protect them, and [small] words for tokenizer searches. */
+    /** JMdict words for old-kana readings and tokenizer searches, and modern spellings that protect old-kana readings. */
     internal class OldKana(
         val today: Map<String, String>, val modern: Set<String>, small: Map<String, String> = emptyMap(),
         val adjectives: Map<String, List<String>> = emptyMap()
