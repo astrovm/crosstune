@@ -28,23 +28,12 @@ internal object Takes {
      */
     fun saysAnotherVersionBesidesLive(title: String): Boolean = SongNames.saysAnotherVersion(title, "live", "")
 
-    /** Read the note on a normalized copy. The matcher still needs the original title. */
-    fun namesMix(title: String): Boolean = tagsOf(Normalizer.normalize(title, Normalizer.Form.NFKC)).any(::isMixNote)
+    /** Read only a disco note on a normalized copy. The matcher still needs the original title or album. */
+    fun namesDisco(name: String): Boolean =
+        tagsOf(Normalizer.normalize(name, Normalizer.Form.NFKC)).any { SongNames.normalize(it) in DISCO_LABELS }
 
-    fun albumNamesMix(album: String): Boolean {
-        val written = Normalizer.normalize(album, Normalizer.Form.NFKC)
-        return SongNames.normalize(written) in MIX_LABELS || tagsOf(written).any(::isMixNote)
-    }
-
-    private fun isMixNote(note: String): Boolean {
-        if (SongNames.normalize(note) in MIX_LABELS) return true
-        val words = SongNames.wordList(note)
-        return words.lastOrNull() == "mix" && words.firstOrNull() !in CREDIT_WORDS
-    }
-
-    private val CREDIT_WORDS = setOf("feat", "ft", "featuring", "with", "prod", "produced")
-    private val MIX_LABELS = listOf(
-        "mix", "disco version", "disco mix", "DISCOバージョン", "プロモーション用DISCOバージョン",
+    private val DISCO_LABELS = listOf(
+        "disco version", "disco mix", "disco ver.", "DISCOバージョン", "プロモーション用DISCOバージョン",
         "ディスコバージョン", "ディスコヴァージョン", "ディスコ版",
         "プロモーション用ディスコバージョン", "プロモーション用ディスコヴァージョン", "プロモーション用ディスコ版"
     ).map(SongNames::normalize).toSet()

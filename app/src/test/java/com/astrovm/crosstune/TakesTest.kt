@@ -9,26 +9,19 @@ import org.junit.Test
 class TakesTest {
 
     @Test
-    fun mixNotesUseCompatibilitySpellingWithoutTreatingSongNamesAsNotes() {
+    fun discoNotesUseCompatibilitySpellingWithoutTreatingSongNamesAsNotes() {
         val notes = listOf(
-            "Song (Disco Version)", "Song - Club Mix", "Song （Ｄｉｓｃｏ　Ｍｉｘ）", "Song (DISCOバージョン)",
+            "Song (Disco Version)", "Song - Disco Ver.", "Song （Ｄｉｓｃｏ　Ｍｉｘ）", "Song (DISCOバージョン)",
             "Song (ディスコ版)", "Song (ﾃﾞｨｽｺ･ﾊﾞｰｼﾞｮﾝ)", "Song (テ\u3099ィスコ・ハ\u3099ーシ\u3099ョン)",
             "Song (ディスコ・ヴァージョン)", "Song (プロモーション用ディスコバージョン)"
         )
-        for (name in notes) {
-            assertTrue(name, Takes.namesMix(name))
-            assertTrue(name, Takes.albumNamesMix(name))
-        }
-        assertTrue(Takes.albumNamesMix("Disco Mix"))
+        for (name in notes) assertTrue(name, Takes.namesDisco(name))
         val names = listOf(
-            "Disco", "Disco Nights", "Disco Inferno", "ディスコ・クイーン", "Song (Deluxe Edition)", "Song (Disco)",
-            "Song (Extended Remix)", "Song (feat. DJ Mix)", "Song - with DJ Mix", "Song (prod. DJ Mix)"
+            "Disco", "Disco Nights", "Disco Inferno", "ディスコ・クイーン", "Disco Mix", "Disco Version", "ディスコ版",
+            "Song (Deluxe Edition)", "Song (Disco)", "Song (Extended Remix)", "Song (Mix Tape)", "Song (Mixed Emotions)",
+            "Song (ミックス)", "Song (Disco Queen)", "Song - Club Mix", "Song (feat. DJ Mix)", "Song (prod. DJ Mix)"
         )
-        for (name in names) {
-            assertFalse(name, Takes.namesMix(name))
-            assertFalse(name, Takes.albumNamesMix(name))
-        }
-        assertFalse(Takes.namesMix("Disco Version"))
+        for (name in names) assertFalse(name, Takes.namesDisco(name))
     }
 
     @Test
