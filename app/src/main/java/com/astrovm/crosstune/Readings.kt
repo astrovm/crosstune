@@ -112,7 +112,7 @@ internal object Readings {
      * 17 to space the Japanese copula apart from the word it follows.
      * 19 to distinguish interrogative 何だ from the interjection.
      */
-    const val VERSION = 19
+    const val VERSION = 20
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1158,6 +1158,10 @@ internal object Readings {
             // A prefix of kanji goes before a word with kanji, 今世紀 or 前前前世; before one in kana, 今となり, it's a word.
             val strayBefore = last?.takeIf { it.kind == "接頭詞" && it.surface.all(::isHan) && piece.surface.none(::isHan) }?.let { alone(it.surface) }
             val next = pieces.getOrNull(index + 1)
+            // IPADIC takes 返し in 投げ返したり for a noun suffix, including its voiced noun reading.
+            val verbSuffix = if (last?.kind == "動詞" && piece.subkind == "接尾" && next?.kana in setOf("たり", "だり")) {
+                tokenizer.knownWord(piece.surface)?.takeIf { it.partOfSpeechLevel1 == "動詞" && it.reading != null && it.reading != "*" }
+            } else null
             val inflected = last?.let { inflectedCompound(it, piece, next) }
             // A suffix said with a voice after a word it can't be part of is the noun it is alone: いつか日, 一度星.
             val apart = last?.takeIf { standsApart(it, piece) }?.let { alone(piece.surface) }
@@ -1166,6 +1170,9 @@ internal object Readings {
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
             when {
+                verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
+                piece.surface == "しん" && next?.kana == "だり" && pieces.getOrNull(index + 2)?.surface == "する" ->
+                    out += piece.read("しん", "動詞", "自立")
                 inflected != null -> out[out.lastIndex] = inflected
                 word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般", reader = Reader.RULES)
                 last != null && count != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, count, "名詞", "一般", reader = Reader.RULES)
@@ -1803,7 +1810,8 @@ internal object Readings {
             }
             val opening = piece.surface in OPENING
             // Both dictionaries can tag たり as a particle, but it is part of the preceding predicate.
-            val tari = piece.kana in setOf("たり", "だり") && piece.kind in setOf("助詞", "助動詞")
+            val tari = piece.kana in setOf("たり", "だり") &&
+                (piece.kind in setOf("助詞", "助動詞") || (piece.surface in setOf("タリ", "ダリ") && previous?.kind == "動詞"))
             val afterTe = tari && followsPredicateTe(previous, pieces.getOrNull(at - 2))
             val ending = piece.isEnding(tari, afterTe, previous)
             // An ending after a particle starts a word of its own: だけだった is dake datta. English

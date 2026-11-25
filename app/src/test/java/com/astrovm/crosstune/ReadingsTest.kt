@@ -34,6 +34,9 @@ class ReadingsTest {
 
     @Test
     fun tariFormsStayWithTheirVerbOrAdjective() = assertJapaneseBoundaries(listOf(
+        Triple("投げ返したり", "nagekaeshitari", listOf("投げ返したり")),
+        Triple("しんだりする", "shindari suru", listOf("しんだり", "する")),
+        Triple("読んダリ", "yondari", listOf("読んダリ")),
         Triple("食べたり", "tabetari", listOf("食べたり")),
         Triple("行ったり", "ittari", listOf("行ったり")),
         Triple("読んだり", "yondari", listOf("読んだり")),
@@ -42,6 +45,12 @@ class ReadingsTest {
         Triple("静かだったり", "shizuka dattari", listOf("静か", "だったり")),
         Triple("読んだりする", "yondari suru", listOf("読んだり", "する")),
         Triple("あたり", "atari", listOf("あたり")),
+        Triple("ぴったり", "pittari", listOf("ぴったり")),
+        Triple("ばったり", "battari", listOf("ばったり")),
+        Triple("ふたり", "futari", listOf("ふたり")),
+        Triple("新だり", "shin dari", listOf("新", "だり")),
+        Triple("時たり", "toki tari", listOf("時", "たり")),
+        Triple("太郎だり", "taroo dari", listOf("太郎", "だり")),
         Triple("本たり", "hon tari", listOf("本", "たり")),
     ))
 
