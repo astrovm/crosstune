@@ -220,6 +220,12 @@ class ExactMatcherTest {
         assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
         respond(prestoPage("""{"title":"1989","artists":"Taylor Swift","prestoCode":7}"""))
         assertNotEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+
+        // A code of 0 is no album, and credits that are only what someone plays name no lead.
+        respond(prestoPage("""{"title":"1989","artists":"Taylor Swift","prestoCode":0}"""))
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+        respond(prestoPage("""{"title":"1989","artists":"(vocals)","prestoCode":7}"""))
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
     }
 
     @Test
