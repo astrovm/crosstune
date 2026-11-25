@@ -457,6 +457,23 @@ class PlaybackTest {
     }
 
     @Test
+    fun nowPlayingKeepsTheReportedAdDurationWhenTheSessionHasNoPosition() {
+        allow()
+        sounding()
+        val id = "9bZkp7q19f0"
+        playback.rememberYouTubeLength(id, 253_000)
+        val controller = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Gangnam Style", "Psy",
+            album = "PSY 6 (Six Rules), Pt. 1", duration = 10_133, position = -1,
+            art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to id))
+        shadowOf(sessions).addController(controller)
+        val heard = checkNotNull(playback.nowPlaying())
+        assertFalse("Without a position there is no classified clock", heard.ad)
+        assertNull(heard.clock)
+        assertEquals(253_000L, heard.metadata.lengthMs)
+        assertEquals("The startup guard needs the unadjusted media report", 10_133L, heard.sessionDurationMs)
+    }
+
+    @Test
     fun samsungGangnamStyleWithKnownExactLengthReplaysAsAnAd() {
         allow()
         sounding()

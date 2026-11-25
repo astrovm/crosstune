@@ -55,7 +55,7 @@ internal sealed interface Heard {
         val speed: Float = 1f,
         val inRoom: Boolean = false,
         val ad: Boolean = false,
-        /** The session's duration, including when a video's length isn't the song's length. */
+        /** The duration the session reported, before it is adjusted to the known song length. */
         val sessionDurationMs: Long? = null
     ) : Heard {
         /** Where the song is, as heard, when both halves are known. */

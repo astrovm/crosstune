@@ -5339,6 +5339,29 @@ class MainViewModelTest {
     }
 
     @Test
+    fun exactVideoPlayUsesTheRequestedLengthWhenTheCatalogueHasNone() {
+        val phone = FakePlayback().apply { access = true }
+        val model = ytMusicModel(phone)
+        val link = checkNotNull(MusicLinks.linkFor(ytLink))
+        val requested = checkNotNull(model.uiState.result).copy(url = ytLink, lengthMs = 253_000)
+        fake.handler = { request -> FakeSpotify.html(request, "{}") }
+        model.showHistoryEntry(HistoryEntry(link, requested), play = true)
+        until("Play asks for the exact video after the empty lookup") { phone.linksAsked == listOf(ytLink) }
+        assertNull(phone.knownYouTubeLength(link.id))
+        assertEquals(253_000L, phone.songsAsked.single().first.lengthMs)
+
+        val report = Heard.Song(requested.copy(url = null, lengthMs = null), null, app = ytMusic, sessionDurationMs = 10_133)
+        phone.onThePhone = report
+        idle()
+        assertTrue("The request's known duration must keep the short report from completing Play", model.uiState.playingResult)
+        assertFalse(checkNotNull(model.uiState.player).played)
+
+        phone.onThePhone = report.copy(sessionDurationMs = 252_261)
+        until("the song-length report can complete Play") { !model.uiState.playingResult }
+        assertEquals(ytLink, model.uiState.player?.song?.url)
+    }
+
+    @Test
     fun exactVideoPlayDoesNotAcceptTheShortReportBeforeItsOwnFollowUpdates() {
         val id = "9bZkp7q19f0"
         val link = "https://music.youtube.com/watch?v=$id"
@@ -5353,8 +5376,8 @@ class MainViewModelTest {
         assertEquals(253_000L, phone.songsAsked.single().first.lengthMs)
 
         // The home report can arrive before the request's own observer gets the same Android update.
-        val heard = MusicMetadata("Gangnam Style", "Psy", lengthMs = 10_133)
-        phone.onThePhone = Heard.Song(heard, null, offsetMs = 45, app = ytMusic)
+        val heard = MusicMetadata("Gangnam Style", "Psy", lengthMs = 253_000)
+        phone.onThePhone = Heard.Song(heard, null, offsetMs = 45, app = ytMusic, sessionDurationMs = 10_133)
         idle()
         assertTrue("The raw ad clock must not complete Play", model.uiState.playingResult)
         assertEquals(link, model.uiState.player?.song?.url)
@@ -5371,7 +5394,7 @@ class MainViewModelTest {
         phone.playing.value = waiting
         until("the request now follows the ad with the song clock stopped") { model.uiState.player?.following?.ad == true }
         assertEquals(0L, model.uiState.player?.following?.clock?.positionMs)
-        phone.onThePhone = Heard.Song(heard.copy(lengthMs = 252_261), null, offsetMs = 27, app = ytMusic)
+        phone.onThePhone = Heard.Song(heard.copy(lengthMs = 252_261), null, offsetMs = 27, app = ytMusic, sessionDurationMs = 252_261)
         phone.playing.value = waiting.copy(clock = PlaybackClock(27, at), durationMs = 252_261, ad = false, adPlaying = false)
         until("the first song report is followed") { model.uiState.player?.following?.clock?.positionMs == 27L }
     }

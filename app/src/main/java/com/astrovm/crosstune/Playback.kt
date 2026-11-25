@@ -1001,12 +1001,14 @@ internal class MediaSessionPlayback(
             }
     }
 
+    private fun MediaMetadata.reportedDurationMs(): Long? = getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 }
+
     /**
      * How long the app says what it plays is, as it said before for the song; see [SteadyLengths]. Under
      * an ad, the song's, when known.
      */
     private fun MediaController.lengthOf(metadata: MediaMetadata, asked: MusicMetadata? = null): Long? {
-        val said = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 } ?: return null
+        val said = metadata.reportedDurationMs() ?: return null
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
         if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return lengths.of(title, artist, said)
@@ -1183,7 +1185,7 @@ internal class MediaSessionPlayback(
             url = uri?.takeIf(String::isNotBlank) ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
             recordingId = RecordingKey.playing(controller.packageName, id, duration)
         ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f,
-            ad = follows?.ad == true, sessionDurationMs = duration)
+            ad = follows?.ad == true, sessionDurationMs = metadata.reportedDurationMs())
     }
 
     /**

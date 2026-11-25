@@ -2292,7 +2292,7 @@ internal class MainViewModel(
         val (following, playing) = withTimeoutOrNull(withinMs) {
             combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).first { (following, playing) ->
                 following != null && (!mustPlay || following.clock.playing) && sameApp(app, following.appPackage, interception::isInstalled) ||
-                    following == null && playing != null && startedAsked(playing, app, over, link)
+                    following == null && playing != null && startedAsked(playing, app, over, link, song.lengthMs)
             }
         } ?: return null
         // Seen to go on to it from another song, that's what the app calls the song at that link. Not from nothing, as an
@@ -2421,7 +2421,10 @@ internal class MainViewModel(
                 // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
                 // Not yet played, the asked app going on to a song is the one asked for, whatever its name there, e.g.
                 // in another script or with the artist's name written otherwise, which the app's session can't be matched by.
-                val next = playing?.takeIf { (played || startedAsked(it, player.app, player.over, player.link)) && following == null && uiState.practice == null && !sameSong(it.metadata, song) }
+                val next = playing?.takeIf {
+                    (played || startedAsked(it, player.app, player.over, player.link, song.lengthMs)) &&
+                        following == null && uiState.practice == null && !sameSong(it.metadata, song)
+                }
                 // In the app that plays it, which may not be the one the song before played in.
                 if (next != null) return@collect openPlayer(next.metadata, next.app ?: player.following?.appPackage ?: player.app, played = true)
                 if (tookUpUnnamed(unnamed, playing, following, played, song)) return@collect
@@ -2480,18 +2483,18 @@ internal class MainViewModel(
      * Whether [playing] is what the [app] asked for a song has gone on to play, rather than what it played [over] before; or,
      * still on that, what it was seen to play for the same [link] before.
      */
-    private fun startedAsked(playing: Heard.Song, app: String?, over: MusicMetadata?, link: String?): Boolean =
+    private fun startedAsked(playing: Heard.Song, app: String?, over: MusicMetadata?, link: String?, askedLength: Long?): Boolean =
         // An ad under the song's name is no song started: free YouTube Music plays them so.
         app != null && !playing.ad && sameApp(app, playing.app, interception::isInstalled) &&
-            !playing.isAnotherYouTubeVideo(link) && !playing.isShortReportForKnownYouTubeVideo(link) &&
+            !playing.isAnotherYouTubeVideo(link) && !playing.isShortReportForKnownYouTubeVideo(link, askedLength) &&
             (over == null || !sameSong(playing.metadata, over) || link?.let { playedAs[app to it] }?.let { sameSong(playing.metadata, it) } == true)
 
     /** The general report can arrive before the follower with the requested video's length sees the ad. */
-    private fun Heard.Song.isShortReportForKnownYouTubeVideo(link: String?): Boolean {
+    private fun Heard.Song.isShortReportForKnownYouTubeVideo(link: String?, askedLength: Long?): Boolean {
         if (MusicService.ofPackage(app) != MusicService.YOUTUBE_MUSIC) return false
         val id = RecordingKey.youTubeIdIn(link) ?: return false
-        val expected = playback?.knownYouTubeLength(id) ?: return false
-        val said = sessionDurationMs ?: metadata.lengthMs ?: return false
+        val expected = playback?.knownYouTubeLength(id) ?: askedLength ?: return false
+        val said = sessionDurationMs ?: return false
         return isYouTubeAdLength(said, expected)
     }
 
