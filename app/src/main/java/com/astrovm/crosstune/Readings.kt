@@ -1024,7 +1024,7 @@ internal object Readings {
             when {
                 // Both dictionaries can take 一撫で + する for ひと + な + です.
                 piece.surface == "でし" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "ひと" &&
-                    next?.surface in setOf("て", "た", "ます") -> {
+                    (next?.kind == "助動詞" || (next?.kind == "助詞" && next.subkind == "接続助詞")) -> {
                     out.removeAt(out.lastIndex)
                     out[out.lastIndex] = Piece("ひとなで", "ひとなで", "名詞", "一般", reader = Reader.RULES)
                     out += Piece("し", "し", "動詞", "自立", "する", reader = Reader.RULES)
