@@ -55,6 +55,14 @@ class ReadingsTest {
     ))
 
     @Test
+    fun dariiIsNotAJoiningEnding() {
+        fun read() = Readings.of(listOf("だりい"), Script.JAPANESE).single().romanized to
+            Readings.words("だりい", Script.JAPANESE).map { it.text }
+        assertEquals("dari i" to listOf("だり", "い"), read())
+        assertEquals("dari i" to listOf("だり", "い"), TestUniDic.reading(::read))
+    }
+
+    @Test
     fun copulasHaveTheirOwnRomajiAndPracticeWords() {
         val lines = listOf("無駄だから", "人間だから", "時代ですから")
         val romaji = listOf("muda da kara", "ningen da kara", "jidai desu kara")
