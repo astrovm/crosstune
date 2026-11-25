@@ -2631,6 +2631,14 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anotherStoreNamingTheGuestDoesNotProveTheNativeName() {
+        listOf("feat.", "ft.", "featuring").forEach { credit ->
+            val name = "愛 $credit Guest"
+            assertNull(credit, findsLoveVideo("$name (Love)", "Band - $name , Band - Love", "Band", "Guest"))
+        }
+    }
+
+    @Test
     fun anEarlierNewAliasMatchDoesNotReplaceTheExistingOfficialVideo() {
         val fan = youTubeMusicRow("Band - 愛 , Band - Love", "Fan • 1K views • 4:00", videoId = "fan00000000")
         val official = youTubeMusicRow("Band - Love (Official Video)", "Band • 1K views • 4:00", videoId = "official000")
@@ -2679,6 +2687,16 @@ class ExactMatcherTest {
     @Test
     fun anEmptyNativeNameIsNotAnAliasEvenWithCompatibilityWidthCredits() {
         assertNull(findsLoveVideo("(Love)", "Ｂａｎｄ -  , Band - Love", "Band"))
+    }
+
+    @Test
+    fun anEmptyNativeNameIsNotProvedByAWordInTheArtist() {
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow("Ｌｏｖｅ Band -  , Love Band - Love", "Love Band • 1K views • 4:00", videoId = "video000000")),
+            apple = mapOf("US" to appleSong("Love", "Love Band", 240_000)),
+            elsewhere = mapOf("JP" to appleSong("(Love)", "Love Band", 240_000))
+        )
+        assertNull(runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Love", "Love Band", lengthMs = 240_000)) })
     }
 
     @Test
