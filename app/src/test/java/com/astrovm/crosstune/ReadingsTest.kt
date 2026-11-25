@@ -154,6 +154,8 @@ class ReadingsTest {
         Triple("これは一体何だ", "kore wa ittai nan da", listOf("これ", "は", "一体", "何", "だ")),
         Triple("これはいったい何だ", "kore wa ittai nan da", listOf("これ", "は", "いったい", "何", "だ")),
         Triple("これは本当に何だ", "kore wa hontooni nan da", listOf("これ", "は", "本当に", "何", "だ")),
+        Triple("これはいったいなんだ", "kore wa ittai nan da", listOf("これ", "は", "いったい", "なん", "だ")),
+        Triple("これは本当になんだ？", "kore wa hontooni nan da？", listOf("これ", "は", "本当に", "なん", "だ")),
         Triple("これもなんだ？", "kore mo nan da？", listOf("これ", "も", "なん", "だ")),
     ))
 
