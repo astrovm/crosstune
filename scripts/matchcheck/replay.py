@@ -2,6 +2,7 @@
 """Replay the songs collect.py kept through the real ExactMatcher, without the network.
 
     python3 scripts/matchcheck/replay.py prepare OUT       # OUT/replay.json: what each song is served, and which results are right
+    python3 scripts/matchcheck/replay.py prepare OUT --apple-down --source-length
     python3 scripts/matchcheck/replay.py run OUT LABEL      # MatchReplayTest in the Gradle box, in this checkout: OUT/replay-LABEL.json
     python3 scripts/matchcheck/replay.py table OUT LABEL [--against OTHER] [-v]
 
@@ -16,6 +17,9 @@ A song result is right when one of its names is a name a store gives the song, b
 is right when it's named so, says no other version, and is the artist's; or names the artist, where
 no song result and no video of the artist's is right, as someone else's lyrics video is no match where
 the song is there. Every wrong open, and every video, is listed with -v, to be checked by eye.
+
+Prepare with --apple-down to fail every Apple request rather than returning no results, and with
+--source-length to pass the collected recording length as if the link supplied it.
 
 Run LABEL on another checkout, e.g. origin/main, with the same test file and gradle-box.sh, and
 compare with --against. OUT stays out of git: it holds what the services answered.
@@ -117,7 +121,7 @@ def read_json(path):
         return json.load(kept)
 
 
-def prepare(out):
+def prepare(out, *, apple_down=False, source_length=False):
     with open(os.path.join(out, "songs.json"), encoding="utf-8") as kept:
         songs = json.load(kept)
     replay = []
@@ -132,6 +136,7 @@ def prepare(out):
             native.setdefault(n["store"], {"trackId": song["id"], "trackName": n["title"], "artistName": n["artist"], "collectionName": n["album"], "trackTimeMillis": song["lengthMs"]})
         replay.append({
             "title": song["title"], "artist": song["artist"],
+            "appleDown": apple_down, "sourceLengthMs": song["lengthMs"] if source_length else None,
             "us": [{"trackId": song["id"], "trackName": song["title"], "artistName": song["artist"], "collectionName": song["album"], "trackTimeMillis": ms}
                    for ms in (song["editionsMs"] or [song["lengthMs"]])],
             "native": native,
@@ -204,10 +209,12 @@ def main():
     parser.add_argument("out")
     parser.add_argument("label", nargs="?", default="head")
     parser.add_argument("--against")
+    parser.add_argument("--apple-down", action="store_true", help="fail Apple requests in the prepared replay")
+    parser.add_argument("--source-length", action="store_true", help="use the collected length as the link's length")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     if args.action == "prepare":
-        prepare(args.out)
+        prepare(args.out, apple_down=args.apple_down, source_length=args.source_length)
     elif args.action == "run":
         run(args.out, args.label)
     else:

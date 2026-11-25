@@ -714,6 +714,82 @@ class ExactMatcherTest {
             {"musicShelfRenderer":{"contents":[${rows.joinToString(",")}]}}]}}}}]}}}"""
 
     @Test
+    fun aLocalizedCreditOnlyProvesTheSameSongId() {
+        val song = MusicMetadata("Lemon", "米津玄師", lengthMs = 256_000)
+        val original = localizedRow("Kenshi Yonezu", "original000")
+        val right = localizedRow(song.artist, "original000")
+        val wrongId = localizedRow(song.artist, "other000000")
+        val wrongCredit = localizedRow("Other Artist", "original000")
+        val wrongTitle = youTubeMusicRow("Another Song", "${song.artist} • Lemon • 4:17", videoId = "original000")
+        val karaoke = localizedRow(song.artist, "original000", album = "Lemon (Karaoke)")
+        val wrongLength = localizedRow(song.artist, "original000", time = "4:20")
+        val unproved = listOf(wrongId, wrongCredit, wrongTitle, karaoke, wrongLength)
+        assertEquals(ExactMatcher.Match.Failed, localizedMatch(song, listOf(original), mapOf("ja" to unproved)))
+        assertEquals(ExactMatcher.Match.Failed, localizedMatch(song, emptyList(), mapOf("ja" to listOf(right))))
+        // Japanese can miss the credit when an artist's name is Han. Try Traditional Chinese too.
+        assertEquals(localizedFound("original000"), localizedMatch(song, listOf(original), mapOf("ja" to listOf(wrongId), "zh-TW" to listOf(right))))
+        // When both IDs are credited, the search order cannot decide between two recordings.
+        assertEquals(ExactMatcher.Match.Failed, localizedMatch(song, listOf(original, localizedRow("Kenshi Yonezu", "other000000")), mapOf("ja" to listOf(right, wrongId))))
+    }
+
+    @Test
+    fun localizedCreditsCanKeepBothNames() {
+        val original = listOf(localizedRow("Band", "original000"))
+        for ((language, artist, credit) in listOf(
+            Triple("ja", "バンド", "バンド (Band)"),
+            Triple("ko", "밴드", "Band (밴드)")
+        )) {
+            val localized = mapOf(language to listOf(localizedRow(credit, "original000")))
+            assertEquals(language, localizedFound("original000"), localizedMatch(MusicMetadata("Lemon", artist), original, localized))
+        }
+    }
+
+    @Test
+    fun aStalledLocalizedSearchDoesNotLoseThePicker() {
+        val release = CountDownLatch(1)
+        val started = AtomicBoolean(false)
+        val original = listOf(localizedRow("Kenshi Yonezu", "original000"))
+        val withPicker = ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> 0 }, timeoutMs = 2_000)
+        try {
+            assertEquals(localizedFound("original000"), localizedMatch(MusicMetadata("Lemon", "米津玄師"), original, emptyMap(), withPicker) {
+                started.set(true)
+                release.await(10, SECONDS)
+            })
+            assertTrue(started.get())
+        } finally {
+            release.countDown()
+        }
+    }
+
+    private fun localizedRow(artist: String, id: String, album: String = "Lemon", time: String = "4:17") =
+        youTubeMusicRow("Lemon", "$artist • $album • $time", videoId = id)
+
+    private fun localizedFound(id: String) = ExactMatcher.Match.Found("https://music.youtube.com/watch?v=$id", lasting = false)
+
+    private fun localizedMatch(
+        song: MusicMetadata, original: List<String>, localized: Map<String, List<String>>,
+        matcher: ExactMatcher = matcher(), onLocalized: () -> Unit = {}
+    ): ExactMatcher.Match {
+        fake.handler = { request ->
+            when (request.url.host) {
+                "itunes.apple.com" -> throw IOException("Apple is down")
+                "api.deezer.com" -> FakeSpotify.html(request, """{"data":[{"title":"Lemon","artist":{"name":"Kenshi Yonezu"},"duration":256}]}""")
+                else -> {
+                    val body = JSONObject(FakeSpotify.bodyOf(request))
+                    val language = body.getJSONObject("context").getJSONObject("client").getString("hl")
+                    val rows = when {
+                        body.optString("params") == VIDEOS_TAB -> emptyList()
+                        language == "en" -> original
+                        else -> localized[language].orEmpty().also { onLocalized() }
+                    }
+                    FakeSpotify.html(request, youTubeMusicPage(*rows.toTypedArray()))
+                }
+            }
+        }
+        return runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) }
+    }
+
+    @Test
     fun aSongNamedOtherwiseOnYouTubeMusicIsPickedFromItsResultsLast() {
         val asked = mutableListOf<Pair<List<String>, Boolean>>()
         var songAnswer: Int? = 1

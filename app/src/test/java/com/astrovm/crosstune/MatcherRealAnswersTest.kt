@@ -36,6 +36,9 @@ class MatcherRealAnswersTest {
     @Volatile
     private var appleDown: (HttpUrl) -> Boolean = { false }
 
+    @Volatile
+    private var localizedSearchDown = false
+
     /** Serve just the saved lyrics upload, as if YouTube Music had only that video. */
     @Volatile
     private var onlySpringDayFan = false
@@ -77,11 +80,12 @@ class MatcherRealAnswersTest {
         assertEquals(mapOf("itunes.apple.com/search" to 6, "itunes.apple.com/lookup" to 2), apple())
     }
 
-    // Issue #1102: with Apple down, nothing says Kenshi Yonezu is 米津玄師, which is no answer, not an answer of "none". So it
+    // Issue #1102: with Apple and the localized search down, nothing says Kenshi Yonezu is 米津玄師. That's no answer, not "none". So it
     // isn't remembered as missing, and it's asked again, when Apple answers. Not at once, as a practice card asks again
     // straight away: then nothing's asked, as Apple is likely still down.
     @Test
     fun lemonIsAskedAgainWhenAppleWasDown() {
+        localizedSearchDown = true
         val matcher = matcher()
         for (length in listOf(null, 256_000L, 280_000L)) {
             val song = LEMON.metadata.copy(lengthMs = length)
@@ -96,14 +100,32 @@ class MatcherRealAnswersTest {
         }
     }
 
+    @Test
+    fun lemonOpensTheSameSongWhenAppleIsDownWithOrWithoutALength() {
+        appleDown = { true }
+        for (length in listOf(null, 254_000L, 256_000L, 260_000L)) {
+            val song = LEMON.metadata.copy(lengthMs = length)
+            assertEquals(length.toString(), ExactMatcher.Match.Found(LEMON_SONG, lasting = false), runBlocking {
+                matcher().lookFor(MusicService.YOUTUBE_MUSIC, song)
+            })
+        }
+    }
+
+    @Test
+    fun pretenderOpensTheSameSongWhenAppleIsDown() {
+        appleDown = { true }
+        assertEquals(PRETENDER.opens, find(PRETENDER, null))
+    }
+
     // With Apple down, a queue's song is asked of each service once: two searches of YouTube Music, each store's, and
     // Deezer's, not all of them twice, as it is when a search fails.
     @Test
     fun aQueuesSongIsAskedOnceWhileAppleIsDown() {
         appleDown = { true }
+        localizedSearchDown = true
         val queue = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(LEMON.metadata)) {} }
         assertEquals(null, queue)
-        assertEquals(mapOf("api.deezer.com/search/track" to 1, "itunes.apple.com/search" to 6, "music.youtube.com/youtubei/v1/search" to 2), asked.groupingBy { it }.eachCount())
+        assertEquals(mapOf("api.deezer.com/search/track" to 1, "itunes.apple.com/search" to 6, "music.youtube.com/youtubei/v1/search" to 4), asked.groupingBy { it }.eachCount())
     }
 
     // Issue #1103: Japan's store finds the song, but the US store, the only one that names 米津玄師 Kenshi Yonezu, fails. Then
@@ -163,8 +185,13 @@ class MatcherRealAnswersTest {
                 apple(url, answers.getJSONObject("apple"), term)
             }
             "api.deezer.com" -> answers.getJSONObject("deezer").takeIf { url.encodedPath == "/search/track" && url.queryParameter("q") == term }
-            "music.youtube.com" -> JSONObject(FakeSpotify.bodyOf(request)).takeIf { it.optString("query") == term }
-                ?.let { youtube(answers, it.optString("params") == VIDEOS) }
+            "music.youtube.com" -> JSONObject(FakeSpotify.bodyOf(request)).takeIf { it.optString("query") == term }?.let { body ->
+                val language = body.getJSONObject("context").getJSONObject("client").getString("hl")
+                val videos = body.optString("params") == VIDEOS
+                if (language == "en") youtube(answers, videos)
+                else if (localizedSearchDown) throw IOException("localized search is down")
+                else kept.localized[language].takeIf { body.optString("params") == SONGS }
+            }
             else -> null
         }
         return FakeSpotify.html(request, served?.toString() ?: throw IOException("not kept: $url").also { unkept += url.toString() })
@@ -193,12 +220,15 @@ class MatcherRealAnswersTest {
     }
 
     /** A song as asked for, what each service answered for it, kept in [file], and the row it [opens]. */
-    private class Kept(val metadata: MusicMetadata, file: String, val opens: String?) {
+    private class Kept(val metadata: MusicMetadata, file: String, val opens: String?, vararg localizedLanguages: String) {
         val term = "${metadata.title} ${metadata.artist}"
 
-        val answers: JSONObject by lazy {
-            val stream = requireNotNull(MatcherRealAnswersTest::class.java.getResourceAsStream("/matcher/$file")) { file }
-            JSONObject(GZIPInputStream(stream).bufferedReader().use { it.readText() })
+        val answers: JSONObject by lazy { read(file) }
+        val localized by lazy { localizedLanguages.associateWith { read(file.replace(".json.gz", "-$it.json.gz")) } }
+
+        private fun read(name: String): JSONObject {
+            val stream = requireNotNull(MatcherRealAnswersTest::class.java.getResourceAsStream("/matcher/$name")) { name }
+            return JSONObject(GZIPInputStream(stream).bufferedReader().use { it.readText() })
         }
     }
 
@@ -206,18 +236,19 @@ class MatcherRealAnswersTest {
         const val WATCH = "https://music.youtube.com/watch?v"
         const val LEMON_SONG = "$WATCH=3NNhrqHZqlI"
         const val SPRING_DAY_FAN = "9zNcHOD1Hdk"
+        const val SONGS = "EgWKAQIIAWoKEAoQAxAEEAkQBQ=="
         const val VIDEOS = "EgWKAQIQAWoKEAoQAxAEEAkQBQ=="
 
         /** Long, as a busy machine is no answer from a service here: each answer is kept. */
         const val WHILE_MS = 60_000L
 
         /** What each service answered, in November 2026. */
-        val LEMON = Kept(MusicMetadata("Lemon", "米津玄師"), "lemon.json.gz", LEMON_SONG)
+        val LEMON = Kept(MusicMetadata("Lemon", "米津玄師"), "lemon.json.gz", LEMON_SONG, "ja")
+        val PRETENDER = Kept(MusicMetadata("Pretender", "Official髭男dism"), "pretender.json.gz", "$WATCH=37W7Y2RRyiM", "ja")
         val SPRING_DAY = Kept(MusicMetadata("봄날", "방탄소년단"), "spring-day.json.gz", "$WATCH=ZO1xdXOXarc")
 
         val OTHERWISE = mapOf(
-            Kept(MusicMetadata("Pretender", "Official髭男dism"), "pretender.json.gz", "$WATCH=37W7Y2RRyiM") to
-                listOf(null, 223_840L, 326_440L, 326_843L, 344_813L),
+            PRETENDER to listOf(null, 223_840L, 326_440L, 326_843L, 344_813L),
             // The original is only among videos; the songs include a 2025 recording From THE FIRST TAKE.
             Kept(MusicMetadata("First Love", "宇多田ヒカル"), "first-love.json.gz", "$WATCH=o1sUaVJUeB0") to
                 listOf(null, 237_752L, 257_894L, 258_627L, 259_385L, 262_030L),

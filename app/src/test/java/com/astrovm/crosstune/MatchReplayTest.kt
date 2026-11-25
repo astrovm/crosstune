@@ -72,12 +72,14 @@ class MatchReplayTest {
         }
         // Long whiles, as a busy machine is no answer from a service here: each answer is kept.
         val matcher = ExactMatcher(fake.client(), "US", pick = if (asked) pick else { _, _, _ -> null }, timeoutMs = WHILE_MS, pickTimeoutMs = WHILE_MS)
-        return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata(song.getString("title"), song.getString("artist"))) }
+        val metadata = MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = song.optLong("sourceLengthMs").takeIf { it > 0 })
+        return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, metadata) }
     }
 
     private fun answer(request: Request, song: JSONObject, answers: Map<String, String?>, names: Boolean): okhttp3.Response {
         val url = request.url
         return when {
+            url.host == "itunes.apple.com" && song.optBoolean("appleDown") -> throw IOException("Apple is down")
             url.host == "itunes.apple.com" && url.encodedPath == "/search" ->
                 FakeSpotify.html(request, JSONObject().put("results", if (url.queryParameter("country") == "US") song.getJSONArray("us") else JSONArray()).toString())
             // A lookup in the US store names the song as its search did; the other stores, with their own names, when served.
@@ -90,7 +92,11 @@ class MatchReplayTest {
                 ?: FakeSpotify.html(request, """{"results":[]}""")
             url.host == "api.deezer.com" -> FakeSpotify.html(request, JSONObject().put("data", song.getJSONArray("deezer")).toString())
             url.host == "music.youtube.com" -> {
-                val videos = FakeSpotify.bodyOf(request).contains(VIDEOS)
+                val body = JSONObject(FakeSpotify.bodyOf(request))
+                if (body.getJSONObject("context").getJSONObject("client").optString("hl") != "en") {
+                    throw IOException("No localized answer kept")
+                }
+                val videos = body.optString("params") == VIDEOS
                 FakeSpotify.html(request, answers[if (videos) "videos" else "songs"] ?: "{}")
             }
             else -> throw IOException("not kept: $url")

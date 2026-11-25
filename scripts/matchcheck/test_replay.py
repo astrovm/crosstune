@@ -86,6 +86,14 @@ class PrepareTest(unittest.TestCase):
                 [prepared] = json.load(kept)
             self.assertIsNone(prepared["songs"])
             self.assertIsNone(prepared["videos"])
+            self.assertFalse(prepared["appleDown"])
+            self.assertIsNone(prepared["sourceLengthMs"])
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.prepare(out, apple_down=True, source_length=True)
+            with open(os.path.join(out, "replay.json"), encoding="utf-8") as kept:
+                [prepared] = json.load(kept)
+            self.assertTrue(prepared["appleDown"])
+            self.assertEqual(255_000, prepared["sourceLengthMs"])
 
 
 if __name__ == "__main__":
