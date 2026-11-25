@@ -12,6 +12,7 @@ import okhttp3.Response
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 internal enum class AppError(@StringRes val messageRes: Int, val canRetry: Boolean = false) {
     INVALID_URL(R.string.error_invalid_url),
@@ -48,7 +49,7 @@ internal class LinkResolver(
 ) {
     /** The duration of the video that will play, not another version that shares the title. */
     suspend fun youTubeVideoLength(id: String): Long? =
-        youTubeMusic(YouTubeMusicApi.NEXT_URL, "videoId", id)?.let { MetadataParsers.youtubeMusicVideoLength(it, id) }
+        youTubeMusic(YouTubeMusicApi.NEXT_URL, "videoId", id, START_MS)?.let { MetadataParsers.youtubeMusicVideoLength(it, id) }
 
     suspend fun resolve(input: LinkInput): Resolution = when (input) {
         is LinkInput.Link -> resolveLink(input.link)
@@ -228,10 +229,13 @@ internal class LinkResolver(
         youTubeMusic(YouTubeMusicApi.BROWSE_URL, "browseId", link.id)?.let { MetadataParsers.youtubeMusicPage(it, link.type) }
 
     /** What YouTube Music's [url] answers about [key] [id]; null when it doesn't. */
-    private suspend fun youTubeMusic(url: String, key: String, id: String): JSONObject? = answeredOr(null) {
+    private suspend fun youTubeMusic(url: String, key: String, id: String, withinMs: Long? = null): JSONObject? = answeredOr(null) {
         val body = YouTubeMusicApi.body().put(key, id)
         val request = Request.Builder().url(url).post(body.toString().toRequestBody("application/json".toMediaType())).build()
-        client.newCall(request).answer(ioDispatcher) { response ->
+        val call = client.newCall(request)
+        // The call deadline includes the body, even after executeAsync has handed it to the reader.
+        if (withinMs != null) call.timeout().deadline(withinMs, TimeUnit.MILLISECONDS)
+        call.answer(ioDispatcher) { response ->
             if (!response.isSuccessful) return@answer null
             JSONObject(response.body.stringAtMost())
         }

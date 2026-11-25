@@ -1,6 +1,11 @@
 package com.astrovm.crosstune
 
+import com.sun.net.httpserver.HttpServer
+import java.net.InetSocketAddress
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -8,6 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import kotlin.time.measureTime
 
 /** Checks each service is read from the right endpoint. Runs under Robolectric for org.json. */
 @RunWith(RobolectricTestRunner::class)
@@ -189,6 +195,40 @@ class LinkResolverTest {
         next = nextFor(id, "Never Gonna Give You Up", "Rick Astley", "3:34", "OMV")
         assertEquals(214_000L, resolver.youTubeVideoLength(id))
         assertEquals(List(3) { YouTubeMusicApi.NEXT_URL }, fake.requestedUrls)
+    }
+
+    @Test
+    fun theExactVideoLengthTimesOutEvenAfterTheHeadersArrive() = runBlocking {
+        val id = "dQw4w9WgXcQ"
+        val json = nextFor(id, "Never Gonna Give You Up", "Rick Astley", "3:34", "OMV").toByteArray()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val sent = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        server.createContext("/youtubei/v1/next") { exchange ->
+            exchange.requestBody.use { it.readBytes() }
+            exchange.sendResponseHeaders(200, json.size.toLong())
+            exchange.responseBody.use { body ->
+                body.write(json[0].toInt())
+                body.flush()
+                sent.countDown()
+                finish.await(START_MS + 2_000, TimeUnit.MILLISECONDS)
+                body.write(json, 1, json.size - 1)
+            }
+        }
+        server.start()
+        try {
+            val client = OkHttpClient.Builder().addInterceptor { chain ->
+                val request = chain.request()
+                val local = request.url.newBuilder().scheme("http").host("127.0.0.1").port(server.address.port).build()
+                chain.proceed(request.newBuilder().url(local).build())
+            }.build()
+            val elapsed = measureTime { assertNull(LinkResolver(client).youTubeVideoLength(id)) }.inWholeMilliseconds
+            assertEquals(0L, sent.count)
+            assertTrue("Expected the body read to stop at the call deadline, took $elapsed ms", elapsed < START_MS + 1_500)
+        } finally {
+            finish.countDown()
+            server.stop(0)
+        }
     }
 
     @Test

@@ -104,6 +104,10 @@
     ],
     [
       "p",
+      "Wenn du einen Song mit „Abspielen“ in YouTube Music startest und Crosstune die Videolänge braucht, sendet es die Video-ID an YouTube Music (music.youtube.com), auch bei einer getakteten Verbindung. Die Länge hilft, Werbung vom Song zu unterscheiden. Die Anfrage enthält weder Kontodaten noch deinen Hörverlauf."
+    ],
+    [
+      "p",
       "Wenn die Suche im regionalen Apple-Store fehlschlägt oder keinen Treffer findet, kann Crosstune Titel und Interpret an Apples US-Store senden."
     ],
     [

@@ -4377,7 +4377,7 @@ class MainActivityTest {
 
         // Asked in the background, with its link there, and Crosstune stays, in its player.
         tapPlay()
-        assertEquals(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada") to youTubeMusic, phone.songsAsked.single())
+        assertEquals(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada", url = link) to youTubeMusic, phone.songsAsked.single())
         assertEquals(link, phone.linksAsked.single())
         assertTrue(playerShown())
         playing()
@@ -4455,7 +4455,7 @@ class MainActivityTest {
         waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         click(play)
         waitUntil { phone.songsAsked.isNotEmpty() }
-        assertEquals(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada") to morphe, phone.songsAsked.single())
+        assertEquals(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada", url = link) to morphe, phone.songsAsked.single())
         assertEquals(link, phone.linksAsked.single())
         click(string(R.string.dismiss_button))
 
@@ -4506,6 +4506,15 @@ class MainActivityTest {
         inTheApp(false)
         tapPlay()
         waitUntil { phone.plays == listOf(true) }
+        assertTrue(phone.songsAsked.isEmpty())
+        assertFalse(YouTubeMusicApi.NEXT_URL in fake.requestedUrls)
+
+        // A paused ad needs Play too, even though the song itself is still waiting at zero.
+        click(string(R.string.dismiss_button))
+        phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music",
+            canSeek = true, appPackage = youTubeMusic, durationMs = 240_000, ad = true)
+        tapPlay()
+        waitUntil { phone.plays == listOf(true, true) }
         assertTrue(phone.songsAsked.isEmpty())
 
         // Not in that app, it's asked for, as before.
@@ -5229,6 +5238,7 @@ class MainActivityTest {
     @Test
     fun wordsOfASongNotPlayingYetStartItInItsAppThenFollowIt() {
         val youTubeMusic = morpheMusic
+        val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
         shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         val playback = FakePlayback().apply { access = true }
@@ -5241,7 +5251,7 @@ class MainActivityTest {
             else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
         }
         launch()
-        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        resolveTyped(link)
         click(string(R.string.lyrics_button))
         waitForText("Two")
 
@@ -5251,7 +5261,7 @@ class MainActivityTest {
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_listen_along)).assertExists()
         composeRule.onNodeWithContentDescription(play).performClick()
         waitUntil { playback.songsAsked.isNotEmpty() }
-        assertEquals(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada") to youTubeMusic, playback.songsAsked.single())
+        assertEquals(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada", url = link) to youTubeMusic, playback.songsAsked.single())
         assertNull(nextStartedActivity())
 
         // The words stay, and follow it once it plays there.

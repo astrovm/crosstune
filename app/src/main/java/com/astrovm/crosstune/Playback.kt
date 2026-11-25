@@ -191,12 +191,16 @@ internal data class Following(
     val from: String? = null,
     /** It plays an ad under the song's name, as YouTube Music's free plan does, and the song waits at its start: see [PlaybackClock]. */
     val ad: Boolean = false,
+    /** The app plays the ad, rather than waiting for Play. The song's clock is still paused. */
+    val adPlaying: Boolean = false,
     /**
      * Which session plays it, by a number each session keeps, in every follow, even one started over: an app may start a
      * new one for what it plays next, and say nothing else of it, as a player of files with no title may.
      */
     val session: Int = 0
-)
+) {
+    val playingInApp: Boolean get() = clock.playing || adPlaying
+}
 
 /**
  * One of a music app's own buttons, as its session shows it: what it does, and what it's called and drawn
@@ -709,12 +713,21 @@ internal class MediaSessionPlayback(
             withTimeoutOrNull(startMs) { back.await() }
             // While waiting, the app can lose its playback state or replace this session.
             return runCatching {
-                val current = appFor(song, app = playing.packageName, token = playing.sessionToken, session = session) ?: return false
+                val controllers = activeSessions()
+                val current = appFor(song, controllers, app = playing.packageName, token = playing.sessionToken, session = session)
+                // YouTube can already be back, playing an unnamed ad. Don't uncover it or ask the ad to play.
+                if (current == null) return@runCatching controllers.any { it.isUnnamedYouTubePlayback(playing.packageName) }
                 current.clockCommand("play") { play() }
-            }.isSuccess
+                true
+            }.getOrDefault(false)
         } finally {
             playing.unregisterCallback(callback)
         }
+    }
+
+    private fun MediaController.isUnnamedYouTubePlayback(app: String): Boolean {
+        if (packageName != app || MusicService.ofPackage(app) != MusicService.YOUTUBE) return false
+        return playbackState?.state == PlaybackState.STATE_PLAYING && metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).isNullOrBlank()
     }
 
     override fun skip(song: MusicMetadata, next: Boolean, app: String?, session: Int?) = moveOn(song, app, session) { if (next) skipToNext() else skipToPrevious() }
@@ -970,8 +983,12 @@ internal class MediaSessionPlayback(
             return lengths.of(title, artist, said, keep = false)
         }
         val stable = lengths.of(title, artist, said)
-        metadata.youTubeVideoId()?.let { if (lengths.video(it) == null) lengths.rememberVideo(it, said) }
-        return stable
+        val id = metadata.youTubeVideoId() ?: return stable
+        val kept = lengths.video(id)
+        if (kept != null && abs(kept - said) <= SteadyLengths.SAME_MS) return kept
+        // This report is too long to be an ad. Keep and show the video's duration, not the title's rounded history.
+        lengths.rememberVideo(id, said)
+        return said
     }
 
     /**
@@ -994,8 +1011,7 @@ internal class MediaSessionPlayback(
         val askedLength = asked?.lengthMs?.takeIf { it > 0 && sameVideo }
         val videoLength = (playingId ?: askedId)?.let(lengths::video)
         // A short length for the requested video is evidence too. Don't replace it with the length of a different edit.
-        val exactLength = askedLength.takeIf { askedId != null } ?: videoLength
-        (exactLength ?: askedLength)?.let { return it }
+        (videoLength ?: askedLength)?.let { return it }
         if (playingId != null) return null
         val known = lengths.known(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty())
         return known.lastOrNull { it >= LONGEST_AD_MS }
@@ -1159,7 +1175,8 @@ internal class MediaSessionPlayback(
         val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
         // Under an ad, the song waits at its start until the ad's over.
         val ad = controller.metadata?.let { controller.songUnderAd(it, asked) } != null
-        val clock = if (ad) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, state.state == PlaybackState.STATE_PLAYING)
+        val playing = state.state == PlaybackState.STATE_PLAYING
+        val clock = if (ad) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, playing)
         return Following(
             clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo(),
             canSkipNext = state.actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,
@@ -1168,7 +1185,8 @@ internal class MediaSessionPlayback(
             shuffle = modes.shuffles(controller),
             repeat = modes.repeats(controller),
             like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon, liked(controller.packageName, it)) },
-            ad = ad
+            ad = ad,
+            adPlaying = ad && playing
         )
     }
 
@@ -1245,6 +1263,11 @@ internal class MediaSessionPlayback(
 
     /** Whether what this app has [playing] is known to be another recording than [song], whatever it's named. */
     private fun MediaController.anotherRecording(playing: MediaMetadata, song: MusicMetadata): Boolean {
+        val askedId = RecordingKey.youTubeId(song)
+        if (askedId != null && MusicService.ofPackage(packageName) in YOUTUBE_PLAYERS) {
+            // An exact ID beats a duration: a video can be trimmed, or briefly report the length of an ad.
+            playing.youTubeVideoId()?.let { return it != askedId }
+        }
         val length = lengthOf(playing, song)
         val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), length)
         if (song.recordingId?.startsWith("$packageName:") == true && recording != null && song.recordingId != recording) return true
@@ -1282,6 +1305,8 @@ internal class MediaSessionPlayback(
 
 /** Installed from a file rather than by an app store, which Android 13 and later restrict settings for. */
 private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE)
+
+internal val YOUTUBE_PLAYERS = setOf(MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC)
 
 /** How long an app asked to play in the background has to say it does, before it's taken as not playing. */
 internal const val START_MS = 3_000L

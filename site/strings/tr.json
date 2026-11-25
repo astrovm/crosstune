@@ -104,6 +104,10 @@
     ],
     [
       "p",
+      "YouTube Music’te bir şarkıyı başlatmak için Oynat’a dokunduğunda Crosstune videonun süresini bilmek isterse video kimliğini YouTube Music’e (music.youtube.com) gönderir. Bu, tarifeli ağlarda da olur. Süre, reklamları şarkıdan ayırt etmeye yardımcı olur. İstek, hesap bilgilerini veya dinleme geçmişini içermez."
+    ],
+    [
+      "p",
       "Apple’ın bölgesel mağazasında arama başarısız olursa veya eşleşme bulunmazsa Crosstune, şarkının adını ve sanatçısını Apple’ın ABD mağazasına gönderebilir."
     ],
     [

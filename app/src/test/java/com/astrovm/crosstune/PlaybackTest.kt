@@ -433,12 +433,17 @@ class PlaybackTest {
         // It's the song, waiting at its start, as long as the song is, and the ad's length is never kept as one of the song's.
         assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         assertTrue(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.ad)
+        assertTrue(checkNotNull(seen.last()).playingInApp)
         assertEquals(325_474L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
         assertEquals(325_474L, checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.metadata.lengthMs)
         assertNull(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.offsetMs)
         assertTrue(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.ad)
         assertEquals("com.google.android.apps.youtube.music:duration:325474", playback.recording(raining)?.recordingId)
         assertEquals(listOf(325_474L), lengths.known("It's Raining Men", "The Weather Girls"))
+        // A paused ad has the same song clock but is no longer running in the app.
+        val paused = PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 5_000, 0f, PLAYED_AT).build()
+        shadowOf(music).setPlaybackState(paused)
+        assertFalse(checkNotNull(followed(raining).last()).playingInApp)
         // Then the song itself starts over from 0, and plays.
         val song = MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 325_474).build()
         shadowOf(music).setMetadata(song)
@@ -525,14 +530,46 @@ class PlaybackTest {
         val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Edit", "Band", album = "Album",
             duration = LONGEST_AD_MS + 400, art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to id))
         shadowOf(sessions).addController(music)
-        playback.nowPlaying()
         // Rounding for the title must never make the exact video look shorter than the ad limit.
+        val edit = MusicMetadata("Edit", "Band", url = "https://music.youtube.com/watch?v=$id")
+        assertEquals(LONGEST_AD_MS + 400, followed(edit).last()?.durationMs)
+        assertEquals(LONGEST_AD_MS + 400, playback.nowPlaying()?.metadata?.lengthMs)
         assertEquals(LONGEST_AD_MS + 400, playback.knownYouTubeLength(id))
         shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, LONGEST_AD_MS - 200).build())
         assertEquals(false, playback.nowPlaying()?.ad)
+        assertEquals(LONGEST_AD_MS + 400, followed(edit).last()?.durationMs)
         assertEquals(LONGEST_AD_MS + 400, playback.nowPlaying()?.metadata?.lengthMs)
         shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 30_000).build())
         assertEquals(true, playback.nowPlaying()?.ad)
+    }
+
+    @Test
+    fun aYouTubeMusicVideoWithAnotherKnownIdIsNotTheAskedRecording() {
+        allow()
+        val official = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Edit", "Band",
+            state = PlaybackState.STATE_PAUSED, duration = 240_000,
+            art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to "longVersion"))
+        shadowOf(sessions).addController(official)
+        val audio = MusicMetadata("Edit", "Band", url = "https://music.youtube.com/watch?v=abcdefghijk")
+        assertNull(followed(audio).last())
+        assertNull(playback.appFor(audio))
+        assertEquals(official, playback.appFor(audio.copy(url = "https://music.youtube.com/watch?v=longVersion")))
+    }
+
+    @Test
+    fun aTrimmedVideoStillTooLongToBeAnAdReplacesItsOldLength() {
+        allow()
+        val id = "longVersion"
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Edit", "Band",
+            album = "Album", duration = 180_000, art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to id))
+        shadowOf(sessions).addController(music)
+        playback.rememberYouTubeLength(id, 240_000)
+        val edit = MusicMetadata("Edit", "Band", url = "https://music.youtube.com/watch?v=$id", lengthMs = 240_000)
+        assertEquals(180_000L, followed(edit).last()?.durationMs)
+        assertEquals(180_000L, playback.knownYouTubeLength(id))
+        shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 30_000).build())
+        assertEquals(180_000L, followed(edit).last()?.durationMs)
+        assertEquals(true, followed(edit).last()?.ad)
     }
 
     @Test
@@ -3808,6 +3845,28 @@ class PlaybackTest {
         assertFalse(brought.await())
         assertTrue(asked().isEmpty())
         assertTrue(shadowOf(original).getCallbacks().isEmpty())
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun youTubeIsBackEvenIfItsSessionStartsAnUnnamedAdBeforeItCanBeAskedToPlay() = runTest {
+        val youtube = MusicService.YOUTUBE.packageName
+        allow()
+        val controller = player(youtube, "YouTube", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(controller)
+        val icon = ComponentName(youtube, "$youtube.VideoActivity")
+        shadowOf(app.packageManager).addActivityIfNotPresent(icon)
+        shadowOf(app.packageManager).addIntentFilterForActivity(icon, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+
+        val returning = async(start = CoroutineStart.UNDISPATCHED) { playback.bringToFront(song, youtube) }
+        assertEquals(icon, shadowOf(app).nextStartedActivity.component)
+        val session = shadowOf(controller)
+        session.setMetadata(MediaMetadata.Builder().build())
+        session.executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(returning.await())
+        assertTrue(asked().isEmpty())
+        assertTrue(session.getCallbacks().isEmpty())
     }
 
     @Test
