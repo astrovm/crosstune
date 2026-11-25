@@ -982,7 +982,10 @@ internal class ExactMatcher(
     }
 
     private fun matchingVideo(songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String, disco: DiscoRequest): Answer? {
-        val matching = videos.filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
+        val known = videos.filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
+        val matching = if (known.any { disco.allows(it, video = true) }) known else {
+            videos.filter { isTheSongsVideo(it, names, allowAlias = true) && keepsRequestedRecording(recording, it, video = true) }
+        }
         val first = matching.firstOrNull { disco.allows(it, video = true) } ?: return null
         val artist = matching.firstOrNull { isOwnVideo(it, names) && disco.allows(it, video = true) }?.id?.let { watchUrl + it }
         // A later lookup can use the artist's video to replace what an outage left it with.
@@ -1624,14 +1627,14 @@ internal class ExactMatcher(
      * Its title says nothing else but such tags outside brackets, so "Perfect Day" isn't "Perfect";
      * what's in them, "(終わらない歌 An Endless Song)", is what it's called elsewhere or said of it.
      */
-    private fun isTheSongsVideo(row: Row, names: Names): Boolean {
-        if (row.id == null || !videoTitleMatches(row.name, names)) return false
+    private fun isTheSongsVideo(row: Row, names: Names, allowAlias: Boolean = false): Boolean {
+        if (row.id == null || !videoTitleMatches(row.name, names, allowAlias)) return false
         // A channel is the artist's own by its whole name, maybe with what YouTube adds to one:
         // "Band - Topic", "BandVEVO".
         return isOwnVideo(row, names) || names.artists.any { artistIn(it, row.name) } && row.lengthMs != null && names.lengthsMs.isNotEmpty() && sameLength(row, names)
     }
 
-    private fun videoTitleMatches(title: String, names: Names): Boolean {
+    private fun videoTitleMatches(title: String, names: Names, allowAlias: Boolean = false): Boolean {
         if (names.titles.none { titleIn(it, title) }) return false
         if (isAnotherVideoVersion(title, names)) return false
         val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
@@ -1644,7 +1647,8 @@ internal class ExactMatcher(
         val bothWays = SongNames.titleNames(outside.trim()).drop(1).takeIf { halves -> halves.any { SongNames.normalize(it) in known } }.orEmpty()
         val written = (known + bothWays.map(SongNames::normalize) +
             names.artists.flatMap(SongNames::artistNames).map { SongNames.normalize(SongNames.withoutArticle(it)) } + VIDEO_TAG_MARKS)
-        return removeVideoNames(outside, written).none { it.code > 0x7f } || repeatsBilingualTitle(title, names) || repeatsParenthesizedTitle(title, names)
+        return removeVideoNames(outside, written).none { it.code > 0x7f } || repeatsBilingualTitle(title, names) ||
+            allowAlias && repeatsParenthesizedTitle(title, names)
     }
 
     /** A store's bracketed alias proves a video only when both whole names and both credits agree. */
@@ -1662,7 +1666,7 @@ internal class ExactMatcher(
             val pair = parenthesizedAlias(name) ?: return@any false
             val native = aliasText(pair.first)
             val alias = aliasText(pair.second)
-            alias == requested && setOf(native, alias) == credited && !aliasNamesAnotherTake(native, requested)
+            native != alias && alias == requested && setOf(native, alias) == credited && !aliasNamesAnotherTake(native, requested)
         }
     }
 
@@ -1675,7 +1679,7 @@ internal class ExactMatcher(
         val close = if (text[open] == '(') ')' else '）'
         if (!text.endsWith(close)) return null
         val native = text.substring(0, open).trim()
-        if (native.any { it in ALIAS_BRACKETS }) return null
+        if (aliasText(native).any { it in ALIAS_BRACKETS }) return null
         val alias = text.substring(open + 1, text.lastIndex).trim()
         val nested = alias.indexOfFirst { it == '(' || it == '（' }
         val plain = if (nested < 0) alias else {
@@ -1685,12 +1689,13 @@ internal class ExactMatcher(
             if (note !in NEUTRAL_ALIAS_WORDS) return null
             alias.substring(0, nested).trim()
         }
-        if (plain.isEmpty() || plain.any { it in ALIAS_BRACKETS }) return null
+        if (plain.isEmpty() || aliasText(plain).any { it in ALIAS_BRACKETS }) return null
         return native to plain
     }
 
     private fun aliasNamesAnotherTake(native: String, requested: String): Boolean {
         if (SongNames.withoutFeaturing(native) != native) return true
+        if (native.any { it in "&+/×" } || SongNames.wordList(native).any { it in ALIAS_CREDIT_WORDS }) return true
         if (SongNames.saysAnotherVersion(native, requested, "")) return true
         val words = SongNames.wordList(native) - SongNames.wordList(requested).toSet()
         if ("disco" in words) return true
@@ -1863,7 +1868,8 @@ internal class ExactMatcher(
         /** The same, as other scripts write them: "歌詞付き", "公式". */
         private val VIDEO_TAG_MARKS = listOf("歌詞付き", "歌詞付", "歌詞", "公式", "字幕", "高音質", "日本語", "中日羅", "가사").map(SongNames::normalize)
 
-        private const val ALIAS_BRACKETS = "()（）[]［］{}｛｝【】〔〕"
+        private const val ALIAS_BRACKETS = "()（）[]［］{}｛｝【】〔〕「」『』〈〉《》〘〙〚〛"
+        private val ALIAS_CREDIT_WORDS = setOf("with", "x", "vs", "versus", "feat", "featuring", "ft", "and")
         private val NEUTRAL_ALIAS_WORDS = setOf("original", "remaster", "remastered", "mono", "stereo")
         private val ALIAS_TAKE_MARKS = listOf(
             "tvsize", "tvサイズ", "ディスコ", "オフボーカル", "オフヴォーカル", "インスト", "リミックス", "ショートバージョン", "ショートサイズ",

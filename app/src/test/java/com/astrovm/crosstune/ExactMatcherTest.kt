@@ -2630,6 +2630,53 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anEarlierNewAliasMatchDoesNotReplaceTheExistingOfficialVideo() {
+        val fan = youTubeMusicRow("Band - 愛 , Band - Love", "Fan • 1K views • 4:00", videoId = "fan00000000")
+        val official = youTubeMusicRow("Band - Love (Official Video)", "Band • 1K views • 4:00", videoId = "official000")
+        namesAndTabs(
+            videos = listOf(fan, official),
+            apple = mapOf("US" to appleSong("Love", "Band", 240_000)),
+            elsewhere = mapOf("JP" to appleSong("愛 (Love)", "Band", 240_000))
+        )
+        assertEquals("https://music.youtube.com/watch?v=official000", runBlocking {
+            matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Love", "Band", lengthMs = 240_000))
+        })
+    }
+
+    @Test
+    fun compatibilityAndCjkClosingBracketsCannotHideInANativeName() {
+        listOf("愛﹚", "愛」").forEach { name ->
+            assertNull(name, findsLoveVideo("$name (Love)", "Band - $name , Band - Love", "Band"))
+        }
+    }
+
+    @Test
+    fun guestCreditsAreNotNativeTitleAliases() {
+        listOf("with", "x", "&", "vs", "feat.").forEach { credit ->
+            val name = "愛 $credit Official"
+            assertNull(credit, findsLoveVideo("$name (Love)", "Band - $name , Band - Love", "Band"))
+        }
+    }
+
+    @Test
+    fun compatibilityEquivalentNamesDoNotProveTwoTitles() {
+        assertNull(findsLoveVideo("Ｌｏｖｅ (Love)", "Band - Ｌｏｖｅ , Band - Love", "Band"))
+    }
+
+    @Test
+    fun anEmptyNativeNameIsNotAnAliasEvenWithCompatibilityWidthCredits() {
+        assertNull(findsLoveVideo("(Love)", "Ｂａｎｄ -  , Band - Love", "Band"))
+    }
+
+    @Test
+    fun plainRecordingWordsKeepTheirExistingVideoMatches() {
+        val words = listOf("ライヴ", "アコースティック", "Off Vocal", "TV edit", "DiscoVersion", "Remastered 2020")
+        words.forEach { word ->
+            assertEquals(word, "https://music.youtube.com/watch?v=video000000", findsLoveVideo("Love $word", "Band - Love $word", "Band"))
+        }
+    }
+
+    @Test
     fun anExplicitlyRequestedTakeCanAppearInBothNames() {
         val title = "Love TVサイズ"
         namesAndTabs(
