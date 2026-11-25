@@ -54,20 +54,60 @@ class ReadingsTest {
             Triple("綺麗です", "kiree desu", listOf("綺麗", "です")),
             Triple("高いです", "takai desu", listOf("高い", "です")),
             Triple("高かったです", "takakatta desu", listOf("高かった", "です")),
-            Triple("花でして", "hana deshite", listOf("花", "でして")),
-            Triple("これはなんだ", "kore wa nan da", listOf("これ", "は", "なん", "だ")),
             Triple("太郎様だ", "taroosama da", listOf("太郎様", "だ"))
         )
-        fun check() {
-            val readings = Readings.of(cases.map { it.first }, Script.JAPANESE)
-            for ((at, case) in cases.withIndex()) {
-                val (line, romaji, words) = case
-                assertEquals(line, romaji, readings[at].romanized)
-                assertEquals(line, words, Readings.words(line, Script.JAPANESE).map { it.text })
-            }
+        assertJapaneseBoundaries(cases)
+    }
+
+    @Test
+    fun ambiguousDeshiteKeepsTheExistingBoundary() = assertJapaneseBoundaries(listOf(
+        Triple("仕事はあとでして", "shigoto wa atodeshite", listOf("仕事", "は", "あとでして")),
+        Triple("作業は二人でして", "sagyoo wa futarideshite", listOf("作業", "は", "二人でして")),
+        Triple("ここは学校でして", "koko wa gakkoodeshite", listOf("ここ", "は", "学校でして")),
+        Triple("ここは学校でした", "koko wa gakkoo deshita", listOf("ここ", "は", "学校", "でした")),
+    ))
+
+    @Test
+    fun explanatoryNandaStaysWholeAndInterrogativeNanSeparates() = assertJapaneseBoundaries(listOf(
+        Triple("今日はここまでなんだ", "kyoo wa koko made nanda", listOf("今日", "は", "ここ", "まで", "なんだ")),
+        Triple("つらいからなんだよ", "tsurai kara nanda yo", listOf("つらい", "から", "なんだ", "よ")),
+        Triple("なんだろう、この音は", "nan darou、 kono oto wa", listOf("なん", "だろう", "この", "音", "は")),
+        Triple("何だろう、この音は", "nan darou、 kono oto wa", listOf("何", "だろう", "この", "音", "は")),
+        Triple("「なんだろう」", "「nan darou」", listOf("なん", "だろう")),
+        Triple("これはなんだ", "kore wa nan da", listOf("これ", "は", "なん", "だ")),
+        Triple("これは何だろう", "kore wa nan darou", listOf("これ", "は", "何", "だろう")),
+        Triple("仕事がなんだ", "shigoto ga nan da", listOf("仕事", "が", "なん", "だ")),
+        Triple("つらいがなんだよ", "tsuraiga nanda yo", listOf("つらいが", "なんだ", "よ")),
+    ))
+
+    @Test
+    fun katakanaCopulasAndConnectivesGetTheSameBoundaries() = assertJapaneseBoundaries(listOf(
+        Triple("無駄ダカラ", "muda da kara", listOf("無駄", "ダ", "カラ")),
+        Triple("無駄だから", "muda da kara", listOf("無駄", "だ", "から")),
+        Triple("無駄ナラバ", "muda naraba", listOf("無駄", "ナラバ")),
+        Triple("無駄ならば", "muda naraba", listOf("無駄", "ならば")),
+    ))
+
+    @Test
+    fun nonCopulaEndingsAndWordsKeepTheirBoundaries() = assertJapaneseBoundaries(listOf(
+        Triple("読んで", "yonde", listOf("読んで")),
+        Triple("死んで", "shinde", listOf("死んで")),
+        Triple("車で帰る", "kuruma de kaeru", listOf("車", "で", "帰る")),
+        Triple("だから", "dakara", listOf("だから")),
+        Triple("でも", "demo", listOf("でも")),
+        Triple("だって", "datte", listOf("だって")),
+        Triple("だが", "daga", listOf("だが")),
+        Triple("だるい", "darui", listOf("だるい")),
+        Triple("ダンス", "dansu", listOf("ダンス")),
+    ))
+
+    private fun assertJapaneseBoundaries(cases: List<Triple<String, String, List<String>>>) {
+        val lines = cases.map { it.first }
+        fun read() = Readings.of(lines, Script.JAPANESE).mapIndexed { index, reading ->
+            val line = lines[index]
+            Triple(line, reading.romanized, Readings.words(line, Script.JAPANESE).map { it.text })
         }
-        check()
-        TestUniDic.reading(::check)
+        assertEquals(listOf(cases, cases), listOf(read(), TestUniDic.reading(::read)))
     }
 
     @Test

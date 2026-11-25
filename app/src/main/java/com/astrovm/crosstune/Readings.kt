@@ -1612,18 +1612,26 @@ internal object Readings {
     private fun romanizedLine(pieces: List<Piece>, typed: Boolean) =
         romajiWords(pieces) { if (typed) it.typed else it.said }.joinToString(" ") { romaji(it, typed) }.replace(phoneRegex("""\s+"""), " ").trim()
 
+    /** Both dictionaries can take でし + て for the copula in あとでして, where it is really で + して. */
+    private fun Piece.ambiguousDeshite(after: Piece?) = kana == "でし" && after?.kana == "て" && after.subkind == "接続助詞"
+
+    /** At the start of a phrase or after a subject or topic, なん can ask 何. After まで or から it can explain. */
+    private fun Piece.beforeExplanatoryNan(): Boolean {
+        if (surface.none(Char::isLetterOrDigit)) return false
+        if (kind != "助詞") return true
+        return !when (kana) {
+            "は" -> subkind == "係助詞"
+            "が" -> subkind == "格助詞"
+            else -> false
+        }
+    }
+
     /** Keep fixed phrases and dependent forms such as そうだ, ようだ, のだ and んだ as they were grouped. */
     private fun Piece.keepsCopula(before: Piece?): Boolean {
         if (kind in COPULA_PHRASE_KINDS || base in COPULA_PHRASE_STEMS) return true
         // 様 read よう is like ようだ, but the honorific 様 read さま belongs to the preceding name.
         if (base == "様") return subkind == "非自立" || subkind == "助動詞語幹"
-        return when (surface) {
-            // 痛くなんだ explains something, but なん in これはなんだ stands for 何, after は.
-            "なん" -> before?.kind != "助詞"
-            // な already attaches the ending to its word. In ひとなでして the dictionaries even put でし after it.
-            "な" -> kind == "助動詞"
-            else -> false
-        }
+        return surface == "なん" && before?.beforeExplanatoryNan() == true
     }
 
     private val COPULA_PHRASE_KINDS = setOf("副詞", "感動詞", "フィラー")
@@ -1643,8 +1651,8 @@ internal object Readings {
                 continue
             }
             val opening = piece.surface in OPENING
-            val ending = (piece.kind == "助動詞" && piece.surface != "なら") ||
-                (piece.kind == "助詞" && piece.subkind == "接続助詞" && piece.surface != "から") ||
+            val ending = (piece.kind == "助動詞" && piece.kana != "なら") ||
+                (piece.kind == "助詞" && piece.subkind == "接続助詞" && piece.kana != "から") ||
                 (piece.kind == "動詞" && piece.subkind == "非自立") || piece.subkind == "接尾"
             // An ending after a particle starts a word of its own: だけだった is dake datta. English
             // the dictionary splits, "Don't" into Don, ' and t, stays as written. A mark goes with the word
@@ -1655,9 +1663,10 @@ internal object Readings {
             val withPrevious = opened || english || longMark || mark
             // A split long mark ends the word it draws out. 好き after 食べるー is a new word.
             // A から without a preceding word can start a noun: keep its ending, then split the next particle.
-            val orphanEnding = orphan && previous?.surface == "から" && piece.kind == "助動詞"
+            val orphanEnding = orphan && previous?.kana == "から" && piece.kind == "助動詞"
             val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
-            val separateCopula = piece.startsCopula && !orphanEnding && previous?.keepsCopula(pieces.getOrNull(at - 2)) != true
+            val copula = piece.startsCopula && !piece.ambiguousDeshite(pieces.getOrNull(at + 1))
+            val separateCopula = copula && !orphanEnding && previous?.keepsCopula(pieces.getOrNull(at - 2)) != true
             val continuesEnding = ending && !afterOrphan && !separateCopula
             val continuesWord = continuesEnding && (previous?.kind != "助詞" || orphanEnding) && previous?.surface?.any { it != 'ー' } == true
             // An opening mark or clause break starts a phrase; a closing quote keeps the word before it.
@@ -1666,7 +1675,7 @@ internal object Readings {
                 (previous.surface == "'" && words.lastOrNull()?.none { it.surface.any(Char::isLetterOrDigit) } == true))
             val join = previous != null && (withPrevious || continuesWord)
             if (join) words.last() += piece else words += mutableListOf(piece)
-            orphan = if (orphanEnding && join) true else piece.surface == "から" && piece.kind == "助詞" &&
+            orphan = if (orphanEnding && join) true else piece.kana == "から" && piece.kind == "助詞" &&
                 (previous == null || previous.kind == "助詞" || phraseMark ||
                     (previous.surface == "の" && previous.kind == "名詞" && previous.subkind == "非自立"))
             opened = opening
