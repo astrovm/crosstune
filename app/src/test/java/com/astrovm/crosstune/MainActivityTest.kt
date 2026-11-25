@@ -1227,12 +1227,21 @@ class MainActivityTest {
 
     @Test
     fun prestoSearchesWhenMoreThanOneAlbumMatches() {
+        assertPrestoSearchesForAlbum("Kind of Blue", "Miles Davis", prestoSearchFixture("jazz"))
+    }
+
+    @Test
+    fun prestoSearchesWhenItHasNotSeenAllAlbumResults() {
+        assertPrestoSearchesForAlbum("Speak No Evil", "Wayne Shorter", prestoShorterFirstPage())
+    }
+
+    private fun assertPrestoSearchesForAlbum(title: String, artist: String, response: String) {
         val presto = MusicService.PRESTO_MUSIC
         prefs().edit().putString("default_target", presto.name).putBoolean("links_in_crosstune", true).commit()
         fake.handler = { request ->
             val body = when (request.url.host) {
-                "ajax-www.prestomusic.com" -> prestoSearchFixture("jazz")
-                "open.spotify.com" -> FakeSpotify.trackPage("Kind of Blue", "Miles Davis · Album · 1959")
+                "ajax-www.prestomusic.com" -> response
+                "open.spotify.com" -> FakeSpotify.trackPage(title, "$artist · Album · 1959")
                 else -> ""
             }
             FakeSpotify.html(request, body)
@@ -1241,11 +1250,12 @@ class MainActivityTest {
         resolveTyped("https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj")
         val search = string(R.string.search_in_destination, string(presto.labelRes))
         waitForDestinationReady()
+        composeRule.onNodeWithContentDescription(string(R.string.open_in_presto_music)).assertDoesNotExist()
         click(search)
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         val opened = checkNotNull(nextStartedActivity())
         assertEquals(presto.packageName, opened.`package`)
-        assertEquals("https://streaming.prestomusic.com/explore/results/albums?search=Kind%20of%20Blue%20Miles%20Davis", opened.dataString)
+        assertEquals(presto.searchUrl("$title $artist"), opened.dataString)
         assertTrue(fake.requestedUrls.any { "/explore/search?" in it })
     }
 

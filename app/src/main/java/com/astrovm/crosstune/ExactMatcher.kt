@@ -485,12 +485,18 @@ internal class ExactMatcher(
         return asLongAs(metadata, named) { it.optLong("duration") * 1000 }?.let { it.optString("link").linkTo(MusicService.DEEZER) }
     }
 
-    /** Presto credits all the players. Use the album's lead credit and leave different matching editions to the search. */
+    /** An album link must name the same edition and lead artist, and one release must fit those credits. */
     private suspend fun findOnPresto(metadata: MusicMetadata): String? {
-        val codes = apis.prestoAlbums(searchQuery(metadata)).mapNotNull { result ->
-            val title = result.nonBlankString("title") ?: return@mapNotNull null
-            val artist = Presto.leader(result.nonBlankString("artists").orEmpty())
-            if (!matches(metadata, title, artist)) return@mapNotNull null
+        val title = SongNames.normalize(metadata.title)
+        val artists = Presto.albumArtists(metadata.artist) ?: return null
+        if (title.isEmpty()) return null
+        val results = apis.prestoAlbums(searchQuery(metadata)) ?: return null
+        val matches = results.filter { result ->
+            SongNames.normalize(result.nonBlankString("title").orEmpty()) == title &&
+                Presto.matchesAlbumArtists(artists, result.nonBlankString("artists").orEmpty())
+        }
+        // Keep a missing code in the list. The row can still be a different release from a row with a code.
+        val codes = matches.map { result ->
             result.optString("prestoCode").toLongOrNull()?.takeIf { it > 0 }
         }
         return codes.distinct().singleOrNull()?.let { Presto.albumUrl(it.toString()) }

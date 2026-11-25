@@ -39,6 +39,25 @@ internal object Presto {
 
     fun leader(credits: String): String = musicians(credits).firstOrNull().orEmpty()
 
+    private val creditSeparators = phoneRegex("""[^\p{L}\p{N}\p{M}]+""")
+
+    private fun genericCredit(name: String): Boolean =
+        MetadataParsers.noArtist(name) || MetadataParsers.noArtist(name.replace(creditSeparators, " "))
+
+    /** Album credits from other services. Do not split band names on "&" or "and". */
+    fun albumArtists(credit: String): List<String>? {
+        val names = credit.split(", ")
+        if (names.any(::genericCredit)) return null
+        return names.map(SongNames::normalize).takeUnless { it.any(String::isEmpty) }
+    }
+
+    /** The first artist must agree. Extra named credits can tell apart two albums by the same ensemble. */
+    fun matchesAlbumArtists(wanted: List<String>, credits: String): Boolean {
+        val names = musicians(credits)
+        val lead = names.firstOrNull() ?: return false
+        return SongNames.normalize(lead) == wanted.first() && !genericCredit(lead) && names.map(SongNames::normalize).containsAll(wanted)
+    }
+
     /**
      * A song as Presto names it, [title] by its [musicians], as other services do. Who wrote it comes off the title when
      * they play on it or wrote the piece, its [composer]: "Davis, M: So What" is "So What" by "Miles Davis", and

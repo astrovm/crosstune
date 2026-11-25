@@ -216,18 +216,21 @@ internal class ServiceApis(
 
     // Presto Music
 
-    /** Presto's own streaming search returns albums, even when the query names a song. */
-    suspend fun prestoAlbums(query: String): List<JSONObject> {
+    /** Presto's album results, or null when the page does not show every result. */
+    suspend fun prestoAlbums(query: String): List<JSONObject>? {
         val url = "${Presto.API}/explore/search".toHttpUrl().newBuilder()
             .addQueryParameter("search", query)
-            .addQueryParameter("limit", "10")
+            .addQueryParameter("limit", "50")
             .addQueryParameter("offset", "0")
             .addQueryParameter("sort", "recommended")
             .addQueryParameter("type", "album")
             .build()
         val answer = getObject(url)
         if (answer.optString("status") != "ok") throw IOException("Presto Music answered ${answer.optInt("code")}")
-        return answer.getJSONObject("payload").getJSONArray("results").objects()
+        val payload = answer.getJSONObject("payload")
+        val results = payload.getJSONArray("results")
+        if (payload.optString("totalCount").toIntOrNull() != results.length()) return null
+        return (0 until results.length()).map(results::getJSONObject)
     }
 
     /** The songs of the Presto Music [album] with this [code], by its leader where they play, with its cover. */

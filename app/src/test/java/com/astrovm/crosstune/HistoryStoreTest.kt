@@ -55,7 +55,9 @@ class HistoryStoreTest {
         assertEquals(listOf(album, song), HistoryStore(preferences).load())
 
         val old = org.json.JSONArray(preferences.getString(HistoryStore.KEY_HISTORY, null))
-        old.getJSONObject(0).getJSONObject("destinations").getJSONObject(service).put("matcher", 11)
+        val storedAlbum = old.getJSONObject(0).getJSONObject("destinations").getJSONObject(service)
+        assertEquals(maxOf(MATCH_VERSION, 12), storedAlbum.getInt("matcher"))
+        storedAlbum.put("matcher", 11)
         preferences.edit { putString(HistoryStore.KEY_HISTORY, old.toString()) }
         assertEquals(listOf(album.copy(destinationLinks = emptyMap()), song), HistoryStore(preferences).load())
     }

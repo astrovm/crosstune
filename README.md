@@ -71,7 +71,7 @@ The first app you pick on a song is where songs play from then on. Change it in 
 | Qobuz | Can't read its links | Songs, albums |
 | Presto Music | Albums, shop products | Albums, search |
 
-Songs shared from Pixel **Now Playing**, **Shazam** links and songs shared from Google's search work too. "Search" means Crosstune opens a search for the title and artist. Bandcamp's app can only search, so there it opens a search for the song, with no **Play**. Presto Music opens an album directly when one result matches its title and artist. Otherwise it opens a search. For a song, that search lists the albums the song is on.
+Songs shared from Pixel **Now Playing**, **Shazam** links and songs shared from Google's search work too. "Search" means Crosstune opens a search for the title and artist. Bandcamp's app can only search, so there it opens a search for the song, with no **Play**. Presto Music opens an album directly when it can check all the results and find one release with the same title, edition and lead artist. Otherwise it opens a search. For a song, that search lists the albums the song is on.
 
 ## 🛠️ Troubleshooting
 
