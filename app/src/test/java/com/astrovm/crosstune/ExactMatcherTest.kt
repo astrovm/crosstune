@@ -2572,6 +2572,7 @@ class ExactMatcherTest {
         }
         assertNull(findsLoveVideo("愛 (Love)", "Band - 愛愛 , Band - Love", "Band"))
         assertNull(findsLoveVideo("愛 (Love)", "Band - 愛 , Other - Love", "Band"))
+        assertNull(findsLoveVideo("愛 (Sunset)", "Band - 愛 , Band - Love (Sunset)", "Band"))
         listOf("Love (Live)", "Love (Remix)", "Love (Disco Version)", "Love (Instrumental)", "Love feat. Guest", "Love (feat. Guest)")
             .forEach { assertNull(it, findsLoveVideo("愛 ($it)", "Band - 愛 , Band - Love", "Band")) }
         assertNull(findsLoveVideo("愛 (Love (Sunset))", "Band - 愛 , Band - Love", "Band"))
