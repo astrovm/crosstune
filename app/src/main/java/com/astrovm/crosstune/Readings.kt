@@ -588,14 +588,19 @@ internal object Readings {
     /** Held while [listed] or [oldKana] is read from its file, so two threads that ask at once read it once. */
     private val tables = Any()
 
-    /** JMdict words for old-kana readings, modern spellings that protect them, and [small] words for tokenizer searches. */
-    internal class OldKana(val today: Map<String, String>, val modern: Set<String>, small: Map<String, String> = emptyMap()) {
+    /** JMdict words for old-kana readings and tokenizer searches, and modern spellings that protect old-kana readings. */
+    internal class OldKana(
+        val today: Map<String, String>, val modern: Set<String>, small: Map<String, String> = emptyMap(),
+        val adjectives: Map<String, List<String>> = emptyMap()
+    ) {
         val modernWithHiOrFu = modern.filter { word -> (1..word.lastIndex).any { word[it] in "ひふ" } }.toSet()
         val longest = modern.maxOf { it.length }
         val longestToday = today.keys.maxOfOrNull { it.length } ?: 0
         val search = small + today
-        val longestSearch = search.keys.maxOfOrNull { it.length } ?: 0
+        val longestSearch = (search.keys + adjectives.keys).maxOfOrNull { it.length } ?: 0
         val smallByPrefix = small.keys.filter { it.length >= 2 }.groupBy { (it[0].code shl 16) or it[1].code }
+            .mapValues { (_, words) -> words.sortedByDescending { it.length } }
+        val adjectivesByPrefix = adjectives.keys.filter { it.length >= 2 }.groupBy { (it[0].code shl 16) or it[1].code }
             .mapValues { (_, words) -> words.sortedByDescending { it.length } }
     }
 
@@ -610,10 +615,12 @@ internal object Readings {
         get() = oldKanaRead ?: synchronized(tables) { oldKanaRead ?: readOldKana().also { oldKanaRead = it } }
 
     private fun readOldKana(): OldKana = checkNotNull(Readings::class.java.getResourceAsStream(OLD_KANA_WORDS)).bufferedReader().useLines { lines ->
-        val (small, rest) = lines.filterNot { it.startsWith('#') }.partition { it.startsWith('+') }
+        val (adjectives, other) = lines.filterNot { it.startsWith('#') }.partition { it.startsWith('~') }
+        val (small, rest) = other.partition { it.startsWith('+') }
         val (today, modern) = rest.partition { '\t' in it }
         OldKana(today.associate { it.substringBefore('\t') to it.substringAfter('\t') }, modern.toSet(),
-            small.associate { it.substringAfter('+').substringBefore('\t') to it.substringAfter('\t') })
+            small.associate { it.substringAfter('+').substringBefore('\t') to it.substringAfter('\t') },
+            adjectives.associate { it.substringAfter('~').substringBefore('\t') to it.split('\t').drop(1) })
     }
 
     private const val OLD_KANA_WORDS = "/com/astrovm/crosstune/old-kana.txt"
@@ -1597,13 +1604,17 @@ internal object Readings {
         val words = mutableListOf<MutableList<Piece>>()
         var previous: Piece? = null
         var opened = false
+        var orphan = false
+        var straightQuotes = 0
         for (piece in pieces) {
             if (piece.surface.isBlank()) {
                 previous = null
+                orphan = false
                 continue
             }
             val opening = piece.surface in OPENING
-            val ending = piece.kind == "助動詞" || (piece.kind == "助詞" && piece.subkind == "接続助詞") ||
+            val ending = (piece.kind == "助動詞" && piece.surface != "なら") ||
+                (piece.kind == "助詞" && piece.subkind == "接続助詞" && piece.surface != "から") ||
                 (piece.kind == "動詞" && piece.subkind == "非自立") || piece.subkind == "接尾"
             // An ending after a particle starts a word of its own: だけだった is dake datta. English
             // the dictionary splits, "Don't" into Don, ' and t, stays as written. A mark goes with the word
@@ -1613,9 +1624,21 @@ internal object Readings {
             val mark = (piece.kind == "記号" || piece.surface.none(Char::isLetterOrDigit)) && !opening
             val withPrevious = opened || english || longMark || mark
             // A split long mark ends the word it draws out. 好き after 食べるー is a new word.
-            val continuesWord = ending && previous?.kind != "助詞" && previous?.surface?.any { it != 'ー' } == true
-            if (previous != null && (withPrevious || continuesWord)) words.last() += piece else words += mutableListOf(piece)
+            // A から without a preceding word can start a noun: keep its ending, then split the next particle.
+            val orphanEnding = orphan && previous?.surface == "から" && piece.kind == "助動詞"
+            val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
+            val continuesWord = ending && !afterOrphan && (previous?.kind != "助詞" || orphanEnding) && previous?.surface?.any { it != 'ー' } == true
+            // An opening mark or clause break starts a phrase; a closing quote keeps the word before it.
+            val phraseMark = previous != null && (previous.surface in OPENING || previous.surface in "、。，．,.！？!?；;：:…" ||
+                (previous.surface == "\"" && straightQuotes % 2 == 1) ||
+                (previous.surface == "'" && words.lastOrNull()?.none { it.surface.any(Char::isLetterOrDigit) } == true))
+            val join = previous != null && (withPrevious || continuesWord)
+            if (join) words.last() += piece else words += mutableListOf(piece)
+            orphan = if (orphanEnding && join) true else piece.surface == "から" && piece.kind == "助詞" &&
+                (previous == null || previous.kind == "助詞" || phraseMark ||
+                    (previous.surface == "の" && previous.kind == "名詞" && previous.subkind == "非自立"))
             opened = opening
+            straightQuotes += piece.surface.count { it == '"' }
             previous = piece
         }
         return words
@@ -1806,7 +1829,7 @@ internal object Readings {
         return words
     }
 
-    private const val OPENING = "「『（(【〈《“"
+    private const val OPENING = "「『（(【〈《“［[‘〔｛{〖〘〚｢«‹⟨〝"
 
     /** What only spaces words in Japanese, a wide space and the ・ of アスファルト・レディ: a space in romaji. */
     private val LATIN_MARKS = mapOf('　' to ' ', '・' to ' ')

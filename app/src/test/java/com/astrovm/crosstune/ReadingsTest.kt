@@ -18,6 +18,110 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun anApostropheBeforeKaraOpensOnlyWithoutAWord() {
+        val cases = listOf(
+            Triple("'からだ", "' karada", listOf("からだ")),
+            Triple("君'からだ", "kimi' kara da", listOf("君", "から", "だ")),
+            Triple("Don'tからだ", "Don't kara da", listOf("Don't", "から", "だ")),
+            Triple("1'からだ", "1' kara da", listOf("から", "だ")),
+            Triple("、'からだ", "、' karada", listOf("からだ"))
+        )
+        for ((line, romaji, words) in cases) {
+            fun read() = Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text }
+            assertEquals(line, listOf(romaji to words, romaji to words), listOf(read(), TestUniDic.reading { read() }))
+        }
+    }
+
+    @Test
+    fun additionalOpeningMarksStartAPhrase() {
+        for (mark in listOf("［", "[", "‘", "〔", "｛", "{", "〖", "〘", "〚", "｢", "«", "‹", "⟨", "〝")) {
+            val line = "${mark}からだ"
+            val expected = "${mark}karada" to listOf("からだ")
+            fun read() = Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text }
+            assertEquals(line, listOf(expected, expected), listOf(read(), TestUniDic.reading { read() }))
+        }
+    }
+
+    @Test
+    fun aStraightQuoteAfterAWordCanOpenAPhrase() {
+        val cases = listOf(
+            Triple("君\"からだ\"", "kimi\" karada\"", listOf("君", "からだ")),
+            Triple("\"LOVE\"の\"からだ\"", "\" LOVE\" no\" karada\"", listOf("LOVE", "の", "からだ")),
+            Triple("君\"からだ\"からだ", "kimi\" karada\" kara da", listOf("君", "からだ", "から", "だ"))
+        )
+        for ((line, romaji, words) in cases) {
+            fun read() = Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text }
+            assertEquals(line, listOf(romaji to words, romaji to words), listOf(read(), TestUniDic.reading { read() }))
+        }
+    }
+
+    @Test
+    fun aClosingQuoteKeepsTheWordBeforeTheParticle() {
+        val line = "「君」からだ"
+        val expected = "「kimi」 kara da" to listOf("君", "から", "だ")
+        fun read() = Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text }
+        assertEquals(listOf(expected, expected), listOf(read(), TestUniDic.reading { read() }))
+    }
+
+    @Test
+    fun particlesDoNotSplitOtherWords() {
+        val cases = listOf(
+            Triple("さようなら", "sayoonara", listOf("さようなら")),
+            Triple("並ぶ星", "narabu hoshi", listOf("並ぶ", "星")),
+            Triple("ならぶ", "narabu", listOf("ならぶ")),
+            Triple("習う", "narau", listOf("習う")),
+            Triple("ならう", "narau", listOf("ならう")),
+            Triple("体", "karada", listOf("体")),
+            Triple("からだ", "karada", listOf("からだ")),
+            Triple("からだが熱い", "karada ga atsui", listOf("からだ", "が", "熱い")),
+            Triple("僕のからだが熱い", "boku no karada ga atsui", listOf("僕", "の", "からだ", "が", "熱い")),
+            Triple("君のからだが", "kimi no karada ga", listOf("君", "の", "からだ", "が")),
+            Triple("僕にからだを", "boku ni karada o", listOf("僕", "に", "からだ", "を")),
+            Triple("「からだが熱い」", "「karada ga atsui」", listOf("からだ", "が", "熱い")),
+            Triple("、からだが熱い", "、 karada ga atsui", listOf("からだ", "が", "熱い")),
+            Triple("君 からだが熱い", "kimi karada ga atsui", listOf("君", "からだ", "が", "熱い")),
+            Triple("空から降る", "sora kara furu", listOf("空", "から", "降る")),
+            Triple("のなら", "no nara", listOf("の", "なら")),
+            Triple("「ならば」", "「naraba」", listOf("ならば")),
+            Triple("君 ならば", "kimi naraba", listOf("君", "ならば")),
+            Triple("「君」から", "「kimi」 kara", listOf("君", "から")),
+            Triple("『夢』なら", "『yume』 nara", listOf("夢", "なら")),
+            Triple("『夢』からだ", "『yume』 kara da", listOf("夢", "から", "だ")),
+            Triple("(笑)から", "(emi) kara", listOf("笑", "から")),
+            Triple("(笑)からだ", "(emi) kara da", listOf("笑", "から", "だ")),
+            Triple("\"LOVE\"なら", "\" LOVE\" nara", listOf("LOVE", "なら")),
+            Triple("\"LOVE\"からだ", "\" LOVE\" kara da", listOf("LOVE", "から", "だ")),
+            Triple("\"からだが熱い\"", "\" karada ga atsui\"", listOf("からだ", "が", "熱い")),
+            Triple("からい", "karai", listOf("からい")),
+            Triple("からす", "karasu", listOf("からす")),
+            Triple("空っぽ", "karappo", listOf("空っぽ")),
+            Triple("からっぽ", "karappo", listOf("からっぽ")),
+            Triple("それなら", "sorenara", listOf("それなら")),
+            Triple("だから", "dakara", listOf("だから")),
+            Triple("なぜなら", "nazenara", listOf("なぜなら")),
+            Triple("奈良", "nara", listOf("奈良")),
+            Triple("ありきたりな喜びきっと二人なら見つけられる", "arikitari na yorokobi kitto futari nara mitsukerareru",
+                listOf("ありきたり", "な", "喜び", "きっと", "二人", "なら", "見つけられる")),
+            Triple("抱きしめた温もりで溶かすから", "dakishimeta nukumori de tokasu kara", listOf("抱きしめた", "温もり", "で", "溶かす", "から"))
+        )
+        for ((line, romaji, words) in cases) {
+            fun read() = Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text }
+            assertEquals(line, romaji to words, read())
+            assertEquals(line, romaji to words, TestUniDic.reading { read() })
+        }
+    }
+
+    @Test
+    fun japaneseWordsAndParticlesHaveSeparateRomaji() {
+        val lines = listOf("ありきたりな喜びきっと二人なら見つけられる", "抱きしめた温もりで溶かすから", "誰かを想いやりゃあだになり")
+        val expected = listOf(
+            "arikitari na yorokobi kitto futari nara mitsukerareru", "dakishimeta nukumori de tokasu kara", "dare ka o omoi yarya ada ni nari"
+        )
+        fun readings() = Readings.of(lines, Script.JAPANESE).map { it.romanized }
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
+    }
+
+    @Test
     fun theScriptIsWhatTheLinesAreWrittenIn() {
         assertEquals(Script.JAPANESE, Readings.scriptOf(listOf("Hello", "夜空に星が")))
         // Kanji alone, with no kana anywhere, is Chinese.
@@ -778,6 +882,18 @@ class ReadingsTest {
         val words = Readings.OldKana(mapOf("あい" to "愛"), setOf("あ"), mapOf("あいうえ" to "上", "あい" to "藍"))
         assertEquals(4, words.longestSearch)
         assertEquals("愛", words.search["あい"])
+    }
+
+    @Test
+    fun adjectiveCandidatesMustCrossTheTokenBoundary() {
+        val vocabulary = Readings.OldKana(
+            emptyMap(), setOf("あ"), mapOf("あいうえ" to "亜"),
+            mapOf("あほ" to listOf("阿呆"), "あり" to listOf("有り"))
+        )
+        val tokenizer = SmallKanaTokenizer { vocabulary }
+        val plain = Tokenizer.Builder().build()
+        assertEquals(0..1, tokenizer.crossingFor("あほな", plain.tokenize("あほな"), 1))
+        assertNull(tokenizer.crossingFor("ありな", plain.tokenize("ありな"), 1))
     }
 
     @Test
@@ -2508,7 +2624,7 @@ class ReadingsTest {
             val line = read("雲がまだ2人の影を残すから")
             assertEquals("$withUniDic", "くもがまだふたりのかげをのこすから", line.reading)
             assertTrue("$withUniDic", Ruby("2人", "ふたり") in line.parts)
-            assertEquals("$withUniDic", "kumo ga mada futari no kage o nokosukara", line.romanized)
+            assertEquals("$withUniDic", "kumo ga mada futari no kage o nokosu kara", line.romanized)
             assertEquals("$withUniDic", "ひとつになる", read("1つになる").reading)
             assertEquals("$withUniDic", "ふたりで", read("２人で").reading)
             // Part of a bigger number, it's that number.

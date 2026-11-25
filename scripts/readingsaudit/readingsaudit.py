@@ -182,6 +182,21 @@ def small_kana(words):
     return {kana: next(iter(forms)) if len(forms) == 1 else kana for kana, forms in sorted(found.items())}
 
 
+def kana_adjectives(words):
+    """Kana adjectives and their written forms, offered to IPADIC before な."""
+    found = defaultdict(set)
+    for entry in words:
+        if not any("adj-na" in s.get("partOfSpeech", []) and "uk" in s.get("misc", []) for s in entry.get("sense", [])):
+            continue
+        for kana in entry["kana"]:
+            text = kana["text"]
+            if not text or not all("ぁ" <= c <= "ゖ" for c in text) or set(kana["tags"]) & ODD_KANA:
+                continue
+            found[text].update(k["text"] for k in entry["kanji"]
+                               if "*" in kana["appliesToKanji"] or k["text"] in kana["appliesToKanji"])
+    return {kana: sorted(forms) for kana, forms in sorted(found.items()) if forms}
+
+
 def old_kana(words):
     """The words in kana a word in old kana may be today, {kana: lookup}, and the words in kana with ひ, ふ or ほ after their first kana.
 
@@ -214,7 +229,7 @@ def old_kana_header(date, version):
             f"# as the Group's licence asks, {EDRDG_LICENCE_URL}",
             "# Changed: only the common words in kana with い, う or お after their first kana, each with how it's looked up,",
             "# then the words in kana with ひ, ふ or ほ after their first kana, which are no old spelling,",
-            "# and + entries for common words with small kana, for the tokenizer's search.",
+            "# + entries are common words with small kana, and ~ entries are kana adjectives with written forms, for search.",
             "# Made by scripts/readingsaudit/readingsaudit.py oldkana."]
 
 
@@ -225,8 +240,10 @@ def oldkana(folder):
     today, modern = old_kana(jmdict["words"])
     header = old_kana_header(jmdict["dictDate"], jmdict["version"])
     small = small_kana(jmdict["words"])
+    adjectives = kana_adjectives(jmdict["words"])
     OLD_KANA.write_text("\n".join(header + [f"{kana}\t{lookup}" for kana, lookup in today.items()] + modern
-                                   + [f"+{kana}\t{lookup}" for kana, lookup in small.items()]) + "\n")
+                                   + [f"+{kana}\t{lookup}" for kana, lookup in small.items()]
+                                   + [f"~{kana}\t" + "\t".join(forms) for kana, forms in adjectives.items()]) + "\n")
     print(f"{len(today)} words today and {len(modern)} modern words in {OLD_KANA}; {len(small)} small-kana words for search")
 
 
