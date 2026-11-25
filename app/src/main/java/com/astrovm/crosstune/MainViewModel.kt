@@ -2155,8 +2155,12 @@ internal class MainViewModel(
                 source?.playSong(song, app, link, mustStart = true) == true
             if (!playThere(song, app, link, asked, exact)) open(destination, finishAfterOpen = false, tapped = true, preparedUrl = link)
         } finally {
-            if (adJob?.isActive != true) clearAdEvidence(evidence)
+            finishPlayEvidence(evidence)
         }
+    }
+
+    private fun finishPlayEvidence(request: YouTubePlayEvidence.Request?) {
+        if (adJob?.isActive != true) clearAdEvidence(request)
     }
 
     /** Already in that app, playing or paused, it carries on from where it is, without asking the network. */
@@ -2328,9 +2332,11 @@ internal class MainViewModel(
     }
 
     private fun hasAdInApp(following: Following?, playing: Heard.Song?, app: String?): Boolean {
-        if (following?.ad == true && sameApp(app, following.appPackage, interception::isInstalled)) return true
-        return playing?.ad == true && sameApp(app, playing.app, interception::isInstalled)
+        if (following?.ad == true && matchesPlaybackApp(app, following.appPackage)) return true
+        return playing?.ad == true && matchesPlaybackApp(app, playing.app)
     }
+
+    private fun matchesPlaybackApp(app: String?, reported: String?): Boolean = sameApp(app, reported, interception::isInstalled)
 
     private fun readStart(
         following: Following?, playing: Heard.Song?, app: String?, over: MusicMetadata?, link: String, mustPlay: Boolean
@@ -2532,18 +2538,12 @@ internal class MainViewModel(
         app != null && !playing.ad && sameApp(app, playing.app, interception::isInstalled) &&
             (over == null || !sameSong(playing.metadata, over) || link?.let { playedAs[app to it] }?.let { sameSong(playing.metadata, it) } == true)
 
-    private fun knownSkip(playing: Heard.Song, app: String?, link: String?): Boolean =
-        !playing.ad && playing.isAnotherYouTubeVideo(link) && sameApp(app, playing.app, interception::isInstalled)
-
-    private fun Heard.Song.isAnotherYouTubeVideo(link: String?): Boolean {
-        if (MusicService.ofPackage(app) !in YOUTUBE_PLAYERS) return false
-        val video = RecordingKey.youTubeIdIn(link) ?: return false
-        val heard = youTubeVideoId()
-        return heard != null && heard != video
+    private fun knownSkip(playing: Heard.Song, app: String?, link: String?): Boolean {
+        if (playing.ad || !matchesPlaybackApp(app, playing.app)) return false
+        val requested = RecordingKey.youTubeIdIn(link)
+        val reported = RecordingKey.confirmedYouTubeSessionId(playing.metadata.url, playing.metadata.recordingId?.removePrefix("${playing.app}:"))
+        return requested != null && reported != null && reported != requested
     }
-
-    private fun Heard.Song.youTubeVideoId(): String? =
-        RecordingKey.confirmedYouTubeSessionId(metadata.url, metadata.recordingId?.removePrefix("$app:"))
 
     fun closePlayer() {
         cancelPlayerStart()

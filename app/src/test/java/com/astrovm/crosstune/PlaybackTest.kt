@@ -546,7 +546,6 @@ class PlaybackTest {
         assertTrue("The exact duration can classify an ad even without a position", heard.ad)
         assertNull(heard.clock)
         assertEquals(253_000L, heard.metadata.lengthMs)
-        assertEquals("The report keeps Android's unadjusted duration", 10_133L, heard.sessionDurationMs)
         playback.youTubePlayEvidence.clear(request)
     }
 
@@ -562,7 +561,6 @@ class PlaybackTest {
         val request = playback.youTubePlayEvidence.start(appPackage, id, 253_000)
         val raw = checkNotNull(playback.nowPlaying())
         assertFalse(raw.ad)
-        assertEquals(10_133L, raw.sessionDurationMs)
         assertEquals(45L, raw.offsetMs)
         val identified = MediaMetadata.Builder(checkNotNull(controller.metadata)).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, id).build()
         shadowOf(controller).setMetadata(identified)
@@ -630,7 +628,6 @@ class PlaybackTest {
         val bar = checkNotNull(playback.nowPlaying())
         assertTrue(bar.ad)
         assertNull(bar.offsetMs)
-        assertEquals(60_046L, bar.sessionDurationMs)
         assertEquals(359_491L, bar.metadata.lengthMs)
         // Home passes the length it just got back. The second reader still uses only the Android report and exact request.
         val follower = checkNotNull(followed(bar.metadata, source = other).first())
@@ -731,6 +728,26 @@ class PlaybackTest {
     }
 
     @Test
+    fun thePreexistingTitleHistoryAdRuleKeepsItsDurationBoundary() {
+        allow()
+        sounding()
+        val appPackage = MusicService.YOUTUBE_MUSIC.packageName
+        val controller = player(appPackage, "YouTube Music", song.title, song.artist, album = "Album",
+            duration = AD_DURATION_HINT_MS, position = 500)
+        shadowOf(sessions).addController(controller)
+        val atCutoff = checkNotNull(controller.metadata)
+        assertEquals(false, playback.nowPlaying()?.ad)
+        val short = MediaMetadata.Builder(atCutoff).putLong(MediaMetadata.METADATA_KEY_DURATION, AD_DURATION_HINT_MS - 1).build()
+        shadowOf(controller).setMetadata(short)
+        val report = checkNotNull(followed().last())
+        assertTrue(report.ad)
+        assertEquals(AD_DURATION_HINT_MS, report.durationMs)
+        shadowOf(controller).setMetadata(atCutoff)
+        assertEquals(false, playback.nowPlaying()?.ad)
+        assertEquals(500L, playback.nowPlaying()?.offsetMs)
+    }
+
+    @Test
     @Config(shadows = [OneMetadataRead::class])
     fun aStateReadBetweenTwoItemsDoesNotSupplyNewAdEvidence() {
         allow()
@@ -742,13 +759,19 @@ class PlaybackTest {
         shadowOf(sessions).addController(controller)
         val request = playback.youTubePlayEvidence.start(appPackage, id, 253_000)
         val ad = checkNotNull(controller.metadata)
-        val old = MediaMetadata.Builder(ad).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "opaque-old").build()
         val shadow = Shadow.extract<OneMetadataRead>(controller)
-        shadow.setMetadata(old)
-        val reading = installSwapOnSnapshot(shadow, ad)
+        val next = MediaMetadata.Builder(ad).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "opaque-next").build()
+        val reading = installSwapOnSnapshot(shadow, next)
         assertFalse(reading.ad)
         assertEquals(694L, reading.offsetMs)
-        assertEquals(true, playback.nowPlaying()?.ad)
+        assertEquals("$appPackage:$id", reading.metadata.recordingId)
+        assertEquals(false, playback.nowPlaying()?.ad)
+
+        // Android may return a fresh wrapper without changing any of the report's fields.
+        shadow.setMetadata(ad)
+        val same = installSwapOnSnapshot(shadow, MediaMetadata.Builder(ad).build())
+        assertTrue(same.ad)
+        assertNull(same.offsetMs)
         playback.youTubePlayEvidence.clear(request)
     }
 
@@ -788,6 +811,30 @@ class PlaybackTest {
         val other = player("com.spotify.music", "Spotify", "Bizarre Love Triangle", "New Order", album = "Substance", duration = 120_000)
         shadowOf(sessions).addController(other)
         assertEquals(120_000L, playback.recording(MusicMetadata("Bizarre Love Triangle", "New Order"))?.lengthMs)
+    }
+
+    @Test
+    fun anUnidentifiedShortYouTubeReportDoesNotEnterPlaybackHistory() {
+        allow()
+        sounding()
+        val appPackage = MusicService.YOUTUBE_MUSIC.packageName
+        val short = player(appPackage, "YouTube Music", song.title, song.artist, album = "Album", duration = 33_204)
+        shadowOf(sessions).addController(short)
+        assertEquals(33_204L, playback.nowPlaying()?.metadata?.lengthMs)
+        val preferences = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        assertTrue(SteadyLengths(preferences).known(song.title, song.artist).isEmpty())
+    }
+
+    @Test
+    fun matchingDoesNotOfferAControllerWithNoTransportState() {
+        allow()
+        val controller = player("com.example.player", "Player", song.title, song.artist)
+        shadowOf(sessions).addController(controller)
+        assertTrue(playback.matching(song).single().playing)
+        shadowOf(controller).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 500, 0f, PLAYED_AT).build())
+        assertFalse(playback.matching(song).single().playing)
+        shadowOf(controller).setPlaybackState(null)
+        assertTrue(playback.matching(song).isEmpty())
     }
 
     @Test

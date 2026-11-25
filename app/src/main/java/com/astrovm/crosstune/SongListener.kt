@@ -54,9 +54,7 @@ internal sealed interface Heard {
         val app: String? = null,
         val speed: Float = 1f,
         val inRoom: Boolean = false,
-        val ad: Boolean = false,
-        /** The duration the session reported, before it is adjusted to the known song length. */
-        val sessionDurationMs: Long? = null
+        val ad: Boolean = false
     ) : Heard {
         /** Where the song is, as heard, when both halves are known. */
         val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs, speed) else null

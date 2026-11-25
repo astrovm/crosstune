@@ -199,7 +199,7 @@ internal class FakePlayback : PlaybackSource {
 
     private fun readAd(heard: Heard.Song): Heard.Song {
         val app = heard.app ?: return heard
-        val duration = heard.sessionDurationMs ?: return heard
+        val duration = heard.metadata.lengthMs ?: return heard
         val id = RecordingKey.confirmedYouTubeSessionId(heard.metadata.url, heard.metadata.recordingId?.removePrefix("$app:"))
         return if (youTubePlayEvidence.adDuration(app, id, duration) != null) heard.copy(ad = true, offsetMs = null) else heard
     }
