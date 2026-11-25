@@ -4549,6 +4549,7 @@ class MainActivityTest {
         val inTheApp = { playing: Boolean ->
             phone.playing.value = Following(PlaybackClock(60_000, SystemClock.elapsedRealtime(), playing = playing), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
         }
+        val lengthRequests = { fake.requestedUrls.count { it == YouTubeMusicApi.NEXT_URL } }
 
         // Playing there already, it keeps on, and its player follows it.
         inTheApp(true)
@@ -4556,6 +4557,8 @@ class MainActivityTest {
         waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         assertTrue(phone.songsAsked.isEmpty())
         assertTrue(phone.plays.isEmpty())
+        // With no known length, the running session could have been an ad.
+        assertEquals(1, lengthRequests())
 
         // Paused there, it plays again from where it was.
         click(string(R.string.dismiss_button))
@@ -4563,7 +4566,7 @@ class MainActivityTest {
         tapPlay()
         waitUntil { phone.plays == listOf(true) }
         assertTrue(phone.songsAsked.isEmpty())
-        assertFalse(YouTubeMusicApi.NEXT_URL in fake.requestedUrls)
+        assertEquals(1, lengthRequests())
 
         // A paused ad needs Play too, even though the song itself is still waiting at zero.
         click(string(R.string.dismiss_button))
@@ -4572,6 +4575,7 @@ class MainActivityTest {
         tapPlay()
         waitUntil { phone.plays == listOf(true, true) }
         assertTrue(phone.songsAsked.isEmpty())
+        assertEquals(1, lengthRequests())
 
         // Not in that app, it's asked for, as before.
         click(string(R.string.dismiss_button))
@@ -4980,8 +4984,11 @@ class MainActivityTest {
         waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         // Recorded on a phone: asked again for the song it's on, YouTube Music does nothing, so nothing changes to see.
         click(play)
+        // The bar already shows the title while Play is still checking the session.
+        waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         waitForText("黄昏のBAY CITY")
         assertTrue(composeRule.onAllNodes(hasText(waiting)).fetchSemanticsNodes().isEmpty())
+        assertTrue(phone.opened.isEmpty())
         // On another song by then, that isn't taken for it.
         click(string(R.string.dismiss_button))
         phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
