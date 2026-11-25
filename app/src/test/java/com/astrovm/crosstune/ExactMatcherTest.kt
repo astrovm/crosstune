@@ -2658,6 +2658,10 @@ class ExactMatcherTest {
         val album = MusicMetadata("Bay City", "Band", lengthMs = 281_200)
         assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, album))
         assertEquals("https://music.youtube.com/watch?v=Wey2yM_dNfc", matcher("US").find(MusicService.YOUTUBE_MUSIC, album.copy(title = "Bay City (Disco Mix)", lengthMs = null)))
+        // Zero means the link could not give a time. The eight-second window includes its edge.
+        for (length in listOf(0L, 259_000L)) {
+            assertEquals("https://music.youtube.com/watch?v=QLHMhVonF-s", matcher("US").find(MusicService.YOUTUBE_MUSIC, album.copy(lengthMs = length)))
+        }
 
         val namedAlbum = youTubeMusicRow("Bay City", "Band • Disco Mix • 7:27", videoId = "Wey2yM_dNfc")
         namesAndTabs(songs = listOf(single, namedAlbum))
@@ -2666,6 +2670,32 @@ class ExactMatcherTest {
         val otherBand = youTubeMusicRow("Bay City (Disco Mix)", "Other Band • Full Moon • 7:27", videoId = "other000000")
         namesAndTabs(songs = listOf(single, otherBand))
         assertEquals("https://music.youtube.com/watch?v=QLHMhVonF-s", matcher("US").find(MusicService.YOUTUBE_MUSIC, album))
+    }
+
+    @Test
+    fun thePickerCannotReplaceAnExplicitDiscoRequestWithAnUnmarkedCut() = runBlocking {
+        val request = MusicMetadata("黄昏のBay City (DISCOバージョン)", "八神純子")
+        val disco = youTubeMusicRow(request.title, "八神純子 • 1K views • 7:27", videoId = "Wey2yM_dNfc")
+        fun picker() = ExactMatcher(fake.client(), "US", pick = { _, _, _ -> 0 })
+        namesAndTabs(videos = listOf(disco))
+        assertEquals("https://music.youtube.com/watch?v=Wey2yM_dNfc", picker().find(MusicService.YOUTUBE_MUSIC, request))
+
+        val single = youTubeMusicRow("黄昏のBAY CITY", "八神純子 • 黄昏のBAY CITY • 4:11", videoId = "QLHMhVonF-s")
+        val video = youTubeMusicRow("黄昏のBAY CITY", "八神純子 • 1K views • 4:11", videoId = "other000000")
+        namesAndTabs(songs = listOf(single), videos = listOf(video))
+        assertNull(picker().find(MusicService.YOUTUBE_MUSIC, request))
+    }
+
+    @Test
+    fun thePickerCanUseASongsAlbumAsEvidenceForALiveRequest() = runBlocking {
+        val track = youTubeMusicRow("曲", "Band • Live at Budokan • 4:00", videoId = "track000000")
+        namesAndTabs(songs = listOf(track))
+        val picker = ExactMatcher(fake.client(), "US", pick = { _, rows, videos ->
+            assertFalse(videos)
+            assertEquals(listOf("曲 | Band • Live at Budokan • 4:00"), rows)
+            0
+        })
+        assertEquals("https://music.youtube.com/watch?v=track000000", picker.find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song: Live", "Band")))
     }
 
     @Test
