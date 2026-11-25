@@ -7,7 +7,9 @@ plugins {
 // Nothing here runs in CI, which has no device; the app only uses the profile committed to it.
 android {
     namespace = "com.astrovm.crosstune.baselineprofile"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     defaultConfig {
         // Collecting a profile without root needs Android 9.

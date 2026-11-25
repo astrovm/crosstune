@@ -16,7 +16,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -54,7 +53,7 @@ import org.robolectric.annotation.Config
 class LyricsToolsTest {
 
     @get:Rule
-    val composeRule = createEmptyComposeRule()
+    val composeRule = createRemoteComposeRule()
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()
