@@ -2648,6 +2648,11 @@ class ExactMatcherTest {
     fun catalogWhitespaceDoesNotHideAParenthesizedAlias() {
         val url = "https://music.youtube.com/watch?v=video000000"
         assertEquals(url, findsLoveVideo("愛 (Love) ", "Band - 愛 , Band - Love", "Band"))
+    }
+
+    @Test
+    fun compatibilityWidthDoesNotHideTheRequestedAlias() {
+        val url = "https://music.youtube.com/watch?v=video000000"
         assertEquals(url, findsLoveVideo("愛 (Ｌｏｖｅ)", "Band - 愛 , Band - Love", "Band"))
     }
 
