@@ -493,7 +493,7 @@ internal class ExactMatcher(
             if (!matches(metadata, title, artist)) return@mapNotNull null
             result.optString("prestoCode").toLongOrNull()?.takeIf { it > 0 }
         }
-        return codes.distinct().singleOrNull()?.toString()?.let(Presto::albumUrl)
+        return codes.distinct().singleOrNull()?.let { Presto.albumUrl(it.toString()) }
     }
 
     /**
