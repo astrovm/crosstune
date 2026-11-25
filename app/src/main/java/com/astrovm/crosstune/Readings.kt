@@ -226,14 +226,16 @@ internal object Readings {
     }
 
     private fun openingNanDaContinues(before: Piece?, after: Piece?) =
-        (before == null || before.surface in "、。，．,.！？!?；;：:…") && (before != null || after != null) &&
-            after?.surface !in setOf("、", ",")
+        nanDaOpening(before) && (before != null || after != null) && after?.surface !in setOf("、", ",")
+
+    private fun nanDaOpening(before: Piece?) =
+        before == null || before.surface in OPENING || before.surface in "、。，．,.！？!?；;：:…"
 
     private fun nanDaCall(pieces: List<Piece>, at: Int): Boolean {
         val before = pieces.getOrNull(at - 1)
         val after = pieces.getOrNull(at + 1)
         val next = pieces.getOrNull(at + 2)
-        return pieces[at].surface == "なん" && (before == null || before.surface in "、。，．,.！？!?；;：:…") &&
+        return pieces[at].surface == "なん" && nanDaOpening(before) &&
             after?.surface == "だ" && after.startsCopula && (next?.surface in setOf("、", ",") || next == null && before == null)
     }
 
