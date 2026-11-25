@@ -18,6 +18,14 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun aClosingQuoteKeepsTheWordBeforeTheParticle() {
+        val line = "「君」からだ"
+        val expected = "「kimi」 kara da" to listOf("君", "から", "だ")
+        fun read() = Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text }
+        assertEquals(listOf(expected, expected), listOf(read(), TestUniDic.reading { read() }))
+    }
+
+    @Test
     fun particlesDoNotSplitOtherWords() {
         val cases = listOf(
             Triple("さようなら", "sayoonara", listOf("さようなら")),
@@ -38,6 +46,12 @@ class ReadingsTest {
             Triple("のなら", "no nara", listOf("の", "なら")),
             Triple("「ならば」", "「naraba」", listOf("ならば")),
             Triple("君 ならば", "kimi naraba", listOf("君", "ならば")),
+            Triple("「君」から", "「kimi」 kara", listOf("君", "から")),
+            Triple("『夢』なら", "『yume』 nara", listOf("夢", "なら")),
+            Triple("(笑)から", "(emi) kara", listOf("笑", "から")),
+            Triple("\"LOVE\"なら", "\" LOVE\" nara", listOf("LOVE", "なら")),
+            Triple("\"LOVE\"からだ", "\" LOVE\" kara da", listOf("LOVE", "から", "だ")),
+            Triple("\"からだが熱い\"", "\" karada ga atsui\"", listOf("からだ", "が", "熱い")),
             Triple("からい", "karai", listOf("からい")),
             Triple("からす", "karasu", listOf("からす")),
             Triple("空っぽ", "karappo", listOf("空っぽ")),

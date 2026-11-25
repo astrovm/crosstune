@@ -1627,10 +1627,13 @@ internal object Readings {
             val orphanEnding = orphan && previous?.surface == "から" && piece.kind == "助動詞"
             val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
             val continuesWord = ending && !afterOrphan && (previous?.kind != "助詞" || orphanEnding) && previous?.surface?.any { it != 'ー' } == true
+            // An opening mark or clause break starts a phrase; a closing quote keeps the word before it.
+            val phraseMark = previous != null && (previous.surface in OPENING || previous.surface in "、。，．,.！？!?；;：:…" ||
+                (previous.surface in setOf("\"", "'") && words.lastOrNull()?.none { it.surface.any(Char::isLetterOrDigit) } == true))
             val join = previous != null && (withPrevious || continuesWord)
             if (join) words.last() += piece else words += mutableListOf(piece)
             orphan = if (orphanEnding && join) true else piece.surface == "から" && piece.kind == "助詞" &&
-                (previous == null || previous.kind in setOf("助詞", "記号") ||
+                (previous == null || previous.kind == "助詞" || phraseMark ||
                     (previous.surface == "の" && previous.kind == "名詞" && previous.subkind == "非自立"))
             opened = opening
             previous = piece
