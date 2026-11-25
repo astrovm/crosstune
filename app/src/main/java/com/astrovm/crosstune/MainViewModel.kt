@@ -12,6 +12,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.astrovm.crosstune.ui.theme.Palette
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
@@ -2289,17 +2291,28 @@ internal class MainViewModel(
      */
     private suspend fun seenPlaying(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean, withinMs: Long = LOAD_SONG_MS): Seen? {
         val over = uiState.player?.over
-        val (following, playing) = withTimeoutOrNull(withinMs) {
-            combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).first { (following, playing) ->
-                following != null && (!mustPlay || following.clock.playing) && sameApp(app, following.appPackage, interception::isInstalled) ||
-                    following == null && playing != null && startedAsked(playing, app, over, link, song.lengthMs)
-            }
-        } ?: return null
+        val wait = UnconfirmedAdWait()
+        var possibleSong: Seen? = null
+        // Don't let the check exhaust the Play timeout when the short report arrives near the end.
+        val seen = withTimeoutOrNull(withinMs) {
+            combine(source.follow(song), source.nowPlayingUpdates(), wait.expired) { following, playing, expired ->
+                val start = when {
+                    following != null -> if ((!mustPlay || following.clock.playing) &&
+                        sameApp(app, following.appPackage, interception::isInstalled)
+                    ) AskedStart.YES else AskedStart.NO
+                    playing != null -> askedStart(playing, app, over, link, song.lengthMs)
+                    else -> AskedStart.NO
+                }
+                val report = Seen(following, playing)
+                possibleSong = report.takeIf { start == AskedStart.MAY_BE_AD }
+                report.takeIf { wait.accepts(start, expired) }
+            }.filterNotNull().first()
+        } ?: possibleSong ?: return null
         // Seen to go on to it from another song, that's what the app calls the song at that link. Not from nothing, as an
         // app may show what it played last a moment first.
-        val wentOn = playing?.takeIf { following == null && over != null && !sameSong(it.metadata, over) }
+        val wentOn = seen.playing?.takeIf { seen.following == null && over != null && !sameSong(it.metadata, over) }
         if (app != null && wentOn != null) playedAs[app to link] = wentOn.metadata
-        return Seen(following, playing)
+        return seen
     }
 
     /**
@@ -2412,19 +2425,19 @@ internal class MainViewModel(
         }
         val song = opened.song
         viewModelScope.launchKept({ playerJob = it }) {
+            val wait = UnconfirmedAdWait()
             combine(
                 source.follow(song, opened.followApp, opened.session), source.nowPlayingUpdates(), source.unnamedUpdates(),
-                youTubeReturnExpired.onStart { emit(Unit) },
-            ) { following, playing, unnamed, _ -> Triple(following, playing, unnamed) }.collect { (following, playing, unnamed) ->
+                youTubeReturnExpired.onStart { emit(Unit) }, wait.expired,
+            ) { following, playing, unnamed, _, expired -> Triple(following, playing, unnamed) to expired }.collect { (report, expired) ->
+                val (following, playing, unnamed) = report
                 val player = uiState.player ?: return@collect
                 val played = playedOrPlays(player, following)
                 // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
                 // Not yet played, the asked app going on to a song is the one asked for, whatever its name there, e.g.
                 // in another script or with the artist's name written otherwise, which the app's session can't be matched by.
-                val next = playing?.takeIf {
-                    (played || startedAsked(it, player.app, player.over, player.link, song.lengthMs)) &&
-                        following == null && uiState.practice == null && !sameSong(it.metadata, song)
-                }
+                val differentName = playing?.takeIf { following == null && uiState.practice == null && !sameSong(it.metadata, song) }
+                val next = differentName?.takeIf { played || wait.accepts(askedStart(it, player.app, player.over, player.link, song.lengthMs), expired) }
                 // In the app that plays it, which may not be the one the song before played in.
                 if (next != null) return@collect openPlayer(next.metadata, next.app ?: player.following?.appPackage ?: player.app, played = true)
                 if (tookUpUnnamed(unnamed, playing, following, played, song)) return@collect
@@ -2483,19 +2496,49 @@ internal class MainViewModel(
      * Whether [playing] is what the [app] asked for a song has gone on to play, rather than what it played [over] before; or,
      * still on that, what it was seen to play for the same [link] before.
      */
-    private fun startedAsked(playing: Heard.Song, app: String?, over: MusicMetadata?, link: String?, askedLength: Long?): Boolean =
+    private fun askedStart(playing: Heard.Song, app: String?, over: MusicMetadata?, link: String?, askedLength: Long?): AskedStart {
         // An ad under the song's name is no song started: free YouTube Music plays them so.
-        app != null && !playing.ad && sameApp(app, playing.app, interception::isInstalled) &&
-            !playing.isAnotherYouTubeVideo(link) && !playing.isShortReportForKnownYouTubeVideo(link, askedLength) &&
-            (over == null || !sameSong(playing.metadata, over) || link?.let { playedAs[app to it] }?.let { sameSong(playing.metadata, it) } == true)
+        if (app == null || playing.ad || !sameApp(app, playing.app, interception::isInstalled)) return AskedStart.NO
+        if (playing.isAnotherYouTubeVideo(link)) return AskedStart.NO
+        if (over != null && sameSong(playing.metadata, over)) {
+            val whatItPlayedLast = link?.let { playedAs[app to it] } ?: return AskedStart.NO
+            if (!sameSong(playing.metadata, whatItPlayedLast)) return AskedStart.NO
+        }
+        return playing.youTubeStart(link, askedLength)
+    }
 
     /** The general report can arrive before the follower with the requested video's length sees the ad. */
-    private fun Heard.Song.isShortReportForKnownYouTubeVideo(link: String?, askedLength: Long?): Boolean {
-        if (MusicService.ofPackage(app) != MusicService.YOUTUBE_MUSIC) return false
-        val id = RecordingKey.youTubeIdIn(link) ?: return false
-        val expected = playback?.knownYouTubeLength(id) ?: askedLength ?: return false
-        val said = sessionDurationMs ?: return false
-        return isYouTubeAdLength(said, expected)
+    private fun Heard.Song.youTubeStart(link: String?, askedLength: Long?): AskedStart {
+        if (MusicService.ofPackage(app) != MusicService.YOUTUBE_MUSIC) return AskedStart.YES
+        val id = RecordingKey.youTubeIdIn(link) ?: return AskedStart.YES
+        val exactLength = playback?.knownYouTubeLength(id)
+        val expected = exactLength ?: askedLength ?: return AskedStart.YES
+        val said = sessionDurationMs ?: return AskedStart.YES
+        if (!isYouTubeAdLength(said, expected)) return AskedStart.YES
+        // A requested duration might be for a different cut. Only the exact video's own duration rules this report out.
+        return if (exactLength == null) AskedStart.MAY_BE_AD else AskedStart.NO
+    }
+
+    private enum class AskedStart { NO, MAY_BE_AD, YES }
+
+    /** Give the song's follower time to decide. Repeated reports don't restart the wait. */
+    private class UnconfirmedAdWait {
+        private val started = CompletableDeferred<Unit>()
+        val expired = flow {
+            emit(false)
+            started.await()
+            delay(UNCONFIRMED_AD_WAIT_MS)
+            emit(true)
+        }
+
+        fun accepts(start: AskedStart, expired: Boolean): Boolean = when (start) {
+            AskedStart.NO -> false
+            AskedStart.MAY_BE_AD -> {
+                started.complete(Unit)
+                expired
+            }
+            AskedStart.YES -> true
+        }
     }
 
     private fun Heard.Song.isAnotherYouTubeVideo(link: String?): Boolean {
@@ -2563,7 +2606,7 @@ internal class MainViewModel(
                 if (playback?.playSong(player.song, player.app, player.link) == false && uiState.phone == Phone.TV) player.app?.let { app -> player.link?.let { playback.openSong(app, it) } }
             }
         }
-        playback?.playPause(player.song, !following.clock.playing, player.askedOf, following.session)
+        playback?.playPause(player.song, !following.playingInApp, player.askedOf, following.session)
     }
 
     /** Has the app go on to its [next] song, or back to the one before, which the player then shows. */
@@ -6661,6 +6704,9 @@ internal class MainViewModel(
         private const val SEEK_SETTLE_MS = 1_000L
         /** How long the music app has to find a song asked for by name, and start it. */
         const val LOAD_SONG_MS = 12_000L
+
+        /** Give the follower the usual app start allowance when a general report might be an ad. */
+        const val UNCONFIRMED_AD_WAIT_MS = START_MS
 
         /** How long an app opened on a song may play something else first: YouTube Music was seen to play two ads in a row. */
         const val ADS_MS = 2 * LONGEST_AD_MS

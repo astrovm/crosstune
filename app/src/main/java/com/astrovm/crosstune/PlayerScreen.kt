@@ -522,7 +522,8 @@ private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
 /** Shuffle, previous, play or pause, next, and repeat, as the app lets them; play asks the app again when it isn't playing the song. */
 @Composable
 private fun PlayerButtons(following: Following?, actions: ScreenActions, modifier: Modifier) {
-    val playing = following?.clock?.playing == true
+    // The song clock waits at zero during an ad, even while the app plays sound.
+    val playing = following?.playingInApp == true
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,

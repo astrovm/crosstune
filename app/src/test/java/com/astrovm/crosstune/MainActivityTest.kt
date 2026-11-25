@@ -4420,7 +4420,7 @@ class MainActivityTest {
         assertTrue(composeRule.onAllNodes(hasContentDescription(play)).fetchSemanticsNodes().isEmpty())
         checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
-        launch()
+        val model = ViewModelProvider(launch())[MainViewModel::class.java]
         resolveTyped(link)
         val playing = { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "Music", canSeek = true, appPackage = youTubeMusic) }
         val playerShown = { composeRule.onAllNodes(hasContentDescription(string(R.string.dismiss_button))).fetchSemanticsNodes().isNotEmpty() }
@@ -4431,17 +4431,24 @@ class MainActivityTest {
             click(play)
         }
 
+        // The video's length may still be loading when the tap returns. Wait for the command and its player.
+        fun waitForPlayRequest(count: Int) = waitUntil(TIMEOUT_MS) {
+            phone.songsAsked.size >= count && phone.linksAsked.size >= count && playerShown()
+        }
+
         // Asked in the background, with its link there, and Crosstune stays, in its player.
         tapPlay()
+        waitForPlayRequest(1)
         assertEquals(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada", url = link) to youTubeMusic, phone.songsAsked.single())
         assertEquals(link, phone.linksAsked.single())
-        assertTrue(playerShown())
         playing()
+        waitUntil(TIMEOUT_MS) { !model.uiState.playingResult && model.uiState.player?.following?.clock?.playing == true }
         assertNull(nextStartedActivity())
 
         // Asked, but never playing it, it's opened there, and left once it plays.
         phone.playing.value = null
         tapPlay()
+        waitForPlayRequest(2)
         assertEquals(2, phone.songsAsked.size)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.LOAD_SONG_MS))
         waitUntil { phone.opened.isNotEmpty() }
@@ -4795,6 +4802,47 @@ class MainActivityTest {
         waitForDescription(string(R.string.lyrics_play))
         click(string(R.string.lyrics_play))
         assertEquals(listOf(false, true), phone.plays)
+    }
+
+    @Test
+    fun theFullPlayerPausesAndResumesTheAdWithoutMovingTheSongClock() {
+        val youtube = MusicService.YOUTUBE_MUSIC.packageName
+        val video = "4NRXx6U8ABQ"
+        val link = "https://music.youtube.com/watch?v=$video"
+        val phone = FakePlayback().apply { access = true; rememberYouTubeLength(video, 263_000) }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Blinding Lights","author_name":"The Weeknd"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youtube, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        val model = ViewModelProvider(launch())[MainViewModel::class.java]
+        resolveTyped(link)
+        val start = string(R.string.play_in_background, "YouTube Music")
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(start) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(start)
+        waitUntil(TIMEOUT_MS) { phone.linksAsked == listOf(link) }
+
+        val ad = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music",
+            canSeek = true, appPackage = youtube, durationMs = 263_000, ad = true, adPlaying = true, session = 31)
+        phone.onPlay = { _, playing -> phone.playing.value = ad.copy(adPlaying = playing) }
+        phone.playing.value = ad
+        waitUntil(TIMEOUT_MS) { model.uiState.player?.following?.ad == true && !model.uiState.playingResult }
+        composeRule.onNode(hasText("4:23")).assertIsDisplayed()
+        composeRule.onNode(hasText("0:00")).assertIsDisplayed()
+        val pause = string(R.string.lyrics_pause)
+        val play = string(R.string.lyrics_play)
+        composeRule.onNode(hasContentDescription(pause) and hasClickAction()).assertIsDisplayed()
+        click(pause)
+        waitForDescription(play)
+        assertEquals(listOf(false), phone.plays)
+        click(play)
+        waitForDescription(pause)
+        assertEquals(listOf(false, true), phone.plays)
+        assertEquals(listOf(31, 31), phone.playedSessions)
+        assertEquals(listOf(link), phone.linksAsked)
+        assertTrue(phone.opened.isEmpty())
+        assertFalse(YouTubeMusicApi.NEXT_URL in fake.requestedUrls)
+        assertEquals(ad.clock, model.uiState.player?.following?.clock)
+        composeRule.onNode(hasText("0:00")).assertIsDisplayed()
     }
 
     @Test

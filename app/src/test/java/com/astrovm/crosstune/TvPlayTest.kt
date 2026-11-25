@@ -1025,6 +1025,27 @@ class TvPlayTest {
     }
 
     @Test
+    fun onATvThePlayerPausesThePlayingAdInItsOwnSession() {
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        playback.running = setOf(youTubeMusic)
+        playback.rememberYouTubeLength("sPmul8b17AU", 214_000)
+        launch()
+        click(play)
+        waitUntil { playback.linksAsked == listOf(link) }
+        val ad = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music",
+            canSeek = true, appPackage = youTubeMusic, durationMs = 214_000, ad = true, adPlaying = true, session = 23)
+        playback.playing.value = ad
+        waitUntil { onPlayer() && model().uiState.player?.following?.ad == true }
+        val pause = string(R.string.lyrics_pause)
+        composeRule.onNode(hasContentDescription(pause) and hasClickAction()).assertExists()
+        click(pause)
+        assertEquals(listOf(false), playback.plays)
+        assertEquals(listOf(23), playback.playedSessions)
+        assertEquals(ad.clock, model().uiState.player?.following?.clock)
+        assertTrue(playback.opened.isEmpty())
+    }
+
+    @Test
     fun onATvTheRemoteStartsOnTheWordsBarAndRightFromALineGoesBackThere() {
         launch()
         click(string(R.string.lyrics_button))
