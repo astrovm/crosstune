@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpRect
@@ -54,6 +56,9 @@ class CardButtonsLayoutTest {
             assertDp("an icon's width", 56.dp, icon.right - icon.left)
             assertDp("an icon's height", 56.dp, icon.bottom - icon.top)
         }
+        val lyrics = composeRule.onNode(hasContentDescription(string(R.string.lyrics_button)) or (hasText(string(R.string.lyrics_button)) and hasClickAction())).getBoundsInRoot()
+        // The row is as tall as what it holds, so the tools under it start just after its lowest button.
+        assertDp("Lyrics after the buttons", maxOf(card.play.bottom, card.search.bottom, card.open.bottom) + 8.dp, lyrics.top)
         return card
     }
 
