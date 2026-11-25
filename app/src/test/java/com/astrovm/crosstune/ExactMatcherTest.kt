@@ -2755,6 +2755,69 @@ class ExactMatcherTest {
         assertNull(findsLoveVideo("愛 (Love)", "Band - 愛愛 , Band - Love", "Band", "愛"))
     }
 
+    private fun findsCreditedVideo(request: String, otherNames: List<String>, vararg titles: String): String? {
+        namesAndTabs(
+            videos = titles.mapIndexed { index, title -> youTubeMusicRow(title, "Band • 1K views • 4:00", videoId = "video${index.toString().padStart(6, '0')}") },
+            apple = mapOf("US" to appleSong(request, "Band", 240_000)),
+            elsewhere = otherNames.zip(listOf("JP", "KR", "TW")).associate { (name, store) -> store to appleSong(name, "Band", 240_000) }
+        )
+        return runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata(request, "Band", lengthMs = 240_000)) }
+    }
+
+    @Test
+    fun mixedCreditSeparatorsDoNotSkipUnprovedNames() {
+        val second = "https://music.youtube.com/watch?v=video000001"
+        val mixed = "Band - 愛, Band - Love, Band – Sunset"
+        assertEquals(second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), mixed, "Band - Love"))
+        val otherArtist = "Band - Love, Other – Sunset"
+        assertEquals(second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), otherArtist, "Band - Love"))
+        val tagAsTitle = "Band - Love, Band - Video"
+        assertEquals(second, findsCreditedVideo("Love", listOf("愛"), tagAsTitle, "Band - Love"))
+        for (dash in listOf(" - ", " – ", " — ")) {
+            for (suffix in listOf("", " (Official Video)")) {
+                val original = "Band${dash}愛, Band${dash}Love, Band${dash}Sunset$suffix"
+                assertNull(original, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), original))
+            }
+            val repeated = "Band${dash}愛, Band${dash}Love, Band${dash}Love, Band${dash}Sunset"
+            assertNull(repeated, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), repeated))
+            for (separator in listOf(", ", " / ", " | ", " ・ ")) {
+                val first = "Band${dash}愛${separator}Band${dash}Love${separator}Band${dash}Sunset"
+                assertEquals(first, second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), first, "Band - Love"))
+            }
+            val first = "Band${dash}愛平和 / Band${dash}Love"
+            assertEquals(first, second, findsCreditedVideo("Love", listOf("愛", "平和"), first, "Band - Love"))
+            val trailing = "Band${dash}愛, Band${dash}Love, Band${dash}Sunset,"
+            assertEquals(trailing, second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), trailing, "Band - Love"))
+        }
+    }
+
+    @Test
+    fun unbracketedVideoNotesDoNotHideKnownCreditedNames() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        for (dash in listOf(" - ", " – ", " — ")) for (note in listOf("Official Video", "MV", "Lyric Video", "公式", "2024")) {
+            val title = "Band${dash}愛, Band${dash}Love $note"
+            assertEquals(title, url, findsCreditedVideo("Love", listOf("愛"), title))
+        }
+    }
+
+    @Test
+    fun wholeCatalogMedleysProveJoinedCredits() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        for (dash in listOf(" - ", " – ", " — ")) for (name in listOf("Love, Peace (Medley)", "Love / Peace (Mashup)")) {
+            val title = "Band${dash}Love, Band${dash}Peace ${name.substringAfter('(').let { "($it" }}"
+            assertEquals(title, url, findsCreditedVideo(name, emptyList(), title))
+        }
+    }
+
+    @Test
+    fun fullBracketedCatalogNameProvesACredit() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        for (dash in listOf(" - ", " – ", " — ")) {
+            val title = "Band${dash}Love (Amor), Band${dash}愛"
+            assertEquals(title, url, findsCreditedVideo("Love (Amor)", listOf("愛"), title))
+        }
+    }
+
     @Test
     fun catalogWhitespaceDoesNotHideAParenthesizedAlias() {
         val url = "https://music.youtube.com/watch?v=video000000"
