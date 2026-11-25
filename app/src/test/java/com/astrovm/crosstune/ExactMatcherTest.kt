@@ -2733,6 +2733,29 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun extraCreditedNameMustBeProved() = assertNull(findsLoveVideo("愛 (Sunset)", "Band - 愛 , Band - Love , Band - Sunset", "Band", "愛"))
+
+    @Test
+    fun officialNoteDoesNotProveExtraCreditedName() =
+        assertNull(findsLoveVideo("愛 (Sunset)", "Band - 愛 , Band - Love , Band - Sunset (Official Video)", "Band", "愛"))
+
+    @Test
+    fun repeatedCreditDoesNotProveExtraCreditedName() =
+        assertNull(findsLoveVideo("愛 (Sunset)", "Band - 愛 , Band - Love , Band - Love , Band - Sunset", "Band", "愛"))
+
+    @Test
+    fun independentlyKnownCreditedNamesCanRepeat() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        assertEquals(url, findsLoveVideo("愛 (Sunset)", "Band - 愛 , Band - Love , Band - Sunset (Official Video)", "Band", "愛", thirdTitle = "Sunset"))
+    }
+
+    @Test
+    fun aShortParenthesizedNameDoesNotEraseARepeatedTitle() {
+        assertNull(findsLoveVideo("愛 (Love)", "Band - 愛愛 , Band - Love", "Band"))
+        assertNull(findsLoveVideo("愛 (Love)", "Band - 愛愛 , Band - Love", "Band", "愛"))
+    }
+
+    @Test
     fun catalogWhitespaceDoesNotHideAParenthesizedAlias() {
         val url = "https://music.youtube.com/watch?v=video000000"
         assertEquals(url, findsLoveVideo("愛 (Love) ", "Band - 愛 , Band - Love", "Band"))

@@ -55,7 +55,7 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * Version 15 keeps disco requests separate from plain requests in the cache.
  * Version 16 can prove a parenthesized catalog alias from both credited video titles.
  */
-internal const val MATCH_VERSION = 16
+internal const val MATCH_VERSION = 17
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -1639,6 +1639,15 @@ internal class ExactMatcher(
         if (isAnotherVideoVersion(title, names)) return false
         val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
         val outside = outsideBrackets(title)
+        val parts = outside.split(',', '，')
+        val artists = names.artists.map(SongNames::normalize).toSet()
+        val credited = parts.mapNotNull { creditedVideoTitle(it, artists) }
+        val knownTitles = names.titles.map { SongNames.normalize(SongNames.withoutEditionTag(it)) }.toSet()
+        val creditedParts = parts.size > 1 && credited.size == parts.size && credited.all(String::isNotEmpty)
+        val unknownPart = credited.any { SongNames.normalize(it) !in knownTitles }
+        if (creditedParts && unknownPart) {
+            if (!repeatsBilingualTitle(title, names) && !(allowAlias && repeatsParenthesizedTitle(title, names))) return false
+        }
         val rest = SongNames.words(outside) - said.toSet() - VIDEO_TAGS
         if (rest.any { !YEAR.matches(it) }) return false
         // Nor anything in another script, which has no words to tell apart: "桜の雨" isn't "桜". Named
