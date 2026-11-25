@@ -482,6 +482,9 @@ class PlaybackTest {
         assertFalse(state.ad)
         assertEquals(PlaybackClock(10_000, PLAYED_AT), state.clock)
         assertEquals(124_000L, state.durationMs)
+        // YouTube Music can round the session length differently from one update to the next.
+        shadowOf(short).setMetadata(MediaMetadata.Builder(short.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 124_800).build())
+        assertEquals(124_000L, playback.recording(edit)?.lengthMs)
     }
 
     @Test
@@ -510,6 +513,26 @@ class PlaybackTest {
         assertEquals(124_000L, playback.knownYouTubeLength("abcdefghijk"))
         assertEquals(false, playback.nowPlaying()?.ad)
         assertEquals(124_000L, playback.recording(edit)?.lengthMs)
+    }
+
+    @Test
+    fun aVideoJustOverTheAdLimitKeepsItsOwnLength() {
+        allow()
+        sounding()
+        val id = "longVersion"
+        val lengths = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+        lengths.of("Edit", "Band", LONGEST_AD_MS - 1_000)
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Edit", "Band", album = "Album",
+            duration = LONGEST_AD_MS + 400, art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to id))
+        shadowOf(sessions).addController(music)
+        playback.nowPlaying()
+        // Rounding for the title must never make the exact video look shorter than the ad limit.
+        assertEquals(LONGEST_AD_MS + 400, playback.knownYouTubeLength(id))
+        shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, LONGEST_AD_MS - 200).build())
+        assertEquals(false, playback.nowPlaying()?.ad)
+        assertEquals(LONGEST_AD_MS + 400, playback.nowPlaying()?.metadata?.lengthMs)
+        shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 30_000).build())
+        assertEquals(true, playback.nowPlaying()?.ad)
     }
 
     @Test

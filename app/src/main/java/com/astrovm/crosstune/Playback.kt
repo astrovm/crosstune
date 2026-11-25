@@ -956,18 +956,21 @@ internal class MediaSessionPlayback(
 
     /**
      * How long the app says what it plays is, as it said before for the song; see [SteadyLengths]. Under
-     * an ad, the song's: see [songUnderAd].
+     * an ad, the song's, when known.
      */
     private fun MediaController.lengthOf(metadata: MediaMetadata, asked: MusicMetadata? = null): Long? {
         val said = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 } ?: return null
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
         if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return lengths.of(title, artist, said)
-        songUnderAd(metadata, asked)?.let { return it }
-        // An observer without the asked song can see its ad first. Never learn a possible ad's length from it.
-        if (said < LONGEST_AD_MS) return lengths.of(title, artist, said, keep = false)
+        if (said < LONGEST_AD_MS) {
+            val expected = expectedYouTubeLength(metadata, asked)
+            // Keep the short video's own clock steady too. An observer that doesn't know it can see the ad first.
+            if (expected != null && (expected >= LONGEST_AD_MS || abs(expected - said) <= SteadyLengths.SAME_MS)) return expected
+            return lengths.of(title, artist, said, keep = false)
+        }
         val stable = lengths.of(title, artist, said)
-        metadata.youTubeVideoId()?.let { if (lengths.video(it) == null) lengths.rememberVideo(it, stable) }
+        metadata.youTubeVideoId()?.let { if (lengths.video(it) == null) lengths.rememberVideo(it, said) }
         return stable
     }
 
@@ -975,11 +978,16 @@ internal class MediaSessionPlayback(
      * How long the song is, when it's an ad that plays: free YouTube Music plays its ads under the next
      * song's name, with all of the song's details but its length, the ad's, then starts the song over
      * from 0. So shorter than the longest ad, said by YouTube Music for a song known to be longer, as [asked]
-     * or as said before, it's an ad. A short song of no longer length known is the song.
+     * or as said before, it's an ad, unless the app only rounded the duration as it often does.
      */
     private fun MediaController.songUnderAd(metadata: MediaMetadata, asked: MusicMetadata?): Long? {
         if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return null
-        if (metadata.getLong(MediaMetadata.METADATA_KEY_DURATION) !in 1 until LONGEST_AD_MS) return null
+        val said = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
+        if (said !in 1 until LONGEST_AD_MS) return null
+        return expectedYouTubeLength(metadata, asked)?.takeIf { it >= LONGEST_AD_MS && it - said > SteadyLengths.SAME_MS }
+    }
+
+    private fun expectedYouTubeLength(metadata: MediaMetadata, asked: MusicMetadata?): Long? {
         val playingId = metadata.youTubeVideoId()
         val askedId = asked?.let(RecordingKey::youTubeId)
         val sameVideo = playingId == null || askedId == null || playingId == askedId
@@ -987,7 +995,7 @@ internal class MediaSessionPlayback(
         val videoLength = (playingId ?: askedId)?.let(lengths::video)
         // A short length for the requested video is evidence too. Don't replace it with the length of a different edit.
         val exactLength = askedLength.takeIf { askedId != null } ?: videoLength
-        (exactLength ?: askedLength)?.let { return it.takeIf { it >= LONGEST_AD_MS } }
+        (exactLength ?: askedLength)?.let { return it }
         if (playingId != null) return null
         val known = lengths.known(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty())
         return known.lastOrNull { it >= LONGEST_AD_MS }
