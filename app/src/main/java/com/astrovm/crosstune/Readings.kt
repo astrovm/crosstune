@@ -711,8 +711,8 @@ internal object Readings {
     }
 
     /** The head of だ, だった or だろう, or a form of です. Not voiced past だ, or the copula's な, で or じゃ. */
-    private fun startsCopula(kind: String, conjugation: String, surface: String) = kind == "助動詞" && when (conjugation) {
-        "特殊・ダ", "助動詞-ダ" -> surface.startsWith('だ')
+    fun startsCopula(kind: String, conjugation: String, surface: String) = kind == "助動詞" && when (conjugation) {
+        "特殊・ダ", "助動詞-ダ" -> surface.first() in "だダ"
         "特殊・デス", "助動詞-デス" -> true
         else -> false
     }
@@ -1613,10 +1613,21 @@ internal object Readings {
         romajiWords(pieces) { if (typed) it.typed else it.said }.joinToString(" ") { romaji(it, typed) }.replace(phoneRegex("""\s+"""), " ").trim()
 
     /** Keep fixed phrases and dependent forms such as そうだ, ようだ, のだ and んだ as they were grouped. */
-    private fun keepsCopula(piece: Piece?) = piece?.kind in COPULA_PHRASE_KINDS || piece?.base in COPULA_PHRASE_STEMS
+    private fun Piece.keepsCopula(before: Piece?): Boolean {
+        if (kind in COPULA_PHRASE_KINDS || base in COPULA_PHRASE_STEMS) return true
+        // 様 read よう is like ようだ, but the honorific 様 read さま belongs to the preceding name.
+        if (base == "様") return subkind == "非自立" || subkind == "助動詞語幹"
+        return when (surface) {
+            // 痛くなんだ explains something, but なん in これはなんだ stands for 何, after は.
+            "なん" -> before?.kind != "助詞"
+            // な already attaches the ending to its word. In ひとなでして the dictionaries even put でし after it.
+            "な" -> kind == "助動詞"
+            else -> false
+        }
+    }
 
     private val COPULA_PHRASE_KINDS = setOf("副詞", "感動詞", "フィラー")
-    private val COPULA_PHRASE_STEMS = setOf("そう", "よう", "様", "の", "ん")
+    private val COPULA_PHRASE_STEMS = setOf("そう", "よう", "みたい", "の", "ん")
 
     /** [pieces] in words, as [romajiWords] spaces them. */
     private fun grouped(pieces: List<Piece>): List<List<Piece>> {
@@ -1625,7 +1636,7 @@ internal object Readings {
         var opened = false
         var orphan = false
         var straightQuotes = 0
-        for (piece in pieces) {
+        for ((at, piece) in pieces.withIndex()) {
             if (piece.surface.isBlank()) {
                 previous = null
                 orphan = false
@@ -1646,7 +1657,7 @@ internal object Readings {
             // A から without a preceding word can start a noun: keep its ending, then split the next particle.
             val orphanEnding = orphan && previous?.surface == "から" && piece.kind == "助動詞"
             val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
-            val separateCopula = piece.startsCopula && !orphanEnding && !keepsCopula(previous)
+            val separateCopula = piece.startsCopula && !orphanEnding && previous?.keepsCopula(pieces.getOrNull(at - 2)) != true
             val continuesEnding = ending && !afterOrphan && !separateCopula
             val continuesWord = continuesEnding && (previous?.kind != "助詞" || orphanEnding) && previous?.surface?.any { it != 'ー' } == true
             // An opening mark or clause break starts a phrase; a closing quote keeps the word before it.

@@ -30,6 +30,17 @@ class ReadingsTest {
     }
 
     @Test
+    fun bothDictionariesTagTheCopulaButNotTheVoicedPastAsACopula() {
+        val line = "読んだ。鳥だ。鳥です。鳥ダ。森じゃない。綺麗な鳥。鳥だった。"
+        val ipadic = Tokenizer.Builder().build().tokenize(line)
+        val unidic = TestUniDic.tokenizer.tokenize(line)
+        val heads = listOf("だ", "です", "だっ")
+        assertEquals(heads, ipadic.filter { Readings.startsCopula(it.partOfSpeechLevel1, it.conjugationType, it.surface) }.map { it.surface })
+        assertEquals(listOf("だ", "です", "ダ", "だっ"),
+            unidic.filter { Readings.startsCopula(it.partOfSpeechLevel1, it.conjugationType, it.surface) }.map { it.surface })
+    }
+
+    @Test
     fun theRestOfTheCopulaStaysInTheSameWord() {
         val cases = listOf(
             Triple("本だった", "hon datta", listOf("本", "だった")),
@@ -42,7 +53,10 @@ class ReadingsTest {
             Triple("『夢』だった", "『yume』 datta", listOf("夢", "だった")),
             Triple("綺麗です", "kiree desu", listOf("綺麗", "です")),
             Triple("高いです", "takai desu", listOf("高い", "です")),
-            Triple("高かったです", "takakatta desu", listOf("高かった", "です"))
+            Triple("高かったです", "takakatta desu", listOf("高かった", "です")),
+            Triple("花でして", "hana deshite", listOf("花", "でして")),
+            Triple("これはなんだ", "kore wa nan da", listOf("これ", "は", "なん", "だ")),
+            Triple("太郎様だ", "taroosama da", listOf("太郎様", "だ"))
         )
         fun check() {
             val readings = Readings.of(cases.map { it.first }, Script.JAPANESE)
@@ -63,7 +77,9 @@ class ReadingsTest {
             "読んだそうだ" to "yonda sooda", "読むそうだ" to "yomu sooda", "泳ぐようだ" to "oyogu yooda", "夢のようだ" to "yume no yooda",
             "そうだ" to "sooda", "そうです" to "soodesu", "読むのだ" to "yomu noda", "読むんだ" to "yomu nda", "のだ" to "noda", "んだ" to "nda",
             "本なんだ" to "honna nda", "夢なのだ" to "yumena noda", "本じゃない" to "hon ja nai", "本ではない" to "hon de wa nai",
-            "本である" to "hondearu", "綺麗な" to "kireena", "人ですら" to "hitode sura"
+            "本である" to "hondearu", "綺麗な" to "kireena", "人ですら" to "hitode sura",
+            "夢の様だ" to "yume no yooda", "夜景みたいだ" to "yakee mitaida", "会いたくなんだ" to "aitaku nanda", "痛くなんだ" to "itaku nanda",
+            "ひとなでして" to "hitonadeshite"
         )
         fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.romanized }
         val expected = cases.values.toList()
