@@ -11,6 +11,8 @@ import org.json.JSONObject
 internal object Presto {
     const val API = "https://ajax-www.prestomusic.com/api/app/6"
 
+    fun albumUrl(code: String): String = "https://streaming.prestomusic.com/album/$code"
+
     /** Names alone, as a title starts with who wrote it: "Davis, M", "Taylor Swift, Jack Antonoff", not "Symphony No. 5". */
     private val names = phoneRegex("""^[\p{L}'’. &,-]+$""")
 
@@ -33,6 +35,27 @@ internal object Presto {
         }
         names += name.toString()
         return names.map { it.trim().removePrefix("with ").trim() }.filter { it.isNotEmpty() }
+    }
+
+    fun leader(credits: String): String = musicians(credits).firstOrNull().orEmpty()
+
+    private val creditSeparators = phoneRegex("""[^\p{L}\p{N}\p{M}]+""")
+
+    private fun genericCredit(name: String): Boolean =
+        MetadataParsers.noArtist(name) || MetadataParsers.noArtist(name.replace(creditSeparators, " "))
+
+    /** Album credits from other services. Do not split band names on "&" or "and". */
+    fun albumArtists(credit: String): List<String>? {
+        val names = credit.split(", ")
+        if (names.any(::genericCredit)) return null
+        return names.map(SongNames::normalize).takeUnless { it.any(String::isEmpty) }
+    }
+
+    /** The first artist must agree. Extra named credits can tell apart two albums by the same ensemble. */
+    fun matchesAlbumArtists(wanted: List<String>, credits: String): Boolean {
+        val names = musicians(credits)
+        val lead = names.firstOrNull() ?: return false
+        return SongNames.normalize(lead) == wanted.first() && !genericCredit(lead) && names.map(SongNames::normalize).containsAll(wanted)
     }
 
     /**
@@ -129,7 +152,7 @@ internal object Presto {
     fun album(json: JSONObject): MusicMetadata? {
         val album = json.optJSONObject("payload") ?: return null
         val title = album.nonBlankString("title") ?: return null
-        val leader = musicians(album.nonBlankString("artistSummary").orEmpty()).firstOrNull().orEmpty()
+        val leader = leader(album.nonBlankString("artistSummary").orEmpty())
         return MusicMetadata(title, leader, ItemType.ALBUM, cover(album))
     }
 
