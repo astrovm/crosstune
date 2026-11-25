@@ -781,37 +781,57 @@ internal class MediaSessionPlayback(
             ?: app?.let { waker.wake(MusicService.appsFor(it)) }
             ?: apps.takeIf { link == null && (app == null || orLastPlayed) }?.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L }
             ?: return false
-        return watchStart(asked, mustStart) { ask(asked, song, link) }
+        val video = if (MusicService.ofPackage(asked.packageName) == MusicService.YOUTUBE_MUSIC) RecordingKey.youTubeIdIn(link) else null
+        return watchStart(asked, mustStart, video = video) { ask(asked, song, link) }
     }
 
     /**
      * Runs [ask]; false if it throws. If [mustStart], also waits for [asked] to say it plays: an app that
      * can't play in the background says so with an error, or says nothing, and plays nothing either way.
-     * One already playing, e.g. another song, is taken to go on with this one. One known to play only in front isn't asked unless it plays, in front.
+     * One already playing is taken to go on with this one, unless it identifies another video than [video].
+     * One known to play only in front isn't asked unless it plays, in front.
      * Said to play, the last state it says within the next [holdMs] ms also has to be neither stopped nor failed, or it only plays in front.
      */
-    private suspend fun watchStart(asked: MediaController, mustStart: Boolean, holdMs: Long = 0, ask: () -> Unit): Boolean {
+    private suspend fun watchStart(asked: MediaController, mustStart: Boolean, holdMs: Long = 0, video: String? = null, ask: () -> Unit): Boolean {
         // Known to play only in front, it isn't asked from behind again: YouTube Music, stopped, opens itself on the song from the start.
         if (mustStart && asked.packageName in onlyInFront && asked.playbackState?.state != PlaybackState.STATE_PLAYING) return false
         val states = Channel<Int?>(Channel.UNLIMITED)
-        val callback = object : MediaController.Callback() {
-            override fun onPlaybackStateChanged(state: PlaybackState?) {
-                states.trySend(state?.state)
-            }
-        }
+        val callback = asked.startCallback(states, video)
         // Listening before it's asked, so an answer that comes at once isn't missed.
         if (mustStart) asked.registerCallback(callback, handler)
         try {
             if (runCatching(ask).isFailure) return false
             if (!mustStart) return true
             val said = states.receiveAsFlow()
-            val started = asked.playbackState?.state == PlaybackState.STATE_PLAYING ||
+            val started = asked.confirmedStartState(asked.playbackState?.state, video) == PlaybackState.STATE_PLAYING ||
                 withTimeoutOrNull(startMs) { said.first { it == PlaybackState.STATE_PLAYING || it == PlaybackState.STATE_ERROR } } == PlaybackState.STATE_PLAYING
-            return (started && keptOn(said, holdMs)).also { if (!it) onlyInFront += asked.packageName }
+            return (started && keptOn(said, holdMs)).also { if (!it && !asked.isPlayingAnotherVideo(video)) onlyInFront += asked.packageName }
         } finally {
             if (mustStart) asked.unregisterCallback(callback)
         }
     }
+
+    private fun MediaController.startCallback(states: Channel<Int?>, video: String?) = object : MediaController.Callback() {
+        override fun onPlaybackStateChanged(state: PlaybackState?) {
+            states.trySend(confirmedStartState(state?.state, video))
+        }
+
+        override fun onMetadataChanged(metadata: MediaMetadata?) {
+            // The video can change while the transport stays playing.
+            if (video != null && playbackState?.state == PlaybackState.STATE_PLAYING && !metadata.isAnotherVideo(video)) {
+                states.trySend(PlaybackState.STATE_PLAYING)
+            }
+        }
+    }
+
+    private fun MediaController.confirmedStartState(state: Int?, video: String?): Int? =
+        if (video != null && state == PlaybackState.STATE_PLAYING && metadata.isAnotherVideo(video)) null else state
+
+    private fun MediaMetadata?.isAnotherVideo(video: String): Boolean =
+        this?.youTubeVideoId()?.let { it != video } == true
+
+    private fun MediaController.isPlayingAnotherVideo(video: String?): Boolean =
+        video != null && playbackState?.state == PlaybackState.STATE_PLAYING && metadata.isAnotherVideo(video)
 
     /**
      * Whether the last state an app says within [holdMs] ms, after it said it plays, is neither stopped nor failed. [said]
@@ -1017,11 +1037,8 @@ internal class MediaSessionPlayback(
         return known.lastOrNull { it >= LONGEST_AD_MS }
     }
 
-    private fun MediaMetadata.youTubeVideoId(): String? {
-        val id = getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
-        return RecordingKey.youTubeIdIn(getString(MediaMetadata.METADATA_KEY_MEDIA_URI)) ?: RecordingKey.youTubeIdIn(id)
-            ?: id?.takeIf(MusicLinks::isYouTubeVideoId)
-    }
+    private fun MediaMetadata.youTubeVideoId(): String? =
+        RecordingKey.youTubeSessionId(getString(MediaMetadata.METADATA_KEY_MEDIA_URI), getString(MediaMetadata.METADATA_KEY_MEDIA_ID))
 
     /** What plays, as the app names it. */
     private fun MediaController.named(): MusicMetadata? =

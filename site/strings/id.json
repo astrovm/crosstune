@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "Saat kamu memilih Putar untuk memulai lagu di YouTube Music dan Crosstune perlu tahu durasi videonya, Crosstune mengirim ID video ke YouTube Music (music.youtube.com), bahkan di jaringan dengan kuota data. Durasi ini membantu membedakan iklan dari lagu. Permintaan ini tidak membawa informasi akun atau riwayat mendengarkan."
+      "Saat Crosstune mulai memutar lagu di YouTube Music dan perlu tahu durasi videonya, Crosstune mengirim ID video ke YouTube Music (music.youtube.com), bahkan di jaringan dengan kuota data. Durasi ini membantu membedakan iklan dari lagu. Permintaan ini tidak membawa informasi akun atau riwayat mendengarkan."
     ],
     [
       "p",

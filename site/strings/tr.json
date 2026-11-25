@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "YouTube Music’te bir şarkıyı başlatmak için Oynat’a dokunduğunda Crosstune videonun süresini bilmek isterse video kimliğini YouTube Music’e (music.youtube.com) gönderir. Bu, tarifeli ağlarda da olur. Süre, reklamları şarkıdan ayırt etmeye yardımcı olur. İstek, hesap bilgilerini veya dinleme geçmişini içermez."
+      "Crosstune YouTube Music’te bir şarkıyı başlatırken videonun süresini bilmesi gerekiyorsa video kimliğini YouTube Music’e (music.youtube.com) gönderir. Bu, tarifeli ağlarda da olur. Süre, reklamları şarkıdan ayırt etmeye yardımcı olur. İstek, hesap bilgilerini veya dinleme geçmişini içermez."
     ],
     [
       "p",

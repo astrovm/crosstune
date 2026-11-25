@@ -54,6 +54,10 @@ internal object RecordingKey {
     fun youTubeIdIn(url: String?): String? =
         track(url)?.takeIf { it.service == MusicService.YOUTUBE || it.service == MusicService.YOUTUBE_MUSIC }?.id
 
+    /** The session may give a link, or just the video ID in its media ID. */
+    fun youTubeSessionId(uri: String?, id: String?): String? =
+        youTubeIdIn(uri) ?: youTubeIdIn(id) ?: id?.takeIf(MusicLinks::isYouTubeVideoId)
+
     /**
      * [song] as the app [playing] it has it: its recording and its length, and its link, or the one it
      * was opened by when the app gives none, as YouTube Music doesn't.

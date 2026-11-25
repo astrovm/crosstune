@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "「再生」で YouTube Music の曲を始めるとき、動画の長さが必要な場合は、従量制のネットワークでも Crosstune が動画 ID を YouTube Music (music.youtube.com) に送ります。長さは曲と広告を見分けるために使います。このリクエストにアカウント情報や再生履歴は含まれません。"
+      "Crosstune が YouTube Music で曲の再生を始めるときに動画の長さが必要な場合は、従量制のネットワークでも Crosstune が動画 ID を YouTube Music (music.youtube.com) に送ります。長さは曲と広告を見分けるために使います。このリクエストにアカウント情報や再生履歴は含まれません。"
     ],
     [
       "p",

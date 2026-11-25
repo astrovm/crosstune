@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "当你点按「播放」在 YouTube Music 中开始播放歌曲，而 Crosstune 需要知道视频时长时，即使在按流量计费的网络上，也会将视频 ID 发送给 YouTube Music（music.youtube.com）。时长有助于区分广告和歌曲。请求不包含账号信息或收听记录。"
+      "Crosstune 在 YouTube Music 中开始播放歌曲且需要知道视频时长时，即使在按流量计费的网络上，也会将视频 ID 发送给 YouTube Music（music.youtube.com）。时长有助于区分广告和歌曲。请求不包含账号信息或收听记录。"
     ],
     [
       "p",

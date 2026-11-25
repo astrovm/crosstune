@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "Quand tu sélectionnes « Lire » pour lancer un morceau dans YouTube Music et que Crosstune a besoin de la durée de la vidéo, l’application envoie l’identifiant de la vidéo à YouTube Music (music.youtube.com), même sur un réseau avec un forfait de données limité. La durée aide à distinguer les annonces du morceau. La requête ne contient ni données de compte ni historique d’écoute."
+      "Quand Crosstune lance un morceau dans YouTube Music et a besoin de la durée de la vidéo, l’application envoie l’identifiant de la vidéo à YouTube Music (music.youtube.com), même sur un réseau avec un forfait de données limité. La durée aide à distinguer les annonces du morceau. La requête ne contient ni données de compte ni historique d’écoute."
     ],
     [
       "p",

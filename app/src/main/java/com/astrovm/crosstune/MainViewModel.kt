@@ -183,9 +183,10 @@ internal class MainViewModel(
             override fun playPause(song: MusicMetadata, play: Boolean, app: String?, session: Int?) {
                 qobuzNumbers?.off()
                 leftJob?.cancel()
+                returnToAppJob?.cancel()
                 if (!play) return source.playPause(song, false, app, session)
-                viewModelScope.launch {
-                    if (source.resume(song, app, session)) return@launch
+                viewModelScope.launchKept({ returnToAppJob = it }) {
+                    if (source.resume(song, app, session)) return@launchKept
                     val player = uiState.player?.takeIf { !it.songless && sameSong(it.song, song) }
                     if (MusicService.ofPackage(app ?: player?.app) == MusicService.YOUTUBE && player != null) {
                         waitForYouTubeReturn()
@@ -2164,16 +2165,20 @@ internal class MainViewModel(
         val musicVideo = video?.takeIf { service == MusicService.YOUTUBE_MUSIC }
         val keptLength = musicVideo?.let(source::knownYouTubeLength)
         val asked = if (video == null) result else forYouTubeVideo(result, link, video, keptLength)
-        if (continuePlaying(source, asked, app, link)) return null
+        // A running ad can report the song's own ID and name. Without its length, only resume a paused session.
+        val pausedOnly = musicVideo != null && (asked.lengthMs ?: 0L) <= 0
+        if (continuePlaying(source, asked, app, link, pausedOnly)) return null
         if (musicVideo == null || keptLength != null) return asked
-        val foundLength = lookUpYouTubeLength(source, musicVideo) ?: return asked
-        // It could have started while we waited, or match now that we know which duration to expect.
-        return asked.copy(lengthMs = foundLength).takeUnless { continuePlaying(source, it, app, link) }
+        val foundLength = lookUpYouTubeLength(source, musicVideo)
+        val ready = if (foundLength == null) asked else asked.copy(lengthMs = foundLength)
+        // It could have started while we waited, even if the lookup gave us no duration.
+        return ready.takeUnless { continuePlaying(source, it, app, link) }
     }
 
     /** Already in that app, playing or paused, it carries on from where it is, without asking the network. */
-    private suspend fun continuePlaying(source: PlaybackSource, song: MusicMetadata, app: String, link: String): Boolean {
+    private suspend fun continuePlaying(source: PlaybackSource, song: MusicMetadata, app: String, link: String, pausedOnly: Boolean = false): Boolean {
         val there = followResultSession(source, song, app).first() ?: return false
+        if (pausedOnly && there.playingInApp) return false
         openPlayer(song, there.appPackage, link, session = there.session)
         if (!there.playingInApp) source.playPause(song, true, there.appPackage, there.session)
         return true
@@ -2323,6 +2328,9 @@ internal class MainViewModel(
 
     private var playerJob: Job? = null
 
+    /** A resume can wait on the app. Its result only belongs to the player that asked for it. */
+    private var returnToAppJob: Job? = null
+
     /** YouTube brought back to the song can first play ads with no name. */
     private var youTubeReturn: Job? = null
     private val youTubeReturnExpired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -2343,6 +2351,7 @@ internal class MainViewModel(
 
     /** Opens the player on [song], asked of [app] at [link], and follows it there as it plays; [unnamed] when it names no song. */
     private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false, unnamed: Unnamed? = null, session: Int? = unnamed?.session) {
+        returnToAppJob?.cancel()
         clearYouTubeReturn()
         // The app may be on another song as it's asked, which isn't the one it goes on to play.
         val over = playback?.takeIf { !played && it.hasAccess() }?.nowPlaying()?.takeIf { sameApp(app, it.app, interception::isInstalled) }?.metadata
@@ -2474,12 +2483,21 @@ internal class MainViewModel(
     private fun startedAsked(playing: Heard.Song, app: String?, over: MusicMetadata?, link: String?): Boolean =
         // An ad under the song's name is no song started: free YouTube Music plays them so.
         app != null && !playing.ad && sameApp(app, playing.app, interception::isInstalled) &&
+            !playing.isAnotherYouTubeVideo(link) &&
             (over == null || !sameSong(playing.metadata, over) || link?.let { playedAs[app to it] }?.let { sameSong(playing.metadata, it) } == true)
+
+    private fun Heard.Song.isAnotherYouTubeVideo(link: String?): Boolean {
+        if (MusicService.ofPackage(app) !in YOUTUBE_PLAYERS) return false
+        val video = RecordingKey.youTubeIdIn(link) ?: return false
+        val heard = RecordingKey.youTubeSessionId(metadata.url, metadata.recordingId?.removePrefix("$app:"))
+        return heard != null && heard != video
+    }
 
     fun closePlayer() {
         // Nor brought back to it, or Crosstune to the app, once an ad's over.
         leftJob?.cancel()
         adJob?.cancel()
+        returnToAppJob?.cancel()
         clearYouTubeReturn()
         playerJob?.cancel()
         playerJob = null

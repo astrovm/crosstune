@@ -6,6 +6,15 @@ import org.junit.Test
 class RecordingKeyTest {
     private val song = MusicMetadata("Demo", "Band")
 
+    @Test fun aYouTubeSessionCanReportTheVideoAsAnIdOrALink() {
+        val link = "https://music.youtube.com/watch?v=abcdefghijk"
+        assertEquals("abcdefghijk", RecordingKey.youTubeSessionId(link, "longVersion"))
+        assertEquals("abcdefghijk", RecordingKey.youTubeSessionId(null, link))
+        assertEquals("longVersion", RecordingKey.youTubeSessionId("https://www.youtube.com/results?search_query=song", "longVersion"))
+        assertNull(RecordingKey.youTubeSessionId(null, "duration:214000"))
+        assertNull(RecordingKey.youTubeSessionId(null, null))
+    }
+
     @Test fun anExactPlayingLinkCanKeepItsInstrumentalAlbumWhenTheSessionOmitsIt() {
         val album = "Album (Instrumentals)"
         val opened = song.copy(url = "https://www.deezer.com/us/track/123", album = album)

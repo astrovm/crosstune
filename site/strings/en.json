@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "When Play starts a song in YouTube Music and Crosstune needs its video length, it sends the video ID to YouTube Music (music.youtube.com), even on a metered network. The length helps tell ads from the song. The request carries no account or listening history."
+      "When Crosstune starts a song in YouTube Music and needs the video's length, it sends the video ID to YouTube Music (music.youtube.com), even on a metered network. The length helps tell ads from the song. The request carries no account or listening history."
     ],
     [
       "p",

@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "재생을 눌러 YouTube Music에서 곡을 시작할 때 동영상 길이가 필요하면 Crosstune은 데이터 사용량에 따라 요금이 부과되는 네트워크에서도 YouTube Music(music.youtube.com)에 동영상 ID를 보냅니다. 길이는 광고와 곡을 구분하는 데 사용합니다. 요청에 계정 정보나 청취 기록은 포함되지 않습니다."
+      "Crosstune이 YouTube Music에서 곡을 재생할 때 동영상 길이가 필요하면 데이터 사용량에 따라 요금이 부과되는 네트워크에서도 YouTube Music(music.youtube.com)에 동영상 ID를 보냅니다. 길이는 광고와 곡을 구분하는 데 사용합니다. 요청에 계정 정보나 청취 기록은 포함되지 않습니다."
     ],
     [
       "p",

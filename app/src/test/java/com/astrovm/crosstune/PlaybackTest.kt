@@ -573,6 +573,62 @@ class PlaybackTest {
     }
 
     @Test
+    fun theExactVideosAdThresholdsAndItsDurationRoundingAgree() {
+        allow()
+        val id = "other000000"
+        val yt = MusicService.YOUTUBE_MUSIC.packageName
+        val video = player(yt, "YouTube Music", song.title, song.artist, album = "Album", position = 100,
+            art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to id))
+        shadowOf(sessions).addController(video)
+        fun follows(said: Long, expected: Long?): Following {
+            shadowOf(video).setMetadata(MediaMetadata.Builder(video.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, said).build())
+            return checkNotNull(followed(song.copy(url = "https://music.youtube.com/watch?v=$id", lengthMs = expected)).last())
+        }
+        assertEquals(500L, follows(500, 0).durationMs)
+        assertEquals(124_000L, follows(124_000 + SteadyLengths.SAME_MS, 124_000).durationMs)
+        assertFalse(follows(30_000, LONGEST_AD_MS - 1).ad)
+        assertFalse(follows(0, LONGEST_AD_MS).ad)
+        val runningAd = follows(1, LONGEST_AD_MS)
+        assertTrue(runningAd.ad)
+        assertTrue(runningAd.adPlaying)
+        shadowOf(video).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 100, 0f, PLAYED_AT).build())
+        val pausedAd = follows(1, LONGEST_AD_MS)
+        assertTrue(pausedAd.ad)
+        assertFalse(pausedAd.adPlaying)
+        val rounded = follows(LONGEST_AD_MS - SteadyLengths.SAME_MS, LONGEST_AD_MS)
+        assertFalse(rounded.ad)
+        assertEquals(LONGEST_AD_MS, rounded.durationMs)
+        assertTrue(follows(LONGEST_AD_MS - SteadyLengths.SAME_MS - 1, LONGEST_AD_MS).ad)
+        assertTrue(follows(LONGEST_AD_MS - 1, 240_000).ad)
+        assertFalse(follows(LONGEST_AD_MS, 240_000).ad)
+        assertEquals(LONGEST_AD_MS, follows(LONGEST_AD_MS + SteadyLengths.SAME_MS, null).durationMs)
+        assertEquals(LONGEST_AD_MS + SteadyLengths.SAME_MS + 1, follows(LONGEST_AD_MS + SteadyLengths.SAME_MS + 1, null).durationMs)
+    }
+
+    @Test
+    fun aSessionWithoutAVideoIdCanUseTheCataloguesLengthOrTheNamesHistory() {
+        allow()
+        val yt = MusicService.YOUTUBE_MUSIC.packageName
+        val video = player(yt, "YouTube Music", song.title, song.artist, album = "Album", position = 100, duration = 500)
+        shadowOf(sessions).addController(video)
+        val lengths = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+        lengths.of(song.title, song.artist, LONGEST_AD_MS)
+        val exact = song.copy(url = "https://music.youtube.com/watch?v=other000000")
+        assertEquals(214_000L, followed(exact.copy(lengthMs = 214_000)).last()?.durationMs)
+        playback.rememberYouTubeLength("other000000", 214_000)
+        assertEquals(214_000L, followed(exact).last()?.durationMs)
+        assertEquals(true, followed(exact).last()?.ad)
+        assertEquals(true, followed(song).last()?.ad)
+        assertEquals(LONGEST_AD_MS, followed(song).last()?.durationMs)
+        // Once the session identifies its cut, the name's length can no longer tell us it is an ad.
+        shadowOf(video).setMetadata(MediaMetadata.Builder(video.metadata).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "longVersion").build())
+        assertEquals(false, followed(song).last()?.ad)
+        assertEquals(500L, followed(song).last()?.durationMs)
+        // A length from the caller is still usable if the caller doesn't identify a different cut.
+        assertEquals(true, followed(song.copy(lengthMs = 214_000)).last()?.ad)
+    }
+
+    @Test
     fun anAdIsShorterThanTheLongestAdForASongNoShorterThanIt() {
         allow()
         val asked = MusicMetadata("Cross My Heart", "Jody Watley", lengthMs = 210_674)
@@ -668,6 +724,17 @@ class PlaybackTest {
         // Kept the wrong way, it starts over.
         prefs.edit().putString("song_lengths", "not json").commit()
         assertEquals(201_000L, SteadyLengths(prefs).of("Song 500", "Band", 201_000))
+    }
+
+    @Test
+    fun readingTheSameVideoLengthAgainDoesNotWriteTheCache() {
+        val prefs = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        val lengths = SteadyLengths(prefs)
+        lengths.rememberVideo("longVersion", 214_000)
+        lengths.rememberVideo("other000000", 150_000)
+        val stored = prefs.all
+        lengths.rememberVideo("longVersion", 214_000)
+        assertEquals(stored, prefs.all)
     }
 
     @Test
@@ -3858,15 +3925,78 @@ class PlaybackTest {
         shadowOf(app.packageManager).addActivityIfNotPresent(icon)
         shadowOf(app.packageManager).addIntentFilterForActivity(icon, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
 
-        val returning = async(start = CoroutineStart.UNDISPATCHED) { playback.bringToFront(song, youtube) }
-        assertEquals(icon, shadowOf(app).nextStartedActivity.component)
         val session = shadowOf(controller)
-        session.setMetadata(MediaMetadata.Builder().build())
-        session.executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
-        shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(returning.await())
+        val named = checkNotNull(controller.metadata)
+        val paused = checkNotNull(controller.playbackState)
+        for (unnamed in listOf(MediaMetadata.Builder().build(), null)) {
+            session.setMetadata(named)
+            session.setPlaybackState(paused)
+            val returning = async(start = CoroutineStart.UNDISPATCHED) { playback.bringToFront(song, youtube) }
+            assertEquals(icon, shadowOf(app).nextStartedActivity.component)
+            session.setMetadata(unnamed)
+            session.executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
+            shadowOf(Looper.getMainLooper()).idle()
+            assertTrue(returning.await())
+            assertTrue(asked().isEmpty())
+            assertTrue(session.getCallbacks().isEmpty())
+        }
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun returningDoesNotMistakeANamedOrPausedSessionForARunningUnnamedYouTubeAd() = runTest {
+        allow()
+        val youtube = MusicService.YOUTUBE.packageName
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        val original = player(youtube, "YouTube", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        val replacements = listOf(
+            player(youtube, "YouTube", "Another video", "Different artist"),
+            player(youtube, "YouTube", "", "", state = PlaybackState.STATE_PAUSED),
+            player(youtube, "YouTube", "", "").also { shadowOf(it).setPlaybackState(null) },
+            player(music, "YouTube Music", "", "")
+        )
+        val icon = ComponentName(youtube, "$youtube.VideoActivity")
+        shadowOf(app.packageManager).addActivityIfNotPresent(icon)
+        shadowOf(app.packageManager).addIntentFilterForActivity(icon, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+        for (replacement in replacements) {
+            shadowOf(sessions).clearControllers()
+            shadowOf(sessions).addController(original)
+            val returned = async(start = CoroutineStart.UNDISPATCHED) { playback.bringToFront(song, youtube) }
+            assertEquals(icon, shadowOf(app).nextStartedActivity.component)
+            shadowOf(sessions).clearControllers()
+            shadowOf(sessions).addController(replacement)
+            assertFalse(returned.await())
+            assertTrue(asked().isEmpty())
+        }
+    }
+
+    @Test
+    @Config(shadows = [DeniedOnReturn::class, AppAsked::class])
+    fun returningStopsWithoutPlayingIfNotificationAccessIsRevokedWhileItWaits() = runTest {
+        allow()
+        val youtube = MusicService.YOUTUBE.packageName
+        val original = player(youtube, "YouTube", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(original)
+        val icon = ComponentName(youtube, "$youtube.VideoActivity")
+        shadowOf(app.packageManager).addActivityIfNotPresent(icon)
+        shadowOf(app.packageManager).addIntentFilterForActivity(icon, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+        val returned = async(start = CoroutineStart.UNDISPATCHED) { playback.bringToFront(song, youtube) }
+        assertEquals(icon, shadowOf(app).nextStartedActivity.component)
+        org.robolectric.shadow.api.Shadow.extract<DeniedOnReturn>(sessions).revoked = true
+        assertFalse(returned.await())
         assertTrue(asked().isEmpty())
-        assertTrue(session.getCallbacks().isEmpty())
+        assertTrue(shadowOf(original).getCallbacks().isEmpty())
+    }
+
+    @Implements(MediaSessionManager::class)
+    class DeniedOnReturn : ShadowMediaSessionManager() {
+        var revoked = false
+
+        @Implementation
+        override fun getActiveSessions(component: ComponentName?): List<MediaController> {
+            if (revoked) throw SecurityException("Notification access was revoked")
+            return super.getActiveSessions(component)
+        }
     }
 
     @Test
@@ -4476,6 +4606,11 @@ class PlaybackTest {
         says(PlaybackState.STATE_ERROR)
         assertFalse(list.await())
         val played = CoroutineScope(Dispatchers.Unconfined).async { fresh().playList(music, link, mustStart = true) }
+        val playing = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build()
+        shadowOf(youTubeMusic).setPlaybackState(playing)
+        shadowOf(youTubeMusic).executeOnMetadataChanged(checkNotNull(youTubeMusic.metadata))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse("A playlist still needs a transport callback", played.isCompleted)
         says(PlaybackState.STATE_PLAYING)
         assertTrue(played.await())
         // It wouldn't play in the background, so opened on the song, it's left in front, where it plays: behind Crosstune it'd stop.
@@ -4484,6 +4619,69 @@ class PlaybackTest {
         assertEquals(music, shadowOf(app).nextStartedActivity.`package`)
         playback.comesBack()
         assertNull(shadowOf(app).nextStartedActivity)
+    }
+
+    @Test
+    fun playFromUriWaitsForTheRequestedVideoEvenIfAnotherVideoStartsFirst() = runTest {
+        allow()
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        val link = "https://music.youtube.com/watch?v=other000000"
+        val controller = player(music, "YouTube Music", song.title, song.artist, state = PlaybackState.STATE_PAUSED,
+            art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to "longVersion"))
+        shadowOf(sessions).addController(controller)
+        val session = shadowOf(controller)
+        val confirmed = async(start = CoroutineStart.UNDISPATCHED) { playback.playSong(song, music, link, mustStart = true) }
+        val old = checkNotNull(controller.metadata)
+        val requested = MediaMetadata.Builder(old).putString(MediaMetadata.METADATA_KEY_MEDIA_URI, link).build()
+        session.executeOnMetadataChanged(requested)
+        shadowOf(Looper.getMainLooper()).idle()
+        testScheduler.runCurrent()
+        assertFalse("The right metadata while paused is not a start confirmation", confirmed.isCompleted)
+        session.setMetadata(old)
+        val playing = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 5_000, 1f, PLAYED_AT).build()
+        session.executeOnPlaybackStateChanged(playing)
+        session.executeOnMetadataChanged(old)
+        shadowOf(Looper.getMainLooper()).idle()
+        testScheduler.runCurrent()
+        assertFalse("The old video is not a start confirmation", confirmed.isCompleted)
+
+        // YouTube Music can switch metadata without sending a new transport state.
+        session.executeOnMetadataChanged(requested)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(confirmed.await())
+        assertTrue(session.getCallbacks().isEmpty())
+    }
+
+    @Test
+    fun aDifferentVideoThatKeepsPlayingIsNotMistakenForNeedingTheForeground() = runTest {
+        allow()
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        val link = "https://music.youtube.com/watch?v=other000000"
+        val other = player(music, "YouTube Music", song.title, song.artist,
+            art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to "longVersion"))
+        shadowOf(sessions).addController(other)
+        assertFalse(playback.playSong(song, music, link, mustStart = true))
+        assertFalse(playback.playsOnlyInFront(music))
+        assertTrue(shadowOf(other).getCallbacks().isEmpty())
+    }
+
+    @Test
+    fun anExactStartWaitsForPlaybackButDoesNotRequireASessionVideoId() = runTest {
+        allow()
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        val link = "https://music.youtube.com/watch?v=other000000"
+        val controller = player(music, "YouTube Music", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(controller)
+        val session = shadowOf(controller)
+        val started = async(start = CoroutineStart.UNDISPATCHED) { playback.playSong(song, music, link, mustStart = true) }
+        session.executeOnPlaybackStateChanged(null)
+        session.executeOnMetadataChanged(null)
+        shadowOf(Looper.getMainLooper()).idle()
+        testScheduler.runCurrent()
+        assertFalse(started.isCompleted)
+        session.executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(started.await())
     }
 
     @Test

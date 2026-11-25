@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "Gdy wybierzesz Odtwórz, by włączyć utwór w YouTube Music, a Crosstune potrzebuje czasu trwania filmu, wysyła identyfikator filmu do YouTube Music (music.youtube.com), nawet w sieci taryfowej. Czas trwania pomaga odróżnić reklamy od utworu. Żądanie nie zawiera danych konta ani historii słuchania."
+      "Gdy Crosstune włącza utwór w YouTube Music i potrzebuje czasu trwania filmu, wysyła identyfikator filmu do YouTube Music (music.youtube.com), nawet w sieci taryfowej. Czas trwania pomaga odróżnić reklamy od utworu. Żądanie nie zawiera danych konta ani historii słuchania."
     ],
     [
       "p",

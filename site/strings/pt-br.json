@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "Quando você toca em Tocar para iniciar uma música no YouTube Music e o Crosstune precisa da duração do vídeo, ele envia o ID do vídeo ao YouTube Music (music.youtube.com), mesmo em uma rede com franquia de dados. A duração ajuda a distinguir os anúncios da música. A solicitação não inclui dados da conta nem o histórico de reprodução."
+      "Quando o Crosstune inicia uma música no YouTube Music e precisa da duração do vídeo, ele envia o ID do vídeo ao YouTube Music (music.youtube.com), mesmo em uma rede com franquia de dados. A duração ajuda a distinguir os anúncios da música. A solicitação não inclui dados da conta nem o histórico de reprodução."
     ],
     [
       "p",

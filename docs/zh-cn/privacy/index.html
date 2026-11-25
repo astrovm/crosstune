@@ -59,7 +59,7 @@
 <p>你的设置、最近的歌曲、保存的行和练习卡留在你的手机上，不纳入 Android 的备份。你保存以便离线使用的歌曲，会把歌词、翻译、和弦和封面留在手机上，只在 Wi-Fi 下下载。Crosstune 只在你打开、分享或粘贴链接时读取链接，只在你使用粘贴快捷方式时读取剪贴板。它会检查安装了哪些音乐应用，以便提供给你选择。</p>
 <h2>打开链接</h2>
 <p>为了识别链接里的歌曲，Crosstune 会读取该链接所属服务的公开页面或 API：Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack、Presto Music、Shazam 或 Google，并加载它的封面。为了在其他应用中打开，标题和艺人会发送到该应用的搜索。当这个搜索拿不准时，它们还会发送到 Apple 和 Deezer 的歌曲搜索。对于 Spotify，它们会发送到 ListenBrainz，艺人的名字发送到 MusicBrainz，并读取 Spotify 的公开页面。“全部播放”和“随机播放”会对每首歌这样做，YouTube 用找到的视频生成播放列表。你输入的歌名会发送到 Deezer 和 Apple 的搜索。自定义目标会在你设置的网址中收到搜索词。 为了在 Presto Music 中查找专辑，Android 应用会将专辑名称和艺人发送到 Presto Music 的搜索 API。</p>
-<p>当你点按「播放」在 YouTube Music 中开始播放歌曲，而 Crosstune 需要知道视频时长时，即使在按流量计费的网络上，也会将视频 ID 发送给 YouTube Music（music.youtube.com）。时长有助于区分广告和歌曲。请求不包含账号信息或收听记录。</p>
+<p>Crosstune 在 YouTube Music 中开始播放歌曲且需要知道视频时长时，即使在按流量计费的网络上，也会将视频 ID 发送给 YouTube Music（music.youtube.com）。时长有助于区分广告和歌曲。请求不包含账号信息或收听记录。</p>
 <p>如果在 Apple 的地区商店搜索失败或找不到匹配的歌曲，Crosstune 可能会将歌名和艺人姓名发送给 Apple 的美国商店。</p>
 <h2>歌词、和弦和翻译</h2>
 <p>歌曲的标题和艺人会发送到 LRCLIB、YouTube Music、网易云音乐、Letras 和 Genius 来查找歌词，发送到 Ultimate Guitar、Cifra Club、LaCuerda、U-FRET、J-Total 和 ChordWiki 来查找和弦，发送到 Apple 来查找翻唱歌曲的原曲，发送到 UtaTen 来获取日语歌曲的读音。你翻译的行会发送到 Google Translate 或 MyMemory，你查词的词语会发送到它们或 Wiktionary。已经是你的语言的歌词不会被发送。读音在你的手机上生成。ChordWiki 会在隐藏的浏览器页面中打开，该页面会运行脚本，可以在应用的浏览器存储中保存 Cookie，也可能连接 Cloudflare 和 Google。来自 Maven Central 的日语词典和来自 Hugging Face 的语音模型只在 Wi-Fi 下下载一次。</p>

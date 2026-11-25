@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "當你點選「播放」在 YouTube Music 開始播放歌曲，而 Crosstune 需要知道影片長度時，即使在計量付費網路上，也會將影片 ID 傳送給 YouTube Music（music.youtube.com）。影片長度有助於區分廣告和歌曲。要求不包含帳戶資料或收聽記錄。"
+      "Crosstune 在 YouTube Music 開始播放歌曲且需要知道影片長度時，即使在計量付費網路上，也會將影片 ID 傳送給 YouTube Music（music.youtube.com）。影片長度有助於區分廣告和歌曲。要求不包含帳戶資料或收聽記錄。"
     ],
     [
       "p",

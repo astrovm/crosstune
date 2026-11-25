@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "Cuando tocás Reproducir para empezar una canción en YouTube Music y Crosstune necesita saber cuánto dura el video, le manda el ID del video a YouTube Music (music.youtube.com), incluso en una red de uso medido. La duración ayuda a distinguir los anuncios de la canción. La consulta no incluye datos de tu cuenta ni tu historial de escucha."
+      "Cuando Crosstune empieza a reproducir una canción en YouTube Music y necesita saber cuánto dura el video, le manda el ID del video a YouTube Music (music.youtube.com), incluso en una red de uso medido. La duración ayuda a distinguir los anuncios de la canción. La consulta no incluye datos de tu cuenta ni tu historial de escucha."
     ],
     [
       "p",

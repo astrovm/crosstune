@@ -104,7 +104,7 @@
     ],
     [
       "p",
-      "Quando tocchi Riproduci per avviare un brano in YouTube Music e a Crosstune serve la durata del video, l’app invia l’ID del video a YouTube Music (music.youtube.com), anche su una rete a consumo. La durata aiuta a distinguere gli annunci dal brano. La richiesta non contiene dati dell’account né la cronologia di ascolto."
+      "Quando Crosstune avvia un brano in YouTube Music e ha bisogno della durata del video, l’app invia l’ID del video a YouTube Music (music.youtube.com), anche su una rete a consumo. La durata aiuta a distinguere gli annunci dal brano. La richiesta non contiene dati dell’account né la cronologia di ascolto."
     ],
     [
       "p",
