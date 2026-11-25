@@ -477,9 +477,11 @@ internal class MediaSessionPlayback(
     override fun matching(song: MusicMetadata): List<PlaybackMatch> = runCatching {
         val active = activeSessions()
         val counts = active.groupingBy { it.packageName }.eachCount()
-        active.filter { it.playbackState != null && it.has(song, null) }.map { controller ->
+        active.mapNotNull { controller ->
+            val snapshot = controller.metadata
+            if (controller.playbackState == null || !controller.has(song, null, snapshot)) return@mapNotNull null
             val number = sessionNumbers.of(controller.sessionToken)
-            PlaybackMatch(following(controller, song)?.copy(session = number), forSession(controller.sessionToken), controller.packageName, number,
+            PlaybackMatch(following(controller, song, snapshot)?.copy(session = number), forSession(controller.sessionToken), controller.packageName, number,
                 controller.playbackState?.state == PlaybackState.STATE_PLAYING, counts.getValue(controller.packageName))
         }
     }.getOrDefault(emptyList())
@@ -521,19 +523,17 @@ internal class MediaSessionPlayback(
         var wasUnderAd = false
         val adCheck = MutableStateFlow<Long?>(null)
         // What it plays next only for the one followed, as reading an app's queue takes a while.
-        fun steadily(controller: MediaController) = following(controller, song)?.let {
-            // Don't carry the last clock across a seek or a change between an ad and the song.
-            if (moves !== movesSeen || it.ad != wasUnderAd) clocks = steadyClock(controller.packageName)
-            movesSeen = moves
-            wasUnderAd = it.ad
-            it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
-                clockLog.note("followed_clock", now) { at ->
-                    put("observer", clockObserver)
-                    put("app", controller.packageName)
-                    put("session", seen.session)
-                    clock(seen, at)
-                }
+        fun steadily(controller: MediaController): Following? {
+            val snapshot = controller.metadataForClock(wasUnderAd)
+            val steady = followRead(controller, song, app, snapshot)?.let {
+                // Don't carry the last clock across a seek or a change between an ad and the song.
+                if (moves !== movesSeen || it.ad != wasUnderAd) clocks = steadyClock(controller.packageName)
+                movesSeen = moves
+                wasUnderAd = it.ad
+                it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken))
             }
+            logFollowed(clockObserver, controller, snapshot, steady)
+            return steady
         }
         fun sendSteady(controller: MediaController?) {
             val sample = controller?.let(::steadily)
@@ -565,7 +565,10 @@ internal class MediaSessionPlayback(
             watched = controllers
             renamed = controllers.map { controller ->
                 val callback = object : MediaController.Callback() {
-                    override fun onMetadataChanged(metadata: MediaMetadata?) = pick(watched)
+                    override fun onMetadataChanged(metadata: MediaMetadata?) {
+                        controller.dropAdWaitForChangedItem(metadata)
+                        pick(watched)
+                    }
                     override fun onPlaybackStateChanged(state: PlaybackState?) {
                         clockLog.note("media_report", now) {
                             put("observer", clockObserver)
@@ -607,6 +610,20 @@ internal class MediaSessionPlayback(
         }
     }.distinctUntilChanged()
 
+    /** Selection and this read can straddle a skip. Check the same metadata the clock will use. */
+    private fun followRead(controller: MediaController, song: MusicMetadata, app: String?, snapshot: MediaMetadata?): Following? =
+        if (controller.has(song, app, snapshot)) following(controller, song, snapshot) else null
+
+    private fun logFollowed(observer: Int, controller: MediaController, snapshot: MediaMetadata?, steady: Following?) {
+        clockLog.note("followed_clock", now) { at ->
+            put("observer", observer)
+            put("app", controller.packageName)
+            put("session", steady?.session ?: sessionNumbers.peek(controller.sessionToken) ?: org.json.JSONObject.NULL)
+            put("item_hash", snapshot?.let { PracticeClockLog.itemHash(it.sessionNames().joinToString("\u0000")) })
+            clock(steady, at)
+        }
+    }
+
     private fun controllerToFollow(
         song: MusicMetadata, controllers: List<MediaController>, app: String?, token: MediaSession.Token?, session: Int?
     ): MediaController? {
@@ -635,11 +652,10 @@ internal class MediaSessionPlayback(
      * app may name who sings it later on, and still has it. A song, even one with no artist, as a song shared from
      * Google is, is had by its name, as any app names it ([SongNames.names]).
      */
-    private fun MediaController.has(song: MusicMetadata, app: String?): Boolean {
-        if (!song.unnamed) return plays(song)
-        val metadata = metadata
-        val (title, artist) = metadata.calls(said(this, snapshot = metadata))
-        val said = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+    private fun MediaController.has(song: MusicMetadata, app: String?, snapshot: MediaMetadata? = metadata): Boolean {
+        if (!song.unnamed) return plays(song, snapshot)
+        val (title, artist) = snapshot.calls(said(this, snapshot = snapshot))
+        val said = snapshot?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         return app != null && title == song.title && (artist == song.artist || !Songless.namesNoSong(said, artist, songName(said, artist)))
     }
 
@@ -1024,6 +1040,7 @@ internal class MediaSessionPlayback(
      * an ad, the song's, when known.
      */
     private fun MediaController.lengthOf(metadata: MediaMetadata, asked: MusicMetadata? = null, forMatching: Boolean = false): Long? {
+        dropAdWaitForChangedItem(metadata)
         val said = metadata.reportedDurationMs() ?: return null
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
@@ -1038,7 +1055,6 @@ internal class MediaSessionPlayback(
             return lengths.of(title, artist, said, keep = false)
         }
         seenYouTubeAds.update { it - sessionToken }
-        youTubeAds.waiting.remove(sessionToken)
         val stable = lengths.of(title, artist, said)
         val id = metadata.youTubeVideoId() ?: return stable
         val kept = lengths.video(id)
@@ -1064,11 +1080,21 @@ internal class MediaSessionPlayback(
 
     /** The same report may move or pause, or be followed again. None gives it a fresh wait. */
     private fun MediaController.unconfirmedAdUntil(metadata: MediaMetadata): Long {
-        val names = metadata.sessionNames()
+        val item = metadata.adWaitItem()
         return checkNotNull(youTubeAds.waiting.compute(sessionToken) { _, prior ->
-            prior?.takeIf { it.names == names } ?: PossibleYouTubeAd(names, now() + UNCONFIRMED_AD_WAIT_MS)
+            prior?.takeIf { it.item == item } ?: PossibleYouTubeAd(item, now() + UNCONFIRMED_AD_WAIT_MS)
         }).until
     }
+
+    // A follower might not match the item between two reports of the requested song.
+    private fun MediaController.dropAdWaitForChangedItem(metadata: MediaMetadata?) {
+        youTubeAds.waiting.computeIfPresent(sessionToken) { _, wait -> wait.takeIf { it.item == metadata?.adWaitItem() } }
+    }
+
+    private fun MediaMetadata.adWaitItem() = AdWaitItem(
+        rawMediaId(), getString(MediaMetadata.METADATA_KEY_MEDIA_URI), getString(MediaMetadata.METADATA_KEY_TITLE),
+        getString(MediaMetadata.METADATA_KEY_ARTIST), getLong(MediaMetadata.METADATA_KEY_DURATION)
+    )
 
     private fun MediaController.expectedYouTubeLength(metadata: MediaMetadata, asked: MusicMetadata?, said: Long): YouTubeLength? {
         val playingId = metadata.youTubeVideoId()
@@ -1088,21 +1114,28 @@ internal class MediaSessionPlayback(
     private fun MediaController.rememberYouTubeAd(metadata: MediaMetadata, asked: MusicMetadata?, adMs: Long, songMs: Long) {
         val video = metadata.youTubeVideoId() ?: asked?.let(RecordingKey::youTubeId) ?: return
         if (lengths.video(video) != songMs) return
-        val seen = SeenYouTubeAd(metadata.adNames(), video, adMs, songMs)
+        val seen = SeenYouTubeAd(metadata.adNames(), metadata.rawMediaId(), video, adMs, songMs)
         // Two link-specific followers can know different edits. The same report must not keep switching between them.
         seenYouTubeAds.update { if (sessionToken in it) it else it + (sessionToken to seen) }
     }
 
     private fun MediaController.seenYouTubeAdLength(metadata: MediaMetadata, said: Long, askedId: String?, playingId: String?): Long? {
         val seen = seenYouTubeAds.value[sessionToken] ?: return null
-        // A later report can fill in an ID or album. An explicit different video still rules out the old ad.
-        val sameVideo = playingId?.let { it == seen.videoId } ?: seen.names.matches(metadata.adNames())
-        if (seen.adMs == said && sameVideo) {
+        if (seen.adMs == said && sameAdItem(seen, metadata, playingId)) {
             return seen.songMs.takeIf { askedId == null || askedId == seen.videoId }
         }
         seenYouTubeAds.update { if (it[sessionToken] == seen) it - sessionToken else it }
         return null
     }
+
+    private fun sameAdItem(seen: SeenYouTubeAd, metadata: MediaMetadata, playingId: String?): Boolean {
+        // An app can fill in a missing ID. Two different IDs still mean a changed item, even if neither names a video.
+        val rawId = metadata.rawMediaId()
+        if (rawId != null && seen.rawId != null && rawId != seen.rawId) return false
+        return playingId?.let { it == seen.videoId } ?: seen.names.matches(metadata.adNames())
+    }
+
+    private fun MediaMetadata.rawMediaId(): String? = getString(MediaMetadata.METADATA_KEY_MEDIA_ID)?.takeIf(String::isNotBlank)
 
     private fun MediaMetadata.adNames() = YouTubeAdNames(
         getString(MediaMetadata.METADATA_KEY_TITLE), getString(MediaMetadata.METADATA_KEY_ARTIST),
@@ -1219,7 +1252,7 @@ internal class MediaSessionPlayback(
         val artwork = coverOf(metadata, controller.sessionToken)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         // Nor where a song waiting for an ad to end is, as it isn't playing yet.
-        val follows = following(controller, asked)
+        val follows = following(controller, asked, metadata)
         val clock = follows?.takeIf { !it.video }?.clock?.takeIf { it.playing }
         val id = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
         val uri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
@@ -1241,7 +1274,7 @@ internal class MediaSessionPlayback(
         val metadata = snapshot ?: return null
         val (said, by) = controller.names(metadata)
         val named = controller.songName(said, by) ?: return null
-        if (named.unnamed) return named.takeUnless { controller.isVideo() }
+        if (named.unnamed) return named.takeUnless { controller.isVideo(metadata) }
         val (title, artist) = named
         // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
         // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
@@ -1249,7 +1282,7 @@ internal class MediaSessionPlayback(
         // A music app's "Song - Remastered" stays whole.
         // A song's length tells its versions apart; a video's is the video's, which may open with more.
         return when {
-            !controller.isVideo() -> MusicMetadata(
+            !controller.isVideo(metadata) -> MusicMetadata(
                 title, artist, lengthMs = controller.lengthOf(metadata, asked),
                 album = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)?.ifBlank { null }
             )
@@ -1275,7 +1308,13 @@ internal class MediaSessionPlayback(
             covers.of(bitmap, session, metadata.sessionNames())
         }
 
-    private fun following(controller: MediaController, asked: MusicMetadata?): Following? {
+    private fun MediaController.metadataForClock(wasUnderAd: Boolean): MediaMetadata? {
+        val report = metadata
+        // A single length read at the ad cutoff cannot end an already confirmed ad.
+        return if (wasUnderAd && (report?.reportedDurationMs() ?: 0) >= LONGEST_AD_MS) metadata else report
+    }
+
+    private fun following(controller: MediaController, asked: MusicMetadata?, metadata: MediaMetadata?): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
         val state = controller.playbackState?.takeIf { it.state !in NOT_PLAYING } ?: return null
         // An app that doesn't say where it is gives nothing to keep the words in time with.
@@ -1285,14 +1324,14 @@ internal class MediaSessionPlayback(
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
         val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
         // Under an ad, the song waits at its start until the ad's over.
-        val ad = controller.metadata?.let { controller.songUnderAd(it, asked) }
+        val ad = metadata?.let { controller.songUnderAd(it, asked) }
         val playing = state.state == PlaybackState.STATE_PLAYING
         val clock = if (ad != null) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, playing)
         return Following(
-            clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo(),
+            clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo(metadata),
             canSkipNext = state.actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,
             canSkipPrevious = state.actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L,
-            durationMs = controller.metadata?.let { controller.lengthOf(it, asked) },
+            durationMs = metadata?.let { controller.lengthOf(it, asked) },
             shuffle = modes.shuffles(controller),
             repeat = modes.repeats(controller),
             like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon, liked(controller.packageName, it)) },
@@ -1331,11 +1370,11 @@ internal class MediaSessionPlayback(
     }
 
     /** Music apps also play singles and local files with no album tag; YouTube Music leaves it out only for videos. */
-    private fun MediaController.isVideo(): Boolean =
-        metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank() &&
+    private fun MediaController.isVideo(snapshot: MediaMetadata?): Boolean =
+        snapshot?.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank() &&
             MusicService.ofPackage(packageName).let {
                 it == MusicService.YOUTUBE || it == MusicService.YOUTUBE_MUSIC ||
-                    (it == null && !MetadataParsers.noArtist(metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()))
+                    (it == null && !MetadataParsers.noArtist(snapshot?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()))
             }
 
     /**
@@ -1386,22 +1425,22 @@ internal class MediaSessionPlayback(
             playing.youTubeVideoId()?.let { return it != askedId }
         }
         // Far from as long as the song, it's another version of it, e.g. the album's take of a single; a video may open with more.
-        val differentLength = !isVideo() && length != null && song.lengthMs?.let { abs(it - length) > SAME_RECORDING_LENGTH_MS } == true
+        val differentLength = !isVideo(playing) && length != null && song.lengthMs?.let { abs(it - length) > SAME_RECORDING_LENGTH_MS } == true
         return differentLength && !matchesRawAd(playing, song, length)
     }
 
     /** A new Home follower may have read the ad's raw duration before the exact follower confirmed it. */
     private fun MediaController.matchesRawAd(metadata: MediaMetadata, song: MusicMetadata, length: Long?): Boolean {
         if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC || length == null) return false
-        val raw = metadata.reportedDurationMs() ?: return false
+        val raw = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
         if (!isYouTubeAdLength(raw, length)) return false
         val ownId = song.recordingId?.takeIf { it.startsWith("$packageName:") }
         return if (ownId == null) song.lengthMs == raw else ownId == RecordingKey.playing(packageName, null, raw)
     }
 
-    private fun MediaController.plays(song: MusicMetadata): Boolean {
+    private fun MediaController.plays(song: MusicMetadata, snapshot: MediaMetadata? = metadata): Boolean {
         if (packageName == RadioGarden.PACKAGE) return false
-        val playing = metadata ?: return false
+        val playing = snapshot ?: return false
         val (title, artist) = names(playing)
         val named = if (MetadataParsers.noArtist(artist)) playsWithNoArtist(title, artist, song) else SongNames.names(title, artist, song)
         return named && !anotherRecording(playing, song)
@@ -1470,9 +1509,9 @@ private const val SONGS_READ_KEPT = 32
 /** How many sessions keep their numbers: more than a phone has apps playing at once. */
 private const val SESSIONS_KEPT = 32
 
-private data class SeenYouTubeAd(val names: YouTubeAdNames, val videoId: String, val adMs: Long, val songMs: Long)
+private data class SeenYouTubeAd(val names: YouTubeAdNames, val rawId: String?, val videoId: String, val adMs: Long, val songMs: Long)
 
-private data class YouTubeAdNames(val title: String?, val artist: String?, val album: String?) {
+private data class YouTubeAdNames(private val title: String?, private val artist: String?, private val album: String?) {
     fun matches(other: YouTubeAdNames): Boolean {
         val sameAlbum = album == null || other.album == null || album == other.album
         return title == other.title && artist == other.artist && sameAlbum
@@ -1481,7 +1520,10 @@ private data class YouTubeAdNames(val title: String?, val artist: String?, val a
 
 private data class YouTubeAd(val checkUntilMs: Long? = null)
 private data class YouTubeLength(val ms: Long, val fromRequest: Boolean = false)
-private data class PossibleYouTubeAd(val names: List<String?>, val until: Long)
+private data class AdWaitItem(
+    private val id: String?, private val uri: String?, private val title: String?, private val artist: String?, private val duration: Long
+)
+private data class PossibleYouTubeAd(val item: AdWaitItem, val until: Long)
 
 private class YouTubeAds {
     val seen = MutableStateFlow<Map<MediaSession.Token, SeenYouTubeAd>>(emptyMap())

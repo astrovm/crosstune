@@ -5425,6 +5425,91 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aDifferentVideoCanTakeOverAfterAnUnconfirmedAdStartsPlay() {
+        val (model, phone, requested) = aPlayRequestWithNoCatalogueLength(253_000)
+        phone.onThePhone = Heard.Song(MusicMetadata("Sponsored", "Other artist"), null, app = ytMusic, sessionDurationMs = 33_204)
+        idle()
+        pass(UNCONFIRMED_AD_WAIT_MS)
+        assertFalse(model.uiState.playingResult)
+        assertEquals(requested, model.uiState.player?.song)
+        val next = MusicMetadata("Next song", "Band", lengthMs = 81_000, recordingId = "$ytMusic:abcdefghijk")
+        phone.onThePhone = Heard.Song(next, null, app = ytMusic, sessionDurationMs = 81_000)
+        idle()
+        assertEquals(next, model.uiState.player?.song)
+        assertTrue(checkNotNull(model.uiState.player).played)
+    }
+
+    @Test
+    fun aDifferentTitleWithoutAVideoIdCanTakeOverOnlyAfterOutlastingAnAd() {
+        val (model, phone, requested) = aPlayRequestWithNoCatalogueLength(253_000)
+        phone.onThePhone = Heard.Song(MusicMetadata("Sponsored", "Other artist"), null, app = ytMusic, sessionDurationMs = 33_204)
+        idle()
+        pass(UNCONFIRMED_AD_WAIT_MS)
+        val next = MusicMetadata("Next song", "Band")
+        phone.onThePhone = Heard.Song(next, null, app = ytMusic)
+        idle()
+        pass(LONGEST_AD_MS - 1)
+        assertEquals(requested, model.uiState.player?.song)
+        val withCover = next.copy(artworkUrl = "https://example.test/cover.png")
+        phone.onThePhone = Heard.Song(withCover, null, app = ytMusic)
+        idle()
+        pass(1)
+        assertEquals(withCover, model.uiState.player?.song)
+    }
+
+    @Test
+    fun theNextUnidentifiedShortItemDoesNotReuseThePreviousTitlesTime() {
+        val (model, phone, requested) = aPlayRequestWithNoCatalogueLength(253_000)
+        val sponsored = MusicMetadata("Sponsored", "Other artist")
+        phone.onThePhone = Heard.Song(sponsored, null, app = ytMusic, sessionDurationMs = 33_204)
+        idle()
+        pass(UNCONFIRMED_AD_WAIT_MS)
+        pass(LONGEST_AD_MS - 1)
+        assertEquals(requested, model.uiState.player?.song)
+        val next = MusicMetadata("Next song", "Band")
+        phone.onThePhone = Heard.Song(next, null, app = ytMusic, sessionDurationMs = 75_000)
+        idle()
+        pass(LONGEST_AD_MS - 1)
+        assertEquals(requested, model.uiState.player?.song)
+        pass(1)
+        assertEquals(next, model.uiState.player?.song)
+    }
+
+    @Test
+    fun closingThePlayerCancelsThePendingPlayReturn() {
+        val (model, phone, _) = aPlayRequestWithNoCatalogueLength(253_000, canAsk = false)
+        assertTrue(model.uiState.playingResult)
+        model.closePlayer()
+        idle()
+        appPlays(phone)
+        idle()
+        assertNull(model.uiState.player)
+        assertFalse(model.uiState.playingResult)
+        assertEquals(0, phone.cameBack)
+        assertTrue(phone.plays.isEmpty())
+    }
+
+    @Test
+    fun openingAnotherPlayerSongCancelsThePendingPlayReturn() {
+        val (model, phone, _) = aPlayRequestWithNoCatalogueLength(253_000, canAsk = false)
+        val next = MusicMetadata("New song", "Another band")
+        model.viewModelScope.launch { model.watchPlayingNow() }
+        phone.onThePhone = Heard.Song(next, null, app = "com.spotify")
+        until("the other song shows on Home") { model.uiState.playingNow?.song == next }
+        assertTrue(model.uiState.playingResult)
+        model.peekPlayingNow()
+        idle()
+        assertEquals(next, model.uiState.player?.song)
+        assertFalse(model.uiState.playingResult)
+
+        phone.onThePhone = null
+        appPlays(phone)
+        idle()
+        assertEquals(0, phone.cameBack)
+        assertTrue(phone.plays.isEmpty())
+    }
+
+    @Test
     fun thePlayerTakesTheAppsTitleWithoutWaitingWhenNoDurationIsReported() =
         theGeneralTitleStartsWithoutAnAdCheckWait(reportedLength = null)
 

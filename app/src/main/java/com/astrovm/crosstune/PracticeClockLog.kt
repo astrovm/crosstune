@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.util.Log
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
@@ -26,8 +27,11 @@ internal class PracticeClockLog(private val debuggable: Boolean) {
     companion object {
         const val TAG = "CrosstuneClock"
         private val attempts = AtomicInteger()
+        private val salt by lazy { UUID.randomUUID() }
         fun nextId(): Int = attempts.incrementAndGet()
         fun of(context: Context) = PracticeClockLog(context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
+        /** Compare reports within one dev app process without recording any song names or IDs. */
+        fun itemHash(key: String): String = UUID.nameUUIDFromBytes("$salt\u0000$key".toByteArray()).toString()
 
         /** Speed is text so even a malformed non-finite app speed has a valid JSON representation. */
         fun JSONObject.clock(state: Following?, at: Long) {

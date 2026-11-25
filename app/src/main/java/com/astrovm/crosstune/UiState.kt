@@ -437,6 +437,8 @@ internal data class PlayerState(
     val linesByEar: Boolean = false,
     /** What the app was playing when asked, so only a song it goes on to after is taken for the one asked. */
     val over: MusicMetadata? = null,
+    /** Play finished waiting, but the song's clock had not started because the app might still be on an ad. */
+    val startedWithAd: Boolean = false,
     /**
      * It plays what the app names no song for, e.g. a radio station, as the app names it: its buttons
      * and where it is, but nothing that takes it for a song, no card, words, link or search.

@@ -51,7 +51,7 @@ Each line is a JSON record. `observed_ms` uses the app's monotonic clock since b
 |---|---|
 | `follow_begin`, `follow_end` | The lifetime of one follower subscription. A queued late callback keeps its original observer number. |
 | `media_report` | The raw callback argument, before clock correction and flow deduplication. Repeated, null and negative-position reports stay visible. `updated_ms` is the app's own report time. |
-| `followed_clock` | The selected clock after the existing timing corrections. |
+| `followed_clock` | The clock after timing corrections, or `present=false` if no usable clock matched. The salted `item_hash` ties reports to the same metadata within one dev app process without recording song names or IDs. |
 | `media_command` | The session about to receive a seek, play or pause transport call. It is a request, not an acknowledgement. |
 | `card_clock` | The clock Practice actually observes while reaching or playing a line. Polls can repeat; they are not new Android callbacks. `projected_ms` is the clock projected to the observation time. |
 | `candidate`, `native_result` | The native session's initial capability/window decision and the final native attempt outcome. |
