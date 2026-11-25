@@ -53,6 +53,19 @@ class RightIdsTest(unittest.TestCase):
 
 
 class PrepareTest(unittest.TestCase):
+    def test_deezer_keeps_artist_names_from_raw_and_compact_captures(self):
+        with tempfile.TemporaryDirectory() as out:
+            raw = {"title": "Peace Sign", "title_short": "Peace Sign", "artist": {"id": 5289039, "name": "Kenshi Yonezu"}, "duration": 237}
+            compact = {"title": "Lemon", "artist": "Kenshi Yonezu", "duration": 256}
+            song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon Kenshi Yonezu", deezer=[raw, compact])
+            with open(os.path.join(out, "songs.json"), "w", encoding="utf-8") as kept:
+                json.dump([song], kept)
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.prepare(out)
+            with open(os.path.join(out, "replay.json"), encoding="utf-8") as kept:
+                [prepared] = json.load(kept)
+            self.assertEqual([raw, dict(compact, artist={"name": "Kenshi Yonezu"})], prepared["deezer"])
+
     def test_the_answers_kept_are_named_where_in_the_folder_so_a_copy_of_it_finds_them(self):
         with tempfile.TemporaryDirectory() as out:
             song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon Kenshi Yonezu")

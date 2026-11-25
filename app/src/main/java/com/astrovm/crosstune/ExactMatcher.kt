@@ -896,7 +896,7 @@ internal class ExactMatcher(
             ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
         song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         matchingVideo(rows, videoRows, names, recording, watchUrl)?.let { return it }
-        val localize = if (names.complete) null else suspend { localizedSong(metadata, rows, names, recording)?.let { watchUrl + it } }
+        val localize = if (names.complete) null else suspend { localizedSong(metadata, items, names, recording)?.let { watchUrl + it } }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(
             null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs),
@@ -906,9 +906,9 @@ internal class ExactMatcher(
 
     /**
      * When a store couldn't name the artist, ask YouTube Music how it credits its own song. The same song ID
-     * must be in both replies: an unrelated match by title or duration cannot name the artist.
+     * and one linked artist ID must agree in both replies. A second artist is not another spelling of the first.
      */
-    private suspend fun localizedSong(metadata: MusicMetadata, rows: List<Row>, names: Names, recording: RequestedRecording): String? {
+    private suspend fun localizedSong(metadata: MusicMetadata, rows: List<JSONObject>, names: Names, recording: RequestedRecording): String? {
         val languages = when (SongNames.homeStore(metadata.artist)) {
             "JP" -> listOf("ja")
             "KR" -> listOf("ko")
@@ -916,17 +916,14 @@ internal class ExactMatcher(
             "TW" -> listOf("ja", "zh-TW")
             else -> return null
         }
-        val candidates = rows.mapNotNull { row ->
-            row.id?.takeIf { fitsLocalizedSong(row, metadata, names, recording) }?.let { it to row }
-        }.toMap()
+        val candidates = rows.mapNotNull(::localizableRow).filter { fitsLocalizedSong(it.row, metadata, names, recording) }.associateBy { it.id }
         if (candidates.isEmpty()) return null
         for (language in languages) {
             val body = YouTubeMusicApi.body(language = language).put("query", searchQuery(metadata)).put("params", YOUTUBE_MUSIC_SONGS)
             val items = answeredOr(emptyList()) { fetchJson(YouTubeMusicApi.SEARCH_URL, body).listItems() }
-            val proved = items.map(::row).mapNotNull { local ->
-                val id = local.id ?: return@mapNotNull null
-                val original = candidates[id] ?: return@mapNotNull null
-                id.takeIf { fitsLocalizedSong(local, metadata, names, recording) && localizedCredit(metadata.artist, original, local) }
+            val proved = items.mapNotNull(::localizableRow).mapNotNull { local ->
+                val original = candidates[local.id] ?: return@mapNotNull null
+                local.id.takeIf { fitsLocalizedSong(local.row, metadata, names, recording) && localizedCredit(metadata.artist, original, local) }
             }.toSet()
             if (proved.isNotEmpty()) return proved.singleOrNull()
         }
@@ -939,16 +936,33 @@ internal class ExactMatcher(
         if (!fitsLength) return false
         val album = row.details.getOrNull(1).orEmpty()
         if (SongNames.saysAnotherVersion(album, metadata.title, metadata.artist)) return false
-        return SongNames.titleNames(row.name).any { SongNames.sameVersion(metadata.title, it, album) } &&
+        // One side of a dash could be a recording label, as in "First Love - 2022 Mix".
+        return SongNames.normalize(metadata.title) == SongNames.normalize(row.name) &&
             keepsRequestedRecording(recording, row) && !isAnotherTake(row, names)
     }
 
-    private fun localizedCredit(wanted: String, original: Row, local: Row): Boolean {
-        val native = SongNames.normalize(wanted)
-        val english = SongNames.normalize(original.details.first())
-        val credit = SongNames.normalize(local.details.first())
-        // The translated reply can keep both names, as in "BTS (방탄소년단)".
-        return credit == native || credit == english + native || credit == native + english
+    private class LocalizableRow(val id: String, val row: Row, val artistId: String)
+
+    /** A song's credit is before the first bullet. Collaborators have separate runs, even in Japanese. */
+    private fun localizableRow(item: JSONObject): LocalizableRow? {
+        val song = row(item)
+        val id = song.id ?: return null
+        val credit = item.optJSONArray("flexColumns")?.optJSONObject(1)?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+            ?.optJSONObject("text")?.optJSONArray("runs").objects().takeWhile { it.optString("text") != " • " }.singleOrNull()
+        val browse = credit?.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint") ?: return null
+        val artist = browse.optString("browseId").takeIf(String::isNotBlank) ?: return null
+        return LocalizableRow(id, song, artist)
+    }
+
+    private fun localizedCredit(wanted: String, original: LocalizableRow, local: LocalizableRow): Boolean {
+        if (original.artistId != local.artistId) return false
+        val localName = local.row.details.first()
+        if (SongNames.normalize(localName) == SongNames.normalize(wanted)) return true
+        val english = SongNames.unaccented(original.row.details.first())
+        val native = SongNames.unaccented(wanted)
+        val credit = SongNames.unaccented(localName)
+        // One linked credit can keep both names, as in "BTS (방탄소년단)". Do not erase the separator of a collaboration.
+        return credit in listOf("$english ($native)", "$native ($english)", "$english $native", "$native $english")
     }
 
     private fun matchingVideo(songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String): Answer? {

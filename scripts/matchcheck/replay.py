@@ -122,6 +122,12 @@ def read_json(path):
         return json.load(kept)
 
 
+def deezer_row(row):
+    """Raw captures already have Deezer's artist object. The compact collector saves only its name."""
+    artist = row.get("artist")
+    return row if isinstance(artist, dict) else dict(row, artist={"name": artist})
+
+
 def prepare(out, *, apple_down=False, source_length=False):
     with open(os.path.join(out, "songs.json"), encoding="utf-8") as kept:
         songs = json.load(kept)
@@ -143,7 +149,7 @@ def prepare(out, *, apple_down=False, source_length=False):
             "us": [{"trackId": song["id"], "trackName": song["title"], "artistName": song["artist"], "collectionName": song["album"], "trackTimeMillis": ms}
                    for ms in (song["editionsMs"] or [song["lengthMs"]])],
             "native": native,
-            "deezer": [{"title": d.get("title"), "artist": {"name": d.get("artist")}, "duration": d.get("duration")} for d in song.get("deezer", [])],
+            "deezer": [deezer_row(row) for row in song.get("deezer", [])],
             # Where in out, so a copy of the folder, as another task's or the build box's, still finds them.
             "songs": songs_path and os.path.relpath(songs_path, out), "videos": videos_path and os.path.relpath(videos_path, out),
             "right": right_ids(song, results, videos), "names": names,
