@@ -148,6 +148,184 @@ class ReadingsTest {
     }
 
     @Test
+    fun interrogativeNanDaSeparatesAfterATopic() = assertJapaneseBoundaries(listOf(
+        Triple("これは何だ", "kore wa nan da", listOf("これ", "は", "何", "だ")),
+        Triple("それは何だ?", "sore wa nan da?", listOf("それ", "は", "何", "だ")),
+        Triple("君は何だ", "kimi wa nan da", listOf("君", "は", "何", "だ")),
+        Triple("仕事が何だ", "shigoto ga nan da", listOf("仕事", "が", "何", "だ")),
+        Triple("これも何だ", "kore mo nan da", listOf("これ", "も", "何", "だ")),
+        Triple("それ何だ", "sore nan da", listOf("それ", "何", "だ")),
+        Triple("何だ？", "nan da？", listOf("何", "だ")),
+    ))
+
+    @Test
+    fun nanDaInterjectionsAndOtherExpressionsKeepTheirWords() = assertJapaneseBoundaries(listOf(
+        Triple("何だ、お前か", "nanda、 omae ka", listOf("何だ", "お前", "か")),
+        Triple("それから何だ、お前か", "sorekara nanda、 omae ka", listOf("それから", "何だ", "お前", "か")),
+        Triple("何だ君か", "nan da kimi ka", listOf("何", "だ", "君", "か")),
+        Triple("なんだ君か", "nan da kimi ka", listOf("なん", "だ", "君", "か")),
+        Triple("なんだ、君か", "nanda、 kimi ka", listOf("なんだ", "君", "か")),
+        Triple("「なんだ、君か」", "「nanda、 kimi ka」", listOf("なんだ", "君", "か")),
+        Triple("これはなんだ、君か", "kore wa nan da、 kimi ka", listOf("これ", "は", "なん", "だ", "君", "か")),
+        Triple("ああ、なんだ、君か", "aa、 nanda、 kimi ka", listOf("ああ", "なんだ", "君", "か")),
+        Triple("なんだ, 君か", "nanda, kimi ka", listOf("なんだ", "君", "か")),
+        Triple("なんだ", "nanda", listOf("なんだ")),
+        Triple("何だ", "nanda", listOf("何だ")),
+        Triple("何だか眠い", "nandaka nemui", listOf("何だか", "眠い")),
+        Triple("何だかんだ", "nandakanda", listOf("何だかんだ")),
+        Triple("何だって？", "nan datte？", listOf("何", "だって")),
+        Triple("なんだかなあ", "nandaka naa", listOf("なんだか", "なあ")),
+    ))
+
+    @Test
+    fun nanDaReviewCasesRespectBoundariesAndTopics() = assertJapaneseBoundaries(listOf(
+        Triple("何だ お前か", "nanda omae ka", listOf("何だ", "お前", "か")),
+        Triple("何だ，君か", "nanda， kimi ka", listOf("何だ", "君", "か")),
+        Triple("なんだ，君か", "nanda， kimi ka", listOf("なんだ", "君", "か")),
+        Triple("「何だ」", "「nanda」", listOf("何だ")),
+        Triple("何だ！", "nanda！", listOf("何だ")),
+        Triple("何だ何だ!?", "nanda nanda!?", listOf("何だ", "何だ")),
+        Triple("何だ何だ？", "nanda nanda？", listOf("何だ", "何だ")),
+        Triple("なんだなんだ", "nanda nanda", listOf("なんだ", "なんだ")),
+        Triple("なんだなんだなんだ!?", "nanda nanda nanda!?", listOf("なんだ", "なんだ", "なんだ")),
+        Triple("なんだ何だ", "nanda nanda", listOf("なんだ", "何だ")),
+        Triple("なんだ何だ？", "nanda nanda？", listOf("なんだ", "何だ")),
+        Triple("何だなんだ", "nanda nanda", listOf("何だ", "なんだ")),
+        Triple("なんだ、なんだ", "nanda、 nanda", listOf("なんだ", "なんだ")),
+        Triple("これは一体何だ", "kore wa ittai nan da", listOf("これ", "は", "一体", "何", "だ")),
+        Triple("これはいったい何だ", "kore wa ittai nan da", listOf("これ", "は", "いったい", "何", "だ")),
+        Triple("これは本当に何だ", "kore wa hontooni nan da", listOf("これ", "は", "本当に", "何", "だ")),
+        Triple("これはいったいなんだ", "kore wa ittai nan da", listOf("これ", "は", "いったい", "なん", "だ")),
+        Triple("これは本当になんだ？", "kore wa hontooni nan da？", listOf("これ", "は", "本当に", "なん", "だ")),
+        Triple("これもなんだ？", "kore mo nan da？", listOf("これ", "も", "なん", "だ")),
+    ))
+
+    @Test
+    fun repeatedNanDaRespectsTopicsAndSpaces() = assertJapaneseBoundaries(listOf(
+        Triple("これなんだなんだ", "kore nanda nanda", listOf("これ", "なんだ", "なんだ")),
+        Triple("これなんだ何だ", "kore nanda nanda", listOf("これ", "なんだ", "何だ")),
+        Triple("これはなんだなんだ", "kore wa nan da nanda", listOf("これ", "は", "なん", "だ", "なんだ")),
+        Triple("これは何だ何だ", "kore wa nan da nanda", listOf("これ", "は", "何", "だ", "何だ")),
+        Triple("これはなんだ何だ", "kore wa nan da nanda", listOf("これ", "は", "なん", "だ", "何だ")),
+        Triple("これは何だなんだ", "kore wa nan da nanda", listOf("これ", "は", "何", "だ", "なんだ")),
+        Triple("なんだ なんだ", "nanda nanda", listOf("なんだ", "なんだ")),
+        Triple("なんだ　なんだ", "nanda nanda", listOf("なんだ", "なんだ")),
+        Triple("何だ なんだ", "nanda nanda", listOf("何だ", "なんだ")),
+        Triple("なんだ 何だ", "nanda nanda", listOf("なんだ", "何だ")),
+        Triple("なんだ、なんだ", "nanda、 nanda", listOf("なんだ", "なんだ")),
+        Triple("これは なんだ", "kore wa nan da", listOf("これ", "は", "なん", "だ")),
+    ))
+
+    @Test
+    fun repeatedNanDaStopsAtSentenceBreaksAndKeepsAsciiCommas() = assertJapaneseBoundaries(listOf(
+        Triple("何だ\nなんだよ", "nanda nan da yo", listOf("何だ", "なん", "だ", "よ")),
+        Triple("何だ\r\nなんだよ", "nanda nan da yo", listOf("何だ", "なん", "だ", "よ")),
+        Triple("なんだ,なんだ", "nanda, nanda", listOf("なんだ", "なんだ")),
+        Triple("なんだ,なんだよ", "nanda, nan da yo", listOf("なんだ", "なん", "だ", "よ")),
+        Triple("何だ!なんだよ", "nanda! nan da yo", listOf("何だ", "なん", "だ", "よ")),
+        Triple("なんだ?なんだよ", "nan da? nan da yo", listOf("なん", "だ", "なん", "だ", "よ")),
+        Triple("何だ。なんだよ", "nanda。 nan da yo", listOf("何だ", "なん", "だ", "よ")),
+        Triple("何だ！なんだよ", "nanda！ nan da yo", listOf("何だ", "なん", "だ", "よ")),
+        Triple("何だ？なんだよ", "nan da？ nan da yo", listOf("何", "だ", "なん", "だ", "よ")),
+    ))
+
+    @Test
+    fun repeatedNanDaSeparatorMatrix() {
+        val spellings = listOf("なんだ", "何だ")
+        val joins = listOf("", " ", "　", "\t", ",", "，", "、", ", ", "， ", "、 ")
+        val endings = listOf("\n", "\r\n", "。", "！", "？")
+        val cases = buildList {
+            for (count in 2..3) for (mask in 0 until (1 shl count)) for (join in joins) for (end in endings) for (topic in listOf(false, true)) {
+                val words = (0 until count).map { spellings[(mask shr it) and 1] }
+                val line = (if (topic) "これは" else "") + words.joinToString(join) + end + "なんだよ"
+                val separator = if (join.any { it in ",，、" }) "${join.first()} " else " "
+                val readings = words.mapIndexed { at, _ -> if (topic && at == 0) "nan da" else "nanda" }
+                val romaji = (if (topic) "kore wa " else "") + readings.joinToString(separator) +
+                    (if (end.startsWith('\r') || end.startsWith('\n')) " " else "$end ") + "nan da yo"
+                val sheet = (if (topic) listOf("これ", "は", if (words.first() == "何だ") "何" else "なん", "だ") else listOf(words.first())) +
+                    words.drop(1) + listOf("なん", "だ", "よ")
+                add(Triple(line, romaji, sheet))
+            }
+        }
+        fun read() = Readings.of(cases.map { it.first }, Script.JAPANESE).mapIndexed { at, reading ->
+            Triple(cases[at].first, reading.romanized, Readings.words(cases[at].first, Script.JAPANESE).map { it.text })
+        }
+        val answers = listOf(read(), TestUniDic.reading(::read))
+        answers.forEachIndexed { mode, readings -> cases.zip(readings).forEach { (expected, actual) ->
+            assertEquals("dictionary $mode: ${expected.first}", expected, actual)
+        } }
+    }
+
+    @Test
+    fun repeatedNanDaAfterAdverbs() {
+        val spellings = listOf("なんだ", "何だ")
+        val adverbs = listOf("一体" to "ittai", "いったい" to "ittai", "本当に" to "hontooni")
+        val cases = buildList {
+            for (count in 2..3) for (mask in 0 until (1 shl count)) for ((adverb, reading) in adverbs) {
+                for (topic in listOf(false, true)) {
+                    val words = (0 until count).map { spellings[(mask shr it) and 1] }
+                    val line = (if (topic) "これは" else "") + adverb + words.joinToString("")
+                    val romaji = (if (topic) "kore wa " else "") + reading + " " +
+                        words.mapIndexed { at, _ -> if (topic && at == 0) "nan da" else "nanda" }.joinToString(" ")
+                    val first = if (topic) listOf(if (words.first() == "何だ") "何" else "なん", "だ") else listOf(words.first())
+                    val sheet = (if (topic) listOf("これ", "は") else emptyList()) + listOf(adverb) + first + words.drop(1)
+                    add(Triple(line, romaji, sheet))
+                }
+            }
+        }
+        assertJapaneseBoundaries(cases)
+    }
+
+    @Test
+    fun nanDaAcrossAdverbsAndCommas() {
+        val spellings = listOf("なんだ", "何だ")
+        val adverbs = listOf("一体" to "ittai", "いったい" to "ittai", "一体全体" to "ittaizentai")
+        val cases = buildList {
+            for ((adverb, reading) in adverbs) for (comma in listOf("", "、", ",")) {
+                for (count in 1..2) for (mask in 0 until (1 shl count)) for (topic in listOf(false, true)) {
+                    if (!topic && count == 1) continue
+                    val words = (0 until count).map { spellings[(mask shr it) and 1] }
+                    val line = (if (topic) "これは" else "") + adverb + comma + words.joinToString("")
+                    val first = if (topic) "nan da" else "nanda"
+                    val romaji = (if (topic) "kore wa " else "") + reading + comma + " " + first +
+                        if (count == 2) " nanda" else ""
+                    val firstWords = if (topic) listOf(if (words.first() == "何だ") "何" else "なん", "だ") else listOf(words.first())
+                    val sheet = (if (topic) listOf("これ", "は") else emptyList()) + listOf(adverb) + firstWords + words.drop(1)
+                    add(Triple(line, romaji, sheet))
+                }
+            }
+        }
+        assertJapaneseBoundaries(cases)
+    }
+
+    @Test
+    fun nanDaAdverbClauseBoundaries() = assertJapaneseBoundaries(listOf(
+        Triple("君はもうなんだ", "kimi wa moo nan da", listOf("君", "は", "もう", "なん", "だ")),
+        Triple("それはなんだ、なんだ", "sore wa nan da、 nanda", listOf("それ", "は", "なん", "だ", "なんだ")),
+        Triple("彼はなんだ、なんだと騒ぐ", "kare wa nan da、 nanda to sawagu", listOf("彼", "は", "なん", "だ", "なんだ", "と", "騒ぐ")),
+        Triple("これは一体。なんだなんだ", "kore wa ittai。 nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
+        Triple("これは一体！なんだなんだ", "kore wa ittai！ nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
+        Triple("これは一体？なんだなんだ", "kore wa ittai？ nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
+        Triple("これは一体\nなんだなんだ", "kore wa ittai nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
+        Triple("これは猫、なんだなんだ", "kore wa neko、 nanda nanda", listOf("これ", "は", "猫", "なんだ", "なんだ")),
+    ))
+
+    @Test
+    fun predicateNounsBeforeNanDaStayWhole() = assertJapaneseBoundaries(listOf(
+        Triple("僕は今日なんだ", "boku wa kyoo nanda", listOf("僕", "は", "今日", "なんだ")),
+        Triple("君は全部なんだ", "kimi wa zenbu nanda", listOf("君", "は", "全部", "なんだ")),
+        Triple("僕は明日なんだ", "boku wa ashita nanda", listOf("僕", "は", "明日", "なんだ")),
+        Triple("それは前なんだ", "sore wa mae nanda", listOf("それ", "は", "前", "なんだ")),
+        Triple("これは今なんだ", "kore wa ima nanda", listOf("これ", "は", "今", "なんだ")),
+        Triple("これは結局なんだ", "kore wa kekkyoku nanda", listOf("これ", "は", "結局", "なんだ")),
+        Triple("これは結局なんだなんだ", "kore wa kekkyoku nanda nanda", listOf("これ", "は", "結局", "なんだ", "なんだ")),
+        Triple("これは今なんだなんだ", "kore wa ima nanda nanda", listOf("これ", "は", "今", "なんだ", "なんだ")),
+        Triple("これは本当なんだ", "kore wa hontoo nanda", listOf("これ", "は", "本当", "なんだ")),
+        Triple("本なんだ", "hon nanda", listOf("本", "なんだ")),
+        Triple("これはもうなんだ", "kore wa moo nan da", listOf("これ", "は", "もう", "なん", "だ")),
+    ))
+
+    @Test
     fun explanatoryNandaStaysWholeAndInterrogativeNanSeparates() = assertJapaneseBoundaries(listOf(
         Triple("今日はここまでなんだ", "kyoo wa koko made nanda", listOf("今日", "は", "ここ", "まで", "なんだ")),
         Triple("つらいからなんだよ", "tsurai kara nanda yo", listOf("つらい", "から", "なんだ", "よ")),
@@ -168,7 +346,7 @@ class ReadingsTest {
         Triple("なんだって？", "nan datte？", listOf("なん", "だって")),
         Triple("なんで帰る", "nande kaeru", listOf("なんで", "帰る")),
         Triple("そうなんだね", "soona nda ne", listOf("そうな", "んだ", "ね")),
-        Triple("猫が好きなんだ", "neko ga sukina nda", listOf("猫", "が", "好きな", "んだ")),
+        Triple("猫が好きなんだ", "neko ga suki nanda", listOf("猫", "が", "好き", "なんだ")),
         Triple("この音は何なんだ", "kono oto wa nanna nda", listOf("この", "音", "は", "何な", "んだ")),
     ))
 
@@ -215,7 +393,7 @@ class ReadingsTest {
             "読んだ" to "yonda", "死んだ" to "shinda", "泳いだ" to "oyoida", "読んだら" to "yondara", "読んだり" to "yondari",
             "読んだそうだ" to "yonda sooda", "読むそうだ" to "yomu sooda", "泳ぐようだ" to "oyogu yooda", "夢のようだ" to "yume no yooda",
             "そうだ" to "sooda", "そうです" to "soodesu", "読むのだ" to "yomu noda", "読むんだ" to "yomu nda", "のだ" to "noda", "んだ" to "nda",
-            "本なんだ" to "honna nda", "夢なのだ" to "yumena noda", "本じゃない" to "hon ja nai", "本ではない" to "hon de wa nai",
+            "本なんだ" to "hon nanda", "夢なのだ" to "yumena noda", "本じゃない" to "hon ja nai", "本ではない" to "hon de wa nai",
             "本である" to "hondearu", "綺麗な" to "kireena", "人ですら" to "hitode sura",
             "夢の様だ" to "yume no yooda", "夜景みたいだ" to "yakee mitaida", "会いたくなんだ" to "aitaku nanda", "痛くなんだ" to "itaku nanda",
             "ひとなでして" to "hitonade shite"

@@ -319,6 +319,15 @@ class SavedLinesRereadTest {
     }
 
     @Test
+    fun aSavedLineReadWithVersion18SeparatesNanDa() {
+        val line = SavedLine("これは何だ", reading = "これはなんだ", romanized = "kore wa nanda", title = "Demo", artist = "Band", readWith = 18)
+        val again = checkNotNull(readAgain(listOf(line))).single()
+        assertEquals("これはなんだ", again.reading)
+        assertEquals("kore wa nan da", again.romanized)
+        assertEquals(Readings.VERSION, again.readWith)
+    }
+
+    @Test
     fun aSavedLineReadWithVersion17JoinsTari() {
         val line = SavedLine("読んだり", reading = "よんだり", romanized = "yon dari", title = "Demo", artist = "Band", readWith = 17)
         val again = checkNotNull(readAgain(listOf(line))).single()
