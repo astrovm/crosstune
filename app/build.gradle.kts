@@ -22,7 +22,9 @@ if (!projectM) logger.warn("third_party/projectm is missing, so this build has n
 
 android {
     namespace = "com.astrovm.crosstune"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     // The Android fixtures and their JVM tests share these helpers.
     sourceSets.named("test") { kotlin.directories += "src/sharedTest/kotlin" }

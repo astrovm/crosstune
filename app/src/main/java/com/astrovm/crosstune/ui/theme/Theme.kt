@@ -4,10 +4,9 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.LocalRippleConfiguration
+import androidx.compose.material3.LocalRippleThemeConfiguration
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RippleConfiguration
-import androidx.compose.material.ripple.RippleAlpha
+import androidx.compose.material3.RippleDefaults
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -164,9 +163,9 @@ fun CrosstuneTheme(
         typography = AppTypography,
         shapes = AppShapes
     ) {
-        CompositionLocalProvider(LocalRippleConfiguration provides RippleConfiguration(rippleAlpha = FocusShown), content = content)
+        CompositionLocalProvider(LocalRippleThemeConfiguration provides FocusShown, content = content)
     }
 }
 
-/** Material's own, but what a TV remote or a keyboard is on shows plainly, to follow it from across the room. */
-private val FocusShown = RippleAlpha(draggedAlpha = 0.16f, focusedAlpha = 0.32f, hoveredAlpha = 0.08f, pressedAlpha = 0.1f)
+/** Rings what a TV remote or a keyboard is on, to follow it from across the room. Material's faint focus tint alone is easy to lose. */
+private val FocusShown = RippleDefaults.InsetFocusRingThemeConfiguration

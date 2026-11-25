@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -355,16 +356,16 @@ internal fun AppSlider(
     val dragged by held.collectIsDraggedAsState()
     val knob by animateDpAsState(if (pressed || dragged) 20.dp else 14.dp, label = "knob")
     val colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f))
+    val state = remember(steps, valueRange) { SliderState(value, steps, valueRange) }
+    state.value = value
     Slider(
-        value = value,
+        state = state,
         onValueChange = onValueChange,
         modifier = modifier,
         enabled = enabled,
         onValueChangeFinished = onValueChangeFinished,
         colors = colors,
         interactionSource = held,
-        steps = steps,
-        valueRange = valueRange,
         thumb = { Box(Modifier.size(knob).background(if (enabled) colors.thumbColor else colors.disabledThumbColor, CircleShape)) },
         track = { slider ->
             SliderDefaults.Track(
