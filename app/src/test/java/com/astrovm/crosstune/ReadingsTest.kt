@@ -89,11 +89,45 @@ class ReadingsTest {
 
     @Test
     fun ambiguousDeshiteKeepsTheExistingBoundary() = assertJapaneseBoundaries(listOf(
+        Triple("ひとなでして", "hitonade shite", listOf("ひとなで", "して")),
+        Triple("花でして", "hanadeshite", listOf("花でして")),
+        Triple("花でした", "hana deshita", listOf("花", "でした")),
+        Triple("花でします", "hana deshimasu", listOf("花", "でします")),
+        Triple("花でしたら", "hana deshitara", listOf("花", "でしたら")),
+        Triple("花でしました", "hana deshimashita", listOf("花", "でしました")),
+        Triple("学校でしたら", "gakkoo deshitara", listOf("学校", "でしたら")),
         Triple("仕事はあとでして", "shigoto wa atodeshite", listOf("仕事", "は", "あとでして")),
         Triple("作業は二人でして", "sagyoo wa futarideshite", listOf("作業", "は", "二人でして")),
         Triple("ここは学校でして", "koko wa gakkoodeshite", listOf("ここ", "は", "学校でして")),
         Triple("ここは学校でした", "koko wa gakkoo deshita", listOf("ここ", "は", "学校", "でした")),
     ))
+
+    @Test
+    fun hitonadeAndSuruFormsHaveTheirOwnWordsAndLookups() {
+        val cases = listOf(
+            Triple("ひとなでして", "hitonade shite", "して"),
+            Triple("ひとなでした", "hitonade shita", "した"),
+            Triple("ひとなでします", "hitonade shimasu", "します"),
+            Triple("ひとなでしよう", "hitonade shiyou", "しよう"),
+            Triple("ひとなでしない", "hitonade shinai", "しない"),
+            Triple("ひとなでしたら", "hitonade shitara", "したら"),
+            Triple("ひとなでしました", "hitonade shimashita", "しました"),
+            Triple("ひとなでしましょう", "hitonade shimashou", "しましょう"),
+            Triple("ひとなでしません", "hitonade shimasen", "しません"),
+            Triple("ひとなでしてる", "hitonade shiteru", "してる"),
+            Triple("ひとなでしちゃう", "hitonade shichau", "しちゃう")
+        )
+        fun read() = cases.map { (line, _, _) ->
+            val words = Readings.words(line, Script.JAPANESE)
+            Triple(Readings.of(listOf(line), Script.JAPANESE).single().romanized, words.map { it.text }, words.map { it.lookup })
+        }
+        val expected = cases.map { (_, romaji, verb) -> Triple(romaji, listOf("ひとなで", verb), listOf("ひとなで", "する")) }
+        assertEquals(listOf(expected, expected), listOf(read(), TestUniDic.reading(::read)))
+        fun withMo() = Readings.of(listOf("ひとなでしても"), Script.JAPANESE).single().romanized to
+            Readings.words("ひとなでしても", Script.JAPANESE).map { it.text to it.lookup }
+        val expectedMo = "hitonade shite mo" to listOf("ひとなで" to "ひとなで", "して" to "する", "も" to "も")
+        assertEquals(listOf(expectedMo, expectedMo), listOf(withMo(), TestUniDic.reading(::withMo)))
+    }
 
     @Test
     fun bothDictionariesGiveTheTwoUsesOfDeshiteTheSameTags() {
@@ -400,7 +434,7 @@ class ReadingsTest {
             "本なんだ" to "hon nanda", "夢なのだ" to "yumena noda", "本じゃない" to "hon ja nai", "本ではない" to "hon de wa nai",
             "本である" to "hondearu", "綺麗な" to "kireena", "人ですら" to "hitode sura",
             "夢の様だ" to "yume no yooda", "夜景みたいだ" to "yakee mitaida", "会いたくなんだ" to "aitaku nanda", "痛くなんだ" to "itaku nanda",
-            "ひとなでして" to "hitonadeshite"
+            "ひとなでして" to "hitonade shite"
         )
         fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.romanized }
         val expected = cases.values.toList()
