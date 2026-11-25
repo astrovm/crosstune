@@ -27,6 +27,7 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
+import java.text.Normalizer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.TimeSource
@@ -52,8 +53,9 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * Version 13 matches two whole names in a bilingual store title when the artist's video repeats its credit.
  * Version 14 needs evidence from the link before opening a row that names a disco version.
  * Version 15 keeps disco requests separate from plain requests in the cache.
+ * Version 16 can prove a parenthesized catalog alias from both credited video titles.
  */
-internal const val MATCH_VERSION = 15
+internal const val MATCH_VERSION = 16
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -980,7 +982,10 @@ internal class ExactMatcher(
     }
 
     private fun matchingVideo(songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String, disco: DiscoRequest): Answer? {
-        val matching = videos.filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
+        val known = videos.filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
+        val matching = if (known.any { disco.allows(it, video = true) }) known else {
+            videos.filter { isTheSongsVideo(it, names, allowAlias = true) && keepsRequestedRecording(recording, it, video = true) }
+        }
         val first = matching.firstOrNull { disco.allows(it, video = true) } ?: return null
         val artist = matching.firstOrNull { isOwnVideo(it, names) && disco.allows(it, video = true) }?.id?.let { watchUrl + it }
         // A later lookup can use the artist's video to replace what an outage left it with.
@@ -1321,6 +1326,7 @@ internal class ExactMatcher(
      */
     private class Names(
         val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, japaneseTitle: String?,
+        val requestedTitle: String, val requestedArtist: String,
         val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?,
         /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
         val takeOnAlbum: Boolean,
@@ -1398,7 +1404,7 @@ internal class ExactMatcher(
         val searchFailed = (found == null && searching.failed) || asked.failed
         val complete = !searchFailed && unanswered.none { it == "US" || it in homes }
         return Names(
-            titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum,
+            titles, artists, lengthsMs, japaneseTitle, metadata.title, metadata.artist, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum,
             searchFailed, complete, unanswered
         )
     }
@@ -1621,14 +1627,14 @@ internal class ExactMatcher(
      * Its title says nothing else but such tags outside brackets, so "Perfect Day" isn't "Perfect";
      * what's in them, "(終わらない歌 An Endless Song)", is what it's called elsewhere or said of it.
      */
-    private fun isTheSongsVideo(row: Row, names: Names): Boolean {
-        if (row.id == null || !videoTitleMatches(row.name, names)) return false
+    private fun isTheSongsVideo(row: Row, names: Names, allowAlias: Boolean = false): Boolean {
+        if (row.id == null || !videoTitleMatches(row.name, names, allowAlias)) return false
         // A channel is the artist's own by its whole name, maybe with what YouTube adds to one:
         // "Band - Topic", "BandVEVO".
         return isOwnVideo(row, names) || names.artists.any { artistIn(it, row.name) } && row.lengthMs != null && names.lengthsMs.isNotEmpty() && sameLength(row, names)
     }
 
-    private fun videoTitleMatches(title: String, names: Names): Boolean {
+    private fun videoTitleMatches(title: String, names: Names, allowAlias: Boolean = false): Boolean {
         if (names.titles.none { titleIn(it, title) }) return false
         if (isAnotherVideoVersion(title, names)) return false
         val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
@@ -1641,7 +1647,60 @@ internal class ExactMatcher(
         val bothWays = SongNames.titleNames(outside.trim()).drop(1).takeIf { halves -> halves.any { SongNames.normalize(it) in known } }.orEmpty()
         val written = (known + bothWays.map(SongNames::normalize) +
             names.artists.flatMap(SongNames::artistNames).map { SongNames.normalize(SongNames.withoutArticle(it)) } + VIDEO_TAG_MARKS)
-        return removeVideoNames(outside, written).none { it.code > 0x7f } || repeatsBilingualTitle(title, names)
+        return removeVideoNames(outside, written).none { it.code > 0x7f } || repeatsBilingualTitle(title, names) ||
+            allowAlias && repeatsParenthesizedTitle(title, names)
+    }
+
+    /** A store's bracketed alias proves a video only when both whole names and both credits agree. */
+    private fun repeatsParenthesizedTitle(title: String, names: Names): Boolean {
+        val parts = title.split(',', '，', limit = 3)
+        if (parts.size != 2) return false
+        val artist = aliasText(names.requestedArtist)
+        val credited = parts.map { part ->
+            val pair = part.split(" - ", limit = 2)
+            if (pair.size != 2 || !aliasText(pair[0]).equals(artist, ignoreCase = true)) return false
+            aliasText(pair[1])
+        }.toSet()
+        val requested = aliasText(names.requestedTitle)
+        return names.titles.any { name ->
+            val pair = parenthesizedAlias(name) ?: return@any false
+            val native = aliasText(pair.first)
+            val alias = aliasText(pair.second)
+            native != alias && alias == requested && setOf(native, alias) == credited &&
+                plainVideoNameMatches(native, names) && plainVideoNameMatches(alias, names)
+        }
+    }
+
+    /** Ask the ordinary video check about each name alone, with the requested title still known. */
+    private fun plainVideoNameMatches(name: String, names: Names): Boolean {
+        val plain = Names(
+            setOf(names.requestedTitle, name), names.artists, names.lengthsMs, null, names.requestedTitle, names.requestedArtist,
+            names.linkedEdition, names.corroboratingAlbum, names.takeOnAlbum, names.searchFailed, names.complete, names.failedLookups
+        )
+        return videoTitleMatches("${names.requestedArtist} - $name", plain)
+    }
+
+    private fun aliasText(text: String): String = Normalizer.normalize(text, Normalizer.Form.NFKC).trim()
+
+    private fun parenthesizedAlias(name: String): Pair<String, String>? {
+        val text = name.trim()
+        val open = text.indexOfFirst { it == '(' || it == '（' }
+        if (open <= 0) return null
+        val close = if (text[open] == '(') ')' else '）'
+        if (!text.endsWith(close)) return null
+        val native = text.substring(0, open).trim()
+        if (aliasText(native).any { it in ALIAS_BRACKETS }) return null
+        val alias = text.substring(open + 1, text.lastIndex).trim()
+        val nested = alias.indexOfFirst { it == '(' || it == '（' }
+        val plain = if (nested < 0) alias else {
+            val end = if (alias[nested] == '(') ')' else '）'
+            if (!alias.endsWith(end)) return null
+            val note = aliasText(alias.substring(nested + 1, alias.lastIndex)).lowercase(Locale.ROOT)
+            if (note !in NEUTRAL_ALIAS_WORDS) return null
+            alias.substring(0, nested).trim()
+        }
+        if (plain.isEmpty() || aliasText(plain).any { it in ALIAS_BRACKETS }) return null
+        return native to plain
     }
 
     /** The video repeats the artist before each store name. Compare whole names, so 愛 can't explain 愛愛. */
@@ -1807,6 +1866,9 @@ internal class ExactMatcher(
 
         /** The same, as other scripts write them: "歌詞付き", "公式". */
         private val VIDEO_TAG_MARKS = listOf("歌詞付き", "歌詞付", "歌詞", "公式", "字幕", "高音質", "日本語", "中日羅", "가사").map(SongNames::normalize)
+
+        private const val ALIAS_BRACKETS = "()（）[]［］{}｛｝【】〔〕「」『』〈〉《》〘〙〚〛"
+        private val NEUTRAL_ALIAS_WORDS = setOf("original", "remaster", "remastered", "mono", "stereo")
 
         /** A year, as a video's title may give the song's: "1984". */
         private val YEAR = phoneRegex("""(?:19|20)\d\d""")
