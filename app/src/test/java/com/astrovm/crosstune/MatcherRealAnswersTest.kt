@@ -103,7 +103,7 @@ class MatcherRealAnswersTest {
     @Test
     fun lemonOpensTheSameSongWhenAppleIsDownWithOrWithoutALength() {
         appleDown = { true }
-        for (length in listOf(null, 254_000L, 256_000L, 260_000L)) {
+        for (length in listOf(null, 0L, 254_000L, 256_000L, 260_000L)) {
             val song = LEMON.metadata.copy(lengthMs = length)
             assertEquals(length.toString(), ExactMatcher.Match.Found(LEMON_SONG, lasting = false), runBlocking {
                 matcher().lookFor(MusicService.YOUTUBE_MUSIC, song)

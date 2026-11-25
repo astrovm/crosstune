@@ -40,6 +40,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.io.IOException
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TestTimeSource
 
 /** Runs under Robolectric for the real org.json implementation. */
 @RunWith(RobolectricTestRunner::class)
@@ -772,6 +774,18 @@ class ExactMatcherTest {
         }
     }
 
+    @Test
+    fun localizationOnlyUsesTheTimeLeftAfterTheFirstSearches() {
+        val clock = TestTimeSource()
+        val matcher = ExactMatcher(fake.client(), "AR", lookupTime = clock)
+        val song = MusicMetadata("Lemon", "米津玄師")
+        val original = listOf(localizedRow("Kenshi Yonezu", "original000"))
+        val local = mapOf("ja" to listOf(localizedRow(song.artist, "original000")))
+        assertEquals(ExactMatcher.Match.Failed, localizedMatch(song, original, local, matcher, onVideos = {
+            clock += ExactMatcher.TIMEOUT_MS.milliseconds
+        }))
+    }
+
     private fun localizedRow(artist: String, id: String, album: String = "Lemon", time: String = "4:17") =
         youTubeMusicRow("Lemon", "$artist • $album • $time", videoId = id)
 
@@ -779,7 +793,7 @@ class ExactMatcherTest {
 
     private fun localizedMatch(
         song: MusicMetadata, original: List<String>, localized: Map<String, List<String>>,
-        matcher: ExactMatcher = matcher(), apple: String? = null, onLocalized: () -> Unit = {}
+        matcher: ExactMatcher = matcher(), apple: String? = null, onVideos: () -> Unit = {}, onLocalized: () -> Unit = {}
     ): ExactMatcher.Match {
         fake.handler = { request ->
             when (request.url.host) {
@@ -794,7 +808,7 @@ class ExactMatcherTest {
                     val body = JSONObject(FakeSpotify.bodyOf(request))
                     val language = body.getJSONObject("context").getJSONObject("client").getString("hl")
                     val rows = when {
-                        body.optString("params") == VIDEOS_TAB -> emptyList()
+                        body.optString("params") == VIDEOS_TAB -> emptyList<String>().also { onVideos() }
                         language == "en" -> original
                         else -> localized[language].orEmpty().also { onLocalized() }
                     }

@@ -82,7 +82,8 @@ internal class ExactMatcher(
     private val pickTimeoutMs: Long = PICK_TIMEOUT_MS,
     /** A Spotify artist's id by their name, see [MusicBrainz.spotifyArtist]; none by default. */
     private val spotifyArtist: suspend (String) -> String? = { null },
-    private val wallNow: () -> Long = { System.currentTimeMillis() }
+    private val wallNow: () -> Long = { System.currentTimeMillis() },
+    private val lookupTime: TimeSource = TimeSource.Monotonic
 ) {
 
     /** What looking for something came to: found, not there, or no answer, e.g. offline, which says neither. */
@@ -232,7 +233,7 @@ internal class ExactMatcher(
      */
     private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false, retrying: Boolean = false): Looked {
         repeat(if (retrying) 2 else 1) {
-            val start = TimeSource.Monotonic.markNow()
+            val start = lookupTime.markNow()
             val answer = withTimeoutOrNull(timeoutMs) {
                 answeredOr(null) { findOn(target, metadata, loosely) }
             }
