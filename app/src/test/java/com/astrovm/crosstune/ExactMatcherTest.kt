@@ -2604,6 +2604,7 @@ class ExactMatcherTest {
         val disco = youTubeMusicRow("黄昏のBay City (DISCOバージョン) (ボーナストラック)", "八神純子 • FULL MOON • 7:27", videoId = "Wey2yM_dNfc")
         val other = youTubeMusicRow("夜空のイヤリング", "八神純子 • LONELY GIRL • 3:59", videoId = "begH0F3uE5Q")
         val mixVideo = youTubeMusicRow("黄昏のBAY CITY(プロモーション用DISCOバージョン) Junko Yagami [HQ]", "BentOn • 663 views • 7:27", videoId = "hyrYByy-wGs")
+        val shortVideo = youTubeMusicRow("黄昏の Bay City (Tasogare no Bay City) - Junko Yagami - Sub español", "Alejn • 125 views • 4:12", videoId = "xrpBLHpbfe8")
         val albumVideo = youTubeMusicRow("Junko Yagami (八神純子) - 黄昏のBay City [Lyrics Eng/Rom/Kan]", "Reidhaha • 1.5M views • 4:42", videoId = "TwSWeSQAm-g")
         val appleAlbum = appleSong(title, artist, 281_200, id = 74904069, album = "full moon")
         val appleDisco = appleSong(title, artist, 446_973, id = 74904445, album = "full moon")
@@ -2622,7 +2623,7 @@ class ExactMatcherTest {
         val explicitlyNamed = MusicMetadata("黄昏のBay City (DISCOバージョン)", "八神純子")
         assertEquals("https://music.youtube.com/watch?v=Wey2yM_dNfc", matcher("US").find(MusicService.YOUTUBE_MUSIC, explicitlyNamed))
 
-        namesAndTabs(songs = listOf(single, disco), videos = listOf(albumVideo), apple = mapOf("US" to "$appleAlbum,$appleSingle,$appleDisco"), elsewhere = japanese)
+        namesAndTabs(songs = listOf(single, disco), videos = listOf(shortVideo, albumVideo), apple = mapOf("US" to "$appleAlbum,$appleSingle,$appleDisco"), elsewhere = japanese)
         assertEquals("https://music.youtube.com/watch?v=TwSWeSQAm-g", matcher("US").find(MusicService.YOUTUBE_MUSIC, album))
         assertEquals("https://music.youtube.com/watch?v=QLHMhVonF-s", matcher("US").find(MusicService.YOUTUBE_MUSIC, album.copy(lengthMs = 250_373)))
 
@@ -2634,6 +2635,37 @@ class ExactMatcherTest {
             0
         })
         assertNull(picker.find(MusicService.YOUTUBE_MUSIC, album))
+    }
+
+    @Test
+    fun aDiscoMixNeedsTheLinksTitleAsWellAsItsLength() = runBlocking {
+        val wrong = youTubeMusicRow("別の曲 (DISCOバージョン)", "八神純子 • FULL MOON • 7:27", videoId = "Wey2yM_dNfc")
+        val title = "tasogare no bay city"
+        val artist = "JUNKO YAGAMI"
+        namesAndTabs(
+            songs = listOf(wrong),
+            apple = mapOf("US" to appleSong(title, artist, 446_973)),
+            elsewhere = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 446_973))
+        )
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata(title, artist, lengthMs = 446_973)))
+    }
+
+    @Test
+    fun aDiscoMixCanBeNamedOnItsAlbumInsteadOfItsTrack() = runBlocking {
+        val single = youTubeMusicRow("Bay City", "Band • Bay City • 4:11", videoId = "QLHMhVonF-s")
+        val disco = youTubeMusicRow("Bay City", "Band • Bay City (Disco Mix) • 7:27", videoId = "Wey2yM_dNfc")
+        namesAndTabs(songs = listOf(single, disco))
+        val album = MusicMetadata("Bay City", "Band", lengthMs = 281_200)
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, album))
+        assertEquals("https://music.youtube.com/watch?v=Wey2yM_dNfc", matcher("US").find(MusicService.YOUTUBE_MUSIC, album.copy(title = "Bay City (Disco Mix)", lengthMs = null)))
+
+        val namedAlbum = youTubeMusicRow("Bay City", "Band • Disco Mix • 7:27", videoId = "Wey2yM_dNfc")
+        namesAndTabs(songs = listOf(single, namedAlbum))
+        assertEquals("https://music.youtube.com/watch?v=Wey2yM_dNfc", matcher("US").find(MusicService.YOUTUBE_MUSIC, album.copy(title = "Bay City (Disco Mix)", lengthMs = null)))
+
+        val otherBand = youTubeMusicRow("Bay City (Disco Mix)", "Other Band • Full Moon • 7:27", videoId = "other000000")
+        namesAndTabs(songs = listOf(single, otherBand))
+        assertEquals("https://music.youtube.com/watch?v=QLHMhVonF-s", matcher("US").find(MusicService.YOUTUBE_MUSIC, album))
     }
 
     @Test

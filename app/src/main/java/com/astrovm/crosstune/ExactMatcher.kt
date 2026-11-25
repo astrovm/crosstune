@@ -1077,13 +1077,15 @@ internal class ExactMatcher(
      * link itself. When YouTube also names the mix, other rows of that song must fit the link too.
      */
     private inner class MixEditions(metadata: MusicMetadata, songs: Collection<Row>) {
+        private val title = metadata.title
         private val length = metadata.lengthMs?.takeIf { it > 0 }
-        private val askedForMix = Takes.saysDiscoMix(metadata.title)
-        private val mixes = songs.filter { it.id != null && Takes.saysDiscoMix(it.name) }
+        private val askedForMix = Takes.saysDiscoMix(title)
+        private val mixes = songs.filter { it.id != null && songSaysDiscoMix(it) }
 
         fun songFits(row: Row): Boolean {
             if (row in mixes) return mixFits(row)
-            if (askedForMix) return false
+            // A song can leave the mix out of its title when its album names it.
+            if (askedForMix) return SongNames.sameVersion(title, row.name, row.details.getOrNull(1).orEmpty())
             val wanted = length ?: return true
             return mixes.none { sameSong(row, it) } || closeTo(row, wanted)
         }
@@ -1099,11 +1101,14 @@ internal class ExactMatcher(
             SongNames.same(mix.details.first(), row.details.first()) && SongNames.same(SongNames.bareTitle(mix.name), SongNames.bareTitle(row.name))
 
         private fun mixFits(row: Row): Boolean =
-            length?.let { sameRecordingLength(row.lengthMs, it) } ?: askedForMix
+            askedForMix || length?.let { sameRecordingLength(row.lengthMs, it) } == true
 
         private fun closeTo(row: Row, wanted: Long): Boolean =
             row.lengthMs?.let { kotlin.math.abs(it - wanted) <= SAME_LENGTH_MS } == true
     }
+
+    private fun songSaysDiscoMix(row: Row): Boolean =
+        Takes.saysDiscoMix(row.name) || Takes.saysDiscoMix(row.details.getOrNull(1).orEmpty())
 
     private class RequestedRecording(val live: Boolean, val part: NumberedPart?, val title: String)
 
@@ -1580,7 +1585,7 @@ internal class ExactMatcher(
         if (row.name.none { it.isLetter() && it.code > 0x7f }) return false
         val anotherScript = namedInAnotherScript(row.name)
         if (!anotherScript && !sameLatinSpelling(row.name, names)) return false
-        if (Takes.saysDiscoMix(row.name) && names.titles.none { SongNames.same(SongNames.bareTitle(it), SongNames.bareTitle(row.name)) }) return false
+        if (songSaysDiscoMix(row) && names.titles.none { SongNames.same(SongNames.bareTitle(it), SongNames.bareTitle(row.name)) }) return false
         if (isAnotherTake(row, names)) return false
         return knownArtist(row.details.first(), names)
     }
