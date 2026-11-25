@@ -1639,7 +1639,7 @@ internal class ExactMatcher(
         if (isAnotherVideoVersion(title, names)) return false
         val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
         val outside = outsideBrackets(title)
-        if (!creditedVideoNamesMatch(title, names, allowAlias)) return false
+        if (!creditedVideoNamesMatch(title, names)) return false
         val rest = SongNames.words(outside) - said.toSet() - VIDEO_TAGS
         if (rest.any { !YEAR.matches(it) }) return false
         // Nor anything in another script, which has no words to tell apart: "桜の雨" isn't "桜". Named
@@ -1652,17 +1652,16 @@ internal class ExactMatcher(
             allowAlias && repeatsParenthesizedTitle(title, names)
     }
 
-    private fun creditedVideoNamesMatch(title: String, names: Names, allowAlias: Boolean): Boolean {
+    private fun creditedVideoNamesMatch(title: String, names: Names): Boolean {
         val parts = videoCreditParts(title)
+        if (parts.size < 2) return true
         val artists = names.artists.map(SongNames::normalize).toSet()
         val credited = parts.map { creditedVideoTitle(it, artists) }
+        if (credited.any { it == null }) return false
         val complete = credited.filterNotNull()
-        val unparsedCredit = parts.zip(credited).any { (part, parsed) -> parsed == null && VIDEO_CREDIT_DASHES.any(part::contains) }
-        if (complete.size < 2 && !(complete.size == 1 && unparsedCredit)) return true
-        if (complete.size != parts.size) return false
         if (videoCreditKnown(complete.joinToString(" "), names.titles, false)) return true
         if (complete.withIndex().all { (index, credit) -> videoCreditKnown(credit, names.titles, index == complete.lastIndex) }) return true
-        return repeatsBilingualTitle(title, names) || allowAlias && repeatsParenthesizedTitle(title, names)
+        return repeatsBilingualTitle(title, names) || repeatsParenthesizedTitle(title, names)
     }
 
     /** A separator inside a title is not a new credit unless an artist and dash follow it. */
@@ -1672,7 +1671,8 @@ internal class ExactMatcher(
         title.forEachIndexed { index, char ->
             if (char in VIDEO_CREDIT_SEPARATORS) {
                 val next = title.substring(index + 1).takeWhile { it !in VIDEO_CREDIT_SEPARATORS }
-                if (VIDEO_CREDIT_DASHES.any(next::contains)) {
+                val before = title.substring(start, index)
+                if (VIDEO_CREDIT_DASHES.any(before::contains) && VIDEO_CREDIT_DASHES.any(next::contains)) {
                     parts += title.substring(start, index)
                     start = index + 1
                 }
@@ -1696,14 +1696,14 @@ internal class ExactMatcher(
     private fun videoDecoration(text: String): Boolean {
         var rest = text
         val tags = (VIDEO_TAGS + VIDEO_TAG_MARKS).sortedByDescending(String::length)
-        while (rest.isNotEmpty()) {
+        do {
             val tag = tags.firstOrNull { rest.startsWith(it) }
             rest = when {
                 tag != null -> rest.removePrefix(tag)
                 YEAR.matches(rest.take(4)) -> rest.drop(4)
                 else -> return false
             }
-        }
+        } while (rest.isNotEmpty())
         return true
     }
 
@@ -1777,7 +1777,7 @@ internal class ExactMatcher(
     }
 
     private fun creditedVideoTitle(part: String, artists: Set<String>): String? {
-        val dash = VIDEO_CREDIT_DASHES.map { part.indexOf(it) to it }.filter { it.first >= 0 }.minByOrNull { it.first } ?: return null
+        val dash = VIDEO_CREDIT_DASHES.map { part.indexOf(it) to it }.filter { it.first != -1 }.minByOrNull { it.first } ?: return null
         val credit = part.substring(0, dash.first)
         val title = part.substring(dash.first + dash.second.length)
         return title.trim().takeIf { SongNames.normalize(credit) in artists }
