@@ -40,9 +40,9 @@ import androidx.annotation.VisibleForTesting
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -575,7 +575,7 @@ internal class MediaSessionPlayback(
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
         val adsAtStart = seenYouTubeAds.value
-        refreshOn(seenYouTubeAds.dropWhile { it == adsAtStart }) { pick(watched) }
+        val stopAdUpdates = refreshOn(seenYouTubeAds.dropWhile { it == adsAtStart }) { pick(watched) }
         // Without the user's say-so, e.g. taken back meanwhile, Android shows none, and says so by throwing.
         val watching = runCatching {
             sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
@@ -583,6 +583,7 @@ internal class MediaSessionPlayback(
         }.isSuccess
         if (!watching) trySend(null)
         awaitClose {
+            stopAdUpdates()
             sessions.removeOnActiveSessionsChangedListener(changed)
             renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             followed?.unregisterCallback(callback)
@@ -1099,16 +1100,26 @@ internal class MediaSessionPlayback(
         return watchStart(asked, mustStart) { asked.clockCommand("play_from_uri") { playFromUri(Uri.parse(link), Bundle()) } }
     }
 
-    private fun CoroutineScope.refreshOn(updates: Flow<*>, read: () -> Unit) {
-        // Keep these reads on the same thread as Android's callbacks and stop them with the flow.
-        launch(Dispatchers.Main) { updates.collect { read() } }
+    private fun CoroutineScope.refreshOn(updates: Flow<*>, read: () -> Unit): () -> Unit {
+        // Post reads to Android's handler. The flow can close without waiting for that handler.
+        val refresh = Runnable { if (isActive) read() }
+        val watching = launch {
+            updates.collect {
+                handler.removeCallbacks(refresh)
+                handler.post(refresh)
+            }
+        }
+        return {
+            watching.cancel()
+            handler.removeCallbacks(refresh)
+        }
     }
 
     /** What [read] says, again whenever an app starts, pauses, stops, changes songs or its queue. */
     private fun <T> changes(read: () -> T): Flow<T> = callbackFlow {
         var watched: List<Pair<MediaController, MediaController.Callback>> = emptyList()
         fun update() { trySend(read()) }
-        refreshOn(combine(covers.updates, seenYouTubeAds) { _, _ -> Unit }, ::update)
+        val stopOtherUpdates = refreshOn(combine(covers.updates, seenYouTubeAds) { _, _ -> Unit }, ::update)
         fun watch(controllers: List<MediaController>) {
             watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             watched = controllers.map { controller ->
@@ -1142,6 +1153,7 @@ internal class MediaSessionPlayback(
         }.isSuccess
         if (!watching) update()
         awaitClose {
+            stopOtherUpdates()
             sessions.removeOnActiveSessionsChangedListener(changed)
             audio.unregisterAudioPlaybackCallback(sounding)
             watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
