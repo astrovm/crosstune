@@ -30,13 +30,14 @@ class TakesTest {
 
     @Test
     fun theSourceCanNameDiscoAnywhereButTheCandidateStillNeedsANote() {
-        for (name in listOf("Disco Mix", "Song: Disco Version", "Song—ＤＩＳＣＯ・Ｖｅｒ．", "曲名：ﾃﾞｨｽｺ･ｳﾞｧｰｼﾞｮﾝ")) {
+        for (name in listOf("Disco Mix", "Song: Disco Version", "Song—ＤＩＳＣＯ・Ｖｅｒ．", "曲名：ﾃﾞｨｽｺ･ｳﾞｧｰｼﾞｮﾝ", "DiscoVersion", "DiscoMix")) {
             assertTrue(name, Takes.requestsDisco(name))
             assertFalse(name, Takes.namesDisco(name))
         }
-        for (name in listOf("Disco", "Disco Nights", "Disco Vertical", "Disco Mixer", "Undisco Version", "Song (2024 Stereo Mix)")) {
-            assertFalse(name, Takes.requestsDisco(name))
-        }
+        val other = listOf(
+            "Disco", "Disco Nights", "Discover", "Disco Vertical", "Disco Mixer", "Undisco Version", "Disco 別 Version", "Song (2024 Stereo Mix)"
+        )
+        for (name in other) assertFalse(name, Takes.requestsDisco(name))
     }
 
     @Test

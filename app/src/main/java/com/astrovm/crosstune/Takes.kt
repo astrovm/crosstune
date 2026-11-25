@@ -36,19 +36,22 @@ internal object Takes {
         }
 
     /** A link can name a disco recording without using the same note delimiters as a search result. */
-    fun requestsDisco(name: String): Boolean = DISCO_PHRASE.containsMatchIn(Normalizer.normalize(name, Normalizer.Form.NFKC))
+    fun requestsDisco(name: String): Boolean {
+        val written = Normalizer.normalize(name, Normalizer.Form.NFKC)
+        val words = SongNames.writtenWords(written)
+        val joined = words.any { it == "discoversion" || it == "discomix" }
+        if (joined || words.zipWithNext().any { (first, second) -> first == "disco" && second in DISCO_LATIN_ENDINGS }) return true
+        val letters = SongNames.normalize(written)
+        return DISCO_JAPANESE_LABELS.any { it in letters }
+    }
 
-    private const val DISCO_GAP = """[^\p{L}\p{N}]*"""
-    private val DISCO_PHRASE = phoneRegex(
-        """(?<![a-z0-9])disco$DISCO_GAP(?:version|mix|ver|バージョン)(?![a-z0-9])|ディスコ$DISCO_GAP(?:版|(?:バ|ヴァ)ージョン)""",
-        RegexOption.IGNORE_CASE
-    )
-
-    private val DISCO_LABELS = listOf(
-        "disco version", "disco mix", "disco ver.", "DISCOバージョン", "プロモーション用DISCOバージョン",
+    private val DISCO_LATIN_ENDINGS = setOf("version", "mix", "ver")
+    private val DISCO_JAPANESE_LABELS = listOf(
+        "DISCOバージョン", "プロモーション用DISCOバージョン",
         "ディスコバージョン", "ディスコヴァージョン", "ディスコ版",
         "プロモーション用ディスコバージョン", "プロモーション用ディスコヴァージョン", "プロモーション用ディスコ版"
     ).map(SongNames::normalize).toSet()
+    private val DISCO_LABELS = DISCO_LATIN_ENDINGS.map { "disco$it" }.toSet() + DISCO_JAPANESE_LABELS
 
     /** The text of each tag in [name]: what's inside brackets, and what follows a dash set apart by spaces. */
     private fun tagsOf(name: String): List<String> {
