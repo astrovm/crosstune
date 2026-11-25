@@ -2613,10 +2613,23 @@ class ExactMatcherTest {
 
     @Test
     fun aBareTakeInTheNativeTitleDoesNotProveTheStudioSong() {
-        listOf("愛 TVサイズ", "愛 TV Size", "愛 ディスコ", "愛 Live", "愛 Remix", "愛 Instrumental", "愛 カラオケ").forEach { name ->
+        listOf("愛 TVサイズ", "愛 TV Size", "愛 ディスコ", "愛 Live", "愛 Remix", "愛 Instrumental", "愛 カラオケ", "愛 feat. Guest").forEach { name ->
             assertNull(name, findsLoveVideo("$name (Love)", "Band - $name , Band - Love", "Band"))
             assertNull(name, findsLoveVideo("$name (Love)", "Band - Love , Band - $name", "Band"))
         }
+    }
+
+    @Test
+    fun anExplicitlyRequestedTakeCanAppearInBothNames() {
+        val title = "Love TVサイズ"
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow("Band - 愛 TVサイズ , Band - $title", "Band • 1K views • 4:00", videoId = "video000000")),
+            apple = mapOf("US" to appleSong(title, "Band", 240_000)),
+            elsewhere = mapOf("JP" to appleSong("愛 TVサイズ ($title)", "Band", 240_000))
+        )
+        assertEquals("https://music.youtube.com/watch?v=video000000", runBlocking {
+            matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata(title, "Band", lengthMs = 240_000))
+        })
     }
 
     @Test
@@ -2635,6 +2648,7 @@ class ExactMatcherTest {
     fun catalogWhitespaceDoesNotHideAParenthesizedAlias() {
         val url = "https://music.youtube.com/watch?v=video000000"
         assertEquals(url, findsLoveVideo("愛 (Love) ", "Band - 愛 , Band - Love", "Band"))
+        assertEquals(url, findsLoveVideo("愛 (Ｌｏｖｅ)", "Band - 愛 , Band - Love", "Band"))
     }
 
     @Test

@@ -1690,6 +1690,7 @@ internal class ExactMatcher(
     }
 
     private fun aliasNamesAnotherTake(native: String, requested: String): Boolean {
+        if (SongNames.withoutFeaturing(native) != native) return true
         if (SongNames.saysAnotherVersion(native, requested, "")) return true
         val words = SongNames.wordList(native) - SongNames.wordList(requested).toSet()
         if ("disco" in words) return true
