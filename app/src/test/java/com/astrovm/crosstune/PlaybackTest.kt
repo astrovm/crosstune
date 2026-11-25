@@ -559,6 +559,8 @@ class PlaybackTest {
         shadowOf(controller).setMetadata(report)
         assertFalse(checkNotNull(playback.nowPlaying()).ad)
         assertTrue(checkNotNull(followed(asked).last()).ad)
+        // No exact-link reader should give the replacement session new evidence of its own.
+        collecting.forEach(Job::cancel)
 
         shadowOf(sessions).clearControllers()
         assertNull(playback.nowPlaying())
@@ -724,13 +726,14 @@ class PlaybackTest {
         shadowOf(sessions).addController(video)
         val lengths = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
         lengths.of(song.title, song.artist, LONGEST_AD_MS)
+        assertEquals(LONGEST_AD_MS, followed(song).last()?.durationMs)
         val exact = song.copy(url = "https://music.youtube.com/watch?v=other000000")
         assertEquals(214_000L, followed(exact.copy(lengthMs = 214_000)).last()?.durationMs)
         playback.rememberYouTubeLength("other000000", 214_000)
         assertEquals(214_000L, followed(exact).last()?.durationMs)
         assertEquals(true, followed(exact).last()?.ad)
         assertEquals(true, followed(song).last()?.ad)
-        assertEquals(LONGEST_AD_MS, followed(song).last()?.durationMs)
+        assertEquals(214_000L, followed(song).last()?.durationMs)
         // Once the session identifies its cut, the name's length can no longer tell us it is an ad.
         shadowOf(video).setMetadata(MediaMetadata.Builder(video.metadata).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "longVersion").build())
         assertEquals(false, followed(song).last()?.ad)
