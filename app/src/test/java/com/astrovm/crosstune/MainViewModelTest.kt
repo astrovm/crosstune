@@ -5407,12 +5407,18 @@ class MainViewModelTest {
     fun aYouTubeReportAtTheAdLengthCutoffCanStartTheVideo() =
         aYouTubeVideoStartsFromTheGeneralReport(expected = 253_000, reported = LONGEST_AD_MS)
 
-    private fun aYouTubeVideoStartsFromTheGeneralReport(expected: Long, reported: Long) {
+    @Test
+    fun anUpdatedExactLengthTakesPrecedenceOverTheRequestedLength() =
+        aYouTubeVideoStartsFromTheGeneralReport(expected = 253_000, reported = 10_133, updated = 10_133)
+
+    private fun aYouTubeVideoStartsFromTheGeneralReport(expected: Long, reported: Long, updated: Long? = null) {
         val phone = FakePlayback().apply { access = true; rememberYouTubeLength("sPmul8b17AU", expected) }
         val model = ytMusicModel(phone)
         val requested = checkNotNull(model.uiState.result)
         model.playResult()
         until("Play asks for the exact video") { phone.linksAsked == listOf(ytLink) }
+        assertEquals(expected, phone.songsAsked.single().first.lengthMs)
+        updated?.let { phone.rememberYouTubeLength("sPmul8b17AU", it) }
         phone.onThePhone = Heard.Song(requested, null, offsetMs = 45, app = ytMusic, sessionDurationMs = reported)
         until("the general report confirms the video") { !model.uiState.playingResult }
         assertEquals(ytLink, model.uiState.player?.song?.url)
