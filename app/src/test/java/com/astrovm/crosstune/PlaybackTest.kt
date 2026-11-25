@@ -529,7 +529,7 @@ class PlaybackTest {
         shadowOf(sessions).addController(controller)
         // The sleep timer and the player can use different playback sources for the same Android session.
         val timerSource = MediaSessionPlayback(app, now = { NOW }, modes = modes)
-        val timer = followed(song, timerSource)
+        val timer = followed(song.copy(lengthMs = 60_046), timerSource)
         assertFalse(checkNotNull(timer.last()).ad)
 
         playback.rememberYouTubeLength("fJ9rUzIMcZQ", 360_000)
@@ -761,8 +761,12 @@ class PlaybackTest {
         assertEquals(true, followed(exact).last()?.ad)
         assertEquals(true, followed(song).last()?.ad)
         assertEquals(214_000L, followed(song).last()?.durationMs)
+        // A different media report drops the confirmation. A title history still counts after that.
+        val report = video.metadata
+        shadowOf(video).setMetadata(MediaMetadata.Builder(report).putLong(MediaMetadata.METADATA_KEY_DURATION, 30_000).build())
+        assertEquals(LONGEST_AD_MS, playback.recording(song)?.lengthMs)
         // Once the session identifies its cut, the name's length can no longer tell us it is an ad.
-        shadowOf(video).setMetadata(MediaMetadata.Builder(video.metadata).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "longVersion").build())
+        shadowOf(video).setMetadata(MediaMetadata.Builder(report).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "longVersion").build())
         assertEquals(false, followed(song).last()?.ad)
         assertEquals(500L, followed(song).last()?.durationMs)
         // A length from the caller is still usable if the caller doesn't identify a different cut.

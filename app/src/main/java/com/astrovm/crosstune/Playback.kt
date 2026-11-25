@@ -40,19 +40,19 @@ import androidx.annotation.VisibleForTesting
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withTimeoutOrNull
@@ -574,7 +574,8 @@ internal class MediaSessionPlayback(
             pick(controllers)
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
-        val stopAdUpdates = refreshOn(seenYouTubeAds.drop(1)) { pick(watched) }
+        val adsAtStart = seenYouTubeAds.value
+        refreshOn(seenYouTubeAds.dropWhile { it == adsAtStart }) { pick(watched) }
         // Without the user's say-so, e.g. taken back meanwhile, Android shows none, and says so by throwing.
         val watching = runCatching {
             sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
@@ -582,7 +583,6 @@ internal class MediaSessionPlayback(
         }.isSuccess
         if (!watching) trySend(null)
         awaitClose {
-            stopAdUpdates()
             sessions.removeOnActiveSessionsChangedListener(changed)
             renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             followed?.unregisterCallback(callback)
@@ -1026,19 +1026,19 @@ internal class MediaSessionPlayback(
     }
 
     /**
-     * How long the song is, when it's an ad that plays: free YouTube Music plays its ads under the next
+     * Whether an ad plays under the song's name: free YouTube Music plays its ads under the next
      * song's name, with all of the song's details but its length, the ad's, then starts the song over
      * from 0. So shorter than the longest ad, said by YouTube Music for a song known to be longer, as [asked]
      * or as said before, it's an ad, unless the app only rounded the duration as it often does.
      */
-    private fun MediaController.songUnderAd(metadata: MediaMetadata, asked: MusicMetadata?): Long? {
-        if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return null
+    private fun MediaController.songUnderAd(metadata: MediaMetadata, asked: MusicMetadata?): Boolean {
+        if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return false
         val said = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
-        if (said !in 1 until LONGEST_AD_MS) return null
+        if (said !in 1 until LONGEST_AD_MS) return false
         val expected = expectedYouTubeLength(metadata, asked, said)
-            ?.takeIf { it >= LONGEST_AD_MS && it - said > SteadyLengths.SAME_MS } ?: return null
+            ?.takeIf { it >= LONGEST_AD_MS && it - said > SteadyLengths.SAME_MS } ?: return false
         rememberYouTubeAd(metadata, asked, said, expected)
-        return expected
+        return true
     }
 
     private fun MediaController.expectedYouTubeLength(metadata: MediaMetadata, asked: MusicMetadata?, said: Long): Long? {
@@ -1099,25 +1099,16 @@ internal class MediaSessionPlayback(
         return watchStart(asked, mustStart) { asked.clockCommand("play_from_uri") { playFromUri(Uri.parse(link), Bundle()) } }
     }
 
-    private fun CoroutineScope.refreshOn(updates: Flow<*>, read: () -> Unit): () -> Unit {
-        val refresh = Runnable { if (isActive) read() }
-        val watching = launch {
-            updates.collect {
-                handler.removeCallbacks(refresh)
-                handler.post(refresh)
-            }
-        }
-        return {
-            watching.cancel()
-            handler.removeCallbacks(refresh)
-        }
+    private fun CoroutineScope.refreshOn(updates: Flow<*>, read: () -> Unit) {
+        // Keep these reads on the same thread as Android's callbacks and stop them with the flow.
+        launch(Dispatchers.Main) { updates.collect { read() } }
     }
 
     /** What [read] says, again whenever an app starts, pauses, stops, changes songs or its queue. */
     private fun <T> changes(read: () -> T): Flow<T> = callbackFlow {
         var watched: List<Pair<MediaController, MediaController.Callback>> = emptyList()
         fun update() { trySend(read()) }
-        val stopOtherUpdates = refreshOn(merge(covers.updates, seenYouTubeAds.drop(1)), ::update)
+        refreshOn(combine(covers.updates, seenYouTubeAds) { _, _ -> Unit }, ::update)
         fun watch(controllers: List<MediaController>) {
             watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             watched = controllers.map { controller ->
@@ -1151,7 +1142,6 @@ internal class MediaSessionPlayback(
         }.isSuccess
         if (!watching) update()
         awaitClose {
-            stopOtherUpdates()
             sessions.removeOnActiveSessionsChangedListener(changed)
             audio.unregisterAudioPlaybackCallback(sounding)
             watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
@@ -1237,7 +1227,7 @@ internal class MediaSessionPlayback(
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
         val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
         // Under an ad, the song waits at its start until the ad's over.
-        val ad = controller.metadata?.let { controller.songUnderAd(it, asked) } != null
+        val ad = controller.metadata?.let { controller.songUnderAd(it, asked) } == true
         val playing = state.state == PlaybackState.STATE_PLAYING
         val clock = if (ad) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, playing)
         return Following(
