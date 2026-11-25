@@ -71,6 +71,24 @@ class GroupTest {
     }
 
     @Test
+    fun aRowThatGrowsMovesItsHairlineAndLeavesNoneWhereItWas() {
+        var tall by mutableStateOf(false)
+        compose.setContent {
+            CrosstuneTheme {
+                Group(Modifier.width(200.dp).testTag("group")) {
+                    Box(Modifier.fillMaxWidth().height(if (tall) 20.dp else 10.dp))
+                    Box(Modifier.fillMaxWidth().height(10.dp))
+                }
+            }
+        }
+        assertEquals(listOf(10) to false, hairlines())
+        tall = true
+        compose.waitForIdle()
+        compose.onNodeWithTag("group").assertHeightIsEqualTo(31.dp)
+        assertEquals(listOf(20) to false, hairlines())
+    }
+
+    @Test
     fun aGroupsRowsAreDrawnUnderItsHairlines() {
         compose.setContent {
             CrosstuneTheme { Group(Modifier.width(200.dp).testTag("group")) { Box(Modifier.fillMaxWidth().height(10.dp).background(Color.Red)) } }
