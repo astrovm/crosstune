@@ -1666,8 +1666,18 @@ internal class ExactMatcher(
             val pair = parenthesizedAlias(name) ?: return@any false
             val native = aliasText(pair.first)
             val alias = aliasText(pair.second)
-            native != alias && alias == requested && setOf(native, alias) == credited && !aliasNamesAnotherTake(native, requested)
+            native != alias && alias == requested && setOf(native, alias) == credited &&
+                plainVideoNameMatches(native, names) && plainVideoNameMatches(alias, names)
         }
+    }
+
+    /** Ask the ordinary video check about each name alone, with the requested title still known. */
+    private fun plainVideoNameMatches(name: String, names: Names): Boolean {
+        val plain = Names(
+            setOf(names.requestedTitle, name), names.artists, names.lengthsMs, null, names.requestedTitle, names.requestedArtist,
+            names.linkedEdition, names.corroboratingAlbum, names.takeOnAlbum, names.searchFailed, names.complete, names.failedLookups
+        )
+        return videoTitleMatches("${names.requestedArtist} - $name", plain)
     }
 
     private fun aliasText(text: String): String = Normalizer.normalize(text, Normalizer.Form.NFKC).trim()
@@ -1691,17 +1701,6 @@ internal class ExactMatcher(
         }
         if (plain.isEmpty() || aliasText(plain).any { it in ALIAS_BRACKETS }) return null
         return native to plain
-    }
-
-    private fun aliasNamesAnotherTake(native: String, requested: String): Boolean {
-        if (SongNames.withoutFeaturing(native) != native) return true
-        if (native.any { it in "&+/×" } || SongNames.wordList(native).any { it in ALIAS_CREDIT_WORDS }) return true
-        if (SongNames.saysAnotherVersion(native, requested, "")) return true
-        val words = SongNames.wordList(native) - SongNames.wordList(requested).toSet()
-        if ("disco" in words) return true
-        val written = SongNames.normalize(native)
-        val wanted = SongNames.normalize(requested)
-        return ALIAS_TAKE_MARKS.any { it in written && it !in wanted }
     }
 
     /** The video repeats the artist before each store name. Compare whole names, so 愛 can't explain 愛愛. */
@@ -1869,12 +1868,7 @@ internal class ExactMatcher(
         private val VIDEO_TAG_MARKS = listOf("歌詞付き", "歌詞付", "歌詞", "公式", "字幕", "高音質", "日本語", "中日羅", "가사").map(SongNames::normalize)
 
         private const val ALIAS_BRACKETS = "()（）[]［］{}｛｝【】〔〕「」『』〈〉《》〘〙〚〛"
-        private val ALIAS_CREDIT_WORDS = setOf("with", "x", "vs", "versus", "feat", "featuring", "ft", "and", "y", "und", "et")
         private val NEUTRAL_ALIAS_WORDS = setOf("original", "remaster", "remastered", "mono", "stereo")
-        private val ALIAS_TAKE_MARKS = listOf(
-            "tvsize", "tvサイズ", "ディスコ", "オフボーカル", "オフヴォーカル", "インスト", "リミックス", "ショートバージョン", "ショートサイズ",
-            "纯音乐", "純音樂", "伴奏版", "인스트", "리믹스", "어쿠스틱", "混音"
-        ).map(SongNames::normalize)
 
         /** A year, as a video's title may give the song's: "1984". */
         private val YEAR = phoneRegex("""(?:19|20)\d\d""")

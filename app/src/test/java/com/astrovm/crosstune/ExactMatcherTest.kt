@@ -2612,21 +2612,22 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun aBareTakeInTheNativeTitleDoesNotProveTheStudioSong() {
-        listOf("愛 TVサイズ", "愛 TV Size", "愛 ディスコ", "愛 Live", "愛 Remix", "愛 Instrumental", "愛 カラオケ", "愛 feat. Guest").forEach { name ->
-            assertNull(name, findsLoveVideo("$name (Love)", "Band - $name , Band - Love", "Band"))
-            assertNull(name, findsLoveVideo("$name (Love)", "Band - Love , Band - $name", "Band"))
+    fun catalogTakeWordsCanBePartOfTheNativeName() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        listOf("愛 TVサイズ", "愛 TV Size", "愛 ディスコ", "愛 Live", "愛 Remix", "愛 Instrumental", "愛 カラオケ").forEach { name ->
+            assertEquals(name, url, findsLoveVideo("$name (Love)", "Band - $name , Band - Love", "Band"))
+            assertEquals(name, url, findsLoveVideo("$name (Love)", "Band - Love , Band - $name", "Band"))
         }
     }
 
     @Test
-    fun aBareDiscoWordCannotProveAnAlias() {
-        assertNull(findsLoveVideo("愛 Disco (Love)", "Band - 愛 Disco , Band - Love", "Band"))
+    fun aBareDiscoWordCanBePartOfTheNativeName() {
+        assertEquals("https://music.youtube.com/watch?v=video000000", findsLoveVideo("愛 Disco (Love)", "Band - 愛 Disco , Band - Love", "Band"))
     }
 
     @Test
-    fun aNativeFeaturingCreditCannotProveAnAlias() {
-        assertNull(findsLoveVideo("愛 feat. Official (Love)", "Band - 愛 feat. Official , Band - Love", "Band"))
+    fun aFeaturingCreditFollowsThePlainVideoCheck() {
+        assertNull(findsLoveVideo("愛 feat. Guest (Love)", "Band - 愛 feat. Guest , Band - Love", "Band"))
     }
 
     @Test
@@ -2651,10 +2652,22 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun guestCreditsAreNotNativeTitleAliases() {
-        listOf("with", "x", "&", "vs", "feat.", "and", "y", "und", "et").forEach { credit ->
-            val name = "愛 $credit Official"
-            assertNull(credit, findsLoveVideo("$name (Love)", "Band - $name , Band - Love", "Band"))
+    fun creditWordsFollowThePlainVideoCheck() {
+        val accepted = setOf("with", "prod", "x", "×", "&", "and", "vs", "と", "와", "和")
+        val rejected = setOf("feat.", "ft.", "featuring")
+        (accepted + rejected).forEach { credit ->
+            val expected = "https://music.youtube.com/watch?v=video000000".takeIf { credit in accepted }
+            assertEquals(credit, expected, findsLoveVideo("Love $credit Guest", "Band - Love $credit Guest", "Band"))
+            assertEquals(credit, expected, findsLoveVideo("愛 $credit Guest (Love)", "Band - 愛 $credit Guest , Band - Love", "Band"))
+        }
+    }
+
+    @Test
+    fun conjunctionsCanBePartOfTheNativeTitle() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        listOf("&", "and").forEach { word ->
+            assertEquals(word, url, findsLoveVideo("Love $word Peace", "Band - Love $word Peace", "Band"))
+            assertEquals(word, url, findsLoveVideo("愛 $word 平和 (Love)", "Band - 愛 $word 平和 , Band - Love", "Band"))
         }
     }
 
