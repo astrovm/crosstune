@@ -2773,6 +2773,8 @@ class ExactMatcherTest {
         assertEquals(second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), otherArtist, "Band - Love"))
         val tagAsTitle = "Band - Love, Band - Video"
         assertEquals(second, findsCreditedVideo("Love", listOf("愛"), tagAsTitle, "Band - Love"))
+        val unknownNote = "Band - 愛, Band - Love Sunset"
+        assertEquals(second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), unknownNote, "Band - Love"))
         for (dash in listOf(" - ", " – ", " — ")) {
             for (suffix in listOf("", " (Official Video)")) {
                 val original = "Band${dash}愛, Band${dash}Love, Band${dash}Sunset$suffix"
