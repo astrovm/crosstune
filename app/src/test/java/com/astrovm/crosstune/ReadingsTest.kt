@@ -243,6 +243,39 @@ class ReadingsTest {
     }
 
     @Test
+    fun nanDaAcrossAdverbsAndCommas() {
+        val spellings = listOf("なんだ", "何だ")
+        val adverbs = listOf("一体" to "ittai", "いったい" to "ittai", "一体全体" to "ittaizentai", "結局" to "kekkyoku", "今" to "ima")
+        val cases = buildList {
+            for ((adverb, reading) in adverbs) for (comma in listOf("", "、", ",")) {
+                for (count in 1..2) for (mask in 0 until (1 shl count)) for (topic in listOf(false, true)) {
+                    if (!topic && count == 1) continue
+                    val words = (0 until count).map { spellings[(mask shr it) and 1] }
+                    val line = (if (topic) "これは" else "") + adverb + comma + words.joinToString("")
+                    val first = if (topic) "nan da" else "nanda"
+                    val romaji = (if (topic) "kore wa " else "") + reading + comma + " " + first +
+                        if (count == 2) " nanda" else ""
+                    val firstWords = if (topic) listOf(if (words.first() == "何だ") "何" else "なん", "だ") else listOf(words.first())
+                    val sheet = (if (topic) listOf("これ", "は") else emptyList()) + listOf(adverb) + firstWords + words.drop(1)
+                    add(Triple(line, romaji, sheet))
+                }
+            }
+        }
+        assertJapaneseBoundaries(cases)
+    }
+
+    @Test
+    fun nanDaAdverbClauseBoundaries() = assertJapaneseBoundaries(listOf(
+        Triple("君はもうなんだ", "kimi wa moo nan da", listOf("君", "は", "もう", "なん", "だ")),
+        Triple("それはなんだ、なんだ", "sore wa nan da、 nanda", listOf("それ", "は", "なん", "だ", "なんだ")),
+        Triple("これは一体。なんだなんだ", "kore wa ittai。 nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
+        Triple("これは一体！なんだなんだ", "kore wa ittai！ nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
+        Triple("これは一体？なんだなんだ", "kore wa ittai？ nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
+        Triple("これは一体\nなんだなんだ", "kore wa ittai nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
+        Triple("これは猫、なんだなんだ", "kore wa neko、 nanda nanda", listOf("これ", "は", "猫", "なんだ", "なんだ")),
+    ))
+
+    @Test
     fun explanatoryNandaStaysWholeAndInterrogativeNanSeparates() = assertJapaneseBoundaries(listOf(
         Triple("今日はここまでなんだ", "kyoo wa koko made nanda", listOf("今日", "は", "ここ", "まで", "なんだ")),
         Triple("つらいからなんだよ", "tsurai kara nanda yo", listOf("つらい", "から", "なんだ", "よ")),

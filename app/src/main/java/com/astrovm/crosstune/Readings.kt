@@ -222,7 +222,7 @@ internal object Readings {
         for (at in pieces.indices) {
             if (at < skipUntil) continue
             val piece = pieces[at]
-            val length = pieces.repeatedNanDaLength(at)
+            val length = pieces.nanDaRewriteLength(at)
             if (length > 0) {
                 addAll(pieces.repeatedNanDaPieces(at, length))
                 skipUntil = at + length
@@ -233,7 +233,7 @@ internal object Readings {
             val subject = pieces.nanDaHasSubject(at)
             val question = subject || after?.surface in setOf("か", "よ", "ね", "?", "？") ||
                 openingNanDaContinues(before, after)
-            val call = nanDaCall(pieces, at)
+            val call = !subject && nanDaCall(pieces, at)
             when {
                 piece.surface == "何だ" && piece.kind == "感動詞" && question -> {
                     add(Piece("何", "なん", "名詞", "代名詞", reader = Reader.RULES))
@@ -273,7 +273,17 @@ internal object Readings {
     }
 
     private fun List<Piece>.beforeAdverbs(at: Int): Piece? =
-        (at - 1 downTo 0).asSequence().map(::get).dropWhile { it.kind == "副詞" || it.surface == "一体" }.firstOrNull()
+        (at - 1 downTo 0).asSequence().dropWhile { adverbOrComma(it) }.firstOrNull()?.let(::get)
+
+    // Both dictionaries can tag 一体 as an ordinary noun. 今 can be a prefix before an ASCII comma.
+    private val NAN_DA_ADVERB_FALLBACKS = setOf("一体", "今")
+
+    private fun List<Piece>.adverbOrComma(at: Int): Boolean {
+        val piece = get(at)
+        // UniDic can also split 一体全体 into two ordinary nouns.
+        return piece.kind == "副詞" || piece.subkind == "副詞可能" || piece.surface in NAN_DA_ADVERB_FALLBACKS ||
+            (piece.surface == "全体" && getOrNull(at - 1)?.surface == "一体") || piece.surface in setOf(",", "，", "、")
+    }
 
     private fun Piece?.endsNanDaCall() = this == null || surface.isBlank() ||
         surface.firstOrNull()?.let { it in "、，,。．.!！；;：:」』）)】〉》］]｝}”’｣»›⟩〟" } == true
@@ -298,6 +308,12 @@ internal object Readings {
     }
 
     private fun Piece.nanDaJoiner() = surface.firstOrNull()?.let { it in " \t　,，、" } == true && surface.all { it in " \t　,，、" }
+
+    private fun List<Piece>.nanDaRewriteLength(at: Int): Int {
+        val repeated = repeatedNanDaLength(at)
+        if (repeated > 0) return repeated
+        return nanDaLength(at).takeIf { it == 3 && nanDaHasSubject(at) } ?: 0
+    }
 
     private fun List<Piece>.repeatedNanDaLength(at: Int): Int {
         val length = nanDaLength(at)
