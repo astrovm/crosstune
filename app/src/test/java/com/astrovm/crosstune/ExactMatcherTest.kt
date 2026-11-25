@@ -20,7 +20,11 @@ import okhttp3.Request
 import okhttp3.ResponseBody.Companion.asResponseBody
 import okio.ForwardingSource
 import okio.buffer
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -48,6 +52,200 @@ class ExactMatcherTest {
 
     private fun respond(json: String) {
         fake.handler = { request: Request -> FakeSpotify.html(request, json) }
+    }
+
+    @Test
+    fun prestoFindsAnAlbumByItsTitleAndArtist() = runBlocking {
+        respond(prestoSearchFixture("jazz-shorter"))
+        val album = MusicMetadata("Speak No Evil", "Wayne Shorter", ItemType.ALBUM)
+        assertEquals("https://streaming.prestomusic.com/album/8038751", matcher().find(MusicService.PRESTO_MUSIC, album))
+        val request = fake.requestedUrls.single().toHttpUrl()
+        assertEquals("ajax-www.prestomusic.com", request.host)
+        assertEquals("/api/app/6/explore/search", request.encodedPath)
+        assertEquals("Speak No Evil Wayne Shorter", request.queryParameter("search"))
+        assertEquals("50", request.queryParameter("limit"))
+        assertEquals("0", request.queryParameter("offset"))
+        assertEquals("recommended", request.queryParameter("sort"))
+        assertEquals("album", request.queryParameter("type"))
+
+        respond(prestoSearchFixture("classical"))
+        val classical = MusicMetadata("Glenn Gould, Piano: Goldberg Variations", "Glenn Gould", ItemType.ALBUM)
+        assertEquals("https://streaming.prestomusic.com/album/9590596", matcher().find(MusicService.PRESTO_MUSIC, classical))
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, classical.copy(artist = "Gould")))
+
+        val row = """{"title":"Speak No Evil","artists":"Wayne Shorter (tenor saxophone)","prestoCode":8038751}"""
+        val other = """{"title":"Speak No Evil","artists":"Flora Purim"}"""
+        respond(prestoPage(row, row, other))
+        assertEquals("https://streaming.prestomusic.com/album/8038751", matcher().find(MusicService.PRESTO_MUSIC, album))
+    }
+
+    private fun prestoPage(vararg rows: String): String =
+        """{"status":"ok","payload":{"totalCount":${rows.size},"results":[${rows.joinToString(",")}]}}"""
+
+    @Test
+    fun prestoDoesNotTakeTheOnlyMatchOnAnIncompletePage() = runBlocking {
+        respond(prestoShorterFirstPage())
+        val album = MusicMetadata("Speak No Evil", "Wayne Shorter", ItemType.ALBUM)
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, album))
+    }
+
+    @Test
+    fun prestoChecksEditionsAfterTheOldFirstTenResults() = runBlocking {
+        fake.handler = { request ->
+            val answer = JSONObject(prestoShorterFirstPage())
+            val payload = answer.getJSONObject("payload").put("totalCount", 11)
+            if (checkNotNull(request.url.queryParameter("limit")).toInt() > 10) {
+                payload.getJSONArray("results").put(JSONObject("""{"title":"Speak No Evil","artists":"Wayne Shorter","prestoCode":42}"""))
+            }
+            FakeSpotify.html(request, answer.toString())
+        }
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, MusicMetadata("Speak No Evil", "Wayne Shorter", ItemType.ALBUM)))
+    }
+
+    @Test
+    fun prestoDoesNotTrustAMissingInvalidOrInconsistentTotal() = runBlocking {
+        val row = """{"title":"Speak No Evil","artists":"Wayne Shorter","prestoCode":8038751}"""
+        val album = MusicMetadata("Speak No Evil", "Wayne Shorter", ItemType.ALBUM)
+        for (total in listOf(null, "invalid", -1, 0, 2)) {
+            val payload = JSONObject().putOpt("totalCount", total).put("results", JSONArray("[$row]"))
+            respond(JSONObject().put("status", "ok").put("payload", payload).toString())
+            assertNull("Total $total", matcher().find(MusicService.PRESTO_MUSIC, album))
+        }
+        // A non-object row may be a release we can't read.
+        respond(prestoPage(row, "null"))
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, album))
+    }
+
+    @Test
+    fun prestoKeepsMonoAndStereoEditionsDistinct() = runBlocking {
+        respond(prestoPage("""{"title":"Kind of Blue (Mono)","artists":"Miles Davis (trumpet), Bill Evans (piano)","prestoCode":8471365}"""))
+        val album = MusicMetadata("Kind of Blue (Stereo)", "Miles Davis", ItemType.ALBUM)
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, album))
+        val mono = album.copy(title = "KÍND OF BLUE – MONO", artist = "Miles Davis, Bill Evans")
+        assertEquals("https://streaming.prestomusic.com/album/8471365", matcher().find(MusicService.PRESTO_MUSIC, mono))
+    }
+
+    @Test
+    fun prestoKeepsRemasteredEditionsDistinct() = runBlocking {
+        respond(prestoPage("""{"title":"Speak No Evil (1998 Remaster)","artists":"Wayne Shorter","prestoCode":8038751}"""))
+        val album = MusicMetadata("Speak No Evil (2024 Remaster)", "Wayne Shorter", ItemType.ALBUM)
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, album))
+    }
+
+    @Test
+    fun prestoRequiresTheLeadArtistEvenWhenConductorsShareAnEnsemble() = runBlocking {
+        val album = MusicMetadata("Goldberg Variations", "Conductor A, Ensemble", ItemType.ALBUM)
+        respond(prestoPage("""{"title":"Goldberg Variations","artists":"Ensemble, Conductor B (conductor)","prestoCode":1}"""))
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, album))
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, album.copy(artist = "Ensemble, Conductor A")))
+        respond(prestoPage("""{"title":"Goldberg Variations","artists":"Ensemble, Conductor A (conductor)","prestoCode":1}"""))
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, album))
+        respond(prestoPage("""{"title":"Goldberg Variations","artists":"Conductor A (conductor), Ensemble","prestoCode":2}"""))
+        assertEquals("https://streaming.prestomusic.com/album/2", matcher().find(MusicService.PRESTO_MUSIC, album))
+    }
+
+    @Test
+    fun prestoDoesNotTreatPartOfABandsNameAsItsLeadArtist() = runBlocking {
+        respond(prestoPage("""{"title":"Live","artists":"Simon","prestoCode":1}"""))
+        val album = MusicMetadata("Live", "Simon & Garfunkel", ItemType.ALBUM)
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, album))
+    }
+
+    @Test
+    fun prestoDoesNotOpenAlbumsWithGenericArtistCredits() = runBlocking {
+        for (credit in listOf("Various Artists", "VARIOUS–ARTISTS", "V/A", "Artistes variés", "ヴァリアス・アーティスト", "<unknown>", "", "♪", "\u0301")) {
+            respond(prestoPage("""{"title":"Best of Jazz","artists":"$credit","prestoCode":1}"""))
+            val album = MusicMetadata("Best of Jazz", credit, ItemType.ALBUM)
+            assertNull(credit, matcher().find(MusicService.PRESTO_MUSIC, album))
+        }
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun prestoDoesNotOpenAlbumsWithAGenericPrestoLead() = runBlocking {
+        respond(prestoPage("""{"title":"Best of Jazz","artists":"Artistes variés","prestoCode":1}"""))
+        val album = MusicMetadata("Best of Jazz", "Artistes varies", ItemType.ALBUM)
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, album))
+    }
+
+    @Test
+    fun prestoDoesNotMatchATitleWithNoLettersOrDigits() = runBlocking {
+        respond(prestoPage("""{"title":".","artists":"Wayne Shorter","prestoCode":1}"""))
+        val album = MusicMetadata("!", "Wayne Shorter", ItemType.ALBUM)
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, album))
+    }
+
+    @Test
+    fun prestoDoesNotDiscardMatchingRowsWithUnusableCodes() = runBlocking {
+        val valid = """{"title":"Speak No Evil","artists":"Wayne Shorter","prestoCode":8038751}"""
+        val album = MusicMetadata("Speak No Evil", "Wayne Shorter", ItemType.ALBUM)
+        for (code in listOf(null, JSONObject.NULL, "", "not-an-id", 0)) {
+            val matching = JSONObject("""{"title":"Speak No Evil","artists":"Wayne Shorter"}""").putOpt("prestoCode", code)
+            respond(prestoPage(valid, matching.toString()))
+            assertNull("Code $code", matcher().find(MusicService.PRESTO_MUSIC, album))
+        }
+    }
+
+    @Test
+    fun prestoLeavesAmbiguousOrMissingAlbumsToSearch() = runBlocking {
+        respond(prestoSearchFixture("jazz"))
+        val album = MusicMetadata("Kind of Blue", "Miles Davis", ItemType.ALBUM)
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, album))
+        assertEquals(1, fake.requestedUrls.size)
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, album.copy(artist = "John Coltrane")))
+
+        respond(prestoSearchFixture("pop"))
+        val pop = MusicMetadata("1989", "Taylor Swift", ItemType.ALBUM)
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+        assertFalse(canBeMissing(MusicService.PRESTO_MUSIC, album))
+
+        respond(prestoPage(
+            """{"title":"1989","artists":"Taylor Swift","prestoCode":"not-an-id"}""",
+            """{"title":"1989","artists":"Taylor Swift","prestoCode":0}""",
+            """{"title":null,"artists":"Taylor Swift","prestoCode":1}""",
+            """{"title":"1989","artists":null,"prestoCode":2}"""
+        ))
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+
+        // Beside a row that can't be read, one that matches may not be the only release.
+        respond(prestoPage(
+            """{"title":"1989","artists":"Taylor Swift","prestoCode":7}""",
+            """{"title":null,"artists":"Taylor Swift","prestoCode":8}"""
+        ))
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+        respond(prestoPage(
+            """{"title":"1989","artists":"Taylor Swift","prestoCode":7}""",
+            """{"title":"1989","artists":null,"prestoCode":8}"""
+        ))
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+        respond(prestoPage("""{"title":"1989","artists":"Taylor Swift","prestoCode":7}"""))
+        assertNotEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+
+        // A code of 0 is no album, and credits that are only what someone plays name no lead.
+        respond(prestoPage("""{"title":"1989","artists":"Taylor Swift","prestoCode":0}"""))
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+        respond(prestoPage("""{"title":"1989","artists":"(vocals)","prestoCode":7}"""))
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+    }
+
+    @Test
+    fun prestoDistinguishesAnOutageFromNoAlbum() = runBlocking {
+        val album = MusicMetadata("1989", "Taylor Swift", ItemType.ALBUM)
+        respond("""{"status":"error","code":54}""")
+        assertEquals(ExactMatcher.Match.Failed, matcher().lookFor(MusicService.PRESTO_MUSIC, album))
+        respond("""{"status":"ok","payload":{}}""")
+        assertEquals(ExactMatcher.Match.Failed, matcher().lookFor(MusicService.PRESTO_MUSIC, album))
+        respond("not JSON")
+        assertEquals(ExactMatcher.Match.Failed, matcher().lookFor(MusicService.PRESTO_MUSIC, album))
+    }
+
+    @Test
+    fun prestoDoesNotLookUpSongsEvenWhenTheirAlbumIsKnown() = runBlocking {
+        val track = MusicMetadata("Witch Hunt", "Wayne Shorter", album = "Speak No Evil")
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, track))
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, track.copy(type = ItemType.ARTIST)))
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, track.copy(type = ItemType.PLAYLIST)))
+        assertTrue(fake.requestedUrls.isEmpty())
     }
 
     @Test

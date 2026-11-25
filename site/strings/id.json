@@ -62,7 +62,7 @@
   "privacy_link": "Kebijakan privasi",
   "language_label": "Bahasa",
   "privacy_title": "Kebijakan Privasi Crosstune",
-  "updated": "Terakhir diperbarui: 20 November 2026",
+  "updated": "Terakhir diperbarui: 24 November 2026",
   "short_h2": "Singkatnya",
   "short_items": [
     "Tanpa akun, iklan, atau analitik.",
@@ -100,7 +100,7 @@
     ],
     [
       "p",
-      "Untuk mengenali lagu dari sebuah link, Crosstune membaca halaman publik atau API publik di layanan asalnya: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Presto Music, Shazam, atau Google, dan memuat sampulnya. Untuk membukanya di aplikasi lain, judul dan artis dikirim ke pencarian aplikasi itu. Kalau pencarian itu tidak yakin, judul dan artis juga dikirim ke pencarian lagu Apple dan Deezer. Untuk Spotify, keduanya dikirim ke ListenBrainz, nama artis ke MusicBrainz, dan halaman publik Spotify dibaca. Putar semua dan Acak melakukan ini untuk setiap lagu, dan YouTube membuat playlist dari video yang ditemukan. Nama lagu yang kamu ketik dikirim ke pencarian Deezer dan Apple. Tujuan khusus menerima kata pencarian di alamat yang kamu atur."
+      "Untuk mengenali lagu dari sebuah link, Crosstune membaca halaman publik atau API publik di layanan asalnya: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Presto Music, Shazam, atau Google, dan memuat sampulnya. Untuk membukanya di aplikasi lain, judul dan artis dikirim ke pencarian aplikasi itu. Kalau pencarian itu tidak yakin, judul dan artis juga dikirim ke pencarian lagu Apple dan Deezer. Untuk Spotify, keduanya dikirim ke ListenBrainz, nama artis ke MusicBrainz, dan halaman publik Spotify dibaca. Putar semua dan Acak melakukan ini untuk setiap lagu, dan YouTube membuat playlist dari video yang ditemukan. Nama lagu yang kamu ketik dikirim ke pencarian Deezer dan Apple. Tujuan khusus menerima kata pencarian di alamat yang kamu atur. Untuk menemukan album di Presto Music, aplikasi Android mengirim judul dan artis album ke API pencarian Presto Music."
     ],
     [
       "p",

@@ -320,7 +320,7 @@ internal object MusicLinks {
             products > 0 && products == segments.size - 2 -> segments.last().substringBefore("--")
             else -> null
         }?.takeIf { numericIdRegex.matches(it) } ?: return null
-        return MusicLink(MusicService.PRESTO_MUSIC, ItemType.ALBUM, code, "https://streaming.prestomusic.com/album/$code")
+        return MusicLink(MusicService.PRESTO_MUSIC, ItemType.ALBUM, code, Presto.albumUrl(code))
     }
 
     /** music.apple.com/{region}/{song|album|artist|playlist}/{slug}/{id}, where album?i= is a song. */

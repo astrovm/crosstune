@@ -24,6 +24,18 @@ test('the privacy policy discloses the Apple US search if the regional search fa
   assert.ok(privacy.html.includes(disclosure), 'published privacy page describes the fallback');
 });
 
+test('the privacy policy discloses the Presto album search in every locale', () => {
+  const disclosure = "To find an album in Presto Music, the Android app sends the album's title and artist to Presto Music's search API.";
+  const readme = fs.readFileSync(path.join(__dirname, '../README.md'), 'utf8');
+  const privacy = documents.find(document => document.code === 'en' && document.section === 'privacy/');
+  assert.ok(readme.includes(disclosure), 'README privacy section describes the album lookup');
+  assert.ok(privacy.html.includes(disclosure), 'published English privacy page describes the album lookup');
+  for (const { code, html } of documents.filter(document => document.section === 'privacy/')) {
+    const openingLinks = html.match(/<p>[^<]*Presto Music[^<]*<\/p>/)?.[0];
+    assert.equal(openingLinks?.match(/Presto Music/g)?.length, 3, `${code} mentions Presto as a source and in its album lookup disclosure`);
+  }
+});
+
 function page(document, { saved = null, browser = ['en'], blockedStorage = false } = {}) {
   const assigned = [], replaced = [], writes = [];
   const context = {

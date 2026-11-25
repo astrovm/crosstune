@@ -4590,6 +4590,22 @@ class MainViewModelTest {
     }
 
     @Test
+    fun closingThePlayerDoesNotBringBackAnAppThatStopsOnceLeft() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        appPlays(playback)
+        until("left the playing app") { playback.cameBack == 1 && !model.uiState.playingResult }
+        model.closePlayer()
+        // Still within the wait to see if it stops now that Crosstune is in front.
+        appPlays(playback, playing = false)
+        pass(START_MS)
+        assertTrue(playback.plays.isEmpty())
+        assertNull(model.uiState.player)
+    }
+
+    @Test
     fun aSongItsAppCantBeAskedForIsOpenedThereAndWithNoAccessIsTakenAsPlayed() {
         val playback = FakePlayback().apply { access = false; canPlaySongs = false }
         val model = ytMusicModel(playback, packageName = morpheMusic)
@@ -4658,11 +4674,21 @@ class MainViewModelTest {
     fun anAppStillOnAnAdIsLeftInFrontAsLeftItMightStopAndLeftOnceTheSongPlays() {
         val playback = FakePlayback().apply { access = true; canPlaySongs = false }
         val model = ytMusicModel(playback)
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
         model.playResult()
         until("opened there") { playback.opened.isNotEmpty() }
+        // The initial Play must complete normally, separate from the wait for the ad to end.
+        val playFailure = CompletableDeferred<Throwable>()
+        checkNotNull(model.viewModelScope.coroutineContext[Job]).children.forEach { child ->
+            child.invokeOnCompletion { cause ->
+                if (cause != null && cause !is CancellationException) playFailure.complete(cause)
+            }
+        }
         playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         until("done playing it") { !model.uiState.playingResult }
+        assertFalse("Play failed while starting the ad wait", playFailure.isCompleted)
         // Left during the ad, YouTube without Premium would stop, with no song to see stop and bring it back for.
         assertEquals(0, playback.cameBack)
         assertNotNull(model.uiState.player)
@@ -4670,6 +4696,34 @@ class MainViewModelTest {
         pass(2 * LONGEST_AD_MS - MainViewModel.LOAD_SONG_MS - 2_000)
         appPlays(playback)
         until("back once the song's on") { playback.cameBack == 1 }
+        assertTrue(effects.isEmpty())
+        assertEquals(ytMusic to ytLink, playback.opened.single())
+    }
+
+    @Test
+    fun aSingleSongThatStaysOnAnAdLeavesAnExistingListAlone() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val file = File(app.noBackupFilesDir, "play_queue_while_ad.json")
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val queue = PlayQueue(playback, { _, songs -> YouTubeQueue(ytLink, songs) }, { _, _ -> null }, file, scope, Dispatchers.Unconfined)
+        try {
+            runBlocking { queue.play(listOf(song, song.copy(title = "Next")), MusicService.YOUTUBE_MUSIC, ytMusic, 1, listOf(song)) }
+            assertTrue(file.exists())
+            val model = ytMusicModel(playback, playQueue = queue)
+            model.playResult()
+            until("opened on the single song") { playback.opened.isNotEmpty() }
+            playback.inApp(ytMusic).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+            pass(MainViewModel.LOAD_SONG_MS + 1_000)
+            until("waiting out the ad") { !model.uiState.playingResult }
+            assertNotNull(model.uiState.player)
+
+            pass(MainViewModel.ADS_MS)
+            until("given up on the song") { model.uiState.player == null }
+            assertTrue(file.exists())
+        } finally {
+            scope.cancel()
+            file.delete()
+        }
     }
 
     @Test
@@ -4912,6 +4966,60 @@ class MainViewModelTest {
         until("done playing it") { !model.uiState.playingResult }
         assertTrue(model.uiState.coveringApp)
         assertNotNull(model.uiState.player)
+    }
+
+    @Test
+    fun anUnnamedAdFromTheTvAppOnlyCountsWhenTheMusicAppIsAbsent() {
+        val tv = MusicService.YOUTUBE_TV
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback, packageName = tv)
+        model.playResult()
+        until("opened through YouTube Music") { playback.opened.isNotEmpty() }
+        assertEquals(ytMusic to ytLink, playback.opened.single())
+        playback.unnamed.value = Unnamed(tv, label = null, name = null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("waiting out the TV ad") { !model.uiState.playingResult }
+        assertNotNull(model.uiState.player)
+
+        model.closePlayer()
+        playback.unnamed.value = null
+        shadowOf(app.packageManager).installPackage(installedApp(ytMusic, "YouTube Music"))
+        model.playResult()
+        until("opened through YouTube Music again") { playback.opened.size == 2 }
+        assertEquals(ytMusic to ytLink, playback.opened.last())
+        playback.unnamed.value = Unnamed(tv, label = null, name = null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done waiting for the music app") { !model.uiState.playingResult }
+        assertNull(model.uiState.player)
+        assertEquals(0, playback.cameBack)
+    }
+
+    @Test
+    fun aSongNamedByTheTvAppOnlyCountsWhenTheMusicAppIsAbsent() {
+        val tv = MusicService.YOUTUBE_TV
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback, packageName = tv)
+        model.playResult()
+        until("opened through YouTube Music") { playback.opened.isNotEmpty() }
+        assertEquals(ytMusic to ytLink, playback.opened.single())
+        val named = MusicMetadata("抱かれにきた女", "浜田省吾")
+        playback.onThePhone = Heard.Song(named, null, app = tv)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("accepted the song named by the TV app") { !model.uiState.playingResult }
+        assertEquals(1, playback.cameBack)
+        assertEquals(named, model.uiState.player?.song)
+
+        model.closePlayer()
+        playback.onThePhone = null
+        shadowOf(app.packageManager).installPackage(installedApp(ytMusic, "YouTube Music"))
+        model.playResult()
+        until("opened through YouTube Music again") { playback.opened.size == 2 }
+        assertEquals(ytMusic to ytLink, playback.opened.last())
+        playback.onThePhone = Heard.Song(named, null, app = tv)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done waiting for the music app") { !model.uiState.playingResult }
+        assertEquals(1, playback.cameBack)
+        assertNull(model.uiState.player)
     }
 
     @Test

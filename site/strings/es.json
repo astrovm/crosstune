@@ -62,7 +62,7 @@
   "privacy_link": "Política de privacidad",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidad de Crosstune",
-  "updated": "Última actualización: 20 de noviembre de 2026",
+  "updated": "Última actualización: 24 de noviembre de 2026",
   "short_h2": "En resumen",
   "short_items": [
     "Sin cuenta, publicidad ni analíticas.",
@@ -100,7 +100,7 @@
     ],
     [
       "p",
-      "Para nombrar la canción de un link, Crosstune lee su página pública o su API en el servicio de donde viene: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Presto Music, Shazam o Google, y carga su portada. Para abrirla en otra app, el título y el artista van a la búsqueda de esa app. Cuando esa búsqueda no está segura, también van a las búsquedas de canciones de Apple y de Deezer. Con Spotify, van a ListenBrainz y el nombre del artista a MusicBrainz, y se leen las páginas públicas de Spotify. Reproducir todo y Aleatorio hacen esto con cada canción, y YouTube arma la playlist con los videos encontrados. El nombre de una canción que escribís va a las búsquedas de Deezer y de Apple. Un destino personalizado recibe las palabras de búsqueda en la dirección que configurás."
+      "Para nombrar la canción de un link, Crosstune lee su página pública o su API en el servicio de donde viene: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Presto Music, Shazam o Google, y carga su portada. Para abrirla en otra app, el título y el artista van a la búsqueda de esa app. Cuando esa búsqueda no está segura, también van a las búsquedas de canciones de Apple y de Deezer. Con Spotify, van a ListenBrainz y el nombre del artista a MusicBrainz, y se leen las páginas públicas de Spotify. Reproducir todo y Aleatorio hacen esto con cada canción, y YouTube arma la playlist con los videos encontrados. El nombre de una canción que escribís va a las búsquedas de Deezer y de Apple. Un destino personalizado recibe las palabras de búsqueda en la dirección que configurás. Para encontrar un álbum en Presto Music, la app de Android manda el título y el artista del álbum a la API de búsqueda de Presto Music."
     ],
     [
       "p",

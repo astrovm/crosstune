@@ -62,7 +62,7 @@
   "privacy_link": "Polityka prywatności",
   "language_label": "Język",
   "privacy_title": "Polityka prywatności Crosstune",
-  "updated": "Ostatnia aktualizacja: 20 listopada 2026",
+  "updated": "Ostatnia aktualizacja: 24 listopada 2026",
   "short_h2": "W skrócie",
   "short_items": [
     "Bez konta, reklam i analityki.",
@@ -100,7 +100,7 @@
     ],
     [
       "p",
-      "Aby rozpoznać utwór z linku, Crosstune czyta jego publiczną stronę lub publiczne API w serwisie, z którego pochodzi: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Presto Music, Shazam lub Google, i pobiera okładkę. Aby otworzyć go w innej aplikacji, tytuł i wykonawca trafiają do wyszukiwarki tej aplikacji. Gdy to wyszukiwanie nie jest pewne, trafiają też do wyszukiwarek utworów Apple i Deezer. Dla Spotify trafiają do ListenBrainz, a nazwa wykonawcy do MusicBrainz, i czytane są publiczne strony Spotify. Odtwórz wszystko i Losowo robią to dla każdego utworu, a YouTube tworzy playlistę ze znalezionych filmów. Wpisana przez Ciebie nazwa utworu trafia do wyszukiwarek Deezer i Apple. Własne miejsce docelowe dostaje szukane słowa w adresie, który ustawisz."
+      "Aby rozpoznać utwór z linku, Crosstune czyta jego publiczną stronę lub publiczne API w serwisie, z którego pochodzi: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Presto Music, Shazam lub Google, i pobiera okładkę. Aby otworzyć go w innej aplikacji, tytuł i wykonawca trafiają do wyszukiwarki tej aplikacji. Gdy to wyszukiwanie nie jest pewne, trafiają też do wyszukiwarek utworów Apple i Deezer. Dla Spotify trafiają do ListenBrainz, a nazwa wykonawcy do MusicBrainz, i czytane są publiczne strony Spotify. Odtwórz wszystko i Losowo robią to dla każdego utworu, a YouTube tworzy playlistę ze znalezionych filmów. Wpisana przez Ciebie nazwa utworu trafia do wyszukiwarek Deezer i Apple. Własne miejsce docelowe dostaje szukane słowa w adresie, który ustawisz. Aby znaleźć album w Presto Music, aplikacja na Androida wysyła jego tytuł i wykonawcę do interfejsu wyszukiwania Presto Music."
     ],
     [
       "p",
