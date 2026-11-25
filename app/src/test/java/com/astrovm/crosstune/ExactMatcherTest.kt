@@ -2548,11 +2548,21 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun repeatingCreditsCanProveAParenthesizedCatalogAlias() {
+    fun repeatingCreditsCanProveAnAsciiParenthesizedCatalogAlias() {
         val url = "https://music.youtube.com/watch?v=video000000"
-        listOf("愛 (Love)", "愛（Love）", "愛 (Love (Original))").forEach {
-            assertEquals(it, url, findsLoveVideo(it, "Band - 愛 , Band - Love", "Band"))
-        }
+        assertEquals(url, findsLoveVideo("愛 (Love)", "Band - 愛 , Band - Love", "Band"))
+    }
+
+    @Test
+    fun repeatingCreditsCanProveAFullWidthParenthesizedCatalogAlias() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        assertEquals(url, findsLoveVideo("愛（Love）", "Band - 愛 , Band - Love", "Band"))
+    }
+
+    @Test
+    fun repeatingCreditsCanProveAParenthesizedAliasWithANeutralTag() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        assertEquals(url, findsLoveVideo("愛 (Love (Original))", "Band - 愛 , Band - Love", "Band"))
     }
 
     @Test
