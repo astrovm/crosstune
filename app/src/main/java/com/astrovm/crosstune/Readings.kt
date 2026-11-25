@@ -110,8 +110,9 @@ internal object Readings {
      * 15 for a long mark or a small vowel that draws out a word IPADIC split.
      * 16 for a word before small っ that left the tokenizer with no way through.
      * 17 to space the Japanese copula apart from the word it follows.
+     * 19 to distinguish interrogative 何だ from the interjection.
      */
-    const val VERSION = 18
+    const val VERSION = 19
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -190,7 +191,45 @@ internal object Readings {
         val other = uniDic
         val mixed = other?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known
         val read = saidAsWritten(modernPieces(splitLeadingLongMarks(line, text, mixed)))
-        return if (other == null) wholeOldKanaWord(line, read) ?: read else read
+        return nanDa(if (other == null) wholeOldKanaWord(line, read) ?: read else read)
+    }
+
+    /** IPADIC can call 何だ an interjection after a topic; both dictionaries split the call in なんだ君か. */
+    private fun nanDa(pieces: List<Piece>): List<Piece> = buildList {
+        var at = 0
+        while (at < pieces.size) {
+            val piece = pieces[at]
+            val before = pieces.getOrNull(at - 1)
+            val after = pieces.getOrNull(at + 1)
+            val question = before?.nanDaSubject() == true || after?.surface in setOf("か", "よ", "ね", "?", "？")
+            val call = nanDaCall(pieces, at)
+            when {
+                piece.surface == "何だ" && piece.kind == "感動詞" && question -> {
+                    add(Piece("何", "なん", "名詞", "代名詞", end = piece.end - 1, reader = Reader.RULES))
+                    add(Piece("だ", "だ", "助動詞", "*", end = piece.end, reader = Reader.RULES, startsCopula = true))
+                }
+                call -> {
+                    add(Piece("なんだ", "なんだ", "感動詞", "*", end = piece.end + 1, reader = Reader.RULES))
+                    at++
+                }
+                else -> add(piece)
+            }
+            at++
+        }
+    }
+
+    private fun Piece.nanDaSubject() = kind == "名詞" || kind == "助詞" && when (surface) {
+        "は", "も" -> subkind == "係助詞"
+        "が" -> subkind == "格助詞"
+        else -> false
+    }
+
+    private fun nanDaCall(pieces: List<Piece>, at: Int): Boolean {
+        val before = pieces.getOrNull(at - 1)
+        val after = pieces.getOrNull(at + 1)
+        return pieces[at].surface == "なん" && (before == null || before.surface in "、。，．,.！？!?；;：:…") &&
+            after?.surface == "だ" && after.startsCopula && pieces.getOrNull(at + 2)?.kind == "名詞" &&
+            pieces.getOrNull(at + 3)?.surface == "か"
     }
 
     /**

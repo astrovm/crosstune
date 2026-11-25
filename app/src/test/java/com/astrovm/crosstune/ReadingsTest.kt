@@ -114,6 +114,27 @@ class ReadingsTest {
     }
 
     @Test
+    fun interrogativeNanDaSeparatesAfterATopic() = assertJapaneseBoundaries(listOf(
+        Triple("これは何だ", "kore wa nan da", listOf("これ", "は", "何", "だ")),
+        Triple("それは何だ?", "sore wa nan da?", listOf("それ", "は", "何", "だ")),
+        Triple("君は何だ", "kimi wa nan da", listOf("君", "は", "何", "だ")),
+        Triple("仕事が何だ", "shigoto ga nan da", listOf("仕事", "が", "何", "だ")),
+        Triple("これも何だ", "kore mo nan da", listOf("これ", "も", "何", "だ")),
+        Triple("それ何だ", "sore nan da", listOf("それ", "何", "だ")),
+        Triple("何だ？", "nan da？", listOf("何", "だ")),
+    ))
+
+    @Test
+    fun nanDaInterjectionsAndOtherExpressionsKeepTheirWords() = assertJapaneseBoundaries(listOf(
+        Triple("何だ、お前か", "nanda、 omae ka", listOf("何だ", "お前", "か")),
+        Triple("なんだ君か", "nanda kimi ka", listOf("なんだ", "君", "か")),
+        Triple("何だか眠い", "nandaka nemui", listOf("何だか", "眠い")),
+        Triple("何だかんだ", "nandakanda", listOf("何だかんだ")),
+        Triple("何だって？", "nan datte？", listOf("何", "だって")),
+        Triple("なんだかなあ", "nandaka naa", listOf("なんだか", "なあ")),
+    ))
+
+    @Test
     fun explanatoryNandaStaysWholeAndInterrogativeNanSeparates() = assertJapaneseBoundaries(listOf(
         Triple("今日はここまでなんだ", "kyoo wa koko made nanda", listOf("今日", "は", "ここ", "まで", "なんだ")),
         Triple("つらいからなんだよ", "tsurai kara nanda yo", listOf("つらい", "から", "なんだ", "よ")),
