@@ -2620,6 +2620,16 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aBareDiscoWordCannotProveAnAlias() {
+        assertNull(findsLoveVideo("愛 Disco (Love)", "Band - 愛 Disco , Band - Love", "Band"))
+    }
+
+    @Test
+    fun aNativeFeaturingCreditCannotProveAnAlias() {
+        assertNull(findsLoveVideo("愛 feat. Official (Love)", "Band - 愛 feat. Official , Band - Love", "Band"))
+    }
+
+    @Test
     fun anExplicitlyRequestedTakeCanAppearInBothNames() {
         val title = "Love TVサイズ"
         namesAndTabs(
