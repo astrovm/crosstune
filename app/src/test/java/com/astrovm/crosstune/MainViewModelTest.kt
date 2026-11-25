@@ -5476,6 +5476,27 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aShortReportForTheSameKnownVideoStillCannotReplaceItsRequestedTitle() {
+        val (model, phone, requested) = aPlayRequestWithNoCatalogueLength(253_000)
+        val shortReport = Heard.Song(MusicMetadata("Sponsored", "Other artist"), null, app = ytMusic, sessionDurationMs = 33_204)
+        phone.onThePhone = shortReport
+        idle()
+        pass(UNCONFIRMED_AD_WAIT_MS)
+        assertFalse(model.uiState.playingResult)
+
+        val id = checkNotNull(RecordingKey.youTubeId(requested))
+        phone.rememberYouTubeLength(id, 253_000)
+        val namedByApp = requested.copy(title = "抱かれに来た女", recordingId = "$ytMusic:$id")
+        phone.onThePhone = shortReport.copy(metadata = namedByApp)
+        idle()
+        assertEquals(requested, model.uiState.player?.song)
+
+        phone.onThePhone = shortReport.copy(metadata = namedByApp, sessionDurationMs = 252_261)
+        idle()
+        assertEquals(namedByApp, model.uiState.player?.song)
+    }
+
+    @Test
     fun closingThePlayerCancelsThePendingPlayReturn() {
         val (model, phone, _) = aPlayRequestWithNoCatalogueLength(253_000, canAsk = false)
         assertTrue(model.uiState.playingResult)
