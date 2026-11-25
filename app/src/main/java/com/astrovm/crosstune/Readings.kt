@@ -272,8 +272,14 @@ internal object Readings {
         else -> false
     }
 
-    private fun List<Piece>.beforeAdverbs(at: Int): Piece? =
-        (at - 1 downTo 0).asSequence().dropWhile { adverbOrComma(it) }.firstOrNull()?.let(::get)
+    private fun List<Piece>.beforeAdverbs(at: Int): Piece? {
+        val skipped = (at - 1 downTo 0).takeWhile { adverbOrComma(it) }
+        val before = getOrNull(at - skipped.size - 1)
+        if (before?.isNanDaTopic() == true) return before
+        return skipped.firstOrNull { get(it).nanDaComma() }?.let(::get) ?: before
+    }
+
+    private fun Piece.nanDaComma() = surface in setOf(",", "，", "、")
 
     // Both dictionaries can tag 一体 as an ordinary noun. 今 can be a prefix before an ASCII comma.
     private val NAN_DA_ADVERB_FALLBACKS = setOf("一体", "今")
@@ -282,7 +288,7 @@ internal object Readings {
         val piece = get(at)
         // UniDic can also split 一体全体 into two ordinary nouns.
         return piece.kind == "副詞" || piece.subkind == "副詞可能" || piece.surface in NAN_DA_ADVERB_FALLBACKS ||
-            (piece.surface == "全体" && getOrNull(at - 1)?.surface == "一体") || piece.surface in setOf(",", "，", "、")
+            (piece.surface == "全体" && getOrNull(at - 1)?.surface == "一体") || piece.nanDaComma()
     }
 
     private fun Piece?.endsNanDaCall() = this == null || surface.isBlank() ||
