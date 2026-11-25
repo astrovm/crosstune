@@ -27,9 +27,6 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.isEnabled
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.ComposeUiTestConfig
-import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.lifecycle.ViewModelProvider
@@ -68,7 +65,7 @@ import org.robolectric.shadows.ShadowWindowManagerImpl
 class TvPlayTest {
 
     @get:Rule
-    val composeRule = createEmptyComposeRule(ComposeUiTestConfig(inputMode = InputMode.Keyboard))
+    val composeRule = createRemoteComposeRule()
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()
