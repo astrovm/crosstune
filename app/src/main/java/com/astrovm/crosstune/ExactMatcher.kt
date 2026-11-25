@@ -281,7 +281,7 @@ internal class ExactMatcher(
 
     /** By the song's length too, when it's known, as an edit of a song is often named just like it; and by how songs are matched, so what was found before is looked for again. */
     private fun cacheKey(kind: String, target: String, metadata: MusicMetadata): String {
-        val edition = if (metadata.namesDisco()) "/disco" else ""
+        val edition = if (metadata.requestsDisco()) "/disco" else ""
         return (listOf("$kind@$MATCH_VERSION$edition", target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()) +
             listOfNotNull(metadata.lengthMs)).joinToString("|")
     }
@@ -1076,11 +1076,11 @@ internal class ExactMatcher(
     private fun sameRecordingLength(time: Long?, wanted: Long): Boolean =
         time != null && kotlin.math.abs(time - wanted) <= SAME_SONG_LENGTH_MS
 
-    private fun MusicMetadata.namesDisco(): Boolean = Takes.namesDisco(title) || Takes.namesDisco(album.orEmpty())
+    private fun MusicMetadata.requestsDisco(): Boolean = Takes.requestsDisco(title) || Takes.requestsDisco(album.orEmpty())
 
     /** A disco note can rule out opening its row, not using it as evidence. */
     private inner class DiscoRequest(metadata: MusicMetadata) {
-        private val named = metadata.namesDisco()
+        private val named = metadata.requestsDisco()
         private val length = metadata.lengthMs?.takeIf { it > 0 }
 
         fun allows(row: Row, video: Boolean = false): Boolean {

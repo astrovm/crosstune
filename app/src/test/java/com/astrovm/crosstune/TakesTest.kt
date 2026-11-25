@@ -13,15 +13,30 @@ class TakesTest {
         val notes = listOf(
             "Song (Disco Version)", "Song - Disco Ver.", "Song （Ｄｉｓｃｏ　Ｍｉｘ）", "Song (DISCOバージョン)",
             "Song (ディスコ版)", "Song (ﾃﾞｨｽｺ･ﾊﾞｰｼﾞｮﾝ)", "Song (テ\u3099ィスコ・ハ\u3099ーシ\u3099ョン)",
-            "Song (ディスコ・ヴァージョン)", "Song (プロモーション用ディスコバージョン)"
+            "Song (ディスコ・ヴァージョン)", "Song (プロモーション用ディスコバージョン)", "Song (プロモーション用DISCOバージョン)",
+            "Song - Disco Version (2024 Remaster)", "Song (Disco Version [2024 Remaster])"
         )
-        for (name in notes) assertTrue(name, Takes.namesDisco(name))
+        for (name in notes) {
+            assertTrue(name, Takes.namesDisco(name))
+            assertTrue(name, Takes.requestsDisco(name))
+        }
         val names = listOf(
             "Disco", "Disco Nights", "Disco Inferno", "ディスコ・クイーン", "Disco Mix", "Disco Version", "ディスコ版",
             "Song (Deluxe Edition)", "Song (Disco)", "Song (Extended Remix)", "Song (Mix Tape)", "Song (Mixed Emotions)",
             "Song (ミックス)", "Song (Disco Queen)", "Song - Club Mix", "Song (feat. DJ Mix)", "Song (prod. DJ Mix)"
         )
         for (name in names) assertFalse(name, Takes.namesDisco(name))
+    }
+
+    @Test
+    fun theSourceCanNameDiscoAnywhereButTheCandidateStillNeedsANote() {
+        for (name in listOf("Disco Mix", "Song: Disco Version", "Song—ＤＩＳＣＯ・Ｖｅｒ．", "曲名：ﾃﾞｨｽｺ･ｳﾞｧｰｼﾞｮﾝ")) {
+            assertTrue(name, Takes.requestsDisco(name))
+            assertFalse(name, Takes.namesDisco(name))
+        }
+        for (name in listOf("Disco", "Disco Nights", "Disco Vertical", "Disco Mixer", "Undisco Version", "Song (2024 Stereo Mix)")) {
+            assertFalse(name, Takes.requestsDisco(name))
+        }
     }
 
     @Test
