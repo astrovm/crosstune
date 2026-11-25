@@ -36,6 +36,8 @@ class ReadingsTest {
             Triple("君 からだが熱い", "kimi karada ga atsui", listOf("君", "からだ", "が", "熱い")),
             Triple("空から降る", "sora kara furu", listOf("空", "から", "降る")),
             Triple("のなら", "no nara", listOf("の", "なら")),
+            Triple("「ならば」", "「naraba」", listOf("ならば")),
+            Triple("君 ならば", "kimi naraba", listOf("君", "ならば")),
             Triple("からい", "karai", listOf("からい")),
             Triple("からす", "karasu", listOf("からす")),
             Triple("空っぽ", "karappo", listOf("空っぽ")),
