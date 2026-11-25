@@ -18,6 +18,152 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun copulasHaveTheirOwnRomajiAndPracticeWords() {
+        val lines = listOf("無駄だから", "人間だから", "時代ですから")
+        val romaji = listOf("muda da kara", "ningen da kara", "jidai desu kara")
+        val words = listOf(listOf("無駄", "だ", "から"), listOf("人間", "だ", "から"), listOf("時代", "です", "から"))
+        fun read() = Readings.of(lines, Script.JAPANESE).map { it.romanized } to lines.map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text }
+        }
+        val expected = romaji to words
+        assertEquals(listOf(expected, expected), listOf(read(), TestUniDic.reading(::read)))
+    }
+
+    @Test
+    fun bothDictionariesTagTheCopulaButNotTheVoicedPastAsACopula() {
+        val line = "読んだ。鳥だ。鳥です。鳥ダ。森じゃない。綺麗な鳥。鳥だった。"
+        val ipadic = Tokenizer.Builder().build().tokenize(line)
+        val unidic = TestUniDic.tokenizer.tokenize(line)
+        val heads = listOf("だ", "です", "だっ")
+        assertEquals(heads, ipadic.filter { Readings.startsCopula(it.partOfSpeechLevel1, it.conjugationType, it.surface) }.map { it.surface })
+        assertEquals(listOf("だ", "です", "ダ", "だっ"),
+            unidic.filter { Readings.startsCopula(it.partOfSpeechLevel1, it.conjugationType, it.surface) }.map { it.surface })
+    }
+
+    @Test
+    fun theRestOfTheCopulaStaysInTheSameWord() {
+        val cases = listOf(
+            Triple("本だった", "hon datta", listOf("本", "だった")),
+            Triple("本でした", "hon deshita", listOf("本", "でした")),
+            Triple("本だろう", "hon darou", listOf("本", "だろう")),
+            Triple("本でしょう", "hon deshou", listOf("本", "でしょう")),
+            Triple("本ですか", "hon desu ka", listOf("本", "です", "か")),
+            Triple("春だったら", "haru dattara", listOf("春", "だったら")),
+            Triple("本だったり", "hon dattari", listOf("本", "だったり")),
+            Triple("『夢』だった", "『yume』 datta", listOf("夢", "だった")),
+            Triple("綺麗です", "kiree desu", listOf("綺麗", "です")),
+            Triple("高いです", "takai desu", listOf("高い", "です")),
+            Triple("高かったです", "takakatta desu", listOf("高かった", "です")),
+            Triple("太郎様だ", "taroosama da", listOf("太郎様", "だ"))
+        )
+        assertJapaneseBoundaries(cases)
+    }
+
+    @Test
+    fun ambiguousDeshiteKeepsTheExistingBoundary() = assertJapaneseBoundaries(listOf(
+        Triple("仕事はあとでして", "shigoto wa atodeshite", listOf("仕事", "は", "あとでして")),
+        Triple("作業は二人でして", "sagyoo wa futarideshite", listOf("作業", "は", "二人でして")),
+        Triple("ここは学校でして", "koko wa gakkoodeshite", listOf("ここ", "は", "学校でして")),
+        Triple("ここは学校でした", "koko wa gakkoo deshita", listOf("ここ", "は", "学校", "でした")),
+    ))
+
+    @Test
+    fun bothDictionariesGiveTheTwoUsesOfDeshiteTheSameTags() {
+        val ipadic = Tokenizer.Builder().build()
+        val unidic = TestUniDic.tokenizer
+        fun ending(type: String, form: String) = listOf(
+            listOf("でし", "助動詞", "*", type, form),
+            listOf("て", "助詞", "接続助詞", "*", "*")
+        )
+        for (line in listOf("仕事はあとでして", "作業は二人でして", "ここは学校でして")) {
+            assertEquals(line, ending("特殊・デス", "連用形"), ipadic.tokenize(line).takeLast(2).map {
+                listOf(it.surface, it.partOfSpeechLevel1, it.partOfSpeechLevel2, it.conjugationType, it.conjugationForm)
+            })
+            assertEquals(line, ending("助動詞-デス", "連用形-一般"), unidic.tokenize(line).takeLast(2).map {
+                listOf(it.surface, it.partOfSpeechLevel1, it.partOfSpeechLevel2, it.conjugationType, it.conjugationForm)
+            })
+        }
+    }
+
+    @Test
+    fun explanatoryNandaStaysWholeAndInterrogativeNanSeparates() = assertJapaneseBoundaries(listOf(
+        Triple("今日はここまでなんだ", "kyoo wa koko made nanda", listOf("今日", "は", "ここ", "まで", "なんだ")),
+        Triple("つらいからなんだよ", "tsurai kara nanda yo", listOf("つらい", "から", "なんだ", "よ")),
+        Triple("なんだろう、この音は", "nan darou、 kono oto wa", listOf("なん", "だろう", "この", "音", "は")),
+        Triple("何だろう、この音は", "nan darou、 kono oto wa", listOf("何", "だろう", "この", "音", "は")),
+        Triple("「なんだろう」", "「nan darou」", listOf("なん", "だろう")),
+        Triple("これはなんだ", "kore wa nan da", listOf("これ", "は", "なん", "だ")),
+        Triple("これは何だろう", "kore wa nan darou", listOf("これ", "は", "何", "だろう")),
+        Triple("仕事がなんだ", "shigoto ga nan da", listOf("仕事", "が", "なん", "だ")),
+        Triple("つらいがなんだよ", "tsuraiga nanda yo", listOf("つらいが", "なんだ", "よ")),
+    ))
+
+    @Test
+    fun onlyTheInterrogativeNanWithACopulaGetsANewBoundary() = assertJapaneseBoundaries(listOf(
+        Triple("なんだよ", "nan da yo", listOf("なん", "だ", "よ")),
+        Triple("なんだよ、この音は", "nan da yo、 kono oto wa", listOf("なん", "だ", "よ", "この", "音", "は")),
+        Triple("なんだか眠い", "nandaka nemui", listOf("なんだか", "眠い")),
+        Triple("なんだって？", "nan datte？", listOf("なん", "だって")),
+        Triple("なんで帰る", "nande kaeru", listOf("なんで", "帰る")),
+        Triple("そうなんだね", "soona nda ne", listOf("そうな", "んだ", "ね")),
+        Triple("猫が好きなんだ", "neko ga sukina nda", listOf("猫", "が", "好きな", "んだ")),
+        Triple("この音は何なんだ", "kono oto wa nanna nda", listOf("この", "音", "は", "何な", "んだ")),
+    ))
+
+    @Test
+    fun katakanaCopulasAndConnectivesGetTheSameBoundaries() = assertJapaneseBoundaries(listOf(
+        Triple("無駄ダカラ", "muda da kara", listOf("無駄", "ダ", "カラ")),
+        Triple("無駄だから", "muda da kara", listOf("無駄", "だ", "から")),
+        Triple("無駄ナラバ", "muda naraba", listOf("無駄", "ナラバ")),
+        Triple("無駄ならば", "muda naraba", listOf("無駄", "ならば")),
+    ))
+
+    @Test
+    fun unattachedKatakanaKaraAndOtherKatakanaParticlesKeepTheirBoundaries() = assertJapaneseBoundaries(listOf(
+        Triple("カラダが熱い", "karada ga atsui", listOf("カラダ", "が", "熱い")),
+        Triple("僕ノカラダガ熱イ", "boku no karada ga atsui", listOf("僕", "ノ", "カラダ", "ガ", "熱イ")),
+        Triple("車デ帰る", "kuruma de kaeru", listOf("車", "デ", "帰る")),
+    ))
+
+    @Test
+    fun nonCopulaEndingsAndWordsKeepTheirBoundaries() = assertJapaneseBoundaries(listOf(
+        Triple("読んで", "yonde", listOf("読んで")),
+        Triple("死んで", "shinde", listOf("死んで")),
+        Triple("車で帰る", "kuruma de kaeru", listOf("車", "で", "帰る")),
+        Triple("だから", "dakara", listOf("だから")),
+        Triple("でも", "demo", listOf("でも")),
+        Triple("だって", "datte", listOf("だって")),
+        Triple("だが", "daga", listOf("だが")),
+        Triple("だるい", "darui", listOf("だるい")),
+        Triple("ダンス", "dansu", listOf("ダンス")),
+    ))
+
+    private fun assertJapaneseBoundaries(cases: List<Triple<String, String, List<String>>>) {
+        val lines = cases.map { it.first }
+        fun read() = Readings.of(lines, Script.JAPANESE).mapIndexed { index, reading ->
+            val line = lines[index]
+            Triple(line, reading.romanized, Readings.words(line, Script.JAPANESE).map { it.text })
+        }
+        assertEquals(listOf(cases, cases), listOf(read(), TestUniDic.reading(::read)))
+    }
+
+    @Test
+    fun theVoicedPastAndFixedAuxiliaryPhrasesKeepTheirRomaji() {
+        val cases = mapOf(
+            "読んだ" to "yonda", "死んだ" to "shinda", "泳いだ" to "oyoida", "読んだら" to "yondara", "読んだり" to "yon dari",
+            "読んだそうだ" to "yonda sooda", "読むそうだ" to "yomu sooda", "泳ぐようだ" to "oyogu yooda", "夢のようだ" to "yume no yooda",
+            "そうだ" to "sooda", "そうです" to "soodesu", "読むのだ" to "yomu noda", "読むんだ" to "yomu nda", "のだ" to "noda", "んだ" to "nda",
+            "本なんだ" to "honna nda", "夢なのだ" to "yumena noda", "本じゃない" to "hon ja nai", "本ではない" to "hon de wa nai",
+            "本である" to "hondearu", "綺麗な" to "kireena", "人ですら" to "hitode sura",
+            "夢の様だ" to "yume no yooda", "夜景みたいだ" to "yakee mitaida", "会いたくなんだ" to "aitaku nanda", "痛くなんだ" to "itaku nanda",
+            "ひとなでして" to "hitonadeshite"
+        )
+        fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.romanized }
+        val expected = cases.values.toList()
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading(::readings)))
+    }
+
+    @Test
     fun anApostropheBeforeKaraOpensOnlyWithoutAWord() {
         val cases = listOf(
             Triple("'からだ", "' karada", listOf("からだ")),
@@ -454,8 +600,8 @@ class ReadingsTest {
 
     @Test
     fun longMarkKeepsTheNextWordSeparate() = assertDrawnReading(
-        "食べるー好きだよ", "taberuu sukida yo",
-        Triple("食べるー", "taberuu", "食べる"), Triple("好きだ", "sukida", "好き"), Triple("よ", "yo", "よ")
+        "食べるー好きだよ", "taberuu suki da yo",
+        Triple("食べるー", "taberuu", "食べる"), Triple("好き", "suki", "好き"), Triple("だ", "da", "だ"), Triple("よ", "yo", "よ")
     )
 
     @Test
