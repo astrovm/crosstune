@@ -27,11 +27,11 @@ internal class PracticeClockLog(private val debuggable: Boolean) {
     companion object {
         const val TAG = "CrosstuneClock"
         private val attempts = AtomicInteger()
-        private val salt by lazy { UUID.randomUUID() }
+        private val hashes by lazy(::ClockItemHashes)
         fun nextId(): Int = attempts.incrementAndGet()
         fun of(context: Context) = PracticeClockLog(context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
         /** Compare reports within one dev app process without recording any song names or IDs. */
-        fun itemHash(key: String): String = UUID.nameUUIDFromBytes("$salt\u0000$key".toByteArray()).toString()
+        fun itemHash(key: String): String = hashes.of(key)
 
         /** Speed is text so even a malformed non-finite app speed has a valid JSON representation. */
         fun JSONObject.clock(state: Following?, at: Long) {
@@ -44,7 +44,6 @@ internal class PracticeClockLog(private val debuggable: Boolean) {
                 put("playing", state.clock.playing)
                 put("can_seek", state.canSeek)
                 put("ad", state.ad)
-                put("item_state", state.item?.kind?.name?.lowercase())
                 put("duration_ms", state.durationMs ?: JSONObject.NULL)
                 put("reported_session", state.session)
             }
@@ -59,4 +58,11 @@ internal class PracticeClockLog(private val debuggable: Boolean) {
         record.fields(at)
         Log.d(TAG, record.toString())
     }
+}
+
+
+/** One salt per diagnostic process. Equal keys match only inside that process. */
+internal class ClockItemHashes {
+    private val salt = UUID.randomUUID()
+    fun of(key: String): String = UUID.nameUUIDFromBytes(salt.toString().toByteArray() + byteArrayOf(0) + key.toByteArray()).toString()
 }

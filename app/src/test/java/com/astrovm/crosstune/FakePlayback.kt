@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.onStart
  * what it plays, and where it was moved to.
  */
 internal class FakePlayback : PlaybackSource {
-    override val playbackItems = PlaybackItems()
+    override val youTubePlayEvidence = YouTubePlayEvidence()
     var access = false
     var restricted = false
     val playing = MutableStateFlow<Following?>(null)
@@ -193,19 +193,15 @@ internal class FakePlayback : PlaybackSource {
 
     override fun nowPlayingUpdates(): Flow<Heard.Song?> = merge(
         changes { (ranked(onThePhone) as? WhatPlays.Named)?.song }.map { Unit },
-        playbackItems.refreshes(android.os.SystemClock::elapsedRealtime)
-    ).map { (ranked(onThePhone) as? WhatPlays.Named)?.song?.let(::readItem) }
+        youTubePlayEvidence.updates
+    ).map { (ranked(onThePhone) as? WhatPlays.Named)?.song?.let(::readAd) }
         .distinctUntilChanged().onStart { nowPlayingLate.first { !it } }
 
-    private fun readItem(heard: Heard.Song): Heard.Song {
+    private fun readAd(heard: Heard.Song): Heard.Song {
         val app = heard.app ?: return heard
-        if (MusicService.ofPackage(app) != MusicService.YOUTUBE_MUSIC) return heard
-        val metadata = heard.metadata
-        val id = metadata.recordingId?.removePrefix("$app:")?.takeUnless { it.startsWith("duration:") }
-        val item = mediaItem(id, metadata.url, metadata.title, metadata.artist, metadata.album, heard.sessionDurationMs)
-        return heard.copy(item = playbackItems.observe(app, ItemObservation(
-            item, android.os.SystemClock.elapsedRealtime(), heard.offsetMs, reportedAd = heard.ad, app = app
-        ), ::knownYouTubeLength))
+        val duration = heard.sessionDurationMs ?: return heard
+        val id = RecordingKey.confirmedYouTubeSessionId(heard.metadata.url, heard.metadata.recordingId?.removePrefix("$app:"))
+        return if (youTubePlayEvidence.adDuration(app, id, duration) != null) heard.copy(ad = true, offsetMs = null) else heard
     }
 
     /** How many are listening for what's on the phone. */

@@ -21,9 +21,10 @@ class PlayGoldenWriter {
         val scenes = PlayScenes.all()
         val lines = scenes.flatMap { scene ->
             PlayScenes.show(app, scene)
-            listOf("plays\t$scene\t${PlayScenes.named(PlayScenes.playback(app).nowPlaying())}") +
+            listOf("plays\t$scene\t${PlayScenes.plays(PlayScenes.playback(app).whatPlays())}") +
                 PlayScenes.followsOf(scene).map { (song, of) -> "follow\t$scene\t${song.title}|${song.artist}\t$of\t${PlayScenes.follows(app, song, of)}" }
         }
-        File("build/play-golden.tsv").writeText((listOf("scenes\t${PlayScenes.fingerprint(scenes)}") + lines).joinToString("\n", postfix = "\n"))
+        val replays = PlayScenes.replays.flatMap { PlayScenes.replay(app, it) }.map { (key, value) -> "$key\t$value" }
+        File("build/play-golden.tsv").writeText((listOf("scenes\t${PlayScenes.fingerprint(scenes)}") + lines + replays).joinToString("\n", postfix = "\n"))
     }
 }

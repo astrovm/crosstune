@@ -4564,8 +4564,8 @@ class MainActivityTest {
         waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         assertTrue(phone.songsAsked.isEmpty())
         assertTrue(phone.plays.isEmpty())
-        // With no known length, the running session could have been an ad.
-        assertEquals(1, lengthRequests())
+        // An existing session carries on as main does, without asking for a length.
+        assertEquals(0, lengthRequests())
 
         // Paused there, it plays again from where it was.
         click(string(R.string.dismiss_button))
@@ -4573,7 +4573,7 @@ class MainActivityTest {
         tapPlay()
         waitUntil { phone.plays == listOf(true) }
         assertTrue(phone.songsAsked.isEmpty())
-        assertEquals(1, lengthRequests())
+        assertEquals(0, lengthRequests())
 
         // A paused ad needs Play too, even though the song itself is still waiting at zero.
         click(string(R.string.dismiss_button))
@@ -4582,13 +4582,13 @@ class MainActivityTest {
         tapPlay()
         waitUntil { phone.plays == listOf(true, true) }
         assertTrue(phone.songsAsked.isEmpty())
-        assertEquals(1, lengthRequests())
+        assertEquals(0, lengthRequests())
 
         // Not in that app, it's asked for, as before.
         click(string(R.string.dismiss_button))
         phone.playing.value = null
         tapPlay()
-        waitUntil { phone.songsAsked.size == 1 }
+        waitUntil { phone.songsAsked.size == 1 && lengthRequests() == 1 }
     }
 
     @Test

@@ -1,6 +1,6 @@
 # Playback checks
 
-`scripts/main-golden.sh play` records the main branch's answers to the scenes in `PlayScenes.kt`. `PlayGoldenTest` compares the current answers with that file and its explicit correction rules.
+`scripts/main-golden.sh play` records a pinned main commit's answers to the scenes in `PlayScenes.kt`. `PlayGoldenTest` requires exact matches for ordinary playback, including sequences of media-session updates. Ads have separate expected results in `PlaybackTest` and `MainViewModelTest`. Do not generate their answers from main.
 
 ## Sessions without an artist
 

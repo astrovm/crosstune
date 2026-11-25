@@ -123,6 +123,13 @@ internal object PlayScenes {
     /** A song as a line: its app, title and artist. */
     fun named(song: Heard.Song?): String = song?.let { "named ${it.app} ${it.metadata.title}|${it.metadata.artist}" } ?: "none"
 
+    /** Both a named song and a session with no name are playback. */
+    fun plays(what: WhatPlays?): String = when (what) {
+        is WhatPlays.Named -> named(what.song)
+        is WhatPlays.Nameless -> what.playing.let { "nameless ${it.app} ${it.name.orEmpty()} ${it.where}${if (it.said) " said" else ""}" }
+        null -> "none"
+    }
+
     /**
      * A source that knows nothing yet, as each answer must stand alone: one kept from scene to scene holds what it
      * noted of an app's clock and lengths, and answered other than the same scene alone does. Shuffle and repeat aren't
@@ -157,4 +164,95 @@ internal object PlayScenes {
     fun followsOf(scene: Scene): List<Pair<MusicMetadata, String?>> =
         if (scene.sessions.size == 1) asked.flatMap { song -> listOf(song to null, song to scene.sessions[0].kind.app, song to "com.example.other") }
         else listOf(asked[0] to null, asked[1] to null)
+
+    /** Only sequences with no ads belong in the main golden. */
+    data class Report(
+        val title: String = "Requested song", val id: String? = null, val duration: Long? = 253_000,
+        val position: Long = 0, val album: String = "Album", val metadata: Boolean = true
+    )
+
+    data class Replay(
+        val name: String, val reports: List<Report>, val twoReaders: Boolean = false,
+        val storedDurations: Pair<Long, Long>? = null
+    )
+
+    val replays = listOf(
+        Replay("skip and skip back", listOf(Report(id = "abcdefghijk"), Report("Next song", "lmnopqrstuv", 81_000),
+            Report(id = "abcdefghijk", position = 90_000))),
+        Replay("same title, new video", listOf(Report(id = "abcdefghijk"), Report(id = "lmnopqrstuv", duration = 90_000))),
+        Replay("short edition without a position or ID", listOf(Report(duration = 90_000, position = -1), Report(duration = 90_000, position = 20))),
+        Replay("81 second opaque edition from a single anchor", listOf(Report(), Report("Next song", "opaque-one", 81_000, 60_000))),
+        Replay("same title and duration, different opaque IDs", listOf(Report(id = "opaque-one", duration = 75_000),
+            Report(id = "opaque-two", duration = 75_000, position = 1))),
+        Replay("Android fills in an ID, then moves on", listOf(Report(), Report(id = "opaque-one"), Report(id = "opaque-two"))),
+        Replay("changed album without an ID", listOf(Report(duration = 90_000), Report(duration = 90_000, album = "Other album"))),
+        Replay("interleaved old and new metadata", listOf(Report(duration = 262_617, position = 1_714),
+            Report(position = 18_694, metadata = false), Report("Next song", duration = 252_261, position = 18_694))),
+        Replay("ordinary seek and repeat", listOf(Report(id = "abcdefghijk"), Report(id = "abcdefghijk", position = 50_000),
+            Report(id = "abcdefghijk", position = 1))),
+        Replay("refresh with no reported duration on the same ID", listOf(Report(id = "abcdefghijk"),
+            Report(id = "abcdefghijk", duration = null), Report(id = "abcdefghijk", duration = null, position = 500))),
+        Replay("trimmed video", listOf(Report(id = "abcdefghijk"), Report(id = "abcdefghijk", duration = 180_000))),
+        Replay("two readers with separate rounding histories", listOf(Report(duration = 239_000), Report(duration = 239_000, position = 3_000)),
+            twoReaders = true, storedDurations = 240_000L to 238_000L),
+        Replay("two readers see a skip", listOf(Report(id = "opaque-one"), Report("Next song", "opaque-two", 90_000)),
+            twoReaders = true)
+    )
+
+    fun replay(app: Application, replay: Replay, before: (MediaSessionPlayback) -> (() -> Unit) = { {} }): List<Pair<String, String>> {
+        val kind = kinds.single { it.name == "ytmusic" }.copy(title = "Requested song", artist = "Band", album = "Album")
+        val manager = app.getSystemService(MediaSessionManager::class.java)
+        ShadowMediaSessionManager.reset()
+        shadowOf(app.getSystemService(AudioManager::class.java)).setIsMusicActive(true)
+        val controller = controller(app, Played(kind, remote = false, playing = true), PLAYED_AT)
+        shadowOf(manager).addController(controller)
+        val sources = List(if (replay.twoReaders) 2 else 1) { i ->
+            val prefs = app.getSharedPreferences("play_golden_reader_$i", Context.MODE_PRIVATE)
+            prefs.edit().clear().commit()
+            val lengths = SteadyLengths(prefs)
+            replay.storedDurations?.let { lengths.of(kind.title, kind.artist.orEmpty(), if (i == 0) it.first else it.second) }
+            MediaSessionPlayback(app, now = { NOW }, waker = { null }, modes = NoModes, lengths = lengths)
+        }
+        val watchers = mutableListOf<kotlinx.coroutines.Job>()
+        val following = MutableList<Following?>(sources.size) { null }
+        val main = shadowOf(Looper.getMainLooper())
+        val after = before(sources.first())
+        try {
+            return replay.reports.flatMapIndexed { index, report ->
+                val metadata = if (report.metadata) setReport(controller, report) else null
+                val state = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, report.position, 1f, PLAYED_AT + index * 10_000L)
+                    .setActions(PlaybackState.ACTION_SEEK_TO).build()
+                shadowOf(controller).setPlaybackState(state)
+                if (index == 0) sources.forEachIndexed { i, source ->
+                    watchers += CoroutineScope(Dispatchers.Unconfined).launch {
+                        source.follow(MusicMetadata("Requested song", "Band", url = "https://music.youtube.com/watch?v=abcdefghijk"), kind.app)
+                            .collect { following[i] = it }
+                    }
+                }
+                if (metadata != null) shadowOf(controller).executeOnMetadataChanged(metadata)
+                shadowOf(controller).executeOnPlaybackStateChanged(state)
+                main.idle()
+                sources.mapIndexed { reader, source ->
+                    val home = source.nowPlaying()
+                    val clock = following[reader]
+                    val key = "replay\t${replay.name}\t$index\t$reader"
+                    key to "${named(home)}:${home?.metadata?.lengthMs}:${home?.metadata?.recordingId}:${home?.offsetMs}:${home?.ad} " +
+                        "${clock?.clock?.positionMs}:${clock?.clock?.playing}:${clock?.ad}:${clock?.durationMs}"
+                }
+            }
+        } finally {
+            watchers.forEach { it.cancel() }
+            after()
+            main.idle()
+        }
+    }
+
+    private fun setReport(controller: MediaController, report: Report): MediaMetadata =
+        MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, report.title)
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, "Band").putString(MediaMetadata.METADATA_KEY_ALBUM, report.album)
+            .apply {
+                report.id?.let { putString(MediaMetadata.METADATA_KEY_MEDIA_ID, it) }
+                report.duration?.let { putLong(MediaMetadata.METADATA_KEY_DURATION, it) }
+            }.build().also { shadowOf(controller).setMetadata(it) }
+
 }

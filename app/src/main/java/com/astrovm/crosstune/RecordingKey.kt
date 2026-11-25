@@ -58,6 +58,10 @@ internal object RecordingKey {
     fun youTubeSessionId(uri: String?, id: String?): String? =
         youTubeIdIn(uri) ?: youTubeIdIn(id) ?: id?.takeIf(MusicLinks::isYouTubeVideoId)
 
+    /** Conflicting fields cannot identify the current item for an ad hold or a skip. */
+    fun confirmedYouTubeSessionId(uri: String?, id: String?): String? =
+        listOfNotNull(youTubeIdIn(uri), youTubeSessionId(null, id)).distinct().singleOrNull()
+
     /**
      * [song] as the app [playing] it has it: its recording and its length, and its link, or the one it
      * was opened by when the app gives none, as YouTube Music doesn't.
