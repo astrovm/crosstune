@@ -201,16 +201,18 @@ internal object Readings {
             val piece = pieces[at]
             val before = pieces.getOrNull(at - 1)
             val after = pieces.getOrNull(at + 1)
-            val question = before?.nanDaSubject() == true || after?.surface in setOf("か", "よ", "ね", "?", "？") ||
+            val subject = piece.surface == "何だ" && pieces.beforeAdverbs(at)?.nanDaSubject() == true
+            val question = subject || after?.surface in setOf("か", "よ", "ね", "?", "？") ||
                 openingNanDaContinues(before, after)
             val call = nanDaCall(pieces, at)
             when {
-                piece.surface == "何だ" && piece.kind == "感動詞" && question -> {
-                    add(Piece("何", "なん", "名詞", "代名詞", end = piece.end - 1, reader = Reader.RULES))
-                    add(Piece("だ", "だ", "助動詞", "*", end = piece.end, reader = Reader.RULES, startsCopula = true))
+                piece.surface == "何だ" && piece.kind == "感動詞" && question &&
+                    before?.surface != "何だ" && after?.surface != "何だ" -> {
+                    add(Piece("何", "なん", "名詞", "代名詞", reader = Reader.RULES))
+                    add(Piece("だ", "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true))
                 }
                 call -> {
-                    add(Piece("なんだ", "なんだ", "感動詞", "*", end = piece.end + 1, reader = Reader.RULES))
+                    add(Piece("なんだ", "なんだ", "感動詞", "*", reader = Reader.RULES))
                     at++
                 }
                 else -> add(piece)
@@ -219,14 +221,22 @@ internal object Readings {
         }
     }
 
-    private fun Piece.nanDaSubject() = kind == "名詞" || kind == "助詞" && when (surface) {
+    private fun Piece.nanDaSubject() = kind == "名詞" || isNanDaTopic()
+
+    private fun Piece.isNanDaTopic() = kind == "助詞" && when (kana) {
         "は", "も" -> subkind == "係助詞"
         "が" -> subkind == "格助詞"
         else -> false
     }
 
+    private fun List<Piece>.beforeAdverbs(at: Int): Piece? =
+        (at - 1 downTo 0).asSequence().map(::get).dropWhile { it.kind == "副詞" }.firstOrNull()
+
+    private fun Piece?.endsNanDaCall() = this == null || surface.isBlank() ||
+        surface.firstOrNull()?.let { it in "、，,。．.!！；;：:」』）)】〉》］]｝}”’｣»›⟩〟" } == true
+
     private fun openingNanDaContinues(before: Piece?, after: Piece?) =
-        nanDaOpening(before) && (before != null || after != null) && after?.surface !in setOf("、", ",")
+        nanDaOpening(before) && !after.endsNanDaCall()
 
     private fun nanDaOpening(before: Piece?) =
         before == null || before.surface in OPENING || before.surface in "、。，．,.！？!?；;：:…"
@@ -236,7 +246,7 @@ internal object Readings {
         val after = pieces.getOrNull(at + 1)
         val next = pieces.getOrNull(at + 2)
         return pieces[at].surface == "なん" && nanDaOpening(before) &&
-            after?.surface == "だ" && after.startsCopula && (next?.surface in setOf("、", ",") || next == null && before == null)
+            after?.surface == "だ" && after.startsCopula && next.endsNanDaCall()
     }
 
     /**
@@ -1666,12 +1676,7 @@ internal object Readings {
     /** At the start of a phrase or after a subject or topic, なん can ask 何. After まで or から it can explain. */
     private fun Piece.beforeExplanatoryNan(): Boolean {
         if (surface.none(Char::isLetterOrDigit)) return false
-        if (kind != "助詞") return true
-        return !when (kana) {
-            "は" -> subkind == "係助詞"
-            "が" -> subkind == "格助詞"
-            else -> false
-        }
+        return !isNanDaTopic()
     }
 
     /** Keep fixed phrases and dependent forms such as そうだ, ようだ, のだ and んだ as they were grouped. */
@@ -1725,7 +1730,8 @@ internal object Readings {
             val orphanEnding = orphan && previous?.kana == "から" && piece.kind == "助動詞"
             val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
             val copula = piece.startsCopula && !piece.ambiguousDeshite(pieces.getOrNull(at + 1))
-            val separateCopula = copula && !orphanEnding && previous?.keepsCopula(pieces.getOrNull(at - 2)) != true
+            val beforeCopula = if (previous?.surface == "なん") pieces.beforeAdverbs(at - 1) else pieces.getOrNull(at - 2)
+            val separateCopula = copula && !orphanEnding && previous?.keepsCopula(beforeCopula) != true
             val continuesEnding = ending && !afterOrphan && !separateCopula
             val continuesWord = continuesEnding && (previous?.kind != "助詞" || orphanEnding || afterTe) && previous?.surface?.any { it != 'ー' } == true
             // An opening mark or clause break starts a phrase; a closing quote keeps the word before it.
