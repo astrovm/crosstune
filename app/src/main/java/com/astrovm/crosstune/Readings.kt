@@ -112,7 +112,7 @@ internal object Readings {
      * 17 to space the Japanese copula apart from the word it follows.
      * 19 to distinguish interrogative 何だ from the interjection.
      */
-    const val VERSION = 20
+    const val VERSION = 21
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1173,6 +1173,16 @@ internal object Readings {
                 verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
                 piece.surface == "しん" && next?.kana == "だり" && pieces.getOrNull(index + 2)?.surface == "する" ->
                     out += piece.read("しん", "動詞", "自立")
+                // Both dictionaries can take 一撫で + する for ひと + な + です.
+                piece.surface == "でし" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "ひと" &&
+                    (next?.kind == "助動詞" || (next?.kind == "助詞" && next.subkind == "接続助詞")) -> {
+                    out.removeAt(out.lastIndex)
+                    out[out.lastIndex] = Piece("ひとなで", "ひとなで", "名詞", "一般", reader = Reader.RULES)
+                    out += Piece("し", "し", "動詞", "自立", "する", reader = Reader.RULES)
+                }
+                // Before しよう or しない, IPADIC instead splits 一撫で into ひと + なでる.
+                piece.surface == "なで" && last?.surface == "ひと" && next?.base == "する" ->
+                    out[out.lastIndex] = Piece("ひとなで", "ひとなで", "名詞", "一般", reader = Reader.RULES)
                 inflected != null -> out[out.lastIndex] = inflected
                 word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般", reader = Reader.RULES)
                 last != null && count != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, count, "名詞", "一般", reader = Reader.RULES)
