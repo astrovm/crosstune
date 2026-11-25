@@ -18,6 +18,34 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun futariAfterANounIsNotAnOldKanaVerb() = assertJapaneseBoundaries(listOf(
+        Triple("おとなふたりとこどもひとり", "otona futari to kodomo hitori", listOf("おとな", "ふたり", "と", "こども", "ひとり")),
+        Triple("私たちふたり", "watashitachi futari", listOf("私たち", "ふたり")),
+        Triple("ふたりで", "futari de", listOf("ふたり", "で")),
+        Triple("ふたりきり", "futari kiri", listOf("ふたり", "きり")),
+    ))
+
+    @Test
+    fun tariAfterTeOrDeStaysWithTheVerb() = assertJapaneseBoundaries(listOf(
+        Triple("読んでたりする", "yondetari suru", listOf("読んでたり", "する")),
+        Triple("食べてたりする", "tabetetari suru", listOf("食べてたり", "する")),
+        Triple("車で食べたりする", "kuruma de tabetari suru", listOf("車", "で", "食べたり", "する")),
+    ))
+
+    @Test
+    fun tariFormsStayWithTheirVerbOrAdjective() = assertJapaneseBoundaries(listOf(
+        Triple("食べたり", "tabetari", listOf("食べたり")),
+        Triple("行ったり", "ittari", listOf("行ったり")),
+        Triple("読んだり", "yondari", listOf("読んだり")),
+        Triple("遊んだり", "asondari", listOf("遊んだり")),
+        Triple("高かったり", "takakattari", listOf("高かったり")),
+        Triple("静かだったり", "shizuka dattari", listOf("静か", "だったり")),
+        Triple("読んだりする", "yondari suru", listOf("読んだり", "する")),
+        Triple("あたり", "atari", listOf("あたり")),
+        Triple("本たり", "hon tari", listOf("本", "たり")),
+    ))
+
+    @Test
     fun copulasHaveTheirOwnRomajiAndPracticeWords() {
         val lines = listOf("無駄だから", "人間だから", "時代ですから")
         val romaji = listOf("muda da kara", "ningen da kara", "jidai desu kara")
@@ -150,7 +178,7 @@ class ReadingsTest {
     @Test
     fun theVoicedPastAndFixedAuxiliaryPhrasesKeepTheirRomaji() {
         val cases = mapOf(
-            "読んだ" to "yonda", "死んだ" to "shinda", "泳いだ" to "oyoida", "読んだら" to "yondara", "読んだり" to "yon dari",
+            "読んだ" to "yonda", "死んだ" to "shinda", "泳いだ" to "oyoida", "読んだら" to "yondara", "読んだり" to "yondari",
             "読んだそうだ" to "yonda sooda", "読むそうだ" to "yomu sooda", "泳ぐようだ" to "oyogu yooda", "夢のようだ" to "yume no yooda",
             "そうだ" to "sooda", "そうです" to "soodesu", "読むのだ" to "yomu noda", "読むんだ" to "yomu nda", "のだ" to "noda", "んだ" to "nda",
             "本なんだ" to "honna nda", "夢なのだ" to "yumena noda", "本じゃない" to "hon ja nai", "本ではない" to "hon de wa nai",

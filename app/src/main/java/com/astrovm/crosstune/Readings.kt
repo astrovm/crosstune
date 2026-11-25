@@ -111,7 +111,7 @@ internal object Readings {
      * 16 for a word before small っ that left the tokenizer with no way through.
      * 17 to space the Japanese copula apart from the word it follows.
      */
-    const val VERSION = 17
+    const val VERSION = 18
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -581,7 +581,9 @@ internal object Readings {
             !ends || token.partOfSpeechLevel1 in NOUNS || (token.partOfSpeechLevel1 == "動詞" && "ワ行" in token.conjugationType)
         }
         val spelling = Furigana.Today(today, text.indices.toList(), changed, emptyList(), changed.first())
-        return tokens.map { todayPiece(listOf(it), spelling, text) }.takeIf { endings && grouped(it).size == 1 }
+        // A たり boundary must not make a rewritten candidate into a word, as in おとなふたり.
+        val tariBoundary = tokens.drop(1).any { it.surface in setOf("たり", "だり") && it.partOfSpeechLevel1 == "助詞" && it.partOfSpeechLevel2 != "接続助詞" }
+        return tokens.map { todayPiece(listOf(it), spelling, text) }.takeIf { endings && !tariBoundary && grouped(it).size == 1 }
     }
 
     /** What a noun made of an old verb is, as IPADIC names it: うたがひ is a noun, わりあひ an adverb. */
@@ -1637,6 +1639,16 @@ internal object Readings {
     private val COPULA_PHRASE_KINDS = setOf("副詞", "感動詞", "フィラー")
     private val COPULA_PHRASE_STEMS = setOf("そう", "よう", "みたい", "の", "ん")
 
+    /** A connective て or で belongs to the predicate before it. */
+    private fun followsPredicateTe(previous: Piece?, before: Piece?) =
+        previous?.kind == "助詞" && previous.subkind == "接続助詞" && previous.kana in setOf("て", "で") &&
+            before?.kind in setOf("動詞", "形容詞", "助動詞")
+
+    private fun Piece.isEnding(tari: Boolean, afterTe: Boolean, previous: Piece?) =
+        if (tari) afterTe || previous?.kind in setOf("動詞", "形容詞", "助動詞") else
+            (kind == "助動詞" && kana != "なら") || (kind == "助詞" && subkind == "接続助詞" && kana != "から") ||
+                (kind == "動詞" && subkind == "非自立") || subkind == "接尾"
+
     /** [pieces] in words, as [romajiWords] spaces them. */
     private fun grouped(pieces: List<Piece>): List<List<Piece>> {
         val words = mutableListOf<MutableList<Piece>>()
@@ -1651,9 +1663,10 @@ internal object Readings {
                 continue
             }
             val opening = piece.surface in OPENING
-            val ending = (piece.kind == "助動詞" && piece.kana != "なら") ||
-                (piece.kind == "助詞" && piece.subkind == "接続助詞" && piece.kana != "から") ||
-                (piece.kind == "動詞" && piece.subkind == "非自立") || piece.subkind == "接尾"
+            // Both dictionaries can tag たり as a particle, but it is part of the preceding predicate.
+            val tari = piece.kana in setOf("たり", "だり") && piece.kind in setOf("助詞", "助動詞")
+            val afterTe = tari && followsPredicateTe(previous, pieces.getOrNull(at - 2))
+            val ending = piece.isEnding(tari, afterTe, previous)
             // An ending after a particle starts a word of its own: だけだった is dake datta. English
             // the dictionary splits, "Don't" into Don, ' and t, stays as written. A mark goes with the word
             // before it, also one the dictionary takes for a word, as "!" in "Shock!".
@@ -1668,7 +1681,7 @@ internal object Readings {
             val copula = piece.startsCopula && !piece.ambiguousDeshite(pieces.getOrNull(at + 1))
             val separateCopula = copula && !orphanEnding && previous?.keepsCopula(pieces.getOrNull(at - 2)) != true
             val continuesEnding = ending && !afterOrphan && !separateCopula
-            val continuesWord = continuesEnding && (previous?.kind != "助詞" || orphanEnding) && previous?.surface?.any { it != 'ー' } == true
+            val continuesWord = continuesEnding && (previous?.kind != "助詞" || orphanEnding || afterTe) && previous?.surface?.any { it != 'ー' } == true
             // An opening mark or clause break starts a phrase; a closing quote keeps the word before it.
             val phraseMark = previous != null && (previous.surface in OPENING || previous.surface in "、。，．,.！？!?；;：:…" ||
                 (previous.surface == "\"" && straightQuotes % 2 == 1) ||
